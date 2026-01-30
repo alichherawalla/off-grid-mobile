@@ -356,12 +356,6 @@ export const ChatScreen: React.FC = () => {
     );
   };
 
-  const handleNewChat = () => {
-    if (activeModelId) {
-      createConversation(activeModelId, undefined, activeProject?.id);
-    }
-  };
-
   const handleCopyMessage = (content: string) => {
     // Copy is handled in ChatMessage component with Alert
   };
@@ -595,67 +589,44 @@ export const ChatScreen: React.FC = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          {/* Top row: Title and actions */}
-          <View style={styles.headerTopRow}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {activeConversation?.title || 'New Chat'}
-            </Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {activeConversation?.title || 'New Chat'}
+              </Text>
+              <TouchableOpacity
+                style={styles.modelSelector}
+                onPress={() => setShowModelSelector(true)}
+              >
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {activeModel.name}
+                </Text>
+                <Text style={styles.modelSelectorArrow}>▼</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.headerActions}>
               <TouchableOpacity
-                style={styles.debugButton}
-                onPress={() => setShowDebugPanel(true)}
+                style={styles.iconButton}
+                onPress={() => setShowSettingsPanel(true)}
               >
-                <Text style={styles.debugButtonText}>Debug</Text>
+                <Text style={styles.iconButtonText}>⚙</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.headerButton}
-                onPress={handleNewChat}
+                style={styles.projectButton}
+                onPress={() => setShowProjectSelector(true)}
               >
-                <Text style={styles.headerButtonText}>+ New</Text>
+                <Text style={styles.projectButtonText}>
+                  {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
+                </Text>
               </TouchableOpacity>
               {activeConversation && (
                 <TouchableOpacity
-                  style={styles.deleteIconButton}
+                  style={styles.iconButton}
                   onPress={handleDeleteConversation}
                 >
-                  <Text style={styles.deleteIconText}>x</Text>
+                  <Text style={styles.iconButtonText}>✕</Text>
                 </TouchableOpacity>
               )}
-            </View>
-          </View>
-
-          {/* Bottom row: Model and Project */}
-          <View style={styles.headerBottomRow}>
-            <TouchableOpacity
-              style={styles.modelSelector}
-              onPress={() => setShowModelSelector(true)}
-            >
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {activeModel.name}
-              </Text>
-              <Text style={styles.modelSelectorArrow}>▼</Text>
-            </TouchableOpacity>
-            <View style={styles.headerBottomActions}>
-              <TouchableOpacity
-                style={styles.settingsButton}
-                onPress={() => setShowSettingsPanel(true)}
-              >
-                <Text style={styles.settingsIconText}>S</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.projectSelector}
-                onPress={() => setShowProjectSelector(true)}
-              >
-                <View style={styles.projectSelectorIcon}>
-                  <Text style={styles.projectSelectorIconText}>
-                    {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
-                  </Text>
-                </View>
-                <Text style={styles.projectSelectorText} numberOfLines={1}>
-                  {activeProject?.name || 'Default'}
-                </Text>
-                <Text style={styles.projectSelectorArrow}>▼</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -945,120 +916,67 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  headerTopRow: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
   },
-  headerBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
   },
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
     color: COLORS.text,
-    flex: 1,
-    marginRight: 12,
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textMuted,
-    flex: 1,
   },
   modelSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    paddingVertical: 4,
   },
   modelSelectorArrow: {
-    fontSize: 8,
+    fontSize: 10,
     color: COLORS.textMuted,
     marginLeft: 4,
-  },
-  headerBottomActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  settingsButton: {
-    padding: 4,
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: COLORS.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsIconText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textMuted,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  iconButton: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    backgroundColor: COLORS.primary,
-  },
-  headerButtonText: {
-    color: COLORS.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  deleteIconButton: {
-    padding: 6,
-  },
-  deleteIconText: {
-    fontSize: 16,
-  },
-  projectSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: COLORS.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  projectSelectorIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
+  iconButtonText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+  },
+  projectButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: COLORS.primary + '30',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  projectSelectorIconText: {
-    fontSize: 11,
+  projectButtonText: {
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.primary,
-  },
-  projectSelectorText: {
-    fontSize: 12,
-    color: COLORS.text,
-    fontWeight: '500',
-    maxWidth: 80,
-  },
-  projectSelectorArrow: {
-    fontSize: 8,
-    color: COLORS.textMuted,
-    marginLeft: 2,
   },
   messageList: {
     paddingVertical: 16,
@@ -1271,19 +1189,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
     marginLeft: 8,
-  },
-  debugButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  debugButtonText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
   },
   debugModalOverlay: {
     flex: 1,
