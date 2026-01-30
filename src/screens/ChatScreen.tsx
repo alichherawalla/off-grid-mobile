@@ -13,21 +13,49 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { ChatMessage, ChatInput, Button, Card } from '../components';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import {
+  ChatMessage,
+  ChatInput,
+  Button,
+  Card,
+  ModelSelectorModal,
+  GenerationSettingsModal,
+} from '../components';
 import { COLORS, APP_CONFIG } from '../constants';
-import { useAppStore, useChatStore, usePersonaStore } from '../stores';
+import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager } from '../services';
-import { Message, MediaAttachment, Persona } from '../types';
+import { Message, MediaAttachment, Project, DownloadedModel } from '../types';
+import { ChatsStackParamList } from '../navigation/types';
+
+type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
+
+interface DebugInfo {
+  systemPrompt: string;
+  originalMessageCount: number;
+  managedMessageCount: number;
+  truncatedCount: number;
+  formattedPrompt: string;
+  estimatedTokens: number;
+  maxContextLength: number;
+  contextUsagePercent: number;
+}
 
 export const ChatScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [supportsVision, setSupportsVision] = useState(false);
-  const [showPersonaSelector, setShowPersonaSelector] = useState(false);
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [showModelSelector, setShowModelSelector] = useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
+  // Track which conversation a generation was started for
+  const generatingForConversationRef = useRef<string | null>(null);
   const navigation = useNavigation();
+  const route = useRoute<ChatScreenRouteProp>();
 
-  const { activeModelId, downloadedModels, settings } = useAppStore();
+  const { activeModelId, downloadedModels, settings, setActiveModelId } = useAppStore();
   const {
     activeConversationId,
     conversations,
@@ -37,23 +65,49 @@ export const ChatScreen: React.FC = () => {
     deleteMessagesAfter,
     streamingMessage,
     isStreaming,
+    isThinking,
     setIsStreaming,
+    setIsThinking,
     appendToStreamingMessage,
     finalizeStreamingMessage,
     clearStreamingMessage,
     deleteConversation,
     setActiveConversation,
-    setConversationPersona,
+    setConversationProject,
   } = useChatStore();
-  const { personas, getPersona } = usePersonaStore();
+  const { projects, getProject } = useProjectStore();
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
   );
   const activeModel = downloadedModels.find((m) => m.id === activeModelId);
-  const activePersona = activeConversation?.personaId
-    ? getPersona(activeConversation.personaId)
+  const activeProject = activeConversation?.personaId
+    ? getProject(activeConversation.personaId)
     : null;
+
+  // Handle route params - set active conversation or create new one
+  useEffect(() => {
+    const { conversationId, projectId } = route.params || {};
+
+    if (conversationId) {
+      // Navigate to existing conversation
+      setActiveConversation(conversationId);
+    } else if (activeModelId) {
+      // No conversation specified - create a new one
+      // This handles the "New Chat" button from ChatsListScreen
+      createConversation(activeModelId, undefined, projectId);
+    }
+  }, [route.params?.conversationId, route.params?.projectId]);
+
+  // Clear generation ref when conversation changes (user switched chats)
+  useEffect(() => {
+    // If we switched to a different conversation than what's generating,
+    // invalidate the generation so tokens don't leak
+    if (generatingForConversationRef.current &&
+        generatingForConversationRef.current !== activeConversationId) {
+      generatingForConversationRef.current = null;
+    }
+  }, [activeConversationId]);
 
   useEffect(() => {
     // Ensure model is loaded when entering chat
@@ -92,24 +146,75 @@ export const ChatScreen: React.FC = () => {
     }
   };
 
+  const handleModelSelect = async (model: DownloadedModel) => {
+    // If already loaded, just close
+    if (llmService.getLoadedModelPath() === model.filePath) {
+      setShowModelSelector(false);
+      return;
+    }
+
+    setIsModelLoading(true);
+    try {
+      await llmService.loadModel(model.filePath);
+      setActiveModelId(model.id);
+      // Check vision support after loading
+      const multimodalSupport = llmService.getMultimodalSupport();
+      setSupportsVision(multimodalSupport?.vision || false);
+
+      // Create a new conversation if none exists
+      if (!activeConversationId) {
+        createConversation(model.id);
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
+    } finally {
+      setIsModelLoading(false);
+      setShowModelSelector(false);
+    }
+  };
+
+  const handleUnloadModel = async () => {
+    // Stop any ongoing generation first
+    if (isStreaming) {
+      await llmService.stopGeneration();
+      clearStreamingMessage();
+    }
+
+    setIsModelLoading(true);
+    try {
+      await llmService.unloadModel();
+      setSupportsVision(false);
+    } catch (error) {
+      Alert.alert('Error', `Failed to unload model: ${(error as Error).message}`);
+    } finally {
+      setIsModelLoading(false);
+      setShowModelSelector(false);
+    }
+  };
+
   const handleSend = async (text: string, attachments?: MediaAttachment[]) => {
     if (!activeConversationId || !activeModel) {
       Alert.alert('No Model Selected', 'Please select a model first.');
       return;
     }
 
+    // Capture the conversation ID at the start - this won't change even if user switches chats
+    const targetConversationId = activeConversationId;
+    generatingForConversationRef.current = targetConversationId;
+
     // Ensure model is loaded
     if (!llmService.isModelLoaded()) {
       await ensureModelLoaded();
       if (!llmService.isModelLoaded()) {
         Alert.alert('Error', 'Failed to load model. Please try again.');
+        generatingForConversationRef.current = null;
         return;
       }
     }
 
     // Add user message with attachments
     const userMessage = addMessage(
-      activeConversationId,
+      targetConversationId,
       {
         role: 'user',
         content: text,
@@ -119,7 +224,12 @@ export const ChatScreen: React.FC = () => {
 
     // Prepare messages for context
     const conversationMessages = activeConversation?.messages || [];
-    const systemPrompt = activePersona?.systemPrompt || settings.systemPrompt;
+
+    // Use project system prompt if available, otherwise use default
+    const systemPrompt = activeProject?.systemPrompt
+      || settings.systemPrompt
+      || APP_CONFIG.defaultSystemPrompt;
+
     const messagesForContext: Message[] = [
       {
         id: 'system',
@@ -131,32 +241,74 @@ export const ChatScreen: React.FC = () => {
       userMessage,
     ];
 
-    // Start streaming response
-    setIsStreaming(true);
+    // Update debug info
+    try {
+      const contextDebug = await llmService.getContextDebugInfo(messagesForContext);
+      setDebugInfo({
+        systemPrompt,
+        ...contextDebug,
+      });
+    } catch (e) {
+      console.log('Debug info error:', e);
+    }
+
+    // Start thinking state (before first token)
+    setIsThinking(true);
+
+    // Track first token locally to avoid stale closure issues with React state
+    let firstTokenReceived = false;
 
     try {
       await llmService.generateResponse(
         messagesForContext,
         (token) => {
+          // Only append if we're still generating for the same conversation
+          if (generatingForConversationRef.current !== targetConversationId) {
+            return; // User switched chats, ignore tokens
+          }
+          // First token received - switch from thinking to streaming
+          if (!firstTokenReceived) {
+            firstTokenReceived = true;
+            setIsThinking(false);
+            setIsStreaming(true);
+          }
           appendToStreamingMessage(token);
         },
         () => {
-          finalizeStreamingMessage(activeConversationId);
+          // Use the captured conversation ID, not the current active one
+          if (generatingForConversationRef.current === targetConversationId) {
+            finalizeStreamingMessage(targetConversationId);
+          }
+          generatingForConversationRef.current = null;
         },
         (error) => {
-          clearStreamingMessage();
-          Alert.alert('Generation Error', error.message);
+          if (generatingForConversationRef.current === targetConversationId) {
+            clearStreamingMessage();
+            Alert.alert('Generation Error', error.message);
+          }
+          generatingForConversationRef.current = null;
+        },
+        () => {
+          // onThinking - prompt is being processed
+          if (generatingForConversationRef.current === targetConversationId) {
+            setIsThinking(true);
+          }
         }
       );
     } catch (error) {
-      clearStreamingMessage();
+      if (generatingForConversationRef.current === targetConversationId) {
+        clearStreamingMessage();
+      }
+      generatingForConversationRef.current = null;
     }
   };
 
   const handleStop = async () => {
+    const targetConversationId = generatingForConversationRef.current;
+    generatingForConversationRef.current = null;
     await llmService.stopGeneration();
-    if (activeConversationId && streamingMessage.trim()) {
-      finalizeStreamingMessage(activeConversationId);
+    if (targetConversationId && streamingMessage.trim()) {
+      finalizeStreamingMessage(targetConversationId);
     } else {
       clearStreamingMessage();
     }
@@ -173,7 +325,12 @@ export const ChatScreen: React.FC = () => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            // Stop any ongoing generation first
+            if (isStreaming) {
+              await llmService.stopGeneration();
+              clearStreamingMessage();
+            }
             deleteConversation(activeConversationId);
             setActiveConversation(null);
             navigation.goBack();
@@ -185,7 +342,7 @@ export const ChatScreen: React.FC = () => {
 
   const handleNewChat = () => {
     if (activeModelId) {
-      createConversation(activeModelId, undefined, activePersona?.id);
+      createConversation(activeModelId, undefined, activeProject?.id);
     }
   };
 
@@ -235,11 +392,19 @@ export const ChatScreen: React.FC = () => {
   const regenerateResponse = async (userMessage: Message) => {
     if (!activeConversationId || !activeModel || !llmService.isModelLoaded()) return;
 
+    // Capture the conversation ID at the start
+    const targetConversationId = activeConversationId;
+    generatingForConversationRef.current = targetConversationId;
+
     const messages = activeConversation?.messages || [];
     const messageIndex = messages.findIndex((m) => m.id === userMessage.id);
     const messagesUpToUser = messages.slice(0, messageIndex + 1);
 
-    const systemPrompt = activePersona?.systemPrompt || settings.systemPrompt;
+    // Use project system prompt if available, otherwise use default
+    const systemPrompt = activeProject?.systemPrompt
+      || settings.systemPrompt
+      || APP_CONFIG.defaultSystemPrompt;
+
     const messagesForContext: Message[] = [
       {
         id: 'system',
@@ -250,24 +415,49 @@ export const ChatScreen: React.FC = () => {
       ...messagesUpToUser,
     ];
 
-    setIsStreaming(true);
+    setIsThinking(true);
+
+    // Track first token locally to avoid stale closure issues
+    let firstTokenReceived = false;
 
     try {
       await llmService.generateResponse(
         messagesForContext,
         (token) => {
+          if (generatingForConversationRef.current !== targetConversationId) {
+            return;
+          }
+          if (!firstTokenReceived) {
+            firstTokenReceived = true;
+            setIsThinking(false);
+            setIsStreaming(true);
+          }
           appendToStreamingMessage(token);
         },
         () => {
-          finalizeStreamingMessage(activeConversationId);
+          if (generatingForConversationRef.current === targetConversationId) {
+            finalizeStreamingMessage(targetConversationId);
+          }
+          generatingForConversationRef.current = null;
         },
         (error) => {
-          clearStreamingMessage();
-          Alert.alert('Generation Error', error.message);
+          if (generatingForConversationRef.current === targetConversationId) {
+            clearStreamingMessage();
+            Alert.alert('Generation Error', error.message);
+          }
+          generatingForConversationRef.current = null;
+        },
+        () => {
+          if (generatingForConversationRef.current === targetConversationId) {
+            setIsThinking(true);
+          }
         }
       );
     } catch (error) {
-      clearStreamingMessage();
+      if (generatingForConversationRef.current === targetConversationId) {
+        clearStreamingMessage();
+      }
+      generatingForConversationRef.current = null;
     }
   };
 
@@ -287,11 +477,11 @@ export const ChatScreen: React.FC = () => {
     await regenerateResponse(updatedMessage);
   };
 
-  const handleSelectPersona = (persona: Persona | null) => {
+  const handleSelectProject = (project: Project | null) => {
     if (activeConversationId) {
-      setConversationPersona(activeConversationId, persona?.id || null);
+      setConversationProject(activeConversationId, project?.id || null);
     }
-    setShowPersonaSelector(false);
+    setShowProjectSelector(false);
   };
 
   const renderMessage = ({ item }: { item: Message }) => (
@@ -304,31 +494,64 @@ export const ChatScreen: React.FC = () => {
     />
   );
 
-  // Create streaming message object for display
+  // Create streaming/thinking message object for display
   const allMessages = activeConversation?.messages || [];
-  const displayMessages = streamingMessage
+  const displayMessages = isThinking
     ? [
         ...allMessages,
         {
-          id: 'streaming',
+          id: 'thinking',
           role: 'assistant' as const,
-          content: streamingMessage,
+          content: '',
           timestamp: Date.now(),
-          isStreaming: true,
+          isThinking: true,
         },
       ]
-    : allMessages;
+    : streamingMessage
+      ? [
+          ...allMessages,
+          {
+            id: 'streaming',
+            role: 'assistant' as const,
+            content: streamingMessage,
+            timestamp: Date.now(),
+            isStreaming: true,
+          },
+        ]
+      : allMessages;
 
   if (!activeModelId || !activeModel) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.noModelContainer}>
-          <Text style={styles.noModelIcon}>🤖</Text>
+          <View style={styles.noModelIconContainer}>
+            <Text style={styles.noModelIconText}>AI</Text>
+          </View>
           <Text style={styles.noModelTitle}>No Model Selected</Text>
           <Text style={styles.noModelText}>
-            Select a model from the Home screen to start chatting.
+            {downloadedModels.length > 0
+              ? 'Select a model to start chatting.'
+              : 'Download a model from the Models tab to start chatting.'}
           </Text>
+          {downloadedModels.length > 0 && (
+            <TouchableOpacity
+              style={styles.selectModelButton}
+              onPress={() => setShowModelSelector(true)}
+            >
+              <Text style={styles.selectModelButtonText}>Select Model</Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* Model Selector Modal - available even when no model selected */}
+        <ModelSelectorModal
+          visible={showModelSelector}
+          onClose={() => setShowModelSelector(false)}
+          onSelectModel={handleModelSelect}
+          onUnloadModel={handleUnloadModel}
+          isLoading={isModelLoading}
+          currentModelPath={llmService.getLoadedModelPath()}
+        />
       </SafeAreaView>
     );
   }
@@ -363,6 +586,12 @@ export const ChatScreen: React.FC = () => {
             </Text>
             <View style={styles.headerActions}>
               <TouchableOpacity
+                style={styles.debugButton}
+                onPress={() => setShowDebugPanel(true)}
+              >
+                <Text style={styles.debugButtonText}>Debug</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={styles.headerButton}
                 onPress={handleNewChat}
               >
@@ -373,52 +602,74 @@ export const ChatScreen: React.FC = () => {
                   style={styles.deleteIconButton}
                   onPress={handleDeleteConversation}
                 >
-                  <Text style={styles.deleteIconText}>🗑</Text>
+                  <Text style={styles.deleteIconText}>x</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* Bottom row: Model and Persona */}
+          {/* Bottom row: Model and Project */}
           <View style={styles.headerBottomRow}>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>
-              {activeModel.name}
-            </Text>
             <TouchableOpacity
-              style={styles.personaSelector}
-              onPress={() => setShowPersonaSelector(true)}
+              style={styles.modelSelector}
+              onPress={() => setShowModelSelector(true)}
             >
-              <Text style={styles.personaSelectorIcon}>
-                {activePersona?.icon || '🤖'}
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {activeModel.name}
               </Text>
-              <Text style={styles.personaSelectorText} numberOfLines={1}>
-                {activePersona?.name || 'Default'}
-              </Text>
-              <Text style={styles.personaSelectorArrow}>▼</Text>
+              <Text style={styles.modelSelectorArrow}>▼</Text>
             </TouchableOpacity>
+            <View style={styles.headerBottomActions}>
+              <TouchableOpacity
+                style={styles.settingsButton}
+                onPress={() => setShowSettingsPanel(true)}
+              >
+                <Text style={styles.settingsIconText}>S</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.projectSelector}
+                onPress={() => setShowProjectSelector(true)}
+              >
+                <View style={styles.projectSelectorIcon}>
+                  <Text style={styles.projectSelectorIconText}>
+                    {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
+                  </Text>
+                </View>
+                <Text style={styles.projectSelectorText} numberOfLines={1}>
+                  {activeProject?.name || 'Default'}
+                </Text>
+                <Text style={styles.projectSelectorArrow}>▼</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         {/* Messages */}
         {displayMessages.length === 0 ? (
           <View style={styles.emptyChat}>
-            <Text style={styles.emptyChatIcon}>💬</Text>
+            <View style={styles.emptyChatIconContainer}>
+              <Text style={styles.emptyChatIconText}>Chat</Text>
+            </View>
             <Text style={styles.emptyChatTitle}>Start a Conversation</Text>
             <Text style={styles.emptyChatText}>
               Type a message below to begin chatting with {activeModel.name}.
             </Text>
             <TouchableOpacity
-              style={styles.personaHint}
-              onPress={() => setShowPersonaSelector(true)}
+              style={styles.projectHint}
+              onPress={() => setShowProjectSelector(true)}
             >
-              <Text style={styles.personaHintIcon}>{activePersona?.icon || '🤖'}</Text>
-              <Text style={styles.personaHintText}>
-                Persona: {activePersona?.name || 'Default'} — tap to change
+              <View style={styles.projectHintIcon}>
+                <Text style={styles.projectHintIconText}>
+                  {activeProject?.name?.charAt(0).toUpperCase() || 'D'}
+                </Text>
+              </View>
+              <Text style={styles.projectHintText}>
+                Project: {activeProject?.name || 'Default'} — tap to change
               </Text>
             </TouchableOpacity>
             <Card style={styles.privacyReminder}>
               <Text style={styles.privacyText}>
-                🔒 This conversation is completely private. All processing
+                This conversation is completely private. All processing
                 happens on your device.
               </Text>
             </Card>
@@ -443,6 +694,7 @@ export const ChatScreen: React.FC = () => {
           disabled={!llmService.isModelLoaded()}
           isGenerating={isStreaming}
           supportsVision={supportsVision}
+          conversationId={activeConversationId}
           placeholder={
             llmService.isModelLoaded()
               ? supportsVision
@@ -453,60 +705,66 @@ export const ChatScreen: React.FC = () => {
         />
       </KeyboardAvoidingView>
 
-      {/* Persona Selector Modal */}
+      {/* Project Selector Modal */}
       <Modal
-        visible={showPersonaSelector}
+        visible={showProjectSelector}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowPersonaSelector(false)}
+        onRequestClose={() => setShowProjectSelector(false)}
       >
-        <View style={styles.personaModalOverlay}>
-          <View style={styles.personaModal}>
-            <View style={styles.personaModalHeader}>
-              <Text style={styles.personaModalTitle}>Select Persona</Text>
-              <TouchableOpacity onPress={() => setShowPersonaSelector(false)}>
-                <Text style={styles.personaModalClose}>Done</Text>
+        <View style={styles.projectModalOverlay}>
+          <View style={styles.projectModal}>
+            <View style={styles.projectModalHeader}>
+              <Text style={styles.projectModalTitle}>Select Project</Text>
+              <TouchableOpacity onPress={() => setShowProjectSelector(false)}>
+                <Text style={styles.projectModalClose}>Done</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.personaList}>
+            <ScrollView style={styles.projectList}>
               {/* Default option */}
               <TouchableOpacity
                 style={[
-                  styles.personaOption,
-                  !activePersona && styles.personaOptionSelected,
+                  styles.projectOption,
+                  !activeProject && styles.projectOptionSelected,
                 ]}
-                onPress={() => handleSelectPersona(null)}
+                onPress={() => handleSelectProject(null)}
               >
-                <Text style={styles.personaOptionIcon}>🤖</Text>
-                <View style={styles.personaOptionInfo}>
-                  <Text style={styles.personaOptionName}>Default</Text>
-                  <Text style={styles.personaOptionDesc} numberOfLines={1}>
+                <View style={styles.projectOptionIcon}>
+                  <Text style={styles.projectOptionIconText}>D</Text>
+                </View>
+                <View style={styles.projectOptionInfo}>
+                  <Text style={styles.projectOptionName}>Default</Text>
+                  <Text style={styles.projectOptionDesc} numberOfLines={1}>
                     Use default system prompt from settings
                   </Text>
                 </View>
-                {!activePersona && (
-                  <Text style={styles.personaCheckmark}>✓</Text>
+                {!activeProject && (
+                  <Text style={styles.projectCheckmark}>✓</Text>
                 )}
               </TouchableOpacity>
 
-              {personas.map((persona) => (
+              {projects.map((project) => (
                 <TouchableOpacity
-                  key={persona.id}
+                  key={project.id}
                   style={[
-                    styles.personaOption,
-                    activePersona?.id === persona.id && styles.personaOptionSelected,
+                    styles.projectOption,
+                    activeProject?.id === project.id && styles.projectOptionSelected,
                   ]}
-                  onPress={() => handleSelectPersona(persona)}
+                  onPress={() => handleSelectProject(project)}
                 >
-                  <Text style={styles.personaOptionIcon}>{persona.icon || '🤖'}</Text>
-                  <View style={styles.personaOptionInfo}>
-                    <Text style={styles.personaOptionName}>{persona.name}</Text>
-                    <Text style={styles.personaOptionDesc} numberOfLines={1}>
-                      {persona.description}
+                  <View style={styles.projectOptionIcon}>
+                    <Text style={styles.projectOptionIconText}>
+                      {project.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
-                  {activePersona?.id === persona.id && (
-                    <Text style={styles.personaCheckmark}>✓</Text>
+                  <View style={styles.projectOptionInfo}>
+                    <Text style={styles.projectOptionName}>{project.name}</Text>
+                    <Text style={styles.projectOptionDesc} numberOfLines={1}>
+                      {project.description}
+                    </Text>
+                  </View>
+                  {activeProject?.id === project.id && (
+                    <Text style={styles.projectCheckmark}>✓</Text>
                   )}
                 </TouchableOpacity>
               ))}
@@ -514,6 +772,149 @@ export const ChatScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Debug Panel Modal */}
+      <Modal
+        visible={showDebugPanel}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDebugPanel(false)}
+      >
+        <View style={styles.debugModalOverlay}>
+          <View style={styles.debugModal}>
+            <View style={styles.debugModalHeader}>
+              <Text style={styles.debugModalTitle}>Debug Info</Text>
+              <TouchableOpacity onPress={() => setShowDebugPanel(false)}>
+                <Text style={styles.debugModalClose}>Close</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.debugContent}>
+              {/* Context Stats */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>Context Stats</Text>
+                <View style={styles.debugStats}>
+                  <View style={styles.debugStat}>
+                    <Text style={styles.debugStatValue}>
+                      {debugInfo?.estimatedTokens || 0}
+                    </Text>
+                    <Text style={styles.debugStatLabel}>Tokens Used</Text>
+                  </View>
+                  <View style={styles.debugStat}>
+                    <Text style={styles.debugStatValue}>
+                      {debugInfo?.maxContextLength || APP_CONFIG.maxContextLength}
+                    </Text>
+                    <Text style={styles.debugStatLabel}>Max Context</Text>
+                  </View>
+                  <View style={styles.debugStat}>
+                    <Text style={styles.debugStatValue}>
+                      {(debugInfo?.contextUsagePercent || 0).toFixed(1)}%
+                    </Text>
+                    <Text style={styles.debugStatLabel}>Usage</Text>
+                  </View>
+                </View>
+                <View style={styles.contextBar}>
+                  <View
+                    style={[
+                      styles.contextBarFill,
+                      { width: `${Math.min(debugInfo?.contextUsagePercent || 0, 100)}%` }
+                    ]}
+                  />
+                </View>
+              </View>
+
+              {/* Message Stats */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>Message Stats</Text>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Original Messages:</Text>
+                  <Text style={styles.debugValue}>{debugInfo?.originalMessageCount || 0}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>After Context Mgmt:</Text>
+                  <Text style={styles.debugValue}>{debugInfo?.managedMessageCount || 0}</Text>
+                </View>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Truncated:</Text>
+                  <Text style={[styles.debugValue, debugInfo?.truncatedCount ? styles.debugWarning : null]}>
+                    {debugInfo?.truncatedCount || 0}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Active Project */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>Active Project</Text>
+                <View style={styles.debugRow}>
+                  <Text style={styles.debugLabel}>Name:</Text>
+                  <Text style={styles.debugValue}>{activeProject?.name || 'Default'}</Text>
+                </View>
+              </View>
+
+              {/* System Prompt */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>System Prompt</Text>
+                <View style={styles.debugCodeBlock}>
+                  <Text style={styles.debugCode} selectable>
+                    {debugInfo?.systemPrompt || settings.systemPrompt || APP_CONFIG.defaultSystemPrompt}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Formatted Prompt (Last Sent) */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>Last Formatted Prompt</Text>
+                <Text style={styles.debugHint}>
+                  This is the exact prompt sent to the LLM (ChatML format)
+                </Text>
+                <View style={styles.debugCodeBlock}>
+                  <Text style={styles.debugCode} selectable>
+                    {debugInfo?.formattedPrompt || 'Send a message to see the formatted prompt'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Current Conversation Messages */}
+              <View style={styles.debugSection}>
+                <Text style={styles.debugSectionTitle}>
+                  Conversation Messages ({activeConversation?.messages.length || 0})
+                </Text>
+                {(activeConversation?.messages || []).map((msg, index) => (
+                  <View key={msg.id} style={styles.debugMessage}>
+                    <View style={styles.debugMessageHeader}>
+                      <Text style={[
+                        styles.debugMessageRole,
+                        msg.role === 'user' ? styles.debugRoleUser : styles.debugRoleAssistant
+                      ]}>
+                        {msg.role.toUpperCase()}
+                      </Text>
+                      <Text style={styles.debugMessageIndex}>#{index + 1}</Text>
+                    </View>
+                    <Text style={styles.debugMessageContent} numberOfLines={3}>
+                      {msg.content}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Model Selector Modal */}
+      <ModelSelectorModal
+        visible={showModelSelector}
+        onClose={() => setShowModelSelector(false)}
+        onSelectModel={handleModelSelect}
+        onUnloadModel={handleUnloadModel}
+        isLoading={isModelLoading}
+        currentModelPath={llmService.getLoadedModelPath()}
+      />
+
+      {/* Generation Settings Modal */}
+      <GenerationSettingsModal
+        visible={showSettingsPanel}
+        onClose={() => setShowSettingsPanel(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -555,6 +956,37 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     flex: 1,
   },
+  modelSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingVertical: 4,
+  },
+  modelSelectorArrow: {
+    fontSize: 8,
+    color: COLORS.textMuted,
+    marginLeft: 4,
+  },
+  headerBottomActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsButton: {
+    padding: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsIconText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -577,7 +1009,7 @@ const styles = StyleSheet.create({
   deleteIconText: {
     fontSize: 16,
   },
-  personaSelector: {
+  projectSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
@@ -586,18 +1018,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 4,
+    gap: 6,
   },
-  personaSelectorIcon: {
-    fontSize: 14,
+  projectSelectorIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  personaSelectorText: {
+  projectSelectorIconText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  projectSelectorText: {
     fontSize: 12,
     color: COLORS.text,
     fontWeight: '500',
     maxWidth: 80,
   },
-  personaSelectorArrow: {
+  projectSelectorArrow: {
     fontSize: 8,
     color: COLORS.textMuted,
     marginLeft: 2,
@@ -611,9 +1053,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
   },
-  emptyChatIcon: {
-    fontSize: 48,
+  emptyChatIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
+  },
+  emptyChatIconText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textMuted,
   },
   emptyChatTitle: {
     fontSize: 20,
@@ -627,7 +1080,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
-  personaHint: {
+  projectHint: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
@@ -637,10 +1090,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
-  personaHintIcon: {
-    fontSize: 18,
+  projectHintIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  personaHintText: {
+  projectHintIconText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  projectHintText: {
     fontSize: 13,
     color: COLORS.primary,
     fontWeight: '500',
@@ -677,9 +1140,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
   },
-  noModelIcon: {
-    fontSize: 64,
+  noModelIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: COLORS.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
+  },
+  noModelIconText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.textMuted,
   },
   noModelTitle: {
     fontSize: 24,
@@ -692,18 +1166,30 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
-  personaModalOverlay: {
+  selectModelButton: {
+    marginTop: 24,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  selectModelButtonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  projectModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  personaModal: {
+  projectModal: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '70%',
   },
-  personaModalHeader: {
+  projectModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -711,20 +1197,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  personaModalTitle: {
+  projectModalTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.text,
   },
-  personaModalClose: {
+  projectModalClose: {
     fontSize: 16,
     color: COLORS.primary,
     fontWeight: '500',
   },
-  personaList: {
+  projectList: {
     padding: 16,
   },
-  personaOption: {
+  projectOption: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
@@ -732,32 +1218,202 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     backgroundColor: COLORS.surface,
   },
-  personaOptionSelected: {
+  projectOptionSelected: {
     backgroundColor: COLORS.primary + '20',
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
-  personaOptionIcon: {
-    fontSize: 28,
+  projectOptionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
-  personaOptionInfo: {
+  projectOptionIconText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  projectOptionInfo: {
     flex: 1,
   },
-  personaOptionName: {
+  projectOptionName: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
   },
-  personaOptionDesc: {
+  projectOptionDesc: {
     fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
-  personaCheckmark: {
+  projectCheckmark: {
     fontSize: 18,
     color: COLORS.primary,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  debugButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  debugButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  debugModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  debugModal: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  debugModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  debugModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  debugModalClose: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  debugContent: {
+    padding: 16,
+  },
+  debugSection: {
+    marginBottom: 20,
+  },
+  debugSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  debugStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+  },
+  debugStat: {
+    alignItems: 'center',
+  },
+  debugStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  debugStatLabel: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  contextBar: {
+    height: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  contextBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.surface,
+  },
+  debugLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  debugValue: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  debugWarning: {
+    color: COLORS.warning,
+  },
+  debugCodeBlock: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  debugCode: {
+    fontSize: 11,
+    color: COLORS.text,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    lineHeight: 16,
+  },
+  debugHint: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  debugMessage: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+  },
+  debugMessageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  debugMessageRole: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  debugRoleUser: {
+    backgroundColor: COLORS.primary + '30',
+    color: COLORS.primary,
+  },
+  debugRoleAssistant: {
+    backgroundColor: COLORS.secondary + '30',
+    color: COLORS.secondary,
+  },
+  debugMessageIndex: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  debugMessageContent: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 16,
   },
 });

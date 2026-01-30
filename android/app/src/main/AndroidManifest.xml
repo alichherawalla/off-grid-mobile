@@ -2,6 +2,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- For voice recording -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- For haptic feedback -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- For downloading models on older Android versions -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />

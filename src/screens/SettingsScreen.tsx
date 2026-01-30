@@ -7,21 +7,23 @@ import {
   TextInput,
   Alert,
   TouchableOpacity,
+  Switch,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Feather';
 import { Card, Button } from '../components';
 import { COLORS } from '../constants';
-import { useAppStore, useChatStore, usePersonaStore } from '../stores';
-import { hardwareService, modelManager, llmService } from '../services';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/types';
+import { useAppStore, useChatStore, useAuthStore, useWhisperStore } from '../stores';
+import { hardwareService, modelManager, llmService, authService, WHISPER_MODELS } from '../services';
+import { PassphraseSetupScreen } from './PassphraseSetupScreen';
 
 export const SettingsScreen: React.FC = () => {
   const [storageUsed, setStorageUsed] = useState(0);
   const [availableStorage, setAvailableStorage] = useState(0);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
+  const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
 
   const {
     deviceInfo,
@@ -31,18 +33,27 @@ export const SettingsScreen: React.FC = () => {
     setOnboardingComplete,
   } = useAppStore();
 
+  const {
+    isEnabled: authEnabled,
+    setEnabled: setAuthEnabled,
+  } = useAuthStore();
+
+  const {
+    downloadedModelId: whisperModelId,
+    isDownloading: isWhisperDownloading,
+    downloadProgress: whisperProgress,
+    downloadModel: downloadWhisperModel,
+    deleteModel: deleteWhisperModel,
+    error: whisperError,
+    clearError: clearWhisperError,
+  } = useWhisperStore();
+
   // Ensure settings have default values (for backward compatibility with persisted state)
   const settings = {
     systemPrompt: rawSettings?.systemPrompt ?? 'You are a helpful AI assistant.',
-    temperature: rawSettings?.temperature ?? 0.7,
-    maxTokens: rawSettings?.maxTokens ?? 512,
-    topP: rawSettings?.topP ?? 0.9,
-    repeatPenalty: rawSettings?.repeatPenalty ?? 1.1,
-    contextLength: rawSettings?.contextLength ?? 2048,
   };
 
   const { conversations, clearAllConversations } = useChatStore();
-  const { personas } = usePersonaStore();
 
   useEffect(() => {
     loadStorageInfo();
@@ -98,6 +109,10 @@ export const SettingsScreen: React.FC = () => {
               // Reset onboarding
               setOnboardingComplete(false);
 
+              // Remove passphrase
+              await authService.removePassphrase();
+              setAuthEnabled(false);
+
               Alert.alert(
                 'App Reset',
                 'Please restart the app to complete the reset.'
@@ -109,6 +124,36 @@ export const SettingsScreen: React.FC = () => {
         },
       ]
     );
+  };
+
+  const handleTogglePassphrase = async () => {
+    if (authEnabled) {
+      // Disabling passphrase
+      Alert.alert(
+        'Disable Passphrase Lock',
+        'Are you sure you want to disable passphrase protection?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disable',
+            style: 'destructive',
+            onPress: async () => {
+              await authService.removePassphrase();
+              setAuthEnabled(false);
+            },
+          },
+        ]
+      );
+    } else {
+      // Enabling passphrase
+      setIsChangingPassphrase(false);
+      setShowPassphraseSetup(true);
+    }
+  };
+
+  const handleChangePassphrase = () => {
+    setIsChangingPassphrase(true);
+    setShowPassphraseSetup(true);
   };
 
   const totalRamGB = hardwareService.getTotalMemoryGB();
@@ -144,6 +189,105 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </Card>
 
+        {/* Security */}
+        <Card style={styles.section}>
+          <Text style={styles.sectionTitle}>Security</Text>
+          <View style={styles.securityRow}>
+            <View style={styles.securityInfo}>
+              <Text style={styles.securityLabel}>Passphrase Lock</Text>
+              <Text style={styles.securityHint}>
+                Require passphrase to open app
+              </Text>
+            </View>
+            <Switch
+              value={authEnabled}
+              onValueChange={handleTogglePassphrase}
+              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
+              thumbColor={authEnabled ? COLORS.primary : COLORS.textMuted}
+            />
+          </View>
+          {authEnabled && (
+            <TouchableOpacity
+              style={styles.changePassphraseButton}
+              onPress={handleChangePassphrase}
+            >
+              <Text style={styles.changePassphraseText}>Change Passphrase</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.securityNote}>
+            When enabled, the app will lock automatically when you switch away or close it.
+          </Text>
+        </Card>
+
+        {/* Voice Transcription */}
+        <Card style={styles.section}>
+          <Text style={styles.sectionTitle}>Voice Transcription</Text>
+          <Text style={styles.voiceDescription}>
+            Download a Whisper model to enable on-device voice input. All transcription happens locally - no data is sent to any server.
+          </Text>
+
+          {whisperModelId ? (
+            <View style={styles.whisperModelInfo}>
+              <View style={styles.whisperModelHeader}>
+                <Text style={styles.whisperModelName}>
+                  {WHISPER_MODELS.find(m => m.id === whisperModelId)?.name || whisperModelId}
+                </Text>
+                <Text style={styles.whisperModelStatus}>Downloaded</Text>
+              </View>
+              <Button
+                title="Remove Model"
+                variant="outline"
+                size="small"
+                onPress={() => {
+                  Alert.alert(
+                    'Remove Whisper Model',
+                    'This will disable voice input until you download a model again.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Remove', style: 'destructive', onPress: deleteWhisperModel },
+                    ]
+                  );
+                }}
+                style={styles.removeWhisperButton}
+              />
+            </View>
+          ) : isWhisperDownloading ? (
+            <View style={styles.whisperDownloading}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.whisperDownloadingText}>
+                Downloading... {Math.round(whisperProgress * 100)}%
+              </Text>
+              <View style={styles.whisperProgressBar}>
+                <View
+                  style={[styles.whisperProgressFill, { width: `${whisperProgress * 100}%` }]}
+                />
+              </View>
+            </View>
+          ) : (
+            <View style={styles.whisperModels}>
+              {WHISPER_MODELS.slice(0, 3).map((model) => (
+                <TouchableOpacity
+                  key={model.id}
+                  style={styles.whisperModelOption}
+                  onPress={() => downloadWhisperModel(model.id)}
+                >
+                  <View style={styles.whisperModelOptionInfo}>
+                    <Text style={styles.whisperModelOptionName}>{model.name}</Text>
+                    <Text style={styles.whisperModelOptionSize}>{model.size} MB</Text>
+                  </View>
+                  <Text style={styles.whisperModelOptionDesc}>{model.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {whisperError && (
+            <TouchableOpacity onPress={clearWhisperError}>
+              <Text style={styles.whisperError}>{whisperError}</Text>
+            </TouchableOpacity>
+          )}
+        </Card>
+
         {/* Storage */}
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Storage</Text>
@@ -169,175 +313,28 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </Card>
 
-        {/* Personas */}
+        {/* Default System Prompt */}
         <Card style={styles.section}>
-          <View style={styles.personasHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Personas</Text>
-              <Text style={styles.personasSubtitle}>
-                {personas.length} persona{personas.length !== 1 ? 's' : ''} available
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.manageButton}
-              onPress={() => navigation.navigate('Personas')}
-            >
-              <Text style={styles.manageButtonText}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.personasHelp}>
-            Create custom personas with specific behaviors and apply them to your chats.
+          <Text style={styles.sectionTitle}>Default System Prompt</Text>
+          <Text style={styles.settingHelp}>
+            Used when chatting without a project selected. Generation settings are available in the chat interface.
           </Text>
-        </Card>
-
-        {/* Model Settings */}
-        <Card style={styles.section}>
-          <Text style={styles.sectionTitle}>Model Settings</Text>
-
-          <View style={styles.settingItem}>
-            <Text style={styles.settingLabel}>System Prompt</Text>
-            <TextInput
-              style={styles.textArea}
-              value={settings.systemPrompt}
-              onChangeText={(text) => updateSettings({ systemPrompt: text })}
-              multiline
-              numberOfLines={4}
-              placeholder="Enter system prompt..."
-              placeholderTextColor={COLORS.textMuted}
-            />
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingHeader}>
-              <Text style={styles.settingLabel}>Temperature</Text>
-              <Text style={styles.settingValue}>
-                {settings.temperature.toFixed(2)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={2}
-              step={0.05}
-              value={settings.temperature}
-              onValueChange={(value) => updateSettings({ temperature: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
-            />
-            <Text style={styles.settingHelp}>
-              Lower = more focused, Higher = more creative (0-2)
-            </Text>
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingHeader}>
-              <Text style={styles.settingLabel}>Max Tokens</Text>
-              <Text style={styles.settingValue}>{settings.maxTokens}</Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={64}
-              maximumValue={4096}
-              step={64}
-              value={settings.maxTokens}
-              onValueChange={(value) => updateSettings({ maxTokens: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
-            />
-            <Text style={styles.settingHelp}>
-              Maximum length of generated responses (64-4096)
-            </Text>
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingHeader}>
-              <Text style={styles.settingLabel}>Top P (Nucleus Sampling)</Text>
-              <Text style={styles.settingValue}>
-                {settings.topP.toFixed(2)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={0.1}
-              maximumValue={1}
-              step={0.05}
-              value={settings.topP}
-              onValueChange={(value) => updateSettings({ topP: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
-            />
-            <Text style={styles.settingHelp}>
-              Controls diversity. Lower = more focused (0.1-1.0)
-            </Text>
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingHeader}>
-              <Text style={styles.settingLabel}>Repeat Penalty</Text>
-              <Text style={styles.settingValue}>
-                {settings.repeatPenalty.toFixed(2)}
-              </Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={1}
-              maximumValue={2}
-              step={0.05}
-              value={settings.repeatPenalty}
-              onValueChange={(value) => updateSettings({ repeatPenalty: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
-            />
-            <Text style={styles.settingHelp}>
-              Penalizes repetition. Higher = less repetitive (1.0-2.0)
-            </Text>
-          </View>
-
-          <View style={styles.settingItem}>
-            <View style={styles.settingHeader}>
-              <Text style={styles.settingLabel}>Context Length</Text>
-              <Text style={styles.settingValue}>{settings.contextLength}</Text>
-            </View>
-            <Slider
-              style={styles.slider}
-              minimumValue={512}
-              maximumValue={8192}
-              step={256}
-              value={settings.contextLength}
-              onValueChange={(value) => updateSettings({ contextLength: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
-            />
-            <Text style={styles.settingHelp}>
-              How much conversation history to remember (512-8192)
-            </Text>
-          </View>
-
-          <Button
-            title="Reset to Defaults"
-            variant="outline"
-            size="small"
-            onPress={() => {
-              updateSettings({
-                temperature: 0.7,
-                maxTokens: 512,
-                topP: 0.9,
-                repeatPenalty: 1.1,
-                contextLength: 2048,
-              });
-            }}
-            style={styles.resetButton}
+          <TextInput
+            style={styles.textArea}
+            value={settings.systemPrompt}
+            onChangeText={(text) => updateSettings({ systemPrompt: text })}
+            multiline
+            numberOfLines={4}
+            placeholder="Enter system prompt..."
+            placeholderTextColor={COLORS.textMuted}
           />
         </Card>
 
         {/* Privacy */}
         <Card style={styles.privacyCard}>
-          <Text style={styles.privacyIcon}>🔒</Text>
+          <View style={styles.privacyIconContainer}>
+            <Icon name="lock" size={24} color={COLORS.secondary} />
+          </View>
           <Text style={styles.privacyTitle}>Privacy First</Text>
           <Text style={styles.privacyText}>
             All your data stays on this device. No conversations, prompts, or
@@ -379,6 +376,19 @@ export const SettingsScreen: React.FC = () => {
           </Text>
         </Card>
       </ScrollView>
+
+      {/* Passphrase Setup Modal */}
+      <Modal
+        visible={showPassphraseSetup}
+        animationType="slide"
+        onRequestClose={() => setShowPassphraseSetup(false)}
+      >
+        <PassphraseSetupScreen
+          isChanging={isChangingPassphrase}
+          onComplete={() => setShowPassphraseSetup(false)}
+          onCancel={() => setShowPassphraseSetup(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -435,37 +445,48 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
   },
-  settingItem: {
-    marginBottom: 16,
-  },
-  settingHeader: {
+  securityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingVertical: 8,
   },
-  settingLabel: {
-    fontSize: 14,
+  securityInfo: {
+    flex: 1,
+  },
+  securityLabel: {
+    fontSize: 16,
     fontWeight: '500',
     color: COLORS.text,
-    marginBottom: 8,
   },
-  settingValue: {
+  securityHint: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  securityNote: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 12,
+    lineHeight: 18,
+  },
+  changePassphraseButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  changePassphraseText: {
     fontSize: 14,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   settingHelp: {
     fontSize: 12,
     color: COLORS.textMuted,
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-    marginVertical: 4,
-  },
-  resetButton: {
-    marginTop: 8,
+    marginBottom: 12,
   },
   textArea: {
     backgroundColor: COLORS.surfaceLight,
@@ -483,9 +504,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.secondary + '40',
     marginBottom: 16,
   },
-  privacyIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+  privacyIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.secondary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   privacyTitle: {
     fontSize: 18,
@@ -509,31 +535,96 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
   },
-  personasHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  personasSubtitle: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  manageButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  manageButtonText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  personasHelp: {
+  voiceDescription: {
     fontSize: 13,
     color: COLORS.textSecondary,
     lineHeight: 18,
+    marginBottom: 16,
+  },
+  whisperModelInfo: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 12,
+    padding: 16,
+  },
+  whisperModelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  whisperModelName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  whisperModelStatus: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    fontWeight: '500',
+    backgroundColor: COLORS.secondary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  removeWhisperButton: {
+    borderColor: COLORS.error,
+  },
+  whisperDownloading: {
+    alignItems: 'center',
+    padding: 16,
+  },
+  whisperDownloadingText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+  },
+  whisperProgressBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 3,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  whisperProgressFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 3,
+  },
+  whisperModels: {
+    gap: 8,
+  },
+  whisperModelOption: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  whisperModelOptionInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  whisperModelOptionName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  whisperModelOptionSize: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  whisperModelOptionDesc: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  whisperError: {
+    fontSize: 13,
+    color: COLORS.error,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

@@ -225,9 +225,15 @@ export const CREDIBILITY_LABELS = {
 export const APP_CONFIG = {
   modelStorageDir: 'models',
   maxConcurrentDownloads: 1,
-  defaultSystemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
+  defaultSystemPrompt: `You are a helpful AI assistant running locally on the user's device. Your responses should be:
+- Accurate and factual - never make up information
+- Concise but complete - answer the question fully without unnecessary elaboration
+- Helpful and friendly - focus on solving the user's actual need
+- Honest about limitations - if you don't know something, say so
+
+If asked about yourself, you can mention you're a local AI assistant that prioritizes user privacy.`,
   streamingEnabled: true,
-  maxContextLength: 2048,
+  maxContextLength: 2048, // Balanced for speed and context (increase to 4096 if you need more history)
 };
 
 // Onboarding slides

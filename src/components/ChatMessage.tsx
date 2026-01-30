@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  Animated,
 } from 'react-native';
 import { COLORS } from '../constants';
 import { Message } from '../types';
@@ -23,6 +24,94 @@ interface ChatMessageProps {
   showActions?: boolean;
 }
 
+// Parse message content to extract <think> blocks
+interface ParsedContent {
+  thinking: string | null;
+  response: string;
+  isThinkingComplete: boolean;
+}
+
+function parseThinkingContent(content: string): ParsedContent {
+  // Check for <think> tags
+  const thinkStartMatch = content.match(/<think>/i);
+  const thinkEndMatch = content.match(/<\/think>/i);
+
+  if (!thinkStartMatch) {
+    // No thinking block
+    return { thinking: null, response: content, isThinkingComplete: true };
+  }
+
+  const thinkStart = thinkStartMatch.index! + thinkStartMatch[0].length;
+
+  if (!thinkEndMatch) {
+    // Still thinking (no closing tag yet)
+    const thinkingContent = content.slice(thinkStart);
+    return {
+      thinking: thinkingContent,
+      response: '',
+      isThinkingComplete: false
+    };
+  }
+
+  const thinkEnd = thinkEndMatch.index!;
+  const thinkingContent = content.slice(thinkStart, thinkEnd).trim();
+  const responseContent = content.slice(thinkEnd + thinkEndMatch[0].length).trim();
+
+  return {
+    thinking: thinkingContent,
+    response: responseContent,
+    isThinkingComplete: true
+  };
+}
+
+// Animated thinking dots component
+const ThinkingIndicator: React.FC = () => {
+  const dot1Anim = useRef(new Animated.Value(0.3)).current;
+  const dot2Anim = useRef(new Animated.Value(0.3)).current;
+  const dot3Anim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animateDots = () => {
+      const duration = 400;
+      const sequence = Animated.loop(
+        Animated.sequence([
+          Animated.timing(dot1Anim, { toValue: 1, duration, useNativeDriver: true }),
+          Animated.timing(dot1Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+        ])
+      );
+      const sequence2 = Animated.loop(
+        Animated.sequence([
+          Animated.delay(150),
+          Animated.timing(dot2Anim, { toValue: 1, duration, useNativeDriver: true }),
+          Animated.timing(dot2Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+        ])
+      );
+      const sequence3 = Animated.loop(
+        Animated.sequence([
+          Animated.delay(300),
+          Animated.timing(dot3Anim, { toValue: 1, duration, useNativeDriver: true }),
+          Animated.timing(dot3Anim, { toValue: 0.3, duration, useNativeDriver: true }),
+        ])
+      );
+      sequence.start();
+      sequence2.start();
+      sequence3.start();
+    };
+    animateDots();
+  }, []);
+
+  return (
+    <View style={styles.thinkingContainer}>
+      <View style={styles.thinkingDots}>
+        <Animated.View style={[styles.thinkingDot, { opacity: dot1Anim }]} />
+        <Animated.View style={[styles.thinkingDot, { opacity: dot2Anim }]} />
+        <Animated.View style={[styles.thinkingDot, { opacity: dot3Anim }]} />
+      </View>
+      <Text style={styles.thinkingText}>Thinking...</Text>
+    </View>
+  );
+};
+
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   isStreaming,
@@ -35,6 +124,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
+  const [showThinking, setShowThinking] = useState(false);
+
+  // Parse content for <think> blocks (only for assistant messages)
+  const parsedContent = message.role === 'assistant'
+    ? parseThinkingContent(message.content)
+    : { thinking: null, response: message.content, isThinkingComplete: true };
 
   const isUser = message.role === 'user';
   const hasAttachments = message.attachments && message.attachments.length > 0;
@@ -118,14 +213,57 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           )}
 
           {/* Text content */}
-          {message.content ? (
-            <Text
-              style={[styles.text, isUser ? styles.userText : styles.assistantText]}
-              selectable
-            >
-              {message.content}
-              {isStreaming && <Text style={styles.cursor}>|</Text>}
-            </Text>
+          {message.isThinking ? (
+            <ThinkingIndicator />
+          ) : message.content ? (
+            <View>
+              {/* Thinking block for assistant messages */}
+              {parsedContent.thinking && (
+                <View style={styles.thinkingBlock}>
+                  <TouchableOpacity
+                    style={styles.thinkingHeader}
+                    onPress={() => setShowThinking(!showThinking)}
+                  >
+                    <View style={styles.thinkingHeaderIconBox}>
+                      <Text style={styles.thinkingHeaderIconText}>
+                        {parsedContent.isThinkingComplete ? 'T' : '...'}
+                      </Text>
+                    </View>
+                    <Text style={styles.thinkingHeaderText}>
+                      {parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...'}
+                    </Text>
+                    <Text style={styles.thinkingToggle}>
+                      {showThinking ? '▼' : '▶'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showThinking && (
+                    <Text style={styles.thinkingBlockText} selectable>
+                      {parsedContent.thinking}
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* Main response */}
+              {parsedContent.response ? (
+                <Text
+                  style={[styles.text, isUser ? styles.userText : styles.assistantText]}
+                  selectable
+                >
+                  {parsedContent.response}
+                  {isStreaming && <Text style={styles.cursor}>|</Text>}
+                </Text>
+              ) : isStreaming && !parsedContent.isThinkingComplete ? (
+                /* Still in thinking phase, show indicator */
+                <View style={styles.streamingThinkingHint}>
+                  <ThinkingIndicator />
+                </View>
+              ) : isStreaming ? (
+                <Text style={[styles.text, styles.assistantText]}>
+                  <Text style={styles.cursor}>|</Text>
+                </Text>
+              ) : null}
+            </View>
           ) : isStreaming ? (
             <Text style={[styles.text, styles.assistantText]}>
               <Text style={styles.cursor}>|</Text>
@@ -160,20 +298,26 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         >
           <View style={styles.actionMenu}>
             <TouchableOpacity style={styles.actionItem} onPress={handleCopy}>
-              <Text style={styles.actionIcon}>📋</Text>
+              <View style={styles.actionIconBox}>
+                <Text style={styles.actionIconText}>C</Text>
+              </View>
               <Text style={styles.actionText}>Copy</Text>
             </TouchableOpacity>
 
             {isUser && onEdit && (
               <TouchableOpacity style={styles.actionItem} onPress={handleEdit}>
-                <Text style={styles.actionIcon}>✏️</Text>
+                <View style={styles.actionIconBox}>
+                  <Text style={styles.actionIconText}>E</Text>
+                </View>
                 <Text style={styles.actionText}>Edit</Text>
               </TouchableOpacity>
             )}
 
             {onRetry && (
               <TouchableOpacity style={styles.actionItem} onPress={handleRetry}>
-                <Text style={styles.actionIcon}>🔄</Text>
+                <View style={styles.actionIconBox}>
+                  <Text style={styles.actionIconText}>R</Text>
+                </View>
                 <Text style={styles.actionText}>
                   {isUser ? 'Resend' : 'Regenerate'}
                 </Text>
@@ -295,6 +439,73 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '300',
   },
+  thinkingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  thinkingDots: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  thinkingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+    marginHorizontal: 2,
+  },
+  thinkingText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  thinkingBlock: {
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 8,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  thinkingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    gap: 6,
+  },
+  thinkingHeaderIconBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thinkingHeaderIconText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  thinkingHeaderText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  thinkingToggle: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+  },
+  thinkingBlockText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+    padding: 8,
+    paddingTop: 0,
+    fontStyle: 'italic',
+  },
+  streamingThinkingHint: {
+    marginTop: 8,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -338,9 +549,19 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     justifyContent: 'center',
   },
-  actionIcon: {
-    fontSize: 18,
+  actionIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
+  },
+  actionIconText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   actionText: {
     fontSize: 16,

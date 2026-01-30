@@ -7,24 +7,31 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/slider": "^5.1.2",
+    "@react-native-voice/voice": "^3.2.4",
     "@react-native/new-app-screen": "0.83.1",
     "@react-navigation/bottom-tabs": "^7.10.1",
     "@react-navigation/native": "^7.1.28",
     "@react-navigation/native-stack": "^7.11.0",
+    "@types/react-native-vector-icons": "^6.4.18",
     "llama.rn": "^0.11.0-rc.3",
+    "patch-package": "^8.0.1",
     "react": "19.2.0",
     "react-native": "0.83.1",
     "react-native-device-info": "^15.0.1",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.30.0",
     "react-native-image-picker": "^8.2.1",
+    "react-native-keychain": "^10.0.0",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "^4.20.0",
+    "react-native-vector-icons": "^10.3.0",
+    "whisper.rn": "^0.5.5",
     "zustand": "^5.0.10"
   },
   "devDependencies": {

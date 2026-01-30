@@ -88,6 +88,7 @@ export interface Message {
   content: string;
   timestamp: number;
   isStreaming?: boolean;
+  isThinking?: boolean;
   attachments?: MediaAttachment[];
 }
 
@@ -185,8 +186,8 @@ export interface ImageGenerationProgress {
   progress: number;
 }
 
-// Persona types
-export interface Persona {
+// Project types - context presets for grouping related chats
+export interface Project {
   id: string;
   name: string;
   description: string;

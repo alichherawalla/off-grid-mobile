@@ -1,7 +1,8 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 import { useAppStore } from '../stores';
 import {
@@ -11,33 +12,78 @@ import {
   ModelsScreen,
   ChatScreen,
   SettingsScreen,
-  GenerateScreen,
-  PersonasScreen,
+  ProjectsScreen,
+  ChatsListScreen,
+  ProjectDetailScreen,
+  ProjectEditScreen,
 } from '../screens';
-import { RootStackParamList, MainTabParamList } from './types';
+import {
+  RootStackParamList,
+  MainTabParamList,
+  ChatsStackParamList,
+  ProjectsStackParamList,
+} from './types';
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
+const ChatsStack = createNativeStackNavigator<ChatsStackParamList>();
+const ProjectsStack = createNativeStackNavigator<ProjectsStackParamList>();
 
-// Simple tab bar icon component
-const TabIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
-  const icons: Record<string, string> = {
-    Home: '🏠',
-    Chat: '💬',
-    Generate: '🎨',
-    Models: '🤖',
-    Settings: '⚙️',
-  };
-
+// Chats Tab Stack
+const ChatsStackNavigator: React.FC = () => {
   return (
-    <View style={styles.iconContainer}>
-      <Text style={[styles.icon, focused && styles.iconFocused]}>
-        {icons[name]}
-      </Text>
-    </View>
+    <ChatsStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: COLORS.background },
+      }}
+    >
+      <ChatsStack.Screen name="ChatsList" component={ChatsListScreen} />
+      <ChatsStack.Screen name="Chat" component={ChatScreen} />
+    </ChatsStack.Navigator>
   );
 };
 
+// Projects Tab Stack
+const ProjectsStackNavigator: React.FC = () => {
+  return (
+    <ProjectsStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: COLORS.background },
+      }}
+    >
+      <ProjectsStack.Screen name="ProjectsList" component={ProjectsScreen} />
+      <ProjectsStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
+      <ProjectsStack.Screen
+        name="ProjectEdit"
+        component={ProjectEditScreen}
+        options={{ presentation: 'modal' }}
+      />
+    </ProjectsStack.Navigator>
+  );
+};
+
+// Tab icon component
+const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focused }) => {
+  const iconMap: Record<string, string> = {
+    HomeTab: 'home',
+    ChatsTab: 'message-circle',
+    ProjectsTab: 'folder',
+    ModelsTab: 'cpu',
+    SettingsTab: 'settings',
+  };
+
+  return (
+    <Icon
+      name={iconMap[name] || 'circle'}
+      size={22}
+      color={focused ? COLORS.primary : COLORS.textMuted}
+    />
+  );
+};
+
+// Main Tab Navigator
 const MainTabs: React.FC = () => {
   return (
     <Tab.Navigator
@@ -47,35 +93,33 @@ const MainTabs: React.FC = () => {
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarIcon: ({ focused }) => (
-          <TabIcon name={route.name} focused={focused} />
+          <TabBarIcon name={route.name} focused={focused} />
         ),
         tabBarLabelStyle: styles.tabLabel,
       })}
     >
       <Tab.Screen
-        name="Home"
+        name="HomeTab"
         component={HomeScreen}
         options={{ tabBarLabel: 'Home' }}
       />
       <Tab.Screen
-        name="Chat"
-        component={ChatScreen}
-        options={{ tabBarLabel: 'Chat' }}
+        name="ChatsTab"
+        component={ChatsStackNavigator}
+        options={{ tabBarLabel: 'Chats' }}
       />
-      {/* Generate tab hidden - device OpenCL incompatibility
       <Tab.Screen
-        name="Generate"
-        component={GenerateScreen}
-        options={{ tabBarLabel: 'Generate' }}
+        name="ProjectsTab"
+        component={ProjectsStackNavigator}
+        options={{ tabBarLabel: 'Projects' }}
       />
-      */}
       <Tab.Screen
-        name="Models"
+        name="ModelsTab"
         component={ModelsScreen}
         options={{ tabBarLabel: 'Models' }}
       />
       <Tab.Screen
-        name="Settings"
+        name="SettingsTab"
         component={SettingsScreen}
         options={{ tabBarLabel: 'Settings' }}
       />
@@ -83,6 +127,7 @@ const MainTabs: React.FC = () => {
   );
 };
 
+// Root Navigator
 export const AppNavigator: React.FC = () => {
   const hasCompletedOnboarding = useAppStore((s) => s.hasCompletedOnboarding);
   const downloadedModels = useAppStore((s) => s.downloadedModels);
@@ -94,7 +139,7 @@ export const AppNavigator: React.FC = () => {
   }
 
   return (
-    <Stack.Navigator
+    <RootStack.Navigator
       initialRouteName={initialRoute}
       screenOptions={{
         headerShown: false,
@@ -102,11 +147,10 @@ export const AppNavigator: React.FC = () => {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-      <Stack.Screen name="ModelDownload" component={ModelDownloadScreen} />
-      <Stack.Screen name="Main" component={MainTabs} />
-      <Stack.Screen name="Personas" component={PersonasScreen} />
-    </Stack.Navigator>
+      <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
+      <RootStack.Screen name="ModelDownload" component={ModelDownloadScreen} />
+      <RootStack.Screen name="Main" component={MainTabs} />
+    </RootStack.Navigator>
   );
 };
 
@@ -120,18 +164,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-  },
-  iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  icon: {
-    fontSize: 24,
-    opacity: 0.6,
-  },
-  iconFocused: {
-    opacity: 1,
   },
 });

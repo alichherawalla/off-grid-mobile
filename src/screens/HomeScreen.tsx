@@ -9,20 +9,25 @@ import {
 } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card, ModelCard } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, llmService, hardwareService } from '../services';
 import { DownloadedModel, Conversation } from '../types';
-import { RootStackParamList, MainTabParamList } from '../navigation/types';
-import { CompositeNavigationProp } from '@react-navigation/native';
+import { MainTabParamList, ChatsStackParamList } from '../navigation/types';
+import { CompositeNavigationProp, NavigatorScreenParams } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
-type HomeScreenNavigationProp = CompositeNavigationProp<
-  BottomTabNavigationProp<MainTabParamList, 'Home'>,
-  NativeStackNavigationProp<RootStackParamList>
->;
+type MainTabParamListWithNested = {
+  HomeTab: undefined;
+  ChatsTab: NavigatorScreenParams<ChatsStackParamList>;
+  ProjectsTab: undefined;
+  ModelsTab: undefined;
+  SettingsTab: undefined;
+};
+
+type HomeScreenNavigationProp = BottomTabNavigationProp<MainTabParamListWithNested, 'HomeTab'>;
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -107,12 +112,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const startNewChat = (modelId: string) => {
     const conversationId = createConversation(modelId);
     setActiveConversation(conversationId);
-    navigation.navigate('Chat');
+    navigation.navigate('ChatsTab', { screen: 'Chat', params: { conversationId } });
   };
 
   const continueChat = (conversationId: string) => {
     setActiveConversation(conversationId);
-    navigation.navigate('Chat');
+    navigation.navigate('ChatsTab', { screen: 'Chat', params: { conversationId } });
   };
 
   const handleDeleteConversation = (conversation: Conversation) => {
@@ -181,7 +186,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 title="Browse Models"
                 variant="outline"
                 size="small"
-                onPress={() => navigation.navigate('Models')}
+                onPress={() => navigation.navigate('ModelsTab')}
               />
             </View>
           )}
@@ -226,7 +231,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               title="Browse More"
               variant="ghost"
               size="small"
-              onPress={() => navigation.navigate('Models')}
+              onPress={() => navigation.navigate('ModelsTab')}
             />
           </View>
 
@@ -238,7 +243,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </Text>
               <Button
                 title="Download a Model"
-                onPress={() => navigation.navigate('Models')}
+                onPress={() => navigation.navigate('ModelsTab')}
                 style={styles.emptyButton}
               />
             </Card>
@@ -264,7 +269,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
         {/* Privacy Card */}
         <Card style={styles.privacyCard}>
-          <Text style={styles.privacyIcon}>🔒</Text>
+          <View style={styles.privacyIconContainer}>
+            <Icon name="lock" size={24} color={COLORS.secondary} />
+          </View>
           <Text style={styles.privacyTitle}>Your Privacy is Protected</Text>
           <Text style={styles.privacyText}>
             All conversations are processed entirely on your device. No data
@@ -421,9 +428,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.secondary + '40',
   },
-  privacyIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+  privacyIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.secondary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   privacyTitle: {
     fontSize: 16,

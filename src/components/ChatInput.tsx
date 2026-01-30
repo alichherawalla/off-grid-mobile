@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -13,6 +13,9 @@ import {
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import { COLORS } from '../constants';
 import { MediaAttachment } from '../types';
+import { VoiceRecordButton } from './VoiceRecordButton';
+import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
+import { useWhisperStore } from '../stores';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[]) => void;
@@ -21,6 +24,7 @@ interface ChatInputProps {
   isGenerating?: boolean;
   placeholder?: string;
   supportsVision?: boolean;
+  conversationId?: string | null;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -30,9 +34,59 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isGenerating,
   placeholder = 'Type a message...',
   supportsVision = false,
+  conversationId,
 }) => {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
+
+  // Track which conversation the recording was started in
+  const recordingConversationIdRef = useRef<string | null>(null);
+
+  const { downloadedModelId } = useWhisperStore();
+
+  const {
+    isRecording,
+    isModelLoaded,
+    partialResult,
+    finalResult,
+    error,
+    startRecording: startRecordingBase,
+    stopRecording,
+    clearResult,
+  } = useWhisperTranscription();
+
+  // Voice is available if whisper model is downloaded and loaded
+  const voiceAvailable = !!downloadedModelId;
+
+  // Wrap startRecording to track conversation ID
+  const startRecording = async () => {
+    recordingConversationIdRef.current = conversationId || null;
+    await startRecordingBase();
+  };
+
+  // Clear pending transcription when conversation changes
+  useEffect(() => {
+    // If conversation changed while we had a pending result, clear it
+    if (recordingConversationIdRef.current && recordingConversationIdRef.current !== conversationId) {
+      clearResult();
+      recordingConversationIdRef.current = null;
+    }
+  }, [conversationId, clearResult]);
+
+  // Insert transcribed text into message - only if same conversation
+  useEffect(() => {
+    if (finalResult) {
+      // Only apply if we're still in the same conversation where recording started
+      if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
+        setMessage(prev => {
+          const prefix = prev.trim() ? prev.trim() + ' ' : '';
+          return prefix + finalResult;
+        });
+      }
+      clearResult();
+      recordingConversationIdRef.current = null;
+    }
+  }, [finalResult, clearResult, conversationId]);
 
   const handleSend = () => {
     if ((message.trim() || attachments.length > 0) && !disabled) {
@@ -167,6 +221,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </View>
           </TouchableOpacity>
         )}
+
+        {/* Voice record button */}
+        <VoiceRecordButton
+          isRecording={isRecording}
+          isAvailable={voiceAvailable}
+          partialResult={partialResult}
+          error={error}
+          disabled={disabled || isGenerating}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
+          onCancelRecording={() => {
+            stopRecording();
+            clearResult();
+          }}
+        />
 
         <TextInput
           style={[styles.input, !supportsVision && styles.inputNoAttach]}

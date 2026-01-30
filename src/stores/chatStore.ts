@@ -11,13 +11,14 @@ interface ChatState {
   // Current message being streamed
   streamingMessage: string;
   isStreaming: boolean;
+  isThinking: boolean; // True when processing prompt, before first token
 
   // Actions
   createConversation: (modelId: string, title?: string, personaId?: string) => string;
   deleteConversation: (conversationId: string) => void;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
-  setConversationPersona: (conversationId: string, personaId: string | null) => void;
+  setConversationProject: (conversationId: string, personaId: string | null) => void;
 
   // Messages
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>, attachments?: MediaAttachment[]) => Message;
@@ -29,6 +30,7 @@ interface ChatState {
   setStreamingMessage: (content: string) => void;
   appendToStreamingMessage: (token: string) => void;
   setIsStreaming: (streaming: boolean) => void;
+  setIsThinking: (thinking: boolean) => void;
   finalizeStreamingMessage: (conversationId: string) => void;
   clearStreamingMessage: () => void;
 
@@ -46,6 +48,7 @@ export const useChatStore = create<ChatState>()(
       activeConversationId: null,
       streamingMessage: '',
       isStreaming: false,
+      isThinking: false,
 
       createConversation: (modelId, title, personaId) => {
         const id = generateId();
@@ -62,6 +65,10 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           conversations: [conversation, ...state.conversations],
           activeConversationId: id,
+          // Clear any streaming state when creating a new conversation
+          streamingMessage: '',
+          isStreaming: false,
+          isThinking: false,
         }));
 
         return id;
@@ -78,7 +85,13 @@ export const useChatStore = create<ChatState>()(
       },
 
       setActiveConversation: (conversationId) => {
-        set({ activeConversationId: conversationId });
+        // Clear any streaming state when switching conversations
+        set({
+          activeConversationId: conversationId,
+          streamingMessage: '',
+          isStreaming: false,
+          isThinking: false,
+        });
       },
 
       getActiveConversation: () => {
@@ -86,7 +99,7 @@ export const useChatStore = create<ChatState>()(
         return state.conversations.find((c) => c.id === state.activeConversationId) || null;
       },
 
-      setConversationPersona: (conversationId, personaId) => {
+      setConversationProject: (conversationId, personaId) => {
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id === conversationId
@@ -179,7 +192,11 @@ export const useChatStore = create<ChatState>()(
       },
 
       setIsStreaming: (streaming) => {
-        set({ isStreaming: streaming });
+        set({ isStreaming: streaming, isThinking: false });
+      },
+
+      setIsThinking: (thinking) => {
+        set({ isThinking: thinking });
       },
 
       finalizeStreamingMessage: (conversationId) => {
@@ -190,11 +207,11 @@ export const useChatStore = create<ChatState>()(
             content: streamingMessage.trim(),
           });
         }
-        set({ streamingMessage: '', isStreaming: false });
+        set({ streamingMessage: '', isStreaming: false, isThinking: false });
       },
 
       clearStreamingMessage: () => {
-        set({ streamingMessage: '', isStreaming: false });
+        set({ streamingMessage: '', isStreaming: false, isThinking: false });
       },
 
       clearAllConversations: () => {

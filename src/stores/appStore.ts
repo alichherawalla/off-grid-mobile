@@ -48,6 +48,9 @@ interface AppState {
     topP: number;
     repeatPenalty: number;
     contextLength: number;
+    // Performance settings
+    nThreads: number;
+    nBatch: number;
   };
   updateSettings: (settings: Partial<AppState['settings']>) => void;
 }
@@ -111,6 +114,9 @@ export const useAppStore = create<AppState>()(
         topP: 0.9,
         repeatPenalty: 1.1,
         contextLength: 2048,
+        // Performance - higher threads = faster on multi-core devices
+        nThreads: 6,
+        nBatch: 256,
       },
       updateSettings: (newSettings) =>
         set((state) => ({
