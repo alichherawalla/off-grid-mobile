@@ -424,24 +424,24 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             <View style={styles.settingItem}>
               <View style={styles.settingHeader}>
                 <Text style={styles.settingLabel}>Image Steps</Text>
-                <Text style={styles.settingValue}>{settings.imageSteps || 30}</Text>
+                <Text style={styles.settingValue}>{settings.imageSteps || 20}</Text>
               </View>
               <Text style={styles.settingDescription}>
-                More steps = better quality but slower (20-50 recommended)
+                LCM models: 4-8 steps, Standard SD: 20-50 steps
               </Text>
               <Slider
                 style={styles.slider}
-                minimumValue={10}
+                minimumValue={4}
                 maximumValue={50}
-                step={5}
-                value={settings.imageSteps || 30}
+                step={1}
+                value={settings.imageSteps || 20}
                 onSlidingComplete={(value) => updateSettings({ imageSteps: value })}
                 minimumTrackTintColor={COLORS.primary}
                 maximumTrackTintColor={COLORS.surface}
                 thumbTintColor={COLORS.primary}
               />
               <View style={styles.sliderLabels}>
-                <Text style={styles.sliderMinMax}>10</Text>
+                <Text style={styles.sliderMinMax}>4</Text>
                 <Text style={styles.sliderMinMax}>50</Text>
               </View>
             </View>

@@ -365,15 +365,15 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.sliderSection}>
             <View style={styles.sliderHeader}>
               <Text style={styles.sliderLabel}>Image Steps</Text>
-              <Text style={styles.sliderValue}>{rawSettings?.imageSteps || 30}</Text>
+              <Text style={styles.sliderValue}>{rawSettings?.imageSteps || 20}</Text>
             </View>
-            <Text style={styles.sliderDesc}>More steps = better quality but slower</Text>
+            <Text style={styles.sliderDesc}>More steps = better quality but slower (LCM: 4-8, Standard: 20-50)</Text>
             <Slider
               style={styles.slider}
-              minimumValue={10}
+              minimumValue={4}
               maximumValue={50}
-              step={5}
-              value={rawSettings?.imageSteps || 30}
+              step={1}
+              value={rawSettings?.imageSteps || 20}
               onSlidingComplete={(value) => updateSettings({ imageSteps: value })}
               minimumTrackTintColor={COLORS.primary}
               maximumTrackTintColor={COLORS.surface}
