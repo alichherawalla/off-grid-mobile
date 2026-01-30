@@ -214,11 +214,16 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                 val negativeTokens = tokenizer!!.encode(negativePrompt)
 
                 // 2. Get text embeddings
+                Log.d(TAG, "Encoding prompt tokens: ${promptTokens.size}")
                 val textEmbeddings = encodeText(promptTokens)
+                Log.d(TAG, "Text embeddings size: ${textEmbeddings.size}")
+
                 val uncondEmbeddings = encodeText(negativeTokens)
+                Log.d(TAG, "Uncond embeddings size: ${uncondEmbeddings.size}")
 
                 // Concatenate for classifier-free guidance [uncond, cond]
                 val batchEmbeddings = concatenateEmbeddings(uncondEmbeddings, textEmbeddings)
+                Log.d(TAG, "Batch embeddings size: ${batchEmbeddings.size}")
 
                 // 3. Initialize latents
                 val latentHeight = height / LATENT_SCALE
@@ -230,6 +235,10 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
 
                 // 4. Denoising loop
                 val timesteps = scheduler!!.getTimesteps()
+                Log.d(TAG, "Starting denoising with ${timesteps.size} steps")
+                Log.d(TAG, "Timesteps: ${timesteps.take(5).toList()}...")
+                Log.d(TAG, "Initial latents - min: ${latents.minOrNull()}, max: ${latents.maxOrNull()}, mean: ${latents.average()}")
+
                 for ((stepIndex, timestep) in timesteps.withIndex()) {
                     if (shouldCancel) {
                         throw Exception("Generation cancelled")
@@ -241,15 +250,25 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                     // Predict noise
                     val noisePred = predictNoise(latentModelInput, timestep.toLong(), batchEmbeddings)
 
+                    if (stepIndex == 0) {
+                        Log.d(TAG, "Step 0 - Noise pred size: ${noisePred.size}, min: ${noisePred.minOrNull()}, max: ${noisePred.maxOrNull()}")
+                    }
+
                     // Perform guidance
                     val guidedNoise = applyGuidance(noisePred, guidanceScale)
 
                     // Scheduler step
                     latents = scheduler!!.step(guidedNoise, stepIndex, latents)
 
+                    if (stepIndex == 0 || stepIndex == steps - 1) {
+                        Log.d(TAG, "Step $stepIndex - Latents min: ${latents.minOrNull()}, max: ${latents.maxOrNull()}, mean: ${latents.average()}")
+                    }
+
                     // Send progress
                     sendProgress(stepIndex + 1, steps)
                 }
+
+                Log.d(TAG, "Final latents - min: ${latents.minOrNull()}, max: ${latents.maxOrNull()}, mean: ${latents.average()}")
 
                 // 5. Decode latents to image
                 val image = decodeLatents(latents, height, width)
@@ -313,22 +332,38 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         val env = ortEnv!!
         val session = textEncoder!!
 
-        // Create input tensor - using int32 as expected by the text encoder model
-        val tokenBuffer = IntBuffer.wrap(tokenIds)
+        // Create input tensor - convert to Long as many CLIP models expect int64
+        val tokenLongs = tokenIds.map { it.toLong() }.toLongArray()
+        val tokenBuffer = LongBuffer.wrap(tokenLongs)
         val inputTensor = OnnxTensor.createTensor(env, tokenBuffer, longArrayOf(1, tokenIds.size.toLong()))
 
-        // Run inference
-        val inputs = mapOf("input_ids" to inputTensor)
+        // Run inference - try different input names
+        val inputName = session.inputNames.firstOrNull() ?: "input_ids"
+        val inputs = mapOf(inputName to inputTensor)
         val outputs = session.run(inputs)
 
-        // Get output - typically named "last_hidden_state" or similar
-        val outputTensor = outputs[0] as OnnxTensor
-        val outputData = outputTensor.floatBuffer.array()
+        // Get output - properly extract data from buffer
+        val outputTensor = outputs.get(0) as OnnxTensor
+        val outputData = extractFloatArray(outputTensor)
 
         inputTensor.close()
         outputs.close()
 
         return outputData
+    }
+
+    private fun extractFloatArray(tensor: OnnxTensor): FloatArray {
+        val buffer = tensor.floatBuffer
+        val data = FloatArray(buffer.remaining())
+        buffer.get(data)
+        return data
+    }
+
+    private fun extractIntArray(tensor: OnnxTensor): IntArray {
+        val buffer = tensor.intBuffer
+        val data = IntArray(buffer.remaining())
+        buffer.get(data)
+        return data
     }
 
     private fun concatenateEmbeddings(uncond: FloatArray, cond: FloatArray): FloatArray {
@@ -349,6 +384,9 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         val height = 64  // 512 / 8
         val width = 64
 
+        // Log input names for debugging
+        Log.d(TAG, "UNet input names: ${session.inputNames.toList()}")
+
         // Create latent tensor
         val latentBuffer = FloatBuffer.wrap(latents)
         val latentTensor = OnnxTensor.createTensor(
@@ -356,30 +394,49 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
             longArrayOf(batchSize.toLong(), channels.toLong(), height.toLong(), width.toLong())
         )
 
-        // Create timestep tensor - using int32 as expected by the model
-        val timestepBuffer = IntBuffer.wrap(intArrayOf(timestep.toInt(), timestep.toInt()))
+        // Create timestep tensor - use int64 as expected by most diffusers models
+        // Shape can be [batch] or [1] depending on model
+        val timestepArray = longArrayOf(timestep, timestep)
+        val timestepBuffer = LongBuffer.wrap(timestepArray)
         val timestepTensor = OnnxTensor.createTensor(env, timestepBuffer, longArrayOf(batchSize.toLong()))
 
         // Create encoder hidden states tensor
         val embeddingBuffer = FloatBuffer.wrap(embeddings)
         val seqLen = 77L  // CLIP max length
         val hiddenSize = embeddings.size / (batchSize * 77)
+        Log.d(TAG, "Embedding hidden size: $hiddenSize, total size: ${embeddings.size}")
         val embeddingTensor = OnnxTensor.createTensor(
             env, embeddingBuffer,
             longArrayOf(batchSize.toLong(), seqLen, hiddenSize.toLong())
         )
 
-        // Run inference
-        val inputs = mapOf(
-            "sample" to latentTensor,
-            "timestep" to timestepTensor,
-            "encoder_hidden_states" to embeddingTensor
-        )
+        // Build inputs map based on actual model input names
+        val inputNames = session.inputNames.toList()
+        val inputs = mutableMapOf<String, OnnxTensor>()
+
+        // Find the right input names (models may use different naming conventions)
+        for (name in inputNames) {
+            when {
+                name.contains("sample") || name.contains("latent") -> inputs[name] = latentTensor
+                name.contains("timestep") || name == "t" -> inputs[name] = timestepTensor
+                name.contains("encoder") || name.contains("hidden") || name.contains("context") -> inputs[name] = embeddingTensor
+            }
+        }
+
+        // Fallback to standard names if no matches found
+        if (inputs.isEmpty()) {
+            inputs["sample"] = latentTensor
+            inputs["timestep"] = timestepTensor
+            inputs["encoder_hidden_states"] = embeddingTensor
+        }
+
+        Log.d(TAG, "UNet inputs: ${inputs.keys.toList()}")
+
         val outputs = session.run(inputs)
 
-        // Get output
-        val outputTensor = outputs[0] as OnnxTensor
-        val outputData = outputTensor.floatBuffer.array()
+        // Get output - properly extract data
+        val outputTensor = outputs.get(0) as OnnxTensor
+        val outputData = extractFloatArray(outputTensor)
 
         latentTensor.close()
         timestepTensor.close()
@@ -405,7 +462,9 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         val env = ortEnv!!
         val session = vaeDecoder!!
 
-        // Scale latents
+        Log.d(TAG, "VAE decoder input names: ${session.inputNames.toList()}")
+
+        // Scale latents (1 / 0.18215 ≈ 5.4885)
         val scaledLatents = latents.map { it / VAE_SCALE_FACTOR }.toFloatArray()
 
         // Create input tensor
@@ -417,13 +476,16 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
             longArrayOf(1, LATENT_CHANNELS.toLong(), latentHeight.toLong(), latentWidth.toLong())
         )
 
-        // Run inference
-        val inputs = mapOf("latent_sample" to latentTensor)
+        // Find the right input name
+        val inputName = session.inputNames.firstOrNull() ?: "latent_sample"
+        val inputs = mapOf(inputName to latentTensor)
         val outputs = session.run(inputs)
 
-        // Get output image
-        val outputTensor = outputs[0] as OnnxTensor
-        val imageData = outputTensor.floatBuffer.array()
+        // Get output image - properly extract data
+        val outputTensor = outputs.get(0) as OnnxTensor
+        val imageData = extractFloatArray(outputTensor)
+
+        Log.d(TAG, "VAE output size: ${imageData.size}, expected: ${3 * height * width}")
 
         latentTensor.close()
         outputs.close()
