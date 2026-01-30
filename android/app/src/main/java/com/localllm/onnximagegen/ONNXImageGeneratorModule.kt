@@ -138,11 +138,12 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                 }
 
                 // Configure session options for CPU (NNAPI doesn't work with SD models)
+                // Use fewer threads to avoid freezing the UI - leave cores for system/UI
                 val sessionOptions = OrtSession.SessionOptions().apply {
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-                    // Use all available threads for CPU (8 core device)
-                    setIntraOpNumThreads(8)
-                    setInterOpNumThreads(4)
+                    // Use 4 threads instead of 8 to leave CPU headroom for UI responsiveness
+                    setIntraOpNumThreads(4)
+                    setInterOpNumThreads(2)
                     // Enable memory optimizations
                     setMemoryPatternOptimization(true)
                 }
@@ -305,6 +306,9 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
 
                     // Send progress with timing info
                     sendProgress(stepIndex + 1, steps)
+
+                    // Yield to allow UI thread to update and prevent phone from freezing
+                    delay(50)
 
                     // Generate and send preview at intervals (but not on first or last step)
                     if (previewInterval > 0 && stepIndex > 0 && stepIndex < steps - 1 && (stepIndex + 1) % previewInterval == 0) {
