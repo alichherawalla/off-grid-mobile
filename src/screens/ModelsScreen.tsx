@@ -41,6 +41,7 @@ const LCM_HUGGINGFACE_FILES = [
 ];
 
 // Predefined ONNX image models available for download
+// Note: Only 1GB+ models from patch-14022024 work reliably. The 600MB models from patch-25022024 have compatibility issues.
 const AVAILABLE_IMAGE_MODELS: Array<{
   id: string;
   name: string;
@@ -62,7 +63,7 @@ const AVAILABLE_IMAGE_MODELS: Array<{
   {
     id: 'lcm_dreamshaper_v7',
     name: 'LCM DreamShaper v7',
-    description: 'Fast generation (4-8 steps) - 40-50% faster per step',
+    description: 'Fast generation (4-8 steps) - experimental LCM model',
     huggingFaceRepo: 'aislamov/lcm-dreamshaper-v7-onnx',
     huggingFaceFiles: LCM_HUGGINGFACE_FILES,
     size: 2.22 * 1024 * 1024 * 1024, // ~2.22GB

@@ -391,7 +391,7 @@ export const ChatScreen: React.FC = () => {
           prompt,
           steps: settings.imageSteps || 30,
           guidanceScale: settings.imageGuidanceScale || 7.5,
-          previewInterval: 5,
+          previewInterval: 2,
         },
         (progress) => {
           setImageGenerationProgress({
