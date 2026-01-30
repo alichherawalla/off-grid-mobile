@@ -124,7 +124,7 @@ class ONNXImageGeneratorService {
         seed: params.seed,
         width: params.width || 512,
         height: params.height || 512,
-        previewInterval: params.previewInterval ?? 5,
+        previewInterval: params.previewInterval ?? 2,
       });
 
       return {
