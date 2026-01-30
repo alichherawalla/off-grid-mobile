@@ -1,12 +1,13 @@
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, DownloadProgress, ModelFile, ModelCredibility, BackgroundDownloadInfo } from '../types';
+import { DownloadedModel, DownloadProgress, ModelFile, ModelCredibility, BackgroundDownloadInfo, ONNXImageModel } from '../types';
 import { APP_CONFIG, LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../constants';
 import { huggingFaceService } from './huggingface';
 import { backgroundDownloadService } from './backgroundDownloadService';
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
+const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
 
 type DownloadProgressCallback = (progress: DownloadProgress) => void;
 type DownloadCompleteCallback = (model: DownloadedModel) => void;
@@ -20,11 +21,13 @@ type BackgroundDownloadMetadataCallback = (
 
 class ModelManager {
   private modelsDir: string;
+  private imageModelsDir: string;
   private downloadJobs: Map<string, { jobId: number; cancel: () => void }> = new Map();
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
 
   constructor() {
     this.modelsDir = `${RNFS.DocumentDirectoryPath}/${APP_CONFIG.modelStorageDir}`;
+    this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
   async initialize(): Promise<void> {
@@ -32,6 +35,11 @@ class ModelManager {
     const exists = await RNFS.exists(this.modelsDir);
     if (!exists) {
       await RNFS.mkdir(this.modelsDir);
+    }
+    // Ensure image models directory exists
+    const imageModelsExists = await RNFS.exists(this.imageModelsDir);
+    if (!imageModelsExists) {
+      await RNFS.mkdir(this.imageModelsDir);
     }
   }
 
@@ -603,6 +611,105 @@ class ModelManager {
 
   private async saveModelsList(models: DownloadedModel[]): Promise<void> {
     await AsyncStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(models));
+  }
+
+  // ============== Image Model Management ==============
+
+  /**
+   * Get all downloaded ONNX image models
+   */
+  async getDownloadedImageModels(): Promise<ONNXImageModel[]> {
+    try {
+      const stored = await AsyncStorage.getItem(IMAGE_MODELS_STORAGE_KEY);
+      if (!stored) return [];
+
+      const models: ONNXImageModel[] = JSON.parse(stored);
+
+      // Verify model directories still exist
+      const validModels: ONNXImageModel[] = [];
+      for (const model of models) {
+        const exists = await RNFS.exists(model.modelPath);
+        if (exists) {
+          validModels.push(model);
+        }
+      }
+
+      // Update storage if we removed any invalid entries
+      if (validModels.length !== models.length) {
+        await this.saveImageModelsList(validModels);
+      }
+
+      return validModels;
+    } catch (error) {
+      console.error('Error loading downloaded image models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Add a downloaded image model to the registry
+   */
+  async addDownloadedImageModel(model: ONNXImageModel): Promise<void> {
+    const models = await this.getDownloadedImageModels();
+
+    // Check if already exists
+    const existingIndex = models.findIndex(m => m.id === model.id);
+    if (existingIndex >= 0) {
+      models[existingIndex] = model;
+    } else {
+      models.push(model);
+    }
+
+    await this.saveImageModelsList(models);
+  }
+
+  /**
+   * Delete an image model and its files
+   */
+  async deleteImageModel(modelId: string): Promise<void> {
+    const models = await this.getDownloadedImageModels();
+    const model = models.find(m => m.id === modelId);
+
+    if (!model) {
+      throw new Error('Image model not found');
+    }
+
+    // Delete the model directory
+    if (await RNFS.exists(model.modelPath)) {
+      await RNFS.unlink(model.modelPath);
+    }
+
+    // Update the stored list
+    const updatedModels = models.filter(m => m.id !== modelId);
+    await this.saveImageModelsList(updatedModels);
+  }
+
+  /**
+   * Get path for an image model
+   */
+  async getImageModelPath(modelId: string): Promise<string | null> {
+    const models = await this.getDownloadedImageModels();
+    const model = models.find(m => m.id === modelId);
+    return model?.modelPath || null;
+  }
+
+  /**
+   * Get storage used by image models
+   */
+  async getImageModelsStorageUsed(): Promise<number> {
+    const models = await this.getDownloadedImageModels();
+    return models.reduce((total, model) => total + model.size, 0);
+  }
+
+  /**
+   * Get the directory where image models are stored
+   */
+  getImageModelsDirectory(): string {
+    return this.imageModelsDir;
+  }
+
+  private async saveImageModelsList(models: ONNXImageModel[]): Promise<void> {
+    await AsyncStorage.setItem(IMAGE_MODELS_STORAGE_KEY, JSON.stringify(models));
   }
 }
 
