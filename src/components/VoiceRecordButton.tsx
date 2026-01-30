@@ -11,6 +11,7 @@ import {
   Alert,
   Vibration,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 
 interface VoiceRecordButtonProps {
@@ -24,6 +25,8 @@ interface VoiceRecordButtonProps {
   onStartRecording: () => void;
   onStopRecording: () => void;
   onCancelRecording: () => void;
+  /** Style as send button (WhatsApp-style, replaces send when input empty) */
+  asSendButton?: boolean;
 }
 
 const CANCEL_DISTANCE = 80;
@@ -39,6 +42,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   onStartRecording,
   onStopRecording,
   onCancelRecording,
+  asSendButton = false,
 }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const loadingAnim = useRef(new Animated.Value(0)).current;
@@ -164,17 +168,21 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
+        <View style={asSendButton ? undefined : styles.loadingContainer}>
           <Animated.View
             style={[
               styles.button,
-              styles.buttonLoading,
+              asSendButton ? styles.buttonAsSendLoading : styles.buttonLoading,
               { transform: [{ rotate: spin }] },
             ]}
           >
-            <View style={styles.loadingIndicator} />
+            {asSendButton ? (
+              <Icon name="mic" size={18} color={COLORS.primary} />
+            ) : (
+              <View style={styles.loadingIndicator} />
+            )}
           </Animated.View>
-          <Text style={styles.loadingText}>Loading...</Text>
+          {!asSendButton && <Text style={styles.loadingText}>Loading...</Text>}
         </View>
       </View>
     );
@@ -189,17 +197,21 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
     return (
       <View style={styles.container}>
-        <View style={styles.loadingContainer}>
+        <View style={asSendButton ? undefined : styles.loadingContainer}>
           <Animated.View
             style={[
               styles.button,
-              styles.buttonTranscribing,
+              asSendButton ? styles.buttonAsSendLoading : styles.buttonTranscribing,
               { transform: [{ rotate: spin }] },
             ]}
           >
-            <View style={styles.loadingIndicator} />
+            {asSendButton ? (
+              <Icon name="mic" size={18} color={COLORS.secondary} />
+            ) : (
+              <View style={styles.loadingIndicator} />
+            )}
           </Animated.View>
-          <Text style={styles.transcribingText}>Transcribing...</Text>
+          {!asSendButton && <Text style={styles.transcribingText}>Transcribing...</Text>}
         </View>
       </View>
     );
@@ -213,12 +225,18 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
           style={styles.buttonWrapper}
           onPress={handleUnavailableTap}
         >
-          <View style={[styles.button, styles.buttonUnavailable]}>
-            <View style={styles.micIcon}>
-              <View style={[styles.micBody, styles.micBodyUnavailable]} />
-              <View style={[styles.micBase, styles.micBodyUnavailable]} />
-            </View>
-            <View style={styles.unavailableSlash} />
+          <View style={[styles.button, asSendButton && styles.buttonAsSendUnavailable, !asSendButton && styles.buttonUnavailable]}>
+            {asSendButton ? (
+              <Icon name="mic-off" size={18} color={COLORS.textMuted} />
+            ) : (
+              <>
+                <View style={styles.micIcon}>
+                  <View style={[styles.micBody, styles.micBodyUnavailable]} />
+                  <View style={[styles.micBase, styles.micBodyUnavailable]} />
+                </View>
+                <View style={styles.unavailableSlash} />
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -270,14 +288,28 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         <View
           style={[
             styles.button,
+            asSendButton && styles.buttonAsSend,
             isRecording && styles.buttonRecording,
             disabled && styles.buttonDisabled,
           ]}
         >
-          <View style={styles.micIcon}>
-            <View style={[styles.micBody, isRecording && styles.micBodyRecording]} />
-            <View style={[styles.micBase, isRecording && styles.micBodyRecording]} />
-          </View>
+          {/* Show send icon by default when asSendButton, mic when recording */}
+          {asSendButton && !isRecording ? (
+            <Icon name="send" size={18} color={COLORS.text} />
+          ) : asSendButton && isRecording ? (
+            <Icon name="mic" size={18} color={COLORS.text} />
+          ) : (
+            <View style={styles.micIcon}>
+              <View style={[
+                styles.micBody,
+                isRecording && styles.micBodyRecording,
+              ]} />
+              <View style={[
+                styles.micBase,
+                isRecording && styles.micBodyRecording,
+              ]} />
+            </View>
+          )}
         </View>
       </Animated.View>
 
@@ -308,6 +340,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceLight,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buttonAsSend: {
+    width: 44,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.primary,
+  },
+  buttonAsSendUnavailable: {
+    width: 44,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surfaceLight,
+  },
+  buttonAsSendLoading: {
+    width: 44,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surface,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderTopColor: 'transparent',
   },
   buttonRecording: {
     backgroundColor: COLORS.error,
@@ -363,6 +416,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   micBodyRecording: {
+    backgroundColor: COLORS.text,
+  },
+  micBodyAsSend: {
     backgroundColor: COLORS.text,
   },
   micBodyUnavailable: {
