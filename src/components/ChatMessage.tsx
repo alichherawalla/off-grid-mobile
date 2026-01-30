@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Modal,
   TextInput,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { COLORS } from '../constants';
 import { Message } from '../types';
@@ -21,7 +23,9 @@ interface ChatMessageProps {
   onCopy?: (content: string) => void;
   onRetry?: (message: Message) => void;
   onEdit?: (message: Message, newContent: string) => void;
+  onGenerateImage?: (prompt: string) => void;
   showActions?: boolean;
+  canGenerateImage?: boolean;
 }
 
 // Parse message content to extract <think> blocks
@@ -119,7 +123,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onCopy,
   onRetry,
   onEdit,
+  onGenerateImage,
   showActions = true,
+  canGenerateImage = false,
 }) => {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -172,6 +178,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     if (showActions && !isStreaming) {
       setShowActionMenu(true);
     }
+  };
+
+  const handleGenerateImage = () => {
+    if (onGenerateImage) {
+      // Extract a prompt from the message - use the main response without thinking blocks
+      const prompt = message.role === 'assistant'
+        ? parsedContent.response.trim()
+        : message.content.trim();
+      // Limit prompt length for image generation
+      const truncatedPrompt = prompt.slice(0, 500);
+      onGenerateImage(truncatedPrompt);
+    }
+    setShowActionMenu(false);
   };
 
   return (
@@ -273,6 +292,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
         <View style={styles.metaRow}>
           <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
+          {message.generationTimeMs && message.role === 'assistant' && (
+            <Text style={styles.generationTime}>
+              {formatDuration(message.generationTimeMs)}
+            </Text>
+          )}
           {showActions && !isStreaming && (
             <TouchableOpacity
               style={styles.actionHint}
@@ -324,6 +348,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               </TouchableOpacity>
             )}
 
+            {canGenerateImage && onGenerateImage && (
+              <TouchableOpacity style={styles.actionItem} onPress={handleGenerateImage}>
+                <View style={[styles.actionIconBox, styles.actionIconBoxImage]}>
+                  <Text style={styles.actionIconText}>I</Text>
+                </View>
+                <Text style={styles.actionText}>Generate Image</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[styles.actionItem, styles.actionItemCancel]}
               onPress={() => setShowActionMenu(false)}
@@ -340,18 +373,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         transparent
         animationType="slide"
         onRequestClose={handleCancelEdit}
+        statusBarTranslucent
       >
-        <View style={styles.editModalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.editModalOverlay}
+        >
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={handleCancelEdit}
+          />
           <View style={styles.editModal}>
             <Text style={styles.editModalTitle}>Edit Message</Text>
             <TextInput
               style={styles.editInput}
-              value={editedContent}
+              defaultValue={message.content}
               onChangeText={setEditedContent}
               multiline
               autoFocus
               placeholder="Enter message..."
               placeholderTextColor={COLORS.textMuted}
+              textAlignVertical="top"
             />
             <View style={styles.editActions}>
               <TouchableOpacity
@@ -368,7 +411,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -377,6 +420,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
 }
 
 const styles = StyleSheet.create({
@@ -517,6 +573,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textMuted,
   },
+  generationTime: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
   actionHint: {
     padding: 4,
   },
@@ -558,6 +619,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  actionIconBoxImage: {
+    backgroundColor: COLORS.secondary + '30',
+  },
   actionIconText: {
     fontSize: 14,
     fontWeight: '600',
@@ -574,8 +638,11 @@ const styles = StyleSheet.create({
   },
   editModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  editModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   editModal: {
     backgroundColor: COLORS.background,
