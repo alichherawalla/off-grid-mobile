@@ -6,10 +6,11 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * LMS Discrete Scheduler for Stable Diffusion denoising.
- * Based on the Latent Diffusion paper and sd4j reference implementation.
+ * Euler Discrete Scheduler for Stable Diffusion denoising.
+ * Simpler and more reliable than LMS for mobile devices.
+ * Also compatible with LCM models when using fewer steps.
  */
-class LMSDiscreteScheduler(
+class EulerDiscreteScheduler(
     private val numTrainTimesteps: Int = 1000,
     private val betaStart: Float = 0.00085f,
     private val betaEnd: Float = 0.012f,
@@ -18,7 +19,6 @@ class LMSDiscreteScheduler(
     private var numInferenceSteps: Int = 0
     private lateinit var timesteps: IntArray
     private lateinit var sigmas: FloatArray
-    private val derivatives: MutableList<FloatArray> = mutableListOf()
 
     // Betas and alphas for the diffusion process
     private val betas: FloatArray
@@ -54,15 +54,15 @@ class LMSDiscreteScheduler(
      */
     fun setTimesteps(numSteps: Int) {
         numInferenceSteps = numSteps
-        derivatives.clear()
 
         // Create timesteps (evenly spaced from numTrainTimesteps-1 to 0)
-        val stepRatio = numTrainTimesteps / numSteps
+        val stepRatio = numTrainTimesteps.toFloat() / numSteps
         timesteps = IntArray(numSteps) { i ->
-            ((numSteps - 1 - i) * stepRatio).coerceIn(0, numTrainTimesteps - 1)
+            ((numSteps - 1 - i) * stepRatio).toInt().coerceIn(0, numTrainTimesteps - 1)
         }
 
-        // Calculate sigmas
+        // Calculate sigmas from alphas_cumprod
+        // sigma = sqrt((1 - alpha_cumprod) / alpha_cumprod)
         sigmas = FloatArray(numSteps + 1)
         for (i in 0 until numSteps) {
             val t = timesteps[i]
@@ -83,7 +83,6 @@ class LMSDiscreteScheduler(
 
     /**
      * Get the initial noise sigma (for scaling input noise)
-     * This matches diffusers: init_noise_sigma = (sigma_max^2 + 1)^0.5
      */
     fun getInitNoiseSigma(): Float {
         val sigmaMax = sigmas[0]
@@ -99,103 +98,35 @@ class LMSDiscreteScheduler(
     }
 
     /**
-     * Perform one denoising step using Linear Multi-Step method
+     * Scale model input for the current timestep
+     */
+    fun scaleModelInput(sample: FloatArray, stepIndex: Int): FloatArray {
+        val sigma = sigmas[stepIndex]
+        val scale = 1f / sqrt(sigma * sigma + 1f)
+        return sample.map { it * scale }.toFloatArray()
+    }
+
+    /**
+     * Perform one denoising step using Euler method
      */
     fun step(
         modelOutput: FloatArray,
         timestepIndex: Int,
-        sample: FloatArray,
-        order: Int = 4
+        sample: FloatArray
     ): FloatArray {
         val sigma = sigmas[timestepIndex]
         val sigmaNext = sigmas[timestepIndex + 1]
 
-        // Compute predicted original sample (x0)
-        val predOriginalSample = FloatArray(sample.size) { i ->
-            sample[i] - sigma * modelOutput[i]
-        }
+        // Euler method: x_next = x + (sigma_next - sigma) * model_output / sigma
+        // Or equivalently for epsilon prediction:
+        // pred_original = sample - sigma * model_output
+        // derivative = (sample - pred_original) / sigma = model_output
+        // x_next = sample + (sigma_next - sigma) * derivative
 
-        // Compute derivative
-        val derivative = FloatArray(sample.size) { i ->
-            (sample[i] - predOriginalSample[i]) / sigma
-        }
-
-        // Store derivative for multi-step method
-        derivatives.add(derivative)
-        if (derivatives.size > order) {
-            derivatives.removeAt(0)
-        }
-
-        // Use LMS method based on available derivatives
-        val effectiveOrder = minOf(timestepIndex + 1, order, derivatives.size)
-
-        return when (effectiveOrder) {
-            1 -> lmsStep1(sample, derivative, sigma, sigmaNext)
-            2 -> lmsStep2(sample, sigma, sigmaNext)
-            3 -> lmsStep3(sample, sigma, sigmaNext)
-            else -> lmsStep4(sample, sigma, sigmaNext)
-        }
-    }
-
-    private fun lmsStep1(
-        sample: FloatArray,
-        derivative: FloatArray,
-        sigma: Float,
-        sigmaNext: Float
-    ): FloatArray {
         val dt = sigmaNext - sigma
-        return FloatArray(sample.size) { i ->
-            sample[i] + dt * derivative[i]
-        }
-    }
-
-    private fun lmsStep2(
-        sample: FloatArray,
-        sigma: Float,
-        sigmaNext: Float
-    ): FloatArray {
-        val dt = sigmaNext - sigma
-        val d0 = derivatives[derivatives.size - 1]
-        val d1 = derivatives[derivatives.size - 2]
 
         return FloatArray(sample.size) { i ->
-            sample[i] + dt * (1.5f * d0[i] - 0.5f * d1[i])
-        }
-    }
-
-    private fun lmsStep3(
-        sample: FloatArray,
-        sigma: Float,
-        sigmaNext: Float
-    ): FloatArray {
-        val dt = sigmaNext - sigma
-        val d0 = derivatives[derivatives.size - 1]
-        val d1 = derivatives[derivatives.size - 2]
-        val d2 = derivatives[derivatives.size - 3]
-
-        return FloatArray(sample.size) { i ->
-            sample[i] + dt * ((23f / 12f) * d0[i] - (16f / 12f) * d1[i] + (5f / 12f) * d2[i])
-        }
-    }
-
-    private fun lmsStep4(
-        sample: FloatArray,
-        sigma: Float,
-        sigmaNext: Float
-    ): FloatArray {
-        val dt = sigmaNext - sigma
-        val d0 = derivatives[derivatives.size - 1]
-        val d1 = derivatives[derivatives.size - 2]
-        val d2 = derivatives[derivatives.size - 3]
-        val d3 = derivatives[derivatives.size - 4]
-
-        return FloatArray(sample.size) { i ->
-            sample[i] + dt * (
-                (55f / 24f) * d0[i] -
-                (59f / 24f) * d1[i] +
-                (37f / 24f) * d2[i] -
-                (9f / 24f) * d3[i]
-            )
+            sample[i] + dt * modelOutput[i]
         }
     }
 
@@ -220,11 +151,9 @@ class LMSDiscreteScheduler(
     }
 
     /**
-     * Get timestep tensor for a step
+     * Get timestep for a step
      */
-    fun getTimestepTensor(stepIndex: Int): Long {
-        return timesteps[stepIndex].toLong()
-    }
+    fun getTimestep(stepIndex: Int): Int = timesteps[stepIndex]
 
     private fun linspace(start: Float, end: Float, steps: Int): List<Float> {
         if (steps == 1) return listOf(start)
