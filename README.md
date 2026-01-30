@@ -8,7 +8,9 @@
   <img src="screenshots/Screenshot_2026-01-30-12-31-04-59_f28200242d1465b50ec18721116dc637.jpg" width="250" alt="Browse Models">
 </p>
 
-LocalLLM is a React Native application that brings the power of large language models directly to your mobile device. Unlike cloud-based AI assistants that send every conversation to remote servers, LocalLLM runs **entirely on-device**—no internet required, no data leaves your phone, complete privacy guaranteed.
+LocalLLM is a React Native application that brings the power of large language models and image generation directly to your mobile device. Unlike cloud-based AI assistants that send every conversation to remote servers, LocalLLM runs **entirely on-device**—no internet required, no data leaves your phone, complete privacy guaranteed.
+
+**Now with on-device image generation!** Create stunning AI-generated images from text prompts, completely offline.
 
 ---
 
@@ -65,6 +67,150 @@ Send images to vision-capable models like LLaVA and SmolVLM. When you download a
 - Camera and photo library support
 - Image preview before sending
 - Works completely offline after download
+
+---
+
+## 🎨 On-Device Image Generation
+
+LocalLLM now includes **on-device AI image generation** powered by ONNX Runtime. Generate stunning images from text prompts—completely offline, completely private.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Image Generation Pipeline                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│   "A sunny day at the beach"                                     │
+│            │                                                      │
+│            ▼                                                      │
+│   ┌─────────────────┐                                            │
+│   │  CLIP Tokenizer │  Text → Token IDs                          │
+│   └────────┬────────┘                                            │
+│            │                                                      │
+│            ▼                                                      │
+│   ┌─────────────────┐                                            │
+│   │  Text Encoder   │  Token IDs → Text Embeddings (768-dim)     │
+│   └────────┬────────┘                                            │
+│            │                                                      │
+│            ▼                                                      │
+│   ┌─────────────────┐     ┌─────────────────┐                    │
+│   │     Scheduler   │ ──▶ │      UNet       │  Iterative         │
+│   │  (Euler/LCM)    │ ◀── │  (Denoising)    │  Denoising         │
+│   └─────────────────┘     └────────┬────────┘                    │
+│                                    │                              │
+│                                    ▼                              │
+│                           ┌─────────────────┐                    │
+│                           │   VAE Decoder   │  Latents → Image   │
+│                           └────────┬────────┘                    │
+│                                    │                              │
+│                                    ▼                              │
+│                           ┌─────────────────┐                    │
+│                           │  512×512 Image  │                    │
+│                           └─────────────────┘                    │
+│                                                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Supported Image Models
+
+| Model | Size | Style | Steps | Generation Time* |
+|-------|------|-------|-------|------------------|
+| **Absolute Reality** | ~1 GB | Photorealistic | 10-20 | ~2-4 min |
+| **LCM DreamShaper v7** | ~2.2 GB | Creative/Artistic | 4-8 | ~1-2 min |
+
+*Times measured on Snapdragon 8 Gen 3 (CPU inference)
+
+### Standard vs LCM Models
+
+LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Models)**:
+
+| Feature | Standard SD | LCM |
+|---------|-------------|-----|
+| Steps Required | 10-50 | 4-8 |
+| Quality | Excellent | Good-Very Good |
+| Speed | Slower | Faster |
+| Best For | Final outputs | Quick iterations |
+| Guidance Scale | 7-12 | 1-2 |
+
+**LCM Advantage:** Generate images in just 4-8 steps instead of 20-50, with minimal quality loss. Perfect for quick previews and iterations.
+
+### Image Generation Features
+
+- **Real-time Preview**: See your image emerge during generation (every 2 steps)
+- **Automatic Intent Detection**: AI classifies if your message wants an image or text response
+- **Manual Override**: Force image generation with the toggle button
+- **Fullscreen Viewer**: Tap any generated image to view in fullscreen
+- **Save to Gallery**: Save generated images to your Pictures folder
+- **Generation Timing**: See how long each image took to generate
+- **Customizable Settings**:
+  - Steps (4-50)
+  - Guidance Scale (1-20)
+  - Random or fixed seed
+
+### Using Image Generation
+
+1. **Download an Image Model**
+   - Go to Models tab → Image Models section
+   - Download "Absolute Reality" (photorealistic) or "LCM DreamShaper" (fast creative)
+
+2. **Set as Active**
+   - Tap "Set Active" on your downloaded model
+   - The model loads automatically (or on next chat)
+
+3. **Generate Images**
+   - Type a descriptive prompt: "A majestic mountain at sunset with golden light"
+   - **Auto Mode**: AI detects image requests automatically
+   - **Force Mode**: Tap the image icon to force image generation
+   - Wait for the magic ✨
+
+4. **Save Your Creation**
+   - Tap the generated image to view fullscreen
+   - Tap "Save" to save to Pictures/LocalLLM
+
+### Image Generation Settings
+
+| Setting | Range | Default | Description |
+|---------|-------|---------|-------------|
+| **Steps** | 4-50 | 10 | More steps = higher quality, slower |
+| **Guidance Scale** | 1-20 | 7.5 | Higher = closer to prompt, less creative |
+| **Seed** | Any | Random | Same seed = reproducible results |
+
+**Pro Tips:**
+- For LCM models, use 4-8 steps and guidance scale 1-2
+- For Standard SD, use 15-25 steps and guidance scale 7-12
+- Lower guidance for abstract art, higher for specific subjects
+- Use detailed prompts: include style, lighting, composition
+
+### Technical Details
+
+**ONNX Runtime Inference:**
+- Pure CPU inference (no GPU required)
+- Multi-threaded processing (8 threads default)
+- Memory-optimized model loading
+- Support for both `.ort` and `.onnx` model formats
+
+**Model Architecture:**
+- CLIP text encoder for prompt understanding
+- UNet for iterative denoising (the heavy lifting)
+- VAE decoder for final image generation
+- Euler scheduler for standard models
+- LCM-specific guidance embedding for LCM models
+
+**Memory Usage:**
+- ~1.5-3 GB during generation
+- Models unloaded after generation if needed
+- Background loading on app startup
+
+### Privacy Note
+
+Just like text generation, **all image generation happens 100% on-device**:
+- No images sent to any server
+- No prompts logged or transmitted
+- Generated images stay in local storage
+- Enable airplane mode and create freely
+
+---
 
 ### Switch Models Instantly
 
@@ -196,18 +342,19 @@ LocalLLM uses [llama.cpp](https://github.com/ggerganov/llama.cpp) compiled for A
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   React Native UI                    │
-├─────────────────────────────────────────────────────┤
-│              TypeScript Services Layer               │
-│   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐  │
-│   │  LLM Service│ │Whisper Svc  │ │Hardware Svc │  │
-│   └─────────────┘ └─────────────┘ └─────────────┘  │
-├─────────────────────────────────────────────────────┤
-│              Native Module Bridge                    │
-├─────────────────────────────────────────────────────┤
-│    llama.rn + whisper.rn (C++ via JNI/Android NDK) │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                       React Native UI                             │
+├──────────────────────────────────────────────────────────────────┤
+│                  TypeScript Services Layer                        │
+│   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
+│   │  LLM Service│ │Whisper Svc  │ │Hardware Svc │ │ONNX Image │ │
+│   └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
+├──────────────────────────────────────────────────────────────────┤
+│                    Native Module Bridge                           │
+├──────────────────────────────────────────────────────────────────┤
+│   llama.rn      whisper.rn      ONNX Runtime                     │
+│   (C++ JNI)     (C++ JNI)       (Kotlin Native)                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -346,6 +493,7 @@ See the [full build guide](#building-from-source) below for signing configuratio
 - **React Native** with TypeScript
 - **llama.rn** - Native GGUF model inference via llama.cpp
 - **whisper.rn** - On-device speech recognition via whisper.cpp
+- **ONNX Runtime** - Stable Diffusion image generation
 - **Zustand** - State management with AsyncStorage persistence
 - **React Navigation** - Native navigation with nested stacks
 
@@ -361,11 +509,13 @@ MIT License - See LICENSE file for details.
 
 ## Acknowledgments
 
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) - The inference engine
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) - The LLM inference engine
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Speech recognition engine
+- [ONNX Runtime](https://onnxruntime.ai/) - Cross-platform ML inference for image generation
 - [llama.rn](https://github.com/mybigday/llama.rn) - React Native LLM bindings
 - [whisper.rn](https://github.com/mybigday/whisper.rn) - React Native Whisper bindings
 - [Hugging Face](https://huggingface.co) - Model hosting and discovery
+- [ShiftHackZ](https://github.com/ShiftHackZ) - ONNX-optimized Stable Diffusion models
 
 ---
 
