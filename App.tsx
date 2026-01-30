@@ -11,7 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { COLORS } from './src/constants';
-import { hardwareService, modelManager, authService } from './src/services';
+import { hardwareService, modelManager, authService, llmService, onnxImageGeneratorService } from './src/services';
 import { useAppStore, useAuthStore, useWhisperStore } from './src/stores';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
@@ -21,6 +21,7 @@ function App() {
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
+  const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
 
   const {
     isEnabled: authEnabled,
@@ -80,6 +81,37 @@ function App() {
           console.log('[App] Whisper model loaded');
         } catch (err) {
           console.error('[App] Failed to load Whisper model:', err);
+        }
+      }
+
+      // Load image models list
+      const imageModels = await modelManager.getDownloadedImageModels();
+      setDownloadedImageModels(imageModels);
+
+      // Get current active model IDs from persisted store
+      const currentState = useAppStore.getState();
+      const currentActiveModelId = currentState.activeModelId;
+      const currentActiveImageModelId = currentState.activeImageModelId;
+
+      // Background load active text model (non-blocking)
+      if (currentActiveModelId) {
+        const textModel = downloadedModels.find(m => m.id === currentActiveModelId);
+        if (textModel) {
+          console.log('[App] Background loading text model:', textModel.name);
+          llmService.loadModel(textModel.path, textModel.mmprojPath || undefined)
+            .then(() => console.log('[App] Text model loaded successfully'))
+            .catch(err => console.error('[App] Failed to load text model:', err));
+        }
+      }
+
+      // Background load active image model (non-blocking)
+      if (currentActiveImageModelId) {
+        const imageModel = imageModels.find(m => m.id === currentActiveImageModelId);
+        if (imageModel) {
+          console.log('[App] Background loading image model:', imageModel.name);
+          onnxImageGeneratorService.loadModel(imageModel.path)
+            .then(() => console.log('[App] Image model loaded successfully'))
+            .catch(err => console.error('[App] Failed to load image model:', err));
         }
       }
     } catch (error) {
