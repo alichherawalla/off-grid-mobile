@@ -8,6 +8,7 @@ import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.localllm.imagegen.ImageGeneratorPackage
 import com.localllm.download.DownloadManagerPackage
+import com.localllm.onnximagegen.ONNXImageGeneratorPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -19,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
           // Packages that cannot be autolinked yet can be added manually here, for example:
           add(ImageGeneratorPackage())
           add(DownloadManagerPackage())
+          add(ONNXImageGeneratorPackage())
         },
     )
   }

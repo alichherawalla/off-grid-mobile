@@ -118,8 +118,11 @@ dependencies {
         implementation jscFlavor
     }
 
-    // MediaPipe Image Generator
+    // MediaPipe Image Generator (legacy - broken on Adreno 750)
     implementation("com.google.mediapipe:tasks-vision-image-generator:0.10.18")
+
+    // ONNX Runtime for image generation (replaces MediaPipe)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
 
     // Coroutines for async operations
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
