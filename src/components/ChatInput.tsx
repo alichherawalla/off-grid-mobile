@@ -306,41 +306,43 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           </View>
         </View>
 
-        {/* Right side: Voice & Send */}
+        {/* Right side: Send/Mic button (WhatsApp style) */}
         <View style={styles.toolbarRight}>
-          {/* Voice record button */}
-          <VoiceRecordButton
-            isRecording={isRecording}
-            isAvailable={voiceAvailable}
-            isModelLoading={isModelLoading}
-            isTranscribing={isTranscribing}
-            partialResult={partialResult}
-            error={error}
-            disabled={disabled || isGenerating}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onCancelRecording={() => {
-              stopRecording();
-              clearResult();
-            }}
-          />
-
-          {/* Send/Stop button */}
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              isGenerating ? styles.stopButton : null,
-              !canSend && !isGenerating && styles.sendButtonDisabled,
-            ]}
-            onPress={isGenerating ? handleStop : handleSend}
-            disabled={!canSend && !isGenerating}
-          >
-            <Icon
-              name={isGenerating ? 'square' : 'send'}
-              size={18}
-              color={COLORS.text}
+          {/* Show stop button when generating */}
+          {isGenerating ? (
+            <TouchableOpacity
+              style={[styles.sendButton, styles.stopButton]}
+              onPress={handleStop}
+            >
+              <Icon name="square" size={18} color={COLORS.text} />
+            </TouchableOpacity>
+          ) : canSend ? (
+            /* Show send button when there's content */
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSend}
+            >
+              <Icon name="send" size={18} color={COLORS.text} />
+            </TouchableOpacity>
+          ) : (
+            /* Show mic button when input is empty (WhatsApp style) */
+            <VoiceRecordButton
+              isRecording={isRecording}
+              isAvailable={voiceAvailable}
+              isModelLoading={isModelLoading}
+              isTranscribing={isTranscribing}
+              partialResult={partialResult}
+              error={error}
+              disabled={disabled}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              onCancelRecording={() => {
+                stopRecording();
+                clearResult();
+              }}
+              asSendButton
             />
-          </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
