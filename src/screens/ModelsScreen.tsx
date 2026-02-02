@@ -728,19 +728,9 @@ export const ModelsScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Button
-            title="Back"
-            variant="ghost"
-            size="small"
-            onPress={() => {
-              setSelectedModel(null);
-              setModelFiles([]);
-            }}
-          />
           <Text style={styles.title} numberOfLines={1}>
             {selectedModel.name}
           </Text>
-          <View style={{ width: 60 }} />
         </View>
 
         <Card style={styles.modelInfoCard}>
