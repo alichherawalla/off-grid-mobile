@@ -29,7 +29,7 @@ import {
 } from '../components';
 import { COLORS, APP_CONFIG } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, onnxImageGeneratorService, intentClassifier } from '../services';
+import { llmService, modelManager, onnxImageGeneratorService, intentClassifier, activeModelService, generationService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -90,6 +90,7 @@ export const ChatScreen: React.FC = () => {
     updateMessage,
     deleteMessagesAfter,
     streamingMessage,
+    streamingForConversationId,
     isStreaming,
     isThinking,
     setIsStreaming,
@@ -133,13 +134,21 @@ export const ChatScreen: React.FC = () => {
     }
   }, [route.params?.conversationId, route.params?.projectId]);
 
-  // Clear generation ref when conversation changes (user switched chats)
+  // Clear generation ref and KV cache when conversation changes (user switched chats)
   useEffect(() => {
     // If we switched to a different conversation than what's generating,
     // invalidate the generation so tokens don't leak
     if (generatingForConversationRef.current &&
         generatingForConversationRef.current !== activeConversationId) {
       generatingForConversationRef.current = null;
+    }
+
+    // Clear KV cache when switching conversations to prevent stale context
+    // This helps prevent the slowdown after many messages issue
+    if (llmService.isModelLoaded()) {
+      llmService.clearKVCache(false).catch(() => {
+        // Ignore errors - cache clear is best effort
+      });
     }
   }, [activeConversationId]);
 
@@ -183,7 +192,8 @@ export const ChatScreen: React.FC = () => {
           if (!currentPath) {
             console.log('[ChatScreen] Preloading classifier model:', classifierModel.name);
             try {
-              await llmService.loadModel(classifierModel.filePath);
+              // Use activeModelService singleton
+              await activeModelService.loadTextModel(settings.classifierModelId);
             } catch (error) {
               console.warn('[ChatScreen] Failed to preload classifier model:', error);
             }
@@ -224,7 +234,7 @@ export const ChatScreen: React.FC = () => {
   };
 
   const ensureModelLoaded = async () => {
-    if (!activeModel) return;
+    if (!activeModel || !activeModelId) return;
 
     const loadedPath = llmService.getLoadedModelPath();
     const currentVisionSupport = llmService.getMultimodalSupport()?.vision || false;
@@ -241,16 +251,8 @@ export const ChatScreen: React.FC = () => {
 
     setIsModelLoading(true);
     try {
-      if (!activeModel.filePath) {
-        throw new Error('Model filePath is undefined');
-      }
-
-      // Force unload if reloading for mmproj
-      if (loadedPath === activeModel.filePath && activeModel.mmProjPath) {
-        await llmService.unloadModel();
-      }
-
-      await llmService.loadModel(activeModel.filePath, activeModel.mmProjPath);
+      // Use activeModelService singleton - prevents duplicate loads
+      await activeModelService.loadTextModel(activeModelId);
       const multimodalSupport = llmService.getMultimodalSupport();
       setSupportsVision(multimodalSupport?.vision || false);
     } catch (error: any) {
@@ -269,8 +271,8 @@ export const ChatScreen: React.FC = () => {
 
     setIsModelLoading(true);
     try {
-      await llmService.loadModel(model.filePath, model.mmProjPath);
-      setActiveModelId(model.id);
+      // Use activeModelService singleton - prevents duplicate loads
+      await activeModelService.loadTextModel(model.id);
       // Check vision support after loading
       const multimodalSupport = llmService.getMultimodalSupport();
       setSupportsVision(multimodalSupport?.vision || false);
@@ -296,7 +298,7 @@ export const ChatScreen: React.FC = () => {
 
     setIsModelLoading(true);
     try {
-      await llmService.unloadModel();
+      await activeModelService.unloadTextModel();
       setSupportsVision(false);
     } catch (error) {
       Alert.alert('Error', `Failed to unload model: ${(error as Error).message}`);
@@ -382,16 +384,21 @@ export const ChatScreen: React.FC = () => {
       );
     }
 
-    // Load image model if not loaded
+    // Load image model if not loaded - use activeModelService singleton
     const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
     const loadedPath = await onnxImageGeneratorService.getLoadedModelPath();
 
     if (!isImageModelLoaded || loadedPath !== activeImageModel.modelPath) {
+      if (!activeImageModelId) {
+        Alert.alert('Error', 'No image model selected.');
+        return;
+      }
       try {
         setIsGeneratingImage(true);
         setImageGenerationStatus(`Loading ${activeImageModel.name}...`);
         setImageGenerationProgress({ step: 0, totalSteps: settings.imageSteps || 30 });
-        await onnxImageGeneratorService.loadModel(activeImageModel.modelPath);
+        // Use activeModelService singleton - prevents duplicate loads
+        await activeModelService.loadImageModel(activeImageModelId);
       } catch (error: any) {
         setIsGeneratingImage(false);
         setImageGenerationProgress(null);
@@ -536,95 +543,51 @@ export const ChatScreen: React.FC = () => {
       userMessage,
     ];
 
-    // Update debug info
+    // Update debug info and check if truncation occurred
+    let shouldClearCache = false;
     try {
       const contextDebug = await llmService.getContextDebugInfo(messagesForContext);
       setDebugInfo({
         systemPrompt,
         ...contextDebug,
       });
+
+      // If messages were truncated or context is > 70% full, clear KV cache
+      // This helps prevent inconsistent state and performance degradation
+      if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
+        shouldClearCache = true;
+      }
     } catch (e) {
       console.log('Debug info error:', e);
     }
 
-    // Start thinking state (before first token)
-    setIsThinking(true);
+    // Clear KV cache if needed to prevent performance degradation
+    if (shouldClearCache) {
+      await llmService.clearKVCache(false).catch(() => {});
+    }
 
-    // Track first token locally to avoid stale closure issues with React state
-    let firstTokenReceived = false;
-
-    // Track generation start time
-    generationStartTimeRef.current = Date.now();
-
+    // Use generationService for background-safe generation
     try {
-      await llmService.generateResponse(
+      await generationService.generateResponse(
+        targetConversationId,
         messagesForContext,
-        (token) => {
-          // Only append if we're still generating for the same conversation
-          if (generatingForConversationRef.current !== targetConversationId) {
-            return; // User switched chats, ignore tokens
-          }
-          // First token received - switch from thinking to streaming
-          if (!firstTokenReceived) {
-            firstTokenReceived = true;
-            setIsThinking(false);
-            setIsStreaming(true);
-          }
-          appendToStreamingMessage(token);
-        },
         () => {
-          // Use the captured conversation ID, not the current active one
-          if (generatingForConversationRef.current === targetConversationId) {
-            const generationTime = generationStartTimeRef.current
-              ? Date.now() - generationStartTimeRef.current
-              : undefined;
-            finalizeStreamingMessage(targetConversationId, generationTime);
-          }
-          generatingForConversationRef.current = null;
-          generationStartTimeRef.current = null;
-        },
-        (error) => {
-          if (generatingForConversationRef.current === targetConversationId) {
-            clearStreamingMessage();
-            Alert.alert('Generation Error', error.message);
-          }
-          generatingForConversationRef.current = null;
-          generationStartTimeRef.current = null;
-        },
-        () => {
-          // onThinking - prompt is being processed
-          if (generatingForConversationRef.current === targetConversationId) {
-            setIsThinking(true);
-          }
+          // onFirstToken callback - generation has started producing tokens
+          console.log('[ChatScreen] First token received for conversation:', targetConversationId);
         }
       );
-    } catch (error) {
-      if (generatingForConversationRef.current === targetConversationId) {
-        clearStreamingMessage();
-      }
-      generatingForConversationRef.current = null;
-      generationStartTimeRef.current = null;
+    } catch (error: any) {
+      Alert.alert('Generation Error', error.message || 'Failed to generate response');
     }
+    generatingForConversationRef.current = null;
   };
 
   const handleStop = async () => {
-    // Stop text generation - update UI immediately, then stop native
-    const targetConversationId = generatingForConversationRef.current;
-    const generationTime = generationStartTimeRef.current
-      ? Date.now() - generationStartTimeRef.current
-      : undefined;
+    // Stop text generation via generationService
     generatingForConversationRef.current = null;
-    generationStartTimeRef.current = null;
 
-    // Finalize/clear UI state immediately for responsive feedback
-    if (targetConversationId && streamingMessage.trim()) {
-      finalizeStreamingMessage(targetConversationId, generationTime);
-    } else {
-      clearStreamingMessage();
-    }
-
-    // Then stop the native generation (don't await - let it happen in background)
-    llmService.stopGeneration().catch(() => {
+    // This will stop generation and save any partial content
+    generationService.stopGeneration().catch(() => {
       // Ignore errors - generation may have already finished
     });
 
@@ -734,59 +697,16 @@ export const ChatScreen: React.FC = () => {
       ...messagesUpToUser,
     ];
 
-    setIsThinking(true);
-
-    // Track first token locally to avoid stale closure issues
-    let firstTokenReceived = false;
-
-    // Track generation start time
-    generationStartTimeRef.current = Date.now();
-
+    // Use generationService for background-safe generation
     try {
-      await llmService.generateResponse(
-        messagesForContext,
-        (token) => {
-          if (generatingForConversationRef.current !== targetConversationId) {
-            return;
-          }
-          if (!firstTokenReceived) {
-            firstTokenReceived = true;
-            setIsThinking(false);
-            setIsStreaming(true);
-          }
-          appendToStreamingMessage(token);
-        },
-        () => {
-          if (generatingForConversationRef.current === targetConversationId) {
-            const generationTime = generationStartTimeRef.current
-              ? Date.now() - generationStartTimeRef.current
-              : undefined;
-            finalizeStreamingMessage(targetConversationId, generationTime);
-          }
-          generatingForConversationRef.current = null;
-          generationStartTimeRef.current = null;
-        },
-        (error) => {
-          if (generatingForConversationRef.current === targetConversationId) {
-            clearStreamingMessage();
-            Alert.alert('Generation Error', error.message);
-          }
-          generatingForConversationRef.current = null;
-          generationStartTimeRef.current = null;
-        },
-        () => {
-          if (generatingForConversationRef.current === targetConversationId) {
-            setIsThinking(true);
-          }
-        }
+      await generationService.generateResponse(
+        targetConversationId,
+        messagesForContext
       );
-    } catch (error) {
-      if (generatingForConversationRef.current === targetConversationId) {
-        clearStreamingMessage();
-      }
-      generatingForConversationRef.current = null;
-      generationStartTimeRef.current = null;
+    } catch (error: any) {
+      Alert.alert('Generation Error', error.message || 'Failed to generate response');
     }
+    generatingForConversationRef.current = null;
   };
 
   const handleEditMessage = async (message: Message, newContent: string) => {
@@ -894,8 +814,10 @@ export const ChatScreen: React.FC = () => {
   );
 
   // Create streaming/thinking message object for display
+  // Only show if the streaming is for the current conversation
   const allMessages = activeConversation?.messages || [];
-  const displayMessages = isThinking
+  const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
+  const displayMessages = isThinking && isStreamingForThisConversation
     ? [
         ...allMessages,
         {
@@ -906,7 +828,7 @@ export const ChatScreen: React.FC = () => {
           isThinking: true,
         },
       ]
-    : streamingMessage
+    : streamingMessage && isStreamingForThisConversation
       ? [
           ...allMessages,
           {
@@ -1072,50 +994,54 @@ export const ChatScreen: React.FC = () => {
         {isGeneratingImage && (
           <View style={styles.imageProgressContainer}>
             <View style={styles.imageProgressCard}>
-              {/* Preview image */}
-              {imagePreviewPath && (
-                <Image
-                  source={{ uri: imagePreviewPath }}
-                  style={styles.imagePreview}
-                  resizeMode="cover"
-                />
-              )}
-              <View style={styles.imageProgressHeader}>
-                <View style={styles.imageProgressIconContainer}>
-                  <Icon name="image" size={18} color={COLORS.primary} />
-                </View>
-                <View style={styles.imageProgressInfo}>
-                  <Text style={styles.imageProgressTitle}>
-                    {imagePreviewPath ? 'Refining Image' : 'Generating Image'}
-                  </Text>
-                  <Text style={styles.imageProgressStatus} numberOfLines={1}>
-                    {imageGenerationStatus || 'Initializing...'}
-                  </Text>
-                </View>
-                {imageGenerationProgress && (
-                  <Text style={styles.imageProgressSteps}>
-                    {imageGenerationProgress.step}/{imageGenerationProgress.totalSteps}
-                  </Text>
+              <View style={styles.imageProgressRow}>
+                {/* Preview image - small thumbnail */}
+                {imagePreviewPath && (
+                  <Image
+                    source={{ uri: imagePreviewPath }}
+                    style={styles.imagePreview}
+                    resizeMode="cover"
+                  />
                 )}
-                <TouchableOpacity
-                  style={styles.imageStopButton}
-                  onPress={handleStop}
-                >
-                  <Icon name="x" size={16} color={COLORS.error} />
-                </TouchableOpacity>
-              </View>
-              {imageGenerationProgress && (
-                <View style={styles.imageProgressBarContainer}>
-                  <View style={styles.imageProgressBar}>
-                    <View
-                      style={[
-                        styles.imageProgressFill,
-                        { width: `${(imageGenerationProgress.step / imageGenerationProgress.totalSteps) * 100}%` }
-                      ]}
-                    />
+                <View style={styles.imageProgressContent}>
+                  <View style={styles.imageProgressHeader}>
+                    <View style={styles.imageProgressIconContainer}>
+                      <Icon name="image" size={18} color={COLORS.primary} />
+                    </View>
+                    <View style={styles.imageProgressInfo}>
+                      <Text style={styles.imageProgressTitle}>
+                        {imagePreviewPath ? 'Refining Image' : 'Generating Image'}
+                      </Text>
+                      <Text style={styles.imageProgressStatus} numberOfLines={1}>
+                        {imageGenerationStatus || 'Initializing...'}
+                      </Text>
+                    </View>
+                    {imageGenerationProgress && (
+                      <Text style={styles.imageProgressSteps}>
+                        {imageGenerationProgress.step}/{imageGenerationProgress.totalSteps}
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.imageStopButton}
+                      onPress={handleStop}
+                    >
+                      <Icon name="x" size={16} color={COLORS.error} />
+                    </TouchableOpacity>
                   </View>
+                  {imageGenerationProgress && (
+                    <View style={styles.imageProgressBarContainer}>
+                      <View style={styles.imageProgressBar}>
+                        <View
+                          style={[
+                            styles.imageProgressFill,
+                            { width: `${(imageGenerationProgress.step / imageGenerationProgress.totalSteps) * 100}%` }
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  )}
                 </View>
-              )}
+              </View>
             </View>
           </View>
         )}
@@ -1851,6 +1777,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary + '30',
   },
+  imageProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  imageProgressContent: {
+    flex: 1,
+  },
   imageProgressHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1898,10 +1831,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   imagePreview: {
-    width: '100%',
-    height: 150,
+    width: 100,
+    height: 100,
     borderRadius: 8,
-    marginBottom: 10,
+    marginRight: 12,
     backgroundColor: COLORS.surfaceLight,
   },
   imageStopButton: {
