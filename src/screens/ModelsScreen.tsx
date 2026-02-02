@@ -11,9 +11,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
@@ -131,6 +132,23 @@ export const ModelsScreen: React.FC = () => {
     loadDownloadedModels();
     loadDownloadedImageModels();
   }, []);
+
+  // Handle system back button when model detail view is shown
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (selectedModel) {
+          setSelectedModel(null);
+          setModelFiles([]);
+          return true; // Prevent default back behavior
+        }
+        return false; // Let default back behavior happen
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [selectedModel])
+  );
 
   const loadInitialModels = async () => {
     setIsLoading(true);
