@@ -11,7 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import { COLORS } from './src/constants';
-import { hardwareService, modelManager, authService, llmService, onnxImageGeneratorService } from './src/services';
+import { hardwareService, modelManager, authService, activeModelService } from './src/services';
 import { useAppStore, useAuthStore, useWhisperStore } from './src/stores';
 import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
@@ -55,6 +55,7 @@ function App() {
 
   const initializeApp = async () => {
     try {
+      // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
       const deviceInfo = await hardwareService.getDeviceInfo();
       setDeviceInfo(deviceInfo);
@@ -62,10 +63,14 @@ function App() {
       const recommendation = hardwareService.getModelRecommendation();
       setModelRecommendation(recommendation);
 
-      // Initialize model manager and load downloaded models
+      // Initialize model manager and load downloaded models list
       await modelManager.initialize();
       const downloadedModels = await modelManager.getDownloadedModels();
       setDownloadedModels(downloadedModels);
+
+      // Load image models list
+      const imageModels = await modelManager.getDownloadedImageModels();
+      setDownloadedImageModels(imageModels);
 
       // Check if passphrase is set and lock app if needed
       const hasPassphrase = await authService.hasPassphrase();
@@ -73,50 +78,58 @@ function App() {
         setLocked(true);
       }
 
-      // Load Whisper model if downloaded (for voice transcription)
-      if (whisperModelId) {
-        console.log('[App] Loading Whisper model:', whisperModelId);
-        try {
-          await loadWhisperModel();
-          console.log('[App] Whisper model loaded');
-        } catch (err) {
-          console.error('[App] Failed to load Whisper model:', err);
-        }
-      }
+      // Show the UI immediately
+      setIsInitializing(false);
 
-      // Load image models list
-      const imageModels = await modelManager.getDownloadedImageModels();
-      setDownloadedImageModels(imageModels);
-
-      // Get current active model IDs from persisted store
+      // Phase 2: Background model loading - don't block UI
+      // Load models in background after UI is shown
       const currentState = useAppStore.getState();
       const currentActiveModelId = currentState.activeModelId;
       const currentActiveImageModelId = currentState.activeImageModelId;
 
-      // Background load active text model (non-blocking)
+      // Load Whisper model if downloaded (for voice transcription)
+      if (whisperModelId) {
+        console.log('[App] Loading Whisper model in background:', whisperModelId);
+        loadWhisperModel()
+          .then(() => console.log('[App] Whisper model loaded'))
+          .catch(err => console.error('[App] Failed to load Whisper model:', err));
+      }
+
+      // Load text model in background
       if (currentActiveModelId) {
         const textModel = downloadedModels.find(m => m.id === currentActiveModelId);
-        if (textModel && textModel.filePath) {
-          console.log('[App] Background loading text model:', textModel.name);
-          llmService.loadModel(textModel.filePath, textModel.mmProjPath || undefined)
+        if (textModel) {
+          console.log('[App] Loading text model in background:', textModel.name);
+          activeModelService.loadTextModel(currentActiveModelId)
             .then(() => console.log('[App] Text model loaded successfully'))
-            .catch(err => console.error('[App] Failed to load text model:', err));
+            .catch(err => {
+              console.error('[App] Failed to load text model:', err);
+              useAppStore.getState().setActiveModelId(null);
+            });
+        } else {
+          console.log('[App] Previously active text model not found, clearing');
+          useAppStore.getState().setActiveModelId(null);
         }
       }
 
-      // Background load active image model (non-blocking)
+      // Load image model in background
       if (currentActiveImageModelId) {
         const imageModel = imageModels.find(m => m.id === currentActiveImageModelId);
-        if (imageModel && imageModel.modelPath) {
-          console.log('[App] Background loading image model:', imageModel.name);
-          onnxImageGeneratorService.loadModel(imageModel.modelPath)
+        if (imageModel) {
+          console.log('[App] Loading image model in background:', imageModel.name);
+          activeModelService.loadImageModel(currentActiveImageModelId)
             .then(() => console.log('[App] Image model loaded successfully'))
-            .catch(err => console.error('[App] Failed to load image model:', err));
+            .catch(err => {
+              console.error('[App] Failed to load image model:', err);
+              useAppStore.getState().setActiveImageModelId(null);
+            });
+        } else {
+          console.log('[App] Previously active image model not found, clearing');
+          useAppStore.getState().setActiveImageModelId(null);
         }
       }
     } catch (error) {
       console.error('Error initializing app:', error);
-    } finally {
       setIsInitializing(false);
     }
   };
