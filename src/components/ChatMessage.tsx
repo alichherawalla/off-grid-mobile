@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   attachmentImage: {
-    width: 200,
-    height: 150,
+    width: 140,
+    height: 140,
     borderRadius: 12,
   },
   text: {
