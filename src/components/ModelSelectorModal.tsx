@@ -11,91 +11,95 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 import { useAppStore } from '../stores';
-import { DownloadedModel } from '../types';
-import { onnxImageGeneratorService } from '../services';
+import { DownloadedModel, ONNXImageModel } from '../types';
+import { activeModelService, hardwareService } from '../services';
+
+type TabType = 'text' | 'image';
 
 interface ModelSelectorModalProps {
   visible: boolean;
   onClose: () => void;
   onSelectModel: (model: DownloadedModel) => void;
+  onSelectImageModel?: (model: ONNXImageModel) => void;
   onUnloadModel: () => void;
   onUnloadImageModel?: () => void;
   isLoading: boolean;
   currentModelPath: string | null;
+  initialTab?: TabType;
 }
 
 export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   visible,
   onClose,
   onSelectModel,
+  onSelectImageModel,
   onUnloadModel,
   onUnloadImageModel,
   isLoading,
   currentModelPath,
+  initialTab = 'text',
 }) => {
-  const { downloadedModels, downloadedImageModels, activeImageModelId, setActiveImageModelId } = useAppStore();
-  const hasLoadedModel = currentModelPath !== null;
-  const [imageModelLoaded, setImageModelLoaded] = useState(false);
-  const [imageModelPath, setImageModelPath] = useState<string | null>(null);
-  const [isUnloadingImage, setIsUnloadingImage] = useState(false);
+  const {
+    downloadedModels,
+    downloadedImageModels,
+    activeImageModelId,
+  } = useAppStore();
 
-  // Check image model loaded state when modal opens
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
+
+  // Reset tab when modal opens
   useEffect(() => {
     if (visible) {
-      checkImageModelState();
+      setActiveTab(initialTab);
     }
-  }, [visible]);
+  }, [visible, initialTab]);
 
-  const checkImageModelState = async () => {
-    const loaded = await onnxImageGeneratorService.isModelLoaded();
-    const path = await onnxImageGeneratorService.getLoadedModelPath();
-    setImageModelLoaded(loaded);
-    setImageModelPath(path);
+  const hasLoadedTextModel = currentModelPath !== null;
+  const hasLoadedImageModel = !!activeImageModelId;
+
+  const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const activeTextModel = downloadedModels.find(m => m.filePath === currentModelPath);
+
+  const handleSelectImageModel = async (model: ONNXImageModel) => {
+    if (activeImageModelId === model.id) return;
+
+    setIsLoadingImage(true);
+    try {
+      await activeModelService.loadImageModel(model.id);
+      onSelectImageModel?.(model);
+    } catch (error) {
+      console.error('Failed to load image model:', error);
+    } finally {
+      setIsLoadingImage(false);
+    }
   };
 
   const handleUnloadImageModel = async () => {
-    setIsUnloadingImage(true);
+    setIsLoadingImage(true);
     try {
-      await onnxImageGeneratorService.unloadModel();
-      setImageModelLoaded(false);
-      setImageModelPath(null);
+      await activeModelService.unloadImageModel();
       onUnloadImageModel?.();
     } catch (error) {
       console.error('Failed to unload image model:', error);
     } finally {
-      setIsUnloadingImage(false);
+      setIsLoadingImage(false);
     }
   };
-
-  const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
-  const loadedImageModel = downloadedImageModels.find(m => m.modelPath === imageModelPath);
 
   const formatSize = (bytes: number): string => {
-    if (bytes >= 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    }
-    return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+    return hardwareService.formatBytes(bytes);
   };
 
-  const getQuantInfo = (model: DownloadedModel): string => {
-    // Extract quantization info from model name or filename
-    const name = model.name.toLowerCase();
-    if (name.includes('q4_k_m')) return 'Q4_K_M';
-    if (name.includes('q4_k_s')) return 'Q4_K_S';
-    if (name.includes('q5_k_m')) return 'Q5_K_M';
-    if (name.includes('q5_k_s')) return 'Q5_K_S';
-    if (name.includes('q8_0')) return 'Q8_0';
-    if (name.includes('q6_k')) return 'Q6_K';
-    if (name.includes('q3_k')) return 'Q3_K';
-    if (name.includes('q2_k')) return 'Q2_K';
-    if (name.includes('f16')) return 'F16';
-    if (name.includes('f32')) return 'F32';
-    return '';
-  };
-
-  const isCurrentModel = (model: DownloadedModel): boolean => {
+  const isCurrentTextModel = (model: DownloadedModel): boolean => {
     return currentModelPath === model.filePath;
   };
+
+  const isCurrentImageModel = (model: ONNXImageModel): boolean => {
+    return activeImageModelId === model.id;
+  };
+
+  const isAnyLoading = isLoading || isLoadingImage;
 
   return (
     <Modal
@@ -110,142 +114,256 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
         onPress={onClose}
       >
         <View style={styles.modal} onStartShouldSetResponder={() => true}>
+          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Select Model</Text>
-            <TouchableOpacity onPress={onClose} disabled={isLoading}>
-              <Text style={[styles.closeButton, isLoading && styles.disabled]}>
+            <TouchableOpacity onPress={onClose} disabled={isAnyLoading}>
+              <Text style={[styles.closeButton, isAnyLoading && styles.disabled]}>
                 Done
               </Text>
             </TouchableOpacity>
           </View>
 
-          {isLoading && (
+          {/* Tab Bar */}
+          <View style={styles.tabBar}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'text' && styles.tabActive]}
+              onPress={() => setActiveTab('text')}
+              disabled={isAnyLoading}
+            >
+              <Icon
+                name="message-square"
+                size={16}
+                color={activeTab === 'text' ? COLORS.primary : COLORS.textMuted}
+              />
+              <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>
+                Text
+              </Text>
+              {hasLoadedTextModel && (
+                <View style={styles.tabBadge}>
+                  <View style={styles.tabBadgeDot} />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'image' && styles.tabActive]}
+              onPress={() => setActiveTab('image')}
+              disabled={isAnyLoading}
+            >
+              <Icon
+                name="image"
+                size={16}
+                color={activeTab === 'image' ? COLORS.secondary : COLORS.textMuted}
+              />
+              <Text style={[
+                styles.tabText,
+                activeTab === 'image' && styles.tabTextActive,
+                activeTab === 'image' && { color: COLORS.secondary }
+              ]}>
+                Image
+              </Text>
+              {hasLoadedImageModel && (
+                <View style={[styles.tabBadge, { backgroundColor: COLORS.secondary + '30' }]}>
+                  <View style={[styles.tabBadgeDot, { backgroundColor: COLORS.secondary }]} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Loading Banner */}
+          {isAnyLoading && (
             <View style={styles.loadingBanner}>
               <ActivityIndicator size="small" color={COLORS.primary} />
               <Text style={styles.loadingText}>Loading model...</Text>
             </View>
           )}
 
+          {/* Content */}
           <ScrollView style={styles.content}>
-            {/* Loaded Models Section */}
-            {(hasLoadedModel || imageModelLoaded) && (
-              <View style={styles.loadedSection}>
-                <Text style={styles.sectionTitle}>Currently Loaded</Text>
-
-                {/* Text Model */}
-                {hasLoadedModel && (
-                  <View style={styles.loadedModelItem}>
-                    <View style={styles.loadedModelIcon}>
-                      <Icon name="message-square" size={18} color={COLORS.primary} />
+            {activeTab === 'text' ? (
+              // Text Models Tab
+              <>
+                {/* Currently Loaded Text Model */}
+                {hasLoadedTextModel && (
+                  <View style={styles.loadedSection}>
+                    <View style={styles.loadedHeader}>
+                      <Icon name="check-circle" size={14} color={COLORS.success} />
+                      <Text style={styles.loadedLabel}>Currently Loaded</Text>
                     </View>
-                    <View style={styles.loadedModelInfo}>
-                      <Text style={styles.loadedModelType}>Text Model</Text>
-                      <Text style={styles.loadedModelName} numberOfLines={1}>
-                        {downloadedModels.find(m => m.filePath === currentModelPath)?.name || 'Unknown'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.unloadIconButton}
-                      onPress={onUnloadModel}
-                      disabled={isLoading}
-                    >
-                      <Icon name="x" size={18} color={COLORS.error} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {/* Image Model */}
-                {imageModelLoaded && (
-                  <View style={styles.loadedModelItem}>
-                    <View style={[styles.loadedModelIcon, { backgroundColor: COLORS.secondary + '20' }]}>
-                      <Icon name="image" size={18} color={COLORS.secondary} />
-                    </View>
-                    <View style={styles.loadedModelInfo}>
-                      <Text style={styles.loadedModelType}>Image Model</Text>
-                      <Text style={styles.loadedModelName} numberOfLines={1}>
-                        {loadedImageModel?.name || activeImageModel?.name || 'Unknown'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.unloadIconButton}
-                      onPress={handleUnloadImageModel}
-                      disabled={isUnloadingImage}
-                    >
-                      {isUnloadingImage ? (
-                        <ActivityIndicator size="small" color={COLORS.error} />
-                      ) : (
-                        <Icon name="x" size={18} color={COLORS.error} />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Text Models Section Title */}
-            <Text style={styles.sectionTitle}>Text Models</Text>
-
-            {downloadedModels.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>📦</Text>
-                <Text style={styles.emptyTitle}>No Models Downloaded</Text>
-                <Text style={styles.emptyText}>
-                  Go to the Models screen to download a model first.
-                </Text>
-              </View>
-            ) : (
-              downloadedModels.map((model) => {
-                const isCurrent = isCurrentModel(model);
-                const quantInfo = getQuantInfo(model);
-
-                return (
-                  <TouchableOpacity
-                    key={model.id}
-                    style={[
-                      styles.modelItem,
-                      isCurrent && styles.modelItemSelected,
-                    ]}
-                    onPress={() => onSelectModel(model)}
-                    disabled={isLoading}
-                  >
-                    <View style={styles.modelInfo}>
-                      <Text
-                        style={[
-                          styles.modelName,
-                          isCurrent && styles.modelNameSelected,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {model.name}
-                      </Text>
-                      <View style={styles.modelMeta}>
-                        <Text style={styles.modelSize}>
-                          {formatSize(model.fileSize + (model.mmProjFileSize || 0))}
+                    <View style={styles.loadedModelItem}>
+                      <View style={styles.loadedModelInfo}>
+                        <Text style={styles.loadedModelName} numberOfLines={1}>
+                          {activeTextModel?.name || 'Unknown'}
                         </Text>
-                        {(quantInfo || model.quantization) && (
-                          <>
-                            <Text style={styles.metaSeparator}>•</Text>
-                            <Text style={styles.modelQuant}>
-                              {quantInfo || model.quantization}
-                            </Text>
-                          </>
-                        )}
-                        {model.isVisionModel && (
-                          <>
-                            <Text style={styles.metaSeparator}>•</Text>
-                            <Text style={styles.visionBadge}>Vision</Text>
-                          </>
-                        )}
+                        <Text style={styles.loadedModelMeta}>
+                          {activeTextModel?.quantization} • {formatSize(activeTextModel?.fileSize || 0)}
+                        </Text>
                       </View>
+                      <TouchableOpacity
+                        style={styles.unloadButton}
+                        onPress={onUnloadModel}
+                        disabled={isAnyLoading}
+                      >
+                        <Icon name="power" size={16} color={COLORS.error} />
+                        <Text style={styles.unloadButtonText}>Unload</Text>
+                      </TouchableOpacity>
                     </View>
-                    {isCurrent && (
-                      <View style={styles.checkmark}>
-                        <Text style={styles.checkmarkText}>✓</Text>
+                  </View>
+                )}
+
+                {/* Available Text Models */}
+                <Text style={styles.sectionTitle}>
+                  {hasLoadedTextModel ? 'Switch Model' : 'Available Models'}
+                </Text>
+
+                {downloadedModels.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Icon name="package" size={40} color={COLORS.textMuted} />
+                    <Text style={styles.emptyTitle}>No Text Models</Text>
+                    <Text style={styles.emptyText}>
+                      Download models from the Models tab
+                    </Text>
+                  </View>
+                ) : (
+                  downloadedModels.map((model) => {
+                    const isCurrent = isCurrentTextModel(model);
+                    return (
+                      <TouchableOpacity
+                        key={model.id}
+                        style={[styles.modelItem, isCurrent && styles.modelItemSelected]}
+                        onPress={() => onSelectModel(model)}
+                        disabled={isAnyLoading || isCurrent}
+                      >
+                        <View style={styles.modelInfo}>
+                          <Text
+                            style={[styles.modelName, isCurrent && styles.modelNameSelected]}
+                            numberOfLines={1}
+                          >
+                            {model.name}
+                          </Text>
+                          <View style={styles.modelMeta}>
+                            <Text style={styles.modelSize}>{formatSize(model.fileSize)}</Text>
+                            {model.quantization && (
+                              <>
+                                <Text style={styles.metaSeparator}>•</Text>
+                                <Text style={styles.modelQuant}>{model.quantization}</Text>
+                              </>
+                            )}
+                            {model.isVisionModel && (
+                              <>
+                                <Text style={styles.metaSeparator}>•</Text>
+                                <View style={styles.visionBadge}>
+                                  <Icon name="eye" size={10} color={COLORS.secondary} />
+                                  <Text style={styles.visionBadgeText}>Vision</Text>
+                                </View>
+                              </>
+                            )}
+                          </View>
+                        </View>
+                        {isCurrent && (
+                          <View style={styles.checkmark}>
+                            <Icon name="check" size={16} color={COLORS.background} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </>
+            ) : (
+              // Image Models Tab
+              <>
+                {/* Currently Loaded Image Model */}
+                {hasLoadedImageModel && (
+                  <View style={[styles.loadedSection, { borderColor: COLORS.secondary + '40' }]}>
+                    <View style={styles.loadedHeader}>
+                      <Icon name="check-circle" size={14} color={COLORS.success} />
+                      <Text style={styles.loadedLabel}>Currently Loaded</Text>
+                    </View>
+                    <View style={styles.loadedModelItem}>
+                      <View style={styles.loadedModelInfo}>
+                        <Text style={styles.loadedModelName} numberOfLines={1}>
+                          {activeImageModel?.name || 'Unknown'}
+                        </Text>
+                        <Text style={styles.loadedModelMeta}>
+                          {activeImageModel?.style || 'Image'} • {formatSize(activeImageModel?.size || 0)}
+                        </Text>
                       </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })
+                      <TouchableOpacity
+                        style={styles.unloadButton}
+                        onPress={handleUnloadImageModel}
+                        disabled={isAnyLoading}
+                      >
+                        {isLoadingImage ? (
+                          <ActivityIndicator size="small" color={COLORS.error} />
+                        ) : (
+                          <>
+                            <Icon name="power" size={16} color={COLORS.error} />
+                            <Text style={styles.unloadButtonText}>Unload</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* Available Image Models */}
+                <Text style={styles.sectionTitle}>
+                  {hasLoadedImageModel ? 'Switch Model' : 'Available Models'}
+                </Text>
+
+                {downloadedImageModels.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <Icon name="image" size={40} color={COLORS.textMuted} />
+                    <Text style={styles.emptyTitle}>No Image Models</Text>
+                    <Text style={styles.emptyText}>
+                      Download image models from the Models tab
+                    </Text>
+                  </View>
+                ) : (
+                  downloadedImageModels.map((model) => {
+                    const isCurrent = isCurrentImageModel(model);
+                    return (
+                      <TouchableOpacity
+                        key={model.id}
+                        style={[
+                          styles.modelItem,
+                          isCurrent && styles.modelItemSelectedImage
+                        ]}
+                        onPress={() => handleSelectImageModel(model)}
+                        disabled={isAnyLoading || isCurrent}
+                      >
+                        <View style={styles.modelInfo}>
+                          <Text
+                            style={[
+                              styles.modelName,
+                              isCurrent && { color: COLORS.secondary }
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {model.name}
+                          </Text>
+                          <View style={styles.modelMeta}>
+                            <Text style={styles.modelSize}>{formatSize(model.size)}</Text>
+                            {model.style && (
+                              <>
+                                <Text style={styles.metaSeparator}>•</Text>
+                                <Text style={styles.modelStyle}>{model.style}</Text>
+                              </>
+                            )}
+                          </View>
+                        </View>
+                        {isCurrent && (
+                          <View style={[styles.checkmark, { backgroundColor: COLORS.secondary }]}>
+                            <Icon name="check" size={16} color={COLORS.background} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </>
             )}
           </ScrollView>
         </View>
@@ -264,7 +382,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '75%',
   },
   header: {
     flexDirection: 'row',
@@ -287,6 +405,49 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    gap: 8,
+  },
+  tabActive: {
+    backgroundColor: COLORS.primary + '20',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+  },
+  tabBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+  },
   loadingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -303,19 +464,75 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  loadedSection: {
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '40',
+  },
+  loadedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  loadedLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.success,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  loadedModelItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadedModelInfo: {
+    flex: 1,
+  },
+  loadedModelName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  loadedModelMeta: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  unloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: COLORS.error + '15',
+    gap: 6,
+  },
+  unloadButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    gap: 12,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
@@ -331,15 +548,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   modelItemSelected: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: COLORS.primary + '15',
     borderWidth: 1,
     borderColor: COLORS.primary,
+  },
+  modelItemSelectedImage: {
+    backgroundColor: COLORS.secondary + '15',
+    borderWidth: 1,
+    borderColor: COLORS.secondary,
   },
   modelInfo: {
     flex: 1,
   },
   modelName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: COLORS.text,
     marginBottom: 4,
@@ -365,98 +587,29 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontFamily: 'monospace',
   },
+  modelStyle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
   visionBadge: {
-    fontSize: 11,
-    color: COLORS.secondary,
-    fontWeight: '600',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.secondary + '20',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    overflow: 'hidden',
+    gap: 4,
+  },
+  visionBadgeText: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    fontWeight: '600',
   },
   checkmark: {
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmarkText: {
-    color: COLORS.background,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  unloadButton: {
-    backgroundColor: COLORS.surface,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.warning,
-    alignItems: 'center',
-  },
-  unloadButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.warning,
-  },
-  unloadButtonHint: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  loadedSection: {
-    marginBottom: 20,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  loadedModelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  loadedModelIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  loadedModelInfo: {
-    flex: 1,
-  },
-  loadedModelType: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    marginBottom: 2,
-  },
-  loadedModelName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  unloadIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: COLORS.error + '15',
     alignItems: 'center',
     justifyContent: 'center',
   },
