@@ -10,12 +10,12 @@ import {
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { Button, Card, ModelCard } from '../components';
+import { Button, Card } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
-import { modelManager, llmService, hardwareService, onnxImageGeneratorService } from '../services';
-import { DownloadedModel, Conversation, ONNXImageModel } from '../types';
-import { MainTabParamList, ChatsStackParamList } from '../navigation/types';
+import { modelManager, hardwareService } from '../services';
+import { Conversation } from '../types';
+import { ChatsStackParamList } from '../navigation/types';
 import { NavigatorScreenParams } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
@@ -33,20 +33,13 @@ type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
 };
 
-type ModelTab = 'text' | 'image';
-
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const [isLoadingModel, setIsLoadingModel] = useState(false);
-  const [activeTab, setActiveTab] = useState<ModelTab>('text');
-
   const {
     downloadedModels,
     setDownloadedModels,
     activeModelId,
-    setActiveModelId,
     downloadedImageModels,
     activeImageModelId,
-    setActiveImageModelId,
     deviceInfo,
     setDeviceInfo,
   } = useAppStore();
@@ -66,70 +59,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setDownloadedModels(models);
   };
 
-  const handleSelectTextModel = async (model: DownloadedModel) => {
-    if (activeModelId === model.id) {
-      startNewChat(model.id);
-      return;
-    }
-
-    setIsLoadingModel(true);
-    try {
-      await llmService.loadModel(model.filePath);
-      setActiveModelId(model.id);
-      Alert.alert('Model Loaded', `${model.name} is ready to use!`);
-    } catch (error) {
-      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
-    } finally {
-      setIsLoadingModel(false);
-    }
-  };
-
-  const handleSelectImageModel = async (model: ONNXImageModel) => {
-    if (activeImageModelId === model.id) {
-      return;
-    }
-
-    setIsLoadingModel(true);
-    try {
-      await onnxImageGeneratorService.loadModel(model.modelPath);
-      setActiveImageModelId(model.id);
-      Alert.alert('Model Loaded', `${model.name} is ready for image generation!`);
-    } catch (error) {
-      Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
-    } finally {
-      setIsLoadingModel(false);
-    }
-  };
-
-  const handleDeleteTextModel = async (model: DownloadedModel) => {
-    Alert.alert(
-      'Delete Model',
-      `Delete ${model.name}? This will free up ${hardwareService.formatBytes(model.fileSize)}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (activeModelId === model.id) {
-                await llmService.unloadModel();
-                setActiveModelId(null);
-              }
-              await modelManager.deleteModel(model.id);
-              const models = await modelManager.getDownloadedModels();
-              setDownloadedModels(models);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete model.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const startNewChat = (modelId: string) => {
-    const conversationId = createConversation(modelId);
+  const startNewChat = () => {
+    if (!activeModelId) return;
+    const conversationId = createConversation(activeModelId);
     setActiveConversation(conversationId);
     navigation.navigate('ChatsTab', { screen: 'Chat', params: { conversationId } });
   };
@@ -159,239 +91,100 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       style={styles.deleteAction}
       onPress={() => handleDeleteConversation(conversation)}
     >
-      <Icon name="trash-2" size={18} color={COLORS.text} />
+      <Icon name="trash-2" size={16} color={COLORS.text} />
     </TouchableOpacity>
   );
 
   const activeTextModel = downloadedModels.find((m) => m.id === activeModelId);
   const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId);
-  const recentConversations = conversations.slice(0, 3);
+  const recentConversations = conversations.slice(0, 4);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Local LLM</Text>
-          <Text style={styles.subtitle}>Private AI on your device</Text>
         </View>
 
-        {/* Model Type Tabs */}
-        <View style={styles.tabContainer}>
+        {/* Active Models Section */}
+        <View style={styles.modelsRow}>
+          {/* Text Model */}
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'text' && styles.tabActive]}
-            onPress={() => setActiveTab('text')}
+            style={styles.modelCard}
+            onPress={() => navigation.navigate('ModelsTab')}
           >
-            <Icon
-              name="message-square"
-              size={16}
-              color={activeTab === 'text' ? COLORS.text : COLORS.textMuted}
-            />
-            <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>
-              Text Models
-            </Text>
-            {downloadedModels.length > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>{downloadedModels.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'image' && styles.tabActive]}
-            onPress={() => setActiveTab('image')}
-          >
-            <Icon
-              name="image"
-              size={16}
-              color={activeTab === 'image' ? COLORS.text : COLORS.textMuted}
-            />
-            <Text style={[styles.tabText, activeTab === 'image' && styles.tabTextActive]}>
-              Image Models
-            </Text>
-            {downloadedImageModels.length > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>{downloadedImageModels.length}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Text Models Tab Content */}
-        {activeTab === 'text' && (
-          <>
-            {/* Active Text Model */}
+            <View style={styles.modelCardHeader}>
+              <Icon name="message-square" size={16} color={COLORS.textMuted} />
+              <Text style={styles.modelCardLabel}>Text</Text>
+            </View>
             {activeTextModel ? (
-              <Card style={styles.activeModelCard}>
-                <View style={styles.activeModelHeader}>
-                  <View style={styles.activeIndicator} />
-                  <Text style={styles.activeLabel}>Active</Text>
-                </View>
-                <View style={styles.activeModelInfo}>
-                  <View style={styles.activeModelTextContainer}>
-                    <Text style={styles.activeModelName} numberOfLines={1}>
-                      {activeTextModel.name}
-                    </Text>
-                    <Text style={styles.activeModelDetails}>
-                      {activeTextModel.quantization} · {hardwareService.formatBytes(activeTextModel.fileSize)}
-                    </Text>
-                  </View>
-                  <Button
-                    title="Chat"
-                    size="small"
-                    onPress={() => startNewChat(activeTextModel.id)}
-                    loading={isLoadingModel}
-                  />
-                </View>
-              </Card>
-            ) : (
-              <Card style={styles.noModelCard}>
-                <Icon name="cpu" size={24} color={COLORS.textMuted} />
-                <Text style={styles.noModelText}>No text model selected</Text>
-                <Button
-                  title="Browse Models"
-                  variant="outline"
-                  size="small"
-                  onPress={() => navigation.navigate('ModelsTab')}
-                />
-              </Card>
-            )}
-
-            {/* Downloaded Text Models */}
-            {downloadedModels.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Downloaded</Text>
-                  <Button
-                    title="Browse"
-                    variant="ghost"
-                    size="small"
-                    onPress={() => navigation.navigate('ModelsTab')}
-                  />
-                </View>
-                {downloadedModels.map((model) => (
-                  <ModelCard
-                    key={model.id}
-                    model={{
-                      id: model.id,
-                      name: model.name,
-                      author: model.author,
-                      credibility: model.credibility,
-                    }}
-                    downloadedModel={model}
-                    isDownloaded
-                    isActive={activeModelId === model.id}
-                    onSelect={() => handleSelectTextModel(model)}
-                    onDelete={() => handleDeleteTextModel(model)}
-                  />
-                ))}
-              </View>
-            )}
-
-            {downloadedModels.length === 0 && (
-              <Card style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No Text Models</Text>
-                <Text style={styles.emptyText}>
-                  Download a model to start chatting privately on your device.
+              <>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {activeTextModel.name}
                 </Text>
-                <Button
-                  title="Download a Model"
-                  onPress={() => navigation.navigate('ModelsTab')}
-                />
-              </Card>
+                <Text style={styles.modelCardMeta}>
+                  {activeTextModel.quantization}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.modelCardEmpty}>No model</Text>
             )}
-          </>
-        )}
+          </TouchableOpacity>
 
-        {/* Image Models Tab Content */}
-        {activeTab === 'image' && (
-          <>
-            {/* Active Image Model */}
+          {/* Image Model */}
+          <TouchableOpacity
+            style={styles.modelCard}
+            onPress={() => navigation.navigate('ModelsTab')}
+          >
+            <View style={styles.modelCardHeader}>
+              <Icon name="image" size={16} color={COLORS.textMuted} />
+              <Text style={styles.modelCardLabel}>Image</Text>
+            </View>
             {activeImageModel ? (
-              <Card style={styles.activeModelCard}>
-                <View style={styles.activeModelHeader}>
-                  <View style={styles.activeIndicator} />
-                  <Text style={styles.activeLabel}>Active</Text>
-                </View>
-                <View style={styles.activeModelInfo}>
-                  <View style={styles.activeModelTextContainer}>
-                    <Text style={styles.activeModelName} numberOfLines={1}>
-                      {activeImageModel.name}
-                    </Text>
-                    <Text style={styles.activeModelDetails}>
-                      {activeImageModel.style || 'Image Generation'} · {hardwareService.formatBytes(activeImageModel.size)}
-                    </Text>
-                  </View>
-                </View>
-              </Card>
-            ) : (
-              <Card style={styles.noModelCard}>
-                <Icon name="image" size={24} color={COLORS.textMuted} />
-                <Text style={styles.noModelText}>No image model selected</Text>
-                <Button
-                  title="Browse Models"
-                  variant="outline"
-                  size="small"
-                  onPress={() => navigation.navigate('ModelsTab')}
-                />
-              </Card>
-            )}
-
-            {/* Downloaded Image Models */}
-            {downloadedImageModels.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Downloaded</Text>
-                  <Button
-                    title="Browse"
-                    variant="ghost"
-                    size="small"
-                    onPress={() => navigation.navigate('ModelsTab')}
-                  />
-                </View>
-                {downloadedImageModels.map((model) => (
-                  <TouchableOpacity
-                    key={model.id}
-                    style={[
-                      styles.imageModelItem,
-                      activeImageModelId === model.id && styles.imageModelItemActive,
-                    ]}
-                    onPress={() => handleSelectImageModel(model)}
-                  >
-                    <View style={styles.imageModelIcon}>
-                      <Icon name="image" size={20} color={COLORS.textSecondary} />
-                    </View>
-                    <View style={styles.imageModelInfo}>
-                      <Text style={styles.imageModelName}>{model.name}</Text>
-                      <Text style={styles.imageModelMeta}>
-                        {model.style || 'Image'} · {hardwareService.formatBytes(model.size)}
-                      </Text>
-                    </View>
-                    {activeImageModelId === model.id && (
-                      <Icon name="check" size={18} color={COLORS.textSecondary} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {downloadedImageModels.length === 0 && (
-              <Card style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>No Image Models</Text>
-                <Text style={styles.emptyText}>
-                  Download an image model to generate images on your device.
+              <>
+                <Text style={styles.modelCardName} numberOfLines={1}>
+                  {activeImageModel.name}
                 </Text>
-                <Button
-                  title="Download a Model"
-                  onPress={() => navigation.navigate('ModelsTab')}
-                />
-              </Card>
+                <Text style={styles.modelCardMeta}>
+                  {activeImageModel.style || 'Ready'}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.modelCardEmpty}>No model</Text>
             )}
-          </>
+          </TouchableOpacity>
+        </View>
+
+        {/* New Chat Button */}
+        {activeTextModel ? (
+          <Button
+            title="New Chat"
+            onPress={startNewChat}
+            style={styles.newChatButton}
+          />
+        ) : (
+          <Card style={styles.setupCard}>
+            <Text style={styles.setupText}>
+              Download a text model to start chatting
+            </Text>
+            <Button
+              title="Browse Models"
+              variant="outline"
+              size="small"
+              onPress={() => navigation.navigate('ModelsTab')}
+            />
+          </Card>
         )}
 
-        {/* Recent Conversations - only show on text tab */}
-        {activeTab === 'text' && recentConversations.length > 0 && (
+        {/* Recent Conversations */}
+        {recentConversations.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Chats</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ChatsTab')}>
+                <Text style={styles.seeAll}>See all</Text>
+              </TouchableOpacity>
+            </View>
             {recentConversations.map((conv) => (
               <Swipeable
                 key={conv.id}
@@ -410,12 +203,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                       {conv.messages.length} messages · {formatDate(conv.updatedAt)}
                     </Text>
                   </View>
-                  <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
+                  <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
                 </TouchableOpacity>
               </Swipeable>
             ))}
           </View>
         )}
+
+        {/* Model Stats */}
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{downloadedModels.length}</Text>
+            <Text style={styles.statLabel}>Text models</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{downloadedImageModels.length}</Text>
+            <Text style={styles.statLabel}>Image models</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{conversations.length}</Text>
+            <Text style={styles.statLabel}>Chats</Text>
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -453,164 +264,73 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
   },
-  subtitle: {
+  modelsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  modelCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 14,
+  },
+  modelCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  modelCardLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  modelCardName: {
     fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  modelCardMeta: {
+    fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 6,
-  },
-  tabActive: {
-    backgroundColor: COLORS.surfaceLight,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.textMuted,
-  },
-  tabTextActive: {
-    color: COLORS.text,
-  },
-  tabBadge: {
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  tabBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  activeModelCard: {
-    marginBottom: 16,
-  },
-  activeModelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 6,
-  },
-  activeIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  activeLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-  },
-  activeModelInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  activeModelTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-  activeModelName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  activeModelDetails: {
+  modelCardEmpty: {
     fontSize: 13,
     color: COLORS.textMuted,
-    marginTop: 2,
   },
-  noModelCard: {
+  newChatButton: {
+    marginBottom: 24,
+  },
+  setupCard: {
     alignItems: 'center',
-    paddingVertical: 24,
-    marginBottom: 16,
+    padding: 20,
+    marginBottom: 24,
     gap: 12,
   },
-  noModelText: {
-    color: COLORS.textMuted,
+  setupText: {
     fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
   },
-  emptyCard: {
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 13,
+  seeAll: {
+    fontSize: 14,
     color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  imageModelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-  },
-  imageModelItemActive: {
-    backgroundColor: COLORS.surfaceLight,
-  },
-  imageModelIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  imageModelInfo: {
-    flex: 1,
-  },
-  imageModelName: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.text,
-  },
-  imageModelMeta: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginTop: 2,
   },
   conversationItem: {
     flexDirection: 'row',
@@ -637,9 +357,33 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.error,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 60,
+    width: 50,
     borderRadius: 10,
     marginBottom: 6,
     marginLeft: 8,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
   },
 });
