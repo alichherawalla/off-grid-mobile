@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +17,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
-import { modelManager, hardwareService, llmService, onnxImageGeneratorService } from '../services';
+import { modelManager, hardwareService, llmService, onnxImageGeneratorService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 import { NavigatorScreenParams } from '@react-navigation/native';
@@ -40,6 +42,9 @@ type ModelPickerType = 'text' | 'image' | null;
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [resourceUsage, setResourceUsage] = useState<ResourceUsage | null>(null);
+  const [isEjecting, setIsEjecting] = useState(false);
+  const appState = useRef(AppState.currentState);
 
   const {
     downloadedModels,
@@ -55,9 +60,35 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
   const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
 
+  const refreshResourceUsage = useCallback(async () => {
+    try {
+      const usage = await activeModelService.getResourceUsage();
+      setResourceUsage(usage);
+    } catch (error) {
+      // Silently fail on resource fetch errors
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
-  }, []);
+    refreshResourceUsage();
+
+    // Refresh resources every 5 seconds when app is active
+    const interval = setInterval(refreshResourceUsage, 5000);
+
+    // Handle app state changes
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        refreshResourceUsage();
+      }
+      appState.current = nextState;
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [refreshResourceUsage]);
 
   const loadData = async () => {
     if (!deviceInfo) {
@@ -120,6 +151,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
 
+  const handleEjectAll = async () => {
+    const hasModels = activeModelId || activeImageModelId;
+    if (!hasModels) return;
+
+    Alert.alert(
+      'Eject All Models',
+      'Unload all active models to free up memory?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Eject All',
+          style: 'destructive',
+          onPress: async () => {
+            setIsEjecting(true);
+            try {
+              const results = await activeModelService.unloadAllModels();
+              await refreshResourceUsage();
+              const count = (results.textUnloaded ? 1 : 0) + (results.imageUnloaded ? 1 : 0);
+              if (count > 0) {
+                Alert.alert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to unload models');
+            } finally {
+              setIsEjecting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const startNewChat = () => {
     if (!activeModelId) return;
     const conversationId = createConversation(activeModelId);
@@ -166,6 +229,50 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <View style={styles.header}>
           <Text style={styles.title}>Local LLM</Text>
         </View>
+
+        {/* Resource Monitor */}
+        {resourceUsage && (
+          <View style={styles.resourceCard}>
+            <View style={styles.resourceRow}>
+              <View style={styles.resourceItem}>
+                <View style={styles.resourceHeader}>
+                  <Icon name="cpu" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.resourceLabel}>Memory</Text>
+                </View>
+                <View style={styles.resourceBarContainer}>
+                  <View
+                    style={[
+                      styles.resourceBar,
+                      {
+                        width: `${Math.min(resourceUsage.memoryUsagePercent, 100)}%`,
+                        backgroundColor: resourceUsage.memoryUsagePercent > 80 ? COLORS.error : COLORS.primary,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.resourceValue}>
+                  {hardwareService.formatBytes(resourceUsage.memoryUsed)} / {hardwareService.formatBytes(resourceUsage.memoryTotal)}
+                </Text>
+              </View>
+              {(activeModelId || activeImageModelId) && (
+                <TouchableOpacity
+                  style={styles.ejectButton}
+                  onPress={handleEjectAll}
+                  disabled={isEjecting}
+                >
+                  {isEjecting ? (
+                    <ActivityIndicator size="small" color={COLORS.text} />
+                  ) : (
+                    <>
+                      <Icon name="power" size={14} color={COLORS.error} />
+                      <Text style={styles.ejectButtonText}>Eject All</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* Active Models Section */}
         <View style={styles.modelsRow}>
@@ -477,12 +584,68 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: COLORS.text,
+  },
+  resourceCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  resourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  resourceItem: {
+    flex: 1,
+  },
+  resourceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  resourceLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  resourceBarContainer: {
+    height: 6,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  resourceBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  resourceValue: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontFamily: 'monospace',
+  },
+  ejectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  ejectButtonText: {
+    fontSize: 12,
+    color: COLORS.error,
+    fontWeight: '500',
   },
   modelsRow: {
     flexDirection: 'row',
