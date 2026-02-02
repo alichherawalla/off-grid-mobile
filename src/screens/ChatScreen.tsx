@@ -48,6 +48,9 @@ interface DebugInfo {
 
 export const ChatScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
+  const isNearBottomRef = useRef(true);
+  const contentHeightRef = useRef(0);
+  const scrollViewHeightRef = useRef(0);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
@@ -192,13 +195,33 @@ export const ChatScreen: React.FC = () => {
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
 
   useEffect(() => {
-    // Scroll to bottom when new messages arrive
-    if (activeConversation?.messages.length || streamingMessage) {
+    // Scroll to bottom when new messages arrive, but only if user is already near bottom
+    if (activeConversation?.messages.length && isNearBottomRef.current) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [activeConversation?.messages.length, streamingMessage]);
+  }, [activeConversation?.messages.length]);
+
+  // Handle scroll position tracking
+  const handleScroll = (event: any) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    // Consider "near bottom" if within 100 pixels of the bottom
+    isNearBottomRef.current = distanceFromBottom < 100;
+  };
+
+  const handleContentSizeChange = (width: number, height: number) => {
+    contentHeightRef.current = height;
+    // Only auto-scroll if user is near bottom
+    if (isNearBottomRef.current) {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }
+  };
+
+  const handleLayout = (event: any) => {
+    scrollViewHeightRef.current = event.nativeEvent.layout.height;
+  };
 
   const ensureModelLoaded = async () => {
     if (!activeModel) return;
@@ -1027,9 +1050,14 @@ export const ChatScreen: React.FC = () => {
             renderItem={renderMessage}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messageList}
-            onContentSizeChange={() =>
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
+            onScroll={handleScroll}
+            onContentSizeChange={handleContentSizeChange}
+            onLayout={handleLayout}
+            scrollEventThrottle={16}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 100,
+            }}
           />
         )}
 
