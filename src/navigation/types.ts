@@ -32,8 +32,8 @@ export type ProjectsStackParamList = {
 };
 
 export type ModelsStackParamList = {
-  Models: undefined;
-  ModelDownloadDetail: { modelId: string };
+  ModelsList: undefined;
+  ModelDetail: { modelId: string };
 };
 
 export type SettingsStackParamList = {

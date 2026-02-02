@@ -28,6 +28,7 @@ import {
   MainTabParamList,
   ChatsStackParamList,
   ProjectsStackParamList,
+  ModelsStackParamList,
   SettingsStackParamList,
 } from './types';
 
@@ -35,6 +36,7 @@ const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const ChatsStack = createNativeStackNavigator<ChatsStackParamList>();
 const ProjectsStack = createNativeStackNavigator<ProjectsStackParamList>();
+const ModelsStack = createNativeStackNavigator<ModelsStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 // Chats Tab Stack
@@ -69,6 +71,20 @@ const ProjectsStackNavigator: React.FC = () => {
         options={{ presentation: 'modal' }}
       />
     </ProjectsStack.Navigator>
+  );
+};
+
+// Models Tab Stack
+const ModelsStackNavigator: React.FC = () => {
+  return (
+    <ModelsStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: COLORS.background },
+      }}
+    >
+      <ModelsStack.Screen name="ModelsList" component={ModelsScreen} />
+    </ModelsStack.Navigator>
   );
 };
 
@@ -148,8 +164,14 @@ const MainTabs: React.FC = () => {
       />
       <Tab.Screen
         name="ModelsTab"
-        component={ModelsScreen}
+        component={ModelsStackNavigator}
         options={{ tabBarLabel: 'Models' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Reset to ModelsList when tab is pressed
+            navigation.navigate('ModelsTab', { screen: 'ModelsList' });
+          },
+        })}
       />
       <Tab.Screen
         name="SettingsTab"
