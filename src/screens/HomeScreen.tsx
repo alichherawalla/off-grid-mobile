@@ -17,7 +17,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
-import { modelManager, hardwareService, llmService, onnxImageGeneratorService, activeModelService, ResourceUsage } from '../services';
+import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 import { NavigatorScreenParams } from '@react-navigation/native';
@@ -104,8 +104,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     setIsLoading(true);
     try {
-      await llmService.loadModel(model.filePath);
-      setActiveModelId(model.id);
+      // Use activeModelService singleton - prevents duplicate loads
+      await activeModelService.loadTextModel(model.id);
     } catch (error) {
       Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
     } finally {
@@ -116,8 +116,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const handleUnloadTextModel = async () => {
     setIsLoading(true);
     try {
-      await llmService.unloadModel();
-      setActiveModelId(null);
+      await activeModelService.unloadTextModel();
     } catch (error) {
       Alert.alert('Error', 'Failed to unload model');
     } finally {
@@ -130,8 +129,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     setIsLoading(true);
     try {
-      await onnxImageGeneratorService.loadModel(model.modelPath);
-      setActiveImageModelId(model.id);
+      // Use activeModelService singleton - prevents duplicate loads
+      await activeModelService.loadImageModel(model.id);
     } catch (error) {
       Alert.alert('Error', `Failed to load model: ${(error as Error).message}`);
     } finally {
@@ -142,8 +141,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const handleUnloadImageModel = async () => {
     setIsLoading(true);
     try {
-      await onnxImageGeneratorService.unloadModel();
-      setActiveImageModelId(null);
+      await activeModelService.unloadImageModel();
     } catch (error) {
       Alert.alert('Error', 'Failed to unload model');
     } finally {
@@ -230,8 +228,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <Text style={styles.title}>Local LLM</Text>
         </View>
 
-        {/* Resource Monitor */}
-        {resourceUsage && (
+        {/* Resource Monitor - Only show when models are loaded */}
+        {resourceUsage && (activeModelId || activeImageModelId) && (
           <TouchableOpacity
             style={styles.resourceCard}
             onPress={refreshResourceUsage}
@@ -240,41 +238,43 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <View style={styles.resourceRow}>
               <View style={styles.resourceItem}>
                 <View style={styles.resourceHeader}>
-                  <Icon name="activity" size={14} color={COLORS.textMuted} />
-                  <Text style={styles.resourceLabel}>Memory</Text>
+                  <Icon name="cpu" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.resourceLabel}>Model Memory (est.)</Text>
                   <Icon name="refresh-cw" size={12} color={COLORS.textMuted} style={styles.refreshIcon} />
                 </View>
-                <View style={styles.resourceBarContainer}>
-                  <View
-                    style={[
-                      styles.resourceBar,
-                      {
-                        width: `${Math.min(resourceUsage.memoryUsagePercent, 100)}%`,
-                        backgroundColor: resourceUsage.memoryUsagePercent > 80 ? COLORS.error : COLORS.primary,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.resourceValue}>
-                  {hardwareService.formatBytes(resourceUsage.memoryUsed)} / {hardwareService.formatBytes(resourceUsage.memoryTotal)}
-                </Text>
+                {resourceUsage.estimatedModelMemory > 0 && (
+                  <>
+                    <View style={styles.resourceBarContainer}>
+                      <View
+                        style={[
+                          styles.resourceBar,
+                          {
+                            width: `${Math.min((resourceUsage.estimatedModelMemory / resourceUsage.memoryTotal) * 100, 100)}%`,
+                            backgroundColor: (resourceUsage.estimatedModelMemory / resourceUsage.memoryTotal) > 0.6 ? COLORS.warning : COLORS.primary,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.modelMemoryValue}>
+                      ~{hardwareService.formatBytes(resourceUsage.estimatedModelMemory)} / {hardwareService.formatBytes(resourceUsage.memoryTotal)} RAM
+                    </Text>
+                  </>
+                )}
               </View>
-              {(activeModelId || activeImageModelId) && (
-                <TouchableOpacity
-                  style={styles.ejectButton}
-                  onPress={handleEjectAll}
-                  disabled={isEjecting}
-                >
-                  {isEjecting ? (
-                    <ActivityIndicator size="small" color={COLORS.text} />
-                  ) : (
-                    <>
-                      <Icon name="power" size={14} color={COLORS.error} />
-                      <Text style={styles.ejectButtonText}>Eject All</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.ejectButton}
+                onPress={handleEjectAll}
+                disabled={isEjecting}
+              >
+                {isEjecting ? (
+                  <ActivityIndicator size="small" color={COLORS.text} />
+                ) : (
+                  <>
+                    <Icon name="power" size={14} color={COLORS.error} />
+                    <Text style={styles.ejectButtonText}>Eject All</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           </TouchableOpacity>
         )}
@@ -635,10 +635,11 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
-  resourceValue: {
-    fontSize: 11,
-    color: COLORS.textMuted,
+  modelMemoryValue: {
+    fontSize: 12,
+    color: COLORS.text,
     fontFamily: 'monospace',
+    marginTop: 4,
   },
   ejectButton: {
     flexDirection: 'row',

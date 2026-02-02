@@ -14,7 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card, Button } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore, useChatStore, useAuthStore } from '../stores';
-import { modelManager, llmService, authService } from '../services';
+import { modelManager, authService, activeModelService } from '../services';
 import { SettingsStackParamList } from '../navigation/types';
 
 type NavigationProp = NativeStackNavigationProp<SettingsStackParamList, 'SettingsMain'>;
@@ -59,7 +59,7 @@ export const SettingsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await llmService.unloadModel();
+              await activeModelService.unloadAllModels();
               for (const model of downloadedModels) {
                 await modelManager.deleteModel(model.id).catch(() => {});
               }

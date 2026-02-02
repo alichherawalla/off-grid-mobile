@@ -22,7 +22,7 @@ import { unzip } from 'react-native-zip-archive';
 import { Card, ModelCard, Button } from '../components';
 import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS } from '../constants';
 import { useAppStore } from '../stores';
-import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService } from '../services';
+import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
@@ -532,8 +532,7 @@ export const ModelsScreen: React.FC = () => {
             try {
               // Unload if this is the active model
               if (activeImageModelId === modelId) {
-                await onnxImageGeneratorService.unloadModel();
-                setActiveImageModelId(null);
+                await activeModelService.unloadImageModel();
               }
               await modelManager.deleteImageModel(modelId);
               removeDownloadedImageModel(modelId);
