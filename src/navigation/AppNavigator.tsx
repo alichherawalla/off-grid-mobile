@@ -108,6 +108,12 @@ const MainTabs: React.FC = () => {
         name="ChatsTab"
         component={ChatsStackNavigator}
         options={{ tabBarLabel: 'Chats' }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Reset to ChatsList when tab is pressed
+            navigation.navigate('ChatsTab', { screen: 'ChatsList' });
+          },
+        })}
       />
       <Tab.Screen
         name="ProjectsTab"
