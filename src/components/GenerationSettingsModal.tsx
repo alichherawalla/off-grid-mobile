@@ -500,6 +500,31 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
+            <View style={styles.settingItem}>
+              <View style={styles.settingHeader}>
+                <Text style={styles.settingLabel}>Image Size</Text>
+                <Text style={styles.settingValue}>{settings.imageWidth ?? 256}x{settings.imageHeight ?? 256}</Text>
+              </View>
+              <Text style={styles.settingDescription}>
+                Output resolution (smaller = faster, larger = more detail)
+              </Text>
+              <Slider
+                style={styles.slider}
+                minimumValue={128}
+                maximumValue={512}
+                step={64}
+                value={settings.imageWidth ?? 256}
+                onSlidingComplete={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
+                minimumTrackTintColor={COLORS.primary}
+                maximumTrackTintColor={COLORS.surfaceLight}
+                thumbTintColor={COLORS.primary}
+              />
+              <View style={styles.sliderLabels}>
+                <Text style={styles.sliderMinMax}>128</Text>
+                <Text style={styles.sliderMinMax}>512</Text>
+              </View>
+            </View>
+
             <View style={styles.sectionDivider} />
 
             {/* Text Generation Settings */}

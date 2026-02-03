@@ -117,6 +117,8 @@ class ImageGenerationService {
 
     const steps = params.steps || settings.imageSteps || 8;
     const guidanceScale = params.guidanceScale || settings.imageGuidanceScale || 2.0;
+    const imageWidth = settings.imageWidth || 256;
+    const imageHeight = settings.imageHeight || 256;
 
     this.cancelRequested = false;
     this.updateState({
@@ -172,6 +174,8 @@ class ImageGenerationService {
           steps,
           guidanceScale,
           seed: params.seed,
+          width: imageWidth,
+          height: imageHeight,
           previewInterval: params.previewInterval ?? 2,
         },
         // onProgress - service-owned callback, never goes stale

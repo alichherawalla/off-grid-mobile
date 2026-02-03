@@ -141,6 +141,25 @@ export const ModelSettingsScreen: React.FC = () => {
               thumbTintColor={COLORS.primary}
             />
           </View>
+
+          <View style={styles.sliderSection}>
+            <View style={styles.sliderHeader}>
+              <Text style={styles.sliderLabel}>Image Size</Text>
+              <Text style={styles.sliderValue}>{rawSettings?.imageWidth ?? 256}x{rawSettings?.imageHeight ?? 256}</Text>
+            </View>
+            <Text style={styles.sliderDesc}>Output resolution (smaller = faster, larger = more detail)</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={128}
+              maximumValue={512}
+              step={64}
+              value={rawSettings?.imageWidth ?? 256}
+              onSlidingComplete={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
+              minimumTrackTintColor={COLORS.primary}
+              maximumTrackTintColor={COLORS.surface}
+              thumbTintColor={COLORS.primary}
+            />
+          </View>
         </Card>
 
         {/* Text Generation Settings */}

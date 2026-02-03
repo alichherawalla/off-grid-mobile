@@ -75,6 +75,8 @@ interface AppState {
     imageSteps: number;
     imageGuidanceScale: number;
     imageThreads: number;
+    imageWidth: number;
+    imageHeight: number;
     // Model loading strategy: 'performance' keeps models loaded, 'memory' loads on demand
     modelLoadingStrategy: ModelLoadingStrategy;
     // GPU acceleration for text model inference (requires model reload)
@@ -206,6 +208,9 @@ export const useAppStore = create<AppState>()(
         imageGuidanceScale: 2.0,
         // CPU threads for image generation (applies on next image model load)
         imageThreads: 4,
+        // Image generation resolution (width and height in pixels, must be divisible by 8)
+        imageWidth: 256,
+        imageHeight: 256,
         // Model loading strategy: 'performance' = keep loaded, 'memory' = load on demand
         modelLoadingStrategy: 'memory' as ModelLoadingStrategy,
         // GPU acceleration for text inference (try GPU offloading when available)

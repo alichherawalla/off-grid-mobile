@@ -135,8 +135,8 @@ class ONNXImageGeneratorService {
         steps: params.steps || 20,
         guidanceScale: params.guidanceScale || 7.5,
         seed: params.seed,
-        width: params.width || 512,
-        height: params.height || 512,
+        width: params.width || 256,
+        height: params.height || 256,
         previewInterval: params.previewInterval ?? 2,
       });
 
@@ -176,8 +176,8 @@ class ONNXImageGeneratorService {
         id: img.id,
         prompt: img.prompt || '',
         imagePath: img.imagePath,
-        width: img.width || 512,
-        height: img.height || 512,
+        width: img.width || 256,
+        height: img.height || 256,
         steps: img.steps || 20,
         seed: img.seed || 0,
         modelId: img.modelId || '',
@@ -198,10 +198,10 @@ class ONNXImageGeneratorService {
       return {
         DEFAULT_STEPS: 20,
         DEFAULT_GUIDANCE_SCALE: 7.5,
-        DEFAULT_WIDTH: 512,
-        DEFAULT_HEIGHT: 512,
-        SUPPORTED_WIDTHS: [512],
-        SUPPORTED_HEIGHTS: [512],
+        DEFAULT_WIDTH: 256,
+        DEFAULT_HEIGHT: 256,
+        SUPPORTED_WIDTHS: [128, 192, 256, 320, 384, 448, 512],
+        SUPPORTED_HEIGHTS: [128, 192, 256, 320, 384, 448, 512],
       };
     }
     return ONNXImageGeneratorModule.getConstants();

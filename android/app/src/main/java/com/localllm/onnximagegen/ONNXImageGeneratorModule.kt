@@ -57,10 +57,10 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         return mapOf(
             "DEFAULT_STEPS" to 20,
             "DEFAULT_GUIDANCE_SCALE" to 7.5,
-            "DEFAULT_WIDTH" to 512,
-            "DEFAULT_HEIGHT" to 512,
-            "SUPPORTED_WIDTHS" to listOf(512),
-            "SUPPORTED_HEIGHTS" to listOf(512)
+            "DEFAULT_WIDTH" to 256,
+            "DEFAULT_HEIGHT" to 256,
+            "SUPPORTED_WIDTHS" to listOf(128, 192, 256, 320, 384, 448, 512),
+            "SUPPORTED_HEIGHTS" to listOf(128, 192, 256, 320, 384, 448, 512)
         )
     }
 
@@ -247,8 +247,8 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         val steps = if (params.hasKey("steps")) params.getInt("steps") else 20
         val guidanceScale = if (params.hasKey("guidanceScale")) params.getDouble("guidanceScale").toFloat() else 7.5f
         val seed = if (params.hasKey("seed")) params.getInt("seed").toLong() else System.currentTimeMillis()
-        val width = if (params.hasKey("width")) params.getInt("width") else 512
-        val height = if (params.hasKey("height")) params.getInt("height") else 512
+        val width = if (params.hasKey("width")) params.getInt("width") else 256
+        val height = if (params.hasKey("height")) params.getInt("height") else 256
         val previewInterval = if (params.hasKey("previewInterval")) params.getInt("previewInterval") else DEFAULT_PREVIEW_INTERVAL
 
         isGenerating = true
@@ -309,7 +309,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
 
                     // Predict noise (this is the expensive part)
                     val unetStart = System.currentTimeMillis()
-                    val noisePred = predictNoise(latentModelInput, timestep.toLong(), batchEmbeddings, guidanceScale)
+                    val noisePred = predictNoise(latentModelInput, timestep.toLong(), batchEmbeddings, guidanceScale, latentHeight, latentWidth)
                     val unetTime = System.currentTimeMillis() - unetStart
                     totalUnetTime += unetTime
 
@@ -363,8 +363,12 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                 val imageId = UUID.randomUUID().toString()
                 val outputFile = File(outputDir, "$imageId.png")
 
-                FileOutputStream(outputFile).use { outputStream ->
-                    image.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                try {
+                    FileOutputStream(outputFile).use { outputStream ->
+                        image.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                    }
+                } finally {
+                    image.recycle()
                 }
 
                 val elapsedTime = (System.currentTimeMillis() - startTime) / 1000f
@@ -480,15 +484,16 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
         return latents + latents  // [latents, latents] for batch of 2
     }
 
-    private fun predictNoise(latents: FloatArray, timestep: Long, embeddings: FloatArray, guidanceScale: Float): FloatArray {
+    private fun predictNoise(latents: FloatArray, timestep: Long, embeddings: FloatArray, guidanceScale: Float, latentHeight: Int, latentWidth: Int): FloatArray {
         val env = ortEnv!!
         val session = unet!!
+        val tensorsToClose = mutableListOf<OnnxTensor>()
 
         // Get latent shape from size (assuming batch=2 for classifier-free guidance)
         val batchSize = 2
         val channels = LATENT_CHANNELS
-        val height = 64  // 512 / 8
-        val width = 64
+        val height = latentHeight
+        val width = latentWidth
 
         // Get input names early for type detection
         val inputNames = session.inputNames.toList()
@@ -500,6 +505,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
             env, latentBuffer,
             longArrayOf(batchSize.toLong(), channels.toLong(), height.toLong(), width.toLong())
         )
+        tensorsToClose.add(latentTensor)
 
         // Create timestep tensor - check model's expected type and shape
         // HuggingFace LCM models expect float with shape [batch, 1], ShiftHackZ models expect int32 with shape [batch]
@@ -538,6 +544,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
             val timestepBuffer = IntBuffer.wrap(timestepArray)
             OnnxTensor.createTensor(env, timestepBuffer, longArrayOf(batchSize.toLong()))
         }
+        tensorsToClose.add(timestepTensor)
 
         // Create encoder hidden states tensor
         val embeddingBuffer = FloatBuffer.wrap(embeddings)
@@ -548,6 +555,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
             env, embeddingBuffer,
             longArrayOf(batchSize.toLong(), seqLen, hiddenSize.toLong())
         )
+        tensorsToClose.add(embeddingTensor)
 
         // Build inputs map based on actual model input names
         val inputs = mutableMapOf<String, OnnxTensor>()
@@ -604,6 +612,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                                 OnnxTensor.createTensor(env, condBuffer, longArrayOf(dim0, dim1))
                             }
                             inputs[name] = condTensor
+                            tensorsToClose.add(condTensor)
                             Log.d(TAG, "Created LCM guidance embedding for '$name' with shape [$dim0, $dim1], w=${guidanceScale - 1.0f}")
                         } else {
                             // Rank 1 tensor - just use the w value
@@ -618,6 +627,7 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
                                 OnnxTensor.createTensor(env, condBuffer, longArrayOf(batchSize.toLong()))
                             }
                             inputs[name] = condTensor
+                            tensorsToClose.add(condTensor)
                         }
                     }
                 } catch (e: Exception) {
@@ -635,18 +645,22 @@ class ONNXImageGeneratorModule(reactContext: ReactApplicationContext) :
 
         Log.d(TAG, "UNet inputs: ${inputs.keys.toList()}")
 
-        val outputs = session.run(inputs)
-
-        // Get output - properly extract data
-        val outputTensor = outputs.get(0) as OnnxTensor
-        val outputData = extractFloatArray(outputTensor)
-
-        latentTensor.close()
-        timestepTensor.close()
-        embeddingTensor.close()
-        outputs.close()
-
-        return outputData
+        var outputs: OrtSession.Result? = null
+        try {
+            outputs = session.run(inputs)
+            // Get output - properly extract data
+            val outputTensor = outputs.get(0) as OnnxTensor
+            return extractFloatArray(outputTensor)
+        } finally {
+            outputs?.close()
+            tensorsToClose.forEach { tensor ->
+                try {
+                    tensor.close()
+                } catch (_: Exception) {
+                    // Best-effort cleanup
+                }
+            }
+        }
     }
 
     private fun applyGuidance(noisePred: FloatArray, guidanceScale: Float): FloatArray {
