@@ -247,7 +247,11 @@ class ActiveModelService {
       await this.imageLoadPromise;
     }
 
-    if (!this.loadedImageModelId) {
+    const store = useAppStore.getState();
+    const hasSelectedImageModel = !!store.activeImageModelId;
+    const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
+
+    if (!this.loadedImageModelId && !hasSelectedImageModel && !isImageModelLoaded) {
       console.log('[ActiveModelService] No image model loaded to unload');
       return;
     }
@@ -256,11 +260,13 @@ class ActiveModelService {
     this.notifyListeners();
 
     try {
-      console.log('[ActiveModelService] Unloading image model:', this.loadedImageModelId);
-      await onnxImageGeneratorService.unloadModel();
+      if (isImageModelLoaded) {
+        console.log('[ActiveModelService] Unloading image model:', this.loadedImageModelId);
+        await onnxImageGeneratorService.unloadModel();
+      }
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
-      useAppStore.getState().setActiveImageModelId(null);
+      store.setActiveImageModelId(null);
       console.log('[ActiveModelService] Image model unloaded');
     } finally {
       this.loadingState.image = false;
