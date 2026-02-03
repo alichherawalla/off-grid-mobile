@@ -29,7 +29,7 @@ import {
 } from '../components';
 import { COLORS, APP_CONFIG } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -75,6 +75,7 @@ export const ChatScreen: React.FC = () => {
     setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
     setImageGenerationStatus: setAppImageGenerationStatus,
+    removeImagesByConversationId,
   } = useAppStore();
 
   // Subscribe to image generation service (lifecycle-independent)
@@ -556,7 +557,7 @@ export const ChatScreen: React.FC = () => {
 
     Alert.alert(
       'Delete Conversation',
-      'Are you sure you want to delete this conversation?',
+      'Are you sure you want to delete this conversation? This will also delete all images generated in this chat.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -567,6 +568,11 @@ export const ChatScreen: React.FC = () => {
             if (isStreaming) {
               await llmService.stopGeneration();
               clearStreamingMessage();
+            }
+            // Delete associated images from disk and store
+            const imageIds = removeImagesByConversationId(activeConversationId);
+            for (const imageId of imageIds) {
+              await onnxImageGeneratorService.deleteGeneratedImage(imageId);
             }
             deleteConversation(activeConversationId);
             setActiveConversation(null);

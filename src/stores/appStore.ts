@@ -107,6 +107,7 @@ interface AppState {
   generatedImages: GeneratedImage[];
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
+  removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
 }
 
@@ -251,6 +252,19 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           generatedImages: state.generatedImages.filter((img) => img.id !== imageId),
         })),
+      removeImagesByConversationId: (conversationId) => {
+        const state = get();
+        const imagesToRemove = state.generatedImages.filter(
+          (img) => img.conversationId === conversationId
+        );
+        const imageIds = imagesToRemove.map((img) => img.id);
+        set({
+          generatedImages: state.generatedImages.filter(
+            (img) => img.conversationId !== conversationId
+          ),
+        });
+        return imageIds;
+      },
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
     }),

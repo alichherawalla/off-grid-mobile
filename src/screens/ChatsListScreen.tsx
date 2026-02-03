@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { onnxImageGeneratorService } from '../services';
 import { Conversation } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -22,7 +23,7 @@ export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { conversations, deleteConversation, setActiveConversation } = useChatStore();
   const { getProject } = useProjectStore();
-  const { downloadedModels } = useAppStore();
+  const { downloadedModels, removeImagesByConversationId } = useAppStore();
 
   const hasModels = downloadedModels.length > 0;
 
@@ -42,13 +43,20 @@ export const ChatsListScreen: React.FC = () => {
   const handleDeleteChat = (conversation: Conversation) => {
     Alert.alert(
       'Delete Chat',
-      `Delete "${conversation.title}"?`,
+      `Delete "${conversation.title}"? This will also delete all images generated in this chat.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteConversation(conversation.id),
+          onPress: async () => {
+            // Delete associated images from disk and store
+            const imageIds = removeImagesByConversationId(conversation.id);
+            for (const imageId of imageIds) {
+              await onnxImageGeneratorService.deleteGeneratedImage(imageId);
+            }
+            deleteConversation(conversation.id);
+          },
         },
       ]
     );
