@@ -344,14 +344,11 @@ LocalLLM uses [llama.cpp](https://github.com/ggerganov/llama.cpp) compiled for A
 
 ### GPU Acceleration
 
-LocalLLM supports GPU offloading for text model inference on supported devices:
+LocalLLM supports GPU offloading for text model inference via the OpenCL backend on Qualcomm Adreno GPUs. Configure the number of GPU layers in Settings > Model Settings — each layer offloaded to the GPU reduces CPU load. If GPU initialization fails, the app automatically falls back to CPU-only inference.
 
-- **iOS**: Metal GPU backend — full layer offloading enabled by default
-- **Android**: OpenCL GPU backend on Qualcomm Adreno GPUs — configurable GPU layers with automatic CPU fallback if GPU initialization fails
+The active backend (OpenCL or CPU) is displayed alongside every generated response, together with decode speed and time-to-first-token.
 
-Configure the number of GPU layers in Settings > Model Settings. Each layer offloaded to the GPU reduces CPU load but requires GPU-compatible memory. The app displays the active GPU backend (Metal, OpenCL, or CPU) alongside every generated response.
-
-> **Note:** Android GPU support via OpenCL is experimental. On some Qualcomm devices the OpenCL compute driver can be unstable for LLM workloads. If you experience crashes, reduce GPU layers or disable GPU entirely — the CPU inference path with ARM NEON/i8mm/dotprod SIMD optimizations delivers strong performance on modern Snapdragon chips.
+> **Note:** GPU support via OpenCL is experimental. On some Qualcomm devices the OpenCL compute driver can be unstable for LLM workloads. If you experience crashes, reduce GPU layers or disable GPU entirely — the CPU inference path with ARM NEON/i8mm/dotprod SIMD optimizations delivers strong performance on modern Snapdragon chips.
 
 ### Architecture
 
@@ -369,7 +366,7 @@ Configure the number of GPU layers in Settings > Model Settings. Each layer offl
 │   llama.rn      whisper.rn      ONNX Runtime    Android DL Mgr   │
 │   (C++ JNI)     (C++ JNI)       (Kotlin)        (Kotlin)         │
 ├──────────────────────────────────────────────────────────────────┤
-│             GPU: Metal (iOS) / OpenCL (Android)                    │
+│             GPU: OpenCL (Qualcomm Adreno)                           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -507,7 +504,7 @@ See the [full build guide](#building-from-source) below for signing configuratio
 ## Technical Stack
 
 - **React Native** with TypeScript
-- **llama.rn** - Native GGUF model inference via llama.cpp with GPU offloading (Metal/OpenCL)
+- **llama.rn** - Native GGUF model inference via llama.cpp with optional OpenCL GPU offloading
 - **whisper.rn** - On-device speech recognition via whisper.cpp
 - **ONNX Runtime** - Stable Diffusion image generation
 - **Android DownloadManager** - Native background model downloads that survive app backgrounding
