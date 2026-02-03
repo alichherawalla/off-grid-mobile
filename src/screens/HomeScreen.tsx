@@ -56,6 +56,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setActiveImageModelId,
     deviceInfo,
     setDeviceInfo,
+    generatedImages,
   } = useAppStore();
 
   const { conversations, createConversation, setActiveConversation, deleteConversation } = useChatStore();
@@ -356,6 +357,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             />
           </Card>
         )}
+
+        {/* Image Gallery */}
+        <TouchableOpacity
+          style={styles.galleryCard}
+          onPress={() => (navigation as any).navigate('Gallery')}
+          activeOpacity={0.7}
+        >
+          <Icon name="image" size={18} color={COLORS.primary} />
+          <View style={styles.galleryCardInfo}>
+            <Text style={styles.galleryCardTitle}>Image Gallery</Text>
+            <Text style={styles.galleryCardMeta}>
+              {generatedImages.length} image{generatedImages.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
+        </TouchableOpacity>
 
         {/* Recent Conversations */}
         {recentConversations.length > 0 && (
@@ -695,6 +712,28 @@ const styles = StyleSheet.create({
   },
   newChatButton: {
     marginBottom: 24,
+  },
+  galleryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    gap: 12,
+  },
+  galleryCardInfo: {
+    flex: 1,
+  },
+  galleryCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  galleryCardMeta: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
   },
   setupCard: {
     alignItems: 'center',

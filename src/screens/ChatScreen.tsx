@@ -29,7 +29,7 @@ import {
 } from '../components';
 import { COLORS, APP_CONFIG } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, onnxImageGeneratorService, intentClassifier, activeModelService, generationService } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -73,15 +73,27 @@ export const ChatScreen: React.FC = () => {
     activeImageModelId,
     downloadedImageModels,
     setDownloadedImageModels,
-    isGeneratingImage,
-    imageGenerationProgress,
-    imageGenerationStatus,
-    imagePreviewPath,
-    setIsGeneratingImage,
-    setImageGenerationProgress,
-    setImageGenerationStatus,
-    setImagePreviewPath,
+    setIsGeneratingImage: setAppIsGeneratingImage,
+    setImageGenerationStatus: setAppImageGenerationStatus,
   } = useAppStore();
+
+  // Subscribe to image generation service (lifecycle-independent)
+  const [imageGenState, setImageGenState] = useState<ImageGenerationState>(
+    imageGenerationService.getState()
+  );
+
+  useEffect(() => {
+    const unsubscribe = imageGenerationService.subscribe((state) => {
+      setImageGenState(state);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Derived state from service for convenience
+  const isGeneratingImage = imageGenState.isGenerating;
+  const imageGenerationProgress = imageGenState.progress;
+  const imageGenerationStatus = imageGenState.status;
+  const imagePreviewPath = imageGenState.previewPath;
   const {
     activeConversationId,
     conversations,
@@ -119,6 +131,20 @@ export const ChatScreen: React.FC = () => {
 
   // Fullscreen image viewer state
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
+
+  // Count images in this conversation for the gallery button
+  const conversationImageCount = React.useMemo(() => {
+    const messages = activeConversation?.messages || [];
+    let count = 0;
+    for (const msg of messages) {
+      if (msg.attachments) {
+        for (const att of msg.attachments) {
+          if (att.type === 'image') count++;
+        }
+      }
+    }
+    return count;
+  }, [activeConversation?.messages]);
 
   // Handle route params - set active conversation or create new one
   useEffect(() => {
@@ -339,34 +365,34 @@ export const ChatScreen: React.FC = () => {
 
       // Show status when using LLM classification (only if not already generating)
       if (useLLM && !isGeneratingImage) {
-        setIsGeneratingImage(true);
-        setImageGenerationStatus('Preparing classifier...');
+        setAppIsGeneratingImage(true);
+        setAppImageGenerationStatus('Preparing classifier...');
       }
 
       const intent = await intentClassifier.classifyIntent(text, {
         useLLM,
         classifierModel,
         currentModelPath: llmService.getLoadedModelPath(),
-        onStatusChange: useLLM ? setImageGenerationStatus : undefined,
+        onStatusChange: useLLM ? setAppImageGenerationStatus : undefined,
         modelLoadingStrategy: settings.modelLoadingStrategy,
       });
 
       // Clear status if not generating image (and we set it during classification)
       if (intent !== 'image' && useLLM) {
-        setImageGenerationStatus(null);
-        setIsGeneratingImage(false);
+        setAppImageGenerationStatus(null);
+        setAppIsGeneratingImage(false);
       }
 
       return intent === 'image';
     } catch (error) {
       console.warn('[ChatScreen] Intent classification failed:', error);
-      setImageGenerationStatus(null);
-      setIsGeneratingImage(false);
+      setAppImageGenerationStatus(null);
+      setAppIsGeneratingImage(false);
       return false;
     }
   };
 
-  // Handle image generation
+  // Handle image generation - delegates to lifecycle-independent service
   const handleImageGeneration = async (prompt: string, conversationId: string, skipUserMessage = false) => {
     if (!activeImageModel) {
       Alert.alert('Error', 'No image model loaded.');
@@ -384,105 +410,21 @@ export const ChatScreen: React.FC = () => {
       );
     }
 
-    // Load image model if not loaded - use activeModelService singleton
-    const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
-    const loadedPath = await onnxImageGeneratorService.getLoadedModelPath();
+    // Delegate to service - this survives navigation
+    const result = await imageGenerationService.generateImage({
+      prompt,
+      conversationId,
+      steps: settings.imageSteps || 8,
+      guidanceScale: settings.imageGuidanceScale || 2.0,
+      previewInterval: 2,
+    });
 
-    if (!isImageModelLoaded || loadedPath !== activeImageModel.modelPath) {
-      if (!activeImageModelId) {
-        Alert.alert('Error', 'No image model selected.');
-        return;
-      }
-      try {
-        setIsGeneratingImage(true);
-        setImageGenerationStatus(`Loading ${activeImageModel.name}...`);
-        setImageGenerationProgress({ step: 0, totalSteps: settings.imageSteps || 30 });
-        // Use activeModelService singleton - prevents duplicate loads
-        await activeModelService.loadImageModel(activeImageModelId);
-      } catch (error: any) {
-        setIsGeneratingImage(false);
-        setImageGenerationProgress(null);
-        setImageGenerationStatus(null);
-        Alert.alert('Error', `Failed to load image model: ${error?.message || 'Unknown error'}`);
-        return;
-      }
-    }
+    // Reset image mode after completion
+    setCurrentImageMode('auto');
 
-    setIsGeneratingImage(true);
-    setImageGenerationStatus('Starting image generation...');
-    setImagePreviewPath(null);
-
-    // Track image generation start time
-    const imageGenStartTime = Date.now();
-
-    try {
-      const result = await onnxImageGeneratorService.generateImage(
-        {
-          prompt,
-          steps: settings.imageSteps || 30,
-          guidanceScale: settings.imageGuidanceScale || 7.5,
-          previewInterval: 2,
-        },
-        (progress) => {
-          setImageGenerationProgress({
-            step: progress.step,
-            totalSteps: progress.totalSteps,
-          });
-          setImageGenerationStatus(`Generating image (${progress.step}/${progress.totalSteps})...`);
-        },
-        (preview) => {
-          // Update preview image with cache-busting timestamp
-          // React Native Image caches by URI, so we need unique URI for each update
-          setImagePreviewPath(`file://${preview.previewPath}?t=${Date.now()}`);
-          setImageGenerationStatus(`Refining image (${preview.step}/${preview.totalSteps})...`);
-        }
-      );
-
-      // Calculate generation time
-      const imageGenTime = Date.now() - imageGenStartTime;
-
-      // Add assistant message with generated image using the promise result
-      if (result && result.imagePath) {
-        console.log('[ChatScreen] Image generated, adding to chat:', result.imagePath);
-        setImageGenerationStatus('Saving image...');
-
-        // Build image generation metadata
-        const imageMeta: GenerationMeta = {
-          gpu: Platform.OS === 'ios',
-          gpuBackend: Platform.OS === 'ios' ? 'Metal' : 'CPU',
-          modelName: activeImageModel.name,
-          steps: settings.imageSteps || 30,
-          guidanceScale: settings.imageGuidanceScale || 7.5,
-          resolution: `${result.width}x${result.height}`,
-        };
-
-        addMessage(
-          conversationId,
-          {
-            role: 'assistant',
-            content: `Generated image for: "${prompt}"`,
-          },
-          [{
-            id: result.id,
-            type: 'image',
-            uri: `file://${result.imagePath}`,
-            width: result.width,
-            height: result.height,
-          }],
-          imageGenTime,
-          imageMeta
-        );
-      }
-    } catch (error: any) {
-      if (!error?.message?.includes('cancelled')) {
-        Alert.alert('Error', `Image generation failed: ${error?.message || 'Unknown error'}`);
-      }
-    } finally {
-      setIsGeneratingImage(false);
-      setImageGenerationProgress(null);
-      setImageGenerationStatus(null);
-      setImagePreviewPath(null);
-      setCurrentImageMode('auto');
+    // Show error if generation failed (and wasn't cancelled)
+    if (!result && imageGenState.error && !imageGenState.error.includes('cancelled')) {
+      Alert.alert('Error', `Image generation failed: ${imageGenState.error}`);
     }
   };
 
@@ -605,12 +547,7 @@ export const ChatScreen: React.FC = () => {
 
     // Stop image generation if in progress
     if (isGeneratingImage) {
-      setImageGenerationStatus('Cancelling...');
-      setIsGeneratingImage(false);
-      setImageGenerationProgress(null);
-      setImageGenerationStatus(null);
-      // Cancel native generation in background
-      onnxImageGeneratorService.cancelGeneration().catch(() => {});
+      imageGenerationService.cancelGeneration().catch(() => {});
     }
   };
 
@@ -929,6 +866,14 @@ export const ChatScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
             <View style={styles.headerActions}>
+              {conversationImageCount > 0 && (
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => (navigation as any).navigate('Gallery', { conversationId: activeConversationId })}
+                >
+                  <Icon name="image" size={14} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={() => setShowSettingsPanel(true)}
@@ -1389,23 +1334,24 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 4,
   },
   iconButton: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 8,
     backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textSecondary,
   },
   projectButton: {
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 8,
     backgroundColor: COLORS.primary + '30',
     alignItems: 'center',

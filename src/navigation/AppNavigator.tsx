@@ -22,6 +22,7 @@ import {
   DeviceInfoScreen,
   StorageSettingsScreen,
   SecuritySettingsScreen,
+  GalleryScreen,
 } from '../screens';
 import {
   RootStackParamList,
@@ -214,6 +215,11 @@ export const AppNavigator: React.FC = () => {
       <RootStack.Screen
         name="DownloadManager"
         component={DownloadManagerScreen}
+        options={{ presentation: 'modal' }}
+      />
+      <RootStack.Screen
+        name="Gallery"
+        component={GalleryScreen}
         options={{ presentation: 'modal' }}
       />
     </RootStack.Navigator>

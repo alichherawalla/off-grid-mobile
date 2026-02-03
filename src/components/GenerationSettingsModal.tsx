@@ -441,7 +441,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 value={settings.imageSteps || 20}
                 onSlidingComplete={(value) => updateSettings({ imageSteps: value })}
                 minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.surface}
+                maximumTrackTintColor={COLORS.surfaceLight}
                 thumbTintColor={COLORS.primary}
               />
               <View style={styles.sliderLabels}>
@@ -466,7 +466,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 value={settings.imageGuidanceScale || 7.5}
                 onSlidingComplete={(value) => updateSettings({ imageGuidanceScale: value })}
                 minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.surface}
+                maximumTrackTintColor={COLORS.surfaceLight}
                 thumbTintColor={COLORS.primary}
               />
               <View style={styles.sliderLabels}>
@@ -503,7 +503,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   onValueChange={(value) => handleSliderChange(config.key, value)}
                   onSlidingComplete={(value) => handleSliderComplete(config.key, value)}
                   minimumTrackTintColor={COLORS.primary}
-                  maximumTrackTintColor={COLORS.surface}
+                  maximumTrackTintColor={COLORS.surfaceLight}
                   thumbTintColor={COLORS.primary}
                 />
                 <View style={styles.sliderLabels}>
@@ -563,31 +563,31 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
 
-            {/* GPU Layers Slider - only shown when GPU is enabled */}
-            {settings.enableGpu && (
-              <View style={styles.settingItem}>
-                <View style={styles.settingHeader}>
-                  <Text style={styles.settingLabel}>GPU Layers</Text>
-                  <Text style={styles.settingValue}>{settings.gpuLayers ?? 6}</Text>
+              {/* GPU Layers Slider - inline when GPU is enabled */}
+              {settings.enableGpu && (
+                <View style={styles.gpuLayersInline}>
+                  <View style={styles.settingHeader}>
+                    <Text style={styles.settingLabel}>GPU Layers</Text>
+                    <Text style={styles.settingValue}>{settings.gpuLayers ?? 6}</Text>
+                  </View>
+                  <Text style={styles.settingDescription}>
+                    Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
+                  </Text>
+                  <Slider
+                    style={styles.slider}
+                    minimumValue={1}
+                    maximumValue={99}
+                    step={1}
+                    value={settings.gpuLayers ?? 6}
+                    onSlidingComplete={(value: number) => updateSettings({ gpuLayers: value })}
+                    minimumTrackTintColor={COLORS.primary}
+                    maximumTrackTintColor={COLORS.surfaceLight}
+                    thumbTintColor={COLORS.primary}
+                  />
                 </View>
-                <Text style={styles.settingDescription}>
-                  Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
-                </Text>
-                <Slider
-                  style={styles.slider}
-                  minimumValue={1}
-                  maximumValue={99}
-                  step={1}
-                  value={settings.gpuLayers ?? 6}
-                  onSlidingComplete={(value: number) => updateSettings({ gpuLayers: value })}
-                  minimumTrackTintColor={COLORS.primary}
-                  maximumTrackTintColor={COLORS.surface}
-                  thumbTintColor={COLORS.primary}
-                />
-              </View>
-            )}
+              )}
+            </View>
 
             <View style={styles.modeToggleContainer}>
               <View style={styles.modeToggleInfo}>
@@ -707,7 +707,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -727,7 +728,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: COLORS.surface,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     gap: 6,
     flexWrap: 'wrap',
   },
@@ -745,10 +746,15 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
   },
   content: {
-    padding: 16,
+    padding: 20,
   },
   settingItem: {
-    marginBottom: 24,
+    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   settingHeader: {
     flexDirection: 'row',
@@ -806,7 +812,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 14,
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 16,
@@ -816,7 +823,7 @@ const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginVertical: 20,
+    marginVertical: 24,
   },
   modelPickerButton: {
     flexDirection: 'row',
@@ -879,8 +886,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textMuted,
     fontStyle: 'italic',
-    marginTop: 8,
+    marginTop: 10,
     marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  gpuLayersInline: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   modeToggleContainer: {
     marginTop: 16,

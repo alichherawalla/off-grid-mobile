@@ -156,10 +156,12 @@ LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Mode
 
 ### Image Generation Features
 
+- **Background Generation**: Image generation continues even when you navigate between screens. Start generating, switch to another chat or the home screen, and come back — your image will have progressed or completed while you were away.
+- **Image Gallery**: A dedicated gallery screen shows all your generated images in a grid. Open it from the Home screen or from the image icon in any chat header. When opened from a chat, it filters to show only images from that conversation.
 - **Real-time Preview**: See your image emerge during generation (every 2 steps)
 - **Automatic Intent Detection**: AI classifies if your message wants an image or text response
 - **Manual Override**: Force image generation with the toggle button
-- **Fullscreen Viewer**: Tap any generated image to view in fullscreen with Save option
+- **Fullscreen Viewer**: Tap any generated image to view in fullscreen with details — prompt, steps, resolution, seed, and creation date. Save or delete from the viewer.
 - **Save to Gallery**: Save generated images to your Pictures folder
 - **Generation Timing**: See how long each image took to generate
 - **Customizable Settings**:
@@ -186,6 +188,61 @@ LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Mode
 4. **Save Your Creation**
    - Tap the generated image to view fullscreen
    - Tap "Save" to save to Pictures/LocalLLM
+
+### Background Image Generation
+
+Unlike most on-device AI apps, LocalLLM doesn't force you to stare at a progress bar. Image generation runs in a **lifecycle-independent background service** — the Kotlin native inference continues on background coroutines while the JavaScript service layer maintains state independently of any screen.
+
+**How it works:**
+
+```
+Start generation in Chat
+        │
+        ▼
+┌─────────────────────────────┐
+│  ImageGenerationService     │  ← Singleton, not tied to any screen
+│  (TypeScript service layer) │
+│                             │
+│  Owns all callbacks         │
+│  Tracks progress, preview,  │
+│  result, errors             │
+│  Notifies subscribers       │
+└──────────┬──────────────────┘
+           │
+           ▼
+┌─────────────────────────────┐
+│  ONNXImageGeneratorModule   │  ← Native Kotlin coroutines
+│  (runs on background thread)│
+│                             │
+│  Continues even when JS     │
+│  screens unmount             │
+└─────────────────────────────┘
+```
+
+**What this means for you:**
+
+1. Start image generation in any chat
+2. Navigate freely — check settings, browse models, start a text chat
+3. Come back to the chat and see real-time progress resumed instantly
+4. If the image finished while you were away, it's already saved to the chat and the gallery
+
+The gallery and any active screen subscribe to the service on mount and immediately receive the current state. No progress is lost.
+
+### Image Gallery
+
+All generated images are persisted and accessible from a dedicated Gallery screen:
+
+- **From Home**: Tap the "Image Gallery" card to see all generated images
+- **From Chat**: Tap the image icon in the chat header to see images from that conversation
+- **Grid View**: All images displayed in a 3-column grid, newest first
+- **Fullscreen Viewer**: Tap any image to view fullscreen with:
+  - **Info panel**: Prompt, negative prompt, steps, resolution, seed, and date
+  - **Save**: Export to Pictures/LocalLLM on device storage
+  - **Delete**: Remove the image permanently
+- **Active Generation**: If an image is being generated, a progress banner appears at the top of the gallery with preview thumbnail, progress bar, and cancel button
+- **Long-press to delete**: Quick delete from the grid view
+
+Image metadata is persisted across app restarts via AsyncStorage, so your gallery survives app closures.
 
 ### Image Generation Settings
 
@@ -308,16 +365,6 @@ Speak instead of type with Whisper-powered voice input. Like the LLM itself, tra
 - Real-time partial transcription
 - Multiple Whisper model sizes
 
-### Debug & Developer Tools
-
-For power users, a comprehensive debug panel shows exactly what's happening: context statistics, message counts, the active project's system prompt, and the exact ChatML-formatted prompt sent to the model.
-
-<p align="center">
-  <img src="screenshots/Screenshot_2026-01-30-12-30-02-40_f28200242d1465b50ec18721116dc637.jpg" width="250" alt="Debug Panel">
-  <img src="screenshots/Screenshot_2026-01-30-12-30-37-63_f28200242d1465b50ec18721116dc637.jpg" width="250" alt="Debug Info Full">
-  <img src="screenshots/Screenshot_2026-01-30-12-30-40-03_f28200242d1465b50ec18721116dc637.jpg" width="250" alt="Debug ChatML">
-</p>
-
 ### Settings & Model Configuration
 
 Configure model behavior, image generation, GPU acceleration, and security from the Settings screen.
@@ -378,6 +425,10 @@ The active backend (OpenCL or CPU) is displayed alongside every generated respon
 │   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
 │   │  LLM Service│ │Whisper Svc  │ │Hardware Svc │ │ONNX Image │ │
 │   └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
+│   ┌──────────────────┐ ┌──────────────────────┐                  │
+│   │Generation Service│ │ImageGeneration Svc   │  ← Background   │
+│   │  (text, bg)      │ │  (images, bg)        │    singletons   │
+│   └──────────────────┘ └──────────────────────┘                  │
 ├──────────────────────────────────────────────────────────────────┤
 │                    Native Module Bridge                           │
 ├──────────────────────────────────────────────────────────────────┤

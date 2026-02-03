@@ -3,6 +3,7 @@ export type RootStackParamList = {
   ModelDownload: undefined;
   Main: undefined;
   DownloadManager: undefined;
+  Gallery: { conversationId?: string } | undefined;
 };
 
 // Tab navigator params

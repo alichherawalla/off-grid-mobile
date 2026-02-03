@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, BackgroundDownloadInfo, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, BackgroundDownloadInfo, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage } from '../types';
 
 interface AppState {
   // Onboarding
@@ -102,6 +102,12 @@ interface AppState {
   setImageGenerationProgress: (progress: { step: number; totalSteps: number } | null) => void;
   setImageGenerationStatus: (status: string | null) => void;
   setImagePreviewPath: (path: string | null) => void;
+
+  // Gallery - persisted metadata of all generated images
+  generatedImages: GeneratedImage[];
+  addGeneratedImage: (image: GeneratedImage) => void;
+  removeGeneratedImage: (imageId: string) => void;
+  clearGeneratedImages: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -234,6 +240,19 @@ export const useAppStore = create<AppState>()(
       setImageGenerationProgress: (progress) => set({ imageGenerationProgress: progress }),
       setImageGenerationStatus: (status) => set({ imageGenerationStatus: status }),
       setImagePreviewPath: (path) => set({ imagePreviewPath: path }),
+
+      // Gallery
+      generatedImages: [],
+      addGeneratedImage: (image) =>
+        set((state) => ({
+          generatedImages: [image, ...state.generatedImages],
+        })),
+      removeGeneratedImage: (imageId) =>
+        set((state) => ({
+          generatedImages: state.generatedImages.filter((img) => img.id !== imageId),
+        })),
+      clearGeneratedImages: () =>
+        set({ generatedImages: [] }),
     }),
     {
       name: 'local-llm-app-storage',
@@ -245,6 +264,8 @@ export const useAppStore = create<AppState>()(
         activeBackgroundDownloads: state.activeBackgroundDownloads,
         // Persist image model state
         activeImageModelId: state.activeImageModelId,
+        // Persist gallery
+        generatedImages: state.generatedImages,
       }),
     }
   )

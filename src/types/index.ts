@@ -241,6 +241,7 @@ export interface GeneratedImage {
   seed: number;
   modelId: string;
   createdAt: string;
+  conversationId?: string;
 }
 
 export interface ImageGenerationParams {
