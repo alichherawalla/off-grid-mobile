@@ -16,3 +16,5 @@ export { generationService } from './generationService';
 export type { GenerationState } from './generationService';
 export { imageGenerationService } from './imageGenerationService';
 export type { ImageGenerationState } from './imageGenerationService';
+export { fetchAvailableModels, getVariantLabel, guessStyle } from './huggingFaceModelBrowser';
+export type { HFImageModel } from './huggingFaceModelBrowser';

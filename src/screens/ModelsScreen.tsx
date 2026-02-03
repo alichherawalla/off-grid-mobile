@@ -23,12 +23,13 @@ import { Card, ModelCard, Button } from '../components';
 import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS } from '../constants';
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
+import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
-// local-dream image models (MNN CPU backend - works on any ARM64 device)
-// Models are pre-converted and hosted on HuggingFace by xororz
-const AVAILABLE_IMAGE_MODELS: Array<{
+type BackendFilter = 'all' | 'mnn' | 'qnn';
+
+interface ImageModelDescriptor {
   id: string;
   name: string;
   description: string;
@@ -36,100 +37,9 @@ const AVAILABLE_IMAGE_MODELS: Array<{
   size: number;
   style: string;
   backend: 'mnn' | 'qnn';
-}> = [
-  // === CPU Models (MNN backend - universal ARM64 support) ===
-  {
-    id: 'anythingv5_cpu',
-    name: 'Anything V5 (CPU)',
-    description: 'Versatile anime/creative model - works on all devices',
-    downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/AnythingV5.zip',
-    size: 1.2 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'mnn',
-  },
-  {
-    id: 'absolutereality_cpu',
-    name: 'Absolute Reality (CPU)',
-    description: 'Photorealistic model - realistic portraits and scenes',
-    downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/AbsoluteReality.zip',
-    size: 1.2 * 1024 * 1024 * 1024,
-    style: 'photorealistic',
-    backend: 'mnn',
-  },
-  {
-    id: 'qteamix_cpu',
-    name: 'QteaMix (CPU)',
-    description: 'Cute chibi style anime art generation',
-    downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/QteaMix.zip',
-    size: 1.2 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'mnn',
-  },
-  {
-    id: 'chilloutmix_cpu',
-    name: 'ChilloutMix (CPU)',
-    description: 'Realistic portraits with smooth, natural aesthetics',
-    downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/ChilloutMix.zip',
-    size: 1.2 * 1024 * 1024 * 1024,
-    style: 'photorealistic',
-    backend: 'mnn',
-  },
-  {
-    id: 'cuteyukimix_cpu',
-    name: 'CuteYukiMix (CPU)',
-    description: 'High-quality anime art with detailed character rendering',
-    downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/CuteYukiMix.zip',
-    size: 1.2 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'mnn',
-  },
-  // === NPU Models (QNN backend - Snapdragon 8 Gen 1+ only, much faster) ===
-  {
-    id: 'anythingv5_npu',
-    name: 'Anything V5 (NPU)',
-    description: 'Fast NPU-accelerated anime model - Snapdragon 8 Gen 1+ only',
-    downloadUrl: 'https://huggingface.co/xororz/sd-qnn/resolve/main/AnythingV5_qnn2.28_min.zip',
-    size: 1.1 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'qnn',
-  },
-  {
-    id: 'absolutereality_npu',
-    name: 'Absolute Reality (NPU)',
-    description: 'Fast NPU-accelerated photorealistic model - Snapdragon 8 Gen 1+ only',
-    downloadUrl: 'https://huggingface.co/xororz/sd-qnn/resolve/main/AbsoluteReality_qnn2.28_min.zip',
-    size: 1.1 * 1024 * 1024 * 1024,
-    style: 'photorealistic',
-    backend: 'qnn',
-  },
-  {
-    id: 'qteamix_npu',
-    name: 'QteaMix (NPU)',
-    description: 'Fast NPU-accelerated chibi anime model - Snapdragon 8 Gen 1+ only',
-    downloadUrl: 'https://huggingface.co/xororz/sd-qnn/resolve/main/QteaMix_qnn2.28_min.zip',
-    size: 1.1 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'qnn',
-  },
-  {
-    id: 'chilloutmix_npu',
-    name: 'ChilloutMix (NPU)',
-    description: 'Fast NPU-accelerated realistic portraits - Snapdragon 8 Gen 1+ only',
-    downloadUrl: 'https://huggingface.co/xororz/sd-qnn/resolve/main/ChilloutMix_qnn2.28_min.zip',
-    size: 1.1 * 1024 * 1024 * 1024,
-    style: 'photorealistic',
-    backend: 'qnn',
-  },
-  {
-    id: 'cuteyukimix_npu',
-    name: 'CuteYukiMix (NPU)',
-    description: 'Fast NPU-accelerated anime model - Snapdragon 8 Gen 1+ only',
-    downloadUrl: 'https://huggingface.co/xororz/sd-qnn/resolve/main/CuteYukiMix_qnn2.28_min.zip',
-    size: 1.1 * 1024 * 1024 * 1024,
-    style: 'anime',
-    backend: 'qnn',
-  },
-];
+  huggingFaceRepo?: string;
+  huggingFaceFiles?: { path: string; size: number }[];
+}
 
 type CredibilityFilter = 'all' | ModelSource;
 type ModelTypeFilter = 'all' | 'text' | 'vision' | 'code' | 'image-gen';
@@ -186,11 +96,36 @@ export const ModelsScreen: React.FC = () => {
   const [imageModelProgress, setImageModelProgress] = useState<number>(0);
   const [imageModelDownloadId, setImageModelDownloadId] = useState<number | null>(null);
 
+  const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
+  const [hfModelsLoading, setHfModelsLoading] = useState(false);
+  const [hfModelsError, setHfModelsError] = useState<string | null>(null);
+  const [backendFilter, setBackendFilter] = useState<BackendFilter>('all');
+  const [imageSearchQuery, setImageSearchQuery] = useState('');
+
+  const loadHFModels = useCallback(async (forceRefresh = false) => {
+    setHfModelsLoading(true);
+    setHfModelsError(null);
+    try {
+      const models = await fetchAvailableModels(forceRefresh);
+      setAvailableHFModels(models);
+    } catch (error: any) {
+      setHfModelsError(error?.message || 'Failed to fetch models');
+    } finally {
+      setHfModelsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadInitialModels();
     loadDownloadedModels();
     loadDownloadedImageModels();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
+      loadHFModels();
+    }
+  }, [activeTab]);
 
   // Handle system back button when model detail view is shown
   useFocusEffect(
@@ -255,11 +190,14 @@ export const ModelsScreen: React.FC = () => {
     await loadInitialModels();
     await loadDownloadedModels();
     await loadDownloadedImageModels();
+    if (activeTab === 'image') {
+      await loadHFModels(true);
+    }
     setIsRefreshing(false);
-  }, []);
+  }, [activeTab, loadHFModels]);
 
   // Download from HuggingFace (multi-file download)
-  const handleDownloadHuggingFaceModel = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadHuggingFaceModel = async (modelInfo: ImageModelDescriptor) => {
     if (!modelInfo.huggingFaceRepo || !modelInfo.huggingFaceFiles) {
       Alert.alert('Error', 'Invalid HuggingFace model configuration');
       return;
@@ -362,7 +300,7 @@ export const ModelsScreen: React.FC = () => {
   };
 
   // Image model download/management - uses native background download service
-  const handleDownloadImageModel = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadImageModel = async (modelInfo: ImageModelDescriptor) => {
     if (imageModelDownloading) {
       Alert.alert('Download in Progress', 'Please wait for the current download to complete.');
       return;
@@ -500,7 +438,7 @@ export const ModelsScreen: React.FC = () => {
   };
 
   // Fallback download method using RNFS (for iOS or when native module unavailable)
-  const handleDownloadImageModelFallback = async (modelInfo: typeof AVAILABLE_IMAGE_MODELS[0]) => {
+  const handleDownloadImageModelFallback = async (modelInfo: ImageModelDescriptor) => {
     setImageModelDownloading(modelInfo.id);
     setImageModelProgress(0);
 
@@ -861,11 +799,31 @@ export const ModelsScreen: React.FC = () => {
   // Count of active downloads for badge
   const activeDownloadCount = Object.keys(downloadProgress).length;
 
+  const filteredHFModels = useMemo(() => {
+    const query = imageSearchQuery.toLowerCase().trim();
+    return availableHFModels.filter((m) => {
+      if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
+      if (downloadedImageModels.some((d) => d.id === m.id)) return false;
+      if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [availableHFModels, backendFilter, downloadedImageModels, imageSearchQuery]);
+
+  const hfModelToDescriptor = (hfModel: HFImageModel): ImageModelDescriptor => ({
+    id: hfModel.id,
+    name: hfModel.displayName,
+    description: `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
+    downloadUrl: hfModel.downloadUrl,
+    size: hfModel.size,
+    style: guessStyle(hfModel.name),
+    backend: hfModel.backend,
+  });
+
   // Render image models section
   const renderImageModelsSection = () => (
     <View style={styles.imageModelsSection}>
       <Text style={styles.imageSectionSubtitle}>
-        ONNX-based Stable Diffusion models for on-device image generation
+        Stable Diffusion models for on-device image generation
       </Text>
 
       {/* Downloaded image models */}
@@ -908,16 +866,86 @@ export const ModelsScreen: React.FC = () => {
         </View>
       )}
 
-      {/* Available image models to download */}
+      {/* Search and filter */}
       <Text style={styles.availableTitle}>Available for Download</Text>
-      {AVAILABLE_IMAGE_MODELS.filter(
-        (m) => !downloadedImageModels.some((d) => d.id === m.id)
-      ).map((model) => (
+      <TextInput
+        style={styles.imageSearchInput}
+        placeholder="Search models..."
+        placeholderTextColor={COLORS.textMuted}
+        value={imageSearchQuery}
+        onChangeText={setImageSearchQuery}
+        returnKeyType="search"
+      />
+      <View style={styles.backendFilterRow}>
+        {([
+          { key: 'all' as BackendFilter, label: 'All' },
+          { key: 'mnn' as BackendFilter, label: 'CPU' },
+          { key: 'qnn' as BackendFilter, label: 'NPU' },
+        ]).map((option) => (
+          <TouchableOpacity
+            key={option.key}
+            style={[
+              styles.filterChip,
+              backendFilter === option.key && styles.filterChipActive,
+            ]}
+            onPress={() => setBackendFilter(option.key)}
+          >
+            <Text
+              style={[
+                styles.filterChipText,
+                backendFilter === option.key && styles.filterChipTextActive,
+              ]}
+            >
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Loading / Error / List */}
+      {hfModelsLoading && (
+        <View style={styles.hfLoadingContainer}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading models...</Text>
+        </View>
+      )}
+
+      {hfModelsError && !hfModelsLoading && (
+        <View style={styles.hfErrorContainer}>
+          <Text style={styles.hfErrorText}>{hfModelsError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => loadHFModels(true)}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model) => (
         <Card key={model.id} style={styles.imageModelCard}>
           <View style={styles.imageModelHeader}>
             <View style={styles.imageModelInfo}>
-              <Text style={styles.imageModelName}>{model.name}</Text>
-              <Text style={styles.imageModelDesc}>{model.description}</Text>
+              <View style={styles.modelNameRow}>
+                <Text style={styles.imageModelName}>{model.displayName}</Text>
+              </View>
+              <View style={styles.badgeRow}>
+                <View style={[styles.backendBadge, model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
+                  <Text style={styles.backendBadgeText}>
+                    {model.backend === 'qnn' ? 'NPU' : 'CPU'}
+                  </Text>
+                </View>
+                {model.variant && (
+                  <View style={styles.variantBadge}>
+                    <Text style={styles.variantBadgeText}>{model.variant}</Text>
+                  </View>
+                )}
+              </View>
+              {model.variant && (
+                <Text style={styles.variantHint}>
+                  {getVariantLabel(model.variant)}
+                </Text>
+              )}
               <Text style={styles.imageModelSize}>
                 {formatBytes(model.size)}
               </Text>
@@ -940,7 +968,7 @@ export const ModelsScreen: React.FC = () => {
           ) : (
             <TouchableOpacity
               style={styles.downloadImageButton}
-              onPress={() => handleDownloadImageModel(model)}
+              onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
               disabled={!!imageModelDownloading}
             >
               <Icon name="download" size={16} color={COLORS.text} />
@@ -950,11 +978,13 @@ export const ModelsScreen: React.FC = () => {
         </Card>
       ))}
 
-      {AVAILABLE_IMAGE_MODELS.every((m) =>
-        downloadedImageModels.some((d) => d.id === m.id)
-      ) && (
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.length === 0 && availableHFModels.length > 0 && (
         <Text style={styles.allDownloadedText}>
-          All available image models are downloaded
+          {imageSearchQuery.trim()
+            ? 'No models match your search'
+            : backendFilter === 'all'
+              ? 'All available models are downloaded'
+              : `All ${backendFilter === 'mnn' ? 'CPU' : 'NPU'} models are downloaded`}
         </Text>
       )}
     </View>
@@ -1497,5 +1527,92 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 12,
     marginTop: 8,
+  },
+  imageSearchInput: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: COLORS.text,
+    fontSize: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  backendFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modelNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  backendBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  cpuBadge: {
+    backgroundColor: COLORS.primary + '25',
+  },
+  npuBadge: {
+    backgroundColor: '#FF990025',
+  },
+  backendBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  variantBadge: {
+    backgroundColor: COLORS.surfaceLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  variantBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  variantHint: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginBottom: 2,
+  },
+  hfLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 24,
+  },
+  hfErrorContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 12,
+  },
+  hfErrorText: {
+    fontSize: 13,
+    color: COLORS.error,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 });
