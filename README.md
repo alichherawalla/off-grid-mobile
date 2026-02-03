@@ -80,7 +80,7 @@ Send images to vision-capable models like LLaVA and SmolVLM. When you download a
 
 ## 🎨 On-Device Image Generation
 
-LocalLLM now includes **on-device AI image generation** powered by ONNX Runtime. Generate stunning images from text prompts—completely offline, completely private.
+LocalLLM now includes **on-device AI image generation** powered by [local-dream](https://github.com/nicenemo/local-dream) with MNN (CPU) and QNN (NPU) backends. Generate stunning images from text prompts—completely offline, completely private.
 
 ### How It Works
 
@@ -104,7 +104,7 @@ LocalLLM now includes **on-device AI image generation** powered by ONNX Runtime.
 │            ▼                                                      │
 │   ┌─────────────────┐     ┌─────────────────┐                    │
 │   │     Scheduler   │ ──▶ │      UNet       │  Iterative         │
-│   │  (Euler/LCM)    │ ◀── │  (Denoising)    │  Denoising         │
+│   │  (Euler)        │ ◀── │  (Denoising)    │  Denoising         │
 │   └─────────────────┘     └────────┬────────┘                    │
 │                                    │                              │
 │                                    ▼                              │
@@ -122,26 +122,21 @@ LocalLLM now includes **on-device AI image generation** powered by ONNX Runtime.
 
 ### Supported Image Models
 
-| Model | Size | Style | Steps | Generation Time* |
-|-------|------|-------|-------|------------------|
-| **Absolute Reality** | ~1 GB | Photorealistic | 10-20 | ~2-4 min |
-| **LCM DreamShaper v7** | ~2.2 GB | Creative/Artistic | 4-8 | ~1-2 min |
+Models are fetched dynamically from xororz's HuggingFace repos. The in-app model browser lets you search and filter by backend (CPU/NPU).
 
-*Times measured on Snapdragon 8 Gen 3 (CPU inference)
+**CPU models (MNN backend — works on any ARM64 device):** ~5 models including Anything V5, Absolute Reality, QteaMix, ChilloutMix, and CuteYukiMix.
 
-### Standard vs LCM Models
+**NPU models (QNN backend — Snapdragon 8 Gen 1+):** ~20 models including all CPU models plus DreamShaper, Realistic Vision, MajicmixRealistic, MistoonAnime, NaiAnime, and many more. NPU models come in three chipset variants:
+- `min` — non-flagship Snapdragon chips
+- `8gen1` — Snapdragon 8 Gen 1
+- `8gen2` — Snapdragon 8 Gen 2/3/4/5
 
-LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Models)**:
+| Backend | Model Size | Steps | Generation Time* |
+|---------|-----------|-------|------------------|
+| **CPU (MNN)** | ~1.2 GB | 20 | ~15 seconds |
+| **NPU (QNN)** | ~1.0 GB | 20 | ~5-10 seconds |
 
-| Feature | Standard SD | LCM |
-|---------|-------------|-----|
-| Steps Required | 10-50 | 4-8 |
-| Quality | Excellent | Good-Very Good |
-| Speed | Slower | Faster |
-| Best For | Final outputs | Quick iterations |
-| Guidance Scale | 7-12 | 1-2 |
-
-**LCM Advantage:** Generate images in just 4-8 steps instead of 20-50, with minimal quality loss. Perfect for quick previews and iterations.
+*512×512 resolution, measured on Snapdragon 8 Gen 3. CPU times vary by device; NPU times depend on chipset variant.
 
 ### Image Generation in Action
 
@@ -157,6 +152,7 @@ LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Mode
 
 ### Image Generation Features
 
+- **Dynamic Model Browser**: Browse all available models from xororz's HuggingFace repos. Search by name, filter by CPU/NPU backend, see real file sizes, and download with one tap.
 - **Background Generation**: Image generation continues even when you navigate between screens. Start generating, switch to another chat or the home screen, and come back — your image will have progressed or completed while you were away.
 - **Image Gallery**: A dedicated gallery screen shows all your generated images in a grid. Open it from the Home screen or from the image icon in any chat header. When opened from a chat, it filters to show only images from that conversation.
 - **Real-time Preview**: See your image emerge during generation (every 2 steps)
@@ -174,7 +170,8 @@ LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Mode
 
 1. **Download an Image Model**
    - Go to Models tab → Image Models section
-   - Download "Absolute Reality" (photorealistic) or "LCM DreamShaper" (fast creative)
+   - Browse available models, search by name, or filter by CPU/NPU
+   - Download any model (CPU models work on all devices, NPU models require Snapdragon 8 Gen 1+)
 
 2. **Set as Active**
    - Tap "Set Active" on your downloaded model
@@ -192,7 +189,7 @@ LocalLLM supports both **Standard Diffusion** and **LCM (Latent Consistency Mode
 
 ### Background Image Generation
 
-Unlike most on-device AI apps, LocalLLM doesn't force you to stare at a progress bar. Image generation runs in a **lifecycle-independent background service** — the Kotlin native inference continues on background coroutines while the JavaScript service layer maintains state independently of any screen.
+Unlike most on-device AI apps, LocalLLM doesn't force you to stare at a progress bar. Image generation runs in a **lifecycle-independent background service** — the native inference continues on background threads while the JavaScript service layer maintains state independently of any screen.
 
 **How it works:**
 
@@ -212,7 +209,7 @@ Start generation in Chat
            │
            ▼
 ┌─────────────────────────────┐
-│  ONNXImageGeneratorModule   │  ← Native Kotlin coroutines
+│  LocalDreamModule           │  ← Native MNN/QNN inference
 │  (runs on background thread)│
 │                             │
 │  Continues even when JS     │
@@ -250,33 +247,30 @@ Image metadata is persisted across app restarts via AsyncStorage, so your galler
 
 | Setting | Range | Default | Description |
 |---------|-------|---------|-------------|
-| **Steps** | 4-50 | 10 | More steps = higher quality, slower |
+| **Steps** | 4-50 | 20 | More steps = higher quality, slower |
 | **Guidance Scale** | 1-20 | 7.5 | Higher = closer to prompt, less creative |
 | **Seed** | Any | Random | Same seed = reproducible results |
 
 **Pro Tips:**
-- For LCM models, use 4-8 steps and guidance scale 1-2
-- For Standard SD, use 15-25 steps and guidance scale 7-12
+- 20 steps at 512×512 generates in ~15 seconds on flagship devices
 - Lower guidance for abstract art, higher for specific subjects
 - Use detailed prompts: include style, lighting, composition
 
 ### Technical Details
 
-**ONNX Runtime Inference:**
-- Pure CPU inference (no GPU required)
-- Multi-threaded processing (8 threads default)
-- Memory-optimized model loading
-- Support for both `.ort` and `.onnx` model formats
+**local-dream Inference:**
+- **MNN backend (CPU):** Multi-threaded ARM NEON inference, works on any ARM64 device
+- **QNN backend (NPU):** Hardware-accelerated inference on Qualcomm Snapdragon 8 Gen 1+ via Qualcomm AI Engine
+- Models are pre-converted and hosted on HuggingFace by [xororz](https://huggingface.co/xororz)
 
 **Model Architecture:**
 - CLIP text encoder for prompt understanding
 - UNet for iterative denoising (the heavy lifting)
 - VAE decoder for final image generation
-- Euler scheduler for standard models
-- LCM-specific guidance embedding for LCM models
+- Euler scheduler for diffusion sampling
 
 **Memory Usage:**
-- ~1.5-3 GB during generation
+- ~1-1.5 GB during generation
 - Models unloaded after generation if needed
 - Background loading on app startup
 
@@ -425,7 +419,7 @@ The active backend (OpenCL or CPU) is displayed alongside every generated respon
 ├──────────────────────────────────────────────────────────────────┤
 │                  TypeScript Services Layer                        │
 │   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│   │  LLM Service│ │Whisper Svc  │ │Hardware Svc │ │ONNX Image │ │
+│   │  LLM Service│ │Whisper Svc  │ │Hardware Svc │ │LocalDream │ │
 │   └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
 │   ┌──────────────────┐ ┌──────────────────────┐                  │
 │   │Generation Service│ │ImageGeneration Svc   │  ← Background   │
@@ -434,10 +428,10 @@ The active backend (OpenCL or CPU) is displayed alongside every generated respon
 ├──────────────────────────────────────────────────────────────────┤
 │                    Native Module Bridge                           │
 ├──────────────────────────────────────────────────────────────────┤
-│   llama.rn      whisper.rn      ONNX Runtime    Android DL Mgr   │
-│   (C++ JNI)     (C++ JNI)       (Kotlin)        (Kotlin)         │
+│   llama.rn      whisper.rn      local-dream     Android DL Mgr   │
+│   (C++ JNI)     (C++ JNI)       (MNN/QNN)       (Kotlin)         │
 ├──────────────────────────────────────────────────────────────────┤
-│             GPU: OpenCL (Qualcomm Adreno)                           │
+│   GPU: OpenCL (Adreno)          NPU: QNN (Snapdragon 8 Gen 1+)    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -457,8 +451,9 @@ The active backend (OpenCL or CPU) is displayed alongside every generated respon
 ### Network Activity
 
 The **only** network activity is:
-1. Fetching model metadata from Hugging Face
-2. Downloading model files (GGUF)
+1. Fetching text model metadata from Hugging Face
+2. Fetching image model listings from xororz's HuggingFace repos
+3. Downloading model files (GGUF for text, ZIP for image)
 
 After downloading models, the app works **completely offline**. Enable airplane mode and chat indefinitely.
 
@@ -577,7 +572,7 @@ See the [full build guide](#building-from-source) below for signing configuratio
 - **React Native** with TypeScript
 - **llama.rn** - Native GGUF model inference via llama.cpp with optional OpenCL GPU offloading
 - **whisper.rn** - On-device speech recognition via whisper.cpp
-- **ONNX Runtime** - Stable Diffusion image generation
+- **local-dream** - Stable Diffusion image generation via MNN (CPU) and QNN (NPU) backends
 - **Android DownloadManager** - Native background model downloads that survive app backgrounding
 - **Zustand** - State management with AsyncStorage persistence
 - **React Navigation** - Native navigation with nested stacks
@@ -596,11 +591,12 @@ MIT License - See LICENSE file for details.
 
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - The LLM inference engine
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - Speech recognition engine
-- [ONNX Runtime](https://onnxruntime.ai/) - Cross-platform ML inference for image generation
+- [local-dream](https://github.com/nicenemo/local-dream) - On-device Stable Diffusion via MNN/QNN
+- [MNN](https://github.com/alibaba/MNN) - Alibaba's lightweight deep learning inference framework
 - [llama.rn](https://github.com/mybigday/llama.rn) - React Native LLM bindings
 - [whisper.rn](https://github.com/mybigday/whisper.rn) - React Native Whisper bindings
 - [Hugging Face](https://huggingface.co) - Model hosting and discovery
-- [ShiftHackZ](https://github.com/ShiftHackZ) - ONNX-optimized Stable Diffusion models
+- [xororz](https://huggingface.co/xororz) - Pre-converted SD models for MNN and QNN backends
 
 ---
 
