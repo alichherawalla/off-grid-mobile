@@ -169,6 +169,40 @@ class HardwareService {
     return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
   }
 
+  /**
+   * Get combined model size including mmproj for vision models.
+   * Use this everywhere model size is displayed for consistency.
+   */
+  getModelTotalSize(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
+    const mainSize = model.fileSize || model.size || 0;
+    const mmProjSize = model.mmProjFileSize || 0;
+    return mainSize + mmProjSize;
+  }
+
+  /**
+   * Format combined model size including mmproj.
+   * Use this everywhere model size is displayed for consistency.
+   */
+  formatModelSize(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): string {
+    return this.formatBytes(this.getModelTotalSize(model));
+  }
+
+  /**
+   * Get estimated RAM usage for a model (combined size * overhead multiplier).
+   */
+  estimateModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier: number = 1.5): number {
+    return this.getModelTotalSize(model) * multiplier;
+  }
+
+  /**
+   * Format estimated RAM usage for a model.
+   */
+  formatModelRam(model: { fileSize?: number; size?: number; mmProjFileSize?: number }, multiplier: number = 1.5): string {
+    const ramBytes = this.estimateModelRam(model, multiplier);
+    const ramGB = ramBytes / (1024 * 1024 * 1024);
+    return `~${ramGB.toFixed(1)} GB`;
+  }
+
   getDeviceTier(): 'low' | 'medium' | 'high' | 'flagship' {
     const ramGB = this.getTotalMemoryGB();
 
