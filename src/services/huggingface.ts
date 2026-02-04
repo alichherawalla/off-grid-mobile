@@ -104,10 +104,15 @@ class HuggingFaceService {
       const mmProjFiles = allGguf.filter(f => this.isMMProjFile(f.path));
       const modelFiles = allGguf.filter(f => !this.isMMProjFile(f.path));
 
+      console.log('[HuggingFace] Found GGUF files:', allGguf.map(f => f.path));
+      console.log('[HuggingFace] MMProj files:', mmProjFiles.map(f => f.path));
+      console.log('[HuggingFace] Model files:', modelFiles.map(f => f.path));
+
       // Transform and pair each model file with its matching mmproj
       const result = modelFiles
         .map(file => {
           const mmProjFile = this.findMatchingMMProj(file.path, mmProjFiles, modelId);
+          console.log('[HuggingFace] Pairing', file.path, '→ mmproj:', mmProjFile?.name || 'NONE');
           return {
             name: file.path,
             size: file.lfs?.size || file.size || 0,

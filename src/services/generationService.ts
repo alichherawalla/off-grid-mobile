@@ -176,6 +176,10 @@ class GenerationService {
    * Returns the partial content if any was generated
    */
   async stopGeneration(): Promise<string> {
+    // Always try to stop native generation first, regardless of our state
+    // This handles race conditions and state mismatches
+    await llmService.stopGeneration().catch(() => {});
+
     if (!this.state.isGenerating) {
       return '';
     }
@@ -188,9 +192,6 @@ class GenerationService {
 
     // Mark as aborted
     this.abortRequested = true;
-
-    // Stop the native generation
-    await llmService.stopGeneration().catch(() => {});
 
     // If we have content and a conversation, save it
     const chatStore = useChatStore.getState();
