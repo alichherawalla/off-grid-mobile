@@ -13,6 +13,39 @@ import { DownloadedModel, ONNXImageModel } from '../types';
 
 export type ModelType = 'text' | 'image';
 
+// Memory safety thresholds
+// Dynamic budget based on device total RAM
+const MEMORY_BUDGET_PERCENT = 0.60; // Use up to 60% of device RAM for models
+const MEMORY_WARNING_PERCENT = 0.50; // Warn when exceeding 50% of device RAM
+const TEXT_MODEL_OVERHEAD_MULTIPLIER = 1.5; // KV cache, activations, etc.
+const IMAGE_MODEL_OVERHEAD_MULTIPLIER = 1.8; // ONNX runtime, intermediate tensors
+
+// Get dynamic memory budget based on device
+const getMemoryBudgetGB = async (): Promise<number> => {
+  const deviceInfo = await hardwareService.getDeviceInfo();
+  const totalGB = deviceInfo.totalMemory / (1024 * 1024 * 1024);
+  return totalGB * MEMORY_BUDGET_PERCENT;
+};
+
+const getMemoryWarningThresholdGB = async (): Promise<number> => {
+  const deviceInfo = await hardwareService.getDeviceInfo();
+  const totalGB = deviceInfo.totalMemory / (1024 * 1024 * 1024);
+  return totalGB * MEMORY_WARNING_PERCENT;
+};
+
+export type MemoryCheckSeverity = 'safe' | 'warning' | 'critical' | 'blocked';
+
+export interface MemoryCheckResult {
+  canLoad: boolean;
+  severity: MemoryCheckSeverity;
+  availableMemoryGB: number;
+  requiredMemoryGB: number;
+  currentlyLoadedMemoryGB: number;
+  totalRequiredMemoryGB: number;
+  remainingAfterLoadGB: number;
+  message: string;
+}
+
 export interface ActiveModelInfo {
   text: {
     model: DownloadedModel | null;
@@ -57,6 +90,7 @@ class ActiveModelService {
     const store = useAppStore.getState();
     const textModel = store.downloadedModels.find(m => m.id === store.activeModelId) || null;
     const imageModel = store.downloadedImageModels.find(m => m.id === store.activeImageModelId) || null;
+    const imageLoaded = this.loadedImageModelId != null;
 
     return {
       text: {
@@ -66,7 +100,7 @@ class ActiveModelService {
       },
       image: {
         model: imageModel,
-        isLoaded: !!store.activeImageModelId,
+        isLoaded: imageLoaded,
         isLoading: this.loadingState.image,
       },
     };
@@ -83,8 +117,9 @@ class ActiveModelService {
   /**
    * Load a text model - THIS IS THE ONLY PLACE TEXT MODELS SHOULD BE LOADED
    * Guards against duplicate loading and concurrent load attempts
+   * Timeout is 2 minutes to allow for slow devices
    */
-  async loadTextModel(modelId: string): Promise<void> {
+  async loadTextModel(modelId: string, timeoutMs: number = 120000): Promise<void> {
     // Already loaded this exact model - no-op
     if (this.loadedTextModelId === modelId && llmService.isModelLoaded()) {
       console.log('[ActiveModelService] Text model already loaded:', modelId);
@@ -119,10 +154,80 @@ class ActiveModelService {
         }
 
         console.log('[ActiveModelService] Loading text model:', modelId);
-        await llmService.loadModel(model.filePath, model.mmProjPath);
+
+        // Check if this looks like a vision model but is missing mmProjPath
+        let mmProjPath = model.mmProjPath;
+        if (!mmProjPath) {
+          const modelNameLower = model.name.toLowerCase();
+          const looksLikeVisionModel = modelNameLower.includes('vl') ||
+                                       modelNameLower.includes('vision') ||
+                                       modelNameLower.includes('smolvlm');
+
+          if (looksLikeVisionModel) {
+            console.log('[ActiveModelService] Vision model detected but no mmProjPath, searching for mmproj file...');
+            // Try to find mmproj file in same directory
+            const modelDir = model.filePath.substring(0, model.filePath.lastIndexOf('/'));
+            try {
+              const RNFS = require('react-native-fs').default;
+              const files = await RNFS.readDir(modelDir);
+              const mmProjFile = files.find((f: any) =>
+                f.name.toLowerCase().includes('mmproj') && f.name.endsWith('.gguf')
+              );
+              if (mmProjFile) {
+                mmProjPath = mmProjFile.path;
+                console.log('[ActiveModelService] Found mmproj file:', mmProjPath);
+
+                // Update the model in the store so ChatScreen sees the mmProjPath
+                const { downloadedModels, setDownloadedModels } = useAppStore.getState();
+                const updatedModels = downloadedModels.map(m => {
+                  if (m.id === modelId) {
+                    console.log('[ActiveModelService] Updating store with mmProjPath for:', m.name);
+                    return {
+                      ...m,
+                      mmProjPath: mmProjFile.path,
+                      mmProjFileName: mmProjFile.name,
+                      mmProjFileSize: typeof mmProjFile.size === 'string' ? parseInt(mmProjFile.size, 10) : mmProjFile.size,
+                      isVisionModel: true,
+                    };
+                  }
+                  return m;
+                });
+                setDownloadedModels(updatedModels);
+
+                // Also persist to storage so it's remembered
+                await modelManager.saveModelWithMmproj(modelId, mmProjFile.path, mmProjFile.name, mmProjFile.size);
+              } else {
+                console.log('[ActiveModelService] No mmproj file found - vision will not work!');
+              }
+            } catch (e) {
+              console.log('[ActiveModelService] Failed to search for mmproj:', e);
+            }
+          }
+        }
+
+        console.log('[ActiveModelService] Using mmProjPath:', mmProjPath || 'NONE');
+        const startTime = Date.now();
+
+        // Add timeout to prevent hanging forever
+        const loadPromise = llmService.loadModel(model.filePath, mmProjPath);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(
+            `Text model loading timed out after ${timeoutMs / 1000}s. ` +
+            'Try a smaller model or reduce context length in settings.'
+          )), timeoutMs);
+        });
+
+        await Promise.race([loadPromise, timeoutPromise]);
+
+        const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[ActiveModelService] Text model loaded in ${loadTime}s:`, modelId);
+
         this.loadedTextModelId = modelId;
         store.setActiveModelId(modelId);
-        console.log('[ActiveModelService] Text model loaded successfully:', modelId);
+      } catch (error) {
+        console.error('[ActiveModelService] Failed to load text model:', error);
+        this.loadedTextModelId = null;
+        throw error;
       } finally {
         this.loadingState.text = false;
         this.textLoadPromise = null;
@@ -142,7 +247,15 @@ class ActiveModelService {
       await this.textLoadPromise;
     }
 
-    if (!this.loadedTextModelId && !llmService.isModelLoaded()) {
+    const storeActiveModelId = useAppStore.getState().activeModelId;
+    const hasStoreActiveModel = !!storeActiveModelId;
+    const hasInternalTracking = !!this.loadedTextModelId;
+    const isNativeLoaded = llmService.isModelLoaded();
+
+    console.log('[ActiveModelService] unloadTextModel check - store:', hasStoreActiveModel, 'internal:', hasInternalTracking, 'native:', isNativeLoaded);
+
+    // Only skip if ALL sources say no model is loaded
+    if (!hasStoreActiveModel && !hasInternalTracking && !isNativeLoaded) {
       console.log('[ActiveModelService] No text model loaded to unload');
       return;
     }
@@ -151,11 +264,17 @@ class ActiveModelService {
     this.notifyListeners();
 
     try {
-      console.log('[ActiveModelService] Unloading text model:', this.loadedTextModelId);
-      await llmService.unloadModel();
+      console.log('[ActiveModelService] Unloading text model:', this.loadedTextModelId || storeActiveModelId);
+
+      // Only call native unload if there's actually a model loaded
+      if (isNativeLoaded) {
+        await llmService.unloadModel();
+      }
+
+      // Always clear internal state and store - get fresh reference
       this.loadedTextModelId = null;
       useAppStore.getState().setActiveModelId(null);
-      console.log('[ActiveModelService] Text model unloaded');
+      console.log('[ActiveModelService] Text model unloaded, store activeModelId now:', useAppStore.getState().activeModelId);
     } finally {
       this.loadingState.text = false;
       this.notifyListeners();
@@ -213,7 +332,11 @@ class ActiveModelService {
         console.log('[ActiveModelService] Loading image model:', modelId);
 
         // Add timeout to prevent hanging forever
-        const loadPromise = onnxImageGeneratorService.loadModel(model.modelPath, imageThreads);
+        const loadPromise = onnxImageGeneratorService.loadModel(
+          model.modelPath,
+          imageThreads,
+          model.backend ?? 'auto',
+        );
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Image model loading timed out')), timeoutMs);
         });
@@ -248,10 +371,12 @@ class ActiveModelService {
     }
 
     const store = useAppStore.getState();
-    const hasSelectedImageModel = !!store.activeImageModelId;
-    const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
+    const hasStoreActiveModel = !!store.activeImageModelId;
+    const hasInternalTracking = !!this.loadedImageModelId;
+    const isNativeLoaded = await onnxImageGeneratorService.isModelLoaded();
 
-    if (!this.loadedImageModelId && !hasSelectedImageModel && !isImageModelLoaded) {
+    // Only skip if ALL sources say no model is loaded
+    if (!hasStoreActiveModel && !hasInternalTracking && !isNativeLoaded) {
       console.log('[ActiveModelService] No image model loaded to unload');
       return;
     }
@@ -260,10 +385,14 @@ class ActiveModelService {
     this.notifyListeners();
 
     try {
-      if (isImageModelLoaded) {
-        console.log('[ActiveModelService] Unloading image model:', this.loadedImageModelId);
+      console.log('[ActiveModelService] Unloading image model:', this.loadedImageModelId || store.activeImageModelId);
+
+      // Only call native unload if there's actually a model loaded
+      if (isNativeLoaded) {
         await onnxImageGeneratorService.unloadModel();
       }
+
+      // Always clear internal state and store
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
       store.setActiveImageModelId(null);
@@ -276,30 +405,43 @@ class ActiveModelService {
 
   /**
    * Unload all models (eject all)
+   * Always attempts to unload both model types - the individual unload functions
+   * handle checking whether there's actually something to unload
    */
   async unloadAllModels(): Promise<{ textUnloaded: boolean; imageUnloaded: boolean }> {
-    const info = this.getActiveModels();
+    const store = useAppStore.getState();
     const results = { textUnloaded: false, imageUnloaded: false };
 
-    const promises: Promise<void>[] = [];
+    // Check all state sources for text model
+    const hasTextModel = !!store.activeModelId ||
+                         !!this.loadedTextModelId ||
+                         llmService.isModelLoaded();
 
-    if (info.text.isLoaded) {
-      promises.push(
-        this.unloadTextModel().then(() => {
-          results.textUnloaded = true;
-        })
-      );
+    // Check all state sources for image model
+    const hasImageModel = !!store.activeImageModelId ||
+                          !!this.loadedImageModelId;
+
+    console.log('[ActiveModelService] unloadAllModels - text:', hasTextModel, 'image:', hasImageModel);
+
+    // Always try to unload both - run sequentially to avoid race conditions
+    if (hasTextModel) {
+      try {
+        await this.unloadTextModel();
+        results.textUnloaded = true;
+      } catch (e) {
+        console.error('[ActiveModelService] Failed to unload text model:', e);
+      }
     }
 
-    if (info.image.isLoaded) {
-      promises.push(
-        this.unloadImageModel().then(() => {
-          results.imageUnloaded = true;
-        })
-      );
+    if (hasImageModel) {
+      try {
+        await this.unloadImageModel();
+        results.imageUnloaded = true;
+      } catch (e) {
+        console.error('[ActiveModelService] Failed to unload image model:', e);
+      }
     }
 
-    await Promise.all(promises);
     return results;
   }
 
@@ -350,6 +492,241 @@ class ActiveModelService {
   }
 
   /**
+   * Estimate memory required for a specific model
+   */
+  private estimateModelMemoryGB(model: DownloadedModel | ONNXImageModel, type: ModelType): number {
+    if (type === 'text') {
+      const textModel = model as DownloadedModel;
+      // Text models: file size * overhead for KV cache, activations, etc.
+      const sizeGB = (textModel.fileSize || 0) / (1024 * 1024 * 1024);
+      return sizeGB * TEXT_MODEL_OVERHEAD_MULTIPLIER;
+    } else {
+      const imageModel = model as ONNXImageModel;
+      // Image models: file size * overhead for ONNX runtime, intermediate tensors
+      const sizeGB = (imageModel.size || 0) / (1024 * 1024 * 1024);
+      return sizeGB * IMAGE_MODEL_OVERHEAD_MULTIPLIER;
+    }
+  }
+
+  /**
+   * Get memory currently used by loaded models
+   */
+  private getCurrentlyLoadedMemoryGB(): number {
+    const store = useAppStore.getState();
+    let totalGB = 0;
+
+    // Only count models that are actually loaded (not just selected)
+    if (this.loadedTextModelId && llmService.isModelLoaded()) {
+      const textModel = store.downloadedModels.find(m => m.id === this.loadedTextModelId);
+      if (textModel) {
+        totalGB += this.estimateModelMemoryGB(textModel, 'text');
+      }
+    }
+
+    if (this.loadedImageModelId) {
+      const imageModel = store.downloadedImageModels.find(m => m.id === this.loadedImageModelId);
+      if (imageModel) {
+        totalGB += this.estimateModelMemoryGB(imageModel, 'image');
+      }
+    }
+
+    return totalGB;
+  }
+
+  /**
+   * Check if there's enough memory to load a model
+   * Uses a dynamic memory budget (60% of device RAM) since system "available" memory is misleading
+   */
+  async checkMemoryForModel(
+    modelId: string,
+    modelType: ModelType,
+  ): Promise<MemoryCheckResult> {
+    const store = useAppStore.getState();
+
+    // Get dynamic budget based on device RAM
+    const memoryBudgetGB = await getMemoryBudgetGB();
+    const warningThresholdGB = await getMemoryWarningThresholdGB();
+
+    // Find the model
+    let model: DownloadedModel | ONNXImageModel | undefined;
+
+    if (modelType === 'text') {
+      model = store.downloadedModels.find(m => m.id === modelId);
+    } else {
+      model = store.downloadedImageModels.find(m => m.id === modelId);
+    }
+
+    if (!model) {
+      return {
+        canLoad: false,
+        severity: 'blocked',
+        availableMemoryGB: 0,
+        requiredMemoryGB: 0,
+        currentlyLoadedMemoryGB: 0,
+        totalRequiredMemoryGB: 0,
+        remainingAfterLoadGB: 0,
+        message: 'Model not found',
+      };
+    }
+
+    // Calculate memory requirements for the new model
+    const requiredMemoryGB = this.estimateModelMemoryGB(model, modelType);
+
+    // Get memory currently used by OTHER loaded models (not the one being replaced)
+    let currentlyLoadedMemoryGB = 0;
+
+    // If loading a text model, count image model memory (if any)
+    if (modelType === 'text' && this.loadedImageModelId) {
+      const imageModel = store.downloadedImageModels.find(m => m.id === this.loadedImageModelId);
+      if (imageModel) {
+        currentlyLoadedMemoryGB += this.estimateModelMemoryGB(imageModel, 'image');
+      }
+    }
+
+    // If loading an image model, count text model memory (if any)
+    if (modelType === 'image' && this.loadedTextModelId && llmService.isModelLoaded()) {
+      const textModel = store.downloadedModels.find(m => m.id === this.loadedTextModelId);
+      if (textModel) {
+        currentlyLoadedMemoryGB += this.estimateModelMemoryGB(textModel, 'text');
+      }
+    }
+
+    // Total memory needed: new model + other loaded models
+    const totalRequiredMemoryGB = requiredMemoryGB + currentlyLoadedMemoryGB;
+
+    // How much budget remains after loading
+    const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
+
+    // Determine severity based on dynamic budget
+    let severity: MemoryCheckSeverity;
+    let canLoad: boolean;
+    let message: string;
+
+    const modelName = 'name' in model ? model.name : modelId;
+    const requiredStr = requiredMemoryGB.toFixed(1);
+    const totalStr = totalRequiredMemoryGB.toFixed(1);
+    const budgetStr = memoryBudgetGB.toFixed(1);
+
+    if (totalRequiredMemoryGB > memoryBudgetGB) {
+      // Critical: would exceed memory budget (60% of device RAM)
+      severity = 'critical';
+      canLoad = false;
+      if (currentlyLoadedMemoryGB > 0) {
+        message = `Cannot load ${modelName} (~${requiredStr} GB) while other models are loaded. ` +
+          `Total would be ~${totalStr} GB, exceeding your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
+          `Unload the other model first, or choose a smaller model.`;
+      } else {
+        message = `${modelName} requires ~${requiredStr} GB which exceeds your device's ~${budgetStr} GB safe limit (60% of RAM). ` +
+          `This model is too large for your device. Choose a smaller model.`;
+      }
+    } else if (totalRequiredMemoryGB > warningThresholdGB) {
+      // Warning: exceeding 50% of RAM
+      severity = 'warning';
+      canLoad = true;
+      message = `Loading ${modelName} will use ~${requiredStr} GB. ` +
+        `Total model memory will be ~${totalStr} GB (over 50% of your RAM). ` +
+        `The app may become slow. Continue anyway?`;
+    } else {
+      // Safe to load
+      severity = 'safe';
+      canLoad = true;
+      message = `${modelName} requires ~${requiredStr} GB. Safe to load.`;
+    }
+
+    // Log for debugging
+    console.log(`[ActiveModelService] Memory check for ${modelId}:`, {
+      requiredGB: requiredMemoryGB.toFixed(2),
+      otherModelsGB: currentlyLoadedMemoryGB.toFixed(2),
+      totalGB: totalRequiredMemoryGB.toFixed(2),
+      budgetGB: memoryBudgetGB.toFixed(2),
+      severity,
+      canLoad,
+    });
+
+    return {
+      canLoad,
+      severity,
+      availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
+      requiredMemoryGB,
+      currentlyLoadedMemoryGB,
+      totalRequiredMemoryGB,
+      remainingAfterLoadGB: remainingBudgetGB,
+      message,
+    };
+  }
+
+  /**
+   * Check memory for loading both a text and image model together
+   * Useful for checking if dual-model operation is feasible
+   */
+  async checkMemoryForDualModel(
+    textModelId: string | null,
+    imageModelId: string | null,
+  ): Promise<MemoryCheckResult> {
+    const store = useAppStore.getState();
+
+    // Get dynamic budget based on device RAM
+    const memoryBudgetGB = await getMemoryBudgetGB();
+    const warningThresholdGB = await getMemoryWarningThresholdGB();
+
+    let totalRequiredGB = 0;
+    const modelNames: string[] = [];
+
+    if (textModelId) {
+      const textModel = store.downloadedModels.find(m => m.id === textModelId);
+      if (textModel) {
+        totalRequiredGB += this.estimateModelMemoryGB(textModel, 'text');
+        modelNames.push(textModel.name);
+      }
+    }
+
+    if (imageModelId) {
+      const imageModel = store.downloadedImageModels.find(m => m.id === imageModelId);
+      if (imageModel) {
+        totalRequiredGB += this.estimateModelMemoryGB(imageModel, 'image');
+        modelNames.push(imageModel.name);
+      }
+    }
+
+    const remainingBudgetGB = memoryBudgetGB - totalRequiredGB;
+
+    let severity: MemoryCheckSeverity;
+    let canLoad: boolean;
+    let message: string;
+
+    const namesStr = modelNames.join(' + ');
+    const requiredStr = totalRequiredGB.toFixed(1);
+    const budgetStr = memoryBudgetGB.toFixed(1);
+
+    if (totalRequiredGB > memoryBudgetGB) {
+      severity = 'critical';
+      canLoad = false;
+      message = `Cannot load both models. ` +
+        `${namesStr} would require ~${requiredStr} GB, exceeding your device's ~${budgetStr} GB safe limit (60% of RAM).`;
+    } else if (totalRequiredGB > warningThresholdGB) {
+      severity = 'warning';
+      canLoad = true;
+      message = `Loading ${namesStr} will use ~${requiredStr} GB (over 50% of RAM). ` +
+        `Performance may be affected.`;
+    } else {
+      severity = 'safe';
+      canLoad = true;
+      message = `${namesStr} will use ~${requiredStr} GB. Safe to load.`;
+    }
+
+    return {
+      canLoad,
+      severity,
+      availableMemoryGB: memoryBudgetGB,
+      requiredMemoryGB: totalRequiredGB,
+      currentlyLoadedMemoryGB: 0,
+      totalRequiredMemoryGB: totalRequiredGB,
+      remainingAfterLoadGB: remainingBudgetGB,
+      message,
+    };
+  }
+
+  /**
    * Clear KV cache to improve performance after many messages
    */
   async clearTextModelCache(): Promise<void> {
@@ -363,12 +740,15 @@ class ActiveModelService {
    * This is useful after app restart when persisted store may be out of sync
    */
   async syncWithNativeState(): Promise<void> {
+    const store = useAppStore.getState();
     // Check text model
     const textModelLoaded = llmService.isModelLoaded();
     const textModelPath = llmService.getLoadedModelPath();
 
     if (!textModelLoaded) {
       this.loadedTextModelId = null;
+    } else if (!this.loadedTextModelId && store.activeModelId) {
+      this.loadedTextModelId = store.activeModelId;
     }
 
     // Check image model
@@ -376,6 +756,9 @@ class ActiveModelService {
 
     if (!imageModelLoaded) {
       this.loadedImageModelId = null;
+      this.loadedImageModelThreads = null;
+    } else if (!this.loadedImageModelId && store.activeImageModelId) {
+      this.loadedImageModelId = store.activeImageModelId;
     }
 
     console.log('[ActiveModelService] Synced with native state - Text:', textModelLoaded, 'Image:', imageModelLoaded);
