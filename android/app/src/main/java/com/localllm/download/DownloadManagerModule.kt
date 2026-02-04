@@ -256,20 +256,54 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
 
             when (status) {
                 "completed" -> {
+                    android.util.Log.d("DownloadManager", "Download $downloadId completed! previousStatus=$previousStatus")
                     eventParams.putString("localUri", statusInfo.getString("localUri"))
                     // Only emit DownloadComplete once — skip if already marked completed
                     if (previousStatus != "completed") {
+                        android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
                         sendEvent("DownloadComplete", eventParams)
                     }
                     updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
                 }
                 "failed" -> {
+                    android.util.Log.e("DownloadManager", "Download $downloadId failed: ${statusInfo.getString("reason")}")
                     eventParams.putString("reason", statusInfo.getString("reason"))
                     sendEvent("DownloadError", eventParams)
                     removeDownload(downloadId)
                 }
-                "running", "pending" -> {
+                "paused" -> {
+                    val reason = statusInfo.getString("reason")
+                    android.util.Log.w("DownloadManager", "Download $downloadId paused: $reason")
+                    eventParams.putString("reason", reason)
                     sendEvent("DownloadProgress", eventParams)
+                }
+                "running", "pending" -> {
+                    val progress = if (statusInfo.getDouble("totalBytes") > 0) {
+                        (statusInfo.getDouble("bytesDownloaded") / statusInfo.getDouble("totalBytes") * 100).toInt()
+                    } else 0
+                    if (progress >= 95) {
+                        android.util.Log.d("DownloadManager", "Download $downloadId at $progress% (status=$status)")
+                    }
+                    sendEvent("DownloadProgress", eventParams)
+                }
+                "unknown" -> {
+                    android.util.Log.w("DownloadManager", "Download $downloadId has unknown status - may have completed or been removed")
+                    // Query the file directly to see if it completed
+                    val downloadInfo = getDownloadInfo(downloadId)
+                    downloadInfo?.optString("fileName")?.let { fileName ->
+                        val file = java.io.File(
+                            reactApplicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
+                            fileName
+                        )
+                        if (file.exists() && file.length() > 0) {
+                            android.util.Log.d("DownloadManager", "File exists, treating as completed: ${file.absolutePath}")
+                            eventParams.putString("localUri", file.toURI().toString())
+                            if (previousStatus != "completed") {
+                                sendEvent("DownloadComplete", eventParams)
+                            }
+                            updateDownloadStatus(downloadId, "completed", file.toURI().toString())
+                        }
+                    }
                 }
             }
         }
