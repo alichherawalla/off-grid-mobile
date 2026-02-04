@@ -16,7 +16,15 @@ type DownloadErrorCallback = (error: Error) => void;
 // Callback for background download metadata persistence
 type BackgroundDownloadMetadataCallback = (
   downloadId: number,
-  info: { modelId: string; fileName: string; quantization: string; author: string; totalBytes: number } | null
+  info: {
+    modelId: string;
+    fileName: string;
+    quantization: string;
+    author: string;
+    totalBytes: number;
+    mmProjFileName?: string;
+    mmProjLocalPath?: string | null;
+  } | null
 ) => void;
 
 class ModelManager {
@@ -87,6 +95,10 @@ class ModelManager {
 
     try {
       await this.initialize();
+
+      console.log('[ModelManager] downloadModel called for:', modelId);
+      console.log('[ModelManager] file.name:', file.name);
+      console.log('[ModelManager] file.mmProjFile:', file.mmProjFile ? file.mmProjFile.name : 'NONE');
 
       const localPath = `${this.modelsDir}/${file.name}`;
       const mmProjLocalPath = file.mmProjFile
@@ -320,28 +332,77 @@ class ModelManager {
     await this.initialize();
 
     const localPath = `${this.modelsDir}/${file.name}`;
+    const mmProjLocalPath = file.mmProjFile
+      ? `${this.modelsDir}/${file.mmProjFile.name}`
+      : null;
 
-    // Check if file already exists
-    const exists = await RNFS.exists(localPath);
-    if (exists) {
-      const model = await this.addDownloadedModel(modelId, file, localPath);
+    console.log('[ModelManager] Background download - mmProjFile:', file.mmProjFile?.name || 'NONE');
+
+    // Check if files already exist
+    const mainExists = await RNFS.exists(localPath);
+    const mmProjExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : true;
+
+    if (mainExists && mmProjExists) {
+      const model = await this.addDownloadedModel(
+        modelId,
+        file,
+        localPath,
+        mmProjLocalPath || undefined,
+        file.mmProjFile
+      );
       onComplete?.(model);
       return {
         downloadId: -1,
         fileName: file.name,
         modelId,
         status: 'completed',
-        bytesDownloaded: file.size,
-        totalBytes: file.size,
+        bytesDownloaded: file.size + (file.mmProjFile?.size || 0),
+        totalBytes: file.size + (file.mmProjFile?.size || 0),
         startedAt: Date.now(),
         completedAt: Date.now(),
       };
     }
 
+    // Calculate combined total for progress tracking
+    const mmProjSize = file.mmProjFile?.size || 0;
+    const combinedTotalBytes = file.size + mmProjSize;
+    let mmProjDownloaded = mmProjExists ? mmProjSize : 0;
+
+    // Download mmproj file first if needed (foreground with progress)
+    if (file.mmProjFile && mmProjLocalPath && !mmProjExists) {
+      console.log('[ModelManager] Downloading mmproj file first:', file.mmProjFile.name);
+      try {
+        const mmProjDownloadResult = RNFS.downloadFile({
+          fromUrl: file.mmProjFile.downloadUrl,
+          toFile: mmProjLocalPath,
+          background: false,
+          cacheable: false,
+          progressInterval: 500,
+          progress: (res) => {
+            mmProjDownloaded = res.bytesWritten;
+            const progress: DownloadProgress = {
+              modelId,
+              fileName: `${file.mmProjFile!.name} (vision)`,
+              bytesDownloaded: mmProjDownloaded,
+              totalBytes: combinedTotalBytes,
+              progress: mmProjDownloaded / combinedTotalBytes,
+            };
+            onProgress?.(progress);
+          },
+        });
+        await mmProjDownloadResult.promise;
+        mmProjDownloaded = mmProjSize;
+        console.log('[ModelManager] mmproj download complete');
+      } catch (mmProjError) {
+        console.error('[ModelManager] mmproj download failed:', mmProjError);
+        // Continue without mmproj - vision won't work but model will still be usable
+      }
+    }
+
     const downloadUrl = huggingFaceService.getDownloadUrl(modelId, file.name);
     const author = modelId.split('/')[0] || 'Unknown';
 
-    // Start background download
+    // Start background download for main model
     const downloadInfo = await backgroundDownloadService.startDownload({
       url: downloadUrl,
       fileName: file.name,
@@ -351,25 +412,33 @@ class ModelManager {
       totalBytes: file.size,
     });
 
-    // Persist metadata for app store
+    // Persist metadata for app store (include mmproj info)
     this.backgroundDownloadMetadataCallback?.(downloadInfo.downloadId, {
       modelId,
       fileName: file.name,
       quantization: file.quantization,
       author,
-      totalBytes: file.size,
+      totalBytes: combinedTotalBytes,
+      mmProjFileName: file.mmProjFile?.name,
+      mmProjLocalPath: mmProjLocalPath,
     });
 
-    // Set up event listeners
+    // Set up event listeners - report combined progress
     const removeProgressListener = backgroundDownloadService.onProgress(
       downloadInfo.downloadId,
       (event) => {
+        const combinedDownloaded = mmProjDownloaded + event.bytesDownloaded;
+        const progressPercent = combinedTotalBytes > 0 ? (combinedDownloaded / combinedTotalBytes * 100).toFixed(1) : 0;
+        // Log at 95%+ to avoid spam
+        if (Number(progressPercent) >= 95) {
+          console.log(`[ModelManager] Download progress: ${progressPercent}%, status: ${event.status}, bytes: ${combinedDownloaded}/${combinedTotalBytes}`);
+        }
         const progress: DownloadProgress = {
           modelId,
           fileName: file.name,
-          bytesDownloaded: event.bytesDownloaded,
-          totalBytes: event.totalBytes || file.size,
-          progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
+          bytesDownloaded: combinedDownloaded,
+          totalBytes: combinedTotalBytes,
+          progress: combinedTotalBytes > 0 ? combinedDownloaded / combinedTotalBytes : 0,
         };
         onProgress?.(progress);
       }
@@ -378,19 +447,34 @@ class ModelManager {
     const removeCompleteListener = backgroundDownloadService.onComplete(
       downloadInfo.downloadId,
       async (event) => {
+        console.log('[ModelManager] DownloadComplete event received:', event.downloadId, event.fileName);
         removeProgressListener();
         removeCompleteListener();
         removeErrorListener();
 
         try {
+          console.log('[ModelManager] Moving completed download to:', localPath);
           // Move file to models directory
           const finalPath = await backgroundDownloadService.moveCompletedDownload(
             event.downloadId,
             localPath
           );
+          console.log('[ModelManager] File moved to:', finalPath);
 
-          // Add to downloaded models list
-          const model = await this.addDownloadedModel(modelId, file, finalPath);
+          // Check if mmproj was downloaded
+          const mmProjFileExists = mmProjLocalPath ? await RNFS.exists(mmProjLocalPath) : false;
+          const finalMmProjPath = mmProjLocalPath && mmProjFileExists ? mmProjLocalPath : undefined;
+
+          console.log('[ModelManager] Background download complete, mmProjPath:', finalMmProjPath || 'NONE');
+
+          // Add to downloaded models list with mmproj info
+          const model = await this.addDownloadedModel(
+            modelId,
+            file,
+            finalPath,
+            finalMmProjPath,
+            finalMmProjPath ? file.mmProjFile : undefined
+          );
 
           // Clear metadata
           this.backgroundDownloadMetadataCallback?.(event.downloadId, null);
@@ -406,6 +490,7 @@ class ModelManager {
     const removeErrorListener = backgroundDownloadService.onError(
       downloadInfo.downloadId,
       (event) => {
+        console.log('[ModelManager] DownloadError event received:', event.downloadId, event.reason);
         removeProgressListener();
         removeCompleteListener();
         removeErrorListener();
@@ -613,6 +698,119 @@ class ModelManager {
     await AsyncStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(models));
   }
 
+  /**
+   * Update a model's mmproj info and persist to storage.
+   * Called when activeModelService discovers an mmproj file at runtime.
+   */
+  async saveModelWithMmproj(modelId: string, mmProjPath: string, mmProjFileName: string, mmProjFileSize: number | string): Promise<void> {
+    const models = await this.getDownloadedModels();
+    const updatedModels = models.map(m => {
+      if (m.id === modelId) {
+        return {
+          ...m,
+          mmProjPath,
+          mmProjFileName,
+          mmProjFileSize: typeof mmProjFileSize === 'string' ? parseInt(mmProjFileSize, 10) : mmProjFileSize,
+          isVisionModel: true,
+        };
+      }
+      return m;
+    });
+    await this.saveModelsList(updatedModels);
+    console.log('[ModelManager] Saved mmproj info for model:', modelId);
+  }
+
+  /**
+   * Check if a filename looks like an mmproj/projector file (not a standalone model)
+   */
+  private isMMProjFile(fileName: string): boolean {
+    const lower = fileName.toLowerCase();
+    return lower.includes('mmproj') ||
+           lower.includes('projector') ||
+           (lower.includes('clip') && lower.endsWith('.gguf'));
+  }
+
+  /**
+   * Clean up any mmproj files that were incorrectly added as standalone models,
+   * and link orphaned mmproj files with their parent vision models.
+   * Call this on app startup to fix any legacy data.
+   */
+  async cleanupMMProjEntries(): Promise<number> {
+    const models = await this.getDownloadedModels();
+
+    // First, remove mmproj entries from the model list
+    const cleanedModels = models.filter(m => !this.isMMProjFile(m.fileName));
+    const removedCount = models.length - cleanedModels.length;
+
+    if (removedCount > 0) {
+      console.log(`[ModelManager] Removing ${removedCount} mmproj entries from model list`);
+    }
+
+    // Now, scan for orphaned mmproj files and link them with parent models
+    try {
+      const dirExists = await RNFS.exists(this.modelsDir);
+      if (dirExists) {
+        const files = await RNFS.readDir(this.modelsDir);
+        const mmProjFiles = files.filter(f => f.isFile() && this.isMMProjFile(f.name));
+
+        console.log(`[ModelManager] Found ${mmProjFiles.length} mmproj files on disk`);
+
+        // For each vision model without an mmProjPath, try to find a matching mmproj
+        for (const model of cleanedModels) {
+          if (model.mmProjPath) {
+            // Already has mmproj linked
+            continue;
+          }
+
+          // Check if this model name suggests it's a vision model
+          const modelNameLower = model.name.toLowerCase();
+          const fileNameLower = model.fileName.toLowerCase();
+          const looksLikeVision = modelNameLower.includes('vl') ||
+                                  modelNameLower.includes('vision') ||
+                                  modelNameLower.includes('smolvlm') ||
+                                  fileNameLower.includes('vl') ||
+                                  fileNameLower.includes('vision');
+
+          console.log(`[ModelManager] Checking model "${model.name}" (${model.fileName}) - looksLikeVision: ${looksLikeVision}`);
+
+          if (!looksLikeVision) {
+            continue;
+          }
+
+          // Try to find a matching mmproj file
+          // Extract base model name for matching (e.g., "Qwen3VL-2B-Instruct" from "Qwen3VL-2B-Instruct-Q4_K_M.gguf")
+          const baseNameMatch = model.fileName.match(/^(.+?)[-_](?:Q\d|q\d|F\d|f\d)/i);
+          const baseName = baseNameMatch ? baseNameMatch[1].toLowerCase() : model.fileName.toLowerCase().replace('.gguf', '');
+
+          console.log(`[ModelManager] Looking for mmproj match - baseName: "${baseName}"`);
+
+          for (const mmProjFile of mmProjFiles) {
+            const mmProjLower = mmProjFile.name.toLowerCase();
+            const noSeparators = baseName.replace(/-/g, '').replace(/_/g, '');
+            console.log(`[ModelManager] Comparing with mmproj "${mmProjFile.name}" - checking "${noSeparators}" or "${baseName}"`);
+
+            // Check if the mmproj file name contains the base model name
+            if (mmProjLower.includes(noSeparators) || mmProjLower.includes(baseName)) {
+              console.log(`[ModelManager] ✓ Linking mmproj "${mmProjFile.name}" with model "${model.name}"`);
+              model.mmProjPath = mmProjFile.path;
+              model.mmProjFileName = mmProjFile.name;
+              model.mmProjFileSize = typeof mmProjFile.size === 'string' ? parseInt(mmProjFile.size, 10) : mmProjFile.size;
+              model.isVisionModel = true;
+              break;
+            } else {
+              console.log(`[ModelManager] ✗ No match`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ModelManager] Error scanning for mmproj files:', error);
+    }
+
+    await this.saveModelsList(cleanedModels);
+    return removedCount;
+  }
+
   // ============== Image Model Management ==============
 
   /**
@@ -710,6 +908,168 @@ class ModelManager {
 
   private async saveImageModelsList(models: ONNXImageModel[]): Promise<void> {
     await AsyncStorage.setItem(IMAGE_MODELS_STORAGE_KEY, JSON.stringify(models));
+  }
+
+  /**
+   * Scan the image models directory for untracked models.
+   * This is useful when a download completed but the app was killed before
+   * the model was added to the registry.
+   * Returns any newly discovered models that were added to the registry.
+   */
+  async scanForUntrackedImageModels(): Promise<ONNXImageModel[]> {
+    await this.initialize();
+
+    const discoveredModels: ONNXImageModel[] = [];
+    const registeredModels = await this.getDownloadedImageModels();
+    const registeredPaths = new Set(registeredModels.map(m => m.modelPath));
+
+    try {
+      // Check if image models directory exists
+      const dirExists = await RNFS.exists(this.imageModelsDir);
+      if (!dirExists) {
+        return [];
+      }
+
+      // List all items in the image models directory
+      const items = await RNFS.readDir(this.imageModelsDir);
+
+      for (const item of items) {
+        // Skip if not a directory or already registered
+        if (!item.isDirectory() || registeredPaths.has(item.path)) {
+          continue;
+        }
+
+        // Check if this looks like a valid model directory
+        // LocalDream models typically have a specific structure
+        const modelDirName = item.name;
+        const modelPath = item.path;
+
+        // Try to get directory size
+        let totalSize = 0;
+        try {
+          const modelFiles = await RNFS.readDir(modelPath);
+          for (const file of modelFiles) {
+            if (file.isFile()) {
+              const fileSize = typeof file.size === 'string' ? parseInt(file.size, 10) : file.size;
+              totalSize += fileSize;
+            }
+          }
+        } catch {
+          // Skip if we can't read the directory
+          continue;
+        }
+
+        // Only add if it has some content
+        if (totalSize > 0) {
+          // Determine backend based on directory name patterns
+          const backend: 'mnn' | 'qnn' | 'auto' = modelDirName.includes('qnn') || modelDirName.includes('8gen')
+            ? 'qnn'
+            : modelDirName.includes('mnn')
+              ? 'mnn'
+              : 'auto';
+
+          const newModel: ONNXImageModel = {
+            id: `recovered_${modelDirName}_${Date.now()}`,
+            name: modelDirName.replace(/_/g, ' ').replace(/\.(zip|tar|gz)$/i, ''),
+            modelPath,
+            size: totalSize,
+            downloadedAt: new Date().toISOString(),
+            backend,
+          };
+
+          await this.addDownloadedImageModel(newModel);
+          discoveredModels.push(newModel);
+          console.log('[ModelManager] Discovered untracked image model:', newModel.name);
+        }
+      }
+    } catch (error) {
+      console.error('[ModelManager] Error scanning for untracked models:', error);
+    }
+
+    return discoveredModels;
+  }
+
+  /**
+   * Scan the text models directory for untracked GGUF files.
+   * Returns any newly discovered models that were added to the registry.
+   */
+  async scanForUntrackedTextModels(): Promise<DownloadedModel[]> {
+    await this.initialize();
+
+    const discoveredModels: DownloadedModel[] = [];
+    const registeredModels = await this.getDownloadedModels();
+    const registeredPaths = new Set(registeredModels.map(m => m.filePath));
+
+    try {
+      // Check if models directory exists
+      const dirExists = await RNFS.exists(this.modelsDir);
+      if (!dirExists) {
+        return [];
+      }
+
+      // List all files in the models directory
+      const items = await RNFS.readDir(this.modelsDir);
+
+      for (const item of items) {
+        // Skip if not a file, not a GGUF, already registered, or is an mmproj file
+        const lowerName = item.name.toLowerCase();
+        const isMMProj = lowerName.includes('mmproj') || lowerName.includes('projector') ||
+                         (lowerName.includes('clip') && lowerName.endsWith('.gguf'));
+        if (!item.isFile() || !item.name.endsWith('.gguf') || registeredPaths.has(item.path) || isMMProj) {
+          continue;
+        }
+
+        const fileSize = typeof item.size === 'string' ? parseInt(item.size, 10) : item.size;
+
+        // Try to parse quantization from filename
+        const quantMatch = item.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
+        const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+
+        const newModel: DownloadedModel = {
+          id: `recovered_${item.name}_${Date.now()}`,
+          name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
+          author: 'Unknown',
+          filePath: item.path,
+          fileName: item.name,
+          fileSize,
+          quantization,
+          downloadedAt: new Date().toISOString(),
+          credibility: {
+            source: 'community',
+            isOfficial: false,
+            isVerifiedQuantizer: false,
+          },
+        };
+
+        // Add to registry
+        const models = await this.getDownloadedModels();
+        models.push(newModel);
+        await this.saveModelsList(models);
+
+        discoveredModels.push(newModel);
+        console.log('[ModelManager] Discovered untracked text model:', newModel.name);
+      }
+    } catch (error) {
+      console.error('[ModelManager] Error scanning for untracked text models:', error);
+    }
+
+    return discoveredModels;
+  }
+
+  /**
+   * Force refresh of model lists by scanning file system.
+   * Call this when models may have been added externally.
+   */
+  async refreshModelLists(): Promise<{ textModels: DownloadedModel[]; imageModels: ONNXImageModel[] }> {
+    // Scan for untracked models first
+    await this.scanForUntrackedTextModels();
+    await this.scanForUntrackedImageModels();
+
+    // Then return the full lists
+    return {
+      textModels: await this.getDownloadedModels(),
+      imageModels: await this.getDownloadedImageModels(),
+    };
   }
 }
 
