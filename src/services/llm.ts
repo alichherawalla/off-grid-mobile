@@ -239,14 +239,31 @@ class LLMService {
       this.multimodalInitialized = false;
 
       // Try to initialize multimodal support if mmproj path provided
+      console.log('[LLM] mmProjPath:', mmProjPath || 'none');
       if (mmProjPath) {
+        // Check mmproj file exists and log size
+        try {
+          const stat = await RNFS.stat(mmProjPath);
+          const sizeMB = (Number(stat.size) / (1024 * 1024)).toFixed(2);
+          console.log(`[LLM] mmproj file size: ${sizeMB} MB`);
+          // Qwen3-VL F16 mmproj should be ~819MB, Q8_0 should be ~445MB
+          if (Number(stat.size) < 100 * 1024 * 1024) {
+            console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB} MB) - may be incomplete download!`);
+          }
+        } catch (statErr) {
+          console.error('[LLM] Failed to stat mmproj file:', statErr);
+        }
+        console.log('[LLM] Initializing multimodal with mmproj...');
         await this.initializeMultimodal(mmProjPath);
       } else {
+        // No separate mmproj file - check if model has built-in multimodal support
+        // (e.g., Qwen-VL merged models have vision built into the main GGUF)
         this.multimodalInitialized = false;
-        this.multimodalSupport = { vision: false, audio: false };
+        await this.checkMultimodalSupport();
       }
 
-      console.log('[LLM] Model loaded, vision:', this.multimodalSupport?.vision || false);
+      const support = this.multimodalSupport as MultimodalSupport | null;
+      console.log('[LLM] Model loaded, vision:', support?.vision ?? false);
     } catch (error: any) {
       console.error('[LLM] Error loading model:', error?.message || error);
       this.context = null;
@@ -261,13 +278,18 @@ class LLMService {
   }
 
   async initializeMultimodal(mmProjPath: string): Promise<boolean> {
-    if (!this.context) return false;
+    if (!this.context) {
+      console.warn('[LLM] initializeMultimodal: No context available');
+      return false;
+    }
 
     try {
+      console.log('[LLM] Calling context.initMultimodal with path:', mmProjPath);
       const success = await this.context.initMultimodal({
         path: mmProjPath,
         use_gpu: Platform.OS === 'ios',
       });
+      console.log('[LLM] context.initMultimodal returned:', success);
 
       if (success) {
         this.multimodalInitialized = true;
@@ -282,14 +304,16 @@ class LLMService {
         } catch (e) {
           // getMultimodalSupport not available, keep defaults
         }
+        console.log('[LLM] Multimodal initialized successfully, vision:', this.multimodalSupport?.vision);
         return true;
       } else {
+        console.warn('[LLM] context.initMultimodal returned false - mmproj may be incompatible with model');
         this.multimodalInitialized = false;
         this.multimodalSupport = { vision: false, audio: false };
         return false;
       }
     } catch (error: any) {
-      console.warn('[LLM] Multimodal init failed:', error?.message || error);
+      console.error('[LLM] Multimodal init exception:', error?.message || error);
       this.multimodalInitialized = false;
       this.multimodalSupport = { vision: false, audio: false };
       return false;
@@ -298,7 +322,8 @@ class LLMService {
 
   async checkMultimodalSupport(): Promise<MultimodalSupport> {
     if (!this.context) {
-      return { vision: false, audio: false };
+      this.multimodalSupport = { vision: false, audio: false };
+      return this.multimodalSupport;
     }
 
     try {
