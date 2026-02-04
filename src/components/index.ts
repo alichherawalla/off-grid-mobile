@@ -6,3 +6,5 @@ export { ChatInput } from './ChatInput';
 export { VoiceRecordButton } from './VoiceRecordButton';
 export { ModelSelectorModal } from './ModelSelectorModal';
 export { GenerationSettingsModal } from './GenerationSettingsModal';
+export { CustomAlert, showAlert, hideAlert, initialAlertState } from './CustomAlert';
+export type { AlertButton, AlertState, CustomAlertProps } from './CustomAlert';
