@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Card, Button } from '../components';
 import { COLORS } from '../constants';
 import { useAppStore } from '../stores';
-import { modelManager, backgroundDownloadService, activeModelService } from '../services';
+import { modelManager, backgroundDownloadService, activeModelService, hardwareService } from '../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../types';
 import { useNavigation } from '@react-navigation/native';
 
@@ -143,9 +143,10 @@ export const DownloadManagerScreen: React.FC = () => {
   };
 
   const handleDeleteModel = async (model: DownloadedModel) => {
+    const totalSize = hardwareService.getModelTotalSize(model);
     Alert.alert(
       'Delete Model',
-      `Are you sure you want to delete "${model.fileName}"? This will free up ${formatBytes(model.fileSize)}.`,
+      `Are you sure you want to delete "${model.fileName}"? This will free up ${formatBytes(totalSize)}.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -237,6 +238,7 @@ export const DownloadManagerScreen: React.FC = () => {
 
     // Add completed text model downloads
     downloadedModels.forEach((model) => {
+      const totalSize = hardwareService.getModelTotalSize(model);
       items.push({
         type: 'completed',
         modelType: 'text',
@@ -244,8 +246,8 @@ export const DownloadManagerScreen: React.FC = () => {
         fileName: model.fileName,
         author: model.author,
         quantization: model.quantization,
-        fileSize: model.fileSize,
-        bytesDownloaded: model.fileSize,
+        fileSize: totalSize,
+        bytesDownloaded: totalSize,
         progress: 1,
         status: 'completed',
         downloadedAt: model.downloadedAt,

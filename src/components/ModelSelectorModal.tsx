@@ -197,7 +197,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
                           {activeTextModel?.name || 'Unknown'}
                         </Text>
                         <Text style={styles.loadedModelMeta}>
-                          {activeTextModel?.quantization} • {formatSize(activeTextModel?.fileSize || 0)}
+                          {activeTextModel?.quantization} • {activeTextModel ? hardwareService.formatModelSize(activeTextModel) : '0 B'}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -243,7 +243,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
                             {model.name}
                           </Text>
                           <View style={styles.modelMeta}>
-                            <Text style={styles.modelSize}>{formatSize(model.fileSize)}</Text>
+                            <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
                             {model.quantization && (
                               <>
                                 <Text style={styles.metaSeparator}>•</Text>

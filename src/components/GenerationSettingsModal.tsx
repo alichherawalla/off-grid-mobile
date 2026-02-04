@@ -11,7 +11,7 @@ import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 import { useAppStore } from '../stores';
-import { llmService } from '../services';
+import { llmService, hardwareService } from '../services';
 import { ONNXImageModel } from '../types';
 
 interface SettingConfig {
@@ -407,7 +407,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                         <View style={{ flex: 1 }}>
                           <Text style={styles.modelPickerItemText}>{model.name}</Text>
                           <Text style={styles.modelPickerItemDesc}>
-                            {(model.fileSize / (1024 * 1024 * 1024)).toFixed(1)}GB
+                            {hardwareService.formatModelSize(model)}
                             {model.id.toLowerCase().includes('smol') && ' • Fast'}
                           </Text>
                         </View>

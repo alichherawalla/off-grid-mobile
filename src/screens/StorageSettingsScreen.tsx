@@ -112,7 +112,7 @@ export const StorageSettingsScreen: React.FC = () => {
                   <Text style={styles.modelName} numberOfLines={1}>{model.name}</Text>
                   <Text style={styles.modelMeta}>{model.quantization}</Text>
                 </View>
-                <Text style={styles.modelSize}>{hardwareService.formatBytes(model.fileSize)}</Text>
+                <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
               </View>
             ))}
           </Card>
