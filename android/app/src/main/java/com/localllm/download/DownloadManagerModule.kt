@@ -262,8 +262,17 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     if (previousStatus != "completed") {
                         android.util.Log.d("DownloadManager", "Sending DownloadComplete event for $downloadId")
                         sendEvent("DownloadComplete", eventParams)
+                        updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
+                    } else {
+                        // Already completed - remove stale entries to stop polling spam
+                        val completedAt = download.optLong("completedAt", 0L)
+                        val ageMs = System.currentTimeMillis() - completedAt
+                        // If completed more than 30 seconds ago and still in list, it's stale - remove it  
+                        if (completedAt > 0 && ageMs > 30_000) {
+                            android.util.Log.d("DownloadManager", "Removing stale completed download $downloadId (completed ${ageMs/1000}s ago)")
+                            removeDownload(downloadId)
+                        }
                     }
-                    updateDownloadStatus(downloadId, "completed", statusInfo.getString("localUri"))
                 }
                 "failed" -> {
                     android.util.Log.e("DownloadManager", "Download $downloadId failed: ${statusInfo.getString("reason")}")

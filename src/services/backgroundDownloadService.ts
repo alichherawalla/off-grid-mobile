@@ -83,7 +83,7 @@ class BackgroundDownloadService {
     });
 
     // Start polling for progress
-    this.startProgressPolling();
+    // this.startProgressPolling(); // REMOVED: Callers must start polling after registering listeners to avoid race conditions
 
     return {
       downloadId: result.downloadId,

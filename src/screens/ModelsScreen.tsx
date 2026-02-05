@@ -429,6 +429,9 @@ export const ModelsScreen: React.FC = () => {
         setImageModelDownloadId(null);
       });
 
+      // Start polling after listeners are attached
+      backgroundDownloadService.startProgressPolling();
+
     } catch (error: any) {
       Alert.alert('Download Failed', error?.message || 'Unknown error');
       setImageModelDownloading(null);
@@ -484,7 +487,7 @@ export const ModelsScreen: React.FC = () => {
       setImageModelProgress(0.95);
 
       // Clean up the ZIP file
-      await RNFS.unlink(zipPath).catch(() => {});
+      await RNFS.unlink(zipPath).catch(() => { });
 
       // Register the model
       const imageModel: ONNXImageModel = {
@@ -566,7 +569,7 @@ export const ModelsScreen: React.FC = () => {
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     const downloadKey = `${model.id}/${file.name}`;
 
-    const onProgress = (progress: {progress: number; bytesDownloaded: number; totalBytes: number}) => {
+    const onProgress = (progress: { progress: number; bytesDownloaded: number; totalBytes: number }) => {
       setDownloadProgress(downloadKey, {
         progress: progress.progress,
         bytesDownloaded: progress.bytesDownloaded,
@@ -619,23 +622,23 @@ export const ModelsScreen: React.FC = () => {
 
     // Check for image generation models (Stable Diffusion, etc.)
     if (tags.some(t => t.includes('diffusion') || t.includes('text-to-image') || t.includes('image-generation')) ||
-        name.includes('stable-diffusion') || name.includes('sd-') || name.includes('sdxl') ||
-        id.includes('stable-diffusion') || id.includes('coreml-stable') ||
-        tags.some(t => t.includes('diffusers'))) {
+      name.includes('stable-diffusion') || name.includes('sd-') || name.includes('sdxl') ||
+      id.includes('stable-diffusion') || id.includes('coreml-stable') ||
+      tags.some(t => t.includes('diffusers'))) {
       return 'image-gen';
     }
 
     // Check for vision/multimodal models
     if (tags.some(t => t.includes('vision') || t.includes('multimodal') || t.includes('image-text')) ||
-        name.includes('vision') || name.includes('vlm') || name.includes('llava') ||
-        id.includes('vision') || id.includes('vlm') || id.includes('llava')) {
+      name.includes('vision') || name.includes('vlm') || name.includes('llava') ||
+      id.includes('vision') || id.includes('vlm') || id.includes('llava')) {
       return 'vision';
     }
 
     // Check for code models
     if (tags.some(t => t.includes('code')) ||
-        name.includes('code') || name.includes('coder') || name.includes('starcoder') ||
-        id.includes('code') || id.includes('coder')) {
+      name.includes('code') || name.includes('coder') || name.includes('starcoder') ||
+      id.includes('code') || id.includes('coder')) {
       return 'code';
     }
 
@@ -1031,139 +1034,143 @@ export const ModelsScreen: React.FC = () => {
       {/* Text Models Tab */}
       {activeTab === 'text' && (
         <>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search models..."
-          placeholderTextColor={COLORS.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-        />
-        <Button title="Search" size="small" onPress={handleSearch} />
-      </View>
-
-      {/* Filters Section */}
-      <View style={styles.filtersSection}>
-        {/* Compatible Only Toggle */}
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Show compatible only</Text>
-          <Switch
-            value={showCompatibleOnly}
-            onValueChange={setShowCompatibleOnly}
-            trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '60' }}
-            thumbColor={showCompatibleOnly ? COLORS.primary : COLORS.textMuted}
-          />
-        </View>
-
-        {/* Model Type Filter */}
-        <View style={styles.filterContainer}>
-          <Text style={styles.filterSectionLabel}>Type</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {MODEL_TYPE_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.filterChip,
-                  modelTypeFilter === option.key && styles.filterChipActive,
-                ]}
-                onPress={() => setModelTypeFilter(option.key)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    modelTypeFilter === option.key && styles.filterChipTextActive,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Credibility Filter */}
-        <View style={styles.filterContainer}>
-          <Text style={styles.filterSectionLabel}>Source</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-          >
-            {CREDIBILITY_OPTIONS.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[
-                  styles.filterChip,
-                  credibilityFilter === option.key && styles.filterChipActive,
-                  credibilityFilter === option.key && option.color && {
-                    backgroundColor: option.color + '25',
-                    borderColor: option.color,
-                  },
-                ]}
-                onPress={() => setCredibilityFilter(option.key)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    credibilityFilter === option.key && styles.filterChipTextActive,
-                    credibilityFilter === option.key && option.color && {
-                      color: option.color,
-                    },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading models...</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredResults}
-          renderItem={renderModelItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.primary}
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search models..."
+              placeholderTextColor={COLORS.textMuted}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={handleSearch}
+              returnKeyType="search"
+              testID="search-input"
             />
-          }
-          ListEmptyComponent={
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyText}>
-                {credibilityFilter !== 'all'
-                  ? `No ${CREDIBILITY_OPTIONS.find((f: { key: CredibilityFilter; label: string }) => f.key === credibilityFilter)?.label} models found. Try a different filter.`
-                  : 'No models found. Try a different search term.'}
-              </Text>
-            </Card>
-          }
-        />
-      )}
+            <Button title="Search" size="small" onPress={handleSearch} />
+          </View>
+
+          {/* Filters Section */}
+          <View style={styles.filtersSection}>
+            {/* Compatible Only Toggle */}
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Show compatible only</Text>
+              <Switch
+                value={showCompatibleOnly}
+                onValueChange={setShowCompatibleOnly}
+                trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '60' }}
+                thumbColor={showCompatibleOnly ? COLORS.primary : COLORS.textMuted}
+              />
+            </View>
+
+            {/* Model Type Filter */}
+            <View style={styles.filterContainer}>
+              <Text style={styles.filterSectionLabel}>Type</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+              >
+                {MODEL_TYPE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[
+                      styles.filterChip,
+                      modelTypeFilter === option.key && styles.filterChipActive,
+                    ]}
+                    onPress={() => setModelTypeFilter(option.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        modelTypeFilter === option.key && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Credibility Filter */}
+            <View style={styles.filterContainer}>
+              <Text style={styles.filterSectionLabel}>Source</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+              >
+                {CREDIBILITY_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[
+                      styles.filterChip,
+                      credibilityFilter === option.key && styles.filterChipActive,
+                      credibilityFilter === option.key && option.color && {
+                        backgroundColor: option.color + '25',
+                        borderColor: option.color,
+                      },
+                    ]}
+                    onPress={() => setCredibilityFilter(option.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        credibilityFilter === option.key && styles.filterChipTextActive,
+                        credibilityFilter === option.key && option.color && {
+                          color: option.color,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.loadingText}>Loading models...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredResults}
+              renderItem={renderModelItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              testID="models-list"
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={COLORS.primary}
+                />
+              }
+              ListEmptyComponent={
+                <Card style={styles.emptyCard}>
+                  <Text style={styles.emptyText}>
+                    {credibilityFilter !== 'all'
+                      ? `No ${CREDIBILITY_OPTIONS.find((f: { key: CredibilityFilter; label: string }) => f.key === credibilityFilter)?.label} models found. Try a different filter.`
+                      : 'No models found. Try a different search term.'}
+                  </Text>
+                </Card>
+              }
+            />
+          )}
         </>
       )}
 
       {/* Image Models Tab */}
-      {activeTab === 'image' && (
-        <ScrollView style={styles.imageTabContent}>
-          {renderImageModelsSection()}
-        </ScrollView>
-      )}
-    </SafeAreaView>
+      {
+        activeTab === 'image' && (
+          <ScrollView style={styles.imageTabContent}>
+            {renderImageModelsSection()}
+          </ScrollView>
+        )
+      }
+    </SafeAreaView >
   );
 };
 

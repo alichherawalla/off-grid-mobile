@@ -166,7 +166,7 @@ class ModelManager {
 
         if (result.statusCode !== 200) {
           this.downloadJobs.delete(downloadKey);
-          await RNFS.unlink(localPath).catch(() => {});
+          await RNFS.unlink(localPath).catch(() => { });
           throw new Error(`Main model download failed with status ${result.statusCode}`);
         }
 
@@ -213,7 +213,7 @@ class ModelManager {
         this.downloadJobs.delete(mmProjDownloadKey);
 
         if (mmProjResult.statusCode !== 200) {
-          await RNFS.unlink(mmProjLocalPath).catch(() => {});
+          await RNFS.unlink(mmProjLocalPath).catch(() => { });
           // Don't fail the whole download - just log and continue without mmproj
           console.warn(`MMProj download failed with status ${mmProjResult.statusCode}`);
         }
@@ -251,7 +251,7 @@ class ModelManager {
 
       // Clean up partial file
       const localPath = `${this.modelsDir}/${fileName}`;
-      await RNFS.unlink(localPath).catch(() => {});
+      await RNFS.unlink(localPath).catch(() => { });
     }
   }
 
@@ -558,6 +558,9 @@ class ModelManager {
       }
     );
 
+    // Start polling after listeners are attached
+    backgroundDownloadService.startProgressPolling();
+
     return downloadInfo;
   }
 
@@ -782,8 +785,8 @@ class ModelManager {
   private isMMProjFile(fileName: string): boolean {
     const lower = fileName.toLowerCase();
     return lower.includes('mmproj') ||
-           lower.includes('projector') ||
-           (lower.includes('clip') && lower.endsWith('.gguf'));
+      lower.includes('projector') ||
+      (lower.includes('clip') && lower.endsWith('.gguf'));
   }
 
   /**
@@ -822,10 +825,10 @@ class ModelManager {
           const modelNameLower = model.name.toLowerCase();
           const fileNameLower = model.fileName.toLowerCase();
           const looksLikeVision = modelNameLower.includes('vl') ||
-                                  modelNameLower.includes('vision') ||
-                                  modelNameLower.includes('smolvlm') ||
-                                  fileNameLower.includes('vl') ||
-                                  fileNameLower.includes('vision');
+            modelNameLower.includes('vision') ||
+            modelNameLower.includes('smolvlm') ||
+            fileNameLower.includes('vl') ||
+            fileNameLower.includes('vision');
 
           console.log(`[ModelManager] Checking model "${model.name}" (${model.fileName}) - looksLikeVision: ${looksLikeVision}`);
 
@@ -1070,7 +1073,7 @@ class ModelManager {
         // Skip if not a file, not a GGUF, already registered, or is an mmproj file
         const lowerName = item.name.toLowerCase();
         const isMMProj = lowerName.includes('mmproj') || lowerName.includes('projector') ||
-                         (lowerName.includes('clip') && lowerName.endsWith('.gguf'));
+          (lowerName.includes('clip') && lowerName.endsWith('.gguf'));
         if (!item.isFile() || !item.name.endsWith('.gguf') || registeredPaths.has(item.path) || isMMProj) {
           continue;
         }
