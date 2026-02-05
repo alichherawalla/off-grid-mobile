@@ -10,6 +10,7 @@ import { modelManager } from './modelManager';
 import { hardwareService } from './hardware';
 import { useAppStore } from '../stores';
 import { DownloadedModel, ONNXImageModel } from '../types';
+import RNFS from 'react-native-fs';
 
 export type ModelType = 'text' | 'image';
 
@@ -168,7 +169,6 @@ class ActiveModelService {
             // Try to find mmproj file in same directory
             const modelDir = model.filePath.substring(0, model.filePath.lastIndexOf('/'));
             try {
-              const RNFS = require('react-native-fs').default;
               const files = await RNFS.readDir(modelDir);
               const mmProjFile = files.find((f: any) =>
                 f.name.toLowerCase().includes('mmproj') && f.name.endsWith('.gguf')

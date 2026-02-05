@@ -23,8 +23,8 @@ const CONTEXT_SAFETY_MARGIN = 0.85; // Use only 85% of context to be safe
 // Default performance settings
 const DEFAULT_THREADS = Platform.OS === 'android' ? 6 : 4;
 const DEFAULT_BATCH = 256;
-// GPU layers: iOS Metal handles full offload well; Android OpenCL needs conservative setting
-const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 6;
+// GPU layers: iOS Metal handles full offload well; Android OpenCL is unstable and causes native crashes
+const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
 
 // Helper functions to get optimal settings based on platform
 function getOptimalThreadCount(): number {

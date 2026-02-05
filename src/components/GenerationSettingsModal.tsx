@@ -538,7 +538,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 <View style={styles.settingHeader}>
                   <Text style={styles.settingLabel}>{config.label}</Text>
                   <Text style={styles.settingValue}>
-                    {config.format(localSettings[config.key] as number)}
+                    {config.format((localSettings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number)}
                   </Text>
                 </View>
                 {config.description && (
@@ -549,7 +549,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   minimumValue={config.min}
                   maximumValue={config.max}
                   step={config.step}
-                  value={localSettings[config.key] as number}
+                  value={(localSettings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number}
                   onValueChange={(value) => handleSliderChange(config.key, value)}
                   onSlidingComplete={(value) => handleSliderComplete(config.key, value)}
                   minimumTrackTintColor={COLORS.primary}
