@@ -5,14 +5,14 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card, Button } from '../components';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { modelManager, backgroundDownloadService, activeModelService, hardwareService } from '../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../types';
@@ -38,6 +38,7 @@ export const DownloadManagerScreen: React.FC = () => {
   const navigation = useNavigation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     downloadedModels,
@@ -91,7 +92,7 @@ export const DownloadManagerScreen: React.FC = () => {
     const unsubError = backgroundDownloadService.onAnyError((event) => {
       setDownloadProgress(`${event.modelId}/${event.fileName}`, null);
       setBackgroundDownload(event.downloadId, null);
-      Alert.alert('Download Failed', event.reason || 'Unknown error');
+      setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
     });
 
     return () => {
@@ -119,7 +120,7 @@ export const DownloadManagerScreen: React.FC = () => {
   }, []);
 
   const handleCancelDownload = async (downloadId: number, modelId: string, fileName: string) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Cancel Download',
       'Are you sure you want to cancel this download?',
       [
@@ -128,23 +129,24 @@ export const DownloadManagerScreen: React.FC = () => {
           text: 'Yes',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             try {
               await modelManager.cancelBackgroundDownload(downloadId);
               setDownloadProgress(`${modelId}/${fileName}`, null);
               setBackgroundDownload(downloadId, null);
               await loadActiveDownloads();
             } catch (error) {
-              Alert.alert('Error', 'Failed to cancel download');
+              setAlertState(showAlert('Error', 'Failed to cancel download'));
             }
           },
         },
       ]
-    );
+    ));
   };
 
   const handleDeleteModel = async (model: DownloadedModel) => {
     const totalSize = hardwareService.getModelTotalSize(model);
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Model',
       `Are you sure you want to delete "${model.fileName}"? This will free up ${formatBytes(totalSize)}.`,
       [
@@ -153,20 +155,21 @@ export const DownloadManagerScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             try {
               await modelManager.deleteModel(model.id);
               removeDownloadedModel(model.id);
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete model');
+              setAlertState(showAlert('Error', 'Failed to delete model'));
             }
           },
         },
       ]
-    );
+    ));
   };
 
   const handleDeleteImageModel = async (model: ONNXImageModel) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Image Model',
       `Are you sure you want to delete "${model.name}"? This will free up ${formatBytes(model.size)}.`,
       [
@@ -175,18 +178,19 @@ export const DownloadManagerScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             try {
               // Unload if this is the active model
               await activeModelService.unloadImageModel();
               await modelManager.deleteImageModel(model.id);
               removeDownloadedImageModel(model.id);
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete image model');
+              setAlertState(showAlert('Error', 'Failed to delete image model'));
             }
           },
         },
       ]
-    );
+    ));
   };
 
   // Combine RNFS downloads and background downloads
@@ -331,7 +335,7 @@ export const DownloadManagerScreen: React.FC = () => {
           <Icon
             name={item.modelType === 'image' ? 'image' : 'message-square'}
             size={16}
-            color={item.modelType === 'image' ? COLORS.secondary : COLORS.primary}
+            color={item.modelType === 'image' ? COLORS.info : COLORS.primary}
           />
         </View>
         <View style={styles.downloadInfo}>
@@ -468,6 +472,13 @@ export const DownloadManagerScreen: React.FC = () => {
         }
         contentContainerStyle={styles.listContent}
       />
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -507,9 +518,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   title: {
+    ...TYPOGRAPHY.h2,
     flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
     color: COLORS.text,
   },
   headerSpacer: {
@@ -532,8 +542,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
     flex: 1,
   },
@@ -544,8 +553,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   countText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
   },
   downloadCard: {
@@ -570,13 +578,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   fileName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
     marginBottom: 2,
   },
   modelId: {
-    fontSize: 13,
+    ...TYPOGRAPHY.label,
     color: COLORS.textSecondary,
   },
   cancelButton: {
@@ -605,7 +612,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   downloadMeta: {
@@ -620,26 +627,25 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   quantText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.meta,
     color: COLORS.primary,
   },
   imageBadge: {
-    backgroundColor: COLORS.secondary + '25',
+    backgroundColor: COLORS.info + '25',
   },
   imageQuantText: {
-    color: COLORS.secondary,
+    color: COLORS.info,
   },
   statusText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
   },
   sizeText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
   },
   dateText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   emptyCard: {
@@ -649,12 +655,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyText: {
-    fontSize: 15,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     marginTop: 8,
   },
   emptySubtext: {
-    fontSize: 13,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
     textAlign: 'center',
   },
@@ -670,7 +676,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   storageText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
 });
