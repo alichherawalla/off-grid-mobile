@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS, QUANTIZATION_INFO, CREDIBILITY_LABELS } from '../constants';
+import { COLORS, QUANTIZATION_INFO, CREDIBILITY_LABELS, TYPOGRAPHY } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { huggingFaceService } from '../services/huggingface';
 
@@ -272,12 +272,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
   },
   author: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   authorRow: {
@@ -295,12 +294,11 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   credibilityIcon: {
+    ...TYPOGRAPHY.meta,
     fontSize: 10,
-    fontWeight: '700',
   },
   credibilityText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...TYPOGRAPHY.meta,
   },
   activeBadge: {
     backgroundColor: COLORS.primary,
@@ -309,12 +307,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeBadgeText: {
+    ...TYPOGRAPHY.meta,
     color: COLORS.text,
-    fontSize: 12,
-    fontWeight: '600',
   },
   description: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     marginBottom: 12,
   },
@@ -334,34 +331,31 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + '20',
   },
   infoText: {
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
   },
   recommendedBadge: {
-    backgroundColor: COLORS.secondary + '30',
+    backgroundColor: COLORS.info + '30',
   },
   recommendedText: {
-    color: COLORS.secondary,
+    color: COLORS.info,
   },
   warningBadge: {
     backgroundColor: COLORS.warning + '30',
   },
   warningText: {
+    ...TYPOGRAPHY.meta,
     color: COLORS.warning,
-    fontSize: 12,
-    fontWeight: '500',
   },
   visionBadge: {
-    backgroundColor: COLORS.secondary + '30',
+    backgroundColor: COLORS.info + '30',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   visionText: {
-    color: COLORS.secondary,
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.meta,
+    color: COLORS.info,
   },
   statsRow: {
     flexDirection: 'row',
@@ -369,8 +363,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statsText: {
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    fontSize: 12,
   },
   progressContainer: {
     flexDirection: 'row',
@@ -391,9 +385,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   progressText: {
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
     width: 40,
     textAlign: 'right',
   },
@@ -405,28 +398,26 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
-  },
-  downloadButton: {
-    backgroundColor: COLORS.primary,
-  },
-  selectButton: {
-    backgroundColor: COLORS.secondary,
-  },
-  deleteButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
+  },
+  downloadButton: {
+    borderColor: COLORS.primary,
+  },
+  selectButton: {
+    borderColor: COLORS.primary,
+  },
+  deleteButton: {
     borderColor: COLORS.error,
   },
   actionButtonText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.primary,
   },
   deleteButtonText: {
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.error,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

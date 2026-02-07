@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,11 @@ import {
   PanResponder,
   GestureResponderEvent,
   PanResponderGestureState,
-  Alert,
   Vibration,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 
 interface VoiceRecordButtonProps {
   isRecording: boolean;
@@ -48,6 +48,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   const loadingAnim = useRef(new Animated.Value(0)).current;
   const cancelOffsetX = useRef(new Animated.Value(0)).current;
   const isDraggingToCancel = useRef(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Loading animation for model loading or transcribing
   useEffect(() => {
@@ -152,11 +153,11 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 
   const handleUnavailableTap = () => {
     const errorDetail = error || 'No transcription model downloaded';
-    Alert.alert(
+    setAlertState(showAlert(
       'Voice Input Unavailable',
       `${errorDetail}\n\nTo enable voice input:\n1. Go to Settings tab\n2. Scroll to "Voice Transcription"\n3. Download a Whisper model\n\nVoice transcription runs completely on-device for privacy.`,
       [{ text: 'OK' }]
-    );
+    ));
   };
 
   // Show loading state when model is loading
@@ -184,6 +185,13 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
           </Animated.View>
           {!asSendButton && <Text style={styles.loadingText}>Loading...</Text>}
         </View>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
       </View>
     );
   }
@@ -206,13 +214,20 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
             ]}
           >
             {asSendButton ? (
-              <Icon name="mic" size={18} color={COLORS.secondary} />
+              <Icon name="mic" size={18} color={COLORS.info} />
             ) : (
               <View style={styles.loadingIndicator} />
             )}
           </Animated.View>
           {!asSendButton && <Text style={styles.transcribingText}>Transcribing...</Text>}
         </View>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
       </View>
     );
   }
@@ -239,6 +254,13 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
             )}
           </View>
         </TouchableOpacity>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
       </View>
     );
   }
@@ -295,9 +317,9 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         >
           {/* Show send icon by default when asSendButton, mic when recording */}
           {asSendButton && !isRecording ? (
-            <Icon name="send" size={18} color={COLORS.text} />
+            <Icon name="send" size={18} color={COLORS.primary} />
           ) : asSendButton && isRecording ? (
-            <Icon name="mic" size={18} color={COLORS.text} />
+            <Icon name="mic" size={18} color={COLORS.primary} />
           ) : (
             <View style={styles.micIcon}>
               <View style={[
@@ -322,6 +344,13 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
       )}
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </View>
   );
 };
@@ -345,7 +374,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 38,
     borderRadius: 19,
-    backgroundColor: COLORS.primary,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
   buttonAsSendUnavailable: {
     width: 44,
@@ -377,7 +408,7 @@ const styles = StyleSheet.create({
   buttonTranscribing: {
     backgroundColor: COLORS.surface,
     borderWidth: 2,
-    borderColor: COLORS.secondary,
+    borderColor: COLORS.info,
     borderTopColor: 'transparent',
   },
   buttonUnavailable: {
@@ -403,7 +434,7 @@ const styles = StyleSheet.create({
   },
   transcribingText: {
     fontSize: 11,
-    color: COLORS.secondary,
+    color: COLORS.info,
     marginLeft: 6,
   },
   micIcon: {

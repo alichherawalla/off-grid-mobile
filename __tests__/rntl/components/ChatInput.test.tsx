@@ -12,7 +12,6 @@
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
 
 // Mock image picker
@@ -56,9 +55,6 @@ jest.mock('../../../src/components/VoiceRecordButton', () => ({
     );
   },
 }));
-
-// Mock Alert
-jest.spyOn(Alert, 'alert');
 
 describe('ChatInput', () => {
   const defaultProps = {
@@ -426,24 +422,19 @@ describe('ChatInput', () => {
   // Attachments
   // ============================================================================
   describe('attachments', () => {
-    it('opens image source alert when camera button is pressed', async () => {
-      const { getByTestId } = render(
+    it('shows custom alert when camera button is pressed', async () => {
+      const { getByTestId, getByText } = render(
         <ChatInput {...defaultProps} supportsVision={true} />
       );
 
       const cameraButton = getByTestId('camera-button');
       fireEvent.press(cameraButton);
 
-      // Should show alert with camera/library options
-      expect(Alert.alert).toHaveBeenCalledWith(
-        'Add Image',
-        'Choose image source',
-        expect.arrayContaining([
-          expect.objectContaining({ text: 'Camera' }),
-          expect.objectContaining({ text: 'Photo Library' }),
-          expect.objectContaining({ text: 'Cancel' }),
-        ])
-      );
+      // Should show CustomAlert with camera/library options
+      await waitFor(() => {
+        expect(getByText('Add Image')).toBeTruthy();
+        expect(getByText('Choose image source')).toBeTruthy();
+      });
     });
 
     it('shows attachment preview after selecting image', async () => {
@@ -457,18 +448,20 @@ describe('ChatInput', () => {
         }],
       });
 
-      const { getByTestId, queryByTestId } = render(
+      const { getByTestId, getByText, queryByTestId } = render(
         <ChatInput {...defaultProps} supportsVision={true} />
       );
 
-      // Press camera button
+      // Press camera button to show CustomAlert
       const cameraButton = getByTestId('camera-button');
       fireEvent.press(cameraButton);
 
-      // Trigger Photo Library option
-      const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-      const photoLibraryOption = alertCall[2].find((opt: any) => opt.text === 'Photo Library');
-      photoLibraryOption.onPress();
+      // Wait for CustomAlert to appear and press Photo Library button
+      await waitFor(() => {
+        expect(getByText('Photo Library')).toBeTruthy();
+      });
+
+      fireEvent.press(getByText('Photo Library'));
 
       await waitFor(() => {
         expect(queryByTestId('attachments-container')).toBeTruthy();
@@ -488,7 +481,7 @@ describe('ChatInput', () => {
       });
 
       const onSend = jest.fn();
-      const { getByTestId } = render(
+      const { getByTestId, getByText } = render(
         <ChatInput {...defaultProps} onSend={onSend} supportsVision={true} />
       );
 
@@ -496,9 +489,12 @@ describe('ChatInput', () => {
       const cameraButton = getByTestId('camera-button');
       fireEvent.press(cameraButton);
 
-      const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-      const photoLibraryOption = alertCall[2].find((opt: any) => opt.text === 'Photo Library');
-      photoLibraryOption.onPress();
+      // Wait for CustomAlert and press Photo Library
+      await waitFor(() => {
+        expect(getByText('Photo Library')).toBeTruthy();
+      });
+
+      fireEvent.press(getByText('Photo Library'));
 
       await waitFor(() => {
         expect(getByTestId('attachments-container')).toBeTruthy();
@@ -530,7 +526,7 @@ describe('ChatInput', () => {
       });
 
       const onSend = jest.fn();
-      const { getByTestId, queryByTestId } = render(
+      const { getByTestId, getByText, queryByTestId } = render(
         <ChatInput {...defaultProps} onSend={onSend} supportsVision={true} />
       );
 
@@ -538,9 +534,12 @@ describe('ChatInput', () => {
       const cameraButton = getByTestId('camera-button');
       fireEvent.press(cameraButton);
 
-      const alertCall = (Alert.alert as jest.Mock).mock.calls[0];
-      const photoLibraryOption = alertCall[2].find((opt: any) => opt.text === 'Photo Library');
-      photoLibraryOption.onPress();
+      // Wait for CustomAlert and press Photo Library
+      await waitFor(() => {
+        expect(getByText('Photo Library')).toBeTruthy();
+      });
+
+      fireEvent.press(getByText('Photo Library'));
 
       await waitFor(() => {
         expect(queryByTestId('attachments-container')).toBeTruthy();

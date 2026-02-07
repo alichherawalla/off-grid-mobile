@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { hardwareService } from '../services';
 
@@ -28,10 +28,9 @@ export const DeviceInfoScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Device Information</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -96,50 +95,47 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: SPACING.md,
   },
   backButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    flex: 1,
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   description: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: 16,
+    lineHeight: 18,
+    marginBottom: SPACING.lg,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -147,55 +143,55 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   infoLabel: {
-    fontSize: 15,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   infoValue: {
-    fontSize: 15,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   tierBadge: {
-    backgroundColor: COLORS.primary + '30',
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    backgroundColor: COLORS.primary + '20',
     color: COLORS.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
     borderRadius: 6,
     overflow: 'hidden',
   },
   tierInfo: {
     flexDirection: 'row',
-    gap: 8,
+    gap: SPACING.sm,
   },
   tierItem: {
     flex: 1,
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: 'transparent',
+    borderRadius: 8,
+    padding: SPACING.md,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   tierItemActive: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '15',
+    backgroundColor: 'transparent',
   },
   tierName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   tierNameActive: {
     color: COLORS.primary,
   },
   tierDesc: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   tierModels: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },

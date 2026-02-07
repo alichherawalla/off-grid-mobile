@@ -7,8 +7,9 @@
 import { Platform } from 'react-native';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { activeModelService } from './activeModelService';
+import { llmService } from './llm';
 import { useAppStore, useChatStore } from '../stores';
-import { GeneratedImage, GenerationMeta } from '../types';
+import { GeneratedImage, GenerationMeta, Message } from '../types';
 
 export interface ImageGenerationState {
   isGenerating: boolean;
@@ -120,17 +121,170 @@ class ImageGenerationService {
     const imageWidth = settings.imageWidth || 256;
     const imageHeight = settings.imageHeight || 256;
 
+    // Enhance prompt using text LLM if enabled
+    let enhancedPrompt = params.prompt;
+    let tempMessageId: string | null = null;
+    console.log('[ImageGen] enhanceImagePrompts setting:', settings.enhanceImagePrompts);
+
+    if (settings.enhanceImagePrompts) {
+      const isTextModelLoaded = llmService.isModelLoaded();
+      const isLlmGenerating = llmService.isCurrentlyGenerating();
+      console.log('[ImageGen] 🎨 Starting prompt enhancement - Model loaded:', isTextModelLoaded, 'LLM generating:', isLlmGenerating);
+
+      if (!isTextModelLoaded) {
+        console.warn('[ImageGen] No text model loaded, skipping enhancement');
+
+        // Delete the thinking message
+        if (params.conversationId && tempMessageId) {
+          const chatStore = useChatStore.getState();
+          chatStore.deleteMessage(params.conversationId, tempMessageId);
+          tempMessageId = null;
+        }
+
+        enhancedPrompt = params.prompt;
+      } else {
+        this.updateState({
+          isGenerating: true,
+          prompt: params.prompt,
+          conversationId: params.conversationId || null,
+          status: 'Enhancing prompt with AI...',
+          previewPath: null,
+          progress: { step: 0, totalSteps: steps },
+          error: null,
+          result: null,
+        });
+
+        // Add message to show enhancement in progress
+        if (params.conversationId) {
+          const chatStore = useChatStore.getState();
+          const tempMessage = chatStore.addMessage(
+            params.conversationId,
+            {
+              role: 'assistant',
+              content: 'Enhancing your prompt...',
+            }
+          );
+          tempMessageId = tempMessage.id;
+        }
+
+        try {
+        const enhancementMessages: Message[] = [
+          {
+            id: 'system-enhance',
+            role: 'system',
+            content: `You are an expert at creating detailed image generation prompts. Take the user's request and enhance it into a detailed, descriptive prompt that will produce better results from an image generation model. Include artistic style, lighting, composition, and quality modifiers. Keep it under 75 words. Only respond with the enhanced prompt, no explanation.`,
+            timestamp: Date.now(),
+          },
+          {
+            id: 'user-enhance',
+            role: 'user',
+            content: params.prompt,
+            timestamp: Date.now(),
+          },
+        ];
+
+        let fullResponse = '';
+        console.log('[ImageGen] 📤 Calling llmService.generateResponse for enhancement...');
+        enhancedPrompt = await llmService.generateResponse(
+          enhancementMessages,
+          (token) => {
+            fullResponse += token;
+          },
+          (complete) => {
+            fullResponse = complete;
+          },
+          (error) => {
+            console.error('[ImageGen] ❌ Enhancement error callback:', error);
+          }
+        );
+        console.log('[ImageGen] 📥 llmService.generateResponse returned, checking state...');
+        console.log('[ImageGen] LLM state after enhancement - generating:', llmService.isCurrentlyGenerating());
+
+          // Clean up the response - remove quotes, extra whitespace
+          enhancedPrompt = enhancedPrompt.trim().replace(/^["']|["']$/g, '');
+
+          console.log('[ImageGen] ✅ Original prompt:', params.prompt);
+          console.log('[ImageGen] ✅ Enhanced prompt:', enhancedPrompt);
+
+          // CRITICAL: Reset LLM service after enhancement
+          // This ensures it's ready for normal text generation later
+          console.log('[ImageGen] 🔄 Starting cleanup - generating:', llmService.isCurrentlyGenerating());
+          try {
+            // Always call stop to ensure clean state
+            await llmService.stopGeneration();
+            console.log('[ImageGen] ✓ stopGeneration() called');
+            // NOTE: We DON'T clear KV cache here because:
+            // 1. It's already cleared during generation completion
+            // 2. Clearing it slows down subsequent vision inference significantly
+            console.log('[ImageGen] ✅ LLM service reset complete - generating:', llmService.isCurrentlyGenerating());
+          } catch (resetError) {
+            console.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
+          }
+
+          // Update thinking message with enhanced prompt
+          if (params.conversationId && tempMessageId) {
+            const chatStore = useChatStore.getState();
+
+            // If enhancement worked, show it; otherwise delete the thinking message
+            if (enhancedPrompt && enhancedPrompt !== params.prompt) {
+              chatStore.updateMessage(
+                params.conversationId,
+                tempMessageId,
+                `Enhanced prompt:\n\n"${enhancedPrompt}"`
+              );
+            } else {
+              console.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
+              chatStore.deleteMessage(params.conversationId, tempMessageId);
+              tempMessageId = null;
+            }
+          }
+        } catch (error: any) {
+          console.error('[ImageGen] ❌ Prompt enhancement failed:', error);
+          console.error('[ImageGen] Error details:', error?.message || 'Unknown error');
+
+          // CRITICAL: Reset LLM service after error
+          console.log('[ImageGen] 🔄 Starting cleanup after error - generating:', llmService.isCurrentlyGenerating());
+          try {
+            await llmService.stopGeneration();
+            console.log('[ImageGen] ✓ stopGeneration() called after error');
+            console.log('[ImageGen] ✅ LLM service reset after error - generating:', llmService.isCurrentlyGenerating());
+          } catch (resetError) {
+            console.error('[ImageGen] ❌ Failed to reset LLM service after error:', resetError);
+          }
+
+          // Update or remove the thinking message on error
+          if (params.conversationId && tempMessageId) {
+            const chatStore = useChatStore.getState();
+            chatStore.deleteMessage(params.conversationId, tempMessageId);
+            tempMessageId = null;
+          }
+
+          // Fall back to original prompt if enhancement fails
+          enhancedPrompt = params.prompt;
+        }
+      }
+    } else {
+      console.log('[ImageGen] Enhancement disabled, using original prompt');
+    }
+
     this.cancelRequested = false;
-    this.updateState({
-      isGenerating: true,
-      prompt: params.prompt,
-      conversationId: params.conversationId || null,
-      status: 'Preparing image generation...',
-      previewPath: null,
-      progress: { step: 0, totalSteps: steps },
-      error: null,
-      result: null,
-    });
+
+    // Only set initial state if we didn't already set it during prompt enhancement
+    if (!settings.enhanceImagePrompts) {
+      this.updateState({
+        isGenerating: true,
+        prompt: params.prompt,
+        conversationId: params.conversationId || null,
+        status: 'Preparing image generation...',
+        previewPath: null,
+        progress: { step: 0, totalSteps: steps },
+        error: null,
+        result: null,
+      });
+    } else {
+      // Update status for next phase
+      this.updateState({ status: 'Preparing image generation...' });
+    }
 
     // Ensure image model is loaded
     const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
@@ -169,7 +323,7 @@ class ImageGenerationService {
     try {
       const result = await onnxImageGeneratorService.generateImage(
         {
-          prompt: params.prompt,
+          prompt: enhancedPrompt,
           negativePrompt: params.negativePrompt || '',
           steps,
           guidanceScale,
@@ -236,11 +390,22 @@ class ImageGenerationService {
           };
 
           const chatStore = useChatStore.getState();
+
+          // Delete the temp enhancement message if it exists
+          if (tempMessageId) {
+            chatStore.deleteMessage(params.conversationId, tempMessageId);
+          }
+
+          // Show both original and enhanced prompt if enhancement was used
+          const messageContent = enhancedPrompt !== params.prompt
+            ? `Generated image for: "${params.prompt}"\n\nEnhanced prompt: "${enhancedPrompt}"`
+            : `Generated image for: "${params.prompt}"`;
+
           chatStore.addMessage(
             params.conversationId,
             {
               role: 'assistant',
-              content: `Generated image for: "${params.prompt}"`,
+              content: messageContent,
             },
             [{
               id: result.id,

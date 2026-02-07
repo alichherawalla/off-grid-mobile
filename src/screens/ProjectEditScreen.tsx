@@ -6,37 +6,25 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useProjectStore } from '../stores';
 import { ProjectsStackParamList } from '../navigation/types';
 
 type NavigationProp = NativeStackNavigationProp<ProjectsStackParamList, 'ProjectEdit'>;
 type RouteProps = RouteProp<ProjectsStackParamList, 'ProjectEdit'>;
 
-// Color options for project icons
-const ICON_COLORS = [
-  '#6366F1', // Indigo
-  '#10B981', // Emerald
-  '#F59E0B', // Amber
-  '#EF4444', // Red
-  '#8B5CF6', // Violet
-  '#06B6D4', // Cyan
-  '#EC4899', // Pink
-  '#84CC16', // Lime
-];
-
 export const ProjectEditScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const projectId = route.params?.projectId;
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { getProject, createProject, updateProject } = useProjectStore();
   const existingProject = projectId ? getProject(projectId) : null;
@@ -45,7 +33,6 @@ export const ProjectEditScreen: React.FC = () => {
     name: '',
     description: '',
     systemPrompt: '',
-    iconColor: ICON_COLORS[0],
   });
 
   useEffect(() => {
@@ -54,18 +41,17 @@ export const ProjectEditScreen: React.FC = () => {
         name: existingProject.name,
         description: existingProject.description,
         systemPrompt: existingProject.systemPrompt,
-        iconColor: existingProject.icon?.startsWith('#') ? existingProject.icon : ICON_COLORS[0],
       });
     }
   }, [existingProject]);
 
   const handleSave = () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Please enter a name for the project');
+      setAlertState(showAlert('Error', 'Please enter a name for the project'));
       return;
     }
     if (!formData.systemPrompt.trim()) {
-      Alert.alert('Error', 'Please enter a system prompt');
+      setAlertState(showAlert('Error', 'Please enter a system prompt'));
       return;
     }
 
@@ -74,14 +60,12 @@ export const ProjectEditScreen: React.FC = () => {
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
-        icon: formData.iconColor,
       });
     } else {
       createProject({
         name: formData.name.trim(),
         description: formData.description.trim(),
         systemPrompt: formData.systemPrompt.trim(),
-        icon: formData.iconColor,
       });
     }
 
@@ -112,38 +96,6 @@ export const ProjectEditScreen: React.FC = () => {
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Color Picker */}
-          <Text style={styles.label}>Color</Text>
-          <View style={styles.colorPicker}>
-            {ICON_COLORS.map((color) => (
-              <TouchableOpacity
-                key={color}
-                style={[
-                  styles.colorOption,
-                  { backgroundColor: color },
-                  formData.iconColor === color && styles.colorOptionSelected,
-                ]}
-                onPress={() => setFormData({ ...formData, iconColor: color })}
-              >
-                {formData.iconColor === color && (
-                  <Icon name="check" size={18} color={COLORS.text} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Preview */}
-          {formData.name.trim() && (
-            <View style={styles.preview}>
-              <View style={[styles.previewIcon, { backgroundColor: formData.iconColor + '30' }]}>
-                <Text style={[styles.previewIconText, { color: formData.iconColor }]}>
-                  {formData.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <Text style={styles.previewName}>{formData.name}</Text>
-            </View>
-          )}
-
           {/* Name */}
           <Text style={styles.label}>Name *</Text>
           <TextInput
@@ -186,6 +138,7 @@ export const ProjectEditScreen: React.FC = () => {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </KeyboardAvoidingView>
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );
 };
@@ -202,107 +155,65 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   headerButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   cancelText: {
-    fontSize: 16,
-    color: COLORS.textSecondary,
+    ...TYPOGRAPHY.body,
+    color: COLORS.textMuted,
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: COLORS.text,
+    ...TYPOGRAPHY.h2,
+    fontWeight: '400',
   },
   saveText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    padding: SPACING.lg,
     paddingBottom: 100,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
-    marginBottom: 8,
-    marginTop: 16,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.lg,
+    textTransform: 'uppercase',
   },
   hint: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginBottom: 8,
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
   },
   input: {
+    ...TYPOGRAPHY.body,
     backgroundColor: COLORS.surface,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 8,
+    padding: SPACING.md,
     color: COLORS.text,
-    fontSize: 16,
   },
   textArea: {
     minHeight: 180,
     maxHeight: 280,
     textAlignVertical: 'top',
   },
-  colorPicker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  colorOptionSelected: {
-    borderWidth: 3,
-    borderColor: COLORS.text,
-  },
-  preview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    padding: 12,
-    borderRadius: 10,
-    marginTop: 16,
-  },
-  previewIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  previewIconText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  previewName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
   tip: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 12,
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
     lineHeight: 18,
   },
   bottomPadding: {
-    height: 40,
+    height: SPACING.xxl,
   },
 });

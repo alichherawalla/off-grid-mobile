@@ -6,16 +6,16 @@ import {
   Image,
   TouchableOpacity,
   Clipboard,
-  Alert,
   Modal,
   TextInput,
   Animated,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { Message } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 
 interface ChatMessageProps {
   message: Message;
@@ -137,6 +137,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
   const [showThinking, setShowThinking] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const displayContent = message.role === 'assistant'
     ? stripControlTokens(message.content)
@@ -156,7 +157,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       onCopy(displayContent);
     }
     setShowActionMenu(false);
-    Alert.alert('Copied', 'Message copied to clipboard');
+    setAlertState(showAlert('Copied', 'Message copied to clipboard'));
   };
 
   const handleRetry = () => {
@@ -206,9 +207,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // Render system info messages (model loaded/unloaded) differently
   if (message.isSystemInfo) {
     return (
-      <View testID="system-info-message" style={styles.systemInfoContainer}>
-        <Text style={styles.systemInfoText}>{displayContent}</Text>
-      </View>
+      <>
+        <View testID="system-info-message" style={styles.systemInfoContainer}>
+          <Text style={styles.systemInfoText}>{displayContent}</Text>
+        </View>
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
+      </>
     );
   }
 
@@ -507,6 +517,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* CustomAlert */}
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </>
   );
 };
@@ -546,16 +565,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   systemInfoText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    fontStyle: 'italic',
     textAlign: 'center',
   },
   bubble: {
     maxWidth: '85%',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
   bubbleWithAttachments: {
     paddingHorizontal: 8,
@@ -586,15 +604,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   text: {
-    fontSize: 16,
-    lineHeight: 22,
+    ...TYPOGRAPHY.body,
+    lineHeight: 20,
     paddingHorizontal: 0,
   },
   userText: {
-    color: COLORS.text,
+    color: COLORS.background,
+    fontWeight: '400',
   },
   assistantText: {
     color: COLORS.text,
+    fontWeight: '400',
   },
   cursor: {
     color: COLORS.primary,
@@ -617,8 +637,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   thinkingText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    fontSize: 14,
     fontStyle: 'italic',
   },
   thinkingBlock: {
@@ -642,25 +662,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   thinkingHeaderIconText: {
-    fontSize: 10,
+    ...TYPOGRAPHY.label,
     fontWeight: '600',
     color: COLORS.primary,
   },
   thinkingHeaderText: {
+    ...TYPOGRAPHY.bodySmall,
     flex: 1,
-    fontSize: 12,
     color: COLORS.textMuted,
     fontWeight: '500',
   },
   thinkingToggle: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   thinkingBlockText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textSecondary,
     lineHeight: 18,
-    padding: 8,
+    padding: SPACING.sm,
     paddingTop: 0,
     fontStyle: 'italic',
   },
@@ -675,19 +695,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   timestamp: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   generationTime: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
+    fontWeight: '400',
     color: COLORS.primary,
-    fontWeight: '500',
   },
   actionHint: {
     padding: 4,
   },
   actionHintText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     letterSpacing: 1,
   },
@@ -700,12 +720,12 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   generationMetaText: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     flexShrink: 1,
   },
   generationMetaSep: {
-    fontSize: 10,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     opacity: 0.5,
   },
@@ -743,19 +763,19 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   actionIconBoxImage: {
-    backgroundColor: COLORS.secondary + '30',
+    backgroundColor: COLORS.info + '30',
   },
   actionIconText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.primary,
   },
   actionText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   actionTextCancel: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.error,
     textAlign: 'center',
   },
@@ -775,18 +795,18 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   editModalTitle: {
+    ...TYPOGRAPHY.h1,
     fontSize: 18,
-    fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
     textAlign: 'center',
   },
   editInput: {
+    ...TYPOGRAPHY.h2,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 8,
+    padding: SPACING.md,
     color: COLORS.text,
-    fontSize: 16,
     minHeight: 100,
     maxHeight: 200,
     textAlignVertical: 'top',
@@ -809,13 +829,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   editButtonTextCancel: {
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
-    fontSize: 16,
     fontWeight: '500',
   },
   editButtonTextSave: {
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
-    fontSize: 16,
     fontWeight: '600',
   },
 });

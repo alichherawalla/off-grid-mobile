@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { COLORS } from '../constants';
+import { COLORS, FONTS, SPACING, TYPOGRAPHY } from '../constants';
 
 interface ButtonProps {
   title: string;
@@ -78,63 +78,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    gap: 8,
+    borderRadius: 8,
+    gap: SPACING.sm,
   },
   button_primary: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
   button_secondary: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   button_outline: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: COLORS.borderLight,
   },
   button_ghost: {
     backgroundColor: 'transparent',
   },
   button_small: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   button_medium: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
   },
   button_large: {
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
   },
   button_disabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   text: {
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
+    fontWeight: '400',
   },
   text_primary: {
-    color: COLORS.text,
+    color: COLORS.primary,
   },
   text_secondary: {
     color: COLORS.text,
   },
   text_outline: {
-    color: COLORS.primary,
+    color: COLORS.textSecondary,
   },
   text_ghost: {
-    color: COLORS.primary,
+    color: COLORS.textSecondary,
   },
   text_small: {
-    fontSize: 14,
+    fontSize: TYPOGRAPHY.h3.fontSize,
   },
   text_medium: {
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.body.fontSize,
   },
   text_large: {
-    fontSize: 18,
+    fontSize: TYPOGRAPHY.h2.fontSize,
   },
   text_disabled: {
-    color: COLORS.textMuted,
+    color: COLORS.textDisabled,
   },
 });

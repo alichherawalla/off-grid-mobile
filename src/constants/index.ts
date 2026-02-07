@@ -242,41 +242,143 @@ export const ONBOARDING_SLIDES = [
     id: 'welcome',
     title: 'Welcome to Local LLM',
     description: 'Run AI models directly on your device. No internet required, complete privacy.',
-    icon: '🤖',
+    icon: 'cpu',
   },
   {
     id: 'privacy',
     title: 'Your Privacy Matters',
     description: 'All conversations stay on your device. No data is sent to any server. Your thoughts remain yours.',
-    icon: '🔒',
+    icon: 'lock',
   },
   {
     id: 'offline',
     title: 'Works Offline',
     description: 'Once you download a model, it works without internet. Perfect for travel, remote areas, or privacy-sensitive tasks.',
-    icon: '📴',
+    icon: 'wifi-off',
   },
   {
     id: 'models',
     title: 'Choose Your Model',
     description: 'Select from various AI models. Smaller models are faster, larger models are smarter. We\'ll help you pick the right one for your device.',
-    icon: '🎯',
+    icon: 'layers',
   },
 ];
 
-// Colors
+// Fonts
+export const FONTS = {
+  mono: 'Menlo',
+};
+
+// Typography Scale - Centralized font sizes and styles
+export const TYPOGRAPHY = {
+  // Display / Hero numbers
+  display: {
+    fontSize: 22,
+    fontFamily: FONTS.mono,
+    fontWeight: '200' as const,
+    letterSpacing: -0.5,
+  },
+
+  // Headings
+  h1: {
+    fontSize: 24,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+    letterSpacing: -0.5,
+  },
+  h2: {
+    fontSize: 16,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: -0.2,
+  },
+  h3: {
+    fontSize: 13,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: -0.2,
+  },
+
+  // Body text
+  body: {
+    fontSize: 14,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+  },
+  bodySmall: {
+    fontSize: 13,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+  },
+
+  // Labels (whispers)
+  label: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: 0.3,
+  },
+  labelSmall: {
+    fontSize: 9,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: 0.3,
+  },
+
+  // Metadata / Details
+  meta: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+  },
+  metaSmall: {
+    fontSize: 9,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+  },
+};
+
+// Spacing Scale - Consistent whitespace
+export const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+};
+
+// Colors - Monochromatic palette with emerald accent
 export const COLORS = {
-  primary: '#6366F1',
-  primaryDark: '#4F46E5',
-  secondary: '#10B981',
-  background: '#0F172A',
-  surface: '#1E293B',
-  surfaceLight: '#334155',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  textMuted: '#64748B',
-  success: '#22C55E',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  border: '#334155',
+  // Primary accent
+  primary: '#34D399',
+  primaryDark: '#10B981',
+  primaryLight: '#6EE7B7',
+
+  // Backgrounds
+  background: '#0A0A0A',
+  surface: '#141414',
+  surfaceLight: '#1E1E1E',
+  surfaceHover: '#252525',
+
+  // Text hierarchy
+  text: '#FFFFFF',
+  textSecondary: '#B0B0B0',
+  textMuted: '#808080',
+  textDisabled: '#4A4A4A',
+
+  // Borders
+  border: '#1E1E1E',
+  borderLight: '#2A2A2A',
+  borderFocus: '#34D399',
+
+  // Semantic colors
+  success: '#B0B0B0',        // no green — matches textSecondary
+  warning: '#FFFFFF',         // bright white = attention
+  error: '#EF4444',           // only color exception besides primary
+  info: '#B0B0B0',            // no blue — stays monochrome
+
+  // Special
+  overlay: 'rgba(0, 0, 0, 0.7)',
+  divider: '#1A1A1A',
 };

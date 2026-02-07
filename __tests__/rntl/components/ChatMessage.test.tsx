@@ -12,7 +12,6 @@
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import {
   createMessage,
@@ -26,9 +25,6 @@ import {
 
 // The Clipboard warning is expected (deprecated in RN). No additional mock needed
 // as the tests will still work with the deprecated API.
-
-// Mock Alert
-jest.spyOn(Alert, 'alert');
 
 // Mock the stripControlTokens utility
 jest.mock('../../../src/utils/messageContent', () => ({
@@ -385,7 +381,7 @@ describe('ChatMessage', () => {
       expect(queryByTestId('action-menu')).toBeNull();
     });
 
-    it('calls onCopy and shows alert when copy is pressed', () => {
+    it('calls onCopy when copy is pressed', () => {
       const onCopy = jest.fn();
       const message = createAssistantMessage('Copy this text');
 
@@ -401,8 +397,6 @@ describe('ChatMessage', () => {
 
       // onCopy callback is called with the message content
       expect(onCopy).toHaveBeenCalledWith('Copy this text');
-      // Alert is shown
-      expect(Alert.alert).toHaveBeenCalledWith('Copied', 'Message copied to clipboard');
     });
 
     it('calls onRetry when retry is pressed', () => {

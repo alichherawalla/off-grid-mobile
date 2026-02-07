@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { COLORS } from '../constants';
+import { COLORS, SPACING, TYPOGRAPHY } from '../constants';
 
 export interface AlertButton {
   text: string;
@@ -58,7 +58,6 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
                 key={index}
                 style={[
                   styles.button,
-                  buttons.length > 1 && index < buttons.length - 1 && styles.buttonBorder,
                   button.style === 'destructive' && styles.destructiveButton,
                 ]}
                 onPress={() => handleButtonPress(button)}
@@ -118,60 +117,67 @@ export const hideAlert = (): AlertState => initialAlertState;
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: COLORS.overlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   alertContainer: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 24,
-    marginHorizontal: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.xl,
+    marginHorizontal: SPACING.xxl,
     maxWidth: 320,
     minWidth: 280,
     alignItems: 'center',
   },
   loadingIndicator: {
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   message: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   buttonContainer: {
     flexDirection: 'row',
-    marginTop: 8,
+    marginTop: SPACING.sm,
     width: '100%',
+    gap: SPACING.sm,
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
   },
   buttonBorder: {
-    borderRightWidth: 1,
-    borderRightColor: COLORS.border,
+    // Removed - using gap instead
   },
   buttonText: {
-    fontSize: 16,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
   },
   cancelButtonText: {
     color: COLORS.textMuted,
   },
-  destructiveButton: {},
+  destructiveButton: {
+    borderColor: COLORS.error,
+  },
   destructiveButtonText: {
     color: COLORS.error,
   },

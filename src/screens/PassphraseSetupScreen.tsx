@@ -4,15 +4,16 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card } from '../components';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, FONTS, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 
@@ -31,6 +32,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   const [newPassphrase, setNewPassphrase] = useState('');
   const [confirmPassphrase, setConfirmPassphrase] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { setEnabled } = useAuthStore();
 
@@ -48,13 +50,13 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
     // Validate new passphrase
     const error = validatePassphrase(newPassphrase);
     if (error) {
-      Alert.alert('Invalid Passphrase', error);
+      setAlertState(showAlert('Invalid Passphrase', error));
       return;
     }
 
     // Check confirmation matches
     if (newPassphrase !== confirmPassphrase) {
-      Alert.alert('Mismatch', 'Passphrases do not match');
+      setAlertState(showAlert('Mismatch', 'Passphrases do not match'));
       return;
     }
 
@@ -65,26 +67,26 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
         // Verify current passphrase and change
         const success = await authService.changePassphrase(currentPassphrase, newPassphrase);
         if (!success) {
-          Alert.alert('Error', 'Current passphrase is incorrect');
+          setAlertState(showAlert('Error', 'Current passphrase is incorrect'));
           setIsSubmitting(false);
           return;
         }
-        Alert.alert('Success', 'Passphrase changed successfully');
+        setAlertState(showAlert('Success', 'Passphrase changed successfully'));
       } else {
         // Set new passphrase
         const success = await authService.setPassphrase(newPassphrase);
         if (!success) {
-          Alert.alert('Error', 'Failed to set passphrase');
+          setAlertState(showAlert('Error', 'Failed to set passphrase'));
           setIsSubmitting(false);
           return;
         }
         setEnabled(true);
-        Alert.alert('Success', 'Passphrase lock enabled');
+        setAlertState(showAlert('Success', 'Passphrase lock enabled'));
       }
 
       onComplete();
     } catch (error) {
-      Alert.alert('Error', 'An error occurred. Please try again.');
+      setAlertState(showAlert('Error', 'An error occurred. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -108,7 +110,9 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           <View style={styles.iconContainer}>
-            <Text style={styles.icon}>🔐</Text>
+            <View style={styles.iconBox}>
+              <Icon name="lock" size={48} color={COLORS.primary} />
+            </View>
           </View>
 
           <Text style={styles.description}>
@@ -180,6 +184,13 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
           />
         </ScrollView>
       </KeyboardAvoidingView>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -201,66 +212,72 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   cancelButton: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    padding: SPACING.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: SPACING.xl,
   },
-  icon: {
-    fontSize: 64,
+  iconBox: {
+    width: 96,
+    height: 96,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   description: {
-    fontSize: 15,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
+    lineHeight: 20,
+    marginBottom: SPACING.xl,
   },
   inputCard: {
-    marginBottom: 24,
+    marginBottom: SPACING.xl,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   input: {
+    ...TYPOGRAPHY.body,
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
     color: COLORS.text,
-    fontSize: 16,
   },
   tips: {
-    marginBottom: 24,
+    marginBottom: SPACING.xl,
   },
   tipsTitle: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   tipItem: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   submitButton: {
     marginBottom: 32,

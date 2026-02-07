@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components';
-import { COLORS, ONBOARDING_SLIDES } from '../constants';
+import { COLORS, ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -51,7 +52,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const renderSlide = ({ item }: { item: typeof ONBOARDING_SLIDES[0] }) => (
     <View style={styles.slide}>
       <View style={styles.iconContainer}>
-        <Text style={styles.icon}>{item.icon}</Text>
+        <Icon name={item.icon} size={64} color={COLORS.primary} />
       </View>
       <Text style={styles.title}>{item.title}</Text>
       <Text style={styles.description}>{item.description}</Text>
@@ -147,56 +148,54 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
     minHeight: 48,
   },
   slide: {
     width,
-    paddingHorizontal: 40,
+    paddingHorizontal: SPACING.xxl,
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconContainer: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
-  },
-  icon: {
-    fontSize: 56,
+    marginBottom: SPACING.xxl,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h1,
     color: COLORS.text,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.md,
   },
   description: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
   },
   dotsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: SPACING.xl,
   },
   dot: {
     height: 8,
     borderRadius: 4,
     backgroundColor: COLORS.primary,
-    marginHorizontal: 4,
+    marginHorizontal: SPACING.xs,
   },
   footer: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.xl,
   },
   nextButton: {
     width: '100%',

@@ -8,13 +8,13 @@ import {
   Image,
   ScrollView,
   Text,
-  Alert,
 } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, FONTS, SPACING } from '../constants';
 import { MediaAttachment, ImageModeState } from '../types';
 import { VoiceRecordButton } from './VoiceRecordButton';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
 import { useWhisperStore, useAppStore } from '../stores';
 
@@ -48,6 +48,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { settings } = useAppStore();
 
@@ -119,11 +120,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleImageModeToggle = () => {
     if (!imageModelLoaded) {
-      Alert.alert(
+      setAlertState(showAlert(
         'No Image Model',
         'Download an image model from the Models screen to enable image generation.',
         [{ text: 'OK' }]
-      );
+      ));
       return;
     }
 
@@ -140,24 +141,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handlePickImage = () => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Add Image',
       'Choose image source',
       [
         {
           text: 'Camera',
-          onPress: () => pickFromCamera(),
+          onPress: () => {
+            setAlertState(hideAlert());
+            pickFromCamera();
+          },
         },
         {
           text: 'Photo Library',
-          onPress: () => pickFromLibrary(),
+          onPress: () => {
+            setAlertState(hideAlert());
+            pickFromLibrary();
+          },
         },
         {
           text: 'Cancel',
           style: 'cancel',
         },
       ]
-    );
+    ));
   };
 
   const pickFromLibrary = async () => {
@@ -358,14 +365,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
         </View>
       </View>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     backgroundColor: COLORS.background,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
@@ -397,6 +411,7 @@ const styles = StyleSheet.create({
   },
   documentName: {
     fontSize: 10,
+    fontFamily: FONTS.mono,
     color: COLORS.textMuted,
     textAlign: 'center',
     marginTop: 4,
@@ -422,17 +437,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: 8,
-    gap: 8,
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginTop: SPACING.sm,
+    gap: SPACING.sm,
   },
   input: {
     flex: 1,
     color: COLORS.text,
-    fontSize: 16,
-    minHeight: 44,
+    fontSize: 14,
+    fontFamily: FONTS.mono,
+    minHeight: 40,
     maxHeight: 100,
     textAlignVertical: 'top',
   },
@@ -457,31 +473,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   toolbarButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: COLORS.surface,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
   imageGenButton: {
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 19,
-    backgroundColor: COLORS.surface,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 4,
   },
   imageGenButtonForce: {
-    backgroundColor: COLORS.primary + '30',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.textSecondary,
   },
   imageGenLabelForce: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontFamily: FONTS.mono,
+    fontWeight: '500',
     color: COLORS.primary,
   },
   statusIndicators: {
@@ -493,20 +511,27 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 11,
+    fontFamily: FONTS.mono,
+    fontWeight: '300',
     color: COLORS.textMuted,
   },
   sendButton: {
-    width: 44,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: COLORS.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    opacity: 0.5,
   },
   stopButton: {
-    backgroundColor: COLORS.error,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.textMuted,
   },
 });

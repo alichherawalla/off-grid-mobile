@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { llmService, hardwareService } from '../services';
 import { ONNXImageModel } from '../types';
@@ -117,7 +117,6 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
     activeImageModelId,
     setActiveImageModelId,
   } = useAppStore();
-  const [localSettings, setLocalSettings] = useState({ ...settings });
   const [performanceStats, setPerformanceStats] = useState(llmService.getPerformanceStats());
   const [showImageModelPicker, setShowImageModelPicker] = useState(false);
   const [showClassifierModelPicker, setShowClassifierModelPicker] = useState(false);
@@ -127,24 +126,21 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
 
   useEffect(() => {
     if (visible) {
-      setLocalSettings({ ...settings });
       setPerformanceStats(llmService.getPerformanceStats());
     }
-  }, [visible, settings]);
+  }, [visible]);
 
   const handleSliderChange = (key: keyof typeof DEFAULT_SETTINGS, value: number) => {
-    setLocalSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSliderComplete = (key: keyof typeof DEFAULT_SETTINGS, value: number) => {
+    // Update store immediately for real-time sync
     updateSettings({ [key]: value });
   };
 
+  const handleSliderComplete = (key: keyof typeof DEFAULT_SETTINGS, value: number) => {
+    // Already updated in handleSliderChange, this is now a no-op
+    // but kept for compatibility with existing code
+  };
+
   const handleResetDefaults = () => {
-    setLocalSettings((prev) => ({
-      ...prev,
-      ...DEFAULT_SETTINGS,
-    }));
     updateSettings(DEFAULT_SETTINGS);
   };
 
@@ -186,16 +182,18 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             </View>
           )}
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Image Model Selector */}
-            <View style={styles.sectionHeader}>
-              <Icon name="image" size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Image Generation</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.modelPickerButton}
-              onPress={() => setShowImageModelPicker(!showImageModelPicker)}
-            >
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* IMAGE GENERATION SETTINGS */}
+            <Text style={[styles.sectionLabel, { marginTop: 0 }]}>IMAGE GENERATION</Text>
+            <View style={styles.sectionCard}>
+              <TouchableOpacity
+                style={styles.modelPickerButton}
+                onPress={() => setShowImageModelPicker(!showImageModelPicker)}
+              >
               <View style={styles.modelPickerContent}>
                 <Text style={styles.modelPickerLabel}>Image Model</Text>
                 <Text style={styles.modelPickerValue}>
@@ -265,7 +263,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 <Text style={styles.modeToggleDesc}>
                   {settings.imageGenerationMode === 'auto'
                     ? 'Detects when you want to generate an image'
-                    : 'Use 🎨 button to manually trigger image generation'}
+                    : 'Use image button to manually trigger image generation'}
                 </Text>
               </View>
               <View style={styles.modeToggleButtons}>
@@ -429,7 +427,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             )}
 
             {/* Image Quality Settings */}
-            <View style={styles.settingItem}>
+            <View style={styles.settingGroup}>
               <View style={styles.settingHeader}>
                 <Text style={styles.settingLabel}>Image Steps</Text>
                 <Text style={styles.settingValue}>{settings.imageSteps || 20}</Text>
@@ -454,7 +452,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
-            <View style={styles.settingItem}>
+            <View style={styles.settingGroup}>
               <View style={styles.settingHeader}>
                 <Text style={styles.settingLabel}>Guidance Scale</Text>
                 <Text style={styles.settingValue}>{(settings.imageGuidanceScale || 7.5).toFixed(1)}</Text>
@@ -479,7 +477,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
-            <View style={styles.settingItem}>
+            <View style={styles.settingGroup}>
               <View style={styles.settingHeader}>
                 <Text style={styles.settingLabel}>Image Threads</Text>
                 <Text style={styles.settingValue}>{settings.imageThreads ?? 4}</Text>
@@ -504,7 +502,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
-            <View style={styles.settingItem}>
+            <View style={styles.settingGroup}>
               <View style={styles.settingHeader}>
                 <Text style={styles.settingLabel}>Image Size</Text>
                 <Text style={styles.settingValue}>{settings.imageWidth ?? 256}x{settings.imageHeight ?? 256}</Text>
@@ -529,20 +527,63 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
-            <View style={styles.sectionDivider} />
-
-            {/* Text Generation Settings */}
-            <View style={styles.sectionHeader}>
-              <Icon name="sliders" size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Text Generation</Text>
+            {/* Enhance Image Prompts Toggle */}
+            <View style={styles.modeToggleContainer}>
+              <View style={styles.modeToggleInfo}>
+                <Text style={styles.modeToggleLabel}>Enhance Image Prompts</Text>
+                <Text style={styles.modeToggleDesc}>
+                  {settings.enhanceImagePrompts
+                    ? 'Text model refines your prompt before image generation (slower but better results)'
+                    : 'Use your prompt directly for image generation (faster)'}
+                </Text>
+              </View>
+              <View style={styles.modeToggleButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeButton,
+                    !settings.enhanceImagePrompts && styles.modeButtonActive,
+                  ]}
+                  onPress={() => updateSettings({ enhanceImagePrompts: false })}
+                >
+                  <Text
+                    style={[
+                      styles.modeButtonText,
+                      !settings.enhanceImagePrompts && styles.modeButtonTextActive,
+                    ]}
+                  >
+                    Off
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modeButton,
+                    settings.enhanceImagePrompts && styles.modeButtonActive,
+                  ]}
+                  onPress={() => updateSettings({ enhanceImagePrompts: true })}
+                >
+                  <Text
+                    style={[
+                      styles.modeButtonText,
+                      settings.enhanceImagePrompts && styles.modeButtonTextActive,
+                    ]}
+                  >
+                    On
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             </View>
 
+            {/* TEXT GENERATION SETTINGS */}
+            <Text style={styles.sectionLabel}>TEXT GENERATION</Text>
+            <View style={styles.sectionCard}>
+
             {SETTINGS_CONFIG.map((config) => (
-              <View key={config.key} style={styles.settingItem}>
+              <View key={config.key} style={styles.settingGroup}>
                 <View style={styles.settingHeader}>
                   <Text style={styles.settingLabel}>{config.label}</Text>
                   <Text style={styles.settingValue}>
-                    {config.format((localSettings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number)}
+                    {config.format((settings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number)}
                   </Text>
                 </View>
                 {config.description && (
@@ -553,7 +594,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   minimumValue={config.min}
                   maximumValue={config.max}
                   step={config.step}
-                  value={(localSettings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number}
+                  value={(settings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number}
                   onValueChange={(value) => handleSliderChange(config.key, value)}
                   onSlidingComplete={(value) => handleSliderComplete(config.key, value)}
                   minimumTrackTintColor={COLORS.primary}
@@ -566,14 +607,11 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 </View>
               </View>
             ))}
-
-            <View style={styles.sectionDivider} />
-
-            {/* Performance Settings */}
-            <View style={styles.sectionHeader}>
-              <Icon name="zap" size={18} color={COLORS.primary} />
-              <Text style={styles.sectionTitle}>Performance</Text>
             </View>
+
+            {/* PERFORMANCE SETTINGS */}
+            <Text style={styles.sectionLabel}>PERFORMANCE</Text>
+            <View style={styles.sectionCard}>
 
             {/* GPU Acceleration Toggle */}
             <View style={styles.modeToggleContainer}>
@@ -732,6 +770,8 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
             </View>
 
+            </View>
+
             {/* Reset Button */}
             <TouchableOpacity style={styles.resetButton} onPress={handleResetDefaults}>
               <Text style={styles.resetButtonText}>Reset to Defaults</Text>
@@ -755,7 +795,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
+    height: '85%',
   },
   header: {
     flexDirection: 'row',
@@ -767,14 +807,12 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   closeButton: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   statsBar: {
     flexDirection: 'row',
@@ -787,26 +825,49 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   statsLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   statsValue: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.primary,
     fontWeight: '600',
   },
   statsSeparator: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   content: {
-    padding: 20,
+    flex: 1,
+  },
+  contentContainer: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+  },
+  sectionLabel: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: SPACING.xl,
+    marginBottom: SPACING.md,
+  },
+  sectionCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.lg,
+  },
+  settingGroup: {
+    marginBottom: SPACING.lg,
   },
   settingItem: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 8,
+    padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -814,23 +875,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.sm,
   },
   settingLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   settingValue: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '700',
-    fontFamily: 'monospace',
+    fontWeight: '400' as const,
   },
   settingDescription: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginBottom: 8,
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
   },
   slider: {
     width: '100%',
@@ -842,79 +902,61 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   sliderMinMax: {
-    fontSize: 11,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
   },
   resetButton: {
     backgroundColor: COLORS.surface,
-    padding: 14,
-    borderRadius: 12,
+    padding: SPACING.md,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   resetButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    fontWeight: '500',
   },
   bottomPadding: {
     height: 40,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  sectionDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 24,
   },
   modelPickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    padding: SPACING.md,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
   },
   modelPickerContent: {
     flex: 1,
   },
   modelPickerLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginBottom: 2,
   },
   modelPickerValue: {
-    fontSize: 15,
+    ...TYPOGRAPHY.bodySmall,
     fontWeight: '600',
     color: COLORS.text,
   },
   modelPickerList: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginTop: 8,
+    marginBottom: SPACING.md,
     overflow: 'hidden',
   },
   modelPickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 14,
+    padding: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -922,79 +964,71 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + '25',
   },
   modelPickerItemText: {
-    fontSize: 15,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.text,
   },
   modelPickerItemDesc: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   noModelsText: {
     padding: 14,
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textMuted,
     textAlign: 'center',
   },
   classifierNote: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     fontStyle: 'italic',
-    marginTop: 10,
-    marginBottom: 8,
-    paddingHorizontal: 4,
+    marginTop: SPACING.sm,
   },
   gpuLayersInline: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   modeToggleContainer: {
-    marginTop: 16,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    marginBottom: SPACING.lg,
   },
   modeToggleInfo: {
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   modeToggleLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    marginBottom: 4,
+    marginBottom: SPACING.sm,
   },
   modeToggleDesc: {
-    fontSize: 12,
-    color: COLORS.textMuted,
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
   },
   modeToggleButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: SPACING.sm,
   },
   modeButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     borderRadius: 8,
-    backgroundColor: COLORS.background,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   modeButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: 'transparent',
     borderColor: COLORS.primary,
   },
   modeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   modeButtonTextActive: {
-    color: COLORS.text,
+    color: COLORS.primary,
   },
 });

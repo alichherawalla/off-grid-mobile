@@ -13,7 +13,7 @@ import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 
 export const ModelSettingsScreen: React.FC = () => {
@@ -29,10 +29,9 @@ export const ModelSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Model Settings</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -158,6 +157,70 @@ export const ModelSettingsScreen: React.FC = () => {
               minimumTrackTintColor={COLORS.primary}
               maximumTrackTintColor={COLORS.surface}
               thumbTintColor={COLORS.primary}
+            />
+          </View>
+
+          {/* Detection Method (only show if auto mode is enabled) */}
+          {rawSettings?.imageGenerationMode === 'auto' && (
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>Detection Method</Text>
+              <Text style={styles.settingDesc}>
+                {rawSettings?.autoDetectMethod === 'pattern'
+                  ? 'Fast keyword matching'
+                  : 'Uses text model for classification'}
+              </Text>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.optionButton,
+                    rawSettings?.autoDetectMethod === 'pattern' && styles.optionButtonActive,
+                  ]}
+                  onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      rawSettings?.autoDetectMethod === 'pattern' && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    Pattern
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.optionButton,
+                    rawSettings?.autoDetectMethod === 'llm' && styles.optionButtonActive,
+                  ]}
+                  onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
+                >
+                  <Text
+                    style={[
+                      styles.optionButtonText,
+                      rawSettings?.autoDetectMethod === 'llm' && styles.optionButtonTextActive,
+                    ]}
+                  >
+                    LLM
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Enhance Image Prompts */}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleLabel}>Enhance Image Prompts</Text>
+              <Text style={styles.toggleDesc}>
+                {rawSettings?.enhanceImagePrompts
+                  ? 'Text model refines your prompt before image generation (slower but better results)'
+                  : 'Use your prompt directly for image generation (faster)'}
+              </Text>
+            </View>
+            <Switch
+              value={rawSettings?.enhanceImagePrompts ?? false}
+              onValueChange={(value) => updateSettings({ enhanceImagePrompts: value })}
+              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
+              thumbColor={rawSettings?.enhanceImagePrompts ? COLORS.primary : COLORS.textMuted}
             />
           </View>
         </Card>
@@ -414,50 +477,52 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: SPACING.md,
   },
   backButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    flex: 1,
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 16,
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    letterSpacing: 0.3,
   },
   settingHelp: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginBottom: 12,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
   },
   textArea: {
+    ...TYPOGRAPHY.bodySmall,
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 8,
-    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
     color: COLORS.text,
-    fontSize: 14,
     minHeight: 80,
     textAlignVertical: 'top',
   },
@@ -465,34 +530,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    marginBottom: 8,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
   },
   toggleInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   toggleLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   toggleDesc: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     marginTop: 2,
+    lineHeight: 18,
   },
   toggleNote: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     lineHeight: 18,
     backgroundColor: COLORS.surfaceLight,
-    padding: 12,
+    padding: SPACING.md,
     borderRadius: 8,
   },
   sliderSection: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: SPACING.lg,
+    paddingTop: SPACING.lg,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
@@ -500,23 +565,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   sliderLabel: {
-    fontSize: 15,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   sliderValue: {
-    fontSize: 15,
-    fontWeight: '700',
+    ...TYPOGRAPHY.body,
+    fontWeight: '400',
     color: COLORS.primary,
-    fontFamily: 'monospace',
   },
   sliderDesc: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
+    lineHeight: 18,
   },
   slider: {
     width: '100%',
@@ -524,29 +588,67 @@ const styles = StyleSheet.create({
   },
   strategyButtons: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
   },
   strategyButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
     borderRadius: 8,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   strategyButtonActive: {
-    backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
   },
   strategyButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   strategyButtonTextActive: {
+    color: COLORS.primary,
+  },
+  settingSection: {
+    marginTop: SPACING.lg,
+  },
+  settingLabel: {
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  settingDesc: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    lineHeight: 18,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  optionButton: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  optionButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: 'transparent',
+  },
+  optionButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+  },
+  optionButtonTextActive: {
+    color: COLORS.primary,
   },
 });

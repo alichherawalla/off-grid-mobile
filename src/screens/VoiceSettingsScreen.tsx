@@ -1,23 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card, Button } from '../components';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useWhisperStore } from '../stores';
 import { WHISPER_MODELS } from '../services';
 
 export const VoiceSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const {
     downloadedModelId: whisperModelId,
     isDownloading: isWhisperDownloading,
@@ -35,10 +36,9 @@ export const VoiceSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Voice Transcription</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -60,14 +60,21 @@ export const VoiceSettingsScreen: React.FC = () => {
                 variant="outline"
                 size="small"
                 onPress={() => {
-                  Alert.alert(
+                  setAlertState(showAlert(
                     'Remove Whisper Model',
                     'This will disable voice input until you download a model again.',
                     [
                       { text: 'Cancel', style: 'cancel' },
-                      { text: 'Remove', style: 'destructive', onPress: deleteWhisperModel },
+                      {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () => {
+                          setAlertState(hideAlert());
+                          deleteWhisperModel();
+                        },
+                      },
                     ]
-                  );
+                  ));
                 }}
                 style={styles.removeButton}
               />
@@ -112,7 +119,7 @@ export const VoiceSettingsScreen: React.FC = () => {
 
         <Card style={styles.privacyCard}>
           <View style={styles.privacyIconContainer}>
-            <Icon name="mic" size={24} color={COLORS.secondary} />
+            <Icon name="mic" size={18} color={COLORS.textSecondary} />
           </View>
           <Text style={styles.privacyTitle}>Privacy First</Text>
           <Text style={styles.privacyText}>
@@ -120,6 +127,13 @@ export const VoiceSettingsScreen: React.FC = () => {
           </Text>
         </Card>
       </ScrollView>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -132,82 +146,81 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: SPACING.md,
   },
   backButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    flex: 1,
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   description: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 18,
+    marginBottom: SPACING.lg,
   },
   modelInfo: {
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.lg,
   },
   modelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   modelName: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   modelStatus: {
-    fontSize: 12,
-    color: COLORS.secondary,
-    fontWeight: '500',
-    backgroundColor: COLORS.secondary + '20',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    color: COLORS.primary,
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 6,
   },
   removeButton: {
     borderColor: COLORS.error,
   },
   downloading: {
     alignItems: 'center',
-    padding: 16,
+    padding: SPACING.lg,
   },
   downloadingText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    marginTop: 8,
+    marginTop: SPACING.sm,
   },
   progressBar: {
     width: '100%',
     height: 6,
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 3,
-    marginTop: 12,
+    marginTop: SPACING.md,
     overflow: 'hidden',
   },
   progressFill: {
@@ -216,18 +229,19 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   modelList: {
-    gap: 8,
+    gap: SPACING.sm,
   },
   selectLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.text,
-    marginBottom: 8,
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    color: COLORS.textMuted,
+    marginBottom: SPACING.sm,
+    letterSpacing: 0.3,
   },
   modelOption: {
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 8,
+    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -235,51 +249,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
   modelOptionName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   modelOptionSize: {
-    fontSize: 13,
+    ...TYPOGRAPHY.meta,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   modelOptionDesc: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
+    lineHeight: 18,
   },
   error: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.error,
-    marginTop: 12,
+    marginTop: SPACING.md,
     textAlign: 'center',
   },
   privacyCard: {
     alignItems: 'center',
-    backgroundColor: COLORS.secondary + '15',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.secondary + '40',
+    borderColor: COLORS.border,
   },
   privacyIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.secondary + '20',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   privacyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.secondary,
-    marginBottom: 8,
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text,
+    marginBottom: SPACING.sm,
   },
   privacyText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,

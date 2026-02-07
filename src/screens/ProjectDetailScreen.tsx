@@ -1,17 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -23,6 +23,7 @@ export const ProjectDetailScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { projectId } = route.params;
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { getProject, deleteProject } = useProjectStore();
   const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
@@ -36,13 +37,6 @@ export const ProjectDetailScreen: React.FC = () => {
     .filter((c) => c.projectId === projectId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-  const getProjectColor = () => {
-    if (project?.icon && project.icon.startsWith('#')) {
-      return project.icon;
-    }
-    return COLORS.primary;
-  };
-
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
     // Navigate to chat in the Chats tab stack
@@ -55,7 +49,7 @@ export const ProjectDetailScreen: React.FC = () => {
 
   const handleNewChat = () => {
     if (!hasModels) {
-      Alert.alert('No Model', 'Please download a model first from the Models tab.');
+      setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
     // Create a new conversation with this project
@@ -74,7 +68,7 @@ export const ProjectDetailScreen: React.FC = () => {
   };
 
   const handleDeleteProject = () => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Project',
       `Delete "${project?.name}"? This will not delete the chats associated with this project.`,
       [
@@ -88,11 +82,11 @@ export const ProjectDetailScreen: React.FC = () => {
           },
         },
       ]
-    );
+    ));
   };
 
   const handleDeleteChat = (conversation: Conversation) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Chat',
       `Delete "${conversation.title}"?`,
       [
@@ -103,7 +97,7 @@ export const ProjectDetailScreen: React.FC = () => {
           onPress: () => deleteConversation(conversation.id),
         },
       ]
-    );
+    ));
   };
 
   const formatDate = (dateString: string) => {
@@ -132,7 +126,7 @@ export const ProjectDetailScreen: React.FC = () => {
         onLongPress={() => handleDeleteChat(item)}
       >
         <View style={styles.chatIcon}>
-          <Icon name="message-circle" size={18} color={COLORS.primary} />
+          <Icon name="message-circle" size={14} color={COLORS.textMuted} />
         </View>
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
@@ -147,7 +141,7 @@ export const ProjectDetailScreen: React.FC = () => {
             </Text>
           )}
         </View>
-        <Icon name="chevron-right" size={18} color={COLORS.textMuted} />
+        <Icon name="chevron-right" size={14} color={COLORS.textMuted} />
       </TouchableOpacity>
     );
   };
@@ -165,25 +159,23 @@ export const ProjectDetailScreen: React.FC = () => {
     );
   }
 
-  const color = getProjectColor();
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <View style={[styles.projectIcon, { backgroundColor: color + '30' }]}>
-            <Text style={[styles.projectIconText, { color }]}>
+          <View style={styles.projectIcon}>
+            <Text style={styles.projectIconText}>
               {project.name.charAt(0).toUpperCase()}
             </Text>
           </View>
           <Text style={styles.headerTitle} numberOfLines={1}>{project.name}</Text>
         </View>
         <TouchableOpacity onPress={handleEditProject} style={styles.editButton}>
-          <Icon name="edit-2" size={20} color={COLORS.text} />
+          <Icon name="edit-2" size={16} color={COLORS.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -235,10 +227,11 @@ export const ProjectDetailScreen: React.FC = () => {
       {/* Delete Project Button */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteProject}>
-          <Icon name="trash-2" size={18} color={COLORS.error} />
+          <Icon name="trash-2" size={16} color={COLORS.error} />
           <Text style={styles.deleteButtonText}>Delete Project</Text>
         </TouchableOpacity>
       </View>
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );
 };
@@ -251,14 +244,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   backButton: {
-    padding: 4,
-    marginRight: 12,
+    padding: SPACING.xs,
+    marginRight: SPACING.md,
   },
   headerCenter: {
     flex: 1,
@@ -266,36 +259,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   projectIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: SPACING.sm,
   },
   projectIconText: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
+    color: COLORS.textMuted,
+    fontWeight: '400',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
+    fontWeight: '400',
     flex: 1,
   },
   editButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   projectInfo: {
-    padding: 16,
+    padding: SPACING.lg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   projectDescription: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
-    lineHeight: 20,
-    marginBottom: 12,
+    lineHeight: 18,
+    marginBottom: SPACING.md,
   },
   projectStats: {
     flexDirection: 'row',
@@ -303,63 +298,68 @@ const styles = StyleSheet.create({
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   statText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
+    fontWeight: '400',
   },
   newChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
     borderRadius: 6,
-    gap: 4,
+    gap: SPACING.xs,
   },
   newChatButtonDisabled: {
-    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    opacity: 0.5,
   },
   newChatText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
+    fontWeight: '400',
     color: COLORS.text,
   },
   newChatTextDisabled: {
     color: COLORS.textMuted,
   },
   chatList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACING.lg,
   },
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    borderRadius: 6,
+    marginBottom: SPACING.sm,
   },
   chatIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primary + '20',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: SPACING.md,
   },
   chatContent: {
     flex: 1,
@@ -368,48 +368,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: SPACING.xs,
   },
   chatTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.text,
+    ...TYPOGRAPHY.body,
+    fontWeight: '400',
     flex: 1,
-    marginRight: 8,
+    marginRight: SPACING.sm,
   },
   chatDate: {
-    fontSize: 11,
+    ...TYPOGRAPHY.labelSmall,
     color: COLORS.textMuted,
   },
   chatPreview: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   emptyChats: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: SPACING.xxl,
   },
   emptyChatsText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginTop: 12,
-    marginBottom: 16,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   startChatButton: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: 6,
   },
   startChatText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   footer: {
-    padding: 16,
+    padding: SPACING.lg,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
@@ -417,13 +418,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
-    gap: 8,
+    padding: SPACING.md,
+    gap: SPACING.sm,
   },
   deleteButtonText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.error,
-    fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   errorContainer: {
     flex: 1,
@@ -431,13 +432,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   errorLink: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '500',
+    fontWeight: '400',
   },
 });

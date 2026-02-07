@@ -290,6 +290,7 @@ export type BackgroundDownloadStatus =
 export interface BackgroundDownloadInfo {
   downloadId: number;
   fileName: string;
+  title?: string;
   modelId: string;
   status: BackgroundDownloadStatus;
   bytesDownloaded: number;

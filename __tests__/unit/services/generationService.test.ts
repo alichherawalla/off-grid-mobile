@@ -16,6 +16,7 @@ import { createMessage, createDownloadedModel } from '../../utils/factories';
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(),
+    isCurrentlyGenerating: jest.fn(),
     generateResponse: jest.fn(),
     stopGeneration: jest.fn(),
     getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
@@ -56,6 +57,7 @@ describe('generationService', () => {
 
     // Re-setup mocks after clearAllMocks
     mockedLlmService.isModelLoaded.mockReturnValue(true);
+    mockedLlmService.isCurrentlyGenerating.mockReturnValue(false);
     mockedLlmService.stopGeneration.mockResolvedValue(undefined);
     mockedLlmService.getGpuInfo.mockReturnValue({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 });
     mockedLlmService.getPerformanceStats.mockReturnValue({

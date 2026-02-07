@@ -4,13 +4,19 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../components';
-import { COLORS } from '../constants';
+import Icon from 'react-native-vector-icons/Feather';
+import { Button, CustomAlert } from '../components';
+import {
+  showAlert,
+  hideAlert,
+  initialAlertState,
+  type AlertState,
+} from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 
@@ -22,6 +28,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [passphrase, setPassphrase] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     failedAttempts,
@@ -48,7 +55,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
   const handleUnlock = useCallback(async () => {
     if (!passphrase.trim()) {
-      Alert.alert('Error', 'Please enter your passphrase');
+      setAlertState(showAlert('Error', 'Please enter your passphrase'));
       return;
     }
 
@@ -70,22 +77,26 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         setPassphrase('');
 
         if (isLockedOut) {
-          Alert.alert(
-            'Too Many Attempts',
-            'You have been locked out for 5 minutes due to too many failed attempts.'
+          setAlertState(
+            showAlert(
+              'Too Many Attempts',
+              'You have been locked out for 5 minutes due to too many failed attempts.'
+            )
           );
         } else {
           const remaining = 5 - (failedAttempts + 1);
-          Alert.alert(
-            'Incorrect Passphrase',
-            remaining > 0
-              ? `${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`
-              : 'Incorrect passphrase.'
+          setAlertState(
+            showAlert(
+              'Incorrect Passphrase',
+              remaining > 0
+                ? `${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`
+                : 'Incorrect passphrase.'
+            )
           );
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to verify passphrase');
+      setAlertState(showAlert('Error', 'Failed to verify passphrase'));
     } finally {
       setIsVerifying(false);
     }
@@ -106,7 +117,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         style={styles.content}
       >
         <View style={styles.header}>
-          <Text style={styles.lockIcon}>🔒</Text>
+          <View style={styles.lockIconContainer}>
+            <Icon name="lock" size={48} color={COLORS.primary} />
+          </View>
           <Text style={styles.title}>App Locked</Text>
           <Text style={styles.subtitle}>
             Enter your passphrase to unlock
@@ -150,12 +163,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         )}
 
         <View style={styles.footer}>
-          <Text style={styles.footerIcon}>🛡️</Text>
+          <Icon name="shield" size={20} color={COLORS.textMuted} />
           <Text style={styles.footerText}>
             Your data is protected and stored locally
           </Text>
         </View>
       </KeyboardAvoidingView>
+
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -172,73 +193,79 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xxl,
   },
-  lockIcon: {
-    fontSize: 64,
-    marginBottom: 16,
+  lockIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h1,
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   subtitle: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
   inputContainer: {
-    marginBottom: 40,
+    marginBottom: SPACING.xxl,
   },
   input: {
+    ...TYPOGRAPHY.body,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.lg,
     color: COLORS.text,
-    fontSize: 18,
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
     textAlign: 'center',
   },
   unlockButton: {
-    marginTop: 8,
+    marginTop: SPACING.sm,
   },
   attemptsText: {
+    ...TYPOGRAPHY.body,
     textAlign: 'center',
     color: COLORS.warning,
-    fontSize: 14,
-    marginTop: 12,
+    marginTop: SPACING.md,
   },
   lockoutContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xxl,
   },
   lockoutText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.error,
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   lockoutTimer: {
+    ...TYPOGRAPHY.display,
     fontSize: 48,
-    fontWeight: 'bold',
+    fontWeight: '200' as const,
     color: COLORS.text,
-    marginBottom: 8,
+    marginBottom: SPACING.sm,
   },
   lockoutHint: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   footer: {
     alignItems: 'center',
     opacity: 0.7,
-  },
-  footerIcon: {
-    fontSize: 24,
-    marginBottom: 8,
+    gap: SPACING.sm,
   },
   footerText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     textAlign: 'center',
   },

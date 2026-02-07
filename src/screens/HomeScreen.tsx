@@ -12,8 +12,9 @@ import {
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { Button, Card, CustomAlert, AlertState, initialAlertState, showAlert, hideAlert } from '../components';
-import { COLORS } from '../constants';
+import { Button, Card, CustomAlert, initialAlertState, showAlert, hideAlert } from '../components';
+import type { AlertState } from '../components';
+import { COLORS, FONTS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
@@ -822,8 +823,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   modelsRow: {
@@ -844,27 +844,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modelCardLabel: {
+    ...TYPOGRAPHY.labelSmall,
     flex: 1,
-    fontSize: 12,
     color: COLORS.textMuted,
-    fontWeight: '500',
+    textTransform: 'uppercase',
   },
   modelCardName: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
   },
   modelCardMeta: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: 3,
   },
   modelCardEmpty: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textMuted,
   },
   modelCardLoading: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.primary,
     marginTop: 2,
   },
@@ -882,10 +881,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   memoryTitle: {
+    ...TYPOGRAPHY.meta,
     flex: 1,
-    fontSize: 12,
     color: COLORS.textMuted,
-    fontWeight: '500',
   },
   refreshButton: {
     padding: 4,
@@ -897,14 +895,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   memoryModelName: {
+    ...TYPOGRAPHY.bodySmall,
     flex: 1,
-    fontSize: 13,
     color: COLORS.text,
   },
   memoryModelSize: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
+    ...TYPOGRAPHY.h3,
+    color: COLORS.text,
   },
   memoryTotalRow: {
     flexDirection: 'row',
@@ -916,19 +913,18 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   memoryTotalLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.labelSmall,
     color: COLORS.textMuted,
+    textTransform: 'uppercase',
   },
   memoryTotalValue: {
-    fontSize: 13,
-    color: COLORS.warning,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    color: COLORS.text,
   },
   memoryWarningText: {
-    fontSize: 11,
-    color: COLORS.warning,
+    ...TYPOGRAPHY.meta,
+    color: COLORS.textMuted,
     marginTop: 6,
-    fontStyle: 'italic',
   },
   ejectAllButton: {
     flexDirection: 'row',
@@ -963,12 +959,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   galleryCardTitle: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     fontWeight: '600',
     color: COLORS.text,
   },
   galleryCardMeta: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -979,7 +975,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   setupText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
     textAlign: 'center',
   },
@@ -993,12 +989,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
   },
   seeAll: {
-    fontSize: 14,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   conversationItem: {
@@ -1013,14 +1008,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   conversationTitle: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
   },
   conversationMeta: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: 3,
   },
   deleteAction: {
     backgroundColor: COLORS.error,
@@ -1042,14 +1036,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...TYPOGRAPHY.display,
     color: COLORS.text,
   },
   statLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.labelSmall,
     color: COLORS.textMuted,
-    marginTop: 2,
+    marginTop: SPACING.xs,
+    textTransform: 'uppercase',
   },
   statDivider: {
     width: 1,
@@ -1076,8 +1070,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   modalScroll: {
@@ -1098,17 +1091,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickerItemName: {
+    ...TYPOGRAPHY.body,
     fontSize: 15,
     fontWeight: '500',
     color: COLORS.text,
   },
   pickerItemMeta: {
-    fontSize: 13,
+    ...TYPOGRAPHY.h3,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   pickerItemMemory: {
-    fontSize: 11,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
@@ -1131,7 +1125,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   unloadButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.error,
   },
   emptyPicker: {
@@ -1140,7 +1134,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyPickerText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
   },
   browseMoreButton: {
@@ -1153,7 +1147,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   browseMoreText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
   },
   // Loading overlay styles
@@ -1165,28 +1159,27 @@ const styles = StyleSheet.create({
   },
   loadingCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 32,
+    borderRadius: 8,
+    padding: SPACING.xxl,
     alignItems: 'center',
     marginHorizontal: 40,
     maxWidth: 300,
   },
   loadingTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
-    marginTop: 20,
+    marginTop: SPACING.xl,
   },
   loadingModelName: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    marginTop: 8,
+    marginTop: SPACING.sm,
     textAlign: 'center',
   },
   loadingHint: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginTop: 16,
+    marginTop: SPACING.lg,
     textAlign: 'center',
     lineHeight: 18,
   },

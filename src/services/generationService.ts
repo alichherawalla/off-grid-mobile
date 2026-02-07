@@ -81,8 +81,18 @@ class GenerationService {
     }
 
     // Ensure model is loaded
-    if (!llmService.isModelLoaded()) {
+    const isModelLoaded = llmService.isModelLoaded();
+    const isLlmGenerating = llmService.isCurrentlyGenerating();
+    console.log('[GenerationService] 🟢 Starting text generation - Model loaded:', isModelLoaded, 'LLM generating:', isLlmGenerating);
+
+    if (!isModelLoaded) {
+      console.error('[GenerationService] ❌ No model loaded');
       throw new Error('No model loaded');
+    }
+
+    if (isLlmGenerating) {
+      console.error('[GenerationService] ❌ LLM service is currently generating, cannot start');
+      throw new Error('LLM service busy - try again in a moment');
     }
 
     this.abortRequested = false;
@@ -100,6 +110,7 @@ class GenerationService {
     let firstTokenReceived = false;
 
     try {
+      console.log('[GenerationService] 📤 Calling llmService.generateResponse...');
       await llmService.generateResponse(
         messages,
         // onStream
@@ -124,6 +135,7 @@ class GenerationService {
         },
         // onComplete
         () => {
+          console.log('[GenerationService] ✅ Text generation completed');
           if (this.abortRequested) {
             chatStore.clearStreamingMessage();
           } else {
@@ -154,7 +166,8 @@ class GenerationService {
         },
         // onError
         (error) => {
-          console.error('[GenerationService] Generation error:', error);
+          console.error('[GenerationService] ❌ Generation error:', error);
+          console.error('[GenerationService] Error message:', error?.message || 'Unknown');
           chatStore.clearStreamingMessage();
           this.resetState();
         },

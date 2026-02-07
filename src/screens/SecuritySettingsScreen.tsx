@@ -6,14 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAuthStore } from '../stores';
 import { authService } from '../services';
 import { PassphraseSetupScreen } from './PassphraseSetupScreen';
@@ -22,6 +22,7 @@ export const SecuritySettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     isEnabled: authEnabled,
@@ -30,7 +31,7 @@ export const SecuritySettingsScreen: React.FC = () => {
 
   const handleTogglePassphrase = async () => {
     if (authEnabled) {
-      Alert.alert(
+      setAlertState(showAlert(
         'Disable Passphrase Lock',
         'Are you sure you want to disable passphrase protection?',
         [
@@ -39,12 +40,13 @@ export const SecuritySettingsScreen: React.FC = () => {
             text: 'Disable',
             style: 'destructive',
             onPress: async () => {
+              setAlertState(hideAlert());
               await authService.removePassphrase();
               setAuthEnabled(false);
             },
           },
         ]
-      );
+      ));
     } else {
       setIsChangingPassphrase(false);
       setShowPassphraseSetup(true);
@@ -63,10 +65,9 @@ export const SecuritySettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Security</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -115,6 +116,13 @@ export const SecuritySettingsScreen: React.FC = () => {
           onCancel={() => setShowPassphraseSetup(false)}
         />
       </Modal>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -127,38 +135,37 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: SPACING.md,
   },
   backButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    flex: 1,
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 16,
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    letterSpacing: 0.3,
   },
   settingRow: {
     flexDirection: 'row',
@@ -169,40 +176,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   settingHint: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     marginTop: 2,
+    lineHeight: 18,
   },
   changeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.surfaceLight,
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    gap: 8,
+    gap: SPACING.sm,
   },
   changeButtonText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
-    backgroundColor: COLORS.surfaceLight,
+    gap: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   infoText: {
+    ...TYPOGRAPHY.bodySmall,
     flex: 1,
-    fontSize: 13,
     color: COLORS.textMuted,
     lineHeight: 18,
   },

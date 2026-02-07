@@ -5,14 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { hardwareService, modelManager } from '../services';
 
@@ -29,6 +29,7 @@ export const StorageSettingsScreen: React.FC = () => {
   const [orphanedFiles, setOrphanedFiles] = useState<OrphanedFile[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { downloadedModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads } = useAppStore();
   const { conversations } = useChatStore();
@@ -63,7 +64,7 @@ export const StorageSettingsScreen: React.FC = () => {
   }, []);
 
   const handleDeleteOrphanedFile = useCallback((file: OrphanedFile) => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Orphaned File',
       `Delete "${file.name}"?\n\nThis will free up ${hardwareService.formatBytes(file.size)}.`,
       [
@@ -72,27 +73,28 @@ export const StorageSettingsScreen: React.FC = () => {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             setIsDeleting(file.path);
             try {
               await modelManager.deleteOrphanedFile(file.path);
               setOrphanedFiles(prev => prev.filter(f => f.path !== file.path));
               loadStorageInfo();
             } catch (error) {
-              Alert.alert('Error', 'Failed to delete file');
+              setAlertState(showAlert('Error', 'Failed to delete file'));
             } finally {
               setIsDeleting(null);
             }
           },
         },
       ]
-    );
+    ));
   }, []);
 
   const handleDeleteAllOrphaned = useCallback(() => {
     if (orphanedFiles.length === 0) return;
 
     const totalSize = orphanedFiles.reduce((sum, f) => sum + f.size, 0);
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete All Orphaned Files',
       `Delete ${orphanedFiles.length} orphaned file(s)?\n\nThis will free up ${hardwareService.formatBytes(totalSize)}.`,
       [
@@ -101,6 +103,7 @@ export const StorageSettingsScreen: React.FC = () => {
           text: 'Delete All',
           style: 'destructive',
           onPress: async () => {
+            setAlertState(hideAlert());
             setIsScanning(true);
             for (const file of orphanedFiles) {
               try {
@@ -115,7 +118,7 @@ export const StorageSettingsScreen: React.FC = () => {
           },
         },
       ]
-    );
+    ));
   }, [orphanedFiles]);
 
   const handleClearStaleDownload = useCallback((downloadId: number) => {
@@ -123,7 +126,7 @@ export const StorageSettingsScreen: React.FC = () => {
   }, [setBackgroundDownload]);
 
   const handleClearAllStaleDownloads = useCallback(() => {
-    Alert.alert(
+    setAlertState(showAlert(
       'Clear Stale Downloads',
       `Clear ${staleDownloads.length} stale download entry(s)?`,
       [
@@ -132,13 +135,14 @@ export const StorageSettingsScreen: React.FC = () => {
           text: 'Clear All',
           style: 'destructive',
           onPress: () => {
+            setAlertState(hideAlert());
             for (const [downloadId] of staleDownloads) {
               setBackgroundDownload(Number(downloadId), null);
             }
           },
         },
       ]
-    );
+    ));
   }, [staleDownloads, setBackgroundDownload]);
 
   const totalStorage = storageUsed + availableStorage;
@@ -151,10 +155,9 @@ export const StorageSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Storage</Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
@@ -321,6 +324,13 @@ export const StorageSettingsScreen: React.FC = () => {
           To free up space, you can delete models from the Models tab.
         </Text>
       </ScrollView>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </SafeAreaView>
   );
 };
@@ -333,45 +343,44 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    gap: SPACING.md,
   },
   backButton: {
-    padding: 4,
+    padding: SPACING.xs,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
+    flex: 1,
     color: COLORS.text,
-  },
-  placeholder: {
-    width: 32,
   },
   scrollView: {
     flex: 1,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 16,
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase',
+    color: COLORS.textMuted,
+    marginBottom: SPACING.md,
+    letterSpacing: 0.3,
   },
   storageBar: {
     height: 12,
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 6,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   storageUsed: {
     height: '100%',
@@ -385,22 +394,22 @@ const styles = StyleSheet.create({
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACING.xs,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   legendText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textSecondary,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -410,46 +419,43 @@ const styles = StyleSheet.create({
   infoRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SPACING.sm,
   },
   infoLabel: {
-    fontSize: 15,
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   infoValue: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
   },
   modelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   modelInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   modelName: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   modelMeta: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   modelSize: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   hint: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 18,
@@ -458,69 +464,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: SPACING.md,
   },
   clearAllButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   clearAllText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   scanButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   warningText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    marginBottom: 12,
+    marginBottom: SPACING.md,
     lineHeight: 18,
   },
   emptyText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
     textAlign: 'center',
-    paddingVertical: 16,
+    paddingVertical: SPACING.lg,
   },
   orphanedRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   orphanedInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   orphanedName: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   orphanedMeta: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginTop: 2,
   },
   deleteButton: {
-    padding: 8,
+    padding: SPACING.sm,
   },
   deleteAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingVertical: 12,
-    backgroundColor: COLORS.error + '15',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.md,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.error,
     borderRadius: 8,
   },
   deleteAllText: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...TYPOGRAPHY.body,
     color: COLORS.error,
   },
 });

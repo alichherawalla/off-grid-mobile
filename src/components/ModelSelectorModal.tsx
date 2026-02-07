@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { DownloadedModel, ONNXImageModel } from '../types';
 import { activeModelService, hardwareService } from '../services';
@@ -154,18 +154,18 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               <Icon
                 name="image"
                 size={16}
-                color={activeTab === 'image' ? COLORS.secondary : COLORS.textMuted}
+                color={activeTab === 'image' ? COLORS.info : COLORS.textMuted}
               />
               <Text style={[
                 styles.tabText,
                 activeTab === 'image' && styles.tabTextActive,
-                activeTab === 'image' && { color: COLORS.secondary }
+                activeTab === 'image' && { color: COLORS.info }
               ]}>
                 Image
               </Text>
               {hasLoadedImageModel && (
-                <View style={[styles.tabBadge, { backgroundColor: COLORS.secondary + '30' }]}>
-                  <View style={[styles.tabBadgeDot, { backgroundColor: COLORS.secondary }]} />
+                <View style={[styles.tabBadge, { backgroundColor: COLORS.info + '30' }]}>
+                  <View style={[styles.tabBadgeDot, { backgroundColor: COLORS.info }]} />
                 </View>
               )}
             </TouchableOpacity>
@@ -254,7 +254,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
                               <>
                                 <Text style={styles.metaSeparator}>•</Text>
                                 <View style={styles.visionBadge}>
-                                  <Icon name="eye" size={10} color={COLORS.secondary} />
+                                  <Icon name="eye" size={10} color={COLORS.info} />
                                   <Text style={styles.visionBadgeText}>Vision</Text>
                                 </View>
                               </>
@@ -276,7 +276,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               <>
                 {/* Currently Loaded Image Model */}
                 {hasLoadedImageModel && (
-                  <View style={[styles.loadedSection, { borderColor: COLORS.secondary + '40' }]}>
+                  <View style={[styles.loadedSection, { borderColor: COLORS.info + '40' }]}>
                     <View style={styles.loadedHeader}>
                       <Icon name="check-circle" size={14} color={COLORS.success} />
                       <Text style={styles.loadedLabel}>Currently Loaded</Text>
@@ -338,7 +338,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
                           <Text
                             style={[
                               styles.modelName,
-                              isCurrent && { color: COLORS.secondary }
+                              isCurrent && { color: COLORS.info }
                             ]}
                             numberOfLines={1}
                           >
@@ -355,7 +355,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
                           </View>
                         </View>
                         {isCurrent && (
-                          <View style={[styles.checkmark, { backgroundColor: COLORS.secondary }]}>
+                          <View style={[styles.checkmark, { backgroundColor: COLORS.info }]}>
                             <Icon name="check" size={16} color={COLORS.background} />
                           </View>
                         )}
@@ -393,14 +393,12 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
   },
   closeButton: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   disabled: {
     opacity: 0.5,
@@ -427,8 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary + '20',
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.textMuted,
   },
   tabTextActive: {
@@ -457,9 +454,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   loadingText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.primary,
-    fontWeight: '500',
   },
   content: {
     padding: 16,
@@ -479,11 +475,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   loadedLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
     color: COLORS.success,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   loadedModelItem: {
     flexDirection: 'row',
@@ -493,13 +487,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   loadedModelName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
     marginBottom: 2,
   },
   loadedModelMeta: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   unloadButton: {
@@ -512,17 +505,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   unloadButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.error,
   },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
     marginBottom: 12,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   emptyState: {
     alignItems: 'center',
@@ -530,12 +520,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   emptyText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
   },
@@ -553,16 +542,15 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   modelItemSelectedImage: {
-    backgroundColor: COLORS.secondary + '15',
+    backgroundColor: COLORS.info + '15',
     borderWidth: 1,
-    borderColor: COLORS.secondary,
+    borderColor: COLORS.info,
   },
   modelInfo: {
     flex: 1,
   },
   modelName: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
     marginBottom: 4,
   },
@@ -574,36 +562,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modelSize: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   metaSeparator: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     marginHorizontal: 6,
   },
   modelQuant: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
-    fontFamily: 'monospace',
   },
   modelStyle: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
   },
   visionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.secondary + '20',
+    backgroundColor: COLORS.info + '20',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     gap: 4,
   },
   visionBadgeText: {
-    fontSize: 11,
-    color: COLORS.secondary,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
+    color: COLORS.info,
   },
   checkmark: {
     width: 28,

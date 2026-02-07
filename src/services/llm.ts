@@ -406,6 +406,9 @@ class LLMService {
       const hasImages = managedMessages.some(m => m.attachments?.some(a => a.type === 'image'));
       const useMultimodal = hasImages && this.multimodalInitialized;
 
+      console.log('[LLM] 🖼️ Generation mode:', useMultimodal ? 'VISION (multimodal)' : 'TEXT-ONLY');
+      console.log('[LLM] Has images:', hasImages, 'Multimodal initialized:', this.multimodalInitialized);
+
       let fullResponse = '';
       let firstTokenReceived = false;
 
@@ -431,7 +434,10 @@ class LLMService {
 
       if (useMultimodal) {
         // Convert to OpenAI-compatible message format with images
+        console.log('[LLM] Converting messages for vision mode...');
         const oaiMessages = this.convertToOAIMessages(managedMessages);
+        console.log('[LLM] Vision messages prepared, image count:',
+          oaiMessages.filter(m => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')).length);
         completionParams = {
           messages: oaiMessages,
           n_predict: maxTokens,
@@ -456,6 +462,9 @@ class LLMService {
       }
 
       // Use streaming completion
+      console.log('[LLM] 🚀 Calling context.completion... (mode:', useMultimodal ? 'vision' : 'text', ')');
+      console.log('[LLM] Waiting for first token...');
+
       await this.context.completion(
         completionParams,
         (data) => {
@@ -467,6 +476,7 @@ class LLMService {
             if (!firstTokenReceived) {
               firstTokenReceived = true;
               firstTokenTime = Date.now() - startTime;
+              console.log('[LLM] ✅ First token received after', firstTokenTime, 'ms');
             }
             tokenCount++;
             fullResponse += data.token;
@@ -474,6 +484,8 @@ class LLMService {
           }
         }
       );
+
+      console.log('[LLM] 🏁 context.completion returned');
 
       // Log and store performance stats
       const elapsed = (Date.now() - startTime) / 1000;

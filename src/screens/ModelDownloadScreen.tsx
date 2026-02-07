@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, ModelCard } from '../components';
-import { COLORS, RECOMMENDED_MODELS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, RECOMMENDED_MODELS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { hardwareService, huggingFaceService, modelManager } from '../services';
 import { ModelFile, DownloadedModel } from '../types';
@@ -28,6 +28,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<ModelFile | null>(null);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     deviceInfo,
@@ -83,7 +84,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
       setModelFiles(filesMap);
     } catch (error) {
       console.error('Error initializing:', error);
-      Alert.alert('Error', 'Failed to initialize. Please try again.');
+      setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +99,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
         const files = await huggingFaceService.getModelFiles(modelId);
         setModelFiles((prev) => ({ ...prev, [modelId]: files }));
       } catch (error) {
-        Alert.alert('Error', 'Failed to fetch model files.');
+        setAlertState(showAlert('Error', 'Failed to fetch model files.'));
       }
     }
   };
@@ -120,7 +121,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
       setActiveModelId(model.id);
 
       // Navigate to home/chat
-      Alert.alert(
+      setAlertState(showAlert(
         'Download Complete!',
         `${model.name} is ready to use. Let's start chatting!`,
         [
@@ -129,11 +130,11 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
             onPress: () => navigation.replace('Main'),
           },
         ]
-      );
+      ));
     };
     const onError = (error: Error) => {
       setDownloadProgress(downloadKey, null);
-      Alert.alert('Download Failed', error.message);
+      setAlertState(showAlert('Download Failed', error.message));
     };
 
     try {
@@ -143,7 +144,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
         await modelManager.downloadModel(modelId, file, onProgress, onComplete, onError);
       }
     } catch (error) {
-      Alert.alert('Download Failed', (error as Error).message);
+      setAlertState(showAlert('Download Failed', (error as Error).message));
     }
   };
 
@@ -243,6 +244,13 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
           testID="model-download-skip"
         />
       </View>
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
       </View>
     </SafeAreaView>
   );
@@ -260,8 +268,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
-    fontSize: 16,
   },
   scrollView: {
     flex: 1,
@@ -274,13 +282,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     lineHeight: 24,
   },
@@ -293,18 +300,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   deviceLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     marginBottom: 4,
   },
   deviceValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     marginBottom: 16,
   },
@@ -314,13 +319,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.warning,
   },
   warningTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.warning,
     marginBottom: 8,
   },
   warningText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     lineHeight: 20,
   },
