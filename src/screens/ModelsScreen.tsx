@@ -6,7 +6,6 @@ import {
   FlatList,
   TextInput,
   ActivityIndicator,
-  Alert,
   RefreshControl,
   TouchableOpacity,
   ScrollView,
@@ -21,7 +20,8 @@ import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { Card, ModelCard, Button } from '../components';
-import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS } from '../constants';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
@@ -78,6 +78,7 @@ export const ModelsScreen: React.FC = () => {
   const [credibilityFilter, setCredibilityFilter] = useState<CredibilityFilter>('all');
   const [modelTypeFilter, setModelTypeFilter] = useState<ModelTypeFilter>('all');
   const [showCompatibleOnly, setShowCompatibleOnly] = useState(false);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
     downloadedModels,
@@ -181,7 +182,7 @@ export const ModelsScreen: React.FC = () => {
       });
       setSearchResults(results);
     } catch (error) {
-      Alert.alert('Search Error', 'Failed to search models. Please try again.');
+      setAlertState(showAlert('Search Error', 'Failed to search models. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -201,7 +202,7 @@ export const ModelsScreen: React.FC = () => {
   // Download from HuggingFace (multi-file download)
   const handleDownloadHuggingFaceModel = async (modelInfo: ImageModelDescriptor) => {
     if (!modelInfo.huggingFaceRepo || !modelInfo.huggingFaceFiles) {
-      Alert.alert('Error', 'Invalid HuggingFace model configuration');
+      setAlertState(showAlert('Error', 'Invalid HuggingFace model configuration'));
       return;
     }
 
@@ -282,10 +283,10 @@ export const ModelsScreen: React.FC = () => {
       }
 
       setImageModelProgress(1);
-      Alert.alert('Success', `${modelInfo.name} downloaded successfully!`);
+      setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
       console.error('[HuggingFace] Download error:', error);
-      Alert.alert('Download Failed', error?.message || 'Unknown error');
+      setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
       // Clean up partial download
       try {
         const modelDir = `${modelManager.getImageModelsDirectory()}/${modelInfo.id}`;
@@ -304,7 +305,7 @@ export const ModelsScreen: React.FC = () => {
   // Image model download/management - uses native background download service
   const handleDownloadImageModel = async (modelInfo: ImageModelDescriptor) => {
     if (imageModelDownloading) {
-      Alert.alert('Download in Progress', 'Please wait for the current download to complete.');
+      setAlertState(showAlert('Download in Progress', 'Please wait for the current download to complete.'));
       return;
     }
 
@@ -410,9 +411,9 @@ export const ModelsScreen: React.FC = () => {
           }
 
           setImageModelProgress(1);
-          Alert.alert('Success', `${modelInfo.name} downloaded successfully!`);
+          setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
         } catch (extractError: any) {
-          Alert.alert('Extraction Failed', extractError?.message || 'Failed to extract model');
+          setAlertState(showAlert('Extraction Failed', extractError?.message || 'Failed to extract model'));
         } finally {
           setImageModelDownloading(null);
           setImageModelProgress(0);
@@ -425,7 +426,7 @@ export const ModelsScreen: React.FC = () => {
         unsubProgress();
         unsubComplete();
         unsubError();
-        Alert.alert('Download Failed', event.reason || 'Unknown error');
+        setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
         setImageModelDownloading(null);
         setImageModelProgress(0);
         setImageModelDownloadId(null);
@@ -435,7 +436,7 @@ export const ModelsScreen: React.FC = () => {
       backgroundDownloadService.startProgressPolling();
 
     } catch (error: any) {
-      Alert.alert('Download Failed', error?.message || 'Unknown error');
+      setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
       setImageModelDownloading(null);
       setImageModelProgress(0);
       setImageModelDownloadId(null);
@@ -511,9 +512,9 @@ export const ModelsScreen: React.FC = () => {
       }
 
       setImageModelProgress(1);
-      Alert.alert('Success', `${modelInfo.name} downloaded successfully!`);
+      setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
-      Alert.alert('Download Failed', error?.message || 'Unknown error');
+      setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
     } finally {
       setImageModelDownloading(null);
       setImageModelProgress(0);
@@ -524,7 +525,7 @@ export const ModelsScreen: React.FC = () => {
     const model = downloadedImageModels.find(m => m.id === modelId);
     if (!model) return;
 
-    Alert.alert(
+    setAlertState(showAlert(
       'Delete Image Model',
       `Are you sure you want to delete ${model.name}?`,
       [
@@ -541,12 +542,12 @@ export const ModelsScreen: React.FC = () => {
               await modelManager.deleteImageModel(modelId);
               removeDownloadedImageModel(modelId);
             } catch (error: any) {
-              Alert.alert('Error', `Failed to delete: ${error?.message}`);
+              setAlertState(showAlert('Error', `Failed to delete: ${error?.message}`));
             }
           },
         },
       ]
-    );
+    ));
   };
 
   const handleSetActiveImageModel = async (modelId: string) => {
@@ -561,7 +562,7 @@ export const ModelsScreen: React.FC = () => {
       const files = await huggingFaceService.getModelFiles(model.id);
       setModelFiles(files);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load model files.');
+      setAlertState(showAlert('Error', 'Failed to load model files.'));
       setModelFiles([]);
     } finally {
       setIsLoadingFiles(false);
@@ -581,11 +582,11 @@ export const ModelsScreen: React.FC = () => {
     const onComplete = (downloadedModel: DownloadedModel) => {
       setDownloadProgress(downloadKey, null);
       addDownloadedModel(downloadedModel);
-      Alert.alert('Success', `${model.name} downloaded successfully!`);
+      setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
     };
     const onError = (error: Error) => {
       setDownloadProgress(downloadKey, null);
-      Alert.alert('Download Failed', error.message);
+      setAlertState(showAlert('Download Failed', error.message));
     };
 
     try {
@@ -595,7 +596,7 @@ export const ModelsScreen: React.FC = () => {
         await modelManager.downloadModel(model.id, file, onProgress, onComplete, onError);
       }
     } catch (error) {
-      Alert.alert('Download Failed', (error as Error).message);
+      setAlertState(showAlert('Download Failed', (error as Error).message));
     }
   };
 
@@ -819,6 +820,7 @@ export const ModelsScreen: React.FC = () => {
           />
         )}
         </View>
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
       </SafeAreaView>
     );
   }
@@ -1187,6 +1189,7 @@ export const ModelsScreen: React.FC = () => {
         )
       }
       </View>
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView >
   );
 };
@@ -1217,8 +1220,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     flex: 1,
   },
@@ -1239,8 +1241,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   downloadBadgeText: {
-    fontSize: 11,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
   tabBar: {
@@ -1265,8 +1266,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   tabTextActive: {
@@ -1288,7 +1288,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     color: COLORS.text,
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
   },
   filtersSection: {
     marginBottom: 8,
@@ -1305,15 +1305,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   toggleLabel: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    fontWeight: '500',
   },
   filterContainer: {
     marginBottom: 8,
   },
   filterSectionLabel: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
     paddingHorizontal: 16,
     marginBottom: 6,
@@ -1323,9 +1322,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 8,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1335,8 +1334,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   filterChipText: {
-    fontSize: 13,
-    fontWeight: '500',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   filterChipTextActive: {
@@ -1350,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: COLORS.textSecondary,
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1367,7 +1365,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   modelAuthor: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
   },
   credibilityBadge: {
@@ -1379,15 +1377,13 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   credibilityIcon: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
   },
   credibilityText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.meta,
   },
   modelDescription: {
-    fontSize: 16,
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     marginBottom: 12,
   },
@@ -1396,18 +1392,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   statText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h3,
     color: COLORS.text,
     paddingHorizontal: 16,
     marginBottom: 4,
   },
   sectionSubtitle: {
-    fontSize: 14,
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     paddingHorizontal: 16,
     marginBottom: 16,
@@ -1427,13 +1422,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   imageSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h1,
     color: COLORS.text,
     marginBottom: 4,
   },
   imageSectionSubtitle: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     marginBottom: 16,
   },
@@ -1453,31 +1447,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   imageModelName: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
     marginBottom: 4,
   },
   imageModelDesc: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     marginBottom: 4,
   },
   imageModelSize: {
-    fontSize: 12,
+    ...TYPOGRAPHY.meta,
     color: COLORS.textMuted,
   },
   activeBadge: {
-    backgroundColor: COLORS.secondary + '25',
+    backgroundColor: COLORS.info + '25',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     marginLeft: 8,
   },
   activeBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.secondary,
+    ...TYPOGRAPHY.meta,
+    color: COLORS.info,
   },
   imageModelActions: {
     flexDirection: 'row',
@@ -1491,16 +1483,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   setActiveButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.primary,
   },
   deleteImageButton: {
     padding: 8,
   },
   availableTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     marginBottom: 12,
     marginTop: 8,
@@ -1516,8 +1506,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   downloadImageButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
   },
   imageDownloadProgress: {
@@ -1525,7 +1514,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   imageDownloadText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
   },
   imageProgressBar: {
@@ -1541,14 +1530,13 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   allDownloadedText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textMuted,
     textAlign: 'center',
     paddingVertical: 16,
   },
   textModelsSectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...TYPOGRAPHY.h1,
     color: COLORS.text,
     marginBottom: 12,
     marginTop: 8,
@@ -1559,7 +1547,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     color: COLORS.text,
-    fontSize: 15,
+    ...TYPOGRAPHY.h2,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1592,8 +1580,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF990025',
   },
   backendBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
   variantBadge: {
@@ -1603,12 +1590,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   variantBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
     color: COLORS.textSecondary,
   },
   variantHint: {
-    fontSize: 11,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
     marginBottom: 2,
   },
@@ -1625,7 +1611,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hfErrorText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.error,
     textAlign: 'center',
   },
@@ -1636,8 +1622,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   retryButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.primary,
   },
 });

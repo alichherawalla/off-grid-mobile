@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS } from '../constants';
+import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -27,14 +27,6 @@ export const ProjectsScreen: React.FC = () => {
     return conversations.filter((c) => c.projectId === projectId).length;
   };
 
-  // Get color for project
-  const getProjectColor = (project: Project) => {
-    if (project.icon && project.icon.startsWith('#')) {
-      return project.icon;
-    }
-    return COLORS.primary;
-  };
-
   const handleProjectPress = (project: Project) => {
     navigation.navigate('ProjectDetail', { projectId: project.id });
   };
@@ -44,7 +36,6 @@ export const ProjectsScreen: React.FC = () => {
   };
 
   const renderProject = ({ item }: { item: Project }) => {
-    const color = getProjectColor(item);
     const chatCount = getChatCount(item.id);
 
     return (
@@ -52,8 +43,8 @@ export const ProjectsScreen: React.FC = () => {
         style={styles.projectItem}
         onPress={() => handleProjectPress(item)}
       >
-        <View style={[styles.projectIcon, { backgroundColor: color + '30' }]}>
-          <Text style={[styles.projectIconText, { color }]}>
+        <View style={styles.projectIcon}>
+          <Text style={styles.projectIconText}>
             {item.name.charAt(0).toUpperCase()}
           </Text>
         </View>
@@ -65,13 +56,13 @@ export const ProjectsScreen: React.FC = () => {
             </Text>
           ) : null}
           <View style={styles.projectMeta}>
-            <Icon name="message-circle" size={12} color={COLORS.textMuted} />
+            <Icon name="message-circle" size={10} color={COLORS.textMuted} />
             <Text style={styles.projectMetaText}>
               {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
             </Text>
           </View>
         </View>
-        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+        <Icon name="chevron-right" size={14} color={COLORS.textMuted} />
       </TouchableOpacity>
     );
   };
@@ -81,7 +72,7 @@ export const ProjectsScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
         <TouchableOpacity style={styles.newButton} onPress={handleNewProject}>
-          <Icon name="plus" size={20} color={COLORS.text} />
+          <Icon name="plus" size={16} color={COLORS.textSecondary} />
           <Text style={styles.newButtonText}>New</Text>
         </TouchableOpacity>
       </View>
@@ -93,14 +84,14 @@ export const ProjectsScreen: React.FC = () => {
       {projects.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIcon}>
-            <Icon name="folder" size={32} color={COLORS.textMuted} />
+            <Icon name="folder" size={20} color={COLORS.textMuted} />
           </View>
           <Text style={styles.emptyTitle}>No Projects Yet</Text>
           <Text style={styles.emptyText}>
             Create a project to organize your chats by topic, like "Spanish Learning" or "Code Review".
           </Text>
           <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
-            <Icon name="plus" size={18} color={COLORS.text} />
+            <Icon name="plus" size={14} color={COLORS.textSecondary} />
             <Text style={styles.emptyButtonText}>Create Project</Text>
           </TouchableOpacity>
         </View>
@@ -126,124 +117,131 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.h2,
     color: COLORS.text,
   },
   newButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 6,
+    gap: SPACING.xs,
   },
   newButtonText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   subtitle: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    ...TYPOGRAPHY.label,
+    color: COLORS.textMuted,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   list: {
-    padding: 16,
-    paddingTop: 0,
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   projectItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    borderRadius: 6,
+    marginBottom: SPACING.sm,
   },
   projectIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: SPACING.md,
   },
   projectIconText: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
+    color: COLORS.textMuted,
+    fontWeight: '400',
   },
   projectContent: {
     flex: 1,
   },
   projectName: {
-    fontSize: 17,
-    fontWeight: '600',
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
+    fontWeight: '400',
     marginBottom: 2,
   },
   projectDescription: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    ...TYPOGRAPHY.label,
+    color: COLORS.textMuted,
     marginBottom: 4,
   },
   projectMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: SPACING.xs,
   },
   projectMetaText: {
-    fontSize: 12,
+    ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: SPACING.xxl,
   },
   emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 2,
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: SPACING.lg,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 8,
+    ...TYPOGRAPHY.h2,
+    fontWeight: '400',
+    marginBottom: SPACING.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textMuted,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 18,
+    marginBottom: SPACING.xl,
   },
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: 6,
+    gap: SPACING.sm,
   },
   emptyButtonText: {
+    ...TYPOGRAPHY.body,
     color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '400',
   },
 });
