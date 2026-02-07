@@ -264,19 +264,121 @@ export const ONBOARDING_SLIDES = [
   },
 ];
 
-// Colors
+// Fonts
+export const FONTS = {
+  mono: 'Menlo',
+};
+
+// Typography Scale - Centralized font sizes and styles
+export const TYPOGRAPHY = {
+  // Display / Hero numbers
+  display: {
+    fontSize: 22,
+    fontFamily: FONTS.mono,
+    fontWeight: '200' as const,
+    letterSpacing: -0.5,
+  },
+
+  // Headings
+  h1: {
+    fontSize: 24,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+    letterSpacing: -0.5,
+  },
+  h2: {
+    fontSize: 16,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: -0.2,
+  },
+  h3: {
+    fontSize: 13,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: -0.2,
+  },
+
+  // Body text
+  body: {
+    fontSize: 14,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+  },
+  bodySmall: {
+    fontSize: 13,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+  },
+
+  // Labels (whispers)
+  label: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: 0.3,
+  },
+  labelSmall: {
+    fontSize: 9,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+    letterSpacing: 0.3,
+  },
+
+  // Metadata / Details
+  meta: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+  },
+  metaSmall: {
+    fontSize: 9,
+    fontFamily: FONTS.mono,
+    fontWeight: '300' as const,
+  },
+};
+
+// Spacing Scale - Consistent whitespace
+export const SPACING = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+};
+
+// Colors - Monochromatic palette with emerald accent
 export const COLORS = {
-  primary: '#6366F1',
-  primaryDark: '#4F46E5',
-  secondary: '#10B981',
-  background: '#0F172A',
-  surface: '#1E293B',
-  surfaceLight: '#334155',
-  text: '#F8FAFC',
-  textSecondary: '#94A3B8',
-  textMuted: '#64748B',
-  success: '#22C55E',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  border: '#334155',
+  // Primary accent
+  primary: '#34D399',        // emerald - main accent
+  primaryDark: '#10B981',    // darker emerald
+  primaryLight: '#6EE7B7',   // lighter emerald for subtle highlights
+
+  // Backgrounds
+  background: '#0A0A0A',     // pure black base
+  surface: '#141414',        // cards, elevated elements
+  surfaceLight: '#1E1E1E',   // lighter surface for nested elements
+  surfaceHover: '#252525',   // hover state for interactive elements
+
+  // Text hierarchy
+  text: '#FFFFFF',           // pure white - primary text
+  textSecondary: '#B0B0B0',  // medium gray - secondary text
+  textMuted: '#808080',      // muted gray - tertiary text
+  textDisabled: '#4A4A4A',   // very muted - disabled text
+
+  // Borders
+  border: '#1E1E1E',         // default border (same as surfaceLight)
+  borderLight: '#2A2A2A',    // subtle lighter border
+  borderFocus: '#34D399',    // focused/active border (primary)
+
+  // Semantic colors
+  success: '#22C55E',        // green for success states
+  warning: '#F59E0B',        // amber for warnings
+  error: '#EF4444',          // red for errors
+  info: '#3B82F6',           // blue for info
+
+  // Special
+  overlay: 'rgba(0, 0, 0, 0.7)',  // modal/overlay background
+  divider: '#1A1A1A',        // subtle dividers
 };
