@@ -12,13 +12,51 @@ tags:
 
 - launchApp
 
+# Wait for app initialization
+- extendedWaitUntil:
+    notVisible:
+      id: "app-loading"
+    timeout: 30000
+
+# Handle onboarding if shown
+- runFlow:
+    when:
+      visible:
+        text: "Welcome to Local LLM"
+    commands:
+      - tapOn:
+          text: "Skip"
+      - extendedWaitUntil:
+          visible:
+            text: "Skip for Now"
+          timeout: 30000
+      - tapOn:
+          text: "Skip for Now"
+
+# Handle download prompt if shown
+- runFlow:
+    when:
+      visible:
+        text: "Download Your First Model"
+    commands:
+      - tapOn:
+          text: "Skip for Now"
+
 # Wait for home screen
 - extendedWaitUntil:
     visible:
       id: "home-screen"
-    timeout: 10000
+    timeout: 15000
 
-# Wait for new-chat-button (requires model to be loaded)
+# Ensure model is loaded (run setup if needed)
+- runFlow:
+    when:
+      visible:
+        id: "setup-card"
+    commands:
+      - runFlow: 00-setup-model.yaml
+
+# Wait for new-chat-button (model must be loaded)
 - extendedWaitUntil:
     visible:
       id: "new-chat-button"
@@ -37,8 +75,10 @@ tags:
 # Type a test message
 - tapOn:
     id: "chat-input"
-
 - inputText: "Hello, respond with one word: OK"
+
+# Dismiss keyboard so send-button testID can be found
+- hideKeyboard
 
 # Send the message
 - tapOn:
