@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,7 @@ export const DownloadManagerScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const cancelledKeysRef = useRef<Set<string>>(new Set());
 
   const {
     downloadedModels,
@@ -72,7 +73,9 @@ export const DownloadManagerScreen: React.FC = () => {
     if (Platform.OS !== 'android') return;
 
     const unsubProgress = backgroundDownloadService.onAnyProgress((event) => {
-      setDownloadProgress(`${event.modelId}/${event.fileName}`, {
+      const key = `${event.modelId}/${event.fileName}`;
+      if (cancelledKeysRef.current.has(key)) return;
+      setDownloadProgress(key, {
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0,
         bytesDownloaded: event.bytesDownloaded,
         totalBytes: event.totalBytes,
@@ -131,20 +134,37 @@ export const DownloadManagerScreen: React.FC = () => {
           onPress: async () => {
             setAlertState(hideAlert());
             try {
-              // Clear from progress tracking immediately (optimistic update)
+              // Mark as cancelled so polling events don't re-add it
               const key = `${item.modelId}/${item.fileName}`;
+              cancelledKeysRef.current.add(key);
+
+              // Clear from progress tracking immediately (optimistic update)
               setDownloadProgress(key, null);
 
-              // If it has a downloadId, cancel it via native download manager
-              if (item.downloadId) {
-                setBackgroundDownload(item.downloadId, null);
-                await modelManager.cancelBackgroundDownload(item.downloadId);
+              // Find downloadId - either from the item or by cross-referencing active downloads
+              let downloadId = item.downloadId;
+              if (!downloadId) {
+                const match = activeDownloads.find(d => {
+                  const meta = activeBackgroundDownloads[d.downloadId];
+                  return meta && meta.fileName === item.fileName;
+                });
+                if (match) downloadId = match.downloadId;
+              }
+
+              // Remove from local activeDownloads state immediately
+              if (downloadId) {
+                setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
+                setBackgroundDownload(downloadId, null);
+                await modelManager.cancelBackgroundDownload(downloadId);
               }
 
               // Wait a bit for native cancellation to complete, then reload
-              // This prevents the polling from re-adding it before cancellation finishes
               setTimeout(async () => {
                 await loadActiveDownloads();
+                // Only clear cancelled key if native cancel succeeded
+                if (downloadId) {
+                  cancelledKeysRef.current.delete(key);
+                }
               }, 1000);
             } catch (error) {
               setAlertState(showAlert('Error', 'Failed to remove download'));

@@ -297,37 +297,70 @@ class ModelManager {
   }
 
   /**
-   * Find GGUF files on disk that aren't tracked in the model list.
-   * Returns array of orphaned file info.
+   * Find files/directories on disk that aren't tracked in model registries.
+   * Scans both the text models directory (for untracked files) and
+   * the image models directory (for untracked directories).
    */
   async getOrphanedFiles(): Promise<Array<{ name: string; path: string; size: number }>> {
     await this.initialize();
     const orphaned: Array<{ name: string; path: string; size: number }> = [];
 
     try {
-      const dirExists = await RNFS.exists(this.modelsDir);
-      if (!dirExists) return orphaned;
+      // Scan text models directory for untracked files
+      const modelsDirExists = await RNFS.exists(this.modelsDir);
+      if (modelsDirExists) {
+        const files = await RNFS.readDir(this.modelsDir);
+        const models = await this.getDownloadedModels();
 
-      const files = await RNFS.readDir(this.modelsDir);
-      const models = await this.getDownloadedModels();
-
-      // Get all tracked file paths (including mmproj)
-      const trackedPaths = new Set<string>();
-      for (const model of models) {
-        trackedPaths.add(model.filePath);
-        if (model.mmProjPath) {
-          trackedPaths.add(model.mmProjPath);
+        // Get all tracked file paths (including mmproj)
+        const trackedPaths = new Set<string>();
+        for (const model of models) {
+          trackedPaths.add(model.filePath);
+          if (model.mmProjPath) {
+            trackedPaths.add(model.mmProjPath);
+          }
         }
-      }
 
-      // Find GGUF files not in tracked list
-      for (const file of files) {
-        if (file.isFile() && file.name.endsWith('.gguf')) {
-          if (!trackedPaths.has(file.path)) {
+        // Find any files not in tracked list (not just .gguf)
+        for (const file of files) {
+          if (file.isFile() && !trackedPaths.has(file.path)) {
             orphaned.push({
               name: file.name,
               path: file.path,
               size: typeof file.size === 'string' ? parseInt(file.size, 10) : file.size,
+            });
+          }
+        }
+      }
+
+      // Scan image models directory for untracked directories
+      const imageDirExists = await RNFS.exists(this.imageModelsDir);
+      if (imageDirExists) {
+        const items = await RNFS.readDir(this.imageModelsDir);
+        const imageModels = await this.getDownloadedImageModels();
+        const trackedImagePaths = new Set(imageModels.map(m => m.modelPath));
+
+        for (const item of items) {
+          if (!trackedImagePaths.has(item.path)) {
+            let totalSize = 0;
+            if (item.isDirectory()) {
+              try {
+                const dirFiles = await RNFS.readDir(item.path);
+                for (const f of dirFiles) {
+                  if (f.isFile()) {
+                    totalSize += typeof f.size === 'string' ? parseInt(f.size, 10) : f.size;
+                  }
+                }
+              } catch {
+                // Can't read directory, use 0
+              }
+            } else {
+              totalSize = typeof item.size === 'string' ? parseInt(item.size, 10) : item.size;
+            }
+            orphaned.push({
+              name: item.name,
+              path: item.path,
+              size: totalSize,
             });
           }
         }
@@ -340,12 +373,15 @@ class ModelManager {
   }
 
   /**
-   * Delete an orphaned file from disk.
+   * Delete an orphaned file or directory from disk.
    */
   async deleteOrphanedFile(filePath: string): Promise<void> {
     try {
-      await RNFS.unlink(filePath);
-      console.log('[ModelManager] Deleted orphaned file:', filePath);
+      const exists = await RNFS.exists(filePath);
+      if (exists) {
+        await RNFS.unlink(filePath);
+        console.log('[ModelManager] Deleted orphaned file/directory:', filePath);
+      }
     } catch (error) {
       console.error('[ModelManager] Failed to delete orphaned file:', error);
       throw error;
@@ -1079,6 +1115,12 @@ class ModelManager {
         }
 
         const fileSize = typeof item.size === 'string' ? parseInt(item.size, 10) : item.size;
+
+        // Skip tiny files (< 1MB) — likely partial/failed downloads, not valid models
+        if (fileSize < 1_000_000) {
+          console.log(`[ModelManager] Skipping tiny file as likely partial download: ${item.name} (${fileSize} bytes)`);
+          continue;
+        }
 
         // Try to parse quantization from filename
         const quantMatch = item.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i);

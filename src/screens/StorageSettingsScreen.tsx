@@ -31,8 +31,10 @@ export const StorageSettingsScreen: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const { downloadedModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads } = useAppStore();
+  const { downloadedModels, downloadedImageModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads } = useAppStore();
   const { conversations } = useChatStore();
+
+  const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
 
   // Find stale download entries (entries with missing/invalid data)
   const staleDownloads = Object.entries(activeBackgroundDownloads).filter(([_, info]) => {
@@ -42,12 +44,12 @@ export const StorageSettingsScreen: React.FC = () => {
   useEffect(() => {
     loadStorageInfo();
     scanForOrphanedFiles();
-  }, [downloadedModels]);
+  }, [downloadedModels, downloadedImageModels]);
 
   const loadStorageInfo = async () => {
     const used = await modelManager.getStorageUsed();
     const available = await modelManager.getAvailableStorage();
-    setStorageUsed(used);
+    setStorageUsed(used + imageStorageUsed);
     setAvailableStorage(available);
   };
 
@@ -186,9 +188,17 @@ export const StorageSettingsScreen: React.FC = () => {
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
               <Icon name="cpu" size={18} color={COLORS.primary} />
-              <Text style={styles.infoLabel}>Downloaded Models</Text>
+              <Text style={styles.infoLabel}>LLM Models</Text>
             </View>
             <Text style={styles.infoValue}>{downloadedModels.length}</Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoRowLeft}>
+              <Icon name="image" size={18} color={COLORS.primary} />
+              <Text style={styles.infoLabel}>Image Models</Text>
+            </View>
+            <Text style={styles.infoValue}>{downloadedImageModels.length}</Text>
           </View>
 
           <View style={styles.infoRow}>
@@ -210,7 +220,7 @@ export const StorageSettingsScreen: React.FC = () => {
 
         {downloadedModels.length > 0 && (
           <Card style={styles.section}>
-            <Text style={styles.sectionTitle}>Models</Text>
+            <Text style={styles.sectionTitle}>LLM Models</Text>
             {downloadedModels.map((model, index) => (
               <View
                 key={model.id}
@@ -224,6 +234,27 @@ export const StorageSettingsScreen: React.FC = () => {
                   <Text style={styles.modelMeta}>{model.quantization}</Text>
                 </View>
                 <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
+              </View>
+            ))}
+          </Card>
+        )}
+
+        {downloadedImageModels.length > 0 && (
+          <Card style={styles.section}>
+            <Text style={styles.sectionTitle}>Image Models</Text>
+            {downloadedImageModels.map((model, index) => (
+              <View
+                key={model.id}
+                style={[
+                  styles.modelRow,
+                  index === downloadedImageModels.length - 1 && styles.lastRow
+                ]}
+              >
+                <View style={styles.modelInfo}>
+                  <Text style={styles.modelName} numberOfLines={1}>{model.name}</Text>
+                  <Text style={styles.modelMeta}>{model.backend === 'qnn' ? 'Qualcomm NPU' : 'CPU'}{model.style ? ` • ${model.style}` : ''}</Text>
+                </View>
+                <Text style={styles.modelSize}>{hardwareService.formatBytes(model.size)}</Text>
               </View>
             ))}
           </Card>
@@ -287,8 +318,8 @@ export const StorageSettingsScreen: React.FC = () => {
           ) : (
             <>
               <Text style={styles.warningText}>
-                These GGUF files exist on disk but aren't tracked as models.
-                They may be from failed downloads or manual copies.
+                These files/folders exist on disk but aren't tracked as models.
+                They may be from failed or cancelled downloads.
               </Text>
               {orphanedFiles.map((file) => (
                 <View key={file.path} style={styles.orphanedRow}>

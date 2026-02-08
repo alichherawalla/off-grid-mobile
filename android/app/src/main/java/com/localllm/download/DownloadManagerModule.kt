@@ -111,11 +111,14 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     fun cancelDownload(downloadId: Double, promise: Promise) {
         try {
             val id = downloadId.toLong()
+
+            // Get download info BEFORE removing from SharedPreferences
+            val downloadInfo = getDownloadInfo(id)
+
             downloadManager.remove(id)
             removeDownload(id)
 
             // Clean up partial file
-            val downloadInfo = getDownloadInfo(id)
             downloadInfo?.optString("fileName")?.let { fileName ->
                 val file = File(
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
@@ -339,7 +342,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     android.util.Log.w("DownloadManager", "Download $downloadId has unknown status - may have completed or been removed")
                     // Query the file directly to see if it completed
                     val downloadInfo = getDownloadInfo(downloadId)
-                    downloadInfo?.optString("fileName")?.let { fileName ->
+                    val fileName = downloadInfo?.optString("fileName")
+                    if (fileName != null) {
                         val file = java.io.File(
                             reactApplicationContext.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS),
                             fileName
@@ -351,7 +355,15 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                                 sendEvent("DownloadComplete", eventParams)
                             }
                             updateDownloadStatus(downloadId, "completed", file.toURI().toString())
+                        } else {
+                            // No file and no native download - stale entry, remove it
+                            android.util.Log.d("DownloadManager", "No file found for unknown download $downloadId, removing stale entry")
+                            removeDownload(downloadId)
                         }
+                    } else {
+                        // No download info at all - remove stale entry
+                        android.util.Log.d("DownloadManager", "No info for unknown download $downloadId, removing stale entry")
+                        removeDownload(downloadId)
                     }
                 }
             }
