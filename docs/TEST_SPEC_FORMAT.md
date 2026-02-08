@@ -6,7 +6,7 @@ This document defines the standard format for test specifications in LocalLLM. W
 - ✅ Jest (unit, integration, RNTL, contract tests)
 - ✅ Maestro (E2E tests on real device)
 - ✅ Factories and test helpers (`__tests__/utils/`)
-- ✅ 237 existing tests (see `TEST_PRIORITY_MAP.md` for breakdown)
+- ✅ 1131 existing tests across 26 suites (see `TEST_PRIORITY_MAP.md` for breakdown)
 
 **See existing tests for examples:**
 - Unit: `__tests__/unit/stores/chatStore.test.ts` (comprehensive example)
