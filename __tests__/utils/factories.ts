@@ -272,7 +272,7 @@ export interface ONNXImageModelFactoryOptions {
   downloadedAt?: string;
   size?: number;
   style?: string;
-  backend?: 'mnn' | 'qnn';
+  backend?: 'mnn' | 'qnn' | 'coreml';
 }
 
 export const createONNXImageModel = (options: ONNXImageModelFactoryOptions = {}): ONNXImageModel => ({

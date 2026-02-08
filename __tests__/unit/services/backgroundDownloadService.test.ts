@@ -79,9 +79,9 @@ describe('BackgroundDownloadService', () => {
       expect(service.isAvailable()).toBe(true);
     });
 
-    it('returns false on iOS', () => {
+    it('returns true on iOS when native module is present', () => {
       Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      expect(service.isAvailable()).toBe(false);
+      expect(service.isAvailable()).toBe(true);
     });
 
     it('returns false when native module is null', () => {
@@ -167,16 +167,23 @@ describe('BackgroundDownloadService', () => {
     });
 
     it('throws when not available', async () => {
-      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      const iosService = new BackgroundDownloadServiceClass();
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
 
       await expect(
-        iosService.startDownload({
+        unavailableService.startDownload({
           url: 'https://example.com/model.gguf',
           fileName: 'model.gguf',
           modelId: 'test/model',
         })
       ).rejects.toThrow('Background downloads not available');
+      NativeModules.DownloadManagerModule = savedModule;
     });
   });
 
@@ -193,10 +200,17 @@ describe('BackgroundDownloadService', () => {
     });
 
     it('throws when not available', async () => {
-      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      const iosService = new BackgroundDownloadServiceClass();
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
 
-      await expect(iosService.cancelDownload(42)).rejects.toThrow('not available');
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      await expect(unavailableService.cancelDownload(42)).rejects.toThrow('not available');
+      NativeModules.DownloadManagerModule = savedModule;
     });
   });
 
@@ -205,11 +219,18 @@ describe('BackgroundDownloadService', () => {
   // ========================================================================
   describe('getActiveDownloads', () => {
     it('returns empty array when not available', async () => {
-      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      const iosService = new BackgroundDownloadServiceClass();
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
 
-      const result = await iosService.getActiveDownloads();
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      const result = await unavailableService.getActiveDownloads();
       expect(result).toEqual([]);
+      NativeModules.DownloadManagerModule = savedModule;
     });
 
     it('maps native response to BackgroundDownloadInfo', async () => {
@@ -248,12 +269,19 @@ describe('BackgroundDownloadService', () => {
     });
 
     it('throws when not available', async () => {
-      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      const iosService = new BackgroundDownloadServiceClass();
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
+
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
 
       await expect(
-        iosService.moveCompletedDownload(42, '/path')
+        unavailableService.moveCompletedDownload(42, '/path')
       ).rejects.toThrow('not available');
+      NativeModules.DownloadManagerModule = savedModule;
     });
   });
 
@@ -406,11 +434,18 @@ describe('BackgroundDownloadService', () => {
     });
 
     it('does nothing when not available', () => {
-      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
-      const iosService = new BackgroundDownloadServiceClass();
+      const savedModule = NativeModules.DownloadManagerModule;
+      NativeModules.DownloadManagerModule = null;
 
-      iosService.startProgressPolling();
+      let unavailableService: any;
+      jest.isolateModules(() => {
+        const mod = require('../../../src/services/backgroundDownloadService');
+        unavailableService = new (mod.backgroundDownloadService as any).constructor();
+      });
+
+      unavailableService.startProgressPolling();
       expect(mockDownloadManagerModule.startProgressPolling).not.toHaveBeenCalled();
+      NativeModules.DownloadManagerModule = savedModule;
     });
   });
 
