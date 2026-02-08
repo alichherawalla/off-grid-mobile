@@ -8,3 +8,4 @@ export { ModelSelectorModal } from './ModelSelectorModal';
 export { GenerationSettingsModal } from './GenerationSettingsModal';
 export { CustomAlert, showAlert, hideAlert, initialAlertState } from './CustomAlert';
 export type { AlertButton, AlertState, CustomAlertProps } from './CustomAlert';
+export { ThinkingIndicator } from './ThinkingIndicator';
