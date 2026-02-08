@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
@@ -613,73 +614,75 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             <Text style={styles.sectionLabel}>PERFORMANCE</Text>
             <View style={styles.sectionCard}>
 
-            {/* GPU Acceleration Toggle */}
-            <View style={styles.modeToggleContainer}>
-              <View style={styles.modeToggleInfo}>
-                <Text style={styles.modeToggleLabel}>GPU Acceleration</Text>
-                <Text style={styles.modeToggleDesc}>
-                  Offload inference to GPU when available. Faster for large models, may add overhead for small ones. Requires model reload.
-                </Text>
-              </View>
-              <View style={styles.modeToggleButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.modeButton,
-                    !settings.enableGpu && styles.modeButtonActive,
-                  ]}
-                  onPress={() => updateSettings({ enableGpu: false })}
-                >
-                  <Text
-                    style={[
-                      styles.modeButtonText,
-                      !settings.enableGpu && styles.modeButtonTextActive,
-                    ]}
-                  >
-                    Off
+            {/* GPU Acceleration Toggle - hidden on iOS (Core ML auto-dispatches) */}
+            {Platform.OS !== 'ios' && (
+              <View style={styles.modeToggleContainer}>
+                <View style={styles.modeToggleInfo}>
+                  <Text style={styles.modeToggleLabel}>GPU Acceleration</Text>
+                  <Text style={styles.modeToggleDesc}>
+                    Offload inference to GPU when available. Faster for large models, may add overhead for small ones. Requires model reload.
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modeButton,
-                    settings.enableGpu && styles.modeButtonActive,
-                  ]}
-                  onPress={() => updateSettings({ enableGpu: true })}
-                >
-                  <Text
-                    style={[
-                      styles.modeButtonText,
-                      settings.enableGpu && styles.modeButtonTextActive,
-                    ]}
-                  >
-                    On
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* GPU Layers Slider - inline when GPU is enabled */}
-              {settings.enableGpu && (
-                <View style={styles.gpuLayersInline}>
-                  <View style={styles.settingHeader}>
-                    <Text style={styles.settingLabel}>GPU Layers</Text>
-                    <Text style={styles.settingValue}>{settings.gpuLayers ?? 6}</Text>
-                  </View>
-                  <Text style={styles.settingDescription}>
-                    Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
-                  </Text>
-                  <Slider
-                    style={styles.slider}
-                    minimumValue={1}
-                    maximumValue={99}
-                    step={1}
-                    value={settings.gpuLayers ?? 6}
-                    onSlidingComplete={(value: number) => updateSettings({ gpuLayers: value })}
-                    minimumTrackTintColor={COLORS.primary}
-                    maximumTrackTintColor={COLORS.surfaceLight}
-                    thumbTintColor={COLORS.primary}
-                  />
                 </View>
-              )}
-            </View>
+                <View style={styles.modeToggleButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      !settings.enableGpu && styles.modeButtonActive,
+                    ]}
+                    onPress={() => updateSettings({ enableGpu: false })}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        !settings.enableGpu && styles.modeButtonTextActive,
+                      ]}
+                    >
+                      Off
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      settings.enableGpu && styles.modeButtonActive,
+                    ]}
+                    onPress={() => updateSettings({ enableGpu: true })}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        settings.enableGpu && styles.modeButtonTextActive,
+                      ]}
+                    >
+                      On
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* GPU Layers Slider - inline when GPU is enabled */}
+                {settings.enableGpu && (
+                  <View style={styles.gpuLayersInline}>
+                    <View style={styles.settingHeader}>
+                      <Text style={styles.settingLabel}>GPU Layers</Text>
+                      <Text style={styles.settingValue}>{settings.gpuLayers ?? 6}</Text>
+                    </View>
+                    <Text style={styles.settingDescription}>
+                      Layers offloaded to GPU. Higher = faster but may crash on low-VRAM devices. Requires model reload.
+                    </Text>
+                    <Slider
+                      style={styles.slider}
+                      minimumValue={1}
+                      maximumValue={99}
+                      step={1}
+                      value={settings.gpuLayers ?? 6}
+                      onSlidingComplete={(value: number) => updateSettings({ gpuLayers: value })}
+                      minimumTrackTintColor={COLORS.primary}
+                      maximumTrackTintColor={COLORS.surfaceLight}
+                      thumbTintColor={COLORS.primary}
+                    />
+                  </View>
+                )}
+              </View>
+            )}
 
             <View style={styles.modeToggleContainer}>
               <View style={styles.modeToggleInfo}>

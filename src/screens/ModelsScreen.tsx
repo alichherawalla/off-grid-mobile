@@ -12,6 +12,7 @@ import {
   Switch,
   BackHandler,
   Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -25,10 +26,12 @@ import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } f
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
+import { fetchAvailableCoreMLModels, CoreMLImageModel } from '../services/coreMLModelBrowser';
+import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
-type BackendFilter = 'all' | 'mnn' | 'qnn';
+type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
 
 interface ImageModelDescriptor {
   id: string;
@@ -37,9 +40,13 @@ interface ImageModelDescriptor {
   downloadUrl: string;
   size: number;
   style: string;
-  backend: 'mnn' | 'qnn';
+  backend: 'mnn' | 'qnn' | 'coreml';
   huggingFaceRepo?: string;
   huggingFaceFiles?: { path: string; size: number }[];
+  /** Multi-file download manifest (Core ML full-precision models) */
+  coremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
+  /** HuggingFace repo slug (e.g. 'apple/coreml-stable-diffusion-2-1-base-palettized') */
+  repo?: string;
 }
 
 type CredibilityFilter = 'all' | ModelSource;
@@ -107,8 +114,26 @@ export const ModelsScreen: React.FC = () => {
     setHfModelsLoading(true);
     setHfModelsError(null);
     try {
-      const models = await fetchAvailableModels(forceRefresh);
-      setAvailableHFModels(models);
+      if (Platform.OS === 'ios') {
+        const coremlModels = await fetchAvailableCoreMLModels(forceRefresh);
+        // Map CoreMLImageModel to HFImageModel shape for unified rendering
+        const mapped: HFImageModel[] = coremlModels.map((m) => ({
+          id: m.id,
+          name: m.name,
+          displayName: m.displayName,
+          backend: 'mnn' as const, // placeholder — overridden by badge logic
+          fileName: m.fileName,
+          downloadUrl: m.downloadUrl,
+          size: m.size,
+          repo: m.repo,
+          _coreml: true, // marker for badge rendering
+          _coremlFiles: m.files, // multi-file download manifest (if no zip available)
+        }));
+        setAvailableHFModels(mapped);
+      } else {
+        const models = await fetchAvailableModels(forceRefresh);
+        setAvailableHFModels(models);
+      }
     } catch (error: any) {
       setHfModelsError(error?.message || 'Failed to fetch models');
     } finally {
@@ -347,6 +372,12 @@ export const ModelsScreen: React.FC = () => {
       return;
     }
 
+    // Route to multi-file downloader for Core ML models without zip archives
+    if (modelInfo.coremlFiles && modelInfo.coremlFiles.length > 0) {
+      await handleDownloadCoreMLMultiFile(modelInfo);
+      return;
+    }
+
     // Check if background download service is available
     if (!backgroundDownloadService.isAvailable()) {
       // Fall back to RNFS download for iOS or if native module unavailable
@@ -413,6 +444,11 @@ export const ModelsScreen: React.FC = () => {
           console.log(`[ImageModels] Extracting ${zipPath} to ${modelDir}`);
           await unzip(zipPath, modelDir);
 
+          // Resolve nested directory for Core ML zips
+          const resolvedModelDir = modelInfo.backend === 'coreml'
+            ? await resolveCoreMLModelDir(modelDir)
+            : modelDir;
+
           setImageModelProgress(0.95);
 
           // Clean up the ZIP file
@@ -428,7 +464,7 @@ export const ModelsScreen: React.FC = () => {
             id: modelInfo.id,
             name: modelInfo.name,
             description: modelInfo.description,
-            modelPath: modelDir,
+            modelPath: resolvedModelDir,
             downloadedAt: new Date().toISOString(),
             size: modelInfo.size,
             style: modelInfo.style,
@@ -519,17 +555,22 @@ export const ModelsScreen: React.FC = () => {
       // Extract the zip file
       await unzip(zipPath, modelDir);
 
+      // Resolve nested directory for Core ML zips
+      const resolvedModelDir = modelInfo.backend === 'coreml'
+        ? await resolveCoreMLModelDir(modelDir)
+        : modelDir;
+
       setImageModelProgress(0.95);
 
       // Clean up the ZIP file
       await RNFS.unlink(zipPath).catch(() => { });
 
-      // Register the model
+      // Register the model with resolved path (handles nested zip extraction)
       const imageModel: ONNXImageModel = {
         id: modelInfo.id,
         name: modelInfo.name,
         description: modelInfo.description,
-        modelPath: modelDir,
+        modelPath: resolvedModelDir,
         downloadedAt: new Date().toISOString(),
         size: modelInfo.size,
         style: modelInfo.style,
@@ -550,6 +591,103 @@ export const ModelsScreen: React.FC = () => {
     } finally {
       setImageModelDownloading(null);
       setImageModelProgress(0);
+    }
+  };
+
+  // Multi-file download handler for Core ML models without zip archives
+  const handleDownloadCoreMLMultiFile = async (modelInfo: ImageModelDescriptor) => {
+    if (!backgroundDownloadService.isAvailable()) {
+      setAlertState(showAlert('Not Available', 'Background downloads not available'));
+      return;
+    }
+    if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
+
+    setImageModelDownloading(modelInfo.id);
+    setImageModelProgress(0);
+
+    try {
+      const imageModelsDir = modelManager.getImageModelsDirectory();
+      const modelDir = `${imageModelsDir}/${modelInfo.id}`;
+
+      // Start multi-file background download
+      const downloadInfo = await backgroundDownloadService.startMultiFileDownload({
+        files: modelInfo.coremlFiles.map(f => ({
+          url: f.downloadUrl,
+          relativePath: f.relativePath,
+          size: f.size,
+        })),
+        fileName: modelInfo.id,
+        modelId: `image:${modelInfo.id}`,
+        destinationDir: modelDir,
+        totalBytes: modelInfo.size,
+      });
+
+      setImageModelDownloadId(downloadInfo.downloadId);
+
+      const unsubProgress = backgroundDownloadService.onProgress(downloadInfo.downloadId, (event) => {
+        const progress = event.totalBytes > 0
+          ? (event.bytesDownloaded / event.totalBytes)
+          : 0;
+        setImageModelProgress(progress * 0.95);
+      });
+
+      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async () => {
+        unsubProgress();
+        unsubComplete();
+        unsubError();
+
+        try {
+          // Download tokenizer files for Core ML models (not included in compiled dir)
+          if (modelInfo.backend === 'coreml' && modelInfo.repo) {
+            await downloadCoreMLTokenizerFiles(modelDir, modelInfo.repo);
+          }
+
+          // Register the model (files are already in modelDir)
+          const imageModel: ONNXImageModel = {
+            id: modelInfo.id,
+            name: modelInfo.name,
+            description: modelInfo.description,
+            modelPath: modelDir,
+            downloadedAt: new Date().toISOString(),
+            size: modelInfo.size,
+            style: modelInfo.style,
+            backend: modelInfo.backend,
+          };
+
+          await modelManager.addDownloadedImageModel(imageModel);
+          addDownloadedImageModel(imageModel);
+
+          if (!activeImageModelId) {
+            setActiveImageModelId(imageModel.id);
+          }
+
+          setImageModelProgress(1);
+          setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
+        } catch (regError: any) {
+          setAlertState(showAlert('Registration Failed', regError?.message || 'Failed to register model'));
+        } finally {
+          setImageModelDownloading(null);
+          setImageModelProgress(0);
+          setImageModelDownloadId(null);
+        }
+      });
+
+      const unsubError = backgroundDownloadService.onError(downloadInfo.downloadId, (event) => {
+        unsubProgress();
+        unsubComplete();
+        unsubError();
+        setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
+        setImageModelDownloading(null);
+        setImageModelProgress(0);
+        setImageModelDownloadId(null);
+      });
+
+      backgroundDownloadService.startProgressPolling();
+    } catch (error: any) {
+      setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
+      setImageModelDownloading(null);
+      setImageModelProgress(0);
+      setImageModelDownloadId(null);
     }
   };
 
@@ -863,14 +1001,18 @@ export const ModelsScreen: React.FC = () => {
   // Total count: downloaded text models + downloaded image models + currently downloading
   const totalModelCount = downloadedModels.length + downloadedImageModels.length + activeDownloadCount;
 
-  const hfModelToDescriptor = (hfModel: HFImageModel): ImageModelDescriptor => ({
+  const hfModelToDescriptor = (hfModel: HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] }): ImageModelDescriptor => ({
     id: hfModel.id,
     name: hfModel.displayName,
-    description: `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
+    description: hfModel._coreml
+      ? `Core ML model from ${hfModel.repo}`
+      : `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
     downloadUrl: hfModel.downloadUrl,
     size: hfModel.size,
     style: guessStyle(hfModel.name),
-    backend: hfModel.backend,
+    backend: hfModel._coreml ? 'coreml' : hfModel.backend,
+    coremlFiles: hfModel._coremlFiles,
+    repo: hfModel.repo,
   });
 
   // Render image models section
@@ -931,31 +1073,33 @@ export const ModelsScreen: React.FC = () => {
         onChangeText={setImageSearchQuery}
         returnKeyType="search"
       />
-      <View style={styles.backendFilterRow}>
-        {([
-          { key: 'all' as BackendFilter, label: 'All' },
-          { key: 'mnn' as BackendFilter, label: 'CPU' },
-          { key: 'qnn' as BackendFilter, label: 'NPU' },
-        ]).map((option) => (
-          <TouchableOpacity
-            key={option.key}
-            style={[
-              styles.filterChip,
-              backendFilter === option.key && styles.filterChipActive,
-            ]}
-            onPress={() => setBackendFilter(option.key)}
-          >
-            <Text
+      {Platform.OS !== 'ios' && (
+        <View style={styles.backendFilterRow}>
+          {([
+            { key: 'all' as BackendFilter, label: 'All' },
+            { key: 'mnn' as BackendFilter, label: 'CPU' },
+            { key: 'qnn' as BackendFilter, label: 'NPU' },
+          ]).map((option) => (
+            <TouchableOpacity
+              key={option.key}
               style={[
-                styles.filterChipText,
-                backendFilter === option.key && styles.filterChipTextActive,
+                styles.filterChip,
+                backendFilter === option.key && styles.filterChipActive,
               ]}
+              onPress={() => setBackendFilter(option.key)}
             >
-              {option.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  backendFilter === option.key && styles.filterChipTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Loading / Error / List */}
       {hfModelsLoading && (
@@ -985,9 +1129,9 @@ export const ModelsScreen: React.FC = () => {
                 <Text style={styles.imageModelName}>{model.displayName}</Text>
               </View>
               <View style={styles.badgeRow}>
-                <View style={[styles.backendBadge, model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
+                <View style={[styles.backendBadge, (model as any)._coreml ? styles.cpuBadge : model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
                   <Text style={styles.backendBadgeText}>
-                    {model.backend === 'qnn' ? 'NPU' : 'CPU'}
+                    {(model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU'}
                   </Text>
                 </View>
                 {model.variant && (
