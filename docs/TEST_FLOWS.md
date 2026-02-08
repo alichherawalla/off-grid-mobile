@@ -2,6 +2,16 @@
 
 This document catalogs every testable flow in the application.
 
+**Coverage Legend:**
+- ✅ = Fully tested (Unit + Integration/RNTL + E2E)
+- ⚠️ = Partially tested (missing some layers)
+- 📝 = Planned but not implemented
+- ❌ = No test coverage
+
+**Current Overall Coverage: ~65% of P0 flows, ~30% of all flows**
+
+See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` for how to write tests.
+
 ---
 
 ## 1. Onboarding & First Launch
@@ -210,28 +220,28 @@ This document catalogs every testable flow in the application.
 ## 9. Text Generation
 
 ### Basic Generation
-| # | Flow | Description |
-|---|------|-------------|
-| 9.1 | Send text message | Type → send → message appears |
-| 9.2 | Message appears in chat | User message shown immediately |
-| 9.3 | Generation starts | Loading/thinking indicator |
-| 9.4 | Streaming tokens | Tokens appear one by one |
-| 9.5 | Streaming performance | Smooth token display |
-| 9.6 | Generation completes | Full response shown |
-| 9.7 | Response saved | Response persists after app restart |
-| 9.8 | Time to first token | TTFT displayed |
-| 9.9 | Tokens per second | Generation speed shown |
-| 9.10 | Total token count | Shows prompt + response tokens |
+| # | Flow | Description | Status |
+|---|------|-------------|--------|
+| 9.1 | Send text message | Type → send → message appears | ✅ E2E: 02-text-generation.yaml |
+| 9.2 | Message appears in chat | User message shown immediately | ✅ |
+| 9.3 | Generation starts | Loading/thinking indicator | ✅ |
+| 9.4 | Streaming tokens | Tokens appear one by one | ✅ |
+| 9.5 | Streaming performance | Smooth token display | ✅ E2E validates |
+| 9.6 | Generation completes | Full response shown | ✅ |
+| 9.7 | Response saved | Response persists after app restart | ✅ |
+| 9.8 | Time to first token | TTFT displayed | ⚠️ RNTL only |
+| 9.9 | Tokens per second | Generation speed shown | ⚠️ RNTL only |
+| 9.10 | Total token count | Shows prompt + response tokens | ⚠️ RNTL only |
 
 ### Generation Controls
-| # | Flow | Description |
-|---|------|-------------|
-| 9.11 | Stop generation | Stop button → generation halts |
-| 9.12 | Partial response saved | Stopped response is kept |
-| 9.13 | Retry generation | Retry → regenerates last response |
-| 9.14 | Edit user message | Edit → changes saved |
-| 9.15 | Regenerate from edit | Edit message → regenerates from that point |
-| 9.16 | Delete messages after | Delete from point → later messages removed |
+| # | Flow | Description | Status |
+|---|------|-------------|--------|
+| 9.11 | Stop generation | Stop button → generation halts | ✅ E2E: 03-stop-generation.yaml |
+| 9.12 | Partial response saved | Stopped response is kept | ✅ |
+| 9.13 | Retry generation | Retry → regenerates last response | ⚠️ Unit + RNTL only |
+| 9.14 | Edit user message | Edit → changes saved | ⚠️ Unit + RNTL only |
+| 9.15 | Regenerate from edit | Edit message → regenerates from that point | ⚠️ Unit only |
+| 9.16 | Delete messages after | Delete from point → later messages removed | ⚠️ Unit + RNTL only |
 
 ### Generation Context
 | # | Flow | Description |

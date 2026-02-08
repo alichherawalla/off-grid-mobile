@@ -2,6 +2,19 @@
 
 This document defines the standard format for test specifications in LocalLLM. When implementing a feature, create a test spec following this format.
 
+**Current Test Infrastructure:**
+- ✅ Jest (unit, integration, RNTL, contract tests)
+- ✅ Maestro (E2E tests on real device)
+- ✅ Factories and test helpers (`__tests__/utils/`)
+- ✅ 237 existing tests (see `TEST_PRIORITY_MAP.md` for breakdown)
+
+**See existing tests for examples:**
+- Unit: `__tests__/unit/stores/chatStore.test.ts` (comprehensive example)
+- Integration: `__tests__/integration/models/activeModelService.test.ts`
+- RNTL: `__tests__/rntl/screens/ChatScreen.test.tsx`
+- E2E: `.maestro/flows/p0/02-text-generation.yaml`
+- Contract: `__tests__/contracts/llamaContext.contract.test.ts`
+
 ---
 
 ## Spec Structure

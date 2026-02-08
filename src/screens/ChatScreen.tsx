@@ -57,6 +57,7 @@ export const ChatScreen: React.FC = () => {
   const contentHeightRef = useRef(0);
   const scrollViewHeightRef = useRef(0);
   const [isModelLoading, setIsModelLoading] = useState(false);
+  const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(null);
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -338,6 +339,7 @@ export const ChatScreen: React.FC = () => {
     // Only show our own loading indicator if we're the one starting the load
     if (!alreadyLoading) {
       setIsModelLoading(true);
+      setLoadingModel(activeModel);
       modelLoadStartTimeRef.current = Date.now();
 
       // Give UI time to render the full-screen loading state before heavy native operation
@@ -369,6 +371,7 @@ export const ChatScreen: React.FC = () => {
     } finally {
       if (!alreadyLoading) {
         setIsModelLoading(false);
+        setLoadingModel(null);
         modelLoadStartTimeRef.current = null;
       }
     }
@@ -416,6 +419,7 @@ export const ChatScreen: React.FC = () => {
 
   const proceedWithModelLoad = async (model: DownloadedModel) => {
     setIsModelLoading(true);
+    setLoadingModel(model);
     modelLoadStartTimeRef.current = Date.now();
 
     // Give UI time to render the full-screen loading state before heavy native operation
@@ -452,6 +456,7 @@ export const ChatScreen: React.FC = () => {
       setAlertState(showAlert('Error', `Failed to load model: ${(error as Error).message}`));
     } finally {
       setIsModelLoading(false);
+      setLoadingModel(null);
       setShowModelSelector(false);
       modelLoadStartTimeRef.current = null;
     }
@@ -466,6 +471,7 @@ export const ChatScreen: React.FC = () => {
 
     const modelName = activeModel?.name;
     setIsModelLoading(true);
+    setLoadingModel(activeModel);
     try {
       await activeModelService.unloadTextModel();
       setSupportsVision(false);
@@ -478,6 +484,7 @@ export const ChatScreen: React.FC = () => {
       setAlertState(showAlert('Error', `Failed to unload model: ${(error as Error).message}`));
     } finally {
       setIsModelLoading(false);
+      setLoadingModel(null);
       setShowModelSelector(false);
     }
   };
@@ -798,10 +805,22 @@ export const ChatScreen: React.FC = () => {
   };
 
   const regenerateResponse = async (userMessage: Message) => {
-    if (!activeConversationId || !activeModel || !llmService.isModelLoaded()) return;
+    if (!activeConversationId || !activeModel) return;
 
     // Capture the conversation ID at the start
     const targetConversationId = activeConversationId;
+
+    // Check if this should be routed to image generation
+    const shouldGenerateImage = await shouldRouteToImageGeneration(userMessage.content);
+
+    if (shouldGenerateImage && activeImageModel) {
+      await handleImageGeneration(userMessage.content, targetConversationId, true);
+      return;
+    }
+
+    // Continue with text generation
+    if (!llmService.isModelLoaded()) return;
+
     generatingForConversationRef.current = targetConversationId;
 
     const messages = activeConversation?.messages || [];
@@ -1005,8 +1024,8 @@ export const ChatScreen: React.FC = () => {
   }
 
   if (isModelLoading) {
-    const loadingModelName = activeModel?.name || 'model';
-    const modelSize = activeModel ? hardwareService.formatModelSize(activeModel) : '';
+    const loadingModelName = loadingModel?.name || activeModel?.name || 'model';
+    const modelSize = loadingModel ? hardwareService.formatModelSize(loadingModel) : activeModel ? hardwareService.formatModelSize(activeModel) : '';
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
@@ -1018,7 +1037,7 @@ export const ChatScreen: React.FC = () => {
           <Text style={styles.loadingHint}>
             Preparing model for inference. This may take a moment for larger models.
           </Text>
-          {activeModel?.mmProjPath && (
+          {(loadingModel?.mmProjPath || activeModel?.mmProjPath) && (
             <Text style={styles.loadingHint}>
               Vision capabilities will be enabled.
             </Text>
@@ -1155,9 +1174,11 @@ export const ChatScreen: React.FC = () => {
                       <Text style={styles.imageProgressTitle}>
                         {imagePreviewPath ? 'Refining Image' : 'Generating Image'}
                       </Text>
-                      <Text style={styles.imageProgressStatus} numberOfLines={1}>
-                        {imageGenerationStatus || 'Initializing...'}
-                      </Text>
+                      {imageGenerationStatus && (
+                        <Text style={styles.imageProgressStatus}>
+                          {imageGenerationStatus}
+                        </Text>
+                      )}
                     </View>
                     {imageGenerationProgress && (
                       <Text style={styles.imageProgressSteps}>
@@ -1964,7 +1985,7 @@ const styles = StyleSheet.create({
   imageProgressStatus: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
-    marginTop: 1,
+    fontStyle: 'normal',
   },
   imageProgressBarContainer: {
     marginTop: 10,

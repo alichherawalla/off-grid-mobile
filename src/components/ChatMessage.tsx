@@ -16,6 +16,8 @@ import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { Message } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
+import { ThinkingIndicator } from './ThinkingIndicator';
+
 
 interface ChatMessageProps {
   message: Message;
@@ -35,6 +37,7 @@ interface ParsedContent {
   thinking: string | null;
   response: string;
   isThinkingComplete: boolean;
+  thinkingLabel?: string;
 }
 
 function parseThinkingContent(content: string): ParsedContent {
@@ -60,66 +63,25 @@ function parseThinkingContent(content: string): ParsedContent {
   }
 
   const thinkEnd = thinkEndMatch.index!;
-  const thinkingContent = content.slice(thinkStart, thinkEnd).trim();
+  let thinkingContent = content.slice(thinkStart, thinkEnd).trim();
   const responseContent = content.slice(thinkEnd + thinkEndMatch[0].length).trim();
+
+  // Check for custom label marker: __LABEL:Custom Label__
+  let thinkingLabel: string | undefined;
+  const labelMatch = thinkingContent.match(/^__LABEL:(.+?)__\n*/);
+  if (labelMatch) {
+    thinkingLabel = labelMatch[1];
+    thinkingContent = thinkingContent.slice(labelMatch[0].length).trim();
+  }
 
   return {
     thinking: thinkingContent,
     response: responseContent,
-    isThinkingComplete: true
+    isThinkingComplete: true,
+    thinkingLabel
   };
 }
 
-// Animated thinking dots component
-const ThinkingIndicator: React.FC = () => {
-  const dot1Anim = useRef(new Animated.Value(0.3)).current;
-  const dot2Anim = useRef(new Animated.Value(0.3)).current;
-  const dot3Anim = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const duration = 400;
-    const sequence = Animated.loop(
-      Animated.sequence([
-        Animated.timing(dot1Anim, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(dot1Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-      ])
-    );
-    const sequence2 = Animated.loop(
-      Animated.sequence([
-        Animated.delay(150),
-        Animated.timing(dot2Anim, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(dot2Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-      ])
-    );
-    const sequence3 = Animated.loop(
-      Animated.sequence([
-        Animated.delay(300),
-        Animated.timing(dot3Anim, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(dot3Anim, { toValue: 0.3, duration, useNativeDriver: true }),
-      ])
-    );
-    sequence.start();
-    sequence2.start();
-    sequence3.start();
-
-    return () => {
-      sequence.stop();
-      sequence2.stop();
-      sequence3.stop();
-    };
-  }, []);
-
-  return (
-    <View style={styles.thinkingContainer}>
-      <View style={styles.thinkingDots}>
-        <Animated.View style={[styles.thinkingDot, { opacity: dot1Anim }]} />
-        <Animated.View style={[styles.thinkingDot, { opacity: dot2Anim }]} />
-        <Animated.View style={[styles.thinkingDot, { opacity: dot3Anim }]} />
-      </View>
-      <Text style={styles.thinkingText}>Thinking...</Text>
-    </View>
-  );
-};
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
@@ -147,6 +109,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const parsedContent = message.role === 'assistant'
     ? parseThinkingContent(displayContent)
     : { thinking: null, response: message.content, isThinkingComplete: true };
+
 
   const isUser = message.role === 'user';
   const hasAttachments = message.attachments && message.attachments.length > 0;
@@ -265,7 +228,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
           {/* Text content */}
           {message.isThinking ? (
-            <View testID="thinking-indicator"><ThinkingIndicator /></View>
+            <View testID="thinking-indicator"><ThinkingIndicator text={message.content} /></View>
           ) : message.content ? (
             <View>
               {/* Thinking block for assistant messages */}
@@ -278,12 +241,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   >
                     <View style={styles.thinkingHeaderIconBox}>
                       <Text style={styles.thinkingHeaderIconText}>
-                        {parsedContent.isThinkingComplete ? 'T' : '...'}
+                        {parsedContent.thinkingLabel?.includes('Enhanced')
+                          ? 'E'
+                          : parsedContent.isThinkingComplete ? 'T' : '...'}
                       </Text>
                     </View>
-                    <Text testID="thinking-block-title" style={styles.thinkingHeaderText}>
-                      {parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...'}
-                    </Text>
+                    <View style={styles.thinkingHeaderTextContainer}>
+                      <Text testID="thinking-block-title" style={styles.thinkingHeaderText}>
+                        {parsedContent.thinkingLabel || (parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...')}
+                      </Text>
+                      {!showThinking && parsedContent.thinking && (
+                        <Text style={styles.thinkingPreview} numberOfLines={2} ellipsizeMode="tail">
+                          {parsedContent.thinking.slice(0, 80)}
+                          {parsedContent.thinking.length > 80 ? '...' : ''}
+                        </Text>
+                      )}
+                    </View>
                     <Text style={styles.thinkingToggle}>
                       {showThinking ? '▼' : '▶'}
                     </Text>
@@ -360,13 +333,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             )}
             {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond) != null &&
               (message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)! > 0 && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText}>
-                  {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)!.toFixed(1)} tok/s
-                </Text>
-              </>
-            )}
+                <>
+                  <Text style={styles.generationMetaSep}>·</Text>
+                  <Text style={styles.generationMetaText}>
+                    {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)!.toFixed(1)} tok/s
+                  </Text>
+                </>
+              )}
             {message.generationMeta.timeToFirstToken != null && message.generationMeta.timeToFirstToken > 0 && (
               <>
                 <Text style={styles.generationMetaSep}>·</Text>
@@ -646,10 +619,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden',
+    minWidth: 260,
   },
   thinkingHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 8,
     gap: 6,
   },
@@ -666,11 +640,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.primary,
   },
+  thinkingHeaderTextContainer: {
+    flex: 1,
+    marginRight: SPACING.xs,
+  },
   thinkingHeaderText: {
     ...TYPOGRAPHY.bodySmall,
-    flex: 1,
     color: COLORS.textMuted,
     fontWeight: '500',
+  },
+  thinkingPreview: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.text,
+    marginTop: 6,
+    lineHeight: 18,
+    opacity: 0.8,
   },
   thinkingToggle: {
     ...TYPOGRAPHY.meta,
@@ -826,7 +810,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   editButtonSave: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
   },
   editButtonTextCancel: {
     ...TYPOGRAPHY.h2,

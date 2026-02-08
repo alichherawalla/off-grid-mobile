@@ -180,7 +180,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
           )}
 
           {/* Content */}
-          <ScrollView style={styles.content}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+          >
             {activeTab === 'text' ? (
               // Text Models Tab
               <>
@@ -459,6 +462,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+  },
+  contentContainer: {
+    paddingBottom: 24,
   },
   loadedSection: {
     marginBottom: 20,

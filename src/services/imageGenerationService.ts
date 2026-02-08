@@ -154,7 +154,7 @@ class ImageGenerationService {
           result: null,
         });
 
-        // Add message to show enhancement in progress
+        // Add message to show enhancement in progress with thinking animation
         if (params.conversationId) {
           const chatStore = useChatStore.getState();
           const tempMessage = chatStore.addMessage(
@@ -162,6 +162,7 @@ class ImageGenerationService {
             {
               role: 'assistant',
               content: 'Enhancing your prompt...',
+              isThinking: true,
             }
           );
           tempMessageId = tempMessage.id;
@@ -221,16 +222,17 @@ class ImageGenerationService {
             console.error('[ImageGen] ❌ Failed to reset LLM service:', resetError);
           }
 
-          // Update thinking message with enhanced prompt
+          // Update thinking message with enhanced prompt as a collapsible block
           if (params.conversationId && tempMessageId) {
             const chatStore = useChatStore.getState();
 
-            // If enhancement worked, show it; otherwise delete the thinking message
+            // If enhancement worked, show it as a collapsible block
             if (enhancedPrompt && enhancedPrompt !== params.prompt) {
               chatStore.updateMessage(
                 params.conversationId,
                 tempMessageId,
-                `Enhanced prompt:\n\n"${enhancedPrompt}"`
+                `<think>__LABEL:Enhanced prompt__\n${enhancedPrompt}</think>`,
+                false  // Clear the isThinking flag so it renders as a collapsible block
               );
             } else {
               console.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
@@ -391,15 +393,11 @@ class ImageGenerationService {
 
           const chatStore = useChatStore.getState();
 
-          // Delete the temp enhancement message if it exists
-          if (tempMessageId) {
-            chatStore.deleteMessage(params.conversationId, tempMessageId);
-          }
+          // Keep the enhanced prompt message (don't delete it)
+          // It's already shown as a collapsible block in the chat
 
-          // Show both original and enhanced prompt if enhancement was used
-          const messageContent = enhancedPrompt !== params.prompt
-            ? `Generated image for: "${params.prompt}"\n\nEnhanced prompt: "${enhancedPrompt}"`
-            : `Generated image for: "${params.prompt}"`;
+          // Add image message with only the original prompt
+          const messageContent = `Generated image for: "${params.prompt}"`;
 
           chatStore.addMessage(
             params.conversationId,
