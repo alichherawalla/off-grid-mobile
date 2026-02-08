@@ -405,6 +405,27 @@ export interface ProjectFactoryOptions {
   updatedAt?: string;
 }
 
+// ============================================================================
+// Model File with MmProj Factory
+// ============================================================================
+
+export const createModelFileWithMmProj = (options: ModelFileFactoryOptions & {
+  mmProjName?: string;
+  mmProjSize?: number;
+  mmProjDownloadUrl?: string;
+} = {}): ModelFile => ({
+  ...createModelFile(options),
+  mmProjFile: {
+    name: options.mmProjName ?? 'mmproj-model-f16.gguf',
+    size: options.mmProjSize ?? 500 * 1024 * 1024,
+    downloadUrl: options.mmProjDownloadUrl ?? 'https://huggingface.co/test/model/resolve/main/mmproj-model-f16.gguf',
+  },
+});
+
+// ============================================================================
+// Project Factory
+// ============================================================================
+
 export const createProject = (options: ProjectFactoryOptions = {}): Project => ({
   id: options.id ?? generateId('project'),
   name: options.name ?? 'Test Project',

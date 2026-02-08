@@ -279,6 +279,52 @@ export const createStreamingMock = (tokens: string[], delayBetweenTokens = 10) =
 };
 
 // ============================================================================
+// Mock Context Factories
+// ============================================================================
+
+/**
+ * Creates a mock LlamaContext matching the llama.rn initLlama return shape.
+ */
+export const createMockLlamaContext = (overrides: Record<string, any> = {}) => ({
+  id: 'test-context-id',
+  gpu: false,
+  reasonNoGPU: 'Test environment',
+  model: { nParams: 1000000 },
+  release: jest.fn(() => Promise.resolve()),
+  completion: jest.fn(() => Promise.resolve({
+    text: 'Test completion response',
+    tokens_predicted: 10,
+    tokens_evaluated: 5,
+    timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
+  })),
+  stopCompletion: jest.fn(() => Promise.resolve()),
+  tokenize: jest.fn((text: string) => Promise.resolve({ tokens: new Array(Math.ceil(text.length / 4)) })),
+  initMultimodal: jest.fn(() => Promise.resolve(true)),
+  getMultimodalSupport: jest.fn(() => Promise.resolve({ vision: false, audio: false })),
+  clearCache: jest.fn(() => Promise.resolve()),
+  transcribe: jest.fn(() => ({
+    promise: Promise.resolve({ result: 'transcribed text' }),
+  })),
+  ...overrides,
+});
+
+/**
+ * Creates a mock WhisperContext matching the whisper.rn initWhisper return shape.
+ */
+export const createMockWhisperContext = (overrides: Record<string, any> = {}) => ({
+  id: 'test-whisper-id',
+  release: jest.fn(() => Promise.resolve()),
+  transcribeRealtime: jest.fn(() => Promise.resolve({
+    stop: jest.fn(),
+    subscribe: jest.fn(),
+  })),
+  transcribe: jest.fn((filePath: string, opts: any) => ({
+    promise: Promise.resolve({ result: 'transcribed text' }),
+  })),
+  ...overrides,
+});
+
+// ============================================================================
 // Subscription Testing
 // ============================================================================
 

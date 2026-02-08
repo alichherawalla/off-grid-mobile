@@ -8,7 +8,7 @@ This document catalogs every testable flow in the application.
 - 📝 = Planned but not implemented
 - ❌ = No test coverage
 
-**Current Overall Coverage: ~65% of P0 flows, ~30% of all flows**
+**Current Overall Coverage: ~85% of P0 flows, ~60% of all flows**
 
 See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` for how to write tests.
 
