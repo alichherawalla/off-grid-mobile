@@ -5,7 +5,14 @@ import {
   GeneratedImage,
 } from '../types';
 
-const { LocalDreamModule } = NativeModules;
+const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
+
+// Pick the right native module per platform
+const DiffusionModule = Platform.select({
+  ios: CoreMLDiffusionModule,
+  android: LocalDreamModule,
+  default: null,
+});
 
 type ProgressCallback = (progress: ImageGenerationProgress) => void;
 type PreviewCallback = (preview: { previewPath: string; step: number; totalSteps: number }) => void;
@@ -30,19 +37,19 @@ class LocalDreamGeneratorService {
 
   private getEmitter(): NativeEventEmitter {
     if (!this.eventEmitter) {
-      this.eventEmitter = new NativeEventEmitter(LocalDreamModule);
+      this.eventEmitter = new NativeEventEmitter(DiffusionModule);
     }
     return this.eventEmitter;
   }
 
   isAvailable(): boolean {
-    return Platform.OS === 'android' && LocalDreamModule != null;
+    return DiffusionModule != null;
   }
 
   async isModelLoaded(): Promise<boolean> {
     if (!this.isAvailable()) return false;
     try {
-      return await LocalDreamModule.isModelLoaded();
+      return await DiffusionModule.isModelLoaded();
     } catch {
       return false;
     }
@@ -51,7 +58,7 @@ class LocalDreamGeneratorService {
   async getLoadedModelPath(): Promise<string | null> {
     if (!this.isAvailable()) return null;
     try {
-      return await LocalDreamModule.getLoadedModelPath();
+      return await DiffusionModule.getLoadedModelPath();
     } catch {
       return null;
     }
@@ -70,7 +77,7 @@ class LocalDreamGeneratorService {
       params.threads = threads;
     }
 
-    const result = await LocalDreamModule.loadModel(params);
+    const result = await DiffusionModule.loadModel(params);
     this.loadedThreads = typeof threads === 'number' ? threads : this.loadedThreads;
     return result;
   }
@@ -81,7 +88,7 @@ class LocalDreamGeneratorService {
 
   async unloadModel(): Promise<boolean> {
     if (!this.isAvailable()) return true;
-    const result = await LocalDreamModule.unloadModel();
+    const result = await DiffusionModule.unloadModel();
     this.loadedThreads = null;
     return result;
   }
@@ -127,7 +134,7 @@ class LocalDreamGeneratorService {
 
     try {
       // Call native generateImage — handles HTTP POST, SSE parsing, and PNG saving
-      const result = await LocalDreamModule.generateImage({
+      const result = await DiffusionModule.generateImage({
         prompt: params.prompt,
         negativePrompt: params.negativePrompt || '',
         steps: params.steps || 20,
@@ -166,7 +173,7 @@ class LocalDreamGeneratorService {
   async cancelGeneration(): Promise<boolean> {
     if (!this.isAvailable()) return true;
     this.generating = false;
-    return await LocalDreamModule.cancelGeneration();
+    return await DiffusionModule.cancelGeneration();
   }
 
   async isGenerating(): Promise<boolean> {
@@ -176,7 +183,7 @@ class LocalDreamGeneratorService {
   async getGeneratedImages(): Promise<GeneratedImage[]> {
     if (!this.isAvailable()) return [];
     try {
-      const images = await LocalDreamModule.getGeneratedImages();
+      const images = await DiffusionModule.getGeneratedImages();
       return images.map((img: any) => ({
         id: img.id,
         prompt: img.prompt || '',
@@ -195,7 +202,7 @@ class LocalDreamGeneratorService {
 
   async deleteGeneratedImage(imageId: string): Promise<boolean> {
     if (!this.isAvailable()) return false;
-    return await LocalDreamModule.deleteGeneratedImage(imageId);
+    return await DiffusionModule.deleteGeneratedImage(imageId);
   }
 
   getConstants() {
@@ -209,7 +216,7 @@ class LocalDreamGeneratorService {
         SUPPORTED_HEIGHTS: [128, 192, 256, 320, 384, 448, 512],
       };
     }
-    return LocalDreamModule.getConstants();
+    return DiffusionModule.getConstants();
   }
 }
 

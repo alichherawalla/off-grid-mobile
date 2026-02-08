@@ -213,7 +213,7 @@ export interface ONNXImageModel {
   downloadedAt: string;
   size: number; // Total size of all model files in bytes
   style?: string; // e.g., 'creative', 'photorealistic', 'anime'
-  backend?: 'mnn' | 'qnn'; // 'mnn' for CPU, 'qnn' for Qualcomm NPU
+  backend?: 'mnn' | 'qnn' | 'coreml'; // 'mnn' for CPU, 'qnn' for Qualcomm NPU, 'coreml' for Apple Core ML
 }
 
 // Image generation state for UI

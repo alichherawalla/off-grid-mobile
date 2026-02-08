@@ -377,7 +377,7 @@ class ImageGenerationService {
         if (params.conversationId) {
           const backend = activeImageModel.backend ?? 'mnn';
           const gpuBackend = Platform.OS === 'ios'
-            ? 'Metal'
+            ? 'Core ML (ANE)'
             : backend === 'qnn'
               ? 'QNN (NPU)'
               : 'MNN (CPU)';

@@ -4,6 +4,7 @@
  * All other code should use this service, never call llmService/onnxImageGeneratorService directly
  */
 
+import { Platform } from 'react-native';
 import { llmService } from './llm';
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 import { modelManager } from './modelManager';
@@ -19,7 +20,7 @@ export type ModelType = 'text' | 'image';
 const MEMORY_BUDGET_PERCENT = 0.60; // Use up to 60% of device RAM for models
 const MEMORY_WARNING_PERCENT = 0.50; // Warn when exceeding 50% of device RAM
 const TEXT_MODEL_OVERHEAD_MULTIPLIER = 1.5; // KV cache, activations, etc.
-const IMAGE_MODEL_OVERHEAD_MULTIPLIER = 1.8; // ONNX runtime, intermediate tensors
+const IMAGE_MODEL_OVERHEAD_MULTIPLIER = Platform.OS === 'ios' ? 1.5 : 1.8; // Core ML is more efficient than ONNX runtime
 
 // Get dynamic memory budget based on device
 const getMemoryBudgetGB = async (): Promise<number> => {

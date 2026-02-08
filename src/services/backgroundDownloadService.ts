@@ -12,6 +12,14 @@ interface DownloadParams {
   totalBytes?: number;
 }
 
+interface MultiFileDownloadParams {
+  files: { url: string; relativePath: string; size: number }[];
+  fileName: string;
+  modelId: string;
+  destinationDir: string;
+  totalBytes?: number;
+}
+
 interface DownloadProgressEvent {
   downloadId: number;
   fileName: string;
@@ -62,7 +70,7 @@ class BackgroundDownloadService {
    * Check if background downloads are available (Android only)
    */
   isAvailable(): boolean {
-    return Platform.OS === 'android' && DownloadManagerModule != null;
+    return DownloadManagerModule != null;
   }
 
   /**
@@ -84,6 +92,33 @@ class BackgroundDownloadService {
 
     // Start polling for progress
     // this.startProgressPolling(); // REMOVED: Callers must start polling after registering listeners to avoid race conditions
+
+    return {
+      downloadId: result.downloadId,
+      fileName: result.fileName,
+      modelId: result.modelId,
+      status: 'pending',
+      bytesDownloaded: 0,
+      totalBytes: params.totalBytes || 0,
+      startedAt: Date.now(),
+    };
+  }
+
+  /**
+   * Start a multi-file background download (files downloaded to destinationDir preserving relative paths)
+   */
+  async startMultiFileDownload(params: MultiFileDownloadParams): Promise<BackgroundDownloadInfo> {
+    if (!this.isAvailable()) {
+      throw new Error('Background downloads not available on this platform');
+    }
+
+    const result = await DownloadManagerModule.startMultiFileDownload({
+      files: params.files,
+      fileName: params.fileName,
+      modelId: params.modelId,
+      destinationDir: params.destinationDir,
+      totalBytes: params.totalBytes || 0,
+    });
 
     return {
       downloadId: result.downloadId,
