@@ -24,7 +24,7 @@ interface ChatState {
 
   // Messages
   addMessage: (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>, attachments?: MediaAttachment[], generationTimeMs?: number, generationMeta?: GenerationMeta) => Message;
-  updateMessage: (conversationId: string, messageId: string, content: string) => void;
+  updateMessage: (conversationId: string, messageId: string, content: string, isThinking?: boolean) => void;
   deleteMessage: (conversationId: string, messageId: string) => void;
   deleteMessagesAfter: (conversationId: string, messageId: string) => void;
 
@@ -139,14 +139,16 @@ export const useChatStore = create<ChatState>()(
         return message;
       },
 
-      updateMessage: (conversationId, messageId, content) => {
+      updateMessage: (conversationId, messageId, content, isThinking) => {
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id === conversationId
               ? {
                   ...conv,
                   messages: conv.messages.map((msg) =>
-                    msg.id === messageId ? { ...msg, content } : msg
+                    msg.id === messageId
+                      ? { ...msg, content, ...(isThinking !== undefined && { isThinking }) }
+                      : msg
                   ),
                   updatedAt: new Date().toISOString(),
                 }

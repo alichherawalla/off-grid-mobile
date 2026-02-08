@@ -231,7 +231,8 @@ class ImageGenerationService {
               chatStore.updateMessage(
                 params.conversationId,
                 tempMessageId,
-                `<think>__LABEL:Enhanced prompt__\n${enhancedPrompt}</think>`
+                `<think>__LABEL:Enhanced prompt__\n${enhancedPrompt}</think>`,
+                false  // Clear the isThinking flag so it renders as a collapsible block
               );
             } else {
               console.warn('[ImageGen] Enhancement produced no change, deleting thinking message');

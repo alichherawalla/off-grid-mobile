@@ -110,6 +110,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     ? parseThinkingContent(displayContent)
     : { thinking: null, response: message.content, isThinkingComplete: true };
 
+
   const isUser = message.role === 'user';
   const hasAttachments = message.attachments && message.attachments.length > 0;
 
@@ -227,7 +228,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
           {/* Text content */}
           {message.isThinking ? (
-            <View testID="thinking-indicator"><ThinkingIndicator /></View>
+            <View testID="thinking-indicator"><ThinkingIndicator text={message.content} /></View>
           ) : message.content ? (
             <View>
               {/* Thinking block for assistant messages */}
@@ -249,11 +250,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       <Text testID="thinking-block-title" style={styles.thinkingHeaderText}>
                         {parsedContent.thinkingLabel || (parsedContent.isThinkingComplete ? 'Thought process' : 'Thinking...')}
                       </Text>
-                      {!showThinking && parsedContent.thinking && parsedContent.thinking.length > 0 && (
-                        <Text style={styles.thinkingPreview} numberOfLines={1} ellipsizeMode="tail">
-                          {parsedContent.thinking.length > 50
-                            ? `${parsedContent.thinking.slice(0, 50)}...`
-                            : parsedContent.thinking}
+                      {!showThinking && parsedContent.thinking && (
+                        <Text style={styles.thinkingPreview} numberOfLines={2} ellipsizeMode="tail">
+                          {parsedContent.thinking.slice(0, 80)}
+                          {parsedContent.thinking.length > 80 ? '...' : ''}
                         </Text>
                       )}
                     </View>
@@ -619,10 +619,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden',
+    minWidth: 260,
   },
   thinkingHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 8,
     gap: 6,
   },
@@ -649,10 +650,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   thinkingPreview: {
-    ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
-    fontStyle: 'italic',
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.text,
+    marginTop: 6,
+    lineHeight: 18,
+    opacity: 0.8,
   },
   thinkingToggle: {
     ...TYPOGRAPHY.meta,
