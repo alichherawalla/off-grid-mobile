@@ -433,6 +433,90 @@ describe('appStore', () => {
   });
 
   // ============================================================================
+  // Image Model Download Tracking
+  // ============================================================================
+  describe('imageModelDownloadTracking', () => {
+    it('starts with null imageModelDownloading', () => {
+      expect(getAppState().imageModelDownloading).toBeNull();
+    });
+
+    it('starts with null imageModelDownloadId', () => {
+      expect(getAppState().imageModelDownloadId).toBeNull();
+    });
+
+    it('setImageModelDownloading sets active download model', () => {
+      const { setImageModelDownloading } = useAppStore.getState();
+
+      setImageModelDownloading('anythingv5_cpu');
+
+      expect(getAppState().imageModelDownloading).toBe('anythingv5_cpu');
+    });
+
+    it('setImageModelDownloading with null clears download state', () => {
+      const { setImageModelDownloading } = useAppStore.getState();
+
+      setImageModelDownloading('anythingv5_cpu');
+      setImageModelDownloading(null);
+
+      expect(getAppState().imageModelDownloading).toBeNull();
+    });
+
+    it('setImageModelDownloadId tracks native download ID', () => {
+      const { setImageModelDownloadId } = useAppStore.getState();
+
+      setImageModelDownloadId(42);
+
+      expect(getAppState().imageModelDownloadId).toBe(42);
+    });
+
+    it('clearing download state unblocks new downloads', () => {
+      const { setImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+
+      // Simulate active download
+      setImageModelDownloading('model-a');
+      setImageModelDownloadId(1);
+      expect(getAppState().imageModelDownloading).toBe('model-a');
+
+      // Simulate cancel from another screen (e.g., DownloadManagerScreen)
+      setImageModelDownloading(null);
+      setImageModelDownloadId(null);
+
+      // Should be unblocked for new download
+      expect(getAppState().imageModelDownloading).toBeNull();
+      expect(getAppState().imageModelDownloadId).toBeNull();
+    });
+
+    it('image download metadata stored in activeBackgroundDownloads enables cancel', () => {
+      const { setBackgroundDownload, setImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+
+      // Simulate starting an image model download with metadata
+      setImageModelDownloading('anythingv5_cpu');
+      setImageModelDownloadId(99);
+      setBackgroundDownload(99, {
+        modelId: 'image:anythingv5_cpu',
+        fileName: 'anythingv5_cpu.zip',
+        quantization: '',
+        author: 'Image Generation',
+        totalBytes: 1_000_000_000,
+      });
+
+      // Metadata should be findable by downloadId
+      const meta = getAppState().activeBackgroundDownloads[99];
+      expect(meta).toBeDefined();
+      expect(meta.modelId).toBe('image:anythingv5_cpu');
+      expect(meta.fileName).toBe('anythingv5_cpu.zip');
+
+      // Simulate cancel: clear all state
+      setBackgroundDownload(99, null);
+      setImageModelDownloading(null);
+      setImageModelDownloadId(null);
+
+      expect(getAppState().activeBackgroundDownloads[99]).toBeUndefined();
+      expect(getAppState().imageModelDownloading).toBeNull();
+    });
+  });
+
+  // ============================================================================
   // Image Generation State
   // ============================================================================
   describe('imageGenerationState', () => {

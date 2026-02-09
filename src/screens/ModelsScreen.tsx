@@ -98,11 +98,14 @@ export const ModelsScreen: React.FC = () => {
     removeDownloadedImageModel,
     activeImageModelId,
     setActiveImageModelId,
+    imageModelDownloading,
+    setImageModelDownloading,
+    imageModelDownloadId,
+    setImageModelDownloadId,
+    setBackgroundDownload,
   } = useAppStore();
 
-  const [imageModelDownloading, setImageModelDownloading] = useState<string | null>(null);
   const [imageModelProgress, setImageModelProgress] = useState<number>(0);
-  const [imageModelDownloadId, setImageModelDownloadId] = useState<number | null>(null);
 
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
   const [hfModelsLoading, setHfModelsLoading] = useState(false);
@@ -403,6 +406,15 @@ export const ModelsScreen: React.FC = () => {
 
       setImageModelDownloadId(downloadInfo.downloadId);
 
+      // Store metadata so DownloadManagerScreen can find and cancel this download
+      setBackgroundDownload(downloadInfo.downloadId, {
+        modelId: `image:${modelInfo.id}`,
+        fileName: fileName,
+        quantization: '',
+        author: 'Image Generation',
+        totalBytes: modelInfo.size,
+      });
+
       // Subscribe to progress events
       const unsubProgress = backgroundDownloadService.onProgress(downloadInfo.downloadId, (event) => {
         const progress = event.totalBytes > 0
@@ -486,6 +498,7 @@ export const ModelsScreen: React.FC = () => {
           setImageModelDownloading(null);
           setImageModelProgress(0);
           setImageModelDownloadId(null);
+          setBackgroundDownload(downloadInfo.downloadId, null);
         }
       });
 
@@ -498,6 +511,7 @@ export const ModelsScreen: React.FC = () => {
         setImageModelDownloading(null);
         setImageModelProgress(0);
         setImageModelDownloadId(null);
+        setBackgroundDownload(downloadInfo.downloadId, null);
       });
 
       // Start polling after listeners are attached
@@ -624,6 +638,15 @@ export const ModelsScreen: React.FC = () => {
 
       setImageModelDownloadId(downloadInfo.downloadId);
 
+      // Store metadata so DownloadManagerScreen can find and cancel this download
+      setBackgroundDownload(downloadInfo.downloadId, {
+        modelId: `image:${modelInfo.id}`,
+        fileName: modelInfo.id,
+        quantization: 'Core ML',
+        author: 'Image Generation',
+        totalBytes: modelInfo.size,
+      });
+
       const unsubProgress = backgroundDownloadService.onProgress(downloadInfo.downloadId, (event) => {
         const progress = event.totalBytes > 0
           ? (event.bytesDownloaded / event.totalBytes)
@@ -669,6 +692,7 @@ export const ModelsScreen: React.FC = () => {
           setImageModelDownloading(null);
           setImageModelProgress(0);
           setImageModelDownloadId(null);
+          setBackgroundDownload(downloadInfo.downloadId, null);
         }
       });
 
@@ -680,6 +704,7 @@ export const ModelsScreen: React.FC = () => {
         setImageModelDownloading(null);
         setImageModelProgress(0);
         setImageModelDownloadId(null);
+        setBackgroundDownload(downloadInfo.downloadId, null);
       });
 
       backgroundDownloadService.startProgressPolling();

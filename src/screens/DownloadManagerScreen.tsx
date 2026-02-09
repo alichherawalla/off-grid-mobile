@@ -51,6 +51,8 @@ export const DownloadManagerScreen: React.FC = () => {
     downloadedImageModels,
     setDownloadedImageModels,
     removeDownloadedImageModel,
+    setImageModelDownloading,
+    setImageModelDownloadId,
   } = useAppStore();
 
   // Load active background downloads on mount
@@ -155,6 +157,12 @@ export const DownloadManagerScreen: React.FC = () => {
                 setActiveDownloads(prev => prev.filter(d => d.downloadId !== downloadId));
                 setBackgroundDownload(downloadId, null);
                 await modelManager.cancelBackgroundDownload(downloadId);
+              }
+
+              // Clear image model download state so ModelsScreen unblocks
+              if (item.modelId.startsWith('image:')) {
+                setImageModelDownloading(null);
+                setImageModelDownloadId(null);
               }
 
               // Wait a bit for native cancellation to complete, then reload

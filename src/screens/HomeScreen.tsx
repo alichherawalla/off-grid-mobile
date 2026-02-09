@@ -65,6 +65,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     activeModelId,
     setActiveModelId,
     downloadedImageModels,
+    setDownloadedImageModels,
     activeImageModelId,
     setActiveImageModelId,
     deviceInfo,
@@ -120,6 +121,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
     const models = await modelManager.getDownloadedModels();
     setDownloadedModels(models);
+    const imageModels = await modelManager.getDownloadedImageModels();
+    setDownloadedImageModels(imageModels);
   };
 
   const handleSelectTextModel = async (model: DownloadedModel) => {

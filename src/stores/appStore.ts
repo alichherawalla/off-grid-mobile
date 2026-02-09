@@ -98,6 +98,12 @@ interface AppState {
   removeDownloadedImageModel: (modelId: string) => void;
   setActiveImageModelId: (modelId: string | null) => void;
 
+  // Image model download tracking (global so cancel works across screens)
+  imageModelDownloading: string | null;
+  imageModelDownloadId: number | null;
+  setImageModelDownloading: (modelId: string | null) => void;
+  setImageModelDownloadId: (downloadId: number | null) => void;
+
   // Image generation state
   isGeneratingImage: boolean;
   imageGenerationProgress: { step: number; totalSteps: number } | null;
@@ -244,6 +250,12 @@ export const useAppStore = create<AppState>()(
           activeImageModelId: state.activeImageModelId === modelId ? null : state.activeImageModelId,
         })),
       setActiveImageModelId: (modelId) => set({ activeImageModelId: modelId }),
+
+      // Image model download tracking
+      imageModelDownloading: null,
+      imageModelDownloadId: null,
+      setImageModelDownloading: (modelId) => set({ imageModelDownloading: modelId }),
+      setImageModelDownloadId: (downloadId) => set({ imageModelDownloadId: downloadId }),
 
       // Image generation state
       isGeneratingImage: false,
