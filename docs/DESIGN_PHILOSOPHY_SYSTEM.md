@@ -131,10 +131,10 @@ Monochromatic palette with emerald green as the only accent.
 #### Semantic Colors
 | Token | Hex | Use Case |
 |-------|-----|----------|
-| `COLORS.success` | `#22C55E` | Success states |
-| `COLORS.warning` | `#F59E0B` | Warnings |
-| `COLORS.error` | `#EF4444` | Errors |
-| `COLORS.info` | `#3B82F6` | Informational |
+| `COLORS.success` | `#B0B0B0` | Success states (monochrome, matches textSecondary) |
+| `COLORS.warning` | `#FFFFFF` | Warnings (bright white for attention) |
+| `COLORS.error` | `#EF4444` | Errors (only color exception besides primary) |
+| `COLORS.info` | `#B0B0B0` | Informational (monochrome, stays neutral) |
 
 #### Special
 | Token | Hex | Use Case |

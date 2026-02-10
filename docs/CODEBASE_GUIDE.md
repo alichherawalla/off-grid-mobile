@@ -40,7 +40,7 @@ LocalLLM is a **privacy-first, on-device AI assistant** built with React Native.
 - Model browsing and download from Hugging Face
 
 **Platform support:**
-- iOS: Text generation (Metal GPU), Whisper. No image generation (LocalDream is Android-only).
+- iOS: Text generation (Metal GPU), Whisper, image generation via Core ML (ANE acceleration).
 - Android: Full feature set including image generation (MNN CPU, QNN NPU on Qualcomm), background downloads via system DownloadManager.
 
 ---
@@ -51,7 +51,7 @@ LocalLLM is a **privacy-first, on-device AI assistant** built with React Native.
 | Layer | Technology |
 |-------|-----------|
 | Framework | React Native (TypeScript) |
-| Navigation | React Navigation 6 (native stack + bottom tabs) |
+| Navigation | React Navigation 7 (native stack + bottom tabs) |
 | State | Zustand with `persist` middleware → AsyncStorage |
 | Styling | React Native StyleSheet (dark theme, custom palette) |
 
@@ -159,7 +159,8 @@ LocalLLM/
 │   │   └── useWhisperTranscription.ts  # Whisper transcription hook
 │   │
 │   ├── types/
-│   │   └── index.ts                    # All TypeScript interfaces & type aliases
+│   │   ├── index.ts                    # All TypeScript interfaces & type aliases
+│   │   └── whisper.rn.d.ts             # Whisper native module type declarations
 │   │
 │   ├── constants/
 │   │   └── index.ts                    # Model recommendations, quantization info, HF config, colors
@@ -169,12 +170,25 @@ LocalLLM/
 │
 ├── android/                             # Android native code
 │   └── app/src/main/java/com/localllm/
+│       ├── MainActivity.kt              # Main activity
+│       ├── MainApplication.kt           # Application entry point
 │       ├── localdream/
-│       │   └── LocalDreamModule.kt      # Stable Diffusion native module
+│       │   ├── LocalDreamModule.kt      # Stable Diffusion native module
+│       │   └── LocalDreamPackage.kt     # Package registration
 │       └── download/
-│           └── DownloadManagerModule.kt # Background download native module
+│           ├── DownloadManagerModule.kt # Background download native module
+│           ├── DownloadManagerPackage.kt # Package registration
+│           └── DownloadCompleteBroadcastReceiver.kt # Broadcast receiver
 │
-├── ios/                                 # iOS native code (minimal — uses RN library natives)
+├── ios/                                 # iOS native code
+│   └── LocalLLM/
+│       ├── AppDelegate.swift            # Application delegate
+│       ├── CoreMLDiffusion/
+│       │   ├── CoreMLDiffusionModule.swift  # Core ML image generation
+│       │   └── CoreMLDiffusionModule.m      # ObjC bridge
+│       └── Download/
+│           ├── DownloadManagerModule.swift   # iOS download manager
+│           └── DownloadManagerModule.m       # ObjC bridge
 │
 ├── __tests__/                           # Test suites
 │   ├── unit/                            # Store & service unit tests
@@ -191,7 +205,14 @@ LocalLLM/
 │   └── utils/
 │
 ├── docs/                                # Documentation
-│   └── CODEBASE_GUIDE.md                # This file — comprehensive architecture guide
+│   ├── CODEBASE_GUIDE.md                # This file — comprehensive architecture guide
+│   ├── DESIGN_PHILOSOPHY_SYSTEM.md      # Design system reference
+│   ├── VISUAL_HIERARCHY_STANDARD.md     # Visual hierarchy guidelines
+│   ├── IOS_PARITY_PLAN.md              # iOS feature parity plan
+│   ├── TEST_FLOWS.md                    # End-to-end test flows
+│   ├── TEST_COVERAGE_REPORT.md          # Test coverage report
+│   ├── TEST_PRIORITY_MAP.md             # Test priority mapping
+│   └── TEST_SPEC_FORMAT.md              # Test specification format
 │
 ├── patches/                             # patch-package patches
 ├── releases/                            # Release APKs
@@ -593,13 +614,39 @@ Android system DownloadManager integration.
 - `moveCompletedDownload(downloadId, destPath)` — moves from temp to models dir
 - `startProgressPolling()` / `stopProgressPolling()` — 500ms interval
 
-### iOS
+### iOS Native Modules
 
-Minimal custom native code. Relies on:
+#### CoreMLDiffusionModule (`ios/.../CoreMLDiffusion/CoreMLDiffusionModule.swift`)
+
+Stable Diffusion image generation via Apple's `ml-stable-diffusion` Core ML pipeline.
+
+**Architecture:**
+- In-process `StableDiffusionPipeline` (no subprocess)
+- Core ML auto-dispatches across CPU, GPU (Metal), and ANE (Apple Neural Engine)
+- DPM-Solver multistep scheduler for faster convergence
+- `reduceMemory` mode for iPhones with limited RAM
+
+**Key native methods:**
+- `loadModel(params)`, `unloadModel()`, `isModelLoaded()`
+- `generateImage(params)` — with step-by-step progress callbacks
+- `cancelGeneration()` — boolean flag checked between steps
+- `isNpuSupported()` — always true (Core ML uses ANE automatically)
+
+**Model format:** `.mlmodelc` compiled Core ML models from Apple's HuggingFace repos.
+
+#### DownloadManagerModule (`ios/.../Download/DownloadManagerModule.swift`)
+
+iOS background download manager using `URLSession` with background configuration.
+
+**Key differences from Android:**
+- Delegate-based progress callbacks (not polling)
+- Survives app suspension but NOT user force-quit
+- Temporary file on completion must be moved immediately
+
+**Additional iOS dependencies:**
 - `llama.rn` for Metal-accelerated LLM inference (99 GPU layers by default)
 - `whisper.rn` for speech-to-text
 - Standard RN library natives for everything else
-- No image generation support (LocalDream is Android-only)
 
 ### Third-Party Native Bindings
 
@@ -871,7 +918,7 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 5. Show "Model unloaded" system message
 6. Display freed memory estimate
 
-#### 9.4.3 Load Image Model (Android only)
+#### 9.4.3 Load Image Model
 
 **Trigger:** Image generation requested, or manual load from model selector.
 
@@ -994,7 +1041,7 @@ When `showGenerationDetails` is enabled in settings:
 
 ---
 
-### 9.6 Image Generation (Android only)
+### 9.6 Image Generation
 
 #### 9.6.1 Auto-Triggered Image Generation
 
@@ -1550,19 +1597,26 @@ npm run test:e2e:single   # Single Maestro flow
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| Primary | #6366F1 | Buttons, active states |
-| Primary Dark | #4F46E5 | Pressed states |
-| Secondary | #10B981 | Success accents |
-| Background | #0F172A | Main background |
-| Surface | #1E293B | Cards, inputs |
-| Surface Light | #334155 | Elevated surfaces |
-| Text | #F8FAFC | Primary text |
-| Text Secondary | #94A3B8 | Secondary text |
-| Text Muted | #64748B | Disabled/hint text |
-| Success | #22C55E | Success states |
-| Warning | #F59E0B | Warning states |
+| Primary | #34D399 | Emerald accent, active states |
+| Primary Dark | #10B981 | Pressed states |
+| Primary Light | #6EE7B7 | Subtle highlights |
+| Background | #0A0A0A | Main background (pure black) |
+| Surface | #141414 | Cards, elevated elements |
+| Surface Light | #1E1E1E | Nested elements, inputs |
+| Surface Hover | #252525 | Hover states |
+| Text | #FFFFFF | Primary text |
+| Text Secondary | #B0B0B0 | Secondary text |
+| Text Muted | #808080 | Metadata, placeholders |
+| Text Disabled | #4A4A4A | Disabled text |
+| Border | #1E1E1E | Default borders |
+| Border Light | #2A2A2A | Subtle lighter borders |
+| Border Focus | #34D399 | Focused/active borders |
+| Success | #B0B0B0 | Success states (monochrome) |
+| Warning | #FFFFFF | Warnings (bright white) |
 | Error | #EF4444 | Error states |
-| Border | #334155 | Borders, dividers |
+| Info | #B0B0B0 | Informational (monochrome) |
+| Overlay | rgba(0,0,0,0.7) | Modal backgrounds |
+| Divider | #1A1A1A | Subtle dividers |
 
 ---
 

@@ -37,13 +37,15 @@ A comprehensive, implementation-ready plan for bringing LocalLLM's iOS build to 
 | Chat, projects, gallery UI | React Native | Same as Android |
 | Foreground model downloads | `RNFS.downloadFile()` | Same as Android |
 
-### What iOS is missing
+### What iOS was missing (now implemented)
 
-| Feature | Android Implementation | What iOS Needs |
-|---------|----------------------|----------------|
-| **Image generation** | LocalDream: spawns `libstable_diffusion_core.so` subprocess, runs HTTP server on localhost:18081, communicates via SSE. Backends: MNN (CPU), QNN (Qualcomm NPU). | Apple's `ml-stable-diffusion` Swift package. Core ML pipeline with ANE (Apple Neural Engine) acceleration. Completely different backend, same TypeScript interface. |
-| **Background downloads** | Android `DownloadManager` system service via custom Kotlin native module (`DownloadManagerModule.kt`). Survives app kill. Polls at 500ms for progress. | `URLSession` with background configuration. Delegate-based progress (not polling). Survives app suspension but NOT user force-quit. |
-| **Image model browsing** | Fetches from `xororz/sd-mnn` and `xororz/sd-qnn` HuggingFace repos. Models are `.zip` archives containing `.mnn`/`.bin` files. | Fetches from Apple's Core ML repos on HuggingFace. Models are `.zip` archives containing `.mlmodelc` directories (compiled Core ML). |
+> **Note (Feb 2026):** Image generation via Core ML and the Core ML model browser have been implemented. Background downloads via URLSession are still pending. See `ios/LocalLLM/CoreMLDiffusion/CoreMLDiffusionModule.swift` and `src/services/coreMLModelBrowser.ts`.
+
+| Feature | Android Implementation | iOS Status |
+|---------|----------------------|------------|
+| **Image generation** | LocalDream: spawns `libstable_diffusion_core.so` subprocess, runs HTTP server on localhost:18081, communicates via SSE. Backends: MNN (CPU), QNN (Qualcomm NPU). | **IMPLEMENTED** — `CoreMLDiffusionModule.swift` wraps Apple's `ml-stable-diffusion` StableDiffusionPipeline with ANE acceleration. |
+| **Image model browsing** | Fetches from `xororz/sd-mnn` and `xororz/sd-qnn` HuggingFace repos. Models are `.zip` archives containing `.mnn`/`.bin` files. | **IMPLEMENTED** — `coreMLModelBrowser.ts` fetches from Apple's Core ML repos on HuggingFace. |
+| **Background downloads** | Android `DownloadManager` system service via custom Kotlin native module (`DownloadManagerModule.kt`). Survives app kill. Polls at 500ms for progress. | **PARTIAL** — `DownloadManagerModule.swift` exists but uses foreground RNFS downloads. Full `URLSession` background configuration still pending. |
 
 ---
 
