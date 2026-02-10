@@ -137,6 +137,11 @@ jest.mock('whisper.rn', () => ({
     segments: [],
   })),
   transcribeRealtime: jest.fn(() => Promise.resolve()),
+  AudioSessionIos: {
+    setCategory: jest.fn(() => Promise.resolve()),
+    setMode: jest.fn(() => Promise.resolve()),
+    setActive: jest.fn(() => Promise.resolve()),
+  },
 }), { virtual: true });
 
 // react-native-fs mock
