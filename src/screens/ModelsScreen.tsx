@@ -99,13 +99,18 @@ export const ModelsScreen: React.FC = () => {
     activeImageModelId,
     setActiveImageModelId,
     imageModelDownloading,
-    setImageModelDownloading,
-    imageModelDownloadId,
+    addImageModelDownloading,
+    removeImageModelDownloading,
+    imageModelDownloadIds,
     setImageModelDownloadId,
     setBackgroundDownload,
   } = useAppStore();
 
-  const [imageModelProgress, setImageModelProgress] = useState<number>(0);
+  const [imageModelProgress, setImageModelProgress] = useState<Record<string, number>>({});
+  const updateModelProgress = (modelId: string, progress: number) =>
+    setImageModelProgress(prev => ({ ...prev, [modelId]: progress }));
+  const clearModelProgress = (modelId: string) =>
+    setImageModelProgress(prev => { const next = { ...prev }; delete next[modelId]; return next; });
 
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
   const [hfModelsLoading, setHfModelsLoading] = useState(false);
@@ -163,25 +168,26 @@ export const ModelsScreen: React.FC = () => {
 
     try {
       const activeDownloads = await modelManager.getActiveBackgroundDownloads();
-
-      // Find image model downloads (modelId starts with "image:")
-      const imageDownload = activeDownloads.find(d =>
+      const imageDownloads = activeDownloads.filter(d =>
         d.modelId.startsWith('image:') &&
         (d.status === 'running' || d.status === 'pending' || d.status === 'paused')
       );
 
-      if (imageDownload) {
-        // Extract the actual model ID (remove "image:" prefix)
-        const modelId = imageDownload.modelId.replace('image:', '');
-        setImageModelDownloading(modelId);
-        setImageModelDownloadId(imageDownload.downloadId);
+      // Clean stale downloads: imageModelDownloading has models with no matching native download
+      const activeNativeModelIds = new Set(imageDownloads.map(d => d.modelId.replace('image:', '')));
+      for (const modelId of imageModelDownloading) {
+        if (!activeNativeModelIds.has(modelId)) {
+          removeImageModelDownloading(modelId);
+        }
+      }
 
-        // Calculate progress
-        const progress = imageDownload.totalBytes > 0
-          ? imageDownload.bytesDownloaded / imageDownload.totalBytes
-          : 0;
-        setImageModelProgress(progress);
-
+      // Restore each active download
+      for (const download of imageDownloads) {
+        const modelId = download.modelId.replace('image:', '');
+        addImageModelDownloading(modelId);
+        setImageModelDownloadId(modelId, download.downloadId);
+        const progress = download.totalBytes > 0 ? download.bytesDownloaded / download.totalBytes : 0;
+        updateModelProgress(modelId, progress);
         console.log('[ModelsScreen] Restored image download state:', modelId, `${Math.round(progress * 100)}%`);
       }
     } catch (error) {
@@ -266,8 +272,8 @@ export const ModelsScreen: React.FC = () => {
       return;
     }
 
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -307,9 +313,8 @@ export const ModelsScreen: React.FC = () => {
           discretionary: false,
           progressInterval: 500,
           progress: (res) => {
-            const fileProgress = res.bytesWritten / res.contentLength;
             const overallProgress = (downloadedSize + res.bytesWritten) / totalSize;
-            setImageModelProgress(overallProgress * 0.95);
+            updateModelProgress(modelInfo.id, overallProgress * 0.95);
           },
         });
 
@@ -320,7 +325,7 @@ export const ModelsScreen: React.FC = () => {
         }
 
         downloadedSize += file.size;
-        setImageModelProgress((downloadedSize / totalSize) * 0.95);
+        updateModelProgress(modelInfo.id, (downloadedSize / totalSize) * 0.95);
       }
 
       // Register the model
@@ -342,7 +347,7 @@ export const ModelsScreen: React.FC = () => {
         setActiveImageModelId(imageModel.id);
       }
 
-      setImageModelProgress(1);
+      updateModelProgress(modelInfo.id, 1);
       setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
       console.error('[HuggingFace] Download error:', error);
@@ -357,18 +362,13 @@ export const ModelsScreen: React.FC = () => {
         console.warn('[HuggingFace] Failed to clean up:', e);
       }
     } finally {
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
   // Image model download/management - uses native background download service
   const handleDownloadImageModel = async (modelInfo: ImageModelDescriptor) => {
-    if (imageModelDownloading) {
-      setAlertState(showAlert('Download in Progress', 'Please wait for the current download to complete.'));
-      return;
-    }
-
     // Route to HuggingFace downloader if it's a HuggingFace model
     if (modelInfo.huggingFaceRepo && modelInfo.huggingFaceFiles) {
       await handleDownloadHuggingFaceModel(modelInfo);
@@ -388,8 +388,8 @@ export const ModelsScreen: React.FC = () => {
       return;
     }
 
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const fileName = `${modelInfo.id}.zip`;
@@ -404,7 +404,7 @@ export const ModelsScreen: React.FC = () => {
         totalBytes: modelInfo.size,
       });
 
-      setImageModelDownloadId(downloadInfo.downloadId);
+      setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
 
       // Store metadata so DownloadManagerScreen can find and cancel this download
       setBackgroundDownload(downloadInfo.downloadId, {
@@ -420,7 +420,7 @@ export const ModelsScreen: React.FC = () => {
         const progress = event.totalBytes > 0
           ? (event.bytesDownloaded / event.totalBytes) * 0.9
           : 0;
-        setImageModelProgress(progress);
+        updateModelProgress(modelInfo.id, progress);
       });
 
       // Subscribe to completion
@@ -430,7 +430,7 @@ export const ModelsScreen: React.FC = () => {
         unsubError();
 
         try {
-          setImageModelProgress(0.9);
+          updateModelProgress(modelInfo.id, 0.9);
 
           // Move the downloaded file to the image models directory
           const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -445,7 +445,7 @@ export const ModelsScreen: React.FC = () => {
           // Move the completed download
           await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
 
-          setImageModelProgress(0.92);
+          updateModelProgress(modelInfo.id, 0.92);
 
           // Create the model directory
           if (!(await RNFS.exists(modelDir))) {
@@ -461,7 +461,7 @@ export const ModelsScreen: React.FC = () => {
             ? await resolveCoreMLModelDir(modelDir)
             : modelDir;
 
-          setImageModelProgress(0.95);
+          updateModelProgress(modelInfo.id, 0.95);
 
           // Clean up the ZIP file
           try {
@@ -490,14 +490,13 @@ export const ModelsScreen: React.FC = () => {
             setActiveImageModelId(imageModel.id);
           }
 
-          setImageModelProgress(1);
+          updateModelProgress(modelInfo.id, 1);
           setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
         } catch (extractError: any) {
           setAlertState(showAlert('Extraction Failed', extractError?.message || 'Failed to extract model'));
         } finally {
-          setImageModelDownloading(null);
-          setImageModelProgress(0);
-          setImageModelDownloadId(null);
+          removeImageModelDownloading(modelInfo.id);
+          clearModelProgress(modelInfo.id);
           setBackgroundDownload(downloadInfo.downloadId, null);
         }
       });
@@ -508,9 +507,8 @@ export const ModelsScreen: React.FC = () => {
         unsubComplete();
         unsubError();
         setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
-        setImageModelDownloading(null);
-        setImageModelProgress(0);
-        setImageModelDownloadId(null);
+        removeImageModelDownloading(modelInfo.id);
+        clearModelProgress(modelInfo.id);
         setBackgroundDownload(downloadInfo.downloadId, null);
       });
 
@@ -519,16 +517,15 @@ export const ModelsScreen: React.FC = () => {
 
     } catch (error: any) {
       setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
-      setImageModelDownloadId(null);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
   // Fallback download method using RNFS (for iOS or when native module unavailable)
   const handleDownloadImageModelFallback = async (modelInfo: ImageModelDescriptor) => {
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -549,7 +546,7 @@ export const ModelsScreen: React.FC = () => {
         progressInterval: 500,
         progress: (res) => {
           const progress = res.bytesWritten / res.contentLength;
-          setImageModelProgress(progress * 0.9);
+          updateModelProgress(modelInfo.id, progress * 0.9);
         },
       });
 
@@ -559,7 +556,7 @@ export const ModelsScreen: React.FC = () => {
         throw new Error(`Download failed with status ${result.statusCode}`);
       }
 
-      setImageModelProgress(0.9);
+      updateModelProgress(modelInfo.id, 0.9);
 
       // Create the model directory
       if (!(await RNFS.exists(modelDir))) {
@@ -574,7 +571,7 @@ export const ModelsScreen: React.FC = () => {
         ? await resolveCoreMLModelDir(modelDir)
         : modelDir;
 
-      setImageModelProgress(0.95);
+      updateModelProgress(modelInfo.id, 0.95);
 
       // Clean up the ZIP file
       await RNFS.unlink(zipPath).catch(() => { });
@@ -598,13 +595,13 @@ export const ModelsScreen: React.FC = () => {
         setActiveImageModelId(imageModel.id);
       }
 
-      setImageModelProgress(1);
+      updateModelProgress(modelInfo.id, 1);
       setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
     } catch (error: any) {
       setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
     } finally {
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
@@ -616,8 +613,8 @@ export const ModelsScreen: React.FC = () => {
     }
     if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
 
-    setImageModelDownloading(modelInfo.id);
-    setImageModelProgress(0);
+    addImageModelDownloading(modelInfo.id);
+    updateModelProgress(modelInfo.id, 0);
 
     try {
       const imageModelsDir = modelManager.getImageModelsDirectory();
@@ -636,7 +633,7 @@ export const ModelsScreen: React.FC = () => {
         totalBytes: modelInfo.size,
       });
 
-      setImageModelDownloadId(downloadInfo.downloadId);
+      setImageModelDownloadId(modelInfo.id, downloadInfo.downloadId);
 
       // Store metadata so DownloadManagerScreen can find and cancel this download
       setBackgroundDownload(downloadInfo.downloadId, {
@@ -651,7 +648,7 @@ export const ModelsScreen: React.FC = () => {
         const progress = event.totalBytes > 0
           ? (event.bytesDownloaded / event.totalBytes)
           : 0;
-        setImageModelProgress(progress * 0.95);
+        updateModelProgress(modelInfo.id, progress * 0.95);
       });
 
       const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async () => {
@@ -684,14 +681,13 @@ export const ModelsScreen: React.FC = () => {
             setActiveImageModelId(imageModel.id);
           }
 
-          setImageModelProgress(1);
+          updateModelProgress(modelInfo.id, 1);
           setAlertState(showAlert('Success', `${modelInfo.name} downloaded successfully!`));
         } catch (regError: any) {
           setAlertState(showAlert('Registration Failed', regError?.message || 'Failed to register model'));
         } finally {
-          setImageModelDownloading(null);
-          setImageModelProgress(0);
-          setImageModelDownloadId(null);
+          removeImageModelDownloading(modelInfo.id);
+          clearModelProgress(modelInfo.id);
           setBackgroundDownload(downloadInfo.downloadId, null);
         }
       });
@@ -701,18 +697,16 @@ export const ModelsScreen: React.FC = () => {
         unsubComplete();
         unsubError();
         setAlertState(showAlert('Download Failed', event.reason || 'Unknown error'));
-        setImageModelDownloading(null);
-        setImageModelProgress(0);
-        setImageModelDownloadId(null);
+        removeImageModelDownloading(modelInfo.id);
+        clearModelProgress(modelInfo.id);
         setBackgroundDownload(downloadInfo.downloadId, null);
       });
 
       backgroundDownloadService.startProgressPolling();
     } catch (error: any) {
       setAlertState(showAlert('Download Failed', error?.message || 'Unknown error'));
-      setImageModelDownloading(null);
-      setImageModelProgress(0);
-      setImageModelDownloadId(null);
+      removeImageModelDownloading(modelInfo.id);
+      clearModelProgress(modelInfo.id);
     }
   };
 
@@ -1175,16 +1169,16 @@ export const ModelsScreen: React.FC = () => {
               </Text>
             </View>
           </View>
-          {imageModelDownloading === model.id ? (
+          {imageModelDownloading.includes(model.id) ? (
             <View style={styles.imageDownloadProgress}>
               <Text style={styles.imageDownloadText}>
-                Downloading... {Math.round(imageModelProgress * 100)}%
+                Downloading... {Math.round((imageModelProgress[model.id] || 0) * 100)}%
               </Text>
               <View style={styles.imageProgressBar}>
                 <View
                   style={[
                     styles.imageProgressFill,
-                    { width: `${imageModelProgress * 100}%` },
+                    { width: `${(imageModelProgress[model.id] || 0) * 100}%` },
                   ]}
                 />
               </View>
@@ -1193,7 +1187,7 @@ export const ModelsScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.downloadImageButton}
               onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
-              disabled={!!imageModelDownloading}
+              disabled={imageModelDownloading.includes(model.id)}
             >
               <Icon name="download" size={16} color={COLORS.primary} />
               <Text style={styles.downloadImageButtonText}>Download</Text>

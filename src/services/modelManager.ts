@@ -38,6 +38,31 @@ class ModelManager {
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
+  /**
+   * Re-resolve a stored absolute path against the current base directory.
+   * Handles iOS simulator sandbox UUID changes where the Documents path changes
+   * between app reinstalls but model files are preserved via AsyncStorage.
+   * Returns the re-resolved path, or null if the stored path doesn't match the expected pattern.
+   */
+  private resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
+    // Extract the relative part after the known directory name
+    // e.g. storedPath = "/old-uuid/Documents/image_models/model_name"
+    //      currentBaseDir = "/new-uuid/Documents/image_models"
+    // We want to extract "model_name" and prepend currentBaseDir
+
+    // Find the base directory name (last component of currentBaseDir)
+    const baseDirName = currentBaseDir.substring(currentBaseDir.lastIndexOf('/') + 1);
+    const marker = `/${baseDirName}/`;
+    const markerIndex = storedPath.indexOf(marker);
+
+    if (markerIndex === -1) return null;
+
+    const relativePart = storedPath.substring(markerIndex + marker.length);
+    if (!relativePart) return null;
+
+    return `${currentBaseDir}/${relativePart}`;
+  }
+
   async initialize(): Promise<void> {
     // Ensure models directory exists
     const exists = await RNFS.exists(this.modelsDir);
@@ -58,17 +83,44 @@ class ModelManager {
 
       const models: DownloadedModel[] = JSON.parse(stored);
 
-      // Verify files still exist
+      // Verify files still exist (re-resolve paths for sandbox UUID changes on iOS simulator)
       const validModels: DownloadedModel[] = [];
+      let pathsUpdated = false;
       for (const model of models) {
-        const exists = await RNFS.exists(model.filePath);
+        let exists = await RNFS.exists(model.filePath);
+        if (!exists) {
+          // Try re-resolving against current DocumentDirectoryPath (handles iOS sandbox UUID changes)
+          const resolvedPath = this.resolveStoredPath(model.filePath, this.modelsDir);
+          if (resolvedPath && resolvedPath !== model.filePath) {
+            exists = await RNFS.exists(resolvedPath);
+            if (exists) {
+              console.log(`[ModelManager] Re-resolved text model path: ${model.filePath} -> ${resolvedPath}`);
+              model.filePath = resolvedPath;
+              pathsUpdated = true;
+            }
+          }
+        }
         if (exists) {
+          // Also re-resolve mmProjPath if present
+          if (model.mmProjPath) {
+            const mmExists = await RNFS.exists(model.mmProjPath);
+            if (!mmExists) {
+              const resolvedMmPath = this.resolveStoredPath(model.mmProjPath, this.modelsDir);
+              if (resolvedMmPath && resolvedMmPath !== model.mmProjPath && await RNFS.exists(resolvedMmPath)) {
+                console.log(`[ModelManager] Re-resolved mmProj path: ${model.mmProjPath} -> ${resolvedMmPath}`);
+                model.mmProjPath = resolvedMmPath;
+                pathsUpdated = true;
+              }
+            }
+          }
           validModels.push(model);
+        } else {
+          console.warn(`[ModelManager] Removing text model "${model.id}" — path not found: ${model.filePath}`);
         }
       }
 
-      // Update storage if we removed any invalid entries
-      if (validModels.length !== models.length) {
+      // Update storage if we removed any invalid entries or updated paths
+      if (validModels.length !== models.length || pathsUpdated) {
         await this.saveModelsList(validModels);
       }
 
@@ -918,17 +970,32 @@ class ModelManager {
 
       const models: ONNXImageModel[] = JSON.parse(stored);
 
-      // Verify model directories still exist
+      // Verify model directories still exist (re-resolve paths for sandbox UUID changes on iOS simulator)
       const validModels: ONNXImageModel[] = [];
+      let pathsUpdated = false;
       for (const model of models) {
-        const exists = await RNFS.exists(model.modelPath);
+        let exists = await RNFS.exists(model.modelPath);
+        if (!exists) {
+          // Try re-resolving against current DocumentDirectoryPath (handles iOS sandbox UUID changes)
+          const resolvedPath = this.resolveStoredPath(model.modelPath, this.imageModelsDir);
+          if (resolvedPath && resolvedPath !== model.modelPath) {
+            exists = await RNFS.exists(resolvedPath);
+            if (exists) {
+              console.log(`[ModelManager] Re-resolved image model path: ${model.modelPath} -> ${resolvedPath}`);
+              model.modelPath = resolvedPath;
+              pathsUpdated = true;
+            }
+          }
+        }
         if (exists) {
           validModels.push(model);
+        } else {
+          console.warn(`[ModelManager] Removing image model "${model.id}" — path not found: ${model.modelPath}`);
         }
       }
 
-      // Update storage if we removed any invalid entries
-      if (validModels.length !== models.length) {
+      // Update storage if we removed any invalid entries or updated paths
+      if (validModels.length !== models.length || pathsUpdated) {
         await this.saveImageModelsList(validModels);
       }
 

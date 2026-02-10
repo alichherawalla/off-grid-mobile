@@ -68,6 +68,8 @@ export const resetStores = (): void => {
     },
     downloadedImageModels: [],
     activeImageModelId: null,
+    imageModelDownloading: [],
+    imageModelDownloadIds: {},
     isGeneratingImage: false,
     imageGenerationProgress: null,
     imageGenerationStatus: null,

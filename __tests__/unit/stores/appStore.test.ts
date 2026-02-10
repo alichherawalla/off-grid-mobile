@@ -433,65 +433,104 @@ describe('appStore', () => {
   });
 
   // ============================================================================
-  // Image Model Download Tracking
+  // Image Model Download Tracking (Multi-download)
   // ============================================================================
   describe('imageModelDownloadTracking', () => {
-    it('starts with null imageModelDownloading', () => {
-      expect(getAppState().imageModelDownloading).toBeNull();
+    it('starts with empty imageModelDownloading array', () => {
+      expect(getAppState().imageModelDownloading).toEqual([]);
     });
 
-    it('starts with null imageModelDownloadId', () => {
-      expect(getAppState().imageModelDownloadId).toBeNull();
+    it('starts with empty imageModelDownloadIds', () => {
+      expect(getAppState().imageModelDownloadIds).toEqual({});
     });
 
-    it('setImageModelDownloading sets active download model', () => {
-      const { setImageModelDownloading } = useAppStore.getState();
+    it('addImageModelDownloading adds model to array', () => {
+      const { addImageModelDownloading } = useAppStore.getState();
 
-      setImageModelDownloading('anythingv5_cpu');
+      addImageModelDownloading('anythingv5_cpu');
 
-      expect(getAppState().imageModelDownloading).toBe('anythingv5_cpu');
+      expect(getAppState().imageModelDownloading).toEqual(['anythingv5_cpu']);
     });
 
-    it('setImageModelDownloading with null clears download state', () => {
-      const { setImageModelDownloading } = useAppStore.getState();
+    it('addImageModelDownloading does not duplicate', () => {
+      const { addImageModelDownloading } = useAppStore.getState();
 
-      setImageModelDownloading('anythingv5_cpu');
-      setImageModelDownloading(null);
+      addImageModelDownloading('anythingv5_cpu');
+      addImageModelDownloading('anythingv5_cpu');
 
-      expect(getAppState().imageModelDownloading).toBeNull();
+      expect(getAppState().imageModelDownloading).toEqual(['anythingv5_cpu']);
     });
 
-    it('setImageModelDownloadId tracks native download ID', () => {
+    it('removeImageModelDownloading removes model from array', () => {
+      const { addImageModelDownloading, removeImageModelDownloading } = useAppStore.getState();
+
+      addImageModelDownloading('model-a');
+      addImageModelDownloading('model-b');
+      removeImageModelDownloading('model-a');
+
+      expect(getAppState().imageModelDownloading).toEqual(['model-b']);
+    });
+
+    it('setImageModelDownloadId maps model to download ID', () => {
       const { setImageModelDownloadId } = useAppStore.getState();
 
-      setImageModelDownloadId(42);
+      setImageModelDownloadId('model-a', 42);
 
-      expect(getAppState().imageModelDownloadId).toBe(42);
+      expect(getAppState().imageModelDownloadIds['model-a']).toBe(42);
     });
 
-    it('clearing download state unblocks new downloads', () => {
-      const { setImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+    it('setImageModelDownloadId with null removes mapping', () => {
+      const { setImageModelDownloadId } = useAppStore.getState();
 
-      // Simulate active download
-      setImageModelDownloading('model-a');
-      setImageModelDownloadId(1);
-      expect(getAppState().imageModelDownloading).toBe('model-a');
+      setImageModelDownloadId('model-a', 42);
+      setImageModelDownloadId('model-a', null);
 
-      // Simulate cancel from another screen (e.g., DownloadManagerScreen)
-      setImageModelDownloading(null);
-      setImageModelDownloadId(null);
+      expect(getAppState().imageModelDownloadIds['model-a']).toBeUndefined();
+    });
 
-      // Should be unblocked for new download
-      expect(getAppState().imageModelDownloading).toBeNull();
-      expect(getAppState().imageModelDownloadId).toBeNull();
+    it('multiple concurrent downloads tracked independently', () => {
+      const { addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+
+      addImageModelDownloading('model-a');
+      setImageModelDownloadId('model-a', 1);
+      addImageModelDownloading('model-b');
+      setImageModelDownloadId('model-b', 2);
+
+      expect(getAppState().imageModelDownloading).toEqual(['model-a', 'model-b']);
+      expect(getAppState().imageModelDownloadIds).toEqual({ 'model-a': 1, 'model-b': 2 });
+    });
+
+    it('removeImageModelDownloading also clears download ID', () => {
+      const { addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
+
+      addImageModelDownloading('model-a');
+      setImageModelDownloadId('model-a', 1);
+      removeImageModelDownloading('model-a');
+
+      expect(getAppState().imageModelDownloading).toEqual([]);
+      expect(getAppState().imageModelDownloadIds['model-a']).toBeUndefined();
+    });
+
+    it('clearImageModelDownloading clears all', () => {
+      const { addImageModelDownloading, setImageModelDownloadId, clearImageModelDownloading } = useAppStore.getState();
+
+      addImageModelDownloading('model-a');
+      setImageModelDownloadId('model-a', 1);
+      addImageModelDownloading('model-b');
+      setImageModelDownloadId('model-b', 2);
+
+      clearImageModelDownloading();
+
+      expect(getAppState().imageModelDownloading).toEqual([]);
+      expect(getAppState().imageModelDownloadIds).toEqual({});
     });
 
     it('image download metadata stored in activeBackgroundDownloads enables cancel', () => {
-      const { setBackgroundDownload, setImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+      const { setBackgroundDownload, addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
 
       // Simulate starting an image model download with metadata
-      setImageModelDownloading('anythingv5_cpu');
-      setImageModelDownloadId(99);
+      addImageModelDownloading('anythingv5_cpu');
+      setImageModelDownloadId('anythingv5_cpu', 99);
       setBackgroundDownload(99, {
         modelId: 'image:anythingv5_cpu',
         fileName: 'anythingv5_cpu.zip',
@@ -508,11 +547,77 @@ describe('appStore', () => {
 
       // Simulate cancel: clear all state
       setBackgroundDownload(99, null);
-      setImageModelDownloading(null);
-      setImageModelDownloadId(null);
+      removeImageModelDownloading('anythingv5_cpu');
 
       expect(getAppState().activeBackgroundDownloads[99]).toBeUndefined();
-      expect(getAppState().imageModelDownloading).toBeNull();
+      expect(getAppState().imageModelDownloading).toEqual([]);
+    });
+  });
+
+  // ============================================================================
+  // Image Model Download Persistence (survives app restart)
+  // ============================================================================
+  describe('imageModelDownloadPersistence', () => {
+    it('partialize includes imageModelDownloading array', () => {
+      const { addImageModelDownloading } = useAppStore.getState();
+      addImageModelDownloading('test-model');
+
+      expect(getAppState().imageModelDownloading).toEqual(['test-model']);
+    });
+
+    it('partialize includes imageModelDownloadIds record', () => {
+      const { setImageModelDownloadId } = useAppStore.getState();
+      setImageModelDownloadId('test-model', 42);
+
+      expect(getAppState().imageModelDownloadIds).toEqual({ 'test-model': 42 });
+    });
+
+    it('imageModelDownloading array survives store rehydration', () => {
+      const { addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+
+      // Simulate active downloads
+      addImageModelDownloading('sd-model-v2');
+      setImageModelDownloadId('sd-model-v2', 7);
+      addImageModelDownloading('sd-model-v3');
+      setImageModelDownloadId('sd-model-v3', 8);
+
+      const state = useAppStore.getState();
+      expect(state.imageModelDownloading).toEqual(['sd-model-v2', 'sd-model-v3']);
+      expect(state.imageModelDownloadIds).toEqual({ 'sd-model-v2': 7, 'sd-model-v3': 8 });
+    });
+
+    it('cleared download state persists empty values correctly', () => {
+      const { addImageModelDownloading, setImageModelDownloadId, removeImageModelDownloading } = useAppStore.getState();
+
+      // Start then cancel a download
+      addImageModelDownloading('model-x');
+      setImageModelDownloadId('model-x', 99);
+      removeImageModelDownloading('model-x');
+
+      const state = useAppStore.getState();
+      expect(state.imageModelDownloading).toEqual([]);
+      expect(state.imageModelDownloadIds).toEqual({});
+    });
+
+    it('activeBackgroundDownloads is also persisted alongside download tracking', () => {
+      const { setBackgroundDownload, addImageModelDownloading, setImageModelDownloadId } = useAppStore.getState();
+
+      // Full download setup: both tracking state and metadata
+      addImageModelDownloading('coreml-sd21');
+      setImageModelDownloadId('coreml-sd21', 5);
+      setBackgroundDownload(5, {
+        modelId: 'image:coreml-sd21',
+        fileName: 'sd21-coreml.zip',
+        quantization: '',
+        author: 'Apple',
+        totalBytes: 2_500_000_000,
+      });
+
+      const state = useAppStore.getState();
+      expect(state.imageModelDownloading).toEqual(['coreml-sd21']);
+      expect(state.imageModelDownloadIds).toEqual({ 'coreml-sd21': 5 });
+      expect(state.activeBackgroundDownloads[5]).toBeDefined();
+      expect(state.activeBackgroundDownloads[5].modelId).toBe('image:coreml-sd21');
     });
   });
 

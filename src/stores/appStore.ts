@@ -99,10 +99,12 @@ interface AppState {
   setActiveImageModelId: (modelId: string | null) => void;
 
   // Image model download tracking (global so cancel works across screens)
-  imageModelDownloading: string | null;
-  imageModelDownloadId: number | null;
-  setImageModelDownloading: (modelId: string | null) => void;
-  setImageModelDownloadId: (downloadId: number | null) => void;
+  imageModelDownloading: string[];
+  imageModelDownloadIds: Record<string, number>;
+  addImageModelDownloading: (modelId: string) => void;
+  removeImageModelDownloading: (modelId: string) => void;
+  clearImageModelDownloading: () => void;
+  setImageModelDownloadId: (modelId: string, downloadId: number | null) => void;
 
   // Image generation state
   isGeneratingImage: boolean;
@@ -252,10 +254,32 @@ export const useAppStore = create<AppState>()(
       setActiveImageModelId: (modelId) => set({ activeImageModelId: modelId }),
 
       // Image model download tracking
-      imageModelDownloading: null,
-      imageModelDownloadId: null,
-      setImageModelDownloading: (modelId) => set({ imageModelDownloading: modelId }),
-      setImageModelDownloadId: (downloadId) => set({ imageModelDownloadId: downloadId }),
+      imageModelDownloading: [],
+      imageModelDownloadIds: {},
+      addImageModelDownloading: (modelId) =>
+        set((state) => ({
+          imageModelDownloading: [...state.imageModelDownloading.filter(id => id !== modelId), modelId],
+        })),
+      removeImageModelDownloading: (modelId) =>
+        set((state) => {
+          const { [modelId]: _, ...restIds } = state.imageModelDownloadIds;
+          return {
+            imageModelDownloading: state.imageModelDownloading.filter(id => id !== modelId),
+            imageModelDownloadIds: restIds,
+          };
+        }),
+      clearImageModelDownloading: () =>
+        set({ imageModelDownloading: [], imageModelDownloadIds: {} }),
+      setImageModelDownloadId: (modelId, downloadId) =>
+        set((state) => {
+          if (downloadId === null) {
+            const { [modelId]: _, ...rest } = state.imageModelDownloadIds;
+            return { imageModelDownloadIds: rest };
+          }
+          return {
+            imageModelDownloadIds: { ...state.imageModelDownloadIds, [modelId]: downloadId },
+          };
+        }),
 
       // Image generation state
       isGeneratingImage: false,
@@ -296,6 +320,27 @@ export const useAppStore = create<AppState>()(
     {
       name: 'local-llm-app-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      merge: (persistedState: any, currentState) => {
+        const merged = { ...currentState, ...persistedState };
+        // Migrate old string|null → string[]
+        if (typeof merged.imageModelDownloading === 'string') {
+          merged.imageModelDownloading = [merged.imageModelDownloading];
+        } else if (!Array.isArray(merged.imageModelDownloading)) {
+          merged.imageModelDownloading = [];
+        }
+        // Migrate old number|null → Record
+        if (typeof merged.imageModelDownloadId === 'number') {
+          const ids: Record<string, number> = {};
+          if (Array.isArray(merged.imageModelDownloading) && merged.imageModelDownloading.length > 0) {
+            ids[merged.imageModelDownloading[0]] = merged.imageModelDownloadId;
+          }
+          merged.imageModelDownloadIds = ids;
+          delete merged.imageModelDownloadId;
+        } else if (!merged.imageModelDownloadIds || typeof merged.imageModelDownloadIds !== 'object') {
+          merged.imageModelDownloadIds = {};
+        }
+        return merged as AppState;
+      },
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         activeModelId: state.activeModelId,
@@ -303,6 +348,9 @@ export const useAppStore = create<AppState>()(
         activeBackgroundDownloads: state.activeBackgroundDownloads,
         // Persist image model state
         activeImageModelId: state.activeImageModelId,
+        // Persist image model download tracking (survives app restart)
+        imageModelDownloading: state.imageModelDownloading,
+        imageModelDownloadIds: state.imageModelDownloadIds,
         // Persist gallery
         generatedImages: state.generatedImages,
       }),

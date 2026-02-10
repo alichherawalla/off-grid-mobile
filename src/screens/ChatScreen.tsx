@@ -1049,7 +1049,12 @@ export const ChatScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View testID="chat-screen" style={styles.keyboardView}>
+      <KeyboardAvoidingView
+        testID="chat-screen"
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerRow}>
@@ -1145,6 +1150,8 @@ export const ChatScreen: React.FC = () => {
             onContentSizeChange={handleContentSizeChange}
             onLayout={handleLayout}
             scrollEventThrottle={16}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
               autoscrollToTopThreshold: 100,
@@ -1499,7 +1506,7 @@ export const ChatScreen: React.FC = () => {
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
       />
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -1511,7 +1518,6 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
-    paddingBottom: 16,
   },
   header: {
     paddingHorizontal: 16,

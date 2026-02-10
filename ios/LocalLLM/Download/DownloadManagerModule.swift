@@ -27,14 +27,41 @@ class DownloadManagerModule: RCTEventEmitter {
     // Single-file download
     var task: URLSessionDownloadTask?
     var localUri: String?
+    var downloadUrl: String? // stored for reconnecting after app restart
     // Multi-file download
     var fileTasks: [Int: FileTask] // taskIdentifier -> FileTask
     var multiFileDestDir: String?
     var isMultiFile: Bool
   }
 
+  // Codable structs for UserDefaults persistence
+  private struct PersistedDownload: Codable {
+    let downloadId: Int64
+    let fileName: String
+    let modelId: String
+    var totalBytes: Int64
+    var bytesDownloaded: Int64
+    var status: String
+    var startedAt: Double
+    var localUri: String?
+    var downloadUrl: String?
+    var isMultiFile: Bool
+    var multiFileDestDir: String?
+    var fileTaskEntries: [PersistedFileTask]?
+  }
+
+  private struct PersistedFileTask: Codable {
+    let url: String
+    let relativePath: String
+    let destinationDir: String
+    var totalBytes: Int64
+    var bytesDownloaded: Int64
+    var completed: Bool
+  }
+
   // MARK: - State
 
+  private static let persistenceKey = "com.localllm.activeDownloads"
   private static var sharedSession: URLSession?
   private static var sessionDelegate: DownloadSessionDelegate?
 
@@ -49,7 +76,8 @@ class DownloadManagerModule: RCTEventEmitter {
 
   override init() {
     super.init()
-    NSLog("[DownloadManager] ✅ Module initialized")
+    NSLog("[DownloadManager] Module initialized")
+    restoreDownloads()
     setupSession()
   }
 
@@ -61,7 +89,7 @@ class DownloadManagerModule: RCTEventEmitter {
 
   override func startObserving() {
     hasListeners = true
-    NSLog("[DownloadManager] 👂 startObserving called — hasListeners = true")
+    NSLog("[DownloadManager] startObserving called — hasListeners = true")
   }
 
   override func stopObserving() {
@@ -69,14 +97,114 @@ class DownloadManagerModule: RCTEventEmitter {
     // Our JS listeners (from BackgroundDownloadService singleton) are permanent.
     // RN's listener lifecycle sometimes calls stop/start in quick succession,
     // which would cause us to drop events during active downloads.
-    NSLog("[DownloadManager] 🔇 stopObserving called — KEEPING hasListeners=true (listeners are permanent)")
+    NSLog("[DownloadManager] stopObserving called — KEEPING hasListeners=true (listeners are permanent)")
+  }
+
+  // MARK: - Persistence (UserDefaults)
+
+  private func persistDownloads() {
+    let persisted: [PersistedDownload] = downloads.values.map { info in
+      var fileEntries: [PersistedFileTask]?
+      if info.isMultiFile {
+        fileEntries = info.fileTasks.values.map { ft in
+          PersistedFileTask(
+            url: ft.url.absoluteString,
+            relativePath: ft.relativePath,
+            destinationDir: ft.destinationDir,
+            totalBytes: ft.totalBytes,
+            bytesDownloaded: ft.bytesDownloaded,
+            completed: ft.completed
+          )
+        }
+      }
+      return PersistedDownload(
+        downloadId: info.downloadId,
+        fileName: info.fileName,
+        modelId: info.modelId,
+        totalBytes: info.totalBytes,
+        bytesDownloaded: info.bytesDownloaded,
+        status: info.status,
+        startedAt: info.startedAt,
+        localUri: info.localUri,
+        downloadUrl: info.downloadUrl,
+        isMultiFile: info.isMultiFile,
+        multiFileDestDir: info.multiFileDestDir,
+        fileTaskEntries: fileEntries
+      )
+    }
+
+    if let data = try? JSONEncoder().encode(persisted) {
+      UserDefaults.standard.set(data, forKey: Self.persistenceKey)
+      NSLog("[DownloadManager] Persisted %d downloads to UserDefaults", persisted.count)
+    }
+  }
+
+  private func restoreDownloads() {
+    guard let data = UserDefaults.standard.data(forKey: Self.persistenceKey),
+          let persisted = try? JSONDecoder().decode([PersistedDownload].self, from: data) else {
+      NSLog("[DownloadManager] No persisted downloads found")
+      return
+    }
+
+    // Only restore downloads that were still active (running/pending)
+    let activeDownloads = persisted.filter { $0.status == "running" || $0.status == "pending" }
+    NSLog("[DownloadManager] Restoring %d active downloads from UserDefaults (of %d total persisted)", activeDownloads.count, persisted.count)
+
+    for p in activeDownloads {
+      var fileTasks: [Int: FileTask] = [:]
+      if p.isMultiFile, let entries = p.fileTaskEntries {
+        // Use negative placeholder keys; will be remapped when reconnecting tasks
+        for (index, entry) in entries.enumerated() {
+          let placeholderKey = -(index + 1)
+          fileTasks[placeholderKey] = FileTask(
+            url: URL(string: entry.url)!,
+            relativePath: entry.relativePath,
+            destinationDir: entry.destinationDir,
+            task: nil,
+            bytesDownloaded: entry.bytesDownloaded,
+            totalBytes: entry.totalBytes,
+            completed: entry.completed
+          )
+        }
+      }
+
+      let info = DownloadInfo(
+        downloadId: p.downloadId,
+        fileName: p.fileName,
+        modelId: p.modelId,
+        totalBytes: p.totalBytes,
+        bytesDownloaded: p.bytesDownloaded,
+        status: p.status,
+        startedAt: p.startedAt,
+        task: nil,
+        localUri: p.localUri,
+        downloadUrl: p.downloadUrl,
+        fileTasks: fileTasks,
+        multiFileDestDir: p.multiFileDestDir,
+        isMultiFile: p.isMultiFile
+      )
+
+      downloads[p.downloadId] = info
+
+      // Ensure nextDownloadId is higher than any restored ID
+      if p.downloadId >= nextDownloadId {
+        nextDownloadId = p.downloadId + 1
+      }
+
+      NSLog("[DownloadManager] Restored download #%lld: %@ (%@)", p.downloadId, p.fileName, p.status)
+    }
+
+    // Clean out completed/failed entries from persistence
+    if activeDownloads.count < persisted.count {
+      persistDownloads()
+    }
   }
 
   // MARK: - Session Setup
 
   private func setupSession() {
     if DownloadManagerModule.sharedSession == nil {
-      NSLog("[DownloadManager] 🔧 Creating NEW background URLSession")
+      NSLog("[DownloadManager] Creating NEW background URLSession")
       let config = URLSessionConfiguration.background(
         withIdentifier: "com.localllm.backgrounddownload"
       )
@@ -92,24 +220,95 @@ class DownloadManagerModule: RCTEventEmitter {
         delegate: delegate,
         delegateQueue: nil
       )
-      NSLog("[DownloadManager] 🔧 Background URLSession created successfully")
+      NSLog("[DownloadManager] Background URLSession created successfully")
 
-      // Cancel any orphaned tasks from previous app runs.
-      // A background URLSession with the same identifier reconnects to old tasks,
-      // which have task IDs we don't recognize. This causes "NOT FOUND in taskToDownloadId" errors.
-      DownloadManagerModule.sharedSession?.getAllTasks { tasks in
-        if !tasks.isEmpty {
-          NSLog("[DownloadManager] 🧹 Found %d orphaned tasks from previous session — cancelling all", tasks.count)
+      // Reconnect orphaned tasks from previous app runs to restored download state
+      DownloadManagerModule.sharedSession?.getAllTasks { [weak self] tasks in
+        guard let self = self else { return }
+        if tasks.isEmpty {
+          NSLog("[DownloadManager] No orphaned tasks found — clean session")
+          return
+        }
+
+        NSLog("[DownloadManager] Found %d tasks from previous session — attempting to reconnect", tasks.count)
+
+        self.queue.async(flags: .barrier) {
           for task in tasks {
-            NSLog("[DownloadManager] 🧹 Cancelling orphaned task#%d (state=%d)", task.taskIdentifier, task.state.rawValue)
-            task.cancel()
+            guard let taskUrl = task.originalRequest?.url?.absoluteString else {
+              NSLog("[DownloadManager] Orphaned task#%d has no URL — cancelling", task.taskIdentifier)
+              task.cancel()
+              continue
+            }
+
+            var matched = false
+
+            for (downloadId, var info) in self.downloads {
+              if info.isMultiFile {
+                // Find matching file task by URL
+                var updatedFileTasks = info.fileTasks
+                for (placeholderKey, ft) in info.fileTasks {
+                  if ft.url.absoluteString == taskUrl && !ft.completed && ft.task == nil {
+                    // Reconnect: move from placeholder key to real task ID
+                    var reconnectedFt = ft
+                    reconnectedFt.task = task as? URLSessionDownloadTask
+                    updatedFileTasks.removeValue(forKey: placeholderKey)
+                    updatedFileTasks[task.taskIdentifier] = reconnectedFt
+                    self.taskToDownloadId[task.taskIdentifier] = downloadId
+                    matched = true
+                    NSLog("[DownloadManager] Reconnected task#%d to download#%lld file %@", task.taskIdentifier, downloadId, ft.relativePath)
+                    break
+                  }
+                }
+                if matched {
+                  info.fileTasks = updatedFileTasks
+                  self.downloads[downloadId] = info
+                }
+              } else {
+                // Single file — match by URL
+                if info.downloadUrl == taskUrl && info.task == nil {
+                  info.task = task as? URLSessionDownloadTask
+                  self.downloads[downloadId] = info
+                  self.taskToDownloadId[task.taskIdentifier] = downloadId
+                  matched = true
+                  NSLog("[DownloadManager] Reconnected task#%d to download#%lld (%@)", task.taskIdentifier, downloadId, info.fileName)
+                }
+              }
+              if matched { break }
+            }
+
+            if !matched {
+              NSLog("[DownloadManager] No match for orphaned task#%d (url=%@, state=%d) — cancelling", task.taskIdentifier, taskUrl, task.state.rawValue)
+              task.cancel()
+            }
           }
-        } else {
-          NSLog("[DownloadManager] 🧹 No orphaned tasks found — clean session")
+        }
+      }
+
+      // After reconnection loop, mark unmatched downloads as failed
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+        guard let self = self else { return }
+        self.queue.async(flags: .barrier) {
+          for (downloadId, var info) in self.downloads {
+            if info.status == "running" || info.status == "pending" {
+              if info.isMultiFile {
+                let hasUnmatchedTask = info.fileTasks.values.contains { !$0.completed && $0.task == nil }
+                if hasUnmatchedTask {
+                  info.status = "failed"
+                  self.downloads[downloadId] = info
+                  NSLog("[DownloadManager] Marking download#%lld as failed — has unmatched file tasks after reconnection", downloadId)
+                }
+              } else if info.task == nil {
+                info.status = "failed"
+                self.downloads[downloadId] = info
+                NSLog("[DownloadManager] Marking download#%lld as failed — no URLSession task after reconnection", downloadId)
+              }
+            }
+          }
+          self.persistDownloads()
         }
       }
     } else {
-      NSLog("[DownloadManager] 🔧 Reusing existing URLSession, updating delegate.module")
+      NSLog("[DownloadManager] Reusing existing URLSession, updating delegate.module")
       DownloadManagerModule.sessionDelegate?.module = self
     }
   }
@@ -121,13 +320,13 @@ class DownloadManagerModule: RCTEventEmitter {
   // MARK: - React Methods
 
   @objc func startDownload(_ params: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-    NSLog("[DownloadManager] 📥 startDownload called with params: %@", params)
+    NSLog("[DownloadManager] startDownload called with params: %@", params)
 
     guard let urlString = params["url"] as? String,
           let url = URL(string: urlString),
           let fileName = params["fileName"] as? String,
           let modelId = params["modelId"] as? String else {
-      NSLog("[DownloadManager] ❌ startDownload: INVALID_PARAMS — missing url, fileName, or modelId")
+      NSLog("[DownloadManager] startDownload: INVALID_PARAMS — missing url, fileName, or modelId")
       reject("INVALID_PARAMS", "Missing url, fileName, or modelId", nil)
       return
     }
@@ -136,10 +335,10 @@ class DownloadManagerModule: RCTEventEmitter {
     let downloadId = nextDownloadId
     nextDownloadId += 1
 
-    NSLog("[DownloadManager] 📥 Starting download #%lld: url=%@, fileName=%@, modelId=%@, totalBytes=%lld", downloadId, urlString, fileName, modelId, totalBytes)
+    NSLog("[DownloadManager] Starting download #%lld: url=%@, fileName=%@, modelId=%@, totalBytes=%lld", downloadId, urlString, fileName, modelId, totalBytes)
 
     let task = session.downloadTask(with: url)
-    NSLog("[DownloadManager] 📥 Created URLSessionDownloadTask #%d for download #%lld", task.taskIdentifier, downloadId)
+    NSLog("[DownloadManager] Created URLSessionDownloadTask #%d for download #%lld", task.taskIdentifier, downloadId)
 
     let info = DownloadInfo(
       downloadId: downloadId,
@@ -151,6 +350,7 @@ class DownloadManagerModule: RCTEventEmitter {
       startedAt: Date().timeIntervalSince1970 * 1000,
       task: task,
       localUri: nil,
+      downloadUrl: urlString,
       fileTasks: [:],
       multiFileDestDir: nil,
       isMultiFile: false
@@ -161,11 +361,13 @@ class DownloadManagerModule: RCTEventEmitter {
     queue.sync(flags: .barrier) {
       self.downloads[downloadId] = info
       self.taskToDownloadId[task.taskIdentifier] = downloadId
-      NSLog("[DownloadManager] 📥 Stored download #%lld in state (total downloads: %d, taskMap entries: %d)", downloadId, self.downloads.count, self.taskToDownloadId.count)
+      NSLog("[DownloadManager] Stored download #%lld in state (total downloads: %d, taskMap entries: %d)", downloadId, self.downloads.count, self.taskToDownloadId.count)
     }
 
+    persistDownloads()
+
     task.resume()
-    NSLog("[DownloadManager] 📥 task.resume() called for download #%lld", downloadId)
+    NSLog("[DownloadManager] task.resume() called for download #%lld", downloadId)
 
     resolve([
       "downloadId": NSNumber(value: downloadId),
@@ -176,13 +378,13 @@ class DownloadManagerModule: RCTEventEmitter {
 
   /// Start a multi-file download (for Core ML models that are directory trees, not zips)
   @objc func startMultiFileDownload(_ params: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-    NSLog("[DownloadManager] 📥 startMultiFileDownload called with params: %@", params)
+    NSLog("[DownloadManager] startMultiFileDownload called with params: %@", params)
 
     guard let filesArray = params["files"] as? [[String: Any]],
           let fileName = params["fileName"] as? String,
           let modelId = params["modelId"] as? String,
           let destinationDir = params["destinationDir"] as? String else {
-      NSLog("[DownloadManager] ❌ startMultiFileDownload: INVALID_PARAMS")
+      NSLog("[DownloadManager] startMultiFileDownload: INVALID_PARAMS")
       reject("INVALID_PARAMS", "Missing files, fileName, modelId, or destinationDir", nil)
       return
     }
@@ -191,7 +393,7 @@ class DownloadManagerModule: RCTEventEmitter {
     let downloadId = nextDownloadId
     nextDownloadId += 1
 
-    NSLog("[DownloadManager] 📥 Starting multi-file download #%lld: %d files, totalBytes=%lld, dest=%@", downloadId, filesArray.count, totalBytes, destinationDir)
+    NSLog("[DownloadManager] Starting multi-file download #%lld: %d files, totalBytes=%lld, dest=%@", downloadId, filesArray.count, totalBytes, destinationDir)
 
     // Create destination directory
     let fileManager = FileManager.default
@@ -204,14 +406,14 @@ class DownloadManagerModule: RCTEventEmitter {
       guard let urlString = fileInfo["url"] as? String,
             let url = URL(string: urlString),
             let relativePath = fileInfo["relativePath"] as? String else {
-        NSLog("[DownloadManager] ⚠️ Skipping file %d: missing url or relativePath", index)
+        NSLog("[DownloadManager] Skipping file %d: missing url or relativePath", index)
         continue
       }
 
       let fileSize = (fileInfo["size"] as? NSNumber)?.int64Value ?? 0
       let task = session.downloadTask(with: url)
 
-      NSLog("[DownloadManager] 📥 File %d/%d: task#%d, relativePath=%@, size=%lld, url=%@", index + 1, filesArray.count, task.taskIdentifier, relativePath, fileSize, urlString)
+      NSLog("[DownloadManager] File %d/%d: task#%d, relativePath=%@, size=%lld, url=%@", index + 1, filesArray.count, task.taskIdentifier, relativePath, fileSize, urlString)
 
       let ft = FileTask(
         url: url,
@@ -237,6 +439,7 @@ class DownloadManagerModule: RCTEventEmitter {
       startedAt: Date().timeIntervalSince1970 * 1000,
       task: nil,
       localUri: nil,
+      downloadUrl: nil,
       fileTasks: fileTasks,
       multiFileDestDir: destinationDir,
       isMultiFile: true
@@ -248,14 +451,16 @@ class DownloadManagerModule: RCTEventEmitter {
       for task in tasks {
         self.taskToDownloadId[task.taskIdentifier] = downloadId
       }
-      NSLog("[DownloadManager] 📥 Stored multi-file download #%lld in state (taskMap entries: %d)", downloadId, self.taskToDownloadId.count)
+      NSLog("[DownloadManager] Stored multi-file download #%lld in state (taskMap entries: %d)", downloadId, self.taskToDownloadId.count)
     }
+
+    persistDownloads()
 
     // Start all tasks
     for task in tasks {
       task.resume()
     }
-    NSLog("[DownloadManager] 📥 Resumed all %d tasks for multi-file download #%lld", tasks.count, downloadId)
+    NSLog("[DownloadManager] Resumed all %d tasks for multi-file download #%lld", tasks.count, downloadId)
 
     resolve([
       "downloadId": NSNumber(value: downloadId),
@@ -266,10 +471,10 @@ class DownloadManagerModule: RCTEventEmitter {
 
   @objc func cancelDownload(_ downloadId: Double, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     let id = Int64(downloadId)
-    NSLog("[DownloadManager] 🛑 cancelDownload called for #%lld", id)
+    NSLog("[DownloadManager] cancelDownload called for #%lld", id)
     queue.async(flags: .barrier) {
       guard let info = self.downloads[id] else {
-        NSLog("[DownloadManager] ❌ cancelDownload: download #%lld NOT FOUND", id)
+        NSLog("[DownloadManager] cancelDownload: download #%lld NOT FOUND", id)
         reject("NOT_FOUND", "Download \(id) not found", nil)
         return
       }
@@ -282,16 +487,17 @@ class DownloadManagerModule: RCTEventEmitter {
       }
       self.downloads[id]?.status = "failed"
       self.downloads.removeValue(forKey: id)
-      NSLog("[DownloadManager] 🛑 Download #%lld cancelled and removed", id)
+      NSLog("[DownloadManager] Download #%lld cancelled and removed", id)
+      self.persistDownloads()
       resolve(nil)
     }
   }
 
   @objc func getActiveDownloads(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     queue.sync {
-      NSLog("[DownloadManager] 📋 getActiveDownloads: %d downloads in state", downloads.count)
+      NSLog("[DownloadManager] getActiveDownloads: %d downloads in state", downloads.count)
       let result = downloads.values.map { info -> [String: Any] in
-        NSLog("[DownloadManager]   → #%lld: %@ status=%@ bytes=%lld/%lld", info.downloadId, info.fileName, info.status, info.bytesDownloaded, info.totalBytes)
+        NSLog("[DownloadManager]   -> #%lld: %@ status=%@ bytes=%lld/%lld", info.downloadId, info.fileName, info.status, info.bytesDownloaded, info.totalBytes)
         return [
           "downloadId": NSNumber(value: info.downloadId),
           "fileName": info.fileName,
@@ -310,11 +516,11 @@ class DownloadManagerModule: RCTEventEmitter {
     let id = Int64(downloadId)
     queue.sync {
       guard let info = downloads[id] else {
-        NSLog("[DownloadManager] ❌ getDownloadProgress: #%lld NOT FOUND", id)
+        NSLog("[DownloadManager] getDownloadProgress: #%lld NOT FOUND", id)
         reject("NOT_FOUND", "Download \(id) not found", nil)
         return
       }
-      NSLog("[DownloadManager] 📊 getDownloadProgress #%lld: %@ %lld/%lld", id, info.status, info.bytesDownloaded, info.totalBytes)
+      NSLog("[DownloadManager] getDownloadProgress #%lld: %@ %lld/%lld", id, info.status, info.bytesDownloaded, info.totalBytes)
       resolve([
         "downloadId": NSNumber(value: info.downloadId),
         "fileName": info.fileName,
@@ -328,28 +534,28 @@ class DownloadManagerModule: RCTEventEmitter {
 
   @objc func moveCompletedDownload(_ downloadId: Double, targetPath: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     let id = Int64(downloadId)
-    NSLog("[DownloadManager] 📁 moveCompletedDownload #%lld → %@", id, targetPath)
+    NSLog("[DownloadManager] moveCompletedDownload #%lld -> %@", id, targetPath)
     queue.sync {
       guard let info = downloads[id] else {
-        NSLog("[DownloadManager] ❌ moveCompletedDownload: #%lld NOT FOUND", id)
+        NSLog("[DownloadManager] moveCompletedDownload: #%lld NOT FOUND", id)
         reject("NOT_FOUND", "Download \(id) not found or not completed", nil)
         return
       }
 
       // Multi-file downloads are already in their final location
       if info.isMultiFile {
-        NSLog("[DownloadManager] 📁 Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
+        NSLog("[DownloadManager] Multi-file download already at: %@", info.multiFileDestDir ?? "nil")
         resolve(info.multiFileDestDir ?? targetPath)
         return
       }
 
       guard let localUri = info.localUri else {
-        NSLog("[DownloadManager] ❌ moveCompletedDownload: #%lld localUri is nil (not completed yet)", id)
+        NSLog("[DownloadManager] moveCompletedDownload: #%lld localUri is nil (not completed yet)", id)
         reject("NOT_COMPLETED", "Download \(id) not completed yet", nil)
         return
       }
 
-      NSLog("[DownloadManager] 📁 Moving from %@ to %@", localUri, targetPath)
+      NSLog("[DownloadManager] Moving from %@ to %@", localUri, targetPath)
 
       let fileManager = FileManager.default
       let sourceURL = URL(fileURLWithPath: localUri)
@@ -362,17 +568,17 @@ class DownloadManagerModule: RCTEventEmitter {
 
       do {
         try fileManager.moveItem(at: sourceURL, to: targetURL)
-        NSLog("[DownloadManager] ✅ File moved successfully")
+        NSLog("[DownloadManager] File moved successfully")
         resolve(targetPath)
       } catch {
-        NSLog("[DownloadManager] ⚠️ moveItem failed: %@, trying copyItem", error.localizedDescription)
+        NSLog("[DownloadManager] moveItem failed: %@, trying copyItem", error.localizedDescription)
         do {
           try fileManager.copyItem(at: sourceURL, to: targetURL)
           try? fileManager.removeItem(at: sourceURL)
-          NSLog("[DownloadManager] ✅ File copied successfully")
+          NSLog("[DownloadManager] File copied successfully")
           resolve(targetPath)
         } catch {
-          NSLog("[DownloadManager] ❌ copyItem also failed: %@", error.localizedDescription)
+          NSLog("[DownloadManager] copyItem also failed: %@", error.localizedDescription)
           reject("MOVE_FAILED", "Failed to move file: \(error.localizedDescription)", error)
         }
       }
@@ -380,36 +586,36 @@ class DownloadManagerModule: RCTEventEmitter {
   }
 
   @objc func startProgressPolling() {
-    NSLog("[DownloadManager] ⏱️ startProgressPolling called (hasListeners=%d)", hasListeners ? 1 : 0)
+    NSLog("[DownloadManager] startProgressPolling called (hasListeners=%d)", hasListeners ? 1 : 0)
     DispatchQueue.main.async {
       guard self.pollingTimer == nil else {
-        NSLog("[DownloadManager] ⏱️ Polling timer already running, skipping")
+        NSLog("[DownloadManager] Polling timer already running, skipping")
         return
       }
       self.pollingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
         self?.pollProgress()
       }
-      NSLog("[DownloadManager] ⏱️ Polling timer STARTED (0.5s interval)")
+      NSLog("[DownloadManager] Polling timer STARTED (0.5s interval)")
     }
   }
 
   @objc func stopProgressPolling() {
-    NSLog("[DownloadManager] ⏱️ stopProgressPolling called")
+    NSLog("[DownloadManager] stopProgressPolling called")
     DispatchQueue.main.async {
       self.pollingTimer?.invalidate()
       self.pollingTimer = nil
-      NSLog("[DownloadManager] ⏱️ Polling timer STOPPED")
+      NSLog("[DownloadManager] Polling timer STOPPED")
     }
   }
 
   @objc override func addListener(_ eventName: String) {
-    NSLog("[DownloadManager] 👂 addListener('%@') called — calling super", eventName)
+    NSLog("[DownloadManager] addListener('%@') called — calling super", eventName)
     super.addListener(eventName)
-    NSLog("[DownloadManager] 👂 addListener('%@') done — hasListeners should now be true", eventName)
+    NSLog("[DownloadManager] addListener('%@') done — hasListeners should now be true", eventName)
   }
 
   @objc override func removeListeners(_ count: Int) {
-    NSLog("[DownloadManager] 🔇 removeListeners(%d) called — calling super", count)
+    NSLog("[DownloadManager] removeListeners(%d) called — calling super", count)
     super.removeListeners(count)
   }
 
@@ -417,16 +623,11 @@ class DownloadManagerModule: RCTEventEmitter {
 
   private func pollProgress() {
     guard hasListeners else {
-      NSLog("[DownloadManager] ⏱️ pollProgress: hasListeners=false, SKIPPING event send")
       return
     }
     queue.sync {
       let activeDownloads = downloads.filter { $0.value.status == "running" || $0.value.status == "pending" }
-      if !activeDownloads.isEmpty {
-        NSLog("[DownloadManager] ⏱️ pollProgress: sending progress for %d active downloads", activeDownloads.count)
-      }
       for (_, info) in activeDownloads {
-        NSLog("[DownloadManager] ⏱️ SENDING DownloadProgress event: #%lld %@  %lld/%lld", info.downloadId, info.fileName, info.bytesDownloaded, info.totalBytes)
         sendEvent(withName: "DownloadProgress", body: [
           "downloadId": NSNumber(value: info.downloadId),
           "fileName": info.fileName,
@@ -445,7 +646,7 @@ class DownloadManagerModule: RCTEventEmitter {
     queue.async(flags: .barrier) {
       guard let downloadId = self.taskToDownloadId[taskId],
             var info = self.downloads[downloadId] else {
-        NSLog("[DownloadManager] ⚠️ handleProgress: task#%d NOT FOUND in taskToDownloadId (map has %d entries)", taskId, self.taskToDownloadId.count)
+        NSLog("[DownloadManager] handleProgress: task#%d NOT FOUND in taskToDownloadId (map has %d entries)", taskId, self.taskToDownloadId.count)
         return
       }
 
@@ -465,7 +666,7 @@ class DownloadManagerModule: RCTEventEmitter {
         info.status = "running"
         // Log every ~5MB to avoid spam
         if totalBytesWritten % (5 * 1024 * 1024) < bytesWritten || totalBytesWritten == bytesWritten {
-          NSLog("[DownloadManager] 📶 Multi-file progress: download#%lld task#%d: %lld/%lld (aggregate: %lld/%lld)", downloadId, taskId, totalBytesWritten, totalBytesExpected, info.bytesDownloaded, info.totalBytes)
+          NSLog("[DownloadManager] Multi-file progress: download#%lld task#%d: %lld/%lld (aggregate: %lld/%lld)", downloadId, taskId, totalBytesWritten, totalBytesExpected, info.bytesDownloaded, info.totalBytes)
         }
       } else {
         info.bytesDownloaded = totalBytesWritten
@@ -473,7 +674,7 @@ class DownloadManagerModule: RCTEventEmitter {
         info.status = "running"
         // Log every ~5MB
         if totalBytesWritten % (5 * 1024 * 1024) < bytesWritten || totalBytesWritten == bytesWritten {
-          NSLog("[DownloadManager] 📶 Progress: download#%lld task#%d: %lld/%lld", downloadId, taskId, totalBytesWritten, totalBytesExpected)
+          NSLog("[DownloadManager] Progress: download#%lld task#%d: %lld/%lld", downloadId, taskId, totalBytesWritten, totalBytesExpected)
         }
       }
 
@@ -482,27 +683,27 @@ class DownloadManagerModule: RCTEventEmitter {
   }
 
   fileprivate func handleCompletion(taskId: Int, location: URL) {
-    NSLog("[DownloadManager] ✅ handleCompletion: task#%d, location=%@", taskId, location.path)
+    NSLog("[DownloadManager] handleCompletion: task#%d, location=%@", taskId, location.path)
     queue.async(flags: .barrier) {
       guard let downloadId = self.taskToDownloadId[taskId],
             var info = self.downloads[downloadId] else {
-        NSLog("[DownloadManager] ⚠️ handleCompletion: task#%d NOT FOUND in taskToDownloadId", taskId)
+        NSLog("[DownloadManager] handleCompletion: task#%d NOT FOUND in taskToDownloadId", taskId)
         return
       }
 
       let fileManager = FileManager.default
-      NSLog("[DownloadManager] ✅ handleCompletion for download#%lld (%@), isMultiFile=%d, hasListeners=%d", downloadId, info.fileName, info.isMultiFile ? 1 : 0, self.hasListeners ? 1 : 0)
+      NSLog("[DownloadManager] handleCompletion for download#%lld (%@), isMultiFile=%d, hasListeners=%d", downloadId, info.fileName, info.isMultiFile ? 1 : 0, self.hasListeners ? 1 : 0)
 
       if info.isMultiFile {
         // Move individual file to its destination
         guard var ft = info.fileTasks[taskId] else {
-          NSLog("[DownloadManager] ⚠️ handleCompletion: task#%d NOT FOUND in fileTasks", taskId)
+          NSLog("[DownloadManager] handleCompletion: task#%d NOT FOUND in fileTasks", taskId)
           return
         }
         let destPath = "\(ft.destinationDir)/\(ft.relativePath)"
         let destURL = URL(fileURLWithPath: destPath)
 
-        NSLog("[DownloadManager] 📁 Moving file task#%d: %@ → %@", taskId, location.path, destPath)
+        NSLog("[DownloadManager] Moving file task#%d: %@ -> %@", taskId, location.path, destPath)
 
         // Create subdirectories
         let parentDir = destURL.deletingLastPathComponent()
@@ -511,14 +712,14 @@ class DownloadManagerModule: RCTEventEmitter {
 
         do {
           try fileManager.moveItem(at: location, to: destURL)
-          NSLog("[DownloadManager] ✅ File moved: %@", ft.relativePath)
+          NSLog("[DownloadManager] File moved: %@", ft.relativePath)
         } catch {
-          NSLog("[DownloadManager] ⚠️ moveItem failed for %@: %@, trying copy", ft.relativePath, error.localizedDescription)
+          NSLog("[DownloadManager] moveItem failed for %@: %@, trying copy", ft.relativePath, error.localizedDescription)
           do {
             try fileManager.copyItem(at: location, to: destURL)
-            NSLog("[DownloadManager] ✅ File copied: %@", ft.relativePath)
+            NSLog("[DownloadManager] File copied: %@", ft.relativePath)
           } catch {
-            NSLog("[DownloadManager] ❌ Failed to save file %@: %@", ft.relativePath, error.localizedDescription)
+            NSLog("[DownloadManager] Failed to save file %@: %@", ft.relativePath, error.localizedDescription)
           }
         }
 
@@ -527,19 +728,20 @@ class DownloadManagerModule: RCTEventEmitter {
 
         let completedCount = info.fileTasks.values.filter { $0.completed }.count
         let totalCount = info.fileTasks.count
-        NSLog("[DownloadManager] 📊 Multi-file progress: %d/%d files completed for download#%lld", completedCount, totalCount, downloadId)
+        NSLog("[DownloadManager] Multi-file progress: %d/%d files completed for download#%lld", completedCount, totalCount, downloadId)
 
         // Check if all files complete
         let allDone = info.fileTasks.values.allSatisfy { $0.completed }
         if allDone {
-          NSLog("[DownloadManager] 🎉 ALL files complete for download#%lld!", downloadId)
+          NSLog("[DownloadManager] ALL files complete for download#%lld!", downloadId)
           info.status = "completed"
           info.bytesDownloaded = info.totalBytes
           info.localUri = info.multiFileDestDir
           self.downloads[downloadId] = info
+          self.persistDownloads()
 
           if self.hasListeners {
-            NSLog("[DownloadManager] 📤 SENDING DownloadComplete event for #%lld", downloadId)
+            NSLog("[DownloadManager] SENDING DownloadComplete event for #%lld", downloadId)
             self.sendEvent(withName: "DownloadComplete", body: [
               "downloadId": NSNumber(value: info.downloadId),
               "fileName": info.fileName,
@@ -550,7 +752,7 @@ class DownloadManagerModule: RCTEventEmitter {
               "localUri": info.multiFileDestDir ?? "",
             ] as [String: Any])
           } else {
-            NSLog("[DownloadManager] ⚠️ Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
+            NSLog("[DownloadManager] Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
           }
         } else {
           self.downloads[downloadId] = info
@@ -562,18 +764,19 @@ class DownloadManagerModule: RCTEventEmitter {
         let destURL = URL(fileURLWithPath: destPath)
         try? fileManager.removeItem(at: destURL)
 
-        NSLog("[DownloadManager] 📁 Moving single file: %@ → %@", location.path, destPath)
+        NSLog("[DownloadManager] Moving single file: %@ -> %@", location.path, destPath)
 
         do {
           try fileManager.moveItem(at: location, to: destURL)
-          NSLog("[DownloadManager] ✅ Single file saved to: %@", destPath)
+          NSLog("[DownloadManager] Single file saved to: %@", destPath)
           info.localUri = destPath
           info.status = "completed"
           info.bytesDownloaded = info.totalBytes
           self.downloads[downloadId] = info
+          self.persistDownloads()
 
           if self.hasListeners {
-            NSLog("[DownloadManager] 📤 SENDING DownloadComplete event for #%lld (single file)", downloadId)
+            NSLog("[DownloadManager] SENDING DownloadComplete event for #%lld (single file)", downloadId)
             self.sendEvent(withName: "DownloadComplete", body: [
               "downloadId": NSNumber(value: info.downloadId),
               "fileName": info.fileName,
@@ -584,12 +787,13 @@ class DownloadManagerModule: RCTEventEmitter {
               "localUri": destPath,
             ] as [String: Any])
           } else {
-            NSLog("[DownloadManager] ⚠️ Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
+            NSLog("[DownloadManager] Download#%lld completed but hasListeners=false, NOT sending event!", downloadId)
           }
         } catch {
-          NSLog("[DownloadManager] ❌ Failed to move single file: %@", error.localizedDescription)
+          NSLog("[DownloadManager] Failed to move single file: %@", error.localizedDescription)
           info.status = "failed"
           self.downloads[downloadId] = info
+          self.persistDownloads()
           if self.hasListeners {
             self.sendEvent(withName: "DownloadError", body: [
               "downloadId": NSNumber(value: info.downloadId),
@@ -607,19 +811,19 @@ class DownloadManagerModule: RCTEventEmitter {
   }
 
   fileprivate func handleError(taskId: Int, error: Error?) {
-    NSLog("[DownloadManager] ❌ handleError: task#%d, error=%@", taskId, error?.localizedDescription ?? "nil")
+    NSLog("[DownloadManager] handleError: task#%d, error=%@", taskId, error?.localizedDescription ?? "nil")
     queue.async(flags: .barrier) {
       guard let downloadId = self.taskToDownloadId[taskId],
             var info = self.downloads[downloadId] else {
-        NSLog("[DownloadManager] ⚠️ handleError: task#%d NOT FOUND in taskToDownloadId", taskId)
+        NSLog("[DownloadManager] handleError: task#%d NOT FOUND in taskToDownloadId", taskId)
         return
       }
 
-      NSLog("[DownloadManager] ❌ Download#%lld (%@) FAILED: %@", downloadId, info.fileName, error?.localizedDescription ?? "Unknown")
+      NSLog("[DownloadManager] Download#%lld (%@) FAILED: %@", downloadId, info.fileName, error?.localizedDescription ?? "Unknown")
 
       // For multi-file: one file failing = whole download fails
       if info.isMultiFile {
-        NSLog("[DownloadManager] 🛑 Cancelling all remaining tasks for multi-file download#%lld", downloadId)
+        NSLog("[DownloadManager] Cancelling all remaining tasks for multi-file download#%lld", downloadId)
         for (_, ft) in info.fileTasks where !ft.completed {
           ft.task?.cancel()
         }
@@ -627,9 +831,10 @@ class DownloadManagerModule: RCTEventEmitter {
 
       info.status = "failed"
       self.downloads[downloadId] = info
+      self.persistDownloads()
 
       if self.hasListeners {
-        NSLog("[DownloadManager] 📤 SENDING DownloadError event for #%lld", downloadId)
+        NSLog("[DownloadManager] SENDING DownloadError event for #%lld", downloadId)
         self.sendEvent(withName: "DownloadError", body: [
           "downloadId": NSNumber(value: info.downloadId),
           "fileName": info.fileName,
@@ -640,7 +845,7 @@ class DownloadManagerModule: RCTEventEmitter {
           "reason": error?.localizedDescription ?? "Unknown error",
         ] as [String: Any])
       } else {
-        NSLog("[DownloadManager] ⚠️ Download#%lld errored but hasListeners=false, NOT sending event!", downloadId)
+        NSLog("[DownloadManager] Download#%lld errored but hasListeners=false, NOT sending event!", downloadId)
       }
     }
   }
@@ -654,7 +859,7 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
   init(module: DownloadManagerModule) {
     self.module = module
     super.init()
-    NSLog("[DownloadManager] 🔗 DownloadSessionDelegate created")
+    NSLog("[DownloadManager] DownloadSessionDelegate created")
   }
 
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -667,7 +872,7 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
   }
 
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-    NSLog("[DownloadManager] 🔗 Delegate: didFinishDownloadingTo for task#%d at %@", downloadTask.taskIdentifier, location.path)
+    NSLog("[DownloadManager] Delegate: didFinishDownloadingTo for task#%d at %@", downloadTask.taskIdentifier, location.path)
 
     // CRITICAL: The file at `location` is deleted by URLSession as soon as this method returns.
     // We must copy it to a safe location SYNCHRONOUSLY before returning.
@@ -677,20 +882,20 @@ private class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
 
     do {
       try fileManager.copyItem(at: location, to: safeURL)
-      NSLog("[DownloadManager] 🔗 Delegate: copied temp file to safe location: %@", safeTmp)
+      NSLog("[DownloadManager] Delegate: copied temp file to safe location: %@", safeTmp)
       module?.handleCompletion(taskId: downloadTask.taskIdentifier, location: safeURL)
     } catch {
-      NSLog("[DownloadManager] 🔗 Delegate: FAILED to copy temp file: %@", error.localizedDescription)
+      NSLog("[DownloadManager] Delegate: FAILED to copy temp file: %@", error.localizedDescription)
       module?.handleError(taskId: downloadTask.taskIdentifier, error: error)
     }
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     if let error = error {
-      NSLog("[DownloadManager] 🔗 Delegate: didCompleteWithError for task#%d: %@", task.taskIdentifier, error.localizedDescription)
+      NSLog("[DownloadManager] Delegate: didCompleteWithError for task#%d: %@", task.taskIdentifier, error.localizedDescription)
       module?.handleError(taskId: task.taskIdentifier, error: error)
     } else {
-      NSLog("[DownloadManager] 🔗 Delegate: didCompleteWithError for task#%d: NO error (success)", task.taskIdentifier)
+      NSLog("[DownloadManager] Delegate: didCompleteWithError for task#%d: NO error (success)", task.taskIdentifier)
     }
   }
 }
