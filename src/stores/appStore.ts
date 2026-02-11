@@ -4,6 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, BackgroundDownloadInfo, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage } from '../types';
 
 interface AppState {
+  // Theme
+  themeMode: 'light' | 'dark';
+  setThemeMode: (mode: 'light' | 'dark') => void;
+
   // Onboarding
   hasCompletedOnboarding: boolean;
   setOnboardingComplete: (complete: boolean) => void;
@@ -127,6 +131,10 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      // Theme
+      themeMode: 'dark' as 'light' | 'dark',
+      setThemeMode: (mode) => set({ themeMode: mode }),
+
       // Onboarding
       hasCompletedOnboarding: false,
       setOnboardingComplete: (complete) =>
@@ -342,6 +350,7 @@ export const useAppStore = create<AppState>()(
         return merged as AppState;
       },
       partialize: (state) => ({
+        themeMode: state.themeMode,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         activeModelId: state.activeModelId,
         settings: state.settings,
