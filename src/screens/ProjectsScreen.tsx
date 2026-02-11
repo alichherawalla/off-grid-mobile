@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
 } from 'react-native';
@@ -13,7 +12,9 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -23,6 +24,8 @@ type NavigationProp = NativeStackNavigationProp<ProjectsStackParamList, 'Project
 export const ProjectsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { projects } = useProjectStore();
   const { conversations } = useChatStore();
 
@@ -62,13 +65,13 @@ export const ProjectsScreen: React.FC = () => {
             </Text>
           ) : null}
           <View style={styles.projectMeta}>
-            <Icon name="message-circle" size={10} color={COLORS.textMuted} />
+            <Icon name="message-circle" size={10} color={colors.textMuted} />
             <Text style={styles.projectMetaText}>
               {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
             </Text>
           </View>
         </View>
-        <Icon name="chevron-right" size={14} color={COLORS.textMuted} />
+        <Icon name="chevron-right" size={14} color={colors.textMuted} />
       </AnimatedListItem>
     );
   };
@@ -78,7 +81,7 @@ export const ProjectsScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
         <TouchableOpacity style={styles.newButton} onPress={handleNewProject}>
-          <Icon name="plus" size={16} color={COLORS.primary} />
+          <Icon name="plus" size={16} color={colors.primary} />
           <Text style={styles.newButtonText}>New</Text>
         </TouchableOpacity>
       </View>
@@ -91,7 +94,7 @@ export const ProjectsScreen: React.FC = () => {
         <View style={styles.emptyState}>
           <AnimatedEntry index={0} staggerMs={60} trigger={focusTrigger}>
             <View style={styles.emptyIcon}>
-              <Icon name="folder" size={20} color={COLORS.textMuted} />
+              <Icon name="folder" size={20} color={colors.textMuted} />
             </View>
           </AnimatedEntry>
           <AnimatedEntry index={1} staggerMs={60} trigger={focusTrigger}>
@@ -104,7 +107,7 @@ export const ProjectsScreen: React.FC = () => {
           </AnimatedEntry>
           <AnimatedEntry index={3} staggerMs={60} trigger={focusTrigger}>
             <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
-              <Icon name="plus" size={14} color={COLORS.primary} />
+              <Icon name="plus" size={14} color={colors.primary} />
               <Text style={styles.emptyButtonText}>Create Project</Text>
             </TouchableOpacity>
           </AnimatedEntry>
@@ -122,33 +125,33 @@ export const ProjectsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    ...SHADOWS.small,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
     zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   newButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 6,
@@ -156,12 +159,12 @@ const styles = StyleSheet.create({
   },
   newButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-    fontWeight: '400',
+    color: colors.primary,
+    fontWeight: '400' as const,
   },
   subtitle: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.sm,
@@ -171,57 +174,57 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
   },
   projectItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.md,
     borderRadius: 6,
     marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   projectIcon: {
     width: 32,
     height: 32,
     borderRadius: 6,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.md,
   },
   projectIconText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    fontWeight: '400',
+    color: colors.textMuted,
+    fontWeight: '400' as const,
   },
   projectContent: {
     flex: 1,
   },
   projectName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
-    fontWeight: '400',
+    color: colors.text,
+    fontWeight: '400' as const,
     marginBottom: SPACING.xs,
   },
   projectDescription: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: SPACING.xs,
   },
   projectMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.xs,
   },
   projectMetaText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.xxl,
   },
   emptyIcon: {
@@ -229,30 +232,30 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.lg,
   },
   emptyTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-    fontWeight: '400',
+    color: colors.text,
+    fontWeight: '400' as const,
     marginBottom: SPACING.sm,
   },
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 18,
     marginBottom: SPACING.xl,
   },
   emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: 6,
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-    fontWeight: '400',
+    color: colors.primary,
+    fontWeight: '400' as const,
   },
 });

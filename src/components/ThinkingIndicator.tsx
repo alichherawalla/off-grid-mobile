@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
-import { COLORS } from '../constants';
+import { useTheme } from '../theme';
 
 interface ThinkingIndicatorProps {
   text?: string;
@@ -11,6 +11,7 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   text = 'Thinking...',
   textStyle
 }) => {
+  const { colors } = useTheme();
   const dot1Anim = useRef(new Animated.Value(0.3)).current;
   const dot2Anim = useRef(new Animated.Value(0.3)).current;
   const dot3Anim = useRef(new Animated.Value(0.3)).current;
@@ -51,11 +52,11 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   return (
     <View style={styles.thinkingContainer}>
       <View style={styles.thinkingDots}>
-        <Animated.View style={[styles.thinkingDot, { opacity: dot1Anim }]} />
-        <Animated.View style={[styles.thinkingDot, { opacity: dot2Anim }]} />
-        <Animated.View style={[styles.thinkingDot, { opacity: dot3Anim }]} />
+        <Animated.View style={[styles.thinkingDot, { opacity: dot1Anim, backgroundColor: colors.primary }]} />
+        <Animated.View style={[styles.thinkingDot, { opacity: dot2Anim, backgroundColor: colors.primary }]} />
+        <Animated.View style={[styles.thinkingDot, { opacity: dot3Anim, backgroundColor: colors.primary }]} />
       </View>
-      <Text style={[styles.thinkingText, textStyle]}>{text}</Text>
+      <Text style={[styles.thinkingText, { color: colors.textSecondary }, textStyle]}>{text}</Text>
     </View>
   );
 };
@@ -73,11 +74,9 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: COLORS.primary,
     marginHorizontal: 2,
   },
   thinkingText: {
-    color: COLORS.textSecondary,
     fontSize: 12,
     fontStyle: 'italic',
   },

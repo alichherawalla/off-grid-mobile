@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
 } from 'react-native';
@@ -14,7 +13,9 @@ import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
 import { Conversation } from '../types';
@@ -25,6 +26,8 @@ type NavigationProp = NativeStackNavigationProp<ChatsStackParamList, 'ChatsList'
 export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { conversations, deleteConversation, setActiveConversation } = useChatStore();
   const { getProject } = useProjectStore();
   const { downloadedModels, removeImagesByConversationId } = useAppStore();
@@ -98,7 +101,7 @@ export const ChatsListScreen: React.FC = () => {
         testID={`conversation-item-${index}`}
       >
         <View style={styles.chatIcon}>
-          <Icon name="message-circle" size={20} color={COLORS.primary} />
+          <Icon name="message-circle" size={20} color={colors.primary} />
         </View>
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
@@ -118,7 +121,7 @@ export const ChatsListScreen: React.FC = () => {
             </View>
           )}
         </View>
-        <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
+        <Icon name="chevron-right" size={20} color={colors.textMuted} />
       </AnimatedListItem>
     );
   };
@@ -136,7 +139,7 @@ export const ChatsListScreen: React.FC = () => {
           style={[styles.newButton, !hasModels && styles.newButtonDisabled]}
           onPress={handleNewChat}
         >
-          <Icon name="plus" size={20} color={hasModels ? COLORS.primary : COLORS.textMuted} />
+          <Icon name="plus" size={20} color={hasModels ? colors.primary : colors.textMuted} />
           <Text style={[styles.newButtonText, !hasModels && styles.newButtonTextDisabled]}>
             New
           </Text>
@@ -147,7 +150,7 @@ export const ChatsListScreen: React.FC = () => {
         <View style={styles.emptyState}>
           <AnimatedEntry index={0} staggerMs={60} trigger={focusTrigger}>
             <View style={styles.emptyIcon}>
-              <Icon name="message-circle" size={32} color={COLORS.textMuted} />
+              <Icon name="message-circle" size={32} color={colors.textMuted} />
             </View>
           </AnimatedEntry>
           <AnimatedEntry index={1} staggerMs={60} trigger={focusTrigger}>
@@ -162,7 +165,7 @@ export const ChatsListScreen: React.FC = () => {
           </AnimatedEntry>
           {hasModels && (
             <AnimatedListItem index={3} staggerMs={60} trigger={focusTrigger} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
-              <Icon name="plus" size={18} color={COLORS.primary} />
+              <Icon name="plus" size={18} color={colors.primary} />
               <Text style={styles.emptyButtonText}>New Chat</Text>
             </AnimatedListItem>
           )}
@@ -188,33 +191,33 @@ export const ChatsListScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    ...SHADOWS.small,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
     zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   newButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.md + 2,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
@@ -222,62 +225,62 @@ const styles = StyleSheet.create({
   },
   newButtonDisabled: {
     backgroundColor: 'transparent',
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   newButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   newButtonTextDisabled: {
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   list: {
     padding: SPACING.lg,
   },
   chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     padding: SPACING.md,
     borderRadius: 12,
     marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   chatIcon: {
     width: 44,
     height: 44,
     borderRadius: 8,
-    backgroundColor: COLORS.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.md,
   },
   chatContent: {
     flex: 1,
   },
   chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xs,
   },
   chatTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
     marginRight: SPACING.sm,
   },
   chatDate: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   chatPreview: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   projectBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: COLORS.surfaceLight,
+    alignSelf: 'flex-start' as const,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs / 2,
     borderRadius: 4,
@@ -285,12 +288,12 @@ const styles = StyleSheet.create({
   },
   projectBadgeText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.xxl + SPACING.sm,
   },
   emptyIcon: {
@@ -298,29 +301,29 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.xl - SPACING.xs,
   },
   emptyTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
     marginBottom: SPACING.xl,
   },
   emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.xl - SPACING.xs,
     paddingVertical: SPACING.md,
     borderRadius: 8,
@@ -328,6 +331,6 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
 });

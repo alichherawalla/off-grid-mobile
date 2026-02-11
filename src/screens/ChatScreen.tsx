@@ -36,7 +36,9 @@ import {
 } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedPressable } from '../components/AnimatedPressable';
-import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
@@ -70,6 +72,9 @@ export const ChatScreen: React.FC = () => {
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
+
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const {
     activeModelId,
@@ -1007,7 +1012,7 @@ export const ChatScreen: React.FC = () => {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.noModelContainer}>
           <View style={styles.noModelIconContainer}>
-            <Icon name="cpu" size={32} color={COLORS.textMuted} />
+            <Icon name="cpu" size={32} color={colors.textMuted} />
           </View>
           <Text style={styles.noModelTitle}>No Model Selected</Text>
           <Text style={styles.noModelText}>
@@ -1044,7 +1049,7 @@ export const ChatScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading {loadingModelName}</Text>
           {modelSize ? (
             <Text style={styles.loadingSubtext}>{modelSize}</Text>
@@ -1094,7 +1099,7 @@ export const ChatScreen: React.FC = () => {
                   style={styles.iconButton}
                   onPress={() => (navigation as any).navigate('Gallery', { conversationId: activeConversationId })}
                 >
-                  <Icon name="image" size={14} color={COLORS.textSecondary} />
+                  <Icon name="image" size={14} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -1129,7 +1134,7 @@ export const ChatScreen: React.FC = () => {
           <View style={styles.emptyChat}>
             <AnimatedEntry index={0} staggerMs={60}>
               <View style={styles.emptyChatIconContainer}>
-                <Icon name="message-square" size={32} color={COLORS.textMuted} />
+                <Icon name="message-square" size={32} color={colors.textMuted} />
               </View>
             </AnimatedEntry>
             <AnimatedEntry index={1} staggerMs={60}>
@@ -1195,7 +1200,7 @@ export const ChatScreen: React.FC = () => {
               style={styles.scrollToBottomButton}
               onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}
             >
-              <Icon name="chevron-down" size={20} color={COLORS.textSecondary} />
+              <Icon name="chevron-down" size={20} color={colors.textSecondary} />
             </AnimatedPressable>
           </Animated.View>
         )}
@@ -1216,7 +1221,7 @@ export const ChatScreen: React.FC = () => {
                 <View style={styles.imageProgressContent}>
                   <View style={styles.imageProgressHeader}>
                     <View style={styles.imageProgressIconContainer}>
-                      <Icon name="image" size={18} color={COLORS.primary} />
+                      <Icon name="image" size={18} color={colors.primary} />
                     </View>
                     <View style={styles.imageProgressInfo}>
                       <Text style={styles.imageProgressTitle}>
@@ -1237,7 +1242,7 @@ export const ChatScreen: React.FC = () => {
                       style={styles.imageStopButton}
                       onPress={handleStop}
                     >
-                      <Icon name="x" size={16} color={COLORS.error} />
+                      <Icon name="x" size={16} color={colors.error} />
                     </TouchableOpacity>
                   </View>
                   {imageGenerationProgress && (
@@ -1339,14 +1344,14 @@ export const ChatScreen: React.FC = () => {
                   style={styles.imageViewerButton}
                   onPress={handleSaveImage}
                 >
-                  <Icon name="download" size={24} color={COLORS.text} />
+                  <Icon name="download" size={24} color={colors.text} />
                   <Text style={styles.imageViewerButtonText}>Save</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.imageViewerButton}
                   onPress={() => setViewerImageUri(null)}
                 >
-                  <Icon name="x" size={24} color={COLORS.text} />
+                  <Icon name="x" size={24} color={colors.text} />
                   <Text style={styles.imageViewerButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -1368,10 +1373,10 @@ export const ChatScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   keyboardView: {
     flex: 1,
@@ -1380,14 +1385,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
     zIndex: 10,
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   headerLeft: {
     flex: 1,
@@ -1395,59 +1400,59 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 2,
   },
   headerSubtitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   modelSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   modelSelectorArrow: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginLeft: SPACING.xs,
   },
   headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 4,
   },
   iconButton: {
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   iconButtonText: {
     ...TYPOGRAPHY.body,
     fontSize: 15,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   projectButton: {
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: COLORS.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '30',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   projectButtonText: {
     ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
   messageList: {
     paddingVertical: 16,
   },
   scrollToBottomContainer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: 80,
     right: 16,
     zIndex: 10,
@@ -1456,16 +1461,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   emptyChat: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 32,
   },
   emptyChatIconContainer: {
@@ -1473,27 +1478,27 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.lg,
   },
   emptyChatTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   emptyChatText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     marginBottom: SPACING.xl,
   },
   projectHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
@@ -1504,60 +1509,60 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: COLORS.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '30',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   projectHintIconText: {
     ...TYPOGRAPHY.bodySmall,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
   projectHintText: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.primary,
-    fontWeight: '500',
+    color: colors.primary,
+    fontWeight: '500' as const,
   },
   privacyReminder: {
-    backgroundColor: COLORS.info + '15',
+    backgroundColor: colors.info + '15',
     borderWidth: 1,
-    borderColor: COLORS.info + '40',
+    borderColor: colors.info + '40',
     maxWidth: 300,
   },
   privacyText: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: 16,
     paddingHorizontal: 24,
   },
   loadingText: {
     ...TYPOGRAPHY.h1,
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
+    color: colors.text,
   },
   loadingSubtext: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   loadingHint: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.lg,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     paddingHorizontal: 32,
   },
   noModelContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.xxl,
   },
   noModelIconContainer: {
@@ -1565,68 +1570,68 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.lg,
   },
   noModelTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   noModelText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
   },
   selectModelButton: {
     marginTop: SPACING.xl,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.md,
     borderRadius: 8,
   },
   selectModelButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   imageProgressContainer: {
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 4,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    backgroundColor: COLORS.background,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
   },
   imageProgressCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: COLORS.primary + '30',
+    borderColor: colors.primary + '30',
   },
   imageProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   imageProgressContent: {
     flex: 1,
   },
   imageProgressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   imageProgressIconContainer: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: COLORS.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: 10,
   },
   imageProgressInfo: {
@@ -1634,32 +1639,32 @@ const styles = StyleSheet.create({
   },
   imageProgressTitle: {
     ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   imageProgressStatus: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-    fontStyle: 'normal',
+    color: colors.textSecondary,
+    fontStyle: 'normal' as const,
   },
   imageProgressBarContainer: {
     marginTop: 10,
   },
   imageProgressBar: {
     height: 4,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 2,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   imageProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 2,
   },
   imageProgressSteps: {
     ...TYPOGRAPHY.bodySmall,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
     marginRight: SPACING.sm,
   },
   imagePreview: {
@@ -1667,53 +1672,53 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 8,
     marginRight: 12,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
   },
   imageStopButton: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.error + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.error + '20',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   // Fullscreen image viewer styles
   imageViewerContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   imageViewerBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
   imageViewerContent: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%' as const,
+    height: '100%' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   fullscreenImage: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height * 0.7,
   },
   imageViewerActions: {
-    flexDirection: 'row',
-    position: 'absolute',
+    flexDirection: 'row' as const,
+    position: 'absolute' as const,
     bottom: 60,
     gap: 40,
   },
   imageViewerButton: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: 16,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     minWidth: 80,
   },
   imageViewerButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.xs,
-    fontWeight: '500',
+    fontWeight: '500' as const,
   },
 });

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
 } from 'react-native';
@@ -11,7 +10,9 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';
@@ -24,6 +25,8 @@ export const ProjectDetailScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
   const { projectId } = route.params;
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const { getProject, deleteProject } = useProjectStore();
   const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
@@ -126,7 +129,7 @@ export const ProjectDetailScreen: React.FC = () => {
         onLongPress={() => handleDeleteChat(item)}
       >
         <View style={styles.chatIcon}>
-          <Icon name="message-circle" size={14} color={COLORS.textMuted} />
+          <Icon name="message-circle" size={14} color={colors.textMuted} />
         </View>
         <View style={styles.chatContent}>
           <View style={styles.chatHeader}>
@@ -141,7 +144,7 @@ export const ProjectDetailScreen: React.FC = () => {
             </Text>
           )}
         </View>
-        <Icon name="chevron-right" size={14} color={COLORS.textMuted} />
+        <Icon name="chevron-right" size={14} color={colors.textMuted} />
       </TouchableOpacity>
     );
   };
@@ -164,7 +167,7 @@ export const ProjectDetailScreen: React.FC = () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <View style={styles.projectIcon}>
@@ -175,7 +178,7 @@ export const ProjectDetailScreen: React.FC = () => {
           <Text style={styles.headerTitle} numberOfLines={1}>{project.name}</Text>
         </View>
         <TouchableOpacity onPress={handleEditProject} style={styles.editButton}>
-          <Icon name="edit-2" size={16} color={COLORS.textSecondary} />
+          <Icon name="edit-2" size={16} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
 
@@ -186,7 +189,7 @@ export const ProjectDetailScreen: React.FC = () => {
         ) : null}
         <View style={styles.projectStats}>
           <View style={styles.statItem}>
-            <Icon name="message-circle" size={16} color={COLORS.textMuted} />
+            <Icon name="message-circle" size={16} color={colors.textMuted} />
             <Text style={styles.statText}>{projectChats.length} chats</Text>
           </View>
         </View>
@@ -199,14 +202,14 @@ export const ProjectDetailScreen: React.FC = () => {
           style={[styles.newChatButton, !hasModels && styles.newChatButtonDisabled]}
           onPress={handleNewChat}
         >
-          <Icon name="plus" size={16} color={hasModels ? COLORS.primary : COLORS.textMuted} />
+          <Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textMuted} />
           <Text style={[styles.newChatText, !hasModels && styles.newChatTextDisabled]}>New Chat</Text>
         </TouchableOpacity>
       </View>
 
       {projectChats.length === 0 ? (
         <View style={styles.emptyChats}>
-          <Icon name="message-circle" size={24} color={COLORS.textMuted} />
+          <Icon name="message-circle" size={24} color={colors.textMuted} />
           <Text style={styles.emptyChatsText}>No chats in this project yet</Text>
           {hasModels && (
             <TouchableOpacity style={styles.startChatButton} onPress={handleNewChat}>
@@ -227,7 +230,7 @@ export const ProjectDetailScreen: React.FC = () => {
       {/* Delete Project Button */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteProject}>
-          <Icon name="trash-2" size={16} color={COLORS.error} />
+          <Icon name="trash-2" size={16} color={colors.error} />
           <Text style={styles.deleteButtonText}>Delete Project</Text>
         </TouchableOpacity>
       </View>
@@ -236,20 +239,20 @@ export const ProjectDetailScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    ...SHADOWS.small,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
     zIndex: 1,
   },
   backButton: {
@@ -258,27 +261,27 @@ const styles = StyleSheet.create({
   },
   headerCenter: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   projectIcon: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.sm,
   },
   projectIconText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    fontWeight: '400',
+    color: colors.textMuted,
+    fontWeight: '400' as const,
   },
   headerTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-    fontWeight: '400',
+    color: colors.text,
+    fontWeight: '400' as const,
     flex: 1,
   },
   editButton: {
@@ -287,162 +290,162 @@ const styles = StyleSheet.create({
   projectInfo: {
     padding: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   projectDescription: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: SPACING.md,
   },
   projectStats: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
   },
   statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.xs,
   },
   statText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
-    fontWeight: '400',
+    color: colors.text,
+    fontWeight: '400' as const,
   },
   newChatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
     gap: SPACING.xs,
   },
   newChatButtonDisabled: {
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     opacity: 0.5,
   },
   newChatText: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
-    color: COLORS.primary,
+    fontWeight: '400' as const,
+    color: colors.primary,
   },
   newChatTextDisabled: {
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   chatList: {
     paddingHorizontal: SPACING.lg,
   },
   chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.md,
     borderRadius: 6,
     marginBottom: SPACING.sm,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   chatIcon: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.md,
   },
   chatContent: {
     flex: 1,
   },
   chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xs,
   },
   chatTitle: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
+    fontWeight: '400' as const,
     flex: 1,
     marginRight: SPACING.sm,
   },
   chatDate: {
     ...TYPOGRAPHY.labelSmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   chatPreview: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   emptyChats: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingHorizontal: SPACING.xxl,
   },
   emptyChatsText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.md,
     marginBottom: SPACING.lg,
   },
   startChatButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: 6,
   },
   startChatText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-    fontWeight: '400',
+    color: colors.primary,
+    fontWeight: '400' as const,
   },
   footer: {
     padding: SPACING.lg,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
   deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     padding: SPACING.md,
     gap: SPACING.sm,
   },
   deleteButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.error,
-    fontWeight: '400',
+    color: colors.error,
+    fontWeight: '400' as const,
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   errorText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: SPACING.md,
   },
   errorLink: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-    fontWeight: '400',
+    color: colors.primary,
+    fontWeight: '400' as const,
   },
 });

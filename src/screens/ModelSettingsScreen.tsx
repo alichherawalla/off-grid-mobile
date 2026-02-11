@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Switch,
@@ -14,11 +13,15 @@ import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 
 export const ModelSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { settings: rawSettings, updateSettings } = useAppStore();
 
   const systemPrompt = rawSettings?.systemPrompt ?? 'You are a helpful AI assistant.';
@@ -30,7 +33,7 @@ export const ModelSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Model Settings</Text>
       </View>
@@ -49,7 +52,7 @@ export const ModelSettingsScreen: React.FC = () => {
             multiline
             numberOfLines={4}
             placeholder="Enter system prompt..."
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
           />
         </Card>
 
@@ -73,8 +76,8 @@ export const ModelSettingsScreen: React.FC = () => {
               onValueChange={(value) =>
                 updateSettings({ imageGenerationMode: value ? 'auto' : 'manual' })
               }
-              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
-              thumbColor={rawSettings?.imageGenerationMode === 'auto' ? COLORS.primary : COLORS.textMuted}
+              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              thumbColor={rawSettings?.imageGenerationMode === 'auto' ? colors.primary : colors.textMuted}
             />
           </View>
           <Text style={styles.toggleNote}>
@@ -96,9 +99,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={1}
               value={rawSettings?.imageSteps || 30}
               onSlidingComplete={(value) => updateSettings({ imageSteps: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -115,9 +118,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={0.5}
               value={rawSettings?.imageGuidanceScale || 7.5}
               onSlidingComplete={(value) => updateSettings({ imageGuidanceScale: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -136,9 +139,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={1}
               value={rawSettings?.imageThreads ?? 4}
               onSlidingComplete={(value) => updateSettings({ imageThreads: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -155,9 +158,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={64}
               value={rawSettings?.imageWidth ?? 256}
               onSlidingComplete={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -220,8 +223,8 @@ export const ModelSettingsScreen: React.FC = () => {
             <Switch
               value={rawSettings?.enhanceImagePrompts ?? false}
               onValueChange={(value) => updateSettings({ enhanceImagePrompts: value })}
-              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
-              thumbColor={rawSettings?.enhanceImagePrompts ? COLORS.primary : COLORS.textMuted}
+              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              thumbColor={rawSettings?.enhanceImagePrompts ? colors.primary : colors.textMuted}
             />
           </View>
         </Card>
@@ -246,9 +249,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={0.05}
               value={rawSettings?.temperature || 0.7}
               onSlidingComplete={(value) => updateSettings({ temperature: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -269,9 +272,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={64}
               value={rawSettings?.maxTokens || 512}
               onSlidingComplete={(value) => updateSettings({ maxTokens: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -288,9 +291,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={0.05}
               value={rawSettings?.topP || 0.9}
               onSlidingComplete={(value) => updateSettings({ topP: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -307,9 +310,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={0.05}
               value={rawSettings?.repeatPenalty || 1.1}
               onSlidingComplete={(value) => updateSettings({ repeatPenalty: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -323,8 +326,8 @@ export const ModelSettingsScreen: React.FC = () => {
             <Switch
               value={rawSettings?.showGenerationDetails ?? false}
               onValueChange={(value) => updateSettings({ showGenerationDetails: value })}
-              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
-              thumbColor={rawSettings?.showGenerationDetails ? COLORS.primary : COLORS.textMuted}
+              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              thumbColor={rawSettings?.showGenerationDetails ? colors.primary : colors.textMuted}
             />
           </View>
 
@@ -345,9 +348,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={512}
               value={rawSettings?.contextLength || 2048}
               onSlidingComplete={(value) => updateSettings({ contextLength: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
         </Card>
@@ -372,9 +375,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={1}
               value={rawSettings?.nThreads || 6}
               onSlidingComplete={(value) => updateSettings({ nThreads: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -391,9 +394,9 @@ export const ModelSettingsScreen: React.FC = () => {
               step={32}
               value={rawSettings?.nBatch || 256}
               onSlidingComplete={(value) => updateSettings({ nBatch: value })}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surface}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surface}
+              thumbTintColor={colors.primary}
             />
           </View>
 
@@ -409,8 +412,8 @@ export const ModelSettingsScreen: React.FC = () => {
                 <Switch
                   value={rawSettings?.enableGpu !== false}
                   onValueChange={(value) => updateSettings({ enableGpu: value })}
-                  trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
-                  thumbColor={rawSettings?.enableGpu !== false ? COLORS.primary : COLORS.textMuted}
+                  trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+                  thumbColor={rawSettings?.enableGpu !== false ? colors.primary : colors.textMuted}
                 />
               </View>
 
@@ -430,9 +433,9 @@ export const ModelSettingsScreen: React.FC = () => {
                     step={1}
                     value={rawSettings?.gpuLayers ?? 6}
                     onSlidingComplete={(value) => updateSettings({ gpuLayers: value })}
-                    minimumTrackTintColor={COLORS.primary}
-                    maximumTrackTintColor={COLORS.surface}
-                    thumbTintColor={COLORS.primary}
+                    minimumTrackTintColor={colors.primary}
+                    maximumTrackTintColor={colors.surface}
+                    thumbTintColor={colors.primary}
                   />
                 </View>
               )}
@@ -489,18 +492,18 @@ export const ModelSettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     gap: SPACING.md,
   },
   backButton: {
@@ -509,7 +512,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -524,32 +527,32 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    color: COLORS.textMuted,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     letterSpacing: 0.3,
   },
   settingHelp: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     lineHeight: 18,
   },
   textArea: {
     ...TYPOGRAPHY.bodySmall,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.md,
-    color: COLORS.text,
+    color: colors.text,
     minHeight: 80,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
   },
   toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.sm,
   },
@@ -559,19 +562,19 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   toggleDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
     lineHeight: 18,
   },
   toggleNote: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     lineHeight: 18,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     padding: SPACING.md,
     borderRadius: 8,
   },
@@ -579,35 +582,35 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     paddingTop: SPACING.lg,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
   sliderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xs,
   },
   sliderLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   sliderValue: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
-    color: COLORS.primary,
+    fontWeight: '400' as const,
+    color: colors.primary,
   },
   sliderDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: SPACING.sm,
     lineHeight: 18,
   },
   slider: {
-    width: '100%',
+    width: '100%' as const,
     height: 40,
   },
   strategyButtons: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: SPACING.sm,
     marginTop: SPACING.md,
   },
@@ -617,37 +620,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderRadius: 8,
     backgroundColor: 'transparent',
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   strategyButtonActive: {
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
   strategyButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   strategyButtonTextActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
   settingSection: {
     marginTop: SPACING.lg,
   },
   settingLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.xs,
   },
   settingDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     lineHeight: 18,
   },
   buttonRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: SPACING.sm,
   },
   optionButton: {
@@ -656,19 +659,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderRadius: 8,
     backgroundColor: 'transparent',
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   optionButtonActive: {
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
   optionButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   optionButtonTextActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
 });

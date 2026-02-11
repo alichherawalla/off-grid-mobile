@@ -3,11 +3,12 @@ import {
   View,
   Text,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { Project } from '../types';
 
 interface ProjectSelectorSheetProps {
@@ -25,6 +26,9 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
   activeProject,
   onSelectProject,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const handleSelect = (project: Project | null) => {
     onSelectProject(project);
     onClose();
@@ -90,55 +94,55 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   projectList: {
     padding: 16,
   },
   projectOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
   },
   projectOptionSelected: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: colors.primary + '20',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   projectOptionIcon: {
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: COLORS.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '30',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: 12,
   },
   projectOptionIconText: {
     ...TYPOGRAPHY.h2,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
   projectOptionInfo: {
     flex: 1,
   },
   projectOptionName: {
     ...TYPOGRAPHY.h2,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   projectOptionDesc: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   projectCheckmark: {
     ...TYPOGRAPHY.h1,
     fontSize: 18,
-    color: COLORS.primary,
-    fontWeight: '600',
+    color: colors.primary,
+    fontWeight: '600' as const,
     marginLeft: SPACING.sm,
   },
 });

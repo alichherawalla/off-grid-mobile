@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS, QUANTIZATION_INFO, CREDIBILITY_LABELS, TYPOGRAPHY } from '../constants';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { QUANTIZATION_INFO, CREDIBILITY_LABELS, TYPOGRAPHY } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { huggingFaceService } from '../services/huggingface';
 
@@ -44,6 +46,9 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onDelete,
   onSelect,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const quantInfo = file
     ? QUANTIZATION_INFO[file.quantization] || null
     : downloadedModel
@@ -248,24 +253,24 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   card: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
   },
   cardActive: {
     borderWidth: 2,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   cardIncompatible: {
     opacity: 0.6,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 8,
   },
   titleContainer: {
@@ -273,21 +278,21 @@ const styles = StyleSheet.create({
   },
   name: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   author: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginTop: 2,
     gap: 8,
   },
   credibilityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
@@ -301,97 +306,97 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.meta,
   },
   activeBadge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   activeBadgeText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.text,
+    color: colors.text,
   },
   description: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   infoRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 8,
     marginBottom: 8,
   },
   infoBadge: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
   sizeBadge: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: colors.primary + '20',
   },
   infoText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   recommendedBadge: {
-    backgroundColor: COLORS.info + '30',
+    backgroundColor: colors.info + '30',
   },
   recommendedText: {
-    color: COLORS.info,
+    color: colors.info,
   },
   warningBadge: {
-    backgroundColor: COLORS.warning + '30',
+    backgroundColor: colors.warning + '30',
   },
   warningText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.warning,
+    color: colors.warning,
   },
   visionBadge: {
-    backgroundColor: COLORS.info + '30',
+    backgroundColor: colors.info + '30',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   visionText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.info,
+    color: colors.info,
   },
   statsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 16,
     marginBottom: 12,
   },
   statsText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
     marginBottom: 12,
   },
   progressBar: {
     flex: 1,
     height: 8,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 4,
   },
   progressText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     width: 40,
-    textAlign: 'right',
+    textAlign: 'right' as const,
   },
   actions: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 8,
     marginTop: 4,
   },
@@ -399,25 +404,25 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     backgroundColor: 'transparent',
     borderWidth: 1,
   },
   downloadButton: {
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   selectButton: {
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   deleteButton: {
-    borderColor: COLORS.error,
+    borderColor: colors.error,
   },
   actionButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   deleteButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.error,
+    color: colors.error,
   },
 });

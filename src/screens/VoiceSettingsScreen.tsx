@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
@@ -12,12 +11,16 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card, Button } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useWhisperStore } from '../stores';
 import { WHISPER_MODELS } from '../services';
 
 export const VoiceSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const {
     downloadedModelId: whisperModelId,
@@ -36,7 +39,7 @@ export const VoiceSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Voice Transcription</Text>
       </View>
@@ -81,7 +84,7 @@ export const VoiceSettingsScreen: React.FC = () => {
             </View>
           ) : isWhisperDownloading ? (
             <View style={styles.downloading}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
+              <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.downloadingText}>
                 Downloading... {Math.round(whisperProgress * 100)}%
               </Text>
@@ -119,7 +122,7 @@ export const VoiceSettingsScreen: React.FC = () => {
 
         <Card style={styles.privacyCard}>
           <View style={styles.privacyIconContainer}>
-            <Icon name="mic" size={18} color={COLORS.textSecondary} />
+            <Icon name="mic" size={18} color={colors.textSecondary} />
           </View>
           <Text style={styles.privacyTitle}>Privacy First</Text>
           <Text style={styles.privacyText}>
@@ -138,18 +141,18 @@ export const VoiceSettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     gap: SPACING.md,
   },
   backButton: {
@@ -158,7 +161,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -173,59 +176,59 @@ const styles = StyleSheet.create({
   },
   description: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: SPACING.lg,
   },
   modelInfo: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.lg,
   },
   modelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.md,
   },
   modelName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelStatus: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    color: COLORS.primary,
-    backgroundColor: COLORS.primary + '20',
+    textTransform: 'uppercase' as const,
+    color: colors.primary,
+    backgroundColor: colors.primary + '20',
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
   },
   removeButton: {
-    borderColor: COLORS.error,
+    borderColor: colors.error,
   },
   downloading: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: SPACING.lg,
   },
   downloadingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginTop: SPACING.sm,
   },
   progressBar: {
-    width: '100%',
+    width: '100%' as const,
     height: 6,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 3,
     marginTop: SPACING.md,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 3,
   },
   modelList: {
@@ -233,67 +236,67 @@ const styles = StyleSheet.create({
   },
   selectLabel: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    color: COLORS.textMuted,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
     marginBottom: SPACING.sm,
     letterSpacing: 0.3,
   },
   modelOption: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 8,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   modelOptionInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xs,
   },
   modelOptionName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelOptionSize: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   modelOptionDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     lineHeight: 18,
   },
   error: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.error,
+    color: colors.error,
     marginTop: SPACING.md,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   privacyCard: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   privacyIconContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.md,
   },
   privacyTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   privacyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
   },
 });

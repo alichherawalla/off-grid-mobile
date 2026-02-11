@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
@@ -10,7 +9,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, ModelCard } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, RECOMMENDED_MODELS, TYPOGRAPHY } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { RECOMMENDED_MODELS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { hardwareService, huggingFaceService, modelManager } from '../services';
 import { ModelFile, DownloadedModel } from '../types';
@@ -29,6 +30,9 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<ModelFile | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const {
     deviceInfo,
@@ -158,7 +162,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
     return (
       <SafeAreaView style={styles.container}>
         <View testID="model-download-loading" style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Analyzing your device...</Text>
         </View>
       </SafeAreaView>
@@ -256,20 +260,20 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: 16,
   },
   loadingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   scrollView: {
     flex: 1,
@@ -283,17 +287,17 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 8,
   },
   subtitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 24,
   },
   deviceCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: 24,
   },
   deviceInfo: {
@@ -301,41 +305,41 @@ const styles = StyleSheet.create({
   },
   deviceLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 4,
   },
   deviceValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 16,
   },
   warningCard: {
-    backgroundColor: COLORS.warning + '20',
+    backgroundColor: colors.warning + '20',
     borderWidth: 1,
-    borderColor: COLORS.warning,
+    borderColor: colors.warning,
   },
   warningTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.warning,
+    color: colors.warning,
     marginBottom: 8,
   },
   warningText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   footer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: 0,
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
 });

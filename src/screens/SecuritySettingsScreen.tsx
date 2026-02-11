@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Switch,
@@ -13,7 +12,9 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAuthStore } from '../stores';
 import { authService } from '../services';
 import { PassphraseSetupScreen } from './PassphraseSetupScreen';
@@ -23,6 +24,8 @@ export const SecuritySettingsScreen: React.FC = () => {
   const [showPassphraseSetup, setShowPassphraseSetup] = useState(false);
   const [isChangingPassphrase, setIsChangingPassphrase] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const {
     isEnabled: authEnabled,
@@ -65,7 +68,7 @@ export const SecuritySettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Security</Text>
       </View>
@@ -81,8 +84,8 @@ export const SecuritySettingsScreen: React.FC = () => {
             <Switch
               value={authEnabled}
               onValueChange={handleTogglePassphrase}
-              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '80' }}
-              thumbColor={authEnabled ? COLORS.primary : COLORS.textMuted}
+              trackColor={{ false: colors.surfaceLight, true: colors.primary + '80' }}
+              thumbColor={authEnabled ? colors.primary : colors.textMuted}
             />
           </View>
 
@@ -91,14 +94,14 @@ export const SecuritySettingsScreen: React.FC = () => {
               style={styles.changeButton}
               onPress={handleChangePassphrase}
             >
-              <Icon name="edit-2" size={16} color={COLORS.primary} />
+              <Icon name="edit-2" size={16} color={colors.primary} />
               <Text style={styles.changeButtonText}>Change Passphrase</Text>
             </TouchableOpacity>
           )}
         </Card>
 
         <Card style={styles.infoCard}>
-          <Icon name="info" size={18} color={COLORS.textMuted} />
+          <Icon name="info" size={18} color={colors.textMuted} />
           <Text style={styles.infoText}>
             When enabled, the app will lock automatically when you switch away or close it. Your passphrase is stored securely on device and never transmitted.
           </Text>
@@ -127,18 +130,18 @@ export const SecuritySettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     gap: SPACING.md,
   },
   backButton: {
@@ -147,7 +150,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -162,58 +165,58 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    color: COLORS.textMuted,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     letterSpacing: 0.3,
   },
   settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
   },
   settingInfo: {
     flex: 1,
   },
   settingLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   settingHint: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
     lineHeight: 18,
   },
   changeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginTop: SPACING.lg,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start' as const,
     gap: SPACING.sm,
   },
   changeButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
     gap: SPACING.md,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   infoText: {
     ...TYPOGRAPHY.bodySmall,
     flex: 1,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     lineHeight: 18,
   },
 });

@@ -19,7 +19,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { imageGenerationService, onnxImageGeneratorService } from '../services';
 import type { ImageGenerationState } from '../services';
@@ -39,6 +41,9 @@ export const GalleryScreen: React.FC = () => {
   const conversationId = route.params?.conversationId;
 
   const { generatedImages, removeGeneratedImage } = useAppStore();
+
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   // Multi-select mode state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -286,7 +291,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.closeButton}
               onPress={toggleSelectMode}
             >
-              <Icon name="x" size={24} color={COLORS.text} />
+              <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>
               {selectedIds.size} selected
@@ -302,7 +307,7 @@ export const GalleryScreen: React.FC = () => {
               onPress={handleDeleteSelected}
               disabled={selectedIds.size === 0}
             >
-              <Icon name="trash-2" size={20} color={selectedIds.size === 0 ? COLORS.textMuted : COLORS.error} />
+              <Icon name="trash-2" size={20} color={selectedIds.size === 0 ? colors.textMuted : colors.error} />
             </TouchableOpacity>
           </>
         ) : (
@@ -311,7 +316,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.closeButton}
               onPress={() => navigation.goBack()}
             >
-              <Icon name="x" size={24} color={COLORS.text} />
+              <Icon name="x" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.title}>{screenTitle}</Text>
             <Text style={styles.countBadge}>
@@ -322,7 +327,7 @@ export const GalleryScreen: React.FC = () => {
                 style={styles.headerButton}
                 onPress={toggleSelectMode}
               >
-                <Icon name="check-square" size={20} color={COLORS.text} />
+                <Icon name="check-square" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
           </>
@@ -367,7 +372,7 @@ export const GalleryScreen: React.FC = () => {
               style={styles.genCancelButton}
               onPress={handleCancelGeneration}
             >
-              <Icon name="x" size={16} color={COLORS.error} />
+              <Icon name="x" size={16} color={colors.error} />
             </TouchableOpacity>
           </View>
         </View>
@@ -376,7 +381,7 @@ export const GalleryScreen: React.FC = () => {
       {/* Grid */}
       {displayImages.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Icon name="image" size={48} color={COLORS.textMuted} />
+          <Icon name="image" size={48} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>
             {conversationId ? 'No images in this chat' : 'No generated images yet'}
           </Text>
@@ -480,22 +485,22 @@ export const GalleryScreen: React.FC = () => {
                   style={[styles.viewerButton, showDetails && styles.viewerButtonActive]}
                   onPress={() => setShowDetails(!showDetails)}
                 >
-                  <Icon name="info" size={22} color={showDetails ? COLORS.primary : COLORS.text} />
-                  <Text style={[styles.viewerButtonText, showDetails && { color: COLORS.primary }]}>Info</Text>
+                  <Icon name="info" size={22} color={showDetails ? colors.primary : colors.text} />
+                  <Text style={[styles.viewerButtonText, showDetails && { color: colors.primary }]}>Info</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
                   onPress={() => handleSaveImage(selectedImage)}
                 >
-                  <Icon name="download" size={22} color={COLORS.text} />
+                  <Icon name="download" size={22} color={colors.text} />
                   <Text style={styles.viewerButtonText}>Save</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
                   onPress={() => handleDelete(selectedImage)}
                 >
-                  <Icon name="trash-2" size={22} color={COLORS.error} />
-                  <Text style={[styles.viewerButtonText, { color: COLORS.error }]}>Delete</Text>
+                  <Icon name="trash-2" size={22} color={colors.error} />
+                  <Text style={[styles.viewerButtonText, { color: colors.error }]}>Delete</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.viewerButton}
@@ -504,7 +509,7 @@ export const GalleryScreen: React.FC = () => {
                     setShowDetails(false);
                   }}
                 >
-                  <Icon name="x" size={22} color={COLORS.text} />
+                  <Icon name="x" size={22} color={colors.text} />
                   <Text style={styles.viewerButtonText}>Close</Text>
                 </TouchableOpacity>
               </View>
@@ -523,18 +528,18 @@ export const GalleryScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   closeButton: {
     padding: SPACING.xs,
@@ -542,12 +547,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   countBadge: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginRight: SPACING.sm,
   },
   headerButton: {
@@ -559,55 +564,55 @@ const styles = StyleSheet.create({
   },
   headerButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   // Active generation banner
   genBanner: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     marginHorizontal: SPACING.md,
     marginTop: SPACING.md,
     borderRadius: SPACING.md,
     padding: SPACING.md,
   },
   genBannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.sm + 2, // 10
   },
   genPreview: {
     width: 40,
     height: 40,
     borderRadius: SPACING.sm,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
   },
   genBannerInfo: {
     flex: 1,
   },
   genBannerTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 0,
   },
   genBannerPrompt: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   genProgressBar: {
     height: 4,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 2,
     marginTop: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   genProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 2,
   },
   genSteps: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   genCancelButton: {
     padding: SPACING.sm - 2, // 6
@@ -624,17 +629,17 @@ const styles = StyleSheet.create({
     width: CELL_SIZE,
     height: CELL_SIZE,
     borderRadius: SPACING.sm,
-    overflow: 'hidden',
-    backgroundColor: COLORS.surfaceLight,
+    overflow: 'hidden' as const,
+    backgroundColor: colors.surfaceLight,
   },
   gridImage: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
   },
   selectionOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
+    justifyContent: 'flex-start' as const,
+    alignItems: 'flex-end' as const,
     padding: SPACING.sm - 2, // 6
   },
   selectionOverlaySelected: {
@@ -647,104 +652,104 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   checkboxSelected: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   // Empty state
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     padding: SPACING.xxl,
   },
   emptyTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.lg,
   },
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     marginTop: SPACING.sm,
   },
   // Fullscreen viewer
   viewerContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   viewerBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
   viewerContent: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%' as const,
+    height: '100%' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   fullscreenImage: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height * 0.65,
   },
   viewerActions: {
-    flexDirection: 'row',
-    position: 'absolute',
+    flexDirection: 'row' as const,
+    position: 'absolute' as const,
     bottom: 60,
     gap: SPACING.lg + 4, // 20
   },
   viewerButton: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: SPACING.md + 2, // 14
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: SPACING.md + 2, // 14
     minWidth: 70,
   },
   viewerButtonActive: {
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   viewerButtonText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.xs,
   },
   // Details sheet (inside fullscreen viewer)
   detailsSheet: {
     flex: 1,
-    width: '100%',
-    backgroundColor: COLORS.surface,
+    width: '100%' as const,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     marginTop: 60,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   detailsSheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   detailsSheetTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   detailsSheetClose: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   detailsPreview: {
-    width: '100%',
+    width: '100%' as const,
     height: 200,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   detailsContent: {
     padding: SPACING.lg,
@@ -754,33 +759,33 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   detailValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     lineHeight: 20,
   },
   detailsMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: SPACING.sm,
     marginTop: SPACING.xs,
   },
   detailChip: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: SPACING.sm + 2, // 10
     paddingVertical: SPACING.xs,
     borderRadius: SPACING.sm,
   },
   detailChipText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   detailDate: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.sm + 2, // 10
   },
 });

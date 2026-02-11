@@ -2,7 +2,6 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
@@ -10,13 +9,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { hardwareService } from '../services';
 
 export const DeviceInfoScreen: React.FC = () => {
   const navigation = useNavigation();
   const { deviceInfo } = useAppStore();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const totalRamGB = hardwareService.getTotalMemoryGB();
   const deviceTier = hardwareService.getDeviceTier();
@@ -28,7 +31,7 @@ export const DeviceInfoScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Device Information</Text>
       </View>
@@ -87,18 +90,18 @@ export const DeviceInfoScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     gap: SPACING.md,
   },
   backButton: {
@@ -107,7 +110,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -122,46 +125,46 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.md,
   },
   description: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: SPACING.lg,
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   lastRow: {
     borderBottomWidth: 0,
   },
   infoLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   infoValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   tierBadge: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    backgroundColor: COLORS.primary + '20',
-    color: COLORS.primary,
+    textTransform: 'uppercase' as const,
+    backgroundColor: colors.primary + '20',
+    color: colors.primary,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   tierInfo: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: SPACING.sm,
   },
   tierItem: {
@@ -169,30 +172,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: 8,
     padding: SPACING.md,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   tierItemActive: {
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
   tierName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.xs,
   },
   tierNameActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
   tierDesc: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: SPACING.xs,
   },
   tierModels: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
   },
 });

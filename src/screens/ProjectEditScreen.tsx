@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   TextInput,
@@ -13,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useProjectStore } from '../stores';
 import { ProjectsStackParamList } from '../navigation/types';
 
@@ -25,6 +26,8 @@ export const ProjectEditScreen: React.FC = () => {
   const route = useRoute<RouteProps>();
   const projectId = route.params?.projectId;
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const { getProject, createProject, updateProject } = useProjectStore();
   const existingProject = projectId ? getProject(projectId) : null;
@@ -103,7 +106,7 @@ export const ProjectEditScreen: React.FC = () => {
             value={formData.name}
             onChangeText={(text) => setFormData({ ...formData, name: text })}
             placeholder="e.g., Spanish Learning, Code Review"
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
           />
 
           {/* Description */}
@@ -113,7 +116,7 @@ export const ProjectEditScreen: React.FC = () => {
             value={formData.description}
             onChangeText={(text) => setFormData({ ...formData, description: text })}
             placeholder="Brief description of this project"
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
           />
 
           {/* System Prompt */}
@@ -126,7 +129,7 @@ export const ProjectEditScreen: React.FC = () => {
             value={formData.systemPrompt}
             onChangeText={(text) => setFormData({ ...formData, systemPrompt: text })}
             placeholder="Enter the instructions or context for the AI..."
-            placeholderTextColor={COLORS.textMuted}
+            placeholderTextColor={colors.textMuted}
             multiline
             textAlignVertical="top"
           />
@@ -143,38 +146,38 @@ export const ProjectEditScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   keyboardAvoid: {
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   headerButton: {
     padding: SPACING.xs,
   },
   cancelText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   headerTitle: {
     ...TYPOGRAPHY.h2,
-    fontWeight: '400',
+    fontWeight: '400' as const,
   },
   saveText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-    fontWeight: '400',
+    color: colors.primary,
+    fontWeight: '400' as const,
   },
   content: {
     flex: 1,
@@ -185,31 +188,31 @@ const styles = StyleSheet.create({
   },
   label: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
     marginTop: SPACING.lg,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
   },
   hint: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: SPACING.sm,
   },
   input: {
     ...TYPOGRAPHY.body,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: SPACING.md,
-    color: COLORS.text,
+    color: colors.text,
   },
   textArea: {
     minHeight: 180,
     maxHeight: 280,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
   },
   tip: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginTop: SPACING.md,
     lineHeight: 18,
   },

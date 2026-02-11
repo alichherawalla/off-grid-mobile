@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TextInput,
   ActivityIndicator,
@@ -24,7 +23,9 @@ import { Card, ModelCard, Button } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
@@ -76,6 +77,8 @@ type ModelTab = 'text' | 'image';
 export const ModelsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [activeTab, setActiveTab] = useState<ModelTab>('text');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -947,7 +950,7 @@ export const ModelsScreen: React.FC = () => {
               testID="model-detail-back"
               style={{ padding: 4, marginRight: 8 }}
             >
-              <Icon name="arrow-left" size={24} color={COLORS.text} />
+              <Icon name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.title, { flex: 1 }]} numberOfLines={1}>
               {selectedModel.name}
@@ -996,7 +999,7 @@ export const ModelsScreen: React.FC = () => {
 
           {isLoadingFiles ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
             <FlatList
@@ -1079,7 +1082,7 @@ export const ModelsScreen: React.FC = () => {
                   style={styles.deleteImageButton}
                   onPress={() => handleDeleteImageModel(model.id)}
                 >
-                  <Icon name="trash-2" size={18} color={COLORS.error} />
+                  <Icon name="trash-2" size={18} color={colors.error} />
                 </TouchableOpacity>
               </View>
             </Card>
@@ -1092,7 +1095,7 @@ export const ModelsScreen: React.FC = () => {
       <TextInput
         style={styles.imageSearchInput}
         placeholder="Search models..."
-        placeholderTextColor={COLORS.textMuted}
+        placeholderTextColor={colors.textMuted}
         value={imageSearchQuery}
         onChangeText={setImageSearchQuery}
         returnKeyType="search"
@@ -1128,7 +1131,7 @@ export const ModelsScreen: React.FC = () => {
       {/* Loading / Error / List */}
       {hfModelsLoading && (
         <View style={styles.hfLoadingContainer}>
-          <ActivityIndicator size="small" color={COLORS.primary} />
+          <ActivityIndicator size="small" color={colors.primary} />
           <Text style={styles.loadingText}>Loading models...</Text>
         </View>
       )}
@@ -1194,7 +1197,7 @@ export const ModelsScreen: React.FC = () => {
               onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
               disabled={imageModelDownloading.includes(model.id)}
             >
-              <Icon name="download" size={16} color={COLORS.primary} />
+              <Icon name="download" size={16} color={colors.primary} />
               <Text style={styles.downloadImageButtonText}>Download</Text>
             </TouchableOpacity>
           )}
@@ -1215,7 +1218,6 @@ export const ModelsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View testID="models-screen" style={{ flex: 1 }}>
         <View style={styles.header}>
           <Text style={styles.title}>Models</Text>
           <TouchableOpacity
@@ -1223,7 +1225,7 @@ export const ModelsScreen: React.FC = () => {
             onPress={() => navigation.navigate('DownloadManager')}
             testID="downloads-icon"
           >
-            <Icon name="download" size={22} color={COLORS.text} />
+            <Icon name="download" size={20} color={colors.text} />
             {totalModelCount > 0 && (
               <View style={styles.downloadBadge}>
                 <Text style={styles.downloadBadgeText}>
@@ -1240,14 +1242,14 @@ export const ModelsScreen: React.FC = () => {
             style={[styles.tab, activeTab === 'text' && styles.tabActive]}
             onPress={() => setActiveTab('text')}
           >
-            <Icon name="message-square" size={18} color={activeTab === 'text' ? COLORS.primary : COLORS.textSecondary} />
+            <Icon name="message-square" size={18} color={activeTab === 'text' ? colors.primary : colors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>Text Models</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'image' && styles.tabActive]}
             onPress={() => setActiveTab('image')}
           >
-            <Icon name="image" size={18} color={activeTab === 'image' ? COLORS.primary : COLORS.textSecondary} />
+            <Icon name="image" size={18} color={activeTab === 'image' ? colors.primary : colors.textSecondary} />
             <Text style={[styles.tabText, activeTab === 'image' && styles.tabTextActive]}>Image Models</Text>
           </TouchableOpacity>
         </View>
@@ -1259,7 +1261,7 @@ export const ModelsScreen: React.FC = () => {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search models..."
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 onSubmitEditing={handleSearch}
@@ -1277,8 +1279,8 @@ export const ModelsScreen: React.FC = () => {
                 <Switch
                   value={showCompatibleOnly}
                   onValueChange={setShowCompatibleOnly}
-                  trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary + '60' }}
-                  thumbColor={showCompatibleOnly ? COLORS.primary : COLORS.textMuted}
+                  trackColor={{ false: colors.surfaceLight, true: colors.primary + '60' }}
+                  thumbColor={showCompatibleOnly ? colors.primary : colors.textMuted}
                 />
               </View>
 
@@ -1352,7 +1354,7 @@ export const ModelsScreen: React.FC = () => {
 
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.loadingText}>Loading models...</Text>
               </View>
             ) : (
@@ -1366,7 +1368,7 @@ export const ModelsScreen: React.FC = () => {
                   <RefreshControl
                     refreshing={isRefreshing}
                     onRefresh={handleRefresh}
-                    tintColor={COLORS.primary}
+                    tintColor={colors.primary}
                   />
                 }
                 ListEmptyComponent={
@@ -1391,9 +1393,8 @@ export const ModelsScreen: React.FC = () => {
             </ScrollView>
           )
         }
-      </View>
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
-    </SafeAreaView >
+    </SafeAreaView>
   );
 };
 
@@ -1410,76 +1411,81 @@ function formatBytes(bytes: number): string {
   return bytes + ' B';
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    ...shadows.small,
+    zIndex: 1,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   downloadManagerButton: {
     padding: 8,
-    position: 'relative',
+    position: 'relative' as const,
   },
   downloadBadge: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 2,
     right: 2,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingHorizontal: 4,
   },
   downloadBadgeText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text,
+    color: colors.text,
   },
   tabBar: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     paddingHorizontal: 16,
-    marginBottom: 8,
+    paddingVertical: SPACING.sm,
     gap: 8,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 8,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
   },
   tabActive: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: colors.primary + '20',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   tabText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   tabTextActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
   imageTabContent: {
     flex: 1,
   },
   searchContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 8,
@@ -1487,36 +1493,36 @@ const styles = StyleSheet.create({
   searchInput: {
     ...TYPOGRAPHY.body,
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    color: COLORS.text,
+    color: colors.text,
   },
   filtersSection: {
     marginBottom: 8,
   },
   toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     marginHorizontal: 16,
     marginBottom: 8,
     borderRadius: 12,
   },
   toggleLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   filterContainer: {
     marginBottom: 8,
   },
   filterSectionLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     paddingHorizontal: 16,
     marginBottom: 6,
   },
@@ -1528,30 +1534,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   filterChipActive: {
-    backgroundColor: COLORS.primary + '25',
-    borderColor: COLORS.primary,
+    backgroundColor: colors.primary + '25',
+    borderColor: colors.primary,
   },
   filterChipText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     gap: 16,
   },
   loadingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -1562,18 +1568,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginBottom: 8,
     gap: 8,
   },
   modelAuthor: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   credibilityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -1587,36 +1593,36 @@ const styles = StyleSheet.create({
   },
   modelDescription: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 12,
   },
   modelStats: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 16,
   },
   statText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     paddingHorizontal: 16,
     marginBottom: 4,
   },
   sectionSubtitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     paddingHorizontal: 16,
     marginBottom: 16,
   },
   emptyCard: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: 32,
   },
   emptyText: {
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
   },
   // Image models section styles
   imageModelsSection: {
@@ -1626,12 +1632,12 @@ const styles = StyleSheet.create({
   },
   imageSectionTitle: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 4,
   },
   imageSectionSubtitle: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   downloadedImageModels: {
@@ -1641,9 +1647,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   imageModelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 12,
   },
   imageModelInfo: {
@@ -1651,20 +1657,20 @@ const styles = StyleSheet.create({
   },
   imageModelName: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 4,
   },
   imageModelDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   imageModelSize: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   activeBadge: {
-    backgroundColor: COLORS.info + '25',
+    backgroundColor: colors.info + '25',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1672,39 +1678,39 @@ const styles = StyleSheet.create({
   },
   activeBadgeText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.info,
+    color: colors.info,
   },
   imageModelActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
   },
   setActiveButton: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: colors.primary + '20',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
   setActiveButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   deleteImageButton: {
     padding: 8,
   },
   availableTitle: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: 12,
     marginTop: 8,
   },
   downloadImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: 'transparent' as const,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1712,64 +1718,64 @@ const styles = StyleSheet.create({
   },
   downloadImageButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   imageDownloadProgress: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     gap: 8,
   },
   imageDownloadText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   imageProgressBar: {
-    width: '100%',
+    width: '100%' as const,
     height: 6,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   imageProgressFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 3,
   },
   allDownloadedText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     paddingVertical: 16,
   },
   textModelsSectionTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 12,
     marginTop: 8,
   },
   imageSearchInput: {
     ...TYPOGRAPHY.body,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   backendFilterRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 8,
     marginBottom: 12,
   },
   modelNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     marginBottom: 4,
   },
   badgeRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 6,
     marginBottom: 4,
   },
@@ -1779,55 +1785,55 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   cpuBadge: {
-    backgroundColor: COLORS.primary + '25',
+    backgroundColor: colors.primary + '25',
   },
   npuBadge: {
     backgroundColor: '#FF990025',
   },
   backendBadgeText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.text,
+    color: colors.text,
   },
   variantBadge: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
   variantBadgeText: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   variantHint: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   hfLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 10,
     paddingVertical: 24,
   },
   hfErrorContainer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingVertical: 20,
     gap: 12,
   },
   hfErrorText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.error,
-    textAlign: 'center',
+    color: colors.error,
+    textAlign: 'center' as const,
   },
   retryButton: {
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: colors.primary + '20',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
   },
   retryButtonText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.primary,
+    color: colors.primary,
   },
 });

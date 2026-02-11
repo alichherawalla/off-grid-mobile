@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Modal,
@@ -19,7 +18,9 @@ import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
-import { COLORS, FONTS, TYPOGRAPHY, SPACING, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { FONTS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
@@ -54,6 +55,8 @@ let hasInitializedNativeSync = false;
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>({
     isLoading: false,
@@ -338,7 +341,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       style={styles.deleteAction}
       onPress={() => handleDeleteConversation(conversation)}
     >
-      <Icon name="trash-2" size={16} color={COLORS.text} />
+      <Icon name="trash-2" size={16} color={colors.text} />
     </TouchableOpacity>
   );
 
@@ -364,12 +367,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             hapticType="selectionClick"
           >
             <View style={styles.modelCardHeader}>
-              <Icon name="message-square" size={16} color={COLORS.textMuted} />
+              <Icon name="message-square" size={16} color={colors.textMuted} />
               <Text style={styles.modelCardLabel}>Text</Text>
               {loadingState.isLoading && loadingState.type === 'text' ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+                <Icon name="chevron-down" size={14} color={colors.textMuted} />
               )}
             </View>
             {loadingState.isLoading && loadingState.type === 'text' ? (
@@ -403,12 +406,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             hapticType="selectionClick"
           >
             <View style={styles.modelCardHeader}>
-              <Icon name="image" size={16} color={COLORS.textMuted} />
+              <Icon name="image" size={16} color={colors.textMuted} />
               <Text style={styles.modelCardLabel}>Image</Text>
               {loadingState.isLoading && loadingState.type === 'image' ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Icon name="chevron-down" size={14} color={COLORS.textMuted} />
+                <Icon name="chevron-down" size={14} color={colors.textMuted} />
               )}
             </View>
             {loadingState.isLoading && loadingState.type === 'image' ? (
@@ -440,15 +443,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {(activeTextModel || activeImageModel) && (
           <View style={styles.memoryIndicator}>
             <View style={styles.memoryHeader}>
-              <Icon name="cpu" size={14} color={COLORS.textMuted} />
+              <Icon name="cpu" size={14} color={colors.textMuted} />
               <Text style={styles.memoryTitle}>Loaded Models</Text>
               <TouchableOpacity onPress={refreshMemoryInfo} style={styles.refreshButton}>
-                <Icon name="refresh-cw" size={14} color={COLORS.textMuted} />
+                <Icon name="refresh-cw" size={14} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             {activeTextModel && (
               <View style={styles.memoryModelRow}>
-                <Icon name="message-square" size={12} color={COLORS.textMuted} />
+                <Icon name="message-square" size={12} color={colors.textMuted} />
                 <Text style={styles.memoryModelName} numberOfLines={1}>
                   {activeTextModel.name}{activeTextModel.isVisionModel ? ' + Vision' : ''}
                 </Text>
@@ -459,7 +462,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             )}
             {activeImageModel && (
               <View style={styles.memoryModelRow}>
-                <Icon name="image" size={12} color={COLORS.textMuted} />
+                <Icon name="image" size={12} color={colors.textMuted} />
                 <Text style={styles.memoryModelName} numberOfLines={1}>{activeImageModel.name}</Text>
                 <Text style={styles.memoryModelSize}>
                   ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
@@ -490,10 +493,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             disabled={isEjecting}
           >
             {isEjecting ? (
-              <ActivityIndicator size="small" color={COLORS.error} />
+              <ActivityIndicator size="small" color={colors.error} />
             ) : (
               <>
-                <Icon name="power" size={14} color={COLORS.error} />
+                <Icon name="power" size={14} color={colors.error} />
                 <Text style={styles.ejectAllText}>
                   {loadingState.isLoading ? 'Cancel Loading' : 'Eject All Models'}
                 </Text>
@@ -533,14 +536,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           onPress={() => (navigation as any).navigate('Gallery')}
           hapticType="selectionClick"
         >
-          <Icon name="grid" size={18} color={COLORS.primary} />
+          <Icon name="grid" size={18} color={colors.primary} />
           <View style={styles.galleryCardInfo}>
             <Text style={styles.galleryCardTitle}>Image Gallery</Text>
             <Text style={styles.galleryCardMeta}>
               {generatedImages.length} image{generatedImages.length !== 1 ? 's' : ''}
             </Text>
           </View>
-          <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
+          <Icon name="chevron-right" size={16} color={colors.textMuted} />
         </AnimatedPressable>
 
         {/* Recent Conversations */}
@@ -558,6 +561,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 key={conv.id}
                 renderRightActions={() => renderRightActions(conv)}
                 overshootRight={false}
+                containerStyle={{ overflow: 'visible' }}
               >
                 <AnimatedListItem
                   index={index}
@@ -575,7 +579,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                       {conv.messages.length} messages · {formatDate(conv.updatedAt)}
                     </Text>
                   </View>
-                  <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
+                  <Icon name="chevron-right" size={16} color={colors.textMuted} />
                 </AnimatedListItem>
               </Swipeable>
             ))}
@@ -636,7 +640,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                           onPress={handleUnloadTextModel}
                           disabled={loadingState.isLoading}
                         >
-                          <Icon name="power" size={16} color={COLORS.error} />
+                          <Icon name="power" size={16} color={colors.error} />
                           <Text style={styles.unloadButtonText}>Unload current model</Text>
                         </TouchableOpacity>
                       )}
@@ -673,7 +677,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                               </Text>
                             </View>
                             {activeModelId === model.id && (
-                              <Icon name="check" size={18} color={COLORS.text} />
+                              <Icon name="check" size={18} color={colors.text} />
                             )}
                           </TouchableOpacity>
                         );
@@ -706,7 +710,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                           onPress={handleUnloadImageModel}
                           disabled={loadingState.isLoading}
                         >
-                          <Icon name="power" size={16} color={COLORS.error} />
+                          <Icon name="power" size={16} color={colors.error} />
                           <Text style={styles.unloadButtonText}>Unload current model</Text>
                         </TouchableOpacity>
                       )}
@@ -738,7 +742,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                               </Text>
                             </View>
                             {activeImageModelId === model.id && (
-                              <Icon name="check" size={18} color={COLORS.text} />
+                              <Icon name="check" size={18} color={colors.text} />
                             )}
                           </TouchableOpacity>
                         );
@@ -757,7 +761,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               }}
             >
               <Text style={styles.browseMoreText}>Browse more models</Text>
-              <Icon name="arrow-right" size={16} color={COLORS.textMuted} />
+              <Icon name="arrow-right" size={16} color={colors.textMuted} />
             </TouchableOpacity>
       </AppSheet>
 
@@ -770,7 +774,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       >
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingCard}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingTitle}>
               {loadingState.type === 'text' ? 'Loading Text Model' : 'Loading Image Model'}
             </Text>
@@ -809,10 +813,10 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   scrollView: {
     flex: 1,
@@ -826,273 +830,273 @@ const styles = StyleSheet.create({
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelsRow: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 12,
     marginBottom: 16,
   },
   modelCard: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 14,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   modelCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     marginBottom: 8,
   },
   modelCardLabel: {
     ...TYPOGRAPHY.labelSmall,
     flex: 1,
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
   },
   modelCardName: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelCardMeta: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 3,
   },
   modelCardEmpty: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   modelCardLoading: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.primary,
+    color: colors.primary,
     marginTop: 2,
   },
   // Memory indicator styles
   memoryIndicator: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   memoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     marginBottom: 8,
   },
   memoryTitle: {
     ...TYPOGRAPHY.meta,
     flex: 1,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   refreshButton: {
     padding: 4,
   },
   memoryModelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     paddingVertical: 4,
   },
   memoryModelName: {
     ...TYPOGRAPHY.bodySmall,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   memoryModelSize: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   memoryTotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
     marginTop: 8,
     paddingTop: 8,
   },
   memoryTotalLabel: {
     ...TYPOGRAPHY.labelSmall,
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
   },
   memoryTotalValue: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   memoryWarningText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 6,
   },
   ejectAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: 8,
     paddingVertical: 10,
     marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   ejectAllText: {
     fontSize: 14,
-    color: COLORS.error,
-    fontWeight: '500',
+    color: colors.error,
+    fontWeight: '500' as const,
   },
   newChatButton: {
     marginBottom: 24,
   },
   galleryCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
     gap: 12,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   galleryCardInfo: {
     flex: 1,
   },
   galleryCardTitle: {
     ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   galleryCardMeta: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   setupCard: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: 20,
     marginBottom: 24,
     gap: 12,
   },
   setupText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
   },
   section: {
     marginBottom: 24,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 12,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   seeAll: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 12,
     marginBottom: 6,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   conversationInfo: {
     flex: 1,
   },
   conversationTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
   },
   conversationMeta: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 3,
   },
   deleteAction: {
-    backgroundColor: COLORS.error,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.error,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     width: 50,
     borderRadius: 10,
     marginBottom: 6,
     marginLeft: 8,
   },
   statsRow: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   statItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   statValue: {
     ...TYPOGRAPHY.display,
-    color: COLORS.text,
+    color: colors.text,
   },
   statLabel: {
     ...TYPOGRAPHY.labelSmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.xs,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
   },
   statDivider: {
     width: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: colors.border,
   },
   // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
   },
   modalContent: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '70%' as const,
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   modalScroll: {
     padding: 16,
   },
   pickerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
   },
   pickerItemActive: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
   },
   pickerItemInfo: {
     flex: 1,
@@ -1100,95 +1104,95 @@ const styles = StyleSheet.create({
   pickerItemName: {
     ...TYPOGRAPHY.body,
     fontSize: 15,
-    fontWeight: '500',
-    color: COLORS.text,
+    fontWeight: '500' as const,
+    color: colors.text,
   },
   pickerItemMeta: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   pickerItemMemory: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   pickerItemMemoryWarning: {
-    color: COLORS.warning,
+    color: colors.warning,
   },
   pickerItemWarning: {
     borderWidth: 1,
-    borderColor: COLORS.warning,
+    borderColor: colors.warning,
   },
   unloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     padding: 12,
     marginBottom: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     gap: 8,
   },
   unloadButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.error,
+    color: colors.error,
   },
   emptyPicker: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     padding: 24,
     gap: 12,
   },
   emptyPickerText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   browseMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
     gap: 8,
   },
   browseMoreText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   // Loading overlay styles
   loadingOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   loadingCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: SPACING.xxl,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     marginHorizontal: 40,
     maxWidth: 300,
-    ...SHADOWS.large,
+    ...shadows.large,
   },
   loadingTitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: SPACING.xl,
   },
   loadingModelName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
     marginTop: SPACING.sm,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   loadingHint: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: SPACING.lg,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     lineHeight: 18,
   },
 });

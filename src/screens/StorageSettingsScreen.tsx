@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
@@ -12,7 +11,9 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { hardwareService, modelManager } from '../services';
 
@@ -24,6 +25,8 @@ interface OrphanedFile {
 
 export const StorageSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [storageUsed, setStorageUsed] = useState(0);
   const [availableStorage, setAvailableStorage] = useState(0);
   const [orphanedFiles, setOrphanedFiles] = useState<OrphanedFile[]>([]);
@@ -157,7 +160,7 @@ export const StorageSettingsScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={20} color={COLORS.text} />
+          <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Storage</Text>
       </View>
@@ -172,11 +175,11 @@ export const StorageSettingsScreen: React.FC = () => {
 
           <View style={styles.storageLegend}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.primary }]} />
+              <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
               <Text style={styles.legendText}>Used: {hardwareService.formatBytes(storageUsed)}</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: COLORS.surfaceLight }]} />
+              <View style={[styles.legendDot, { backgroundColor: colors.surfaceLight }]} />
               <Text style={styles.legendText}>Free: {hardwareService.formatBytes(availableStorage)}</Text>
             </View>
           </View>
@@ -187,7 +190,7 @@ export const StorageSettingsScreen: React.FC = () => {
 
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
-              <Icon name="cpu" size={18} color={COLORS.primary} />
+              <Icon name="cpu" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>LLM Models</Text>
             </View>
             <Text style={styles.infoValue}>{downloadedModels.length}</Text>
@@ -195,7 +198,7 @@ export const StorageSettingsScreen: React.FC = () => {
 
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
-              <Icon name="image" size={18} color={COLORS.primary} />
+              <Icon name="image" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>Image Models</Text>
             </View>
             <Text style={styles.infoValue}>{downloadedImageModels.length}</Text>
@@ -203,7 +206,7 @@ export const StorageSettingsScreen: React.FC = () => {
 
           <View style={styles.infoRow}>
             <View style={styles.infoRowLeft}>
-              <Icon name="hard-drive" size={18} color={COLORS.primary} />
+              <Icon name="hard-drive" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>Model Storage</Text>
             </View>
             <Text style={styles.infoValue}>{hardwareService.formatBytes(storageUsed)}</Text>
@@ -211,7 +214,7 @@ export const StorageSettingsScreen: React.FC = () => {
 
           <View style={[styles.infoRow, styles.lastRow]}>
             <View style={styles.infoRowLeft}>
-              <Icon name="message-circle" size={18} color={COLORS.primary} />
+              <Icon name="message-circle" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>Conversations</Text>
             </View>
             <Text style={styles.infoValue}>{conversations.length}</Text>
@@ -287,7 +290,7 @@ export const StorageSettingsScreen: React.FC = () => {
                   style={styles.deleteButton}
                   onPress={() => handleClearStaleDownload(Number(downloadId))}
                 >
-                  <Icon name="x" size={18} color={COLORS.error} />
+                  <Icon name="x" size={18} color={colors.error} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -304,9 +307,9 @@ export const StorageSettingsScreen: React.FC = () => {
               disabled={isScanning}
             >
               {isScanning ? (
-                <ActivityIndicator size="small" color={COLORS.primary} />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Icon name="refresh-cw" size={16} color={COLORS.primary} />
+                <Icon name="refresh-cw" size={16} color={colors.primary} />
               )}
             </TouchableOpacity>
           </View>
@@ -333,9 +336,9 @@ export const StorageSettingsScreen: React.FC = () => {
                     disabled={isDeleting === file.path}
                   >
                     {isDeleting === file.path ? (
-                      <ActivityIndicator size="small" color={COLORS.error} />
+                      <ActivityIndicator size="small" color={colors.error} />
                     ) : (
-                      <Icon name="trash-2" size={18} color={COLORS.error} />
+                      <Icon name="trash-2" size={18} color={colors.error} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -344,7 +347,7 @@ export const StorageSettingsScreen: React.FC = () => {
                 style={styles.deleteAllButton}
                 onPress={handleDeleteAllOrphaned}
               >
-                <Icon name="trash-2" size={16} color={COLORS.error} />
+                <Icon name="trash-2" size={16} color={colors.error} />
                 <Text style={styles.deleteAllText}>Delete All Orphaned Files</Text>
               </TouchableOpacity>
             </>
@@ -366,18 +369,18 @@ export const StorageSettingsScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
     gap: SPACING.md,
   },
   backButton: {
@@ -386,7 +389,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
@@ -401,30 +404,30 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TYPOGRAPHY.label,
-    textTransform: 'uppercase',
-    color: COLORS.textMuted,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     letterSpacing: 0.3,
   },
   storageBar: {
     height: 12,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 6,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     marginBottom: SPACING.md,
   },
   storageUsed: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 6,
   },
   storageLegend: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
   },
   legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.xs,
   },
   legendDot: {
@@ -434,39 +437,39 @@ const styles = StyleSheet.create({
   },
   legendText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   lastRow: {
     borderBottomWidth: 0,
   },
   infoRowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.sm,
   },
   infoLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   infoValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   modelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   modelInfo: {
     flex: 1,
@@ -474,27 +477,27 @@ const styles = StyleSheet.create({
   },
   modelName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelMeta: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   modelSize: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   hint: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     lineHeight: 18,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.md,
   },
   clearAllButton: {
@@ -502,30 +505,30 @@ const styles = StyleSheet.create({
   },
   clearAllText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   scanButton: {
     padding: SPACING.sm,
   },
   warningText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: SPACING.md,
     lineHeight: 18,
   },
   emptyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     paddingVertical: SPACING.lg,
   },
   orphanedRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   orphanedInfo: {
     flex: 1,
@@ -533,30 +536,30 @@ const styles = StyleSheet.create({
   },
   orphanedName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   orphanedMeta: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   deleteButton: {
     padding: SPACING.sm,
   },
   deleteAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     gap: SPACING.sm,
     marginTop: SPACING.md,
     paddingVertical: SPACING.md,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.error,
+    borderColor: colors.error,
     borderRadius: 8,
   },
   deleteAllText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.error,
+    color: colors.error,
   },
 });

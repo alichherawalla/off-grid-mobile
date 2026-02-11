@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   Dimensions,
   Animated,
@@ -18,7 +17,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components';
-import { COLORS, ONBOARDING_SLIDES, SPACING, TYPOGRAPHY, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -29,9 +30,16 @@ type OnboardingScreenProps = {
 const { width } = Dimensions.get('window');
 
 /** Animated slide with staggered entrance for icon, title, description */
-const SlideContent: React.FC<{ item: typeof ONBOARDING_SLIDES[0]; isActive: boolean }> = ({
+const SlideContent: React.FC<{
+  item: typeof ONBOARDING_SLIDES[0];
+  isActive: boolean;
+  styles: ReturnType<typeof createStyles>;
+  primaryColor: string;
+}> = ({
   item,
   isActive,
+  styles,
+  primaryColor,
 }) => {
   const iconScale = useSharedValue(0.6);
   const iconOpacity = useSharedValue(0);
@@ -78,7 +86,7 @@ const SlideContent: React.FC<{ item: typeof ONBOARDING_SLIDES[0]; isActive: bool
   return (
     <View style={styles.slide}>
       <ReanimatedAnimated.View style={[styles.iconContainer, iconStyle]}>
-        <Icon name={item.icon} size={64} color={COLORS.primary} />
+        <Icon name={item.icon} size={64} color={primaryColor} />
       </ReanimatedAnimated.View>
       <ReanimatedAnimated.View style={titleStyle}>
         <Text style={styles.title}>{item.title}</Text>
@@ -97,6 +105,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const handleNext = () => {
     if (currentIndex < ONBOARDING_SLIDES.length - 1) {
@@ -119,7 +129,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const renderSlide = ({ item, index }: { item: typeof ONBOARDING_SLIDES[0]; index: number }) => (
-    <SlideContent item={item} isActive={currentIndex === index} />
+    <SlideContent item={item} isActive={currentIndex === index} styles={styles} primaryColor={colors.primary} />
   );
 
   const renderDots = () => (
@@ -203,14 +213,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     minHeight: 48,
@@ -218,43 +228,43 @@ const styles = StyleSheet.create({
   slide: {
     width,
     paddingHorizontal: SPACING.xxl,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   iconContainer: {
     width: 120,
     height: 120,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.xxl,
-    ...SHADOWS.medium,
+    ...shadows.medium,
   },
   title: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.text,
-    textAlign: 'center',
+    color: colors.text,
+    textAlign: 'center' as const,
     marginBottom: SPACING.md,
   },
   description: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
   },
   dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     marginVertical: SPACING.xl,
   },
   dot: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     marginHorizontal: SPACING.xs,
   },
   footer: {
@@ -262,6 +272,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   nextButton: {
-    width: '100%',
+    width: '100%' as const,
   },
 });

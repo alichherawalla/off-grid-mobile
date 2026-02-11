@@ -3,10 +3,11 @@ import {
   View,
   Text,
   ScrollView,
-  StyleSheet,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { COLORS, TYPOGRAPHY, SPACING, APP_CONFIG } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING, APP_CONFIG } from '../constants';
 import { DebugInfo, Project, Conversation } from '../types';
 
 interface DebugSheetProps {
@@ -26,6 +27,9 @@ export const DebugSheet: React.FC<DebugSheetProps> = ({
   settings,
   activeConversation,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <AppSheet
       visible={visible}
@@ -145,7 +149,7 @@ export const DebugSheet: React.FC<DebugSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   debugContent: {
     padding: 16,
   },
@@ -154,113 +158,113 @@ const styles = StyleSheet.create({
   },
   debugSectionTitle: {
     ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
     marginBottom: SPACING.sm,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     letterSpacing: 0.5,
   },
   debugStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-around' as const,
     marginBottom: 12,
   },
   debugStat: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   debugStatValue: {
     ...TYPOGRAPHY.h1,
-    fontWeight: '700',
-    color: COLORS.text,
+    fontWeight: '700' as const,
+    color: colors.text,
   },
   debugStatLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   contextBar: {
     height: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 4,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   contextBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 4,
   },
   debugRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
+    borderBottomColor: colors.surface,
   },
   debugLabel: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   debugValue: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
-    fontWeight: '500',
+    color: colors.text,
+    fontWeight: '500' as const,
   },
   debugWarning: {
-    color: COLORS.warning,
+    color: colors.warning,
   },
   debugCodeBlock: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   debugCode: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.text,
+    color: colors.text,
     lineHeight: 16,
   },
   debugHint: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
+    color: colors.textMuted,
+    fontStyle: 'italic' as const,
     marginBottom: SPACING.sm,
   },
   debugMessage: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 10,
     marginBottom: 8,
   },
   debugMessageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 6,
   },
   debugMessageRole: {
     ...TYPOGRAPHY.meta,
-    fontWeight: '700',
+    fontWeight: '700' as const,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   debugRoleUser: {
-    backgroundColor: COLORS.primary + '30',
-    color: COLORS.primary,
+    backgroundColor: colors.primary + '30',
+    color: colors.primary,
   },
   debugRoleAssistant: {
-    backgroundColor: COLORS.info + '30',
-    color: COLORS.info,
+    backgroundColor: colors.info + '30',
+    color: colors.info,
   },
   debugMessageIndex: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   debugMessageContent: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 16,
   },
 });

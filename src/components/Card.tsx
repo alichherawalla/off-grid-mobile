@@ -2,11 +2,11 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { COLORS, SHADOWS } from '../constants';
+import { useThemedStyles } from '../theme/useThemedStyles';
+import type { ThemeColors, ThemeShadows } from '../theme';
 
 interface CardProps {
   children: React.ReactNode;
@@ -27,6 +27,7 @@ export const Card: React.FC<CardProps> = ({
   headerRight,
   testID,
 }) => {
+  const styles = useThemedStyles(createStyles);
   const Container = onPress ? TouchableOpacity : View;
 
   return (
@@ -50,17 +51,17 @@ export const Card: React.FC<CardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   card: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
-    ...SHADOWS.small,
+    ...shadows.small,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: 12,
   },
   headerText: {
@@ -68,12 +69,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   subtitle: {
     fontSize: 14,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginTop: 4,
   },
 });

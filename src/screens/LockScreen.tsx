@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -16,7 +15,9 @@ import {
   initialAlertState,
   type AlertState,
 } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 
@@ -29,6 +30,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const {
     failedAttempts,
@@ -118,7 +121,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       >
         <View style={styles.header}>
           <View style={styles.lockIconContainer}>
-            <Icon name="lock" size={48} color={COLORS.primary} />
+            <Icon name="lock" size={48} color={colors.primary} />
           </View>
           <Text style={styles.title}>App Locked</Text>
           <Text style={styles.subtitle}>
@@ -139,7 +142,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
               value={passphrase}
               onChangeText={setPassphrase}
               placeholder="Enter passphrase"
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
@@ -163,7 +166,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
         )}
 
         <View style={styles.footer}>
-          <Icon name="shield" size={20} color={COLORS.textMuted} />
+          <Icon name="shield" size={20} color={colors.textMuted} />
           <Text style={styles.footerText}>
             Your data is protected and stored locally
           </Text>
@@ -181,18 +184,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'center' as const,
     padding: 24,
   },
   header: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     marginBottom: SPACING.xxl,
   },
   lockIconContainer: {
@@ -200,73 +203,73 @@ const styles = StyleSheet.create({
     height: 96,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginBottom: SPACING.lg,
   },
   title: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   subtitle: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
   },
   inputContainer: {
     marginBottom: SPACING.xxl,
   },
   input: {
     ...TYPOGRAPHY.body,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.lg,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.lg,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   unlockButton: {
     marginTop: SPACING.sm,
   },
   attemptsText: {
     ...TYPOGRAPHY.body,
-    textAlign: 'center',
-    color: COLORS.warning,
+    textAlign: 'center' as const,
+    color: colors.warning,
     marginTop: SPACING.md,
   },
   lockoutContainer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     marginBottom: SPACING.xxl,
   },
   lockoutText: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.error,
+    color: colors.error,
     marginBottom: SPACING.md,
   },
   lockoutTimer: {
     ...TYPOGRAPHY.display,
     fontSize: 48,
     fontWeight: '200' as const,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   lockoutHint: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   footer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     opacity: 0.7,
     gap: SPACING.sm,
   },
   footerText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
   },
 });

@@ -3,14 +3,15 @@ import {
   View,
   Text,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { llmService, hardwareService } from '../services';
 import { ONNXImageModel } from '../types';
@@ -110,6 +111,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   visible,
   onClose,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const {
     settings,
     updateSettings,
@@ -191,7 +195,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           <Icon
             name={showImageModelPicker ? 'chevron-up' : 'chevron-down'}
             size={20}
-            color={COLORS.textSecondary}
+            color={colors.textSecondary}
           />
         </TouchableOpacity>
 
@@ -215,7 +219,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                 >
                   <Text style={styles.modelPickerItemText}>None (disable image gen)</Text>
                   {!activeImageModelId && (
-                    <Icon name="check" size={18} color={COLORS.primary} />
+                    <Icon name="check" size={18} color={colors.primary} />
                   )}
                 </TouchableOpacity>
                 {downloadedImageModels.map((model) => (
@@ -235,7 +239,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                       <Text style={styles.modelPickerItemDesc}>{model.style}</Text>
                     </View>
                     {activeImageModelId === model.id && (
-                      <Icon name="check" size={18} color={COLORS.primary} />
+                      <Icon name="check" size={18} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -358,7 +362,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               <Icon
                 name={showClassifierModelPicker ? 'chevron-up' : 'chevron-down'}
                 size={20}
-                color={COLORS.textSecondary}
+                color={colors.textSecondary}
               />
             </TouchableOpacity>
 
@@ -379,7 +383,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                     <Text style={styles.modelPickerItemDesc}>No model switching needed</Text>
                   </View>
                   {!settings.classifierModelId && (
-                    <Icon name="check" size={18} color={COLORS.primary} />
+                    <Icon name="check" size={18} color={colors.primary} />
                   )}
                 </TouchableOpacity>
                 {downloadedModels.map((model) => (
@@ -402,7 +406,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                       </Text>
                     </View>
                     {settings.classifierModelId === model.id && (
-                      <Icon name="check" size={18} color={COLORS.primary} />
+                      <Icon name="check" size={18} color={colors.primary} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -430,9 +434,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             step={1}
             value={settings.imageSteps || 20}
             onSlidingComplete={(value) => updateSettings({ imageSteps: value })}
-            minimumTrackTintColor={COLORS.primary}
-            maximumTrackTintColor={COLORS.surfaceLight}
-            thumbTintColor={COLORS.primary}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surfaceLight}
+            thumbTintColor={colors.primary}
           />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMinMax}>4</Text>
@@ -455,9 +459,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             step={0.5}
             value={settings.imageGuidanceScale || 7.5}
             onSlidingComplete={(value) => updateSettings({ imageGuidanceScale: value })}
-            minimumTrackTintColor={COLORS.primary}
-            maximumTrackTintColor={COLORS.surfaceLight}
-            thumbTintColor={COLORS.primary}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surfaceLight}
+            thumbTintColor={colors.primary}
           />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMinMax}>1</Text>
@@ -480,9 +484,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             step={1}
             value={settings.imageThreads ?? 4}
             onSlidingComplete={(value) => updateSettings({ imageThreads: value })}
-            minimumTrackTintColor={COLORS.primary}
-            maximumTrackTintColor={COLORS.surfaceLight}
-            thumbTintColor={COLORS.primary}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surfaceLight}
+            thumbTintColor={colors.primary}
           />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMinMax}>1</Text>
@@ -505,9 +509,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
             step={64}
             value={settings.imageWidth ?? 256}
             onSlidingComplete={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
-            minimumTrackTintColor={COLORS.primary}
-            maximumTrackTintColor={COLORS.surfaceLight}
-            thumbTintColor={COLORS.primary}
+            minimumTrackTintColor={colors.primary}
+            maximumTrackTintColor={colors.surfaceLight}
+            thumbTintColor={colors.primary}
           />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderMinMax}>128</Text>
@@ -585,9 +589,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               value={(settings[config.key] ?? DEFAULT_SETTINGS[config.key]) as number}
               onValueChange={(value) => handleSliderChange(config.key, value)}
               onSlidingComplete={(value) => handleSliderComplete(config.key, value)}
-              minimumTrackTintColor={COLORS.primary}
-              maximumTrackTintColor={COLORS.surfaceLight}
-              thumbTintColor={COLORS.primary}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.surfaceLight}
+              thumbTintColor={colors.primary}
             />
             <View style={styles.sliderLabels}>
               <Text style={styles.sliderMinMax}>{config.format(config.min)}</Text>
@@ -662,9 +666,9 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
                   step={1}
                   value={settings.gpuLayers ?? 6}
                   onSlidingComplete={(value: number) => updateSettings({ gpuLayers: value })}
-                  minimumTrackTintColor={COLORS.primary}
-                  maximumTrackTintColor={COLORS.surfaceLight}
-                  thumbTintColor={COLORS.primary}
+                  minimumTrackTintColor={colors.primary}
+                  maximumTrackTintColor={colors.surfaceLight}
+                  thumbTintColor={colors.primary}
                 />
               </View>
             )}
@@ -773,29 +777,29 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   statsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: colors.surface,
     paddingVertical: 10,
     paddingHorizontal: 20,
     gap: 6,
-    flexWrap: 'wrap',
+    flexWrap: 'wrap' as const,
   },
   statsLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   statsValue: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.primary,
-    fontWeight: '600',
+    color: colors.primary,
+    fontWeight: '600' as const,
   },
   statsSeparator: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   content: {
     flex: 1,
@@ -806,81 +810,81 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
     letterSpacing: 1,
     marginTop: SPACING.xl,
     marginBottom: SPACING.md,
   },
   sectionCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: SPACING.lg,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     marginBottom: SPACING.lg,
   },
   settingGroup: {
     marginBottom: SPACING.lg,
   },
   settingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: SPACING.sm,
   },
   settingLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   settingValue: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
     fontWeight: '400' as const,
   },
   settingDescription: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: SPACING.md,
     lineHeight: 18,
   },
   slider: {
-    width: '100%',
+    width: '100%' as const,
     height: 40,
   },
   sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     marginTop: -4,
   },
   sliderMinMax: {
     ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   resetButton: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     padding: SPACING.md,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   resetButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   bottomPadding: {
     height: 40,
   },
   modelPickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.background,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: colors.background,
     padding: SPACING.md,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     marginBottom: SPACING.sm,
   },
   modelPickerContent: {
@@ -888,59 +892,59 @@ const styles = StyleSheet.create({
   },
   modelPickerLabel: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginBottom: 2,
   },
   modelPickerValue: {
     ...TYPOGRAPHY.bodySmall,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontWeight: '600' as const,
+    color: colors.text,
   },
   modelPickerList: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     marginBottom: SPACING.md,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   modelPickerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     padding: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   modelPickerItemActive: {
-    backgroundColor: COLORS.primary + '25',
+    backgroundColor: colors.primary + '25',
   },
   modelPickerItemText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.text,
+    color: colors.text,
   },
   modelPickerItemDesc: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     marginTop: 2,
   },
   noModelsText: {
     padding: 14,
     ...TYPOGRAPHY.h3,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
   },
   classifierNote: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
+    color: colors.textMuted,
+    fontStyle: 'italic' as const,
     marginTop: SPACING.sm,
   },
   gpuLayersInline: {
     marginTop: SPACING.md,
     paddingTop: SPACING.md,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
   modeToggleContainer: {
     marginBottom: SPACING.lg,
@@ -950,16 +954,16 @@ const styles = StyleSheet.create({
   },
   modeToggleLabel: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   modeToggleDesc: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   modeToggleButtons: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: SPACING.sm,
   },
   modeButton: {
@@ -968,19 +972,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     borderRadius: 8,
     backgroundColor: 'transparent',
-    alignItems: 'center',
+    alignItems: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   modeButtonActive: {
     backgroundColor: 'transparent',
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   modeButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   modeButtonTextActive: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
 });

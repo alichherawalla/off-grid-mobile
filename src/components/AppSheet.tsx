@@ -7,11 +7,12 @@ import {
   Modal,
   Animated,
   PanResponder,
-  StyleSheet,
   Dimensions,
   Platform,
 } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING, ELEVATION, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -48,6 +49,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   elevation = 'level3',
   children,
 }) => {
+  const { colors, elevation: elevationTokens } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const [modalVisible, setModalVisible] = useState(false);
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
@@ -63,7 +67,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
         snapPoints?.[snapPoints.length - 1] || '50%',
       );
 
-  const elevationTokens = ELEVATION[elevation];
+  const levelTokens = elevationTokens[elevation];
 
   // Animate in
   const animateIn = useCallback(() => {
@@ -190,11 +194,11 @@ export const AppSheet: React.FC<AppSheetProps> = ({
               ...(enableDynamicSizing
                 ? { maxHeight: SCREEN_HEIGHT * 0.85 }
                 : { height: sheetMaxHeight }),
-              backgroundColor: elevationTokens.backgroundColor,
-              borderTopLeftRadius: elevationTokens.borderRadius,
-              borderTopRightRadius: elevationTokens.borderRadius,
-              borderTopWidth: elevationTokens.borderTopWidth,
-              borderColor: elevationTokens.borderColor,
+              backgroundColor: levelTokens.backgroundColor,
+              borderTopLeftRadius: levelTokens.borderRadius,
+              borderTopRightRadius: levelTokens.borderRadius,
+              borderTopWidth: levelTokens.borderTopWidth,
+              borderColor: levelTokens.borderColor,
               transform: [{ translateY }],
             },
           ]}
@@ -202,7 +206,17 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           {/* Handle — swipe target */}
           {showHandle && (
             <View {...panResponder.panHandlers} style={styles.handleContainer}>
-              <View style={styles.handle} />
+              <View
+                style={[
+                  styles.handle,
+                  {
+                    width: elevationTokens.handle.width,
+                    height: elevationTokens.handle.height,
+                    backgroundColor: elevationTokens.handle.backgroundColor,
+                    borderRadius: elevationTokens.handle.borderRadius,
+                  },
+                ]}
+              />
             </View>
           )}
 
@@ -229,46 +243,47 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...({
+      position: 'absolute' as const,
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+    }),
     backgroundColor: '#000000',
   },
   sheet: {
-    overflow: 'hidden',
-    ...SHADOWS.large,
+    overflow: 'hidden' as const,
+    ...shadows.large,
   },
   handleContainer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingVertical: SPACING.sm,
   },
-  handle: {
-    width: ELEVATION.handle.width,
-    height: ELEVATION.handle.height,
-    backgroundColor: ELEVATION.handle.backgroundColor,
-    borderRadius: ELEVATION.handle.borderRadius,
-  },
+  handle: {},
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
     marginRight: SPACING.md,
   },
   headerClose: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
 });

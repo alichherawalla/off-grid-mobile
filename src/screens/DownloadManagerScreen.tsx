@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   RefreshControl,
@@ -11,7 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card, Button } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { modelManager, backgroundDownloadService, activeModelService, hardwareService } from '../services';
 import { DownloadedModel, BackgroundDownloadInfo, ONNXImageModel } from '../types';
@@ -35,6 +36,8 @@ type DownloadItem = {
 
 export const DownloadManagerScreen: React.FC = () => {
   const navigation = useNavigation();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeDownloads, setActiveDownloads] = useState<BackgroundDownloadInfo[]>([]);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -350,7 +353,7 @@ export const DownloadManagerScreen: React.FC = () => {
           style={styles.cancelButton}
           onPress={() => handleRemoveDownload(item)}
         >
-          <Icon name="x" size={20} color={COLORS.error} />
+          <Icon name="x" size={20} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -386,7 +389,7 @@ export const DownloadManagerScreen: React.FC = () => {
           <Icon
             name={item.modelType === 'image' ? 'image' : 'message-square'}
             size={16}
-            color={item.modelType === 'image' ? COLORS.info : COLORS.primary}
+            color={item.modelType === 'image' ? colors.info : colors.primary}
           />
         </View>
         <View style={styles.downloadInfo}>
@@ -410,7 +413,7 @@ export const DownloadManagerScreen: React.FC = () => {
             }
           }}
         >
-          <Icon name="trash-2" size={18} color={COLORS.error} />
+          <Icon name="trash-2" size={18} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -439,7 +442,7 @@ export const DownloadManagerScreen: React.FC = () => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-left" size={24} color={COLORS.text} />
+          <Icon name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Download Manager</Text>
         <View style={styles.headerSpacer} />
@@ -452,7 +455,7 @@ export const DownloadManagerScreen: React.FC = () => {
             {/* Active Downloads Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Icon name="download" size={18} color={COLORS.primary} />
+                <Icon name="download" size={18} color={colors.primary} />
                 <Text style={styles.sectionTitle}>Active Downloads</Text>
                 <View style={styles.countBadge}>
                   <Text style={styles.countText}>{activeItems.length}</Text>
@@ -467,7 +470,7 @@ export const DownloadManagerScreen: React.FC = () => {
                 ))
               ) : (
                 <Card style={styles.emptyCard}>
-                  <Icon name="inbox" size={32} color={COLORS.textMuted} />
+                  <Icon name="inbox" size={32} color={colors.textMuted} />
                   <Text style={styles.emptyText}>No active downloads</Text>
                 </Card>
               )}
@@ -476,7 +479,7 @@ export const DownloadManagerScreen: React.FC = () => {
             {/* Completed Downloads Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Icon name="check-circle" size={18} color={COLORS.success} />
+                <Icon name="check-circle" size={18} color={colors.success} />
                 <Text style={styles.sectionTitle}>Downloaded Models</Text>
                 <View style={styles.countBadge}>
                   <Text style={styles.countText}>{completedItems.length}</Text>
@@ -491,7 +494,7 @@ export const DownloadManagerScreen: React.FC = () => {
                 ))
               ) : (
                 <Card style={styles.emptyCard}>
-                  <Icon name="package" size={32} color={COLORS.textMuted} />
+                  <Icon name="package" size={32} color={colors.textMuted} />
                   <Text style={styles.emptyText}>No models downloaded yet</Text>
                   <Text style={styles.emptySubtext}>
                     Go to the Models tab to browse and download models
@@ -504,7 +507,7 @@ export const DownloadManagerScreen: React.FC = () => {
             {completedItems.length > 0 && (
               <View style={styles.storageSection}>
                 <View style={styles.storageRow}>
-                  <Icon name="hard-drive" size={16} color={COLORS.textMuted} />
+                  <Icon name="hard-drive" size={16} color={colors.textMuted} />
                   <Text style={styles.storageText}>
                     Total storage used: {formatBytes(
                       completedItems.reduce((sum, item) => sum + item.fileSize, 0)
@@ -520,7 +523,7 @@ export const DownloadManagerScreen: React.FC = () => {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
+            tintColor={colors.primary}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -557,14 +560,14 @@ function extractQuantization(fileName: string): string {
   return match ? match[0].toUpperCase() : 'Unknown';
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
   },
@@ -575,7 +578,7 @@ const styles = StyleSheet.create({
   title: {
     ...TYPOGRAPHY.h2,
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
   },
   headerSpacer: {
     width: 40,
@@ -590,43 +593,43 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xl,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
     gap: SPACING.sm,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.text,
+    color: colors.text,
     flex: 1,
   },
   countBadge: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     paddingHorizontal: SPACING.sm + 2,
     paddingVertical: SPACING.xs,
     borderRadius: 12,
   },
   countText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   downloadCard: {
     marginHorizontal: SPACING.lg,
     marginBottom: SPACING.md,
   },
   downloadHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
     marginBottom: SPACING.md,
   },
   modelTypeIcon: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: COLORS.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.surfaceLight,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     marginRight: SPACING.sm + 2,
   },
   downloadInfo: {
@@ -634,12 +637,12 @@ const styles = StyleSheet.create({
   },
   fileName: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.xs / 2, // 2px - minimal spacing between filename and author
   },
   modelId: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   cancelButton: {
     padding: SPACING.sm,
@@ -656,82 +659,82 @@ const styles = StyleSheet.create({
   },
   progressBarBackground: {
     height: 6,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 3,
     marginBottom: SPACING.xs + 2,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   progressBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
+    height: '100%' as const,
+    backgroundColor: colors.primary,
     borderRadius: 3,
   },
   progressText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   downloadMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.md,
   },
   quantBadge: {
-    backgroundColor: COLORS.primary + '25',
+    backgroundColor: colors.primary + '25',
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
   },
   quantText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   imageBadge: {
-    backgroundColor: COLORS.info + '25',
+    backgroundColor: colors.info + '25',
   },
   imageQuantText: {
-    color: COLORS.info,
+    color: colors.info,
   },
   statusText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   sizeText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   dateText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   emptyCard: {
     marginHorizontal: SPACING.lg,
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingVertical: SPACING.xxl,
     gap: SPACING.sm,
   },
   emptyText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginTop: SPACING.sm,
   },
   emptySubtext: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
   },
   storageSection: {
     paddingHorizontal: SPACING.lg,
   },
   storageRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     padding: SPACING.lg,
     borderRadius: 12,
   },
   storageText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
 });

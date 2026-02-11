@@ -2,12 +2,13 @@ import React from 'react';
 import {
   TouchableOpacity,
   Text,
-  StyleSheet,
   ActivityIndicator,
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { COLORS, FONTS, SPACING, TYPOGRAPHY } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 interface ButtonProps {
   title: string;
@@ -34,6 +35,9 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   testID,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const buttonStyles = [
     styles.button,
     styles[`button_${variant}`],
@@ -60,7 +64,7 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === 'primary' ? COLORS.text : COLORS.primary}
+          color={variant === 'primary' ? colors.text : colors.primary}
           size="small"
         />
       ) : (
@@ -73,28 +77,28 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderRadius: 8,
     gap: SPACING.sm,
   },
   button_primary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   button_secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
   },
   button_outline: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: colors.borderLight,
   },
   button_ghost: {
     backgroundColor: 'transparent',
@@ -116,19 +120,19 @@ const styles = StyleSheet.create({
   },
   text: {
     ...TYPOGRAPHY.body,
-    fontWeight: '400',
+    fontWeight: '400' as const,
   },
   text_primary: {
-    color: COLORS.primary,
+    color: colors.primary,
   },
   text_secondary: {
-    color: COLORS.text,
+    color: colors.text,
   },
   text_outline: {
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   text_ghost: {
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   text_small: {
     fontSize: TYPOGRAPHY.h3.fontSize,
@@ -140,6 +144,6 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.h2.fontSize,
   },
   text_disabled: {
-    color: COLORS.textDisabled,
+    color: colors.textDisabled,
   },
 });

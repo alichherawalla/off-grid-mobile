@@ -21,7 +21,9 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { Message } from '../types';
 import { stripControlTokens } from '../utils/messageContent';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
@@ -34,6 +36,7 @@ import { AppSheet } from './AppSheet';
 
 // Animated blinking cursor for streaming state
 function BlinkingCursor() {
+  const { colors } = useTheme();
   const reducedMotion = useReducedMotion();
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -49,7 +52,7 @@ function BlinkingCursor() {
   }, [reducedMotion]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return (
-    <Animated.Text testID="streaming-cursor" style={[{ color: COLORS.primary, fontFamily: FONTS.mono, fontWeight: '300' }, style]}>
+    <Animated.Text testID="streaming-cursor" style={[{ color: colors.primary, fontFamily: FONTS.mono, fontWeight: '300' as const }, style]}>
       _
     </Animated.Text>
   );
@@ -176,6 +179,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   showGenerationDetails = false,
   animateEntry = false,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
@@ -483,7 +488,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             style={styles.actionSheetItem}
             onPress={handleCopy}
           >
-            <Icon name="copy" size={18} color={COLORS.textSecondary} />
+            <Icon name="copy" size={18} color={colors.textSecondary} />
             <Text style={styles.actionSheetText}>Copy</Text>
           </AnimatedPressable>
 
@@ -494,7 +499,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               style={styles.actionSheetItem}
               onPress={handleEdit}
             >
-              <Icon name="edit-2" size={18} color={COLORS.textSecondary} />
+              <Icon name="edit-2" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>Edit</Text>
             </AnimatedPressable>
           )}
@@ -506,7 +511,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               style={styles.actionSheetItem}
               onPress={handleRetry}
             >
-              <Icon name="refresh-cw" size={18} color={COLORS.textSecondary} />
+              <Icon name="refresh-cw" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>
                 {isUser ? 'Resend' : 'Regenerate'}
               </Text>
@@ -520,7 +525,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               style={styles.actionSheetItem}
               onPress={handleGenerateImage}
             >
-              <Icon name="image" size={18} color={COLORS.textSecondary} />
+              <Icon name="image" size={18} color={colors.textSecondary} />
               <Text style={styles.actionSheetText}>Generate Image</Text>
             </AnimatedPressable>
           )}
@@ -553,7 +558,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               multiline
               autoFocus
               placeholder="Enter message..."
-              placeholderTextColor={COLORS.textMuted}
+              placeholderTextColor={colors.textMuted}
               textAlignVertical="top"
             />
             <View style={styles.editActions}>
@@ -604,29 +609,29 @@ function formatDuration(ms: number): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     marginVertical: 8,
     paddingHorizontal: 16,
   },
   userContainer: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-end' as const,
   },
   assistantContainer: {
-    alignItems: 'flex-start',
+    alignItems: 'flex-start' as const,
   },
   systemInfoContainer: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   systemInfoText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
   },
   bubble: {
-    maxWidth: '85%',
+    maxWidth: '85%' as const,
     borderRadius: 8,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
@@ -637,22 +642,22 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   userBubble: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderBottomLeftRadius: 4,
   },
   attachmentsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 4,
     marginBottom: 8,
   },
   attachmentWrapper: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   attachmentImage: {
     width: 140,
@@ -665,48 +670,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   userText: {
-    color: COLORS.background,
-    fontWeight: '400',
+    color: colors.background,
+    fontWeight: '400' as const,
   },
   assistantText: {
-    color: COLORS.text,
-    fontWeight: '400',
+    color: colors.text,
+    fontWeight: '400' as const,
   },
   cursor: {
-    color: COLORS.primary,
-    fontWeight: '300',
+    color: colors.primary,
+    fontWeight: '300' as const,
   },
   thinkingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingVertical: 4,
   },
   thinkingDots: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     marginRight: 8,
   },
   thinkingDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: colors.primary,
     marginHorizontal: 2,
   },
   thinkingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
+    color: colors.textSecondary,
+    fontStyle: 'italic' as const,
   },
   thinkingBlock: {
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 8,
     marginBottom: 8,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
     minWidth: 260,
   },
   thinkingHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
     padding: 8,
     gap: 6,
   },
@@ -714,14 +719,14 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 4,
-    backgroundColor: COLORS.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.primary + '30',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   thinkingHeaderIconText: {
     ...TYPOGRAPHY.label,
-    fontWeight: '600',
-    color: COLORS.primary,
+    fontWeight: '600' as const,
+    color: colors.primary,
   },
   thinkingHeaderTextContainer: {
     flex: 1,
@@ -729,71 +734,71 @@ const styles = StyleSheet.create({
   },
   thinkingHeaderText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
-    fontWeight: '500',
+    color: colors.textMuted,
+    fontWeight: '500' as const,
   },
   thinkingPreview: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.text,
+    color: colors.text,
     marginTop: 6,
     lineHeight: 18,
     opacity: 0.8,
   },
   thinkingToggle: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   thinkingBlockText: {
     ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     lineHeight: 18,
     padding: SPACING.sm,
     paddingTop: 0,
-    fontStyle: 'italic',
+    fontStyle: 'italic' as const,
   },
   streamingThinkingHint: {
     marginTop: 8,
   },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginTop: 4,
     marginHorizontal: 8,
     gap: 8,
   },
   timestamp: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   generationTime: {
     ...TYPOGRAPHY.meta,
-    fontWeight: '400',
-    color: COLORS.primary,
+    fontWeight: '400' as const,
+    color: colors.primary,
   },
   actionHint: {
     padding: 4,
   },
   actionHintText: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     letterSpacing: 1,
   },
   generationMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
     marginTop: 2,
     marginHorizontal: 8,
     gap: 3,
   },
   generationMetaText: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     flexShrink: 1,
   },
   generationMetaSep: {
     ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     opacity: 0.5,
   },
   actionSheetContent: {
@@ -801,28 +806,28 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   actionSheetItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.sm,
     gap: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   actionSheetText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: colors.text,
   },
   editModalOverlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
   },
   editModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   editModal: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -831,22 +836,22 @@ const styles = StyleSheet.create({
   editModalTitle: {
     ...TYPOGRAPHY.h1,
     fontSize: 18,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.lg,
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   editInput: {
     ...TYPOGRAPHY.h2,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: SPACING.md,
-    color: COLORS.text,
+    color: colors.text,
     minHeight: 100,
     maxHeight: 200,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
   },
   editActions: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     gap: 12,
     marginTop: 16,
   },
@@ -854,24 +859,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   editButtonCancel: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
   },
   editButtonSave: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'transparent' as const,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   editButtonTextCancel: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-    fontWeight: '500',
+    color: colors.text,
+    fontWeight: '500' as const,
   },
   editButtonTextSave: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-    fontWeight: '600',
+    color: colors.text,
+    fontWeight: '600' as const,
   },
 });

@@ -3,7 +3,6 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Keyboard,
   Image,
   ScrollView,
@@ -11,7 +10,9 @@ import {
 } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Feather';
-import { COLORS, FONTS, SPACING, SHADOWS } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { FONTS, SPACING } from '../constants';
 import { MediaAttachment, ImageModeState } from '../types';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { triggerHaptic } from '../utils/haptics';
@@ -46,6 +47,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onOpenSettings,
   activeImageModelName,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
@@ -250,7 +253,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 />
               ) : (
                 <View testID={`document-preview-${attachment.id}`} style={styles.documentPreview}>
-                  <Icon name="file-text" size={24} color={COLORS.primary} />
+                  <Icon name="file-text" size={24} color={colors.primary} />
                   <Text style={styles.documentName} numberOfLines={2}>
                     {attachment.fileName || 'Document'}
                   </Text>
@@ -261,7 +264,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 style={styles.removeAttachment}
                 onPress={() => removeAttachment(attachment.id)}
               >
-                <Text style={styles.removeAttachmentText}>×</Text>
+                <Text style={styles.removeAttachmentText}>&times;</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -279,7 +282,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onPress={handlePickImage}
               disabled={disabled || isGenerating}
             >
-              <Icon name="camera" size={20} color={COLORS.textSecondary} />
+              <Icon name="camera" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
 
@@ -298,7 +301,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <Icon
                 name="zap"
                 size={18}
-                color={imageMode === 'force' ? COLORS.primary : COLORS.textSecondary}
+                color={imageMode === 'force' ? colors.primary : colors.textSecondary}
               />
               {imageMode === 'force' && (
                 <Text testID="image-mode-on-badge" style={styles.imageGenLabelForce}>ON</Text>
@@ -327,7 +330,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           value={message}
           onChangeText={setMessage}
           placeholder={placeholder}
-          placeholderTextColor={COLORS.textMuted}
+          placeholderTextColor={colors.textMuted}
           multiline
           maxLength={2000}
           editable={!disabled}
@@ -340,7 +343,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               style={[styles.sendButton, styles.stopButton]}
               onPress={handleStop}
             >
-              <Icon name="square" size={18} color={COLORS.text} />
+              <Icon name="square" size={18} color={colors.text} />
             </TouchableOpacity>
           ) : canSend ? (
             <TouchableOpacity
@@ -348,7 +351,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               style={styles.sendButton}
               onPress={handleSend}
             >
-              <Icon name="send" size={18} color={COLORS.text} />
+              <Icon name="send" size={18} color={colors.text} />
             </TouchableOpacity>
           ) : (
             <VoiceRecordButton
@@ -381,13 +384,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopColor: colors.border,
   },
   attachmentsContainer: {
     marginBottom: 8,
@@ -396,52 +399,52 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   attachmentPreview: {
-    position: 'relative',
+    position: 'relative' as const,
     width: 60,
     height: 60,
     borderRadius: 8,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   attachmentImage: {
-    width: '100%',
-    height: '100%',
+    width: '100%' as const,
+    height: '100%' as const,
   },
   documentPreview: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: '100%' as const,
+    height: '100%' as const,
+    backgroundColor: colors.surface,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
     padding: 4,
   },
   documentName: {
     fontSize: 10,
     fontFamily: FONTS.mono,
-    color: COLORS.textMuted,
-    textAlign: 'center',
+    color: colors.textMuted,
+    textAlign: 'center' as const,
     marginTop: 4,
   },
   removeAttachment: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 2,
     right: 2,
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: COLORS.error,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: colors.error,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   removeAttachmentText: {
-    color: COLORS.text,
+    color: colors.text,
     fontSize: 14,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
     marginTop: -2,
   },
   inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: COLORS.surface,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    backgroundColor: colors.surface,
     borderRadius: 8,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
@@ -450,31 +453,31 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    color: COLORS.text,
+    color: colors.text,
     fontSize: 14,
     fontFamily: FONTS.mono,
     minHeight: 40,
     maxHeight: 100,
-    textAlignVertical: 'top',
+    textAlignVertical: 'top' as const,
   },
   inputActions: {
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-end' as const,
     paddingBottom: 3,
   },
   toolbarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   toolbarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     flex: 1,
   },
   toolbarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
   },
   toolbarButton: {
@@ -482,8 +485,8 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   imageGenButton: {
     height: 32,
@@ -491,25 +494,25 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexDirection: 'row' as const,
     gap: 4,
   },
   imageGenButtonForce: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.textSecondary,
+    backgroundColor: colors.surface,
+    borderColor: colors.textSecondary,
   },
   imageGenLabelForce: {
     fontSize: 11,
     fontFamily: FONTS.mono,
-    fontWeight: '500',
-    color: COLORS.primary,
+    fontWeight: '500' as const,
+    color: colors.primary,
   },
   statusIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     flex: 1,
     gap: 4,
     marginLeft: 4,
@@ -517,26 +520,26 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontFamily: FONTS.mono,
-    fontWeight: '300',
-    color: COLORS.textMuted,
+    fontWeight: '300' as const,
+    color: colors.textMuted,
   },
   sendButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: COLORS.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   sendButtonDisabled: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     opacity: 0.5,
   },
   stopButton: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.textMuted,
+    backgroundColor: colors.surface,
+    borderColor: colors.textMuted,
   },
 });

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
   ScrollView,
   KeyboardAvoidingView,
@@ -13,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { COLORS, TYPOGRAPHY, FONTS, SPACING } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { TYPOGRAPHY, FONTS, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 
@@ -33,6 +34,8 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   const [confirmPassphrase, setConfirmPassphrase] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   const { setEnabled } = useAuthStore();
 
@@ -111,7 +114,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           <View style={styles.iconContainer}>
             <View style={styles.iconBox}>
-              <Icon name="lock" size={48} color={COLORS.primary} />
+              <Icon name="lock" size={48} color={colors.primary} />
             </View>
           </View>
 
@@ -130,7 +133,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
                   value={currentPassphrase}
                   onChangeText={setCurrentPassphrase}
                   placeholder="Enter current passphrase"
-                  placeholderTextColor={COLORS.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   secureTextEntry
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -147,7 +150,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
                 value={newPassphrase}
                 onChangeText={setNewPassphrase}
                 placeholder="Enter passphrase (min 6 characters)"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -161,7 +164,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
                 value={confirmPassphrase}
                 onChangeText={setConfirmPassphrase}
                 placeholder="Re-enter passphrase"
-                placeholderTextColor={COLORS.textMuted}
+                placeholderTextColor={colors.textMuted}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -195,29 +198,29 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: colors.border,
   },
   cancelButton: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
   },
   title: {
     ...TYPOGRAPHY.h2,
-    color: COLORS.text,
+    color: colors.text,
   },
   content: {
     flex: 1,
@@ -226,7 +229,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   iconContainer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     marginVertical: SPACING.xl,
   },
   iconBox: {
@@ -234,15 +237,15 @@ const styles = StyleSheet.create({
     height: 96,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   description: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
     marginBottom: SPACING.xl,
   },
@@ -254,29 +257,29 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.sm,
   },
   input: {
     ...TYPOGRAPHY.body,
-    backgroundColor: COLORS.surfaceLight,
+    backgroundColor: colors.surfaceLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     padding: SPACING.md,
-    color: COLORS.text,
+    color: colors.text,
   },
   tips: {
     marginBottom: SPACING.xl,
   },
   tipsTitle: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
+    color: colors.textSecondary,
     marginBottom: SPACING.sm,
   },
   tipItem: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textMuted,
+    color: colors.textMuted,
     lineHeight: 20,
   },
   submitButton: {

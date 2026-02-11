@@ -2,12 +2,13 @@ import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { COLORS, SPACING, TYPOGRAPHY } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 export interface AlertButton {
   text: string;
@@ -32,6 +33,9 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
   onClose,
   loading = false,
 }) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+
   const handleButtonPress = (button: AlertButton) => {
     button.onPress?.();
     onClose?.();
@@ -47,7 +51,7 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator size="small" color={COLORS.primary} style={styles.loadingIndicator} />
+          <ActivityIndicator size="small" color={colors.primary} style={styles.loadingIndicator} />
         ) : null}
         {message ? <Text style={styles.message}>{message}</Text> : null}
         <View style={styles.buttonContainer}>
@@ -111,51 +115,51 @@ export const showAlert = (
 // Helper function to hide alert (returns state to set)
 export const hideAlert = (): AlertState => initialAlertState;
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   content: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.xxl,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
   loadingIndicator: {
     marginBottom: SPACING.md,
   },
   message: {
     ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
+    color: colors.textSecondary,
+    textAlign: 'center' as const,
     lineHeight: 20,
     marginBottom: SPACING.lg,
   },
   buttonContainer: {
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     marginTop: SPACING.sm,
-    width: '100%',
+    width: '100%' as const,
     gap: SPACING.sm,
   },
   button: {
     flex: 1,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: colors.border,
     borderRadius: 8,
     backgroundColor: 'transparent',
   },
   buttonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.primary,
+    color: colors.primary,
   },
   cancelButtonText: {
-    color: COLORS.textMuted,
+    color: colors.textMuted,
   },
   destructiveButton: {
-    borderColor: COLORS.error,
+    borderColor: colors.error,
   },
   destructiveButtonText: {
-    color: COLORS.error,
+    color: colors.error,
   },
 });
