@@ -75,7 +75,7 @@ const ProjectsStackNavigator: React.FC = () => {
       <ProjectsStack.Screen
         name="ProjectEdit"
         component={ProjectEditScreen}
-        options={{ presentation: 'modal' }}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
     </ProjectsStack.Navigator>
   );
@@ -244,12 +244,12 @@ export const AppNavigator: React.FC = () => {
       <RootStack.Screen
         name="DownloadManager"
         component={DownloadManagerScreen}
-        options={{ presentation: 'modal' }}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <RootStack.Screen
         name="Gallery"
         component={GalleryScreen}
-        options={{ presentation: 'modal' }}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
     </RootStack.Navigator>
   );
