@@ -10,6 +10,14 @@ import {
   PanResponderGestureState,
   Vibration,
 } from 'react-native';
+import ReanimatedAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
 import { COLORS } from '../constants';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
@@ -49,6 +57,35 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   const cancelOffsetX = useRef(new Animated.Value(0)).current;
   const isDraggingToCancel = useRef(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+
+  // Reanimated ripple ring
+  const rippleScale = useSharedValue(1);
+  const rippleOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (isRecording) {
+      rippleScale.value = 1;
+      rippleOpacity.value = 0.4;
+      rippleScale.value = withRepeat(
+        withTiming(2.2, { duration: 1200, easing: Easing.out(Easing.ease) }),
+        -1,
+        false
+      );
+      rippleOpacity.value = withRepeat(
+        withTiming(0, { duration: 1200, easing: Easing.out(Easing.ease) }),
+        -1,
+        false
+      );
+    } else {
+      rippleScale.value = 1;
+      rippleOpacity.value = 0;
+    }
+  }, [isRecording]);
+
+  const rippleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: rippleScale.value }],
+    opacity: rippleOpacity.value,
+  }));
 
   // Loading animation for model loading or transcribing
   useEffect(() => {
@@ -294,6 +331,11 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         </View>
       )}
 
+      {/* Ripple ring behind button when recording */}
+      {isRecording && (
+        <ReanimatedAnimated.View style={[styles.rippleRing, rippleStyle]} />
+      )}
+
       {/* Main button with pan responder for hold-to-record */}
       <Animated.View
         style={[
@@ -359,6 +401,15 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rippleRing: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: COLORS.error,
+    backgroundColor: 'transparent',
   },
   buttonWrapper: {
   },
