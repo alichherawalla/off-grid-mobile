@@ -284,10 +284,14 @@ class LLMService {
     }
 
     try {
-      console.log('[LLM] Calling context.initMultimodal with path:', mmProjPath);
+      // Disable GPU for CLIP on iOS Simulator — the simulated Metal driver
+      // can't handle the large buffer allocations and crashes with XPC API misuse.
+      const deviceInfo = useAppStore.getState().deviceInfo;
+      const useGpuForClip = Platform.OS === 'ios' && !deviceInfo?.isEmulator;
+      console.log('[LLM] Calling context.initMultimodal with path:', mmProjPath, 'use_gpu:', useGpuForClip);
       const success = await this.context.initMultimodal({
         path: mmProjPath,
-        use_gpu: Platform.OS === 'ios',
+        use_gpu: useGpuForClip,
       });
       console.log('[LLM] context.initMultimodal returned:', success);
 
