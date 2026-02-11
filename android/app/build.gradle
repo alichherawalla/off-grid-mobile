@@ -83,8 +83,8 @@ android {
         applicationId "com.localllm"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1770846204
-        versionName "0.0.13"
+        versionCode 1770846520
+        versionName "0.0.14"
     }
     signingConfigs {
         debug {
