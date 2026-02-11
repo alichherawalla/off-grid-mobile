@@ -153,7 +153,8 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            // Reset to ChatsList when tab is pressed
+            // Prevent default behavior and always reset to ChatsList
+            e.preventDefault();
             navigation.navigate('ChatsTab', { screen: 'ChatsList' });
           },
         })}
