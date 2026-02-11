@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Modal,
-  ScrollView,
   Image,
   Dimensions,
   PermissionsAndroid,
@@ -31,25 +30,16 @@ import {
   initialAlertState,
   showAlert,
   hideAlert,
+  ProjectSelectorSheet,
+  DebugSheet,
 } from '../components';
 import { COLORS, APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
-import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta } from '../types';
+import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
 type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
-
-interface DebugInfo {
-  systemPrompt: string;
-  originalMessageCount: number;
-  managedMessageCount: number;
-  truncatedCount: number;
-  formattedPrompt: string;
-  estimatedTokens: number;
-  maxContextLength: number;
-  contextUsagePercent: number;
-}
 
 export const ChatScreen: React.FC = () => {
   const flatListRef = useRef<FlatList>(null);
@@ -1238,208 +1228,24 @@ export const ChatScreen: React.FC = () => {
           }
         />
 
-      {/* Project Selector Modal */}
-      <Modal
+      {/* Project Selector Sheet */}
+      <ProjectSelectorSheet
         visible={showProjectSelector}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowProjectSelector(false)}
-      >
-        <TouchableOpacity
-          style={styles.projectModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowProjectSelector(false)}
-        >
-          <View style={styles.projectModal} onStartShouldSetResponder={() => true}>
-            <View style={styles.projectModalHeader}>
-              <Text style={styles.projectModalTitle}>Select Project</Text>
-              <TouchableOpacity onPress={() => setShowProjectSelector(false)}>
-                <Text style={styles.projectModalClose}>Done</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.projectList}>
-              {/* Default option */}
-              <TouchableOpacity
-                style={[
-                  styles.projectOption,
-                  !activeProject && styles.projectOptionSelected,
-                ]}
-                onPress={() => handleSelectProject(null)}
-              >
-                <View style={styles.projectOptionIcon}>
-                  <Text style={styles.projectOptionIconText}>D</Text>
-                </View>
-                <View style={styles.projectOptionInfo}>
-                  <Text style={styles.projectOptionName}>Default</Text>
-                  <Text style={styles.projectOptionDesc} numberOfLines={1}>
-                    Use default system prompt from settings
-                  </Text>
-                </View>
-                {!activeProject && (
-                  <Text style={styles.projectCheckmark}>✓</Text>
-                )}
-              </TouchableOpacity>
+        onClose={() => setShowProjectSelector(false)}
+        projects={projects}
+        activeProject={activeProject || null}
+        onSelectProject={handleSelectProject}
+      />
 
-              {projects.map((project) => (
-                <TouchableOpacity
-                  key={project.id}
-                  style={[
-                    styles.projectOption,
-                    activeProject?.id === project.id && styles.projectOptionSelected,
-                  ]}
-                  onPress={() => handleSelectProject(project)}
-                >
-                  <View style={styles.projectOptionIcon}>
-                    <Text style={styles.projectOptionIconText}>
-                      {project.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.projectOptionInfo}>
-                    <Text style={styles.projectOptionName}>{project.name}</Text>
-                    <Text style={styles.projectOptionDesc} numberOfLines={1}>
-                      {project.description}
-                    </Text>
-                  </View>
-                  {activeProject?.id === project.id && (
-                    <Text style={styles.projectCheckmark}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Debug Panel Modal */}
-      <Modal
+      {/* Debug Sheet */}
+      <DebugSheet
         visible={showDebugPanel}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDebugPanel(false)}
-      >
-        <TouchableOpacity
-          style={styles.debugModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDebugPanel(false)}
-        >
-          <View style={styles.debugModal} onStartShouldSetResponder={() => true}>
-            <View style={styles.debugModalHeader}>
-              <Text style={styles.debugModalTitle}>Debug Info</Text>
-              <TouchableOpacity onPress={() => setShowDebugPanel(false)}>
-                <Text style={styles.debugModalClose}>Close</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.debugContent}>
-              {/* Context Stats */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>Context Stats</Text>
-                <View style={styles.debugStats}>
-                  <View style={styles.debugStat}>
-                    <Text style={styles.debugStatValue}>
-                      {debugInfo?.estimatedTokens || 0}
-                    </Text>
-                    <Text style={styles.debugStatLabel}>Tokens Used</Text>
-                  </View>
-                  <View style={styles.debugStat}>
-                    <Text style={styles.debugStatValue}>
-                      {debugInfo?.maxContextLength || APP_CONFIG.maxContextLength}
-                    </Text>
-                    <Text style={styles.debugStatLabel}>Max Context</Text>
-                  </View>
-                  <View style={styles.debugStat}>
-                    <Text style={styles.debugStatValue}>
-                      {(debugInfo?.contextUsagePercent || 0).toFixed(1)}%
-                    </Text>
-                    <Text style={styles.debugStatLabel}>Usage</Text>
-                  </View>
-                </View>
-                <View style={styles.contextBar}>
-                  <View
-                    style={[
-                      styles.contextBarFill,
-                      { width: `${Math.min(debugInfo?.contextUsagePercent || 0, 100)}%` }
-                    ]}
-                  />
-                </View>
-              </View>
-
-              {/* Message Stats */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>Message Stats</Text>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Original Messages:</Text>
-                  <Text style={styles.debugValue}>{debugInfo?.originalMessageCount || 0}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>After Context Mgmt:</Text>
-                  <Text style={styles.debugValue}>{debugInfo?.managedMessageCount || 0}</Text>
-                </View>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Truncated:</Text>
-                  <Text style={[styles.debugValue, debugInfo?.truncatedCount ? styles.debugWarning : null]}>
-                    {debugInfo?.truncatedCount || 0}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Active Project */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>Active Project</Text>
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Name:</Text>
-                  <Text style={styles.debugValue}>{activeProject?.name || 'Default'}</Text>
-                </View>
-              </View>
-
-              {/* System Prompt */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>System Prompt</Text>
-                <View style={styles.debugCodeBlock}>
-                  <Text style={styles.debugCode} selectable>
-                    {debugInfo?.systemPrompt || settings.systemPrompt || APP_CONFIG.defaultSystemPrompt}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Formatted Prompt (Last Sent) */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>Last Formatted Prompt</Text>
-                <Text style={styles.debugHint}>
-                  This is the exact prompt sent to the LLM (ChatML format)
-                </Text>
-                <View style={styles.debugCodeBlock}>
-                  <Text style={styles.debugCode} selectable>
-                    {debugInfo?.formattedPrompt || 'Send a message to see the formatted prompt'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Current Conversation Messages */}
-              <View style={styles.debugSection}>
-                <Text style={styles.debugSectionTitle}>
-                  Conversation Messages ({activeConversation?.messages.length || 0})
-                </Text>
-                {(activeConversation?.messages || []).map((msg, index) => (
-                  <View key={msg.id} style={styles.debugMessage}>
-                    <View style={styles.debugMessageHeader}>
-                      <Text style={[
-                        styles.debugMessageRole,
-                        msg.role === 'user' ? styles.debugRoleUser : styles.debugRoleAssistant
-                      ]}>
-                        {msg.role.toUpperCase()}
-                      </Text>
-                      <Text style={styles.debugMessageIndex}>#{index + 1}</Text>
-                    </View>
-                    <Text style={styles.debugMessageContent} numberOfLines={3}>
-                      {msg.content}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setShowDebugPanel(false)}
+        debugInfo={debugInfo}
+        activeProject={activeProject || null}
+        settings={settings}
+        activeConversation={activeConversation || null}
+      />
 
       {/* Model Selector Modal */}
       <ModelSelectorModal
@@ -1721,229 +1527,6 @@ const styles = StyleSheet.create({
   selectModelButtonText: {
     ...TYPOGRAPHY.body,
     color: COLORS.primary,
-  },
-  projectModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  projectModal: {
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-  },
-  projectModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  projectModalTitle: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-  },
-  projectModalClose: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  projectList: {
-    padding: 16,
-  },
-  projectOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: COLORS.surface,
-  },
-  projectOptionSelected: {
-    backgroundColor: COLORS.primary + '20',
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  projectOptionIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  projectOptionIconText: {
-    ...TYPOGRAPHY.h2,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  projectOptionInfo: {
-    flex: 1,
-  },
-  projectOptionName: {
-    ...TYPOGRAPHY.h2,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  projectOptionDesc: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  projectCheckmark: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 18,
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginLeft: SPACING.sm,
-  },
-  debugModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  debugModal: {
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
-  },
-  debugModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  debugModalTitle: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-  },
-  debugModalClose: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.primary,
-    fontWeight: '500',
-  },
-  debugContent: {
-    padding: 16,
-  },
-  debugSection: {
-    marginBottom: 20,
-  },
-  debugSectionTitle: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '600',
-    color: COLORS.primary,
-    marginBottom: SPACING.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  debugStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 12,
-  },
-  debugStat: {
-    alignItems: 'center',
-  },
-  debugStatValue: {
-    ...TYPOGRAPHY.h1,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  debugStatLabel: {
-    ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  contextBar: {
-    height: 8,
-    backgroundColor: COLORS.surface,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  contextBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.primary,
-    borderRadius: 4,
-  },
-  debugRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
-  },
-  debugLabel: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textSecondary,
-  },
-  debugValue: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  debugWarning: {
-    color: COLORS.warning,
-  },
-  debugCodeBlock: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  debugCode: {
-    ...TYPOGRAPHY.meta,
-    color: COLORS.text,
-    lineHeight: 16,
-  },
-  debugHint: {
-    ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    marginBottom: SPACING.sm,
-  },
-  debugMessage: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  debugMessageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  debugMessageRole: {
-    ...TYPOGRAPHY.meta,
-    fontWeight: '700',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  debugRoleUser: {
-    backgroundColor: COLORS.primary + '30',
-    color: COLORS.primary,
-  },
-  debugRoleAssistant: {
-    backgroundColor: COLORS.info + '30',
-    color: COLORS.info,
-  },
-  debugMessageIndex: {
-    ...TYPOGRAPHY.meta,
-    color: COLORS.textMuted,
-  },
-  debugMessageContent: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-    lineHeight: 16,
   },
   imageProgressContainer: {
     paddingHorizontal: 12,

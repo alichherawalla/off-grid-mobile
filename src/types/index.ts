@@ -301,6 +301,18 @@ export interface BackgroundDownloadInfo {
   failureReason?: string;
 }
 
+// Debug info for context inspection
+export interface DebugInfo {
+  systemPrompt: string;
+  originalMessageCount: number;
+  managedMessageCount: number;
+  truncatedCount: number;
+  formattedPrompt: string;
+  estimatedTokens: number;
+  maxContextLength: number;
+  contextUsagePercent: number;
+}
+
 // App state types
 export type AppScreen =
   | 'onboarding'

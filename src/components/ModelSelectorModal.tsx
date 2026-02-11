@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
   ScrollView,
+  StyleSheet,
+  TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { AppSheet } from './AppSheet';
 import { COLORS, TYPOGRAPHY } from '../constants';
 import { useAppStore } from '../stores';
 import { DownloadedModel, ONNXImageModel } from '../types';
@@ -102,310 +102,262 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const isAnyLoading = isLoading || isLoadingImage;
 
   return (
-    <Modal
+    <AppSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      snapPoints={['40%', '75%']}
+      title="Select Model"
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <View style={styles.modal} onStartShouldSetResponder={() => true}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Select Model</Text>
-            <TouchableOpacity onPress={onClose} disabled={isAnyLoading}>
-              <Text style={[styles.closeButton, isAnyLoading && styles.disabled]}>
-                Done
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Tab Bar */}
-          <View style={styles.tabBar}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'text' && styles.tabActive]}
-              onPress={() => setActiveTab('text')}
-              disabled={isAnyLoading}
-            >
-              <Icon
-                name="message-square"
-                size={16}
-                color={activeTab === 'text' ? COLORS.primary : COLORS.textMuted}
-              />
-              <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>
-                Text
-              </Text>
-              {hasLoadedTextModel && (
-                <View style={styles.tabBadge}>
-                  <View style={styles.tabBadgeDot} />
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'image' && styles.tabActive]}
-              onPress={() => setActiveTab('image')}
-              disabled={isAnyLoading}
-            >
-              <Icon
-                name="image"
-                size={16}
-                color={activeTab === 'image' ? COLORS.info : COLORS.textMuted}
-              />
-              <Text style={[
-                styles.tabText,
-                activeTab === 'image' && styles.tabTextActive,
-                activeTab === 'image' && { color: COLORS.info }
-              ]}>
-                Image
-              </Text>
-              {hasLoadedImageModel && (
-                <View style={[styles.tabBadge, { backgroundColor: COLORS.info + '30' }]}>
-                  <View style={[styles.tabBadgeDot, { backgroundColor: COLORS.info }]} />
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Loading Banner */}
-          {isAnyLoading && (
-            <View style={styles.loadingBanner}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
-              <Text style={styles.loadingText}>Loading model...</Text>
+      {/* Tab Bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'text' && styles.tabActive]}
+          onPress={() => setActiveTab('text')}
+          disabled={isAnyLoading}
+        >
+          <Icon
+            name="message-square"
+            size={16}
+            color={activeTab === 'text' ? COLORS.primary : COLORS.textMuted}
+          />
+          <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>
+            Text
+          </Text>
+          {hasLoadedTextModel && (
+            <View style={styles.tabBadge}>
+              <View style={styles.tabBadgeDot} />
             </View>
           )}
+        </TouchableOpacity>
 
-          {/* Content */}
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={styles.contentContainer}
-          >
-            {activeTab === 'text' ? (
-              // Text Models Tab
-              <>
-                {/* Currently Loaded Text Model */}
-                {hasLoadedTextModel && (
-                  <View style={styles.loadedSection}>
-                    <View style={styles.loadedHeader}>
-                      <Icon name="check-circle" size={14} color={COLORS.success} />
-                      <Text style={styles.loadedLabel}>Currently Loaded</Text>
-                    </View>
-                    <View style={styles.loadedModelItem}>
-                      <View style={styles.loadedModelInfo}>
-                        <Text style={styles.loadedModelName} numberOfLines={1}>
-                          {activeTextModel?.name || 'Unknown'}
-                        </Text>
-                        <Text style={styles.loadedModelMeta}>
-                          {activeTextModel?.quantization} • {activeTextModel ? hardwareService.formatModelSize(activeTextModel) : '0 B'}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.unloadButton}
-                        onPress={onUnloadModel}
-                        disabled={isAnyLoading}
-                      >
-                        <Icon name="power" size={16} color={COLORS.error} />
-                        <Text style={styles.unloadButtonText}>Unload</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'image' && styles.tabActive]}
+          onPress={() => setActiveTab('image')}
+          disabled={isAnyLoading}
+        >
+          <Icon
+            name="image"
+            size={16}
+            color={activeTab === 'image' ? COLORS.info : COLORS.textMuted}
+          />
+          <Text style={[
+            styles.tabText,
+            activeTab === 'image' && styles.tabTextActive,
+            activeTab === 'image' && { color: COLORS.info }
+          ]}>
+            Image
+          </Text>
+          {hasLoadedImageModel && (
+            <View style={[styles.tabBadge, { backgroundColor: COLORS.info + '30' }]}>
+              <View style={[styles.tabBadgeDot, { backgroundColor: COLORS.info }]} />
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
 
-                {/* Available Text Models */}
-                <Text style={styles.sectionTitle}>
-                  {hasLoadedTextModel ? 'Switch Model' : 'Available Models'}
-                </Text>
+      {/* Loading Banner */}
+      {isAnyLoading && (
+        <View style={styles.loadingBanner}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading model...</Text>
+        </View>
+      )}
 
-                {downloadedModels.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Icon name="package" size={40} color={COLORS.textMuted} />
-                    <Text style={styles.emptyTitle}>No Text Models</Text>
-                    <Text style={styles.emptyText}>
-                      Download models from the Models tab
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
+        {activeTab === 'text' ? (
+          // Text Models Tab
+          <>
+            {/* Currently Loaded Text Model */}
+            {hasLoadedTextModel && (
+              <View style={styles.loadedSection}>
+                <View style={styles.loadedHeader}>
+                  <Icon name="check-circle" size={14} color={COLORS.success} />
+                  <Text style={styles.loadedLabel}>Currently Loaded</Text>
+                </View>
+                <View style={styles.loadedModelItem}>
+                  <View style={styles.loadedModelInfo}>
+                    <Text style={styles.loadedModelName} numberOfLines={1}>
+                      {activeTextModel?.name || 'Unknown'}
+                    </Text>
+                    <Text style={styles.loadedModelMeta}>
+                      {activeTextModel?.quantization} • {activeTextModel ? hardwareService.formatModelSize(activeTextModel) : '0 B'}
                     </Text>
                   </View>
-                ) : (
-                  downloadedModels.map((model) => {
-                    const isCurrent = isCurrentTextModel(model);
-                    return (
-                      <TouchableOpacity
-                        key={model.id}
-                        style={[styles.modelItem, isCurrent && styles.modelItemSelected]}
-                        onPress={() => onSelectModel(model)}
-                        disabled={isAnyLoading || isCurrent}
-                      >
-                        <View style={styles.modelInfo}>
-                          <Text
-                            style={[styles.modelName, isCurrent && styles.modelNameSelected]}
-                            numberOfLines={1}
-                          >
-                            {model.name}
-                          </Text>
-                          <View style={styles.modelMeta}>
-                            <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
-                            {model.quantization && (
-                              <>
-                                <Text style={styles.metaSeparator}>•</Text>
-                                <Text style={styles.modelQuant}>{model.quantization}</Text>
-                              </>
-                            )}
-                            {model.isVisionModel && (
-                              <>
-                                <Text style={styles.metaSeparator}>•</Text>
-                                <View style={styles.visionBadge}>
-                                  <Icon name="eye" size={10} color={COLORS.info} />
-                                  <Text style={styles.visionBadgeText}>Vision</Text>
-                                </View>
-                              </>
-                            )}
-                          </View>
-                        </View>
-                        {isCurrent && (
-                          <View style={styles.checkmark}>
-                            <Icon name="check" size={16} color={COLORS.background} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </>
+                  <TouchableOpacity
+                    style={styles.unloadButton}
+                    onPress={onUnloadModel}
+                    disabled={isAnyLoading}
+                  >
+                    <Icon name="power" size={16} color={COLORS.error} />
+                    <Text style={styles.unloadButtonText}>Unload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Available Text Models */}
+            <Text style={styles.sectionTitle}>
+              {hasLoadedTextModel ? 'Switch Model' : 'Available Models'}
+            </Text>
+
+            {downloadedModels.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="package" size={40} color={COLORS.textMuted} />
+                <Text style={styles.emptyTitle}>No Text Models</Text>
+                <Text style={styles.emptyText}>
+                  Download models from the Models tab
+                </Text>
+              </View>
             ) : (
-              // Image Models Tab
-              <>
-                {/* Currently Loaded Image Model */}
-                {hasLoadedImageModel && (
-                  <View style={[styles.loadedSection, { borderColor: COLORS.info + '40' }]}>
-                    <View style={styles.loadedHeader}>
-                      <Icon name="check-circle" size={14} color={COLORS.success} />
-                      <Text style={styles.loadedLabel}>Currently Loaded</Text>
-                    </View>
-                    <View style={styles.loadedModelItem}>
-                      <View style={styles.loadedModelInfo}>
-                        <Text style={styles.loadedModelName} numberOfLines={1}>
-                          {activeImageModel?.name || 'Unknown'}
-                        </Text>
-                        <Text style={styles.loadedModelMeta}>
-                          {activeImageModel?.style || 'Image'} • {formatSize(activeImageModel?.size || 0)}
-                        </Text>
-                      </View>
-                      <TouchableOpacity
-                        style={styles.unloadButton}
-                        onPress={handleUnloadImageModel}
-                        disabled={isAnyLoading}
+              downloadedModels.map((model) => {
+                const isCurrent = isCurrentTextModel(model);
+                return (
+                  <TouchableOpacity
+                    key={model.id}
+                    style={[styles.modelItem, isCurrent && styles.modelItemSelected]}
+                    onPress={() => onSelectModel(model)}
+                    disabled={isAnyLoading || isCurrent}
+                  >
+                    <View style={styles.modelInfo}>
+                      <Text
+                        style={[styles.modelName, isCurrent && styles.modelNameSelected]}
+                        numberOfLines={1}
                       >
-                        {isLoadingImage ? (
-                          <ActivityIndicator size="small" color={COLORS.error} />
-                        ) : (
+                        {model.name}
+                      </Text>
+                      <View style={styles.modelMeta}>
+                        <Text style={styles.modelSize}>{hardwareService.formatModelSize(model)}</Text>
+                        {model.quantization && (
                           <>
-                            <Icon name="power" size={16} color={COLORS.error} />
-                            <Text style={styles.unloadButtonText}>Unload</Text>
+                            <Text style={styles.metaSeparator}>•</Text>
+                            <Text style={styles.modelQuant}>{model.quantization}</Text>
                           </>
                         )}
-                      </TouchableOpacity>
+                        {model.isVisionModel && (
+                          <>
+                            <Text style={styles.metaSeparator}>•</Text>
+                            <View style={styles.visionBadge}>
+                              <Icon name="eye" size={10} color={COLORS.info} />
+                              <Text style={styles.visionBadgeText}>Vision</Text>
+                            </View>
+                          </>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                )}
-
-                {/* Available Image Models */}
-                <Text style={styles.sectionTitle}>
-                  {hasLoadedImageModel ? 'Switch Model' : 'Available Models'}
-                </Text>
-
-                {downloadedImageModels.length === 0 ? (
-                  <View style={styles.emptyState}>
-                    <Icon name="image" size={40} color={COLORS.textMuted} />
-                    <Text style={styles.emptyTitle}>No Image Models</Text>
-                    <Text style={styles.emptyText}>
-                      Download image models from the Models tab
+                    {isCurrent && (
+                      <View style={styles.checkmark}>
+                        <Icon name="check" size={16} color={COLORS.background} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </>
+        ) : (
+          // Image Models Tab
+          <>
+            {/* Currently Loaded Image Model */}
+            {hasLoadedImageModel && (
+              <View style={[styles.loadedSection, { borderColor: COLORS.info + '40' }]}>
+                <View style={styles.loadedHeader}>
+                  <Icon name="check-circle" size={14} color={COLORS.success} />
+                  <Text style={styles.loadedLabel}>Currently Loaded</Text>
+                </View>
+                <View style={styles.loadedModelItem}>
+                  <View style={styles.loadedModelInfo}>
+                    <Text style={styles.loadedModelName} numberOfLines={1}>
+                      {activeImageModel?.name || 'Unknown'}
+                    </Text>
+                    <Text style={styles.loadedModelMeta}>
+                      {activeImageModel?.style || 'Image'} • {formatSize(activeImageModel?.size || 0)}
                     </Text>
                   </View>
-                ) : (
-                  downloadedImageModels.map((model) => {
-                    const isCurrent = isCurrentImageModel(model);
-                    return (
-                      <TouchableOpacity
-                        key={model.id}
-                        style={[
-                          styles.modelItem,
-                          isCurrent && styles.modelItemSelectedImage
-                        ]}
-                        onPress={() => handleSelectImageModel(model)}
-                        disabled={isAnyLoading || isCurrent}
-                      >
-                        <View style={styles.modelInfo}>
-                          <Text
-                            style={[
-                              styles.modelName,
-                              isCurrent && { color: COLORS.info }
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {model.name}
-                          </Text>
-                          <View style={styles.modelMeta}>
-                            <Text style={styles.modelSize}>{formatSize(model.size)}</Text>
-                            {model.style && (
-                              <>
-                                <Text style={styles.metaSeparator}>•</Text>
-                                <Text style={styles.modelStyle}>{model.style}</Text>
-                              </>
-                            )}
-                          </View>
-                        </View>
-                        {isCurrent && (
-                          <View style={[styles.checkmark, { backgroundColor: COLORS.info }]}>
-                            <Icon name="check" size={16} color={COLORS.background} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </>
+                  <TouchableOpacity
+                    style={styles.unloadButton}
+                    onPress={handleUnloadImageModel}
+                    disabled={isAnyLoading}
+                  >
+                    {isLoadingImage ? (
+                      <ActivityIndicator size="small" color={COLORS.error} />
+                    ) : (
+                      <>
+                        <Icon name="power" size={16} color={COLORS.error} />
+                        <Text style={styles.unloadButtonText}>Unload</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
-          </ScrollView>
-        </View>
-      </TouchableOpacity>
-    </Modal>
+
+            {/* Available Image Models */}
+            <Text style={styles.sectionTitle}>
+              {hasLoadedImageModel ? 'Switch Model' : 'Available Models'}
+            </Text>
+
+            {downloadedImageModels.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Icon name="image" size={40} color={COLORS.textMuted} />
+                <Text style={styles.emptyTitle}>No Image Models</Text>
+                <Text style={styles.emptyText}>
+                  Download image models from the Models tab
+                </Text>
+              </View>
+            ) : (
+              downloadedImageModels.map((model) => {
+                const isCurrent = isCurrentImageModel(model);
+                return (
+                  <TouchableOpacity
+                    key={model.id}
+                    style={[
+                      styles.modelItem,
+                      isCurrent && styles.modelItemSelectedImage
+                    ]}
+                    onPress={() => handleSelectImageModel(model)}
+                    disabled={isAnyLoading || isCurrent}
+                  >
+                    <View style={styles.modelInfo}>
+                      <Text
+                        style={[
+                          styles.modelName,
+                          isCurrent && { color: COLORS.info }
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {model.name}
+                      </Text>
+                      <View style={styles.modelMeta}>
+                        <Text style={styles.modelSize}>{formatSize(model.size)}</Text>
+                        {model.style && (
+                          <>
+                            <Text style={styles.metaSeparator}>•</Text>
+                            <Text style={styles.modelStyle}>{model.style}</Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                    {isCurrent && (
+                      <View style={[styles.checkmark, { backgroundColor: COLORS.info }]}>
+                        <Icon name="check" size={16} color={COLORS.background} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </>
+        )}
+      </ScrollView>
+    </AppSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modal: {
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '75%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  title: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.text,
-  },
-  closeButton: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.primary,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
   tabBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,

@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { AppSheet } from './AppSheet';
 import { COLORS, SPACING, TYPOGRAPHY } from '../constants';
 
 export interface AlertButton {
@@ -38,45 +38,42 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
   };
 
   return (
-    <Modal
+    <AppSheet
       visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onClose}
+      onClose={() => onClose?.()}
+      enableDynamicSizing
+      title={title}
+      closeLabel="Done"
     >
-      <View style={styles.overlay}>
-        <View style={styles.alertContainer}>
-          {loading ? (
-            <ActivityIndicator size="small" color={COLORS.primary} style={styles.loadingIndicator} />
-          ) : null}
-          <Text style={styles.title}>{title}</Text>
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-          <View style={styles.buttonContainer}>
-            {buttons.map((button, index) => (
-              <TouchableOpacity
-                key={index}
+      <View style={styles.content}>
+        {loading ? (
+          <ActivityIndicator size="small" color={COLORS.primary} style={styles.loadingIndicator} />
+        ) : null}
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+        <View style={styles.buttonContainer}>
+          {buttons.map((button, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.button,
+                button.style === 'destructive' && styles.destructiveButton,
+              ]}
+              onPress={() => handleButtonPress(button)}
+            >
+              <Text
                 style={[
-                  styles.button,
-                  button.style === 'destructive' && styles.destructiveButton,
+                  styles.buttonText,
+                  button.style === 'cancel' && styles.cancelButtonText,
+                  button.style === 'destructive' && styles.destructiveButtonText,
                 ]}
-                onPress={() => handleButtonPress(button)}
               >
-                <Text
-                  style={[
-                    styles.buttonText,
-                    button.style === 'cancel' && styles.cancelButtonText,
-                    button.style === 'destructive' && styles.destructiveButtonText,
-                  ]}
-                >
-                  {button.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {button.text}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
-    </Modal>
+    </AppSheet>
   );
 };
 
@@ -115,31 +112,14 @@ export const showAlert = (
 export const hideAlert = (): AlertState => initialAlertState;
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: COLORS.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alertContainer: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: SPACING.xl,
-    marginHorizontal: SPACING.xxl,
-    maxWidth: 320,
-    minWidth: 280,
+  content: {
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl,
     alignItems: 'center',
   },
   loadingIndicator: {
     marginBottom: SPACING.md,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: SPACING.sm,
   },
   message: {
     ...TYPOGRAPHY.bodySmall,
@@ -164,9 +144,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 8,
     backgroundColor: 'transparent',
-  },
-  buttonBorder: {
-    // Removed - using gap instead
   },
   buttonText: {
     ...TYPOGRAPHY.body,
