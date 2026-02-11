@@ -199,7 +199,7 @@ export const ProjectDetailScreen: React.FC = () => {
           style={[styles.newChatButton, !hasModels && styles.newChatButtonDisabled]}
           onPress={handleNewChat}
         >
-          <Icon name="plus" size={16} color={hasModels ? COLORS.text : COLORS.textMuted} />
+          <Icon name="plus" size={16} color={hasModels ? COLORS.primary : COLORS.textMuted} />
           <Text style={[styles.newChatText, !hasModels && styles.newChatTextDisabled]}>New Chat</Text>
         </TouchableOpacity>
       </View>
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
     borderRadius: 6,
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
   newChatText: {
     ...TYPOGRAPHY.body,
     fontWeight: '400',
-    color: COLORS.text,
+    color: COLORS.primary,
   },
   newChatTextDisabled: {
     color: COLORS.textMuted,
@@ -399,14 +399,14 @@ const styles = StyleSheet.create({
   startChatButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: 6,
   },
   startChatText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: COLORS.primary,
     fontWeight: '400',
   },
   footer: {

@@ -104,7 +104,7 @@ export const ProjectsScreen: React.FC = () => {
           </AnimatedEntry>
           <AnimatedEntry index={3} staggerMs={60} trigger={focusTrigger}>
             <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
-              <Icon name="plus" size={14} color={COLORS.textSecondary} />
+              <Icon name="plus" size={14} color={COLORS.primary} />
               <Text style={styles.emptyButtonText}>Create Project</Text>
             </TouchableOpacity>
           </AnimatedEntry>
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderRadius: 6,
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: COLORS.primary,
     fontWeight: '400',
   },
 });
