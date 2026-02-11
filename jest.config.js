@@ -7,7 +7,6 @@ module.exports = {
   transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@react-native-.*|moti|@motify|@gorhom|@shopify)/)',],
   testEnvironment: 'node',
   clearMocks: true,
-  resetMocks: true,
   verbose: true,
   testTimeout: 10000,
 };

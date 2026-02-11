@@ -241,13 +241,16 @@ jest.mock('react-native-worklets', () => ({}));
 
 // react-native-reanimated mock — fully manual to avoid loading native worklets
 jest.mock('react-native-reanimated', () => {
-  const { View } = require('react-native');
+  const { View, Text, Image } = require('react-native');
   return {
     __esModule: true,
     default: {
       createAnimatedComponent: (component: any) => component || View,
       addWhitelistedNativeProps: jest.fn(),
       addWhitelistedUIProps: jest.fn(),
+      View,
+      Text,
+      Image,
     },
     useSharedValue: jest.fn((init: any) => ({ value: init })),
     useAnimatedStyle: jest.fn((fn: any) => fn()),
@@ -293,13 +296,13 @@ jest.mock('lottie-react-native', () => 'LottieView');
 // react-native-linear-gradient mock
 jest.mock('react-native-linear-gradient', () => 'LinearGradient');
 
-// moti mock
+// moti mock (kept for any transitive imports)
 jest.mock('moti', () => ({
   MotiView: 'MotiView',
   MotiText: 'MotiText',
   MotiImage: 'MotiImage',
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
-}));
+}), { virtual: true });
 
 // react-native-zip-archive mock
 jest.mock('react-native-zip-archive', () => ({

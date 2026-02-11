@@ -17,12 +17,18 @@ const mockedInitWhisper = initWhisper as jest.MockedFunction<typeof initWhisper>
 
 describe('WhisperService', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     // Reset singleton state
     (whisperService as any).context = null;
     (whisperService as any).currentModelPath = null;
     (whisperService as any).isTranscribing = false;
     (whisperService as any).stopFn = null;
+    // Re-establish default AudioSessionIos mock implementations
+    // (previous tests may have set mockRejectedValue which clearAllMocks doesn't reset)
+    mockedAudioSessionIos.setCategory.mockResolvedValue(undefined as any);
+    mockedAudioSessionIos.setMode.mockResolvedValue(undefined as any);
+    mockedAudioSessionIos.setActive.mockResolvedValue(undefined as any);
   });
 
   // ========================================================================

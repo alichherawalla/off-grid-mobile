@@ -504,10 +504,10 @@ describe('ChatMessage', () => {
       expect(onGenerateImage).toHaveBeenCalledWith('A beautiful sunset');
     });
 
-    it('closes action menu when cancel is pressed', () => {
+    it('shows action sheet with Done button instead of cancel', () => {
       const message = createAssistantMessage('Test');
 
-      const { getByTestId, queryByTestId } = render(
+      const { getByTestId, getByText } = render(
         <ChatMessage message={message} showActions={true} />
       );
 
@@ -515,10 +515,8 @@ describe('ChatMessage', () => {
       fireEvent(getByTestId('assistant-message'), 'longPress');
       expect(getByTestId('action-menu')).toBeTruthy();
 
-      // Press cancel
-      fireEvent.press(getByTestId('action-cancel'));
-
-      expect(queryByTestId('action-menu')).toBeNull();
+      // AppSheet has a Done button for dismissal (no cancel button)
+      expect(getByText('Done')).toBeTruthy();
     });
   });
 

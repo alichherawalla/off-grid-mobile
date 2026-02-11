@@ -47,11 +47,17 @@ const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 
 describe('ModelManager', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
     // Reset private state
     (modelManager as any).downloadJobs = new Map();
     (modelManager as any).backgroundDownloadMetadataCallback = null;
+
+    // Re-establish huggingFaceService mock (resetAllMocks clears jest.mock implementations)
+    (huggingFaceService.getDownloadUrl as jest.Mock).mockImplementation(
+      (modelId: string, fileName: string) =>
+        `https://huggingface.co/${modelId}/resolve/main/${fileName}`
+    );
 
     // Default RNFS behaviors
     mockedRNFS.exists.mockResolvedValue(false);
@@ -59,6 +65,29 @@ describe('ModelManager', () => {
     mockedRNFS.stat.mockResolvedValue({ size: 4000000000, isFile: () => true } as any);
     mockedRNFS.unlink.mockResolvedValue(undefined as any);
     mockedRNFS.readDir.mockResolvedValue([]);
+    mockedRNFS.downloadFile.mockReturnValue({
+      jobId: 1,
+      promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
+    } as any);
+    (mockedRNFS as any).stopDownload = jest.fn();
+    (mockedRNFS as any).copyFile = jest.fn(() => Promise.resolve());
+    (mockedRNFS as any).moveFile = jest.fn(() => Promise.resolve());
+
+    // Reset backgroundDownloadService mock implementations
+    mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
+    mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
+    mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
+    mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
+    mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('' as any);
+    mockedBackgroundDownloadService.startProgressPolling.mockImplementation(() => {});
+    mockedBackgroundDownloadService.stopProgressPolling.mockImplementation(() => {});
+    mockedBackgroundDownloadService.onProgress.mockReturnValue(jest.fn());
+    mockedBackgroundDownloadService.onComplete.mockReturnValue(jest.fn());
+    mockedBackgroundDownloadService.onError.mockReturnValue(jest.fn());
+
+    // Reset AsyncStorage defaults
+    mockedAsyncStorage.getItem.mockResolvedValue(null);
+    mockedAsyncStorage.setItem.mockResolvedValue(undefined as any);
   });
 
   // ========================================================================

@@ -85,7 +85,9 @@ jest.mock('../../../src/services/generationService', () => ({
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
     loadModel: mockLoadModel,
+    loadTextModel: mockLoadModel,
     unloadModel: mockUnloadModel,
+    unloadTextModel: mockUnloadModel,
     unloadImageModel: jest.fn(() => Promise.resolve()),
     getActiveModels: jest.fn(() => ({
       text: { modelId: null, modelPath: null, isLoading: false },
@@ -118,6 +120,7 @@ jest.mock('../../../src/services/imageGenerationService', () => ({
     }),
     isGeneratingFor: jest.fn(() => false),
     cancel: jest.fn(),
+    cancelGeneration: jest.fn(() => Promise.resolve()),
   },
 }));
 
@@ -132,15 +135,22 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(() => true),
     supportsVision: jest.fn(() => false),
-    clearKvCache: jest.fn(() => Promise.resolve()),
+    clearKVCache: jest.fn(() => Promise.resolve()),
     getMultimodalSupport: jest.fn(() => null),
     getLoadedModelPath: jest.fn(() => null),
+    stopGeneration: jest.fn(() => Promise.resolve()),
     getPerformanceStats: jest.fn(() => ({
       tokensPerSecond: 0,
       totalTokens: 0,
       timeToFirstToken: 0,
       lastTokensPerSecond: 0,
       lastTimeToFirstToken: 0,
+    })),
+    getContextDebugInfo: jest.fn(() => Promise.resolve({
+      contextUsagePercent: 0,
+      truncatedCount: 0,
+      totalTokens: 0,
+      maxContext: 2048,
     })),
   },
 }));
@@ -540,14 +550,15 @@ describe('ChatScreen', () => {
       // Loading overlay should be visible
     });
 
-    it('disables input during model load', () => {
+    it('disables input when model is not loaded', () => {
       setupFullChat();
-      useAppStore.setState({ isLoadingModel: true });
+      // Mock llmService.isModelLoaded to return false — input disabled prop depends on this
+      (llmService.isModelLoaded as jest.Mock).mockReturnValue(false);
 
       const { queryByPlaceholderText } = renderWithNavigation(<ChatScreen />);
 
       const input = queryByPlaceholderText(/message/i);
-      // Input might not be rendered during model load, or may be disabled
+      // Input should be disabled when model is not loaded
       if (input) {
         expect(input.props.editable).toBe(false);
       }
