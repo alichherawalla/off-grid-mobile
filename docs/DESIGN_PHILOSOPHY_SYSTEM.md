@@ -154,10 +154,60 @@ Dark mode shadows use very tight radius (1-3px) to preserve crisp card edges whi
 - Shadow: `shadows.small` (subtle elevation)
 - Hover state (if interactive): `backgroundColor: colors.surfaceHover`
 
+#### Screen Headers
+
+All screens must use a standardized header style for visual consistency. Two variants exist:
+
+**Tab Screen Header** (top-level tabs: Chats, Projects, Models, Settings):
+```typescript
+header: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingHorizontal: SPACING.lg,
+  paddingVertical: SPACING.md,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.border,
+  backgroundColor: colors.surface,
+  ...shadows.small,
+  zIndex: 1,
+}
+```
+- Title (`TYPOGRAPHY.h2`) on the left
+- Optional action button on the right (e.g. "New", download icon)
+- `backgroundColor: colors.surface` + `shadows.small` for elevation
+
+**Sub-Screen Header** (pushed screens: ModelSettings, Storage, Security, etc.):
+```typescript
+header: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: SPACING.lg,
+  paddingVertical: SPACING.md,
+  borderBottomWidth: 1,
+  borderBottomColor: colors.border,
+  backgroundColor: colors.surface,
+  ...shadows.small,
+  zIndex: 1,
+  gap: SPACING.md,
+}
+```
+- Back button on the left
+- Title (`TYPOGRAPHY.h2`, `flex: 1`) fills remaining space
+- Optional action button on the right
+
+**Key rules:**
+- Every header MUST have `backgroundColor: colors.surface` and `...shadows.small`
+- Every header MUST have `zIndex: 1` (so shadow renders above content below)
+- Padding is always `SPACING.lg` horizontal, `SPACING.md` vertical
+- Border bottom is always 1px `colors.border`
+
+**Exceptions:** Onboarding, LockScreen, and ModelDownload have no standard header (full-screen flows).
+
 #### Text Inputs
-- Background: `COLORS.surfaceLight`
-- Border: `1px solid COLORS.border`
-- Focus border: `COLORS.borderFocus`
+- Background: `colors.surfaceLight`
+- Border: `1px solid colors.border`
+- Focus border: `colors.borderFocus`
 - Padding: `SPACING.md`
 - Border radius: `8px`
 - Monospace font

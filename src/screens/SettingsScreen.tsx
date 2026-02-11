@@ -142,6 +142,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
@@ -153,6 +156,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   title: {
     ...TYPOGRAPHY.h2,
     color: colors.text,
+    lineHeight: 36,
   },
   scrollView: {
     flex: 1,

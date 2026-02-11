@@ -162,6 +162,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows.small,
+    zIndex: 1,
   },
   headerButton: {
     padding: SPACING.xs,
