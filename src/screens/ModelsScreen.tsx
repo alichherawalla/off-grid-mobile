@@ -21,6 +21,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { Card, ModelCard, Button } from '../components';
+import { AnimatedEntry } from '../components/AnimatedEntry';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
@@ -886,12 +887,14 @@ export const ModelsScreen: React.FC = () => {
     );
 
     return (
-      <ModelCard
-        model={item}
-        isDownloaded={isAnyFileDownloaded}
-        onPress={() => handleSelectModel(item)}
-        testID={`model-card-${index}`}
-      />
+      <AnimatedEntry index={index} staggerMs={30}>
+        <ModelCard
+          model={item}
+          isDownloaded={isAnyFileDownloaded}
+          onPress={() => handleSelectModel(item)}
+          testID={`model-card-${index}`}
+        />
+      </AnimatedEntry>
     );
   };
 
