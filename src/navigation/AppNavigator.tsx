@@ -168,6 +168,7 @@ const MainTabs: React.FC = () => {
 
   return (
     <Tab.Navigator
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
         animation: 'fade',
