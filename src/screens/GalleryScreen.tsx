@@ -10,6 +10,7 @@ import {
   Dimensions,
   Platform,
   PermissionsAndroid,
+  Share,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import RNFS from 'react-native-fs';
@@ -180,23 +181,28 @@ export const GalleryScreen: React.FC = () => {
 
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
-      if (Platform.OS === 'android') {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-          {
-            title: 'Storage Permission',
-            message: 'App needs access to save images',
-            buttonNeutral: 'Ask Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
+      if (Platform.OS === 'ios') {
+        // On iOS, open the native share sheet so the user can save to Photos
+        await Share.share({
+          url: `file://${image.imagePath}`,
+        });
+        return;
       }
 
+      // Android: save to Pictures directory
+      await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        {
+          title: 'Storage Permission',
+          message: 'App needs access to save images',
+          buttonNeutral: 'Ask Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      );
+
       const sourcePath = image.imagePath;
-      const picturesDir = Platform.OS === 'android'
-        ? `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`
-        : `${RNFS.DocumentDirectoryPath}/LocalLLM_Images`;
+      const picturesDir = `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`;
 
       if (!(await RNFS.exists(picturesDir))) {
         await RNFS.mkdir(picturesDir);
@@ -208,12 +214,7 @@ export const GalleryScreen: React.FC = () => {
 
       await RNFS.copyFile(sourcePath, destPath);
 
-      setAlertState(showAlert(
-        'Image Saved',
-        Platform.OS === 'android'
-          ? `Saved to Pictures/LocalLLM/${fileName}`
-          : `Saved to ${fileName}`
-      ));
+      setAlertState(showAlert('Image Saved', `Saved to Pictures/LocalLLM/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
     }
