@@ -12,6 +12,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Card } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { SettingsStackParamList } from '../navigation/types';
 import packageJson from '../../package.json';
@@ -20,6 +21,7 @@ type NavigationProp = NativeStackNavigationProp<SettingsStackParamList, 'Setting
 
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const focusTrigger = useFocusTrigger();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -41,6 +43,7 @@ export const SettingsScreen: React.FC = () => {
               key={item.screen}
               index={index}
               staggerMs={40}
+              trigger={focusTrigger}
               style={[styles.navItem, index === arr.length - 1 && styles.navItemLast]}
               onPress={() => navigation.navigate(item.screen)}
             >
@@ -57,7 +60,7 @@ export const SettingsScreen: React.FC = () => {
         </View>
 
         {/* About */}
-        <AnimatedEntry index={5} staggerMs={40}>
+        <AnimatedEntry index={5} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.section}>
             <View style={styles.aboutRow}>
               <Text style={styles.aboutLabel}>Version</Text>
@@ -70,7 +73,7 @@ export const SettingsScreen: React.FC = () => {
         </AnimatedEntry>
 
         {/* Privacy */}
-        <AnimatedEntry index={6} staggerMs={40}>
+        <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>
           <Card style={styles.privacyCard}>
             <View style={styles.privacyIconContainer}>
               <Icon name="shield" size={18} color={COLORS.textSecondary} />

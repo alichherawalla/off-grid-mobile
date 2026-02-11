@@ -22,6 +22,7 @@ import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { Card, ModelCard, Button } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
+import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { COLORS, RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
@@ -74,6 +75,7 @@ type ModelTab = 'text' | 'image';
 
 export const ModelsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const focusTrigger = useFocusTrigger();
   const [activeTab, setActiveTab] = useState<ModelTab>('text');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -887,7 +889,7 @@ export const ModelsScreen: React.FC = () => {
     );
 
     return (
-      <AnimatedEntry index={index} staggerMs={30}>
+      <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}>
         <ModelCard
           model={item}
           isDownloaded={isAnyFileDownloaded}

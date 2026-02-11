@@ -13,6 +13,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
@@ -23,6 +24,7 @@ type NavigationProp = NativeStackNavigationProp<ChatsStackParamList, 'ChatsList'
 
 export const ChatsListScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const focusTrigger = useFocusTrigger();
   const { conversations, deleteConversation, setActiveConversation } = useChatStore();
   const { getProject } = useProjectStore();
   const { downloadedModels, removeImagesByConversationId } = useAppStore();
@@ -89,6 +91,7 @@ export const ChatsListScreen: React.FC = () => {
     return (
       <AnimatedListItem
         index={index}
+        trigger={focusTrigger}
         style={styles.chatItem}
         onPress={() => handleChatPress(item)}
         onLongPress={() => handleDeleteChat(item)}
@@ -142,15 +145,15 @@ export const ChatsListScreen: React.FC = () => {
 
       {sortedConversations.length === 0 ? (
         <View style={styles.emptyState}>
-          <AnimatedEntry index={0} staggerMs={60}>
+          <AnimatedEntry index={0} staggerMs={60} trigger={focusTrigger}>
             <View style={styles.emptyIcon}>
               <Icon name="message-circle" size={32} color={COLORS.textMuted} />
             </View>
           </AnimatedEntry>
-          <AnimatedEntry index={1} staggerMs={60}>
+          <AnimatedEntry index={1} staggerMs={60} trigger={focusTrigger}>
             <Text style={styles.emptyTitle}>No Chats Yet</Text>
           </AnimatedEntry>
-          <AnimatedEntry index={2} staggerMs={60}>
+          <AnimatedEntry index={2} staggerMs={60} trigger={focusTrigger}>
             <Text style={styles.emptyText}>
               {hasModels
                 ? 'Start a new conversation to begin chatting with your local AI.'
@@ -158,7 +161,7 @@ export const ChatsListScreen: React.FC = () => {
             </Text>
           </AnimatedEntry>
           {hasModels && (
-            <AnimatedListItem index={3} staggerMs={60} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
+            <AnimatedListItem index={3} staggerMs={60} trigger={focusTrigger} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
               <Icon name="plus" size={18} color={COLORS.primary} />
               <Text style={styles.emptyButtonText}>New Chat</Text>
             </AnimatedListItem>

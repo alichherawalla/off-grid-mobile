@@ -17,6 +17,7 @@ import { Button, Card, CustomAlert, initialAlertState, showAlert, hideAlert } fr
 import type { AlertState } from '../components';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { COLORS, FONTS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
@@ -51,6 +52,7 @@ type LoadingState = {
 let hasInitializedNativeSync = false;
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
+  const focusTrigger = useFocusTrigger();
   const [pickerType, setPickerType] = useState<ModelPickerType>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>({
     isLoading: false,
@@ -352,7 +354,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
 
         {/* Active Models Section */}
-        <AnimatedEntry index={0} staggerMs={50}>
+        <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
         <View style={styles.modelsRow}>
           {/* Text Model */}
           <TouchableOpacity
@@ -540,7 +542,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
         {/* Recent Conversations */}
         {recentConversations.length > 0 && (
-          <AnimatedEntry index={2} staggerMs={50}>
+          <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent</Text>
@@ -557,6 +559,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 <AnimatedListItem
                   index={index}
                   staggerMs={40}
+                  trigger={focusTrigger}
                   style={styles.conversationItem}
                   onPress={() => continueChat(conv.id)}
                   testID={`conversation-item-${index}`}
@@ -578,7 +581,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         )}
 
         {/* Model Stats */}
-        <AnimatedEntry index={3} staggerMs={50}>
+        <AnimatedEntry index={3} staggerMs={50} trigger={focusTrigger}>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{downloadedModels.length}</Text>

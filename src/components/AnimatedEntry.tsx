@@ -16,6 +16,8 @@ export interface AnimatedEntryProps {
   from?: ViewStyle;
   animate?: ViewStyle;
   transition?: Record<string, any>;
+  /** Change this value to replay the animation (e.g. pass a focus counter) */
+  trigger?: number;
   children: React.ReactNode;
 }
 
@@ -27,6 +29,7 @@ export function AnimatedEntry({
   from = { opacity: 0, translateY: 12 },
   animate = { opacity: 1, translateY: 0 },
   transition = { type: 'timing' as const, duration: 300 },
+  trigger,
   children,
 }: AnimatedEntryProps) {
   const reducedMotion = useReducedMotion();
@@ -38,11 +41,14 @@ export function AnimatedEntry({
 
   useEffect(() => {
     if (reducedMotion || index >= maxItems) return;
+    // Reset to initial values before animating
+    opacity.value = (from as any).opacity ?? 1;
+    translateY.value = (from as any).translateY ?? 0;
     const targetOpacity = (animate as any).opacity ?? 1;
     const targetTranslateY = (animate as any).translateY ?? 0;
     opacity.value = withDelay(computedDelay, withTiming(targetOpacity, { duration }));
     translateY.value = withDelay(computedDelay, withTiming(targetTranslateY, { duration }));
-  }, []);
+  }, [trigger]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

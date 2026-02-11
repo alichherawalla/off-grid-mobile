@@ -11,6 +11,8 @@ export interface AnimatedListItemProps {
   staggerMs?: number;
   /** Max items to animate (default 10) */
   maxItems?: number;
+  /** Change this value to replay the entry animation (e.g. pass a focus counter) */
+  trigger?: number;
   /** Haptic type on press (default 'selection') */
   hapticType?: HapticType;
   /** Scale on press (default 0.97) */
@@ -36,6 +38,7 @@ export function AnimatedListItem({
   index,
   staggerMs = 30,
   maxItems = 10,
+  trigger,
   hapticType = 'selection',
   scaleValue,
   style,
@@ -46,7 +49,7 @@ export function AnimatedListItem({
   children,
 }: AnimatedListItemProps) {
   return (
-    <AnimatedEntry index={index} staggerMs={staggerMs} maxItems={maxItems}>
+    <AnimatedEntry index={index} staggerMs={staggerMs} maxItems={maxItems} trigger={trigger}>
       <AnimatedPressable
         hapticType={hapticType}
         scaleValue={scaleValue}
