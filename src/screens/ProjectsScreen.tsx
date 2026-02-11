@@ -10,6 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
+import { AnimatedEntry } from '../components/AnimatedEntry';
+import { AnimatedListItem } from '../components/AnimatedListItem';
+import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { COLORS, TYPOGRAPHY, SPACING, FONTS } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
@@ -19,6 +22,7 @@ type NavigationProp = NativeStackNavigationProp<ProjectsStackParamList, 'Project
 
 export const ProjectsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
+  const focusTrigger = useFocusTrigger();
   const { projects } = useProjectStore();
   const { conversations } = useChatStore();
 
@@ -35,11 +39,13 @@ export const ProjectsScreen: React.FC = () => {
     navigation.navigate('ProjectEdit', {});
   };
 
-  const renderProject = ({ item }: { item: Project }) => {
+  const renderProject = ({ item, index }: { item: Project; index: number }) => {
     const chatCount = getChatCount(item.id);
 
     return (
-      <TouchableOpacity
+      <AnimatedListItem
+        index={index}
+        trigger={focusTrigger}
         style={styles.projectItem}
         onPress={() => handleProjectPress(item)}
       >
@@ -63,7 +69,7 @@ export const ProjectsScreen: React.FC = () => {
           </View>
         </View>
         <Icon name="chevron-right" size={14} color={COLORS.textMuted} />
-      </TouchableOpacity>
+      </AnimatedListItem>
     );
   };
 
@@ -72,7 +78,7 @@ export const ProjectsScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
         <TouchableOpacity style={styles.newButton} onPress={handleNewProject}>
-          <Icon name="plus" size={16} color={COLORS.textSecondary} />
+          <Icon name="plus" size={16} color={COLORS.primary} />
           <Text style={styles.newButtonText}>New</Text>
         </TouchableOpacity>
       </View>
@@ -83,17 +89,25 @@ export const ProjectsScreen: React.FC = () => {
 
       {projects.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Icon name="folder" size={20} color={COLORS.textMuted} />
-          </View>
-          <Text style={styles.emptyTitle}>No Projects Yet</Text>
-          <Text style={styles.emptyText}>
-            Create a project to organize your chats by topic, like "Spanish Learning" or "Code Review".
-          </Text>
-          <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
-            <Icon name="plus" size={14} color={COLORS.textSecondary} />
-            <Text style={styles.emptyButtonText}>Create Project</Text>
-          </TouchableOpacity>
+          <AnimatedEntry index={0} staggerMs={60} trigger={focusTrigger}>
+            <View style={styles.emptyIcon}>
+              <Icon name="folder" size={20} color={COLORS.textMuted} />
+            </View>
+          </AnimatedEntry>
+          <AnimatedEntry index={1} staggerMs={60} trigger={focusTrigger}>
+            <Text style={styles.emptyTitle}>No Projects Yet</Text>
+          </AnimatedEntry>
+          <AnimatedEntry index={2} staggerMs={60} trigger={focusTrigger}>
+            <Text style={styles.emptyText}>
+              Create a project to organize your chats by topic, like "Spanish Learning" or "Code Review".
+            </Text>
+          </AnimatedEntry>
+          <AnimatedEntry index={3} staggerMs={60} trigger={focusTrigger}>
+            <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
+              <Icon name="plus" size={14} color={COLORS.textSecondary} />
+              <Text style={styles.emptyButtonText}>Create Project</Text>
+            </TouchableOpacity>
+          </AnimatedEntry>
         </View>
       ) : (
         <FlatList
@@ -131,7 +145,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.primary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
     borderRadius: 6,
@@ -139,7 +153,7 @@ const styles = StyleSheet.create({
   },
   newButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.text,
+    color: COLORS.primary,
     fontWeight: '400',
   },
   subtitle: {
