@@ -53,7 +53,7 @@ LocalLLM is a **privacy-first, on-device AI assistant** built with React Native.
 | Framework | React Native (TypeScript) |
 | Navigation | React Navigation 7 (native stack + bottom tabs) |
 | State | Zustand with `persist` middleware → AsyncStorage |
-| Styling | React Native StyleSheet (dark theme, custom palette) |
+| Styling | React Native StyleSheet + dynamic theme system (`src/theme/`) |
 
 ### On-Device AI
 | Capability | Library | Native Backend |
@@ -162,8 +162,13 @@ LocalLLM/
 │   │   ├── index.ts                    # All TypeScript interfaces & type aliases
 │   │   └── whisper.rn.d.ts             # Whisper native module type declarations
 │   │
+│   ├── theme/                            # Light/dark theme system
+│   │   ├── index.ts                     # useTheme() hook, getTheme(), Theme type
+│   │   ├── palettes.ts                  # COLORS_LIGHT/DARK, SHADOWS_LIGHT/DARK, createElevation()
+│   │   └── useThemedStyles.ts           # useThemedStyles() — memoized style factory
+│   │
 │   ├── constants/
-│   │   └── index.ts                    # Model recommendations, quantization info, HF config, colors
+│   │   └── index.ts                    # Model recommendations, quantization info, HF config, typography, spacing
 │   │
 │   └── utils/
 │       └── messageContent.ts           # Strip LLM control tokens from output
@@ -1593,30 +1598,66 @@ npm run test:e2e:single   # Single Maestro flow
 | Q6_K | 6.5 | Very High | No | Minimal quality loss |
 | Q8_0 | 8.0 | Excellent | No | Best quality, largest size |
 
-### Color Palette
+### Theme System
 
-| Name | Hex | Usage |
-|------|-----|-------|
-| Primary | #34D399 | Emerald accent, active states |
-| Primary Dark | #10B981 | Pressed states |
-| Primary Light | #6EE7B7 | Subtle highlights |
-| Background | #0A0A0A | Main background (pure black) |
-| Surface | #141414 | Cards, elevated elements |
-| Surface Light | #1E1E1E | Nested elements, inputs |
-| Surface Hover | #252525 | Hover states |
-| Text | #FFFFFF | Primary text |
-| Text Secondary | #B0B0B0 | Secondary text |
-| Text Muted | #808080 | Metadata, placeholders |
-| Text Disabled | #4A4A4A | Disabled text |
-| Border | #1E1E1E | Default borders |
-| Border Light | #2A2A2A | Subtle lighter borders |
-| Border Focus | #34D399 | Focused/active borders |
-| Success | #B0B0B0 | Success states (monochrome) |
-| Warning | #FFFFFF | Warnings (bright white) |
-| Error | #EF4444 | Error states |
-| Info | #B0B0B0 | Informational (monochrome) |
-| Overlay | rgba(0,0,0,0.7) | Modal backgrounds |
-| Divider | #1A1A1A | Subtle dividers |
+The app supports **light and dark modes** via a dynamic theme system in `src/theme/`. Colors and shadows are no longer hardcoded — all screens and components use `useTheme()` and `useThemedStyles()` hooks.
+
+**Architecture:**
+- `src/theme/palettes.ts` — Light and dark color palettes, shadow definitions, elevation factory
+- `src/theme/index.ts` — `useTheme()` hook (returns `{ colors, shadows, elevation, isDark }`), `getTheme(mode)` for non-hook contexts
+- `src/theme/useThemedStyles.ts` — `useThemedStyles(createStyles)` memoized style factory
+- Theme preference stored in `appStore.themeMode` (persisted via Zustand + AsyncStorage)
+- Toggle in Settings screen (Dark Mode switch)
+
+**Pattern (every screen/component):**
+```typescript
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
+
+const MyScreen = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles.container}><Icon color={colors.text} /></View>;
+};
+
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  container: { backgroundColor: colors.background, ...shadows.small },
+});
+```
+
+**Theme-independent tokens** (`TYPOGRAPHY`, `SPACING`, `FONTS`) remain in `src/constants/index.ts`.
+
+### Color Palettes
+
+#### Dark Mode (default)
+| Token | Hex | Usage |
+|-------|-----|-------|
+| primary | #34D399 | Emerald accent, active states |
+| background | #0A0A0A | Main background (pure black) |
+| surface | #141414 | Cards, elevated elements |
+| text | #FFFFFF | Primary text |
+| textSecondary | #B0B0B0 | Secondary text |
+| textMuted | #808080 | Metadata, placeholders |
+| border | #1E1E1E | Default borders |
+| error | #EF4444 | Error states |
+
+#### Light Mode
+| Token | Hex | Usage |
+|-------|-----|-------|
+| primary | #059669 | Emerald accent (darker for contrast) |
+| background | #FFFFFF | Main background (white) |
+| surface | #F5F5F5 | Cards, elevated elements |
+| text | #0A0A0A | Primary text (near black) |
+| textSecondary | #525252 | Secondary text |
+| textMuted | #8A8A8A | Metadata, placeholders |
+| border | #E5E5E5 | Default borders |
+| error | #DC2626 | Error states |
+
+### Shadows
+
+Shadows adapt per theme for proper visibility:
+- **Light mode**: Standard black shadows (opacity 0.15–0.35, radius 6–18)
+- **Dark mode**: Tight white glow (opacity 0.08–0.12, radius 1–3) for crisp edge definition without blur
 
 ---
 

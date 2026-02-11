@@ -64,7 +64,7 @@ export function AnimatedPressable({
       disabled={disabled}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={[animatedStyle, { opacity: disabled ? 0.4 : 1 }, style]}
+      style={[animatedStyle, { opacity: disabled ? 0.4 : 1, overflow: 'visible' as const }, style]}
     >
       {children}
     </AnimatedPressableBase>

@@ -60,7 +60,7 @@ export function AnimatedEntry({
   }
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[animatedStyle, { overflow: 'visible' as const }]}>
       {children}
     </Animated.View>
   );

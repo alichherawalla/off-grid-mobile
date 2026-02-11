@@ -16,9 +16,9 @@ LocalLLM follows a **brutalist, minimal design system** inspired by terminal aes
 
 ### 2. **Terminal-Inspired Aesthetic**
 - Monospace typography (`Menlo`) throughout
-- Pure black background (`#0A0A0A`)
-- Single accent color (emerald green `#34D399`)
-- High contrast for readability
+- Dark mode: Pure black background (`#0A0A0A`), light mode: clean white (`#FFFFFF`)
+- Single accent color (emerald green — `#34D399` dark, `#059669` light)
+- High contrast for readability in both themes
 - Crisp borders and sharp edges
 
 ### 3. **Consistent Patterns**
@@ -96,58 +96,42 @@ Use the spacing scale for all margins, paddings, and gaps.
 
 ### Color System
 
-Monochromatic palette with emerald green as the only accent.
+Monochromatic palette with emerald green as the only accent. Supports **light and dark modes** via the theme system (`src/theme/`).
 
-#### Primary Accent
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.primary` | `#34D399` | Main accent, active states, borders |
-| `COLORS.primaryDark` | `#10B981` | Pressed states |
-| `COLORS.primaryLight` | `#6EE7B7` | Subtle highlights |
+Colors are accessed via `useTheme()` hook — not imported directly. All tokens are available as `colors.xxx` in both themes.
 
-#### Backgrounds
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.background` | `#0A0A0A` | App background (pure black) |
-| `COLORS.surface` | `#141414` | Cards, elevated elements |
-| `COLORS.surfaceLight` | `#1E1E1E` | Nested elements, inputs |
-| `COLORS.surfaceHover` | `#252525` | Hover states |
+#### Token Reference (dark / light values)
+| Token | Dark | Light | Use Case |
+|-------|------|-------|----------|
+| `colors.primary` | `#34D399` | `#059669` | Main accent, active states |
+| `colors.background` | `#0A0A0A` | `#FFFFFF` | App background |
+| `colors.surface` | `#141414` | `#F5F5F5` | Cards, elevated elements |
+| `colors.surfaceLight` | `#1E1E1E` | `#EBEBEB` | Nested elements, inputs |
+| `colors.text` | `#FFFFFF` | `#0A0A0A` | Primary text |
+| `colors.textSecondary` | `#B0B0B0` | `#525252` | Secondary text |
+| `colors.textMuted` | `#808080` | `#8A8A8A` | Metadata, placeholders |
+| `colors.border` | `#1E1E1E` | `#E5E5E5` | Default borders |
+| `colors.borderFocus` | `#34D399` | `#059669` | Focused/active borders |
+| `colors.error` | `#EF4444` | `#DC2626` | Error states |
+| `colors.overlay` | `rgba(0,0,0,0.7)` | `rgba(0,0,0,0.4)` | Modal backgrounds |
 
-#### Text Hierarchy
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.text` | `#FFFFFF` | Primary text (pure white) |
-| `COLORS.textSecondary` | `#B0B0B0` | Secondary text |
-| `COLORS.textMuted` | `#808080` | Tertiary text, placeholders |
-| `COLORS.textDisabled` | `#4A4A4A` | Disabled text |
+#### Shadows (theme-aware)
+| Level | Light Mode | Dark Mode |
+|-------|-----------|-----------|
+| `shadows.small` | Black, opacity 0.15, radius 6 | White, opacity 0.08, radius 1 |
+| `shadows.medium` | Black, opacity 0.22, radius 10 | White, opacity 0.10, radius 2 |
+| `shadows.large` | Black, opacity 0.35, radius 18 | White, opacity 0.12, radius 3 |
+| `shadows.glow` | Emerald, opacity 0.25, radius 12 | Emerald, opacity 0.15, radius 4 |
 
-#### Borders
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.border` | `#1E1E1E` | Default borders |
-| `COLORS.borderLight` | `#2A2A2A` | Subtle lighter borders |
-| `COLORS.borderFocus` | `#34D399` | Focused/active borders (primary) |
-
-#### Semantic Colors
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.success` | `#B0B0B0` | Success states (monochrome, matches textSecondary) |
-| `COLORS.warning` | `#FFFFFF` | Warnings (bright white for attention) |
-| `COLORS.error` | `#EF4444` | Errors (only color exception besides primary) |
-| `COLORS.info` | `#B0B0B0` | Informational (monochrome, stays neutral) |
-
-#### Special
-| Token | Hex | Use Case |
-|-------|-----|----------|
-| `COLORS.overlay` | `rgba(0, 0, 0, 0.7)` | Modal backgrounds |
-| `COLORS.divider` | `#1A1A1A` | Subtle dividers |
+Dark mode shadows use very tight radius (1-3px) to preserve crisp card edges while still providing subtle elevation.
 
 **Color Rules:**
 - Use emerald (`primary`) sparingly — only for active states, focus, and important actions
-- Prefer monochrome hierarchy (white → gray → muted) over color variation
+- Prefer monochrome hierarchy over color variation
 - Semantic colors (success, warning, error) only for their intended purpose
 - Borders should be subtle (`border`) unless focused (`borderFocus`)
 - Backgrounds should use the three-tier system: `background` → `surface` → `surfaceLight`
+- **Never import COLORS directly** — always use `useTheme()` for dynamic theming
 
 ---
 
@@ -163,11 +147,12 @@ Monochromatic palette with emerald green as the only accent.
 - No shadows or gradients
 
 #### Cards
-- Background: `COLORS.surface`
+- Background: `colors.surface`
 - Padding: `SPACING.lg`
 - Border radius: `8px`
-- Border: `1px solid COLORS.border`
-- Hover state (if interactive): `backgroundColor: COLORS.surfaceHover`
+- Border: `1px solid colors.border`
+- Shadow: `shadows.small` (subtle elevation)
+- Hover state (if interactive): `backgroundColor: colors.surfaceHover`
 
 #### Text Inputs
 - Background: `COLORS.surfaceLight`
@@ -230,7 +215,7 @@ Monochromatic palette with emerald green as the only accent.
 
 ## Anti-Patterns (What to Avoid)
 
-❌ **Colorful gradients or shadows** — Keep it flat and monochrome
+❌ **Colorful gradients or heavy shadows** — Keep it flat; use theme shadows sparingly
 ❌ **Multiple accent colors** — Emerald only
 ❌ **Rounded pill shapes** — Use minimal `8px` radius
 ❌ **Decorative animations** — Only functional animations (loading, state transitions)
@@ -246,26 +231,34 @@ Monochromatic palette with emerald green as the only accent.
 
 ### Using Design Tokens
 
-Always import and use design tokens from `src/constants/index.ts`:
+Theme-independent tokens (`TYPOGRAPHY`, `SPACING`, `FONTS`) come from `src/constants/index.ts`.
+Colors and shadows come from the theme system via hooks:
 
 ```typescript
-import { COLORS, FONTS, SPACING, TYPOGRAPHY } from '../constants';
+import { SPACING, TYPOGRAPHY } from '../constants';
+import { useTheme, useThemedStyles } from '../theme';
+import type { ThemeColors, ThemeShadows } from '../theme';
 
-const styles = StyleSheet.create({
+const MyScreen = () => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Hello</Text>
+      <Icon color={colors.textMuted} />
+    </View>
+  );
+};
+
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
-    backgroundColor: COLORS.background,
+    backgroundColor: colors.background,
     padding: SPACING.xl,
   },
   title: {
     ...TYPOGRAPHY.h1,
-    color: COLORS.text,
+    color: colors.text,
     marginBottom: SPACING.md,
-  },
-  label: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
   },
 });
 ```
@@ -274,15 +267,15 @@ const styles = StyleSheet.create({
 
 When building or refactoring a component:
 
-- [ ] Uses design tokens (no hardcoded colors, sizes, or fonts)
+- [ ] Uses `useTheme()` and `useThemedStyles()` (no hardcoded colors)
 - [ ] Follows typography scale (`TYPOGRAPHY.*`)
 - [ ] Uses spacing scale for all padding/margin (`SPACING.*`)
-- [ ] Colors from palette only (`COLORS.*`)
+- [ ] Colors from theme only (`colors.*` via hook, never direct import)
 - [ ] Labels are uppercase with proper typography
 - [ ] Metadata uses appropriate meta styles
 - [ ] Buttons follow button patterns (transparent + border)
 - [ ] Cards use surface colors with minimal borders
-- [ ] No shadows, gradients, or decorative elements
+- [ ] Shadows from theme only (`shadows.small/medium/large`)
 - [ ] States (hover, focus, disabled) properly styled
 - [ ] Accessible (sufficient contrast, touch targets ≥ 44px)
 
@@ -347,7 +340,8 @@ As the app evolves:
 
 ## References
 
-- **Design Token Source:** `src/constants/index.ts`
+- **Theme System:** `src/theme/` (palettes, hooks, style factory)
+- **Design Tokens:** `src/constants/index.ts` (typography, spacing, fonts)
 - **Codebase Guide:** `docs/CODEBASE_GUIDE.md`
 - **Typography:** All Menlo, weights 200-400 only
 - **Inspiration:** Terminal UIs, Linear, Vercel, brutalist web design
