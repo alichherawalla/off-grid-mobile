@@ -11,6 +11,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
+import { AnimatedEntry } from '../components/AnimatedEntry';
+import { AnimatedListItem } from '../components/AnimatedListItem';
 import { COLORS, TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { onnxImageGeneratorService } from '../services';
@@ -85,7 +87,8 @@ export const ChatsListScreen: React.FC = () => {
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <TouchableOpacity
+      <AnimatedListItem
+        index={index}
         style={styles.chatItem}
         onPress={() => handleChatPress(item)}
         onLongPress={() => handleDeleteChat(item)}
@@ -113,7 +116,7 @@ export const ChatsListScreen: React.FC = () => {
           )}
         </View>
         <Icon name="chevron-right" size={20} color={COLORS.textMuted} />
-      </TouchableOpacity>
+      </AnimatedListItem>
     );
   };
 
@@ -139,20 +142,26 @@ export const ChatsListScreen: React.FC = () => {
 
       {sortedConversations.length === 0 ? (
         <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Icon name="message-circle" size={32} color={COLORS.textMuted} />
-          </View>
-          <Text style={styles.emptyTitle}>No Chats Yet</Text>
-          <Text style={styles.emptyText}>
-            {hasModels
-              ? 'Start a new conversation to begin chatting with your local AI.'
-              : 'Download a model from the Models tab to start chatting.'}
-          </Text>
+          <AnimatedEntry index={0} staggerMs={60}>
+            <View style={styles.emptyIcon}>
+              <Icon name="message-circle" size={32} color={COLORS.textMuted} />
+            </View>
+          </AnimatedEntry>
+          <AnimatedEntry index={1} staggerMs={60}>
+            <Text style={styles.emptyTitle}>No Chats Yet</Text>
+          </AnimatedEntry>
+          <AnimatedEntry index={2} staggerMs={60}>
+            <Text style={styles.emptyText}>
+              {hasModels
+                ? 'Start a new conversation to begin chatting with your local AI.'
+                : 'Download a model from the Models tab to start chatting.'}
+            </Text>
+          </AnimatedEntry>
           {hasModels && (
-            <TouchableOpacity style={styles.emptyButton} onPress={handleNewChat}>
+            <AnimatedListItem index={3} staggerMs={60} hapticType="impactLight" style={styles.emptyButton} onPress={handleNewChat}>
               <Icon name="plus" size={18} color={COLORS.primary} />
               <Text style={styles.emptyButtonText}>New Chat</Text>
-            </TouchableOpacity>
+            </AnimatedListItem>
           )}
         </View>
       ) : (

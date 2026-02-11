@@ -13,6 +13,8 @@ export { AnimatedPressable } from './AnimatedPressable';
 export type { AnimatedPressableProps } from './AnimatedPressable';
 export { AnimatedEntry } from './AnimatedEntry';
 export type { AnimatedEntryProps } from './AnimatedEntry';
+export { AnimatedListItem } from './AnimatedListItem';
+export type { AnimatedListItemProps } from './AnimatedListItem';
 export { AppSheet } from './AppSheet';
 export type { AppSheetProps } from './AppSheet';
 export { ProjectSelectorSheet } from './ProjectSelectorSheet';

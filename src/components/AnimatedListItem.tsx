@@ -1,0 +1,63 @@
+import React from 'react';
+import { type StyleProp, type ViewStyle } from 'react-native';
+import { AnimatedEntry, type AnimatedEntryProps } from './AnimatedEntry';
+import { AnimatedPressable, type AnimatedPressableProps } from './AnimatedPressable';
+import { type HapticType } from '../utils/haptics';
+
+export interface AnimatedListItemProps {
+  /** List index for stagger delay */
+  index: number;
+  /** Stagger delay per item in ms (default 30) */
+  staggerMs?: number;
+  /** Max items to animate (default 10) */
+  maxItems?: number;
+  /** Haptic type on press (default 'selection') */
+  hapticType?: HapticType;
+  /** Scale on press (default 0.97) */
+  scaleValue?: number;
+  /** Container style */
+  style?: StyleProp<ViewStyle>;
+  /** Press handler */
+  onPress?: () => void;
+  /** Long press handler */
+  onLongPress?: () => void;
+  /** Disabled state */
+  disabled?: boolean;
+  /** Test ID */
+  testID?: string;
+  children: React.ReactNode;
+}
+
+/**
+ * Combined animated list item: staggered entry animation + press feedback.
+ * Use this for any tappable list item that should animate in on mount.
+ */
+export function AnimatedListItem({
+  index,
+  staggerMs = 30,
+  maxItems = 10,
+  hapticType = 'selection',
+  scaleValue,
+  style,
+  onPress,
+  onLongPress,
+  disabled,
+  testID,
+  children,
+}: AnimatedListItemProps) {
+  return (
+    <AnimatedEntry index={index} staggerMs={staggerMs} maxItems={maxItems}>
+      <AnimatedPressable
+        hapticType={hapticType}
+        scaleValue={scaleValue}
+        style={style}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        disabled={disabled}
+        testID={testID}
+      >
+        {children}
+      </AnimatedPressable>
+    </AnimatedEntry>
+  );
+}

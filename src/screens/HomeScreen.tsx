@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button, Card, CustomAlert, initialAlertState, showAlert, hideAlert } from '../components';
 import type { AlertState } from '../components';
+import { AnimatedEntry } from '../components/AnimatedEntry';
+import { AnimatedListItem } from '../components/AnimatedListItem';
 import { COLORS, FONTS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
@@ -349,6 +351,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
 
         {/* Active Models Section */}
+        <AnimatedEntry index={0} staggerMs={50}>
         <View style={styles.modelsRow}>
           {/* Text Model */}
           <TouchableOpacity
@@ -425,6 +428,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             )}
           </TouchableOpacity>
         </View>
+        </AnimatedEntry>
 
         {/* Memory Usage Indicator - Shows loaded models and their estimated RAM */}
         {(activeTextModel || activeImageModel) && (
@@ -535,6 +539,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
         {/* Recent Conversations */}
         {recentConversations.length > 0 && (
+          <AnimatedEntry index={2} staggerMs={50}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent</Text>
@@ -548,7 +553,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 renderRightActions={() => renderRightActions(conv)}
                 overshootRight={false}
               >
-                <TouchableOpacity
+                <AnimatedListItem
+                  index={index}
+                  staggerMs={40}
                   style={styles.conversationItem}
                   onPress={() => continueChat(conv.id)}
                   testID={`conversation-item-${index}`}
@@ -562,13 +569,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                     </Text>
                   </View>
                   <Icon name="chevron-right" size={16} color={COLORS.textMuted} />
-                </TouchableOpacity>
+                </AnimatedListItem>
               </Swipeable>
             ))}
           </View>
+          </AnimatedEntry>
         )}
 
         {/* Model Stats */}
+        <AnimatedEntry index={3} staggerMs={50}>
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{downloadedModels.length}</Text>
@@ -585,6 +594,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Text style={styles.statLabel}>Chats</Text>
           </View>
         </View>
+        </AnimatedEntry>
       </ScrollView>
       </View>
 
