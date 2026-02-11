@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { COLORS, FONTS, SPACING } from '../constants';
 import { MediaAttachment, ImageModeState } from '../types';
 import { VoiceRecordButton } from './VoiceRecordButton';
+import { triggerHaptic } from '../utils/haptics';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from './CustomAlert';
 import { useWhisperTranscription } from '../hooks/useWhisperTranscription';
 import { useWhisperStore, useAppStore } from '../stores';
@@ -105,6 +106,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSend = () => {
     if ((message.trim() || attachments.length > 0) && !disabled) {
+      triggerHaptic('impactMedium');
       const forceImage = imageMode === 'force';
       onSend(message.trim(), attachments.length > 0 ? attachments : undefined, forceImage);
       setMessage('');
@@ -136,6 +138,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleStop = () => {
     if (onStop && isGenerating) {
+      triggerHaptic('impactLight');
       onStop();
     }
   };
@@ -149,14 +152,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           text: 'Camera',
           onPress: () => {
             setAlertState(hideAlert());
-            pickFromCamera();
+            // Delay picker launch to allow AppSheet modal close animation to finish
+            setTimeout(pickFromCamera, 300);
           },
         },
         {
           text: 'Photo Library',
           onPress: () => {
             setAlertState(hideAlert());
-            pickFromLibrary();
+            // Delay picker launch to allow AppSheet modal close animation to finish
+            setTimeout(pickFromLibrary, 300);
           },
         },
         {
