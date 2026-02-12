@@ -320,12 +320,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                         ts: 'text/typescript',
                       };
                       const mimeType = ext ? mimeMap[ext] || 'application/octet-stream' : undefined;
-                      viewDocument({
-                        uri: attachment.uri.startsWith('/') ? `file://${attachment.uri}` : attachment.uri,
-                        mimeType,
-                        grantPermissions: 'read',
-                      }).catch((err: any) => {
-                        console.warn('[ChatMessage] Failed to open document:', err);
+                      // Ensure proper URI format: absolute paths need file:// prefix
+                      let uri = attachment.uri;
+                      if (uri.startsWith('/')) {
+                        uri = `file://${uri}`;
+                      } else if (!uri.includes('://')) {
+                        uri = `file://${uri}`;
+                      }
+                      console.log('[ChatMessage] Opening document:', uri);
+                      viewDocument({ uri, mimeType, grantPermissions: 'read' }).catch((err: any) => {
+                        console.warn('[ChatMessage] Failed to open document:', err?.message || err);
                       });
                     }}
                     activeOpacity={0.7}

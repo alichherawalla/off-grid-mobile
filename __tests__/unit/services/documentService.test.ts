@@ -151,25 +151,37 @@ describe('DocumentService', () => {
   // createFromText
   // ========================================================================
   describe('createFromText', () => {
-    it('creates document with default filename', () => {
-      const result = documentService.createFromText('Some pasted text');
+    it('creates document with default filename', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.writeFile.mockResolvedValue(undefined as any);
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      const result = await documentService.createFromText('Some pasted text');
 
       expect(result.type).toBe('document');
       expect(result.textContent).toBe('Some pasted text');
       expect(result.fileName).toBe('pasted-text.txt');
       expect(result.fileSize).toBe('Some pasted text'.length);
-      expect(result.uri).toBe('');
+      expect(result.uri).toContain('attachments');
     });
 
-    it('creates document with custom filename', () => {
-      const result = documentService.createFromText('Code snippet', 'snippet.py');
+    it('creates document with custom filename', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.writeFile.mockResolvedValue(undefined as any);
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
+      const result = await documentService.createFromText('Code snippet', 'snippet.py');
 
       expect(result.fileName).toBe('snippet.py');
     });
 
-    it('truncates text exceeding 50K characters', () => {
+    it('truncates text exceeding 50K characters', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.writeFile.mockResolvedValue(undefined as any);
+      mockedRNFS.mkdir.mockResolvedValue(undefined as any);
+
       const longText = 'b'.repeat(60000);
-      const result = documentService.createFromText(longText);
+      const result = await documentService.createFromText(longText);
 
       expect(result.textContent!.length).toBeLessThan(60000);
       expect(result.textContent).toContain('... [Content truncated due to length]');

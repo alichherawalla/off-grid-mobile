@@ -102,15 +102,20 @@ class DocumentService {
       await this.ensureAttachmentsDir();
       const attachmentId = Date.now().toString();
       const persistentPath = `${ATTACHMENTS_DIR}/${attachmentId}_${name}`;
+      let persistentCopyOk = false;
       try {
         await RNFS.copyFile(resolvedPath, persistentPath);
+        persistentCopyOk = await RNFS.exists(persistentPath);
       } catch {
-        // If copy fails (e.g. same file), try the resolved path as fallback
+        // Copy failed — will fall back to original path
       }
 
-      // Clean up temp file if we copied from content:// URI
+      // Only clean up temp file AFTER verifying persistent copy succeeded
       if (resolvedPath !== filePath) {
-        RNFS.unlink(resolvedPath).catch(() => {});
+        if (persistentCopyOk) {
+          RNFS.unlink(resolvedPath).catch(() => {});
+        }
+        // If persistent copy failed, keep the temp file as fallback
       }
 
       // Truncate if too long (keep first 50k chars for context limits)
@@ -119,9 +124,7 @@ class DocumentService {
         textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';
       }
 
-      // Use persistent path if it exists, otherwise fall back to original
-      const persistentExists = await RNFS.exists(persistentPath);
-      const storedUri = persistentExists ? persistentPath : filePath;
+      const storedUri = persistentCopyOk ? persistentPath : resolvedPath;
 
       return {
         id: attachmentId,
@@ -138,9 +141,10 @@ class DocumentService {
   }
 
   /**
-   * Create a document attachment from pasted text
+   * Create a document attachment from pasted text.
+   * Saves to a persistent file so it can be opened later from chat.
    */
-  createFromText(text: string, fileName: string = 'pasted-text.txt'): MediaAttachment {
+  async createFromText(text: string, fileName: string = 'pasted-text.txt'): Promise<MediaAttachment> {
     // Truncate if too long
     const maxChars = 50000;
     let textContent = text;
@@ -148,10 +152,23 @@ class DocumentService {
       textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';
     }
 
+    const id = Date.now().toString();
+
+    // Write to persistent file so it can be opened from chat
+    let uri = '';
+    try {
+      await this.ensureAttachmentsDir();
+      const persistentPath = `${ATTACHMENTS_DIR}/${id}_${fileName}`;
+      await RNFS.writeFile(persistentPath, text, 'utf8');
+      uri = persistentPath;
+    } catch {
+      // Failed to write — uri stays empty, tap will be a no-op
+    }
+
     return {
-      id: Date.now().toString(),
+      id,
       type: 'document',
-      uri: '',
+      uri,
       fileName,
       textContent,
       fileSize: text.length,
