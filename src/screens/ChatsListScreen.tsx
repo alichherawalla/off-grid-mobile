@@ -219,9 +219,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
-    padding: SPACING.md,
+    padding: SPACING.lg,
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 16,
     ...shadows.small,
   },
   chatIcon: {

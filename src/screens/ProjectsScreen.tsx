@@ -167,9 +167,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: SPACING.md,
-    borderRadius: 6,
-    marginBottom: 10,
+    padding: SPACING.lg,
+    borderRadius: 12,
+    marginBottom: 16,
     ...shadows.small,
   },
   projectIcon: {

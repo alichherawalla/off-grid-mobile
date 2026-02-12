@@ -253,12 +253,13 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    ...shadows.small,
   },
   cardActive: {
     borderWidth: 2,
