@@ -6,10 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Clipboard,
-  Modal,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -594,52 +591,42 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </View>
       </AppSheet>
 
-      {/* Edit Modal */}
-      <Modal
+      {/* Edit Sheet */}
+      <AppSheet
         visible={isEditing}
-        transparent
-        animationType="slide"
-        onRequestClose={handleCancelEdit}
-        statusBarTranslucent
+        onClose={handleCancelEdit}
+        title="EDIT MESSAGE"
+        enableDynamicSizing
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.editModalOverlay}
-        >
-          <TouchableOpacity
-            style={styles.editModalBackdrop}
-            activeOpacity={1}
-            onPress={handleCancelEdit}
+        <View style={styles.editSheetContent}>
+          <TextInput
+            style={styles.editInput}
+            defaultValue={message.content}
+            onChangeText={setEditedContent}
+            multiline
+            autoFocus
+            placeholder="Enter message..."
+            placeholderTextColor={colors.textMuted}
+            textAlignVertical="top"
           />
-          <View style={styles.editModal}>
-            <Text style={styles.editModalTitle}>Edit Message</Text>
-            <TextInput
-              style={styles.editInput}
-              defaultValue={message.content}
-              onChangeText={setEditedContent}
-              multiline
-              autoFocus
-              placeholder="Enter message..."
-              placeholderTextColor={colors.textMuted}
-              textAlignVertical="top"
-            />
-            <View style={styles.editActions}>
-              <TouchableOpacity
-                style={[styles.editButton, styles.editButtonCancel]}
-                onPress={handleCancelEdit}
-              >
-                <Text style={styles.editButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editButton, styles.editButtonSave]}
-                onPress={handleSaveEdit}
-              >
-                <Text style={styles.editButtonTextSave}>Save & Resend</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.editActions}>
+            <AnimatedPressable
+              hapticType="selection"
+              style={[styles.editButton, styles.editButtonCancel]}
+              onPress={handleCancelEdit}
+            >
+              <Text style={styles.editButtonText}>CANCEL</Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              hapticType="impactMedium"
+              style={[styles.editButton, styles.editButtonSave]}
+              onPress={handleSaveEdit}
+            >
+              <Text style={[styles.editButtonText, styles.editButtonTextSave]}>SAVE & RESEND</Text>
+            </AnimatedPressable>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      </AppSheet>
 
       {/* CustomAlert */}
       <CustomAlert
@@ -922,32 +909,17 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.text,
   },
-  editModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end' as const,
-  },
-  editModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  editModal: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    paddingBottom: 40,
-  },
-  editModalTitle: {
-    ...TYPOGRAPHY.h1,
-    fontSize: 18,
-    color: colors.text,
-    marginBottom: SPACING.lg,
-    textAlign: 'center' as const,
+  editSheetContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
   },
   editInput: {
-    ...TYPOGRAPHY.h2,
+    ...TYPOGRAPHY.body,
+    fontFamily: FONTS.mono,
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: SPACING.md,
     color: colors.text,
     minHeight: 100,
@@ -956,31 +928,32 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   editActions: {
     flexDirection: 'row' as const,
-    gap: 12,
-    marginTop: 16,
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
   },
   editButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    borderRadius: 4,
     alignItems: 'center' as const,
+    borderWidth: 1,
   },
   editButtonCancel: {
     backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   editButtonSave: {
     backgroundColor: 'transparent' as const,
-    borderWidth: 1,
     borderColor: colors.primary,
   },
-  editButtonTextCancel: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    fontWeight: '500' as const,
+  editButtonText: {
+    ...TYPOGRAPHY.label,
+    fontFamily: FONTS.mono,
+    color: colors.textSecondary,
+    letterSpacing: 1,
   },
   editButtonTextSave: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
+    color: colors.primary,
     fontWeight: '600' as const,
   },
 });
