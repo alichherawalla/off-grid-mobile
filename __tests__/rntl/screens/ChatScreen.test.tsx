@@ -68,6 +68,7 @@ jest.mock('../../../src/services/generationService', () => ({
       isThinking: false,
       conversationId: null,
       streamingContent: '',
+      queuedMessages: [],
     })),
     subscribe: jest.fn((cb) => {
       cb({
@@ -75,10 +76,15 @@ jest.mock('../../../src/services/generationService', () => ({
         isThinking: false,
         conversationId: null,
         streamingContent: '',
+        queuedMessages: [],
       });
       return jest.fn();
     }),
     isGeneratingFor: jest.fn(() => false),
+    enqueueMessage: jest.fn(),
+    removeFromQueue: jest.fn(),
+    clearQueue: jest.fn(),
+    setQueueProcessor: jest.fn(),
   },
 }));
 

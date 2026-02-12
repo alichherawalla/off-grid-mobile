@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService, QueuedMessage } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -101,6 +101,35 @@ export const ChatScreen: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  // Subscribe to generation service for queue state
+  useEffect(() => {
+    const unsubscribe = generationService.subscribe((state) => {
+      setQueueCount(state.queuedMessages.length);
+      setQueuedTexts(state.queuedMessages.map(m => m.text));
+    });
+    return unsubscribe;
+  }, []);
+
+  // Queue processor — called by generationService when a queued message should be processed
+  const handleQueuedSend = useCallback(async (item: QueuedMessage) => {
+    // Add the user message to chat now (preserves correct chronology)
+    addMessage(
+      item.conversationId,
+      {
+        role: 'user',
+        content: item.text,
+      },
+      item.attachments
+    );
+    await startGeneration(item.conversationId, item.messageText);
+  }, [activeModel, settings]);
+
+  // Register queue processor on mount, clean up on unmount
+  useEffect(() => {
+    generationService.setQueueProcessor(handleQueuedSend);
+    return () => generationService.setQueueProcessor(null);
+  }, [handleQueuedSend]);
+
   // Derived state from service for convenience
   const isGeneratingImage = imageGenState.isGenerating;
   const imageGenerationProgress = imageGenState.progress;
@@ -137,6 +166,10 @@ export const ChatScreen: React.FC = () => {
     : null;
   const activeImageModel = downloadedImageModels.find((m) => m.id === activeImageModelId);
   const imageModelLoaded = !!activeImageModel;
+
+  // Queue state from generation service
+  const [queueCount, setQueueCount] = useState(0);
+  const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
 
   // Track image mode state
   const [currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
@@ -609,6 +642,7 @@ export const ChatScreen: React.FC = () => {
     const shouldGenerateImage = await shouldRouteToImageGeneration(messageText, forceImageMode);
 
     if (shouldGenerateImage && activeImageModel) {
+      // Image generation bypasses the queue — goes immediately
       await handleImageGeneration(text, targetConversationId);
       return;
     }
@@ -619,11 +653,42 @@ export const ChatScreen: React.FC = () => {
       messageText = `[User wanted an image but no image model is loaded] ${messageText}`;
     }
 
+    // If currently generating, enqueue (message added to chat later when processed)
+    if (generationService.getState().isGenerating) {
+      generationService.enqueueMessage({
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        conversationId: targetConversationId,
+        text,
+        attachments,
+        messageText,
+      });
+      return;
+    }
+
+    // Add user message to chat
+    addMessage(
+      targetConversationId,
+      {
+        role: 'user',
+        content: text,
+      },
+      attachments
+    );
+
+    // Proceed with generation
+    await startGeneration(targetConversationId, messageText);
+  };
+
+  /**
+   * Start generation for a conversation. Builds context from current conversation
+   * state and calls generationService.generateResponse.
+   */
+  const startGeneration = async (targetConversationId: string, messageText: string) => {
+    if (!activeModel) return;
+
     generatingForConversationRef.current = targetConversationId;
 
     // Ensure the correct model is loaded (not just any model)
-    // This is important after LLM classification in memory mode, where the classifier
-    // model may be loaded instead of the text generation model
     const currentLoadedPath = llmService.getLoadedModelPath();
     const needsModelLoad = !currentLoadedPath || currentLoadedPath !== activeModel.filePath;
 
@@ -636,29 +701,23 @@ export const ChatScreen: React.FC = () => {
       }
     }
 
-    // Add user message with attachments (show original text, not with document content appended)
-    const userMessage = addMessage(
-      targetConversationId,
-      {
-        role: 'user',
-        content: text, // Keep original text for display
-      },
-      attachments
-    );
-
-    // Prepare messages for context
-    const conversationMessages = activeConversation?.messages || [];
+    // Rebuild context from current conversation state (messages may have changed since enqueue)
+    const conversation = useChatStore.getState().conversations.find(c => c.id === targetConversationId);
+    const conversationMessages = conversation?.messages || [];
 
     // Use project system prompt if available, otherwise use default
-    const systemPrompt = activeProject?.systemPrompt
+    const project = conversation?.projectId
+      ? useProjectStore.getState().getProject(conversation.projectId)
+      : null;
+    const systemPrompt = project?.systemPrompt
       || settings.systemPrompt
       || APP_CONFIG.defaultSystemPrompt;
 
-    // Create a version of the user message with document content for the LLM context
-    const userMessageForContext: Message = {
-      ...userMessage,
-      content: messageText, // Include document content for the LLM
-    };
+    // Find the last user message to create context version with document content
+    const lastUserMsg = conversationMessages[conversationMessages.length - 1];
+    const userMessageForContext: Message = lastUserMsg?.role === 'user'
+      ? { ...lastUserMsg, content: messageText }
+      : lastUserMsg;
 
     const messagesForContext: Message[] = [
       {
@@ -667,7 +726,8 @@ export const ChatScreen: React.FC = () => {
         content: systemPrompt,
         timestamp: 0,
       },
-      ...conversationMessages,
+      // All messages except the last (which we replace with the context version)
+      ...conversationMessages.slice(0, -1),
       userMessageForContext,
     ];
 
@@ -680,8 +740,6 @@ export const ChatScreen: React.FC = () => {
         ...contextDebug,
       });
 
-      // If messages were truncated or context is > 70% full, clear KV cache
-      // This helps prevent inconsistent state and performance degradation
       if (contextDebug.truncatedCount > 0 || contextDebug.contextUsagePercent > 70) {
         shouldClearCache = true;
       }
@@ -689,7 +747,6 @@ export const ChatScreen: React.FC = () => {
       console.log('Debug info error:', e);
     }
 
-    // Clear KV cache if needed to prevent performance degradation
     if (shouldClearCache) {
       await llmService.clearKVCache(false).catch(() => {});
     }
@@ -700,7 +757,6 @@ export const ChatScreen: React.FC = () => {
         targetConversationId,
         messagesForContext,
         () => {
-          // onFirstToken callback - generation has started producing tokens
           console.log('[ChatScreen] First token received for conversation:', targetConversationId);
         }
       );
@@ -1266,13 +1322,16 @@ export const ChatScreen: React.FC = () => {
           onSend={handleSend}
           onStop={handleStop}
           disabled={!llmService.isModelLoaded()}
-          isGenerating={isStreaming}
+          isGenerating={isStreaming || isThinking}
           supportsVision={supportsVision}
           conversationId={activeConversationId}
           imageModelLoaded={imageModelLoaded}
           onImageModeChange={setCurrentImageMode}
           onOpenSettings={() => setShowSettingsPanel(true)}
           activeImageModelName={activeImageModel?.name || null}
+          queueCount={queueCount}
+          queuedTexts={queuedTexts}
+          onClearQueue={() => generationService.clearQueue()}
           placeholder={
             llmService.isModelLoaded()
               ? supportsVision
