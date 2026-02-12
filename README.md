@@ -22,6 +22,8 @@ LocalLLM is a React Native application that brings large language models, vision
 | Vision AI | llama.rn multimodal | llama.rn multimodal |
 | Image Generation | local-dream (MNN/QNN) | Core ML (ANE + CPU) |
 | Voice Transcription | whisper.cpp | whisper.cpp |
+| PDF Extraction | PdfRenderer (Kotlin) | PDFKit (Swift) |
+| Document Viewer | Intent.ACTION_VIEW | QuickLook |
 | Background Downloads | Native DownloadManager | RNFS / URLSession |
 
 ---
@@ -33,6 +35,9 @@ LocalLLM is a React Native application that brings large language models, vision
 - **Image Generation** - On-device Stable Diffusion (CPU/NPU), real-time preview, background generation
 - **AI Prompt Enhancement** - Use text LLM to expand simple prompts into detailed descriptions for better image quality
 - **Voice Transcription** - On-device Whisper for speech-to-text, multiple model sizes
+- **Document Attachments** - Attach text files, code, CSV, JSON, and PDFs to chat messages
+- **PDF Extraction** - Native on-device PDF text extraction (Android + iOS)
+- **Message Queue** - Send multiple messages during active generation, auto-processed sequentially
 - **GPU Acceleration** - Optional OpenCL GPU offloading for text models
 - **Auto/Manual Image Generation** - Automatic intent detection or manual toggle for image generation
 - **Dark Mode** - Full light/dark theme with dynamic color palettes and elevation system
@@ -177,6 +182,53 @@ On-device speech recognition using whisper.cpp via whisper.rn native bindings:
 - Transcription results passed via callbacks to React Native
 - Audio temporarily buffered in native code, cleared after transcription
 - Model selection in settings (Tiny: fastest, Base: balanced, Small: most accurate)
+
+### Document Attachments
+
+Attach documents to chat messages for context-aware conversations. Documents are parsed and included in the LLM context window alongside the user's message.
+
+**Supported Formats:**
+- **Text files** - `.txt`, `.md`, `.log`
+- **Code files** - `.py`, `.js`, `.ts`, `.jsx`, `.tsx`, `.java`, `.c`, `.cpp`, `.h`, `.swift`, `.kt`, `.go`, `.rs`, `.rb`, `.php`, `.sql`, `.sh`
+- **Data files** - `.csv`, `.json`, `.xml`, `.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.html`
+- **PDF documents** - Native text extraction via platform-specific modules
+
+**Features:**
+- **File picker integration** - Uses `@react-native-documents/picker` for native file selection
+- **PDF text extraction** - Native modules extract text from PDFs on both platforms
+- **Persistent storage** - Attached files are copied to persistent app storage so they survive temp file cleanup
+- **Tappable document badges** - Tap any attached document in chat to open it with the system viewer (QuickLook on iOS, Intent viewer on Android)
+- **Paste-as-attachment** - Large pasted text can be attached as a document
+- **File size limit** - 5MB maximum, with text content truncated to 50K characters for context window management
+
+**PDF Extraction Implementation:**
+- Android: `PdfExtractorModule` (Kotlin) uses Android's native `PdfRenderer` API
+- iOS: `PDFExtractorModule` (Swift) uses Apple's `PDFKit` framework
+- Both extract page-by-page text content with page separators
+- Graceful fallback when PDF extraction is unavailable
+
+**Document Viewer:**
+- Uses `@react-native-documents/viewer` for cross-platform document opening
+- iOS: Opens in QuickLook preview
+- Android: Opens with `Intent.ACTION_VIEW` using the appropriate system app
+
+### Message Queue
+
+Send messages while the LLM is still generating a response. Messages are queued and processed automatically after the current generation completes.
+
+**Features:**
+- **Non-blocking input** - Send button stays active during generation, alongside a visible stop button
+- **Queue indicator** - Shows count and preview of queued messages in the toolbar
+- **Clear queue** - Tap the "x" on the queue indicator to discard all queued messages
+- **Aggregated processing** - When generation completes, all queued messages are combined into a single prompt and processed together
+- **Image bypass** - Image generation requests skip the queue and process immediately via the separate image generation service
+- **Stop + Send side-by-side** - Both stop and send buttons visible in the input area during active generation
+
+**Implementation:**
+- Queue lives in `generationService.ts` as transient state (not persisted across app restarts)
+- User messages are added to chat only when the queue processor picks them up, preserving correct chronology
+- ChatScreen registers a `queueProcessor` callback; when generation resets and the queue has items, the service calls this callback
+- Multiple queued messages are aggregated: texts joined with `\n\n`, attachments combined
 
 ### Image Generation Modes
 
@@ -835,6 +887,8 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 - **React Navigation 7.x** - Native navigation
 - **React Native Reanimated 4.x** - Performant native-thread animations
 - **React Native Haptic Feedback** - Haptic responses on interactions
+- **@react-native-documents/picker** - Native document picker for file attachments
+- **@react-native-documents/viewer** - Native document viewer (QuickLook / Intent.ACTION_VIEW)
 
 ### Native Modules
 
@@ -861,6 +915,12 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 - DPM-Solver multistep scheduler for faster convergence
 - Safety checker disabled for reduced latency
 - Supports palettized (6-bit) and full-precision (fp16) Core ML models
+
+**PdfExtractorModule (Android + iOS):**
+- Android: Kotlin module using `android.graphics.pdf.PdfRenderer` for page-by-page text extraction
+- iOS: Swift module using Apple's `PDFKit` (`PDFDocument`, `PDFPage`) for text extraction
+- Both expose `extractText(filePath)` returning concatenated page text with separators
+- Graceful error handling when PDF is corrupted or password-protected
 
 **DownloadManager (Android only):**
 - Native Android DownloadManager wrapper
@@ -1043,7 +1103,8 @@ LocalLLM/
 │   │   ├── localDreamGenerator.ts # local-dream bridge
 │   │   ├── imageGenerator.ts      # Image generation utilities
 │   │   ├── hardware.ts            # Device info and memory
-│   │   ├── documentService.ts     # Document text extraction
+│   │   ├── documentService.ts     # Document attachment processing
+│   │   ├── pdfExtractor.ts       # Native PDF text extraction bridge
 │   │   ├── authService.ts         # Passphrase authentication
 │   │   ├── voiceService.ts        # Voice recording
 │   │   ├── whisperService.ts      # Whisper transcription
@@ -1077,15 +1138,20 @@ LocalLLM/
 │       │   ├── DownloadManagerModule.kt
 │       │   ├── DownloadManagerPackage.kt
 │       │   └── DownloadCompleteBroadcastReceiver.kt
-│       └── localdream/            # local-dream native module
-│           ├── LocalDreamModule.kt
-│           └── LocalDreamPackage.kt
+│       ├── localdream/            # local-dream native module
+│       │   ├── LocalDreamModule.kt
+│       │   └── LocalDreamPackage.kt
+│       └── pdf/                   # PDF text extraction
+│           ├── PdfExtractorModule.kt
+│           └── PdfExtractorPackage.kt
 ├── ios/                     # iOS native code
 │   └── LocalLLM/
 │       ├── AppDelegate.swift      # Application delegate
 │       ├── CoreMLDiffusion/       # Core ML image generation
 │       │   ├── CoreMLDiffusionModule.swift
 │       │   └── CoreMLDiffusionModule.m
+│       ├── PDFExtractor/          # PDF text extraction
+│       │   └── PDFExtractorModule.swift
 │       └── Download/              # iOS download manager
 │           ├── DownloadManagerModule.swift
 │           └── DownloadManagerModule.m
