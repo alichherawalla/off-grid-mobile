@@ -388,7 +388,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   {activeTextModel.name}
                 </Text>
                 <Text style={styles.modelCardMeta}>
-                  {activeTextModel.quantization}
+                  {activeTextModel.quantization} · ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
                 </Text>
               </>
             ) : (
@@ -427,7 +427,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   {activeImageModel.name}
                 </Text>
                 <Text style={styles.modelCardMeta}>
-                  {activeImageModel.style || 'Ready'}
+                  {activeImageModel.style || 'Ready'} · ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
                 </Text>
               </>
             ) : (
@@ -439,51 +439,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </View>
         </AnimatedEntry>
 
-        {/* Memory Usage Indicator - Shows loaded models and their estimated RAM */}
-        {(activeTextModel || activeImageModel) && (
-          <View style={styles.memoryIndicator}>
-            <View style={styles.memoryHeader}>
-              <Icon name="cpu" size={14} color={colors.textMuted} />
-              <Text style={styles.memoryTitle}>Loaded Models</Text>
-              <TouchableOpacity onPress={refreshMemoryInfo} style={styles.refreshButton}>
-                <Icon name="refresh-cw" size={14} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            {activeTextModel && (
-              <View style={styles.memoryModelRow}>
-                <Icon name="message-square" size={12} color={colors.textMuted} />
-                <Text style={styles.memoryModelName} numberOfLines={1}>
-                  {activeTextModel.name}{activeTextModel.isVisionModel ? ' + Vision' : ''}
-                </Text>
-                <Text style={styles.memoryModelSize}>
-                  ~{(((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) / (1024 * 1024 * 1024)).toFixed(1)} GB
-                </Text>
-              </View>
-            )}
-            {activeImageModel && (
-              <View style={styles.memoryModelRow}>
-                <Icon name="image" size={12} color={colors.textMuted} />
-                <Text style={styles.memoryModelName} numberOfLines={1}>{activeImageModel.name}</Text>
-                <Text style={styles.memoryModelSize}>
-                  ~{((activeImageModel.size * 1.8) / (1024 * 1024 * 1024)).toFixed(1)} GB
-                </Text>
-              </View>
-            )}
-            {activeTextModel && activeImageModel && (
-              <View style={styles.memoryTotalRow}>
-                <Text style={styles.memoryTotalLabel}>Total estimated RAM</Text>
-                <Text style={styles.memoryTotalValue}>
-                  ~{((((activeTextModel.fileSize + (activeTextModel.mmProjFileSize || 0)) * 1.5) + (activeImageModel.size * 1.8)) / (1024 * 1024 * 1024)).toFixed(1)} GB
-                </Text>
-              </View>
-            )}
-            {activeTextModel && activeImageModel && (
-              <Text style={styles.memoryWarningText}>
-                Running both models uses significant memory. If the app becomes slow, try unloading one.
-              </Text>
-            )}
-          </View>
-        )}
+        {/* Memory info is now shown inline in the model cards above */}
 
         {/* Eject All - Show when models are loaded OR loading (so user can cancel) */}
         {(activeModelId || activeImageModelId || loadingState.isLoading) && (
@@ -530,22 +486,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </Card>
         )}
 
-        {/* Image Gallery */}
-        <AnimatedPressable
-          style={styles.galleryCard}
-          onPress={() => (navigation as any).navigate('Gallery')}
-          hapticType="selectionClick"
-        >
-          <Icon name="grid" size={18} color={colors.primary} />
-          <View style={styles.galleryCardInfo}>
-            <Text style={styles.galleryCardTitle}>Image Gallery</Text>
-            <Text style={styles.galleryCardMeta}>
-              {generatedImages.length} image{generatedImages.length !== 1 ? 's' : ''}
-            </Text>
-          </View>
-          <Icon name="chevron-right" size={16} color={colors.textMuted} />
-        </AnimatedPressable>
-
         {/* Recent Conversations */}
         {recentConversations.length > 0 && (
           <AnimatedEntry index={2} staggerMs={50} trigger={focusTrigger}>
@@ -586,6 +526,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
           </AnimatedEntry>
         )}
+
+        {/* Image Gallery */}
+        <AnimatedPressable
+          style={styles.galleryCard}
+          onPress={() => (navigation as any).navigate('Gallery')}
+          hapticType="selectionClick"
+        >
+          <Icon name="grid" size={18} color={colors.primary} />
+          <View style={styles.galleryCardInfo}>
+            <Text style={styles.galleryCardTitle}>Image Gallery</Text>
+            <Text style={styles.galleryCardMeta}>
+              {generatedImages.length} image{generatedImages.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={16} color={colors.textMuted} />
+        </AnimatedPressable>
 
         {/* Model Stats */}
         <AnimatedEntry index={3} staggerMs={50} trigger={focusTrigger}>
@@ -822,11 +778,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: 20,
     paddingBottom: 32,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   title: {
     ...TYPOGRAPHY.h2,
@@ -834,14 +790,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   modelsRow: {
     flexDirection: 'row' as const,
-    gap: 12,
-    marginBottom: 16,
+    gap: 20,
+    marginBottom: 24,
   },
   modelCard: {
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     ...shadows.small,
   },
   modelCardHeader: {
@@ -874,74 +830,15 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.primary,
     marginTop: 2,
   },
-  // Memory indicator styles
-  memoryIndicator: {
-    backgroundColor: colors.surface,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 12,
-    ...shadows.small,
-  },
-  memoryHeader: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 6,
-    marginBottom: 8,
-  },
-  memoryTitle: {
-    ...TYPOGRAPHY.meta,
-    flex: 1,
-    color: colors.textMuted,
-  },
-  refreshButton: {
-    padding: 4,
-  },
-  memoryModelRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-    paddingVertical: 4,
-  },
-  memoryModelName: {
-    ...TYPOGRAPHY.bodySmall,
-    flex: 1,
-    color: colors.text,
-  },
-  memoryModelSize: {
-    ...TYPOGRAPHY.h3,
-    color: colors.text,
-  },
-  memoryTotalRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: 8,
-    paddingTop: 8,
-  },
-  memoryTotalLabel: {
-    ...TYPOGRAPHY.labelSmall,
-    color: colors.textMuted,
-    textTransform: 'uppercase' as const,
-  },
-  memoryTotalValue: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
-  memoryWarningText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-    marginTop: 6,
-  },
+  // Memory info is now shown inline in model cards
   ejectAllButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
-    paddingVertical: 10,
-    marginBottom: 16,
-    borderRadius: 8,
+    paddingVertical: 12,
+    marginBottom: 24,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
@@ -959,9 +856,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    gap: 12,
+    padding: 16,
+    marginBottom: 24,
+    gap: 16,
     ...shadows.small,
   },
   galleryCardInfo: {
@@ -1009,9 +906,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
     ...shadows.small,
   },
   conversationInfo: {
@@ -1031,9 +928,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     width: 50,
-    borderRadius: 10,
-    marginBottom: 6,
-    marginLeft: 8,
+    borderRadius: 12,
+    marginBottom: 16,
+    marginLeft: 10,
   },
   statsRow: {
     flexDirection: 'row' as const,
