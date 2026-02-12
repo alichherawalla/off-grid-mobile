@@ -1161,12 +1161,10 @@ export const ChatScreen: React.FC = () => {
               </TouchableOpacity>
             </AnimatedEntry>
             <AnimatedEntry index={4} staggerMs={60}>
-              <Card style={styles.privacyReminder}>
-                <Text style={styles.privacyText}>
-                  This conversation is completely private. All processing
-                  happens on your device.
-                </Text>
-              </Card>
+              <Text style={styles.privacyText}>
+                This conversation is completely private. All processing
+                happens on your device.
+              </Text>
             </AnimatedEntry>
           </View>
         ) : (
@@ -1523,16 +1521,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.primary,
     fontWeight: '500' as const,
   },
-  privacyReminder: {
-    backgroundColor: colors.info + '15',
-    borderWidth: 1,
-    borderColor: colors.info + '40',
-    maxWidth: 300,
-  },
   privacyText: {
     ...TYPOGRAPHY.h3,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     textAlign: 'center' as const,
+    maxWidth: 300,
   },
   loadingContainer: {
     flex: 1,

@@ -1,4 +1,5 @@
 // Light and dark color palettes + shadow definitions
+import { Platform } from 'react-native';
 
 export type ThemeColors = typeof COLORS_LIGHT;
 
@@ -88,20 +89,27 @@ export const COLORS_DARK = {
 };
 
 // ── Light shadows (standard black shadows) ──────────────────────────
+// On Android, elevation creates a Material Design shadow that looks like
+// an ugly blur/glow behind items (especially during animated entry).
+// We disable elevation for small/medium shadows on Android and rely on
+// borders for depth cues instead. iOS uses shadowColor/shadowRadius.
+const androidElevation = (level: number) =>
+  Platform.OS === 'android' ? 0 : level;
+
 export const SHADOWS_LIGHT = {
   small: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: androidElevation(3),
   },
   medium: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.22,
     shadowRadius: 10,
-    elevation: 6,
+    elevation: androidElevation(6),
   },
   large: {
     shadowColor: '#000',
@@ -115,7 +123,7 @@ export const SHADOWS_LIGHT = {
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: androidElevation(4),
   },
 } as const;
 
@@ -126,14 +134,14 @@ export const SHADOWS_DARK = {
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.08,
     shadowRadius: 1,
-    elevation: 3,
+    elevation: androidElevation(3),
   },
   medium: {
     shadowColor: '#FFF',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.10,
     shadowRadius: 2,
-    elevation: 6,
+    elevation: androidElevation(6),
   },
   large: {
     shadowColor: '#FFF',
@@ -147,7 +155,7 @@ export const SHADOWS_DARK = {
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: androidElevation(4),
   },
 } as const;
 
