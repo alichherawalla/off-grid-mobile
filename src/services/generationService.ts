@@ -7,7 +7,15 @@ import { Platform } from 'react-native';
 import { llmService } from './llm';
 import { activeModelService } from './activeModelService';
 import { useAppStore, useChatStore } from '../stores';
-import { Message, GenerationMeta } from '../types';
+import { Message, GenerationMeta, MediaAttachment } from '../types';
+
+export interface QueuedMessage {
+  id: string;
+  conversationId: string;
+  text: string;
+  attachments?: MediaAttachment[];
+  messageText: string;
+}
 
 export interface GenerationState {
   isGenerating: boolean;
@@ -15,9 +23,11 @@ export interface GenerationState {
   conversationId: string | null;
   streamingContent: string;
   startTime: number | null;
+  queuedMessages: QueuedMessage[];
 }
 
 type GenerationListener = (state: GenerationState) => void;
+type QueueProcessor = (item: QueuedMessage) => Promise<void>;
 
 class GenerationService {
   private state: GenerationState = {
@@ -26,10 +36,12 @@ class GenerationService {
     conversationId: null,
     streamingContent: '',
     startTime: null,
+    queuedMessages: [],
   };
 
   private listeners: Set<GenerationListener> = new Set();
   private abortRequested: boolean = false;
+  private queueProcessor: QueueProcessor | null = null;
 
   /**
    * Get current generation state
@@ -233,7 +245,82 @@ class GenerationService {
     return streamingContent;
   }
 
+  /**
+   * Add a message to the queue (processed after current generation completes)
+   */
+  enqueueMessage(entry: QueuedMessage): void {
+    this.state = {
+      ...this.state,
+      queuedMessages: [...this.state.queuedMessages, entry],
+    };
+    this.notifyListeners();
+  }
+
+  /**
+   * Remove a specific message from the queue
+   */
+  removeFromQueue(id: string): void {
+    this.state = {
+      ...this.state,
+      queuedMessages: this.state.queuedMessages.filter(m => m.id !== id),
+    };
+    this.notifyListeners();
+  }
+
+  /**
+   * Clear all queued messages
+   */
+  clearQueue(): void {
+    this.state = {
+      ...this.state,
+      queuedMessages: [],
+    };
+    this.notifyListeners();
+  }
+
+  /**
+   * Register a callback that processes queued messages.
+   * ChatScreen sets this on mount and clears on unmount.
+   */
+  setQueueProcessor(processor: QueueProcessor | null): void {
+    this.queueProcessor = processor;
+  }
+
+  /**
+   * Drain all queued messages, aggregate into a single combined message,
+   * and call the processor once.
+   */
+  private processNextInQueue(): void {
+    if (this.state.queuedMessages.length === 0 || !this.queueProcessor) {
+      return;
+    }
+
+    const all = this.state.queuedMessages;
+    this.state = {
+      ...this.state,
+      queuedMessages: [],
+    };
+    this.notifyListeners();
+
+    // Aggregate into a single QueuedMessage
+    const combined: QueuedMessage = all.length === 1
+      ? all[0]
+      : {
+          id: all[0].id,
+          conversationId: all[0].conversationId,
+          text: all.map(m => m.text).join('\n\n'),
+          attachments: all.flatMap(m => m.attachments || []),
+          messageText: all.map(m => m.messageText).join('\n\n'),
+        };
+
+    this.queueProcessor(combined).catch(error => {
+      console.error('[GenerationService] Queue processor error:', error);
+    });
+  }
+
   private resetState(): void {
+    const hasQueuedItems = this.state.queuedMessages.length > 0;
+
     this.updateState({
       isGenerating: false,
       isThinking: false,
@@ -241,6 +328,10 @@ class GenerationService {
       streamingContent: '',
       startTime: null,
     });
+
+    if (hasQueuedItems) {
+      setTimeout(() => this.processNextInQueue(), 100);
+    }
   }
 }
 

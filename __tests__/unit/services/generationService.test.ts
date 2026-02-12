@@ -51,9 +51,11 @@ describe('generationService', () => {
       conversationId: null,
       streamingContent: '',
       startTime: null,
+      queuedMessages: [],
     };
     (generationService as any).listeners.clear();
     (generationService as any).abortRequested = false;
+    (generationService as any).queueProcessor = null;
 
     // Re-setup mocks after clearAllMocks
     mockedLlmService.isModelLoaded.mockReturnValue(true);
