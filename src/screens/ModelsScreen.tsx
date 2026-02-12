@@ -1238,20 +1238,24 @@ export const ModelsScreen: React.FC = () => {
 
         {/* Tab Bar */}
         <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'text' && styles.tabActive]}
+          <Button
+            title="Text Models"
+            variant="secondary"
+            size="medium"
+            active={activeTab === 'text'}
             onPress={() => setActiveTab('text')}
-          >
-            <Icon name="message-square" size={18} color={activeTab === 'text' ? colors.primary : colors.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>Text Models</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'image' && styles.tabActive]}
+            icon={<Icon name="message-square" size={18} color={activeTab === 'text' ? colors.primary : colors.textSecondary} />}
+            style={styles.tab}
+          />
+          <Button
+            title="Image Models"
+            variant="secondary"
+            size="medium"
+            active={activeTab === 'image'}
             onPress={() => setActiveTab('image')}
-          >
-            <Icon name="image" size={18} color={activeTab === 'image' ? colors.primary : colors.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'image' && styles.tabTextActive]}>Image Models</Text>
-          </TouchableOpacity>
+            icon={<Icon name="image" size={18} color={activeTab === 'image' ? colors.primary : colors.textSecondary} />}
+            style={styles.tab}
+          />
         </View>
 
         {/* Text Models Tab */}
@@ -1457,30 +1461,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     paddingHorizontal: 16,
     paddingTop: SPACING.lg,
-    paddingBottom: SPACING.sm,
+    paddingBottom: 16,
     gap: 8,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
-  },
-  tabActive: {
-    backgroundColor: colors.primary + '20',
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  tabText: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-  },
-  tabTextActive: {
-    color: colors.primary,
   },
   imageTabContent: {
     flex: 1,

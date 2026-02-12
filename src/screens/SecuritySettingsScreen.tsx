@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
+import { Button } from '../components/Button';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -90,13 +91,14 @@ export const SecuritySettingsScreen: React.FC = () => {
           </View>
 
           {authEnabled && (
-            <TouchableOpacity
-              style={styles.changeButton}
+            <Button
+              title="Change Passphrase"
+              variant="primary"
+              size="medium"
               onPress={handleChangePassphrase}
-            >
-              <Icon name="edit-2" size={16} color={colors.primary} />
-              <Text style={styles.changeButtonText}>Change Passphrase</Text>
-            </TouchableOpacity>
+              icon={<Icon name="edit-2" size={16} color={colors.primary} />}
+              style={{ alignSelf: 'flex-start' as const, marginTop: SPACING.lg }}
+            />
           )}
         </Card>
 
@@ -160,7 +162,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   content: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
   section: {
@@ -190,23 +192,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
     marginTop: 2,
     lineHeight: 18,
-  },
-  changeButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    marginTop: SPACING.lg,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 8,
-    alignSelf: 'flex-start' as const,
-    gap: SPACING.sm,
-  },
-  changeButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
   },
   infoCard: {
     flexDirection: 'row' as const,

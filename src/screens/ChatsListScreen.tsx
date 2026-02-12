@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
+import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
@@ -135,15 +136,14 @@ export const ChatsListScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
-        <TouchableOpacity
-          style={[styles.newButton, !hasModels && styles.newButtonDisabled]}
+        <Button
+          title="New"
+          variant="primary"
+          size="small"
           onPress={handleNewChat}
-        >
-          <Icon name="plus" size={20} color={hasModels ? colors.primary : colors.textMuted} />
-          <Text style={[styles.newButtonText, !hasModels && styles.newButtonTextDisabled]}>
-            New
-          </Text>
-        </TouchableOpacity>
+          disabled={!hasModels}
+          icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+        />
       </View>
 
       {sortedConversations.length === 0 ? (
@@ -211,28 +211,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   title: {
     ...TYPOGRAPHY.h2,
     color: colors.text,
-  },
-  newButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.md + 2,
-    paddingVertical: SPACING.sm,
-    borderRadius: 8,
-    gap: SPACING.sm - 2,
-  },
-  newButtonDisabled: {
-    backgroundColor: 'transparent',
-    borderColor: colors.border,
-  },
-  newButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-  },
-  newButtonTextDisabled: {
-    color: colors.textMuted,
   },
   list: {
     padding: SPACING.lg,

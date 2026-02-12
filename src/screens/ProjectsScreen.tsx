@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
+import { Button } from '../components/Button';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
@@ -80,10 +81,13 @@ export const ProjectsScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
-        <TouchableOpacity style={styles.newButton} onPress={handleNewProject}>
-          <Icon name="plus" size={16} color={colors.primary} />
-          <Text style={styles.newButtonText}>New</Text>
-        </TouchableOpacity>
+        <Button
+          title="New"
+          variant="primary"
+          size="small"
+          onPress={handleNewProject}
+          icon={<Icon name="plus" size={16} color={colors.primary} />}
+        />
       </View>
 
       <Text style={styles.subtitle}>
@@ -146,22 +150,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.h2,
     color: colors.text,
   },
-  newButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: 6,
-    gap: SPACING.xs,
-  },
-  newButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-    fontWeight: '400' as const,
-  },
   subtitle: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
@@ -171,7 +159,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   list: {
     padding: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.lg,
   },
   projectItem: {
     flexDirection: 'row' as const,

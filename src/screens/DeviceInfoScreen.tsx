@@ -120,7 +120,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   content: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
   section: {

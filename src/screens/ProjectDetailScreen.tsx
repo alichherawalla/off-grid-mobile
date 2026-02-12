@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Feather';
+import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -198,13 +199,14 @@ export const ProjectDetailScreen: React.FC = () => {
       {/* Chats Section */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Chats</Text>
-        <TouchableOpacity
-          style={[styles.newChatButton, !hasModels && styles.newChatButtonDisabled]}
+        <Button
+          title="New Chat"
+          variant="primary"
+          size="small"
           onPress={handleNewChat}
-        >
-          <Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textMuted} />
-          <Text style={[styles.newChatText, !hasModels && styles.newChatTextDisabled]}>New Chat</Text>
-        </TouchableOpacity>
+          disabled={!hasModels}
+          icon={<Icon name="plus" size={16} color={hasModels ? colors.primary : colors.textDisabled} />}
+        />
       </View>
 
       {projectChats.length === 0 ? (
@@ -212,9 +214,12 @@ export const ProjectDetailScreen: React.FC = () => {
           <Icon name="message-circle" size={24} color={colors.textMuted} />
           <Text style={styles.emptyChatsText}>No chats in this project yet</Text>
           {hasModels && (
-            <TouchableOpacity style={styles.startChatButton} onPress={handleNewChat}>
-              <Text style={styles.startChatText}>Start a Chat</Text>
-            </TouchableOpacity>
+            <Button
+              title="Start a Chat"
+              variant="primary"
+              size="medium"
+              onPress={handleNewChat}
+            />
           )}
         </View>
       ) : (
@@ -229,10 +234,14 @@ export const ProjectDetailScreen: React.FC = () => {
 
       {/* Delete Project Button */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteProject}>
-          <Icon name="trash-2" size={16} color={colors.error} />
-          <Text style={styles.deleteButtonText}>Delete Project</Text>
-        </TouchableOpacity>
+        <Button
+          title="Delete Project"
+          variant="ghost"
+          size="medium"
+          onPress={handleDeleteProject}
+          icon={<Icon name="trash-2" size={16} color={colors.error} />}
+          textStyle={{ color: colors.error }}
+        />
       </View>
       <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
@@ -322,29 +331,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.text,
     fontWeight: '400' as const,
   },
-  newChatButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 6,
-    gap: SPACING.xs,
-  },
-  newChatButtonDisabled: {
-    borderColor: colors.border,
-    opacity: 0.5,
-  },
-  newChatText: {
-    ...TYPOGRAPHY.body,
-    fontWeight: '400' as const,
-    color: colors.primary,
-  },
-  newChatTextDisabled: {
-    color: colors.textMuted,
-  },
   chatList: {
     paddingHorizontal: SPACING.lg,
   },
@@ -403,35 +389,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginTop: SPACING.md,
     marginBottom: SPACING.lg,
   },
-  startChatButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderRadius: 6,
-  },
-  startChatText: {
-    ...TYPOGRAPHY.body,
-    color: colors.primary,
-    fontWeight: '400' as const,
-  },
   footer: {
     padding: SPACING.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-  },
-  deleteButton: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    padding: SPACING.md,
-    gap: SPACING.sm,
-  },
-  deleteButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.error,
-    fontWeight: '400' as const,
   },
   errorContainer: {
     flex: 1,

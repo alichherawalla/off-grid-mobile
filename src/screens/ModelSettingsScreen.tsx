@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation } from '@react-navigation/native';
+import { Button } from '../components/Button';
 import { Card } from '../components';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -174,38 +175,22 @@ export const ModelSettingsScreen: React.FC = () => {
                   : 'Uses text model for classification'}
               </Text>
               <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.optionButton,
-                    rawSettings?.autoDetectMethod === 'pattern' && styles.optionButtonActive,
-                  ]}
+                <Button
+                  title="Pattern"
+                  variant="secondary"
+                  size="medium"
+                  active={rawSettings?.autoDetectMethod === 'pattern'}
                   onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      rawSettings?.autoDetectMethod === 'pattern' && styles.optionButtonTextActive,
-                    ]}
-                  >
-                    Pattern
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.optionButton,
-                    rawSettings?.autoDetectMethod === 'llm' && styles.optionButtonActive,
-                  ]}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="LLM"
+                  variant="secondary"
+                  size="medium"
+                  active={rawSettings?.autoDetectMethod === 'llm'}
                   onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
-                >
-                  <Text
-                    style={[
-                      styles.optionButtonText,
-                      rawSettings?.autoDetectMethod === 'llm' && styles.optionButtonTextActive,
-                    ]}
-                  >
-                    LLM
-                  </Text>
-                </TouchableOpacity>
+                  style={{ flex: 1 }}
+                />
               </View>
             </View>
           )}
@@ -453,38 +438,22 @@ export const ModelSettingsScreen: React.FC = () => {
             </View>
           </View>
           <View style={styles.strategyButtons}>
-            <TouchableOpacity
-              style={[
-                styles.strategyButton,
-                rawSettings?.modelLoadingStrategy === 'memory' && styles.strategyButtonActive,
-              ]}
+            <Button
+              title="Save Memory"
+              variant="secondary"
+              size="small"
+              active={rawSettings?.modelLoadingStrategy === 'memory'}
               onPress={() => updateSettings({ modelLoadingStrategy: 'memory' })}
-            >
-              <Text
-                style={[
-                  styles.strategyButtonText,
-                  rawSettings?.modelLoadingStrategy === 'memory' && styles.strategyButtonTextActive,
-                ]}
-              >
-                Save Memory
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.strategyButton,
-                rawSettings?.modelLoadingStrategy === 'performance' && styles.strategyButtonActive,
-              ]}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Fast"
+              variant="secondary"
+              size="small"
+              active={rawSettings?.modelLoadingStrategy === 'performance'}
               onPress={() => updateSettings({ modelLoadingStrategy: 'performance' })}
-            >
-              <Text
-                style={[
-                  styles.strategyButtonText,
-                  rawSettings?.modelLoadingStrategy === 'performance' && styles.strategyButtonTextActive,
-                ]}
-              >
-                Fast
-              </Text>
-            </TouchableOpacity>
+              style={{ flex: 1 }}
+            />
           </View>
         </Card>
       </ScrollView>
@@ -522,7 +491,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   content: {
     paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
   section: {
@@ -617,27 +586,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: SPACING.sm,
     marginTop: SPACING.md,
   },
-  strategyButton: {
-    flex: 1,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    alignItems: 'center' as const,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  strategyButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'transparent',
-  },
-  strategyButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-  },
-  strategyButtonTextActive: {
-    color: colors.primary,
-  },
   settingSection: {
     marginTop: SPACING.lg,
   },
@@ -655,26 +603,5 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   buttonRow: {
     flexDirection: 'row' as const,
     gap: SPACING.sm,
-  },
-  optionButton: {
-    flex: 1,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    alignItems: 'center' as const,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  optionButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'transparent',
-  },
-  optionButtonText: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-  },
-  optionButtonTextActive: {
-    color: colors.primary,
   },
 });

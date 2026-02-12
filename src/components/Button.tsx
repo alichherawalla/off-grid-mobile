@@ -13,8 +13,10 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
   size?: 'small' | 'medium' | 'large';
+  /** Highlighted state for toggle buttons */
+  active?: boolean;
   disabled?: boolean;
   loading?: boolean;
   icon?: React.ReactNode;
@@ -28,6 +30,7 @@ export const Button: React.FC<ButtonProps> = ({
   onPress,
   variant = 'primary',
   size = 'medium',
+  active = false,
   disabled = false,
   loading = false,
   icon,
@@ -42,6 +45,7 @@ export const Button: React.FC<ButtonProps> = ({
     styles.button,
     styles[`button_${variant}`],
     styles[`button_${size}`],
+    active && styles.button_active,
     disabled && styles.button_disabled,
     style,
   ];
@@ -50,6 +54,7 @@ export const Button: React.FC<ButtonProps> = ({
     styles.text,
     styles[`text_${variant}`],
     styles[`text_${size}`],
+    active && styles.text_active,
     disabled && styles.text_disabled,
     textStyle,
   ];
@@ -103,12 +108,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   button_ghost: {
     backgroundColor: 'transparent',
   },
+  button_danger: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  button_active: {
+    borderColor: colors.primary,
+  },
   button_small: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: 10,
     paddingHorizontal: SPACING.md,
   },
   button_medium: {
-    paddingVertical: SPACING.md,
+    paddingVertical: 14,
     paddingHorizontal: SPACING.lg,
   },
   button_large: {
@@ -133,6 +146,12 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   text_ghost: {
     color: colors.textSecondary,
+  },
+  text_danger: {
+    color: colors.error,
+  },
+  text_active: {
+    color: colors.primary,
   },
   text_small: {
     fontSize: TYPOGRAPHY.h3.fontSize,
