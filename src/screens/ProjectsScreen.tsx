@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
+import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
@@ -27,8 +29,9 @@ export const ProjectsScreen: React.FC = () => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { projects } = useProjectStore();
+  const { projects, deleteProject } = useProjectStore();
   const { conversations } = useChatStore();
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Get chat count for a project
   const getChatCount = (projectId: string) => {
@@ -39,6 +42,33 @@ export const ProjectsScreen: React.FC = () => {
     navigation.navigate('ProjectDetail', { projectId: project.id });
   };
 
+  const handleDeleteProject = (project: Project) => {
+    setAlertState(showAlert(
+      'Delete Project',
+      `Delete "${project.name}"? This will not delete the chats associated with this project.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setAlertState(hideAlert());
+            deleteProject(project.id);
+          },
+        },
+      ]
+    ));
+  };
+
+  const renderRightActions = (project: Project) => (
+    <TouchableOpacity
+      style={styles.deleteAction}
+      onPress={() => handleDeleteProject(project)}
+    >
+      <Icon name="trash-2" size={16} color={colors.error} />
+    </TouchableOpacity>
+  );
+
   const handleNewProject = () => {
     navigation.navigate('ProjectEdit', {});
   };
@@ -47,33 +77,39 @@ export const ProjectsScreen: React.FC = () => {
     const chatCount = getChatCount(item.id);
 
     return (
-      <AnimatedListItem
-        index={index}
-        trigger={focusTrigger}
-        style={styles.projectItem}
-        onPress={() => handleProjectPress(item)}
+      <Swipeable
+        renderRightActions={() => renderRightActions(item)}
+        overshootRight={false}
+        containerStyle={{ overflow: 'visible' }}
       >
-        <View style={styles.projectIcon}>
-          <Text style={styles.projectIconText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.projectContent}>
-          <Text style={styles.projectName}>{item.name}</Text>
-          {item.description ? (
-            <Text style={styles.projectDescription} numberOfLines={1}>
-              {item.description}
-            </Text>
-          ) : null}
-          <View style={styles.projectMeta}>
-            <Icon name="message-circle" size={10} color={colors.textMuted} />
-            <Text style={styles.projectMetaText}>
-              {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
+        <AnimatedListItem
+          index={index}
+          trigger={focusTrigger}
+          style={styles.projectItem}
+          onPress={() => handleProjectPress(item)}
+        >
+          <View style={styles.projectIcon}>
+            <Text style={styles.projectIconText}>
+              {item.name.charAt(0).toUpperCase()}
             </Text>
           </View>
-        </View>
-        <Icon name="chevron-right" size={14} color={colors.textMuted} />
-      </AnimatedListItem>
+          <View style={styles.projectContent}>
+            <Text style={styles.projectName}>{item.name}</Text>
+            {item.description ? (
+              <Text style={styles.projectDescription} numberOfLines={1}>
+                {item.description}
+              </Text>
+            ) : null}
+            <View style={styles.projectMeta}>
+              <Icon name="message-circle" size={10} color={colors.textMuted} />
+              <Text style={styles.projectMetaText}>
+                {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
+              </Text>
+            </View>
+          </View>
+          <Icon name="chevron-right" size={14} color={colors.textMuted} />
+        </AnimatedListItem>
+      </Swipeable>
     );
   };
 
@@ -125,6 +161,7 @@ export const ProjectsScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         />
       )}
+      <CustomAlert {...alertState} onClose={() => setAlertState(hideAlert())} />
     </SafeAreaView>
   );
 };
@@ -253,5 +290,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.primary,
     fontWeight: '400' as const,
+  },
+  deleteAction: {
+    backgroundColor: colors.errorBackground,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    width: 50,
+    borderRadius: 12,
+    marginBottom: 16,
+    marginLeft: 10,
   },
 });

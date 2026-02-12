@@ -8,6 +8,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -120,33 +121,47 @@ export const ProjectDetailScreen: React.FC = () => {
     }
   };
 
+  const renderChatRightActions = (conversation: Conversation) => (
+    <TouchableOpacity
+      style={styles.deleteAction}
+      onPress={() => handleDeleteChat(conversation)}
+    >
+      <Icon name="trash-2" size={16} color={colors.error} />
+    </TouchableOpacity>
+  );
+
   const renderChat = ({ item }: { item: Conversation }) => {
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <TouchableOpacity
-        style={styles.chatItem}
-        onPress={() => handleChatPress(item)}
-        onLongPress={() => handleDeleteChat(item)}
+      <Swipeable
+        renderRightActions={() => renderChatRightActions(item)}
+        overshootRight={false}
+        containerStyle={{ overflow: 'visible' }}
       >
-        <View style={styles.chatIcon}>
-          <Icon name="message-circle" size={14} color={colors.textMuted} />
-        </View>
-        <View style={styles.chatContent}>
-          <View style={styles.chatHeader}>
-            <Text style={styles.chatTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+        <TouchableOpacity
+          style={styles.chatItem}
+          onPress={() => handleChatPress(item)}
+        >
+          <View style={styles.chatIcon}>
+            <Icon name="message-circle" size={14} color={colors.textMuted} />
           </View>
-          {lastMessage && (
-            <Text style={styles.chatPreview} numberOfLines={1}>
-              {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
-            </Text>
-          )}
-        </View>
-        <Icon name="chevron-right" size={14} color={colors.textMuted} />
-      </TouchableOpacity>
+          <View style={styles.chatContent}>
+            <View style={styles.chatHeader}>
+              <Text style={styles.chatTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+            </View>
+            {lastMessage && (
+              <Text style={styles.chatPreview} numberOfLines={1}>
+                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+              </Text>
+            )}
+          </View>
+          <Icon name="chevron-right" size={14} color={colors.textMuted} />
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -408,5 +423,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.primary,
     fontWeight: '400' as const,
+  },
+  deleteAction: {
+    backgroundColor: colors.errorBackground,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    width: 50,
+    borderRadius: 12,
+    marginBottom: SPACING.sm,
+    marginLeft: 10,
   },
 });

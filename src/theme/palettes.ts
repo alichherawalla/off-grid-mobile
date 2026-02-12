@@ -41,6 +41,7 @@ export const COLORS_LIGHT = {
   success: '#525252',
   warning: '#0A0A0A',
   error: '#DC2626',
+  errorBackground: 'rgba(220, 38, 38, 0.10)',
   info: '#525252',
 
   // Special
@@ -76,6 +77,7 @@ export const COLORS_DARK = {
   success: '#B0B0B0',
   warning: '#FFFFFF',
   error: '#EF4444',
+  errorBackground: 'rgba(239, 68, 68, 0.15)',
   info: '#B0B0B0',
 
   // Special

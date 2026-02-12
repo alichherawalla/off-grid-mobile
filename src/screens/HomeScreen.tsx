@@ -341,7 +341,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       style={styles.deleteAction}
       onPress={() => handleDeleteConversation(conversation)}
     >
-      <Icon name="trash-2" size={16} color={colors.text} />
+      <Icon name="trash-2" size={16} color={colors.error} />
     </TouchableOpacity>
   );
 
@@ -924,7 +924,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginTop: 3,
   },
   deleteAction: {
-    backgroundColor: colors.error,
+    backgroundColor: colors.errorBackground,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
     width: 50,

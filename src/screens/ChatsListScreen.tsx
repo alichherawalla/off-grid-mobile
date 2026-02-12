@@ -8,6 +8,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -88,42 +89,56 @@ export const ChatsListScreen: React.FC = () => {
     }
   };
 
+  const renderRightActions = (conversation: Conversation) => (
+    <TouchableOpacity
+      style={styles.deleteAction}
+      onPress={() => handleDeleteChat(conversation)}
+    >
+      <Icon name="trash-2" size={16} color={colors.error} />
+    </TouchableOpacity>
+  );
+
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
     const lastMessage = item.messages[item.messages.length - 1];
 
     return (
-      <AnimatedListItem
-        index={index}
-        trigger={focusTrigger}
-        style={styles.chatItem}
-        onPress={() => handleChatPress(item)}
-        onLongPress={() => handleDeleteChat(item)}
-        testID={`conversation-item-${index}`}
+      <Swipeable
+        renderRightActions={() => renderRightActions(item)}
+        overshootRight={false}
+        containerStyle={{ overflow: 'visible' }}
       >
-        <View style={styles.chatIcon}>
-          <Icon name="message-circle" size={20} color={colors.primary} />
-        </View>
-        <View style={styles.chatContent}>
-          <View style={styles.chatHeader}>
-            <Text style={styles.chatTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+        <AnimatedListItem
+          index={index}
+          trigger={focusTrigger}
+          style={styles.chatItem}
+          onPress={() => handleChatPress(item)}
+          testID={`conversation-item-${index}`}
+        >
+          <View style={styles.chatIcon}>
+            <Icon name="message-circle" size={20} color={colors.primary} />
           </View>
-          {lastMessage && (
-            <Text style={styles.chatPreview} numberOfLines={1}>
-              {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
-            </Text>
-          )}
-          {project && (
-            <View style={styles.projectBadge}>
-              <Text style={styles.projectBadgeText}>{project.name}</Text>
+          <View style={styles.chatContent}>
+            <View style={styles.chatHeader}>
+              <Text style={styles.chatTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-          )}
-        </View>
-        <Icon name="chevron-right" size={20} color={colors.textMuted} />
-      </AnimatedListItem>
+            {lastMessage && (
+              <Text style={styles.chatPreview} numberOfLines={1}>
+                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+              </Text>
+            )}
+            {project && (
+              <View style={styles.projectBadge}>
+                <Text style={styles.projectBadgeText}>{project.name}</Text>
+              </View>
+            )}
+          </View>
+          <Icon name="chevron-right" size={20} color={colors.textMuted} />
+        </AnimatedListItem>
+      </Swipeable>
     );
   };
 
@@ -310,5 +325,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   emptyButtonText: {
     ...TYPOGRAPHY.body,
     color: colors.primary,
+  },
+  deleteAction: {
+    backgroundColor: colors.errorBackground,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    width: 50,
+    borderRadius: 12,
+    marginBottom: 16,
+    marginLeft: 10,
   },
 });
