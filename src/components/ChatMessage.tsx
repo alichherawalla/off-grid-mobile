@@ -29,7 +29,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { AnimatedEntry } from './AnimatedEntry';
 import { AnimatedPressable } from './AnimatedPressable';
 import { AppSheet } from './AppSheet';
-import { viewDocument, isErrorWithCode } from '@react-native-documents/viewer';
+import { viewDocument } from '@react-native-documents/viewer';
 
 
 // Animated blinking cursor for streaming state

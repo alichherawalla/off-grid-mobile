@@ -730,7 +730,7 @@ describe('ChatInput', () => {
         type: 'text/plain',
         size: 100,
       }]);
-      mockProcessDocument.mockResolvedValue(null);
+      mockProcessDocument.mockResolvedValue(null as any);
 
       const { getByTestId, queryByTestId } = render(
         <ChatInput {...defaultProps} />

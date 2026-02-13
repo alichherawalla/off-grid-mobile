@@ -19,6 +19,7 @@ import {
   createAssistantMessage,
   createSystemMessage,
   createImageAttachment,
+  createDocumentAttachment,
   createGenerationMeta,
 } from '../../utils/factories';
 

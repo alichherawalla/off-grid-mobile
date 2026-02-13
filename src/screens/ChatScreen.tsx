@@ -38,7 +38,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService, QueuedMessage } from '../services';
 import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
@@ -106,26 +106,6 @@ export const ChatScreen: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // Queue processor — called by generationService when a queued message should be processed
-  const handleQueuedSend = useCallback(async (item: QueuedMessage) => {
-    // Add the user message to chat now (preserves correct chronology)
-    addMessage(
-      item.conversationId,
-      {
-        role: 'user',
-        content: item.text,
-      },
-      item.attachments
-    );
-    await startGeneration(item.conversationId, item.messageText);
-  }, [activeModel, settings]);
-
-  // Register queue processor on mount, clean up on unmount
-  useEffect(() => {
-    generationService.setQueueProcessor(handleQueuedSend);
-    return () => generationService.setQueueProcessor(null);
-  }, [handleQueuedSend]);
-
   // Derived state from service for convenience
   const isGeneratingImage = imageGenState.isGenerating;
   const imageGenerationProgress = imageGenState.progress;
@@ -152,6 +132,30 @@ export const ChatScreen: React.FC = () => {
     setConversationProject,
   } = useChatStore();
   const { projects, getProject } = useProjectStore();
+
+  // Refs to always hold the latest versions (avoids dependency churn in useCallback)
+  const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
+  const addMessageRef = useRef(addMessage);
+  addMessageRef.current = addMessage;
+
+  // Queue processor — called by generationService when a queued message should be processed
+  const handleQueuedSend = useCallback(async (item: QueuedMessage) => {
+    addMessageRef.current(
+      item.conversationId,
+      {
+        role: 'user',
+        content: item.text,
+      },
+      item.attachments
+    );
+    await startGenerationRef.current(item.conversationId, item.messageText);
+  }, []);
+
+  // Register queue processor on mount, clean up on unmount
+  useEffect(() => {
+    generationService.setQueueProcessor(handleQueuedSend);
+    return () => generationService.setQueueProcessor(null);
+  }, [handleQueuedSend]);
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
@@ -765,6 +769,7 @@ export const ChatScreen: React.FC = () => {
     }
     generatingForConversationRef.current = null;
   };
+  startGenerationRef.current = startGeneration;
 
   const handleStop = async () => {
     console.log('[ChatScreen] handleStop called');

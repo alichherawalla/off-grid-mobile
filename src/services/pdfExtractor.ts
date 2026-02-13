@@ -3,7 +3,7 @@
  * Uses PDFKit on iOS (built-in) and pdfbox-android on Android.
  */
 
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules } from 'react-native';
 
 const { PDFExtractorModule } = NativeModules;
 

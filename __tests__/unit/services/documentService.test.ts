@@ -553,7 +553,7 @@ describe('DocumentService', () => {
       // documentService which calls pdfExtractor.isAvailable() dynamically
       // Actually pdfExtractor reads NativeModules.PDFExtractorModule at module load.
       // Since we set it above, and pdfExtractor caches the reference... let's test:
-      const { pdfExtractor } = require('../../../src/services/pdfExtractor');
+      const { pdfExtractor: _pdfExtractor } = require('../../../src/services/pdfExtractor');
       // The module was cached without PDFExtractorModule, so isAvailable may be false.
       // This tests the documentService layer which re-checks each call.
     });
