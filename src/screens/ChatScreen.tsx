@@ -22,8 +22,6 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   ChatMessage,
   ChatInput,
-  Button,
-  Card,
   ModelSelectorModal,
   GenerationSettingsModal,
   CustomAlert,
@@ -41,7 +39,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
-import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
+import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
 type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;

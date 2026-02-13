@@ -63,7 +63,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const {
     isRecording,
-    isModelLoaded,
     isModelLoading,
     isTranscribing,
     partialResult,

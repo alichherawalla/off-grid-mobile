@@ -49,7 +49,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   elevation = 'level3',
   children,
 }) => {
-  const { colors, elevation: elevationTokens } = useTheme();
+  const { elevation: elevationTokens } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const [modalVisible, setModalVisible] = useState(false);

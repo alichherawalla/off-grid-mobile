@@ -5,7 +5,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { useTheme, useThemedStyles } from '../theme';
+import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING, APP_CONFIG } from '../constants';
 import { DebugInfo, Project, Conversation } from '../types';
@@ -27,7 +27,6 @@ export const DebugSheet: React.FC<DebugSheetProps> = ({
   settings,
   activeConversation,
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (

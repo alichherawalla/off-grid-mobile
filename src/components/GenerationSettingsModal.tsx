@@ -14,7 +14,6 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { llmService, hardwareService } from '../services';
-import { ONNXImageModel } from '../types';
 
 interface SettingConfig {
   key: keyof typeof DEFAULT_SETTINGS;

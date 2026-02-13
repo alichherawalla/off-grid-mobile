@@ -1,7 +1,7 @@
 import { initLlama, LlamaContext, RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { Message, MediaAttachment } from '../types';
+import { Message } from '../types';
 import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores';
 

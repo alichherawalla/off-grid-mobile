@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { useTheme, useThemedStyles } from '../theme';
+import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { QUANTIZATION_INFO, CREDIBILITY_LABELS, TYPOGRAPHY } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
@@ -46,7 +46,6 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onDelete,
   onSelect,
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const quantInfo = file

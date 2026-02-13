@@ -1,7 +1,7 @@
 import React from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
-import { AnimatedEntry, type AnimatedEntryProps } from './AnimatedEntry';
-import { AnimatedPressable, type AnimatedPressableProps } from './AnimatedPressable';
+import { AnimatedEntry } from './AnimatedEntry';
+import { AnimatedPressable } from './AnimatedPressable';
 import { type HapticType } from '../utils/haptics';
 
 export interface AnimatedListItemProps {

@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { AppSheet } from './AppSheet';
-import { useTheme, useThemedStyles } from '../theme';
+import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { Project } from '../types';
@@ -26,7 +26,6 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
   activeProject,
   onSelectProject,
 }) => {
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const handleSelect = (project: Project | null) => {

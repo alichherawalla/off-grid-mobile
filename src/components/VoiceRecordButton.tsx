@@ -14,7 +14,6 @@ import ReanimatedAnimated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';

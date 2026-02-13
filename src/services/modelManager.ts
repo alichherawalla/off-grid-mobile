@@ -1,5 +1,4 @@
 import RNFS from 'react-native-fs';
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, DownloadProgress, ModelFile, ModelCredibility, BackgroundDownloadInfo, ONNXImageModel } from '../types';
 import { APP_CONFIG, LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../constants';
