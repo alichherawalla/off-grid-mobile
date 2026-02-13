@@ -239,7 +239,7 @@ export const DownloadManagerScreen: React.FC = () => {
 
     // Add active RNFS downloads (iOS and foreground Android)
     Object.entries(downloadProgress).forEach(([key, progress]) => {
-      const [modelId, fileName] = key.split('/').slice(-2);
+      const [_modelId, fileName] = key.split('/').slice(-2);
       const fullModelId = key.substring(0, key.lastIndexOf('/'));
 
       // Skip invalid entries (undefined, null, or malformed keys)

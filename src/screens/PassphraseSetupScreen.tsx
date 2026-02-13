@@ -198,7 +198,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

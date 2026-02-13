@@ -184,7 +184,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

@@ -76,7 +76,7 @@ export const ChatScreen: React.FC = () => {
     activeModelId,
     downloadedModels,
     settings,
-    setActiveModelId,
+    setActiveModelId: _setActiveModelId,
     activeImageModelId,
     downloadedImageModels,
     setDownloadedImageModels,
@@ -113,10 +113,10 @@ export const ChatScreen: React.FC = () => {
     streamingForConversationId,
     isStreaming,
     isThinking,
-    setIsStreaming,
-    setIsThinking,
-    appendToStreamingMessage,
-    finalizeStreamingMessage,
+    setIsStreaming: _setIsStreaming,
+    setIsThinking: _setIsThinking,
+    appendToStreamingMessage: _appendToStreamingMessage,
+    finalizeStreamingMessage: _finalizeStreamingMessage,
     clearStreamingMessage,
     deleteConversation,
     setActiveConversation,
@@ -135,7 +135,7 @@ export const ChatScreen: React.FC = () => {
   const imageModelLoaded = !!activeImageModel;
 
   // Track image mode state
-  const [currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
+  const [_currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
 
   // Fullscreen image viewer state
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
@@ -760,7 +760,7 @@ export const ChatScreen: React.FC = () => {
     ));
   };
 
-  const handleCopyMessage = (content: string) => {
+  const handleCopyMessage = (_content: string) => {
     // Copy is handled in ChatMessage component with Alert
   };
 
@@ -771,8 +771,8 @@ export const ChatScreen: React.FC = () => {
       // Delete all messages after this one and resend
       deleteMessagesAfter(activeConversationId, message.id);
       // Remove the user message too, then resend
-      const content = message.content;
-      const attachments = message.attachments;
+      const _content = message.content;
+      const _attachments = message.attachments;
       // Actually we want to keep the message and regenerate the response
       // So just delete the assistant responses after
 
@@ -795,7 +795,7 @@ export const ChatScreen: React.FC = () => {
           .find((m) => m.role === 'user');
         if (previousUserMessage) {
           // Delete this assistant message and any after it
-          const prevIndex = messages.findIndex((m) => m.id === previousUserMessage.id);
+          const _prevIndex = messages.findIndex((m) => m.id === previousUserMessage.id);
           deleteMessagesAfter(activeConversationId, previousUserMessage.id);
           await regenerateResponse(previousUserMessage);
         }
@@ -898,7 +898,7 @@ export const ChatScreen: React.FC = () => {
     try {
       // Request permission on Android
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
+        const _granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission',
@@ -1367,7 +1367,7 @@ export const ChatScreen: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

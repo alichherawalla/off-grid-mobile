@@ -27,8 +27,8 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [recommendedModels, setRecommendedModels] = useState<typeof RECOMMENDED_MODELS>([]);
   const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<ModelFile | null>(null);
+  const [_selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [_selectedFile, setSelectedFile] = useState<ModelFile | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { colors } = useTheme();
@@ -260,7 +260,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

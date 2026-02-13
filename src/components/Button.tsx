@@ -82,7 +82,7 @@ export const Button: React.FC<ButtonProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   button: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

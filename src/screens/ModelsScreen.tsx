@@ -107,7 +107,7 @@ export const ModelsScreen: React.FC = () => {
     imageModelDownloading,
     addImageModelDownloading,
     removeImageModelDownloading,
-    imageModelDownloadIds,
+    imageModelDownloadIds: _imageModelDownloadIds,
     setImageModelDownloadId,
     setBackgroundDownload,
   } = useAppStore();
@@ -430,7 +430,7 @@ export const ModelsScreen: React.FC = () => {
       });
 
       // Subscribe to completion
-      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async (event) => {
+      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async (_event) => {
         unsubProgress();
         unsubComplete();
         unsubError();

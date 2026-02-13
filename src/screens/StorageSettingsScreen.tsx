@@ -34,7 +34,7 @@ export const StorageSettingsScreen: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const { downloadedModels, downloadedImageModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads } = useAppStore();
+  const { downloadedModels, downloadedImageModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads: _clearBackgroundDownloads } = useAppStore();
   const { conversations } = useChatStore();
 
   const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
