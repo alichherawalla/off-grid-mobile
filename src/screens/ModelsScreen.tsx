@@ -253,7 +253,7 @@ export const ModelsScreen: React.FC = () => {
         limit: 30,
       });
       setSearchResults(results);
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Search Error', 'Failed to search models. Please try again.'));
     } finally {
       setIsLoading(false);
@@ -756,7 +756,7 @@ export const ModelsScreen: React.FC = () => {
     try {
       const files = await huggingFaceService.getModelFiles(model.id);
       setModelFiles(files);
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to load model files.'));
       setModelFiles([]);
     } finally {

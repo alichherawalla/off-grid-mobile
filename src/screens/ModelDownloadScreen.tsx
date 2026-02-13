@@ -102,7 +102,7 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
       try {
         const files = await huggingFaceService.getModelFiles(modelId);
         setModelFiles((prev) => ({ ...prev, [modelId]: files }));
-      } catch (error) {
+      } catch (_error) {
         setAlertState(showAlert('Error', 'Failed to fetch model files.'));
       }
     }

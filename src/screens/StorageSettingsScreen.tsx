@@ -84,7 +84,7 @@ export const StorageSettingsScreen: React.FC = () => {
               await modelManager.deleteOrphanedFile(file.path);
               setOrphanedFiles(prev => prev.filter(f => f.path !== file.path));
               loadStorageInfo();
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete file'));
             } finally {
               setIsDeleting(null);
@@ -113,7 +113,7 @@ export const StorageSettingsScreen: React.FC = () => {
             for (const file of orphanedFiles) {
               try {
                 await modelManager.deleteOrphanedFile(file.path);
-              } catch (error) {
+              } catch (_error) {
                 console.error('Failed to delete:', file.path);
               }
             }

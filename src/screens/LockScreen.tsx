@@ -98,7 +98,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           );
         }
       }
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to verify passphrase'));
     } finally {
       setIsVerifying(false);

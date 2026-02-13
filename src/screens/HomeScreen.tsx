@@ -267,7 +267,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setPickerType(null); // Close modal
     try {
       await activeModelService.unloadImageModel();
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
@@ -295,7 +295,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               if (count > 0) {
                 setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
               }
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to unload models'));
             } finally {
               setIsEjecting(false);

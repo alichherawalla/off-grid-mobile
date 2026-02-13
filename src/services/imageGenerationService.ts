@@ -455,7 +455,7 @@ class ImageGenerationService {
     this.cancelRequested = true;
     try {
       await onnxImageGeneratorService.cancelGeneration();
-    } catch (e) {
+    } catch {
       // Ignore cancellation errors
     }
     this.resetState();

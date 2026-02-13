@@ -152,7 +152,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       if (downloadedModelId) {
         try {
           await loadModel();
-        } catch (err) {
+        } catch {
           setError('Failed to load Whisper model. Please try again.');
           return;
         }

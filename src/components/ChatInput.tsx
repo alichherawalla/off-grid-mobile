@@ -186,8 +186,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (result.assets && result.assets.length > 0) {
         addAttachments(result.assets);
       }
-    } catch (error) {
-      console.error('Error picking image:', error);
+    } catch (pickError) {
+      console.error('Error picking image:', pickError);
     }
   };
 
@@ -203,8 +203,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (result.assets && result.assets.length > 0) {
         addAttachments(result.assets);
       }
-    } catch (error) {
-      console.error('Error taking photo:', error);
+    } catch (cameraError) {
+      console.error('Error taking photo:', cameraError);
     }
   };
 

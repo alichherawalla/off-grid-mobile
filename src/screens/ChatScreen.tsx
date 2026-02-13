@@ -718,7 +718,7 @@ export const ChatScreen: React.FC = () => {
         generationService.stopGeneration().catch(() => {}),
         llmService.stopGeneration().catch(() => {}),
       ]);
-    } catch (e) {
+    } catch (_e) {
       // Ignore errors - generation may have already finished
     }
 

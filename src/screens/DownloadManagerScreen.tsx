@@ -175,7 +175,7 @@ export const DownloadManagerScreen: React.FC = () => {
                   cancelledKeysRef.current.delete(key);
                 }
               }, 1000);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to remove download'));
             }
           },
@@ -199,7 +199,7 @@ export const DownloadManagerScreen: React.FC = () => {
             try {
               await modelManager.deleteModel(model.id);
               removeDownloadedModel(model.id);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete model'));
             }
           },
@@ -224,7 +224,7 @@ export const DownloadManagerScreen: React.FC = () => {
               await activeModelService.unloadImageModel();
               await modelManager.deleteImageModel(model.id);
               removeDownloadedImageModel(model.id);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete image model'));
             }
           },

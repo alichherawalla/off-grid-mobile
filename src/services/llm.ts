@@ -201,7 +201,7 @@ class LLMService {
         if (metadata) {
           const trainCtx = metadata['llama.context_length']
             || metadata['general.context_length']
-            || metadata['context_length'];
+            || metadata.context_length;
           if (trainCtx) {
             const maxModelCtx = parseInt(trainCtx, 10);
             console.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
@@ -210,7 +210,7 @@ class LLMService {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Metadata reading is best-effort
       }
 
@@ -305,7 +305,7 @@ class LLMService {
             vision: support?.vision || true,
             audio: support?.audio || false,
           };
-        } catch (e) {
+        } catch {
           // getMultimodalSupport not available, keep defaults
         }
         console.log('[LLM] Multimodal initialized successfully, vision:', this.multimodalSupport?.vision);
@@ -340,7 +340,7 @@ class LLMService {
         };
         return this.multimodalSupport;
       }
-    } catch (error) {
+    } catch {
       console.log('Multimodal support check not available');
     }
 

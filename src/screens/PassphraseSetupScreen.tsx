@@ -88,7 +88,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
       }
 
       onComplete();
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'An error occurred. Please try again.'));
     } finally {
       setIsSubmitting(false);
