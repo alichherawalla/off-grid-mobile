@@ -11,64 +11,135 @@ export const MODEL_RECOMMENDATIONS = {
   ],
 };
 
-// Curated list of recommended models for mobile
+// Curated list of recommended models for mobile (updated Feb 2026)
+// All IDs use official org repos where available, ggml-org (HuggingFace official) as fallback
 export const RECOMMENDED_MODELS = [
+  // --- Text: Ultra-light (3 GB+) ---
   {
-    id: 'Qwen/Qwen2.5-0.5B-Instruct-GGUF',
-    name: 'Qwen 2.5 0.5B',
-    params: 0.5,
-    description: 'Tiny but capable model, great for basic tasks',
+    id: 'Qwen/Qwen3-0.6B-GGUF',
+    name: 'Qwen 3 0.6B',
+    params: 0.6,
+    description: 'Latest Qwen with thinking mode, ultra-light',
     minRam: 3,
+    type: 'text' as const,
+    org: 'Qwen',
   },
   {
-    id: 'Qwen/Qwen2.5-1.5B-Instruct-GGUF',
-    name: 'Qwen 2.5 1.5B',
-    params: 1.5,
-    description: 'Excellent balance of size and capability',
+    id: 'ggml-org/gemma-3-1b-it-GGUF',
+    name: 'Gemma 3 1B',
+    params: 1,
+    description: 'Google\'s tiny model, 128K context',
+    minRam: 3,
+    type: 'text' as const,
+    org: 'google',
+  },
+  // --- Text: Small (4 GB+) ---
+  {
+    id: 'bartowski/Llama-3.2-1B-Instruct-GGUF',
+    name: 'Llama 3.2 1B',
+    params: 1,
+    description: 'Meta\'s fastest mobile model, 128K context',
     minRam: 4,
+    type: 'text' as const,
+    org: 'meta-llama',
   },
   {
-    id: 'Qwen/Qwen2.5-3B-Instruct-GGUF',
-    name: 'Qwen 2.5 3B',
+    id: 'ggml-org/gemma-3n-E2B-it-GGUF',
+    name: 'Gemma 3n E2B',
+    params: 2,
+    description: 'Google\'s mobile-first with selective activation',
+    minRam: 4,
+    type: 'text' as const,
+    org: 'google',
+  },
+  // --- Text: Medium (6 GB+) ---
+  {
+    id: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
+    name: 'Llama 3.2 3B',
     params: 3,
-    description: 'Great quality for most mobile devices',
+    description: 'Best quality-to-size ratio for mobile',
     minRam: 6,
+    type: 'text' as const,
+    org: 'meta-llama',
   },
   {
-    id: 'HuggingFaceTB/SmolLM2-135M-Instruct-GGUF',
-    name: 'SmolLM2 135M',
-    params: 0.135,
-    description: 'Ultra-tiny model, runs on any device',
-    minRam: 2,
+    id: 'ggml-org/SmolLM3-3B-GGUF',
+    name: 'SmolLM3 3B',
+    params: 3,
+    description: 'Strong reasoning & 128K context',
+    minRam: 6,
+    type: 'text' as const,
+    org: 'HuggingFaceTB',
   },
   {
-    id: 'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
-    name: 'SmolLM2 360M',
-    params: 0.36,
-    description: 'Very small but surprisingly capable',
-    minRam: 3,
-  },
-  {
-    id: 'HuggingFaceTB/SmolLM2-1.7B-Instruct-GGUF',
-    name: 'SmolLM2 1.7B',
-    params: 1.7,
-    description: 'Best tiny model for general use',
-    minRam: 4,
-  },
-  {
-    id: 'microsoft/Phi-3-mini-4k-instruct-gguf',
-    name: 'Phi-3 Mini 4K',
+    id: 'bartowski/microsoft_Phi-4-mini-instruct-GGUF',
+    name: 'Phi-4 Mini',
     params: 3.8,
-    description: 'Microsoft\'s efficient small model',
+    description: 'Math & reasoning specialist',
     minRam: 6,
+    type: 'text' as const,
+    org: 'microsoft',
+  },
+  // --- Text: Large (8 GB+) ---
+  {
+    id: 'Qwen/Qwen3-8B-GGUF',
+    name: 'Qwen 3 8B',
+    params: 8,
+    description: 'Thinking + non-thinking modes, 100+ languages',
+    minRam: 8,
+    type: 'text' as const,
+    org: 'Qwen',
+  },
+  // --- Vision ---
+  {
+    id: 'Qwen/Qwen3-VL-2B-Instruct-GGUF',
+    name: 'Qwen 3 VL 2B',
+    params: 2,
+    description: 'Compact vision-language model with thinking mode',
+    minRam: 4,
+    type: 'vision' as const,
+    org: 'Qwen',
   },
   {
-    id: 'TheBloke/Llama-2-7B-Chat-GGUF',
-    name: 'Llama 2 7B Chat',
-    params: 7,
-    description: 'Meta\'s popular chat model',
-    minRam: 8,
+    id: 'ggml-org/gemma-3n-E4B-it-GGUF',
+    name: 'Gemma 3n E4B',
+    params: 4,
+    description: 'Vision + audio, built for mobile',
+    minRam: 6,
+    type: 'vision' as const,
+    org: 'google',
   },
+  {
+    id: 'Qwen/Qwen3-VL-8B-Instruct-GGUF',
+    name: 'Qwen 3 VL 8B',
+    params: 8,
+    description: 'Vision-language model with thinking mode',
+    minRam: 8,
+    type: 'vision' as const,
+    org: 'Qwen',
+  },
+  // --- Code ---
+  {
+    id: 'Qwen/Qwen3-Coder-30B-A3B-Instruct-GGUF',
+    name: 'Qwen 3 Coder A3B',
+    params: 3,
+    description: 'MoE coding model, only 3B active params',
+    minRam: 6,
+    type: 'code' as const,
+    org: 'Qwen',
+  },
+];
+
+// Model organization filter options
+export const MODEL_ORGS = [
+  { key: 'Qwen', label: 'Qwen' },
+  { key: 'meta-llama', label: 'Llama' },
+  { key: 'google', label: 'Google' },
+  { key: 'microsoft', label: 'Microsoft' },
+  { key: 'mistralai', label: 'Mistral' },
+  { key: 'deepseek-ai', label: 'DeepSeek' },
+  { key: 'HuggingFaceTB', label: 'HuggingFace' },
+  { key: 'nvidia', label: 'NVIDIA' },
 ];
 
 // Quantization levels and their properties
@@ -195,6 +266,7 @@ export const VERIFIED_QUANTIZERS: Record<string, string> = {
   'MaziyarPanahi': 'Maziyar Panahi',
   'Triangle104': 'Triangle104',
   'unsloth': 'Unsloth',
+  'ggml-org': 'GGML (HuggingFace)',
 };
 
 // Credibility level labels

@@ -8,7 +8,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   ScrollView,
-  Switch,
   BackHandler,
   Keyboard,
   Platform,
@@ -25,12 +24,13 @@ import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
+import { CREDIBILITY_LABELS, TYPOGRAPHY, SPACING, RECOMMENDED_MODELS, MODEL_ORGS } from '../constants';
 import { useAppStore } from '../stores';
-import { huggingFaceService, modelManager, hardwareService, backgroundDownloadService, activeModelService } from '../services';
+import { huggingFaceService, modelManager, hardwareService, backgroundDownloadService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../services/coreMLModelBrowser';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
+import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
@@ -70,6 +70,59 @@ const MODEL_TYPE_OPTIONS: { key: ModelTypeFilter; label: string }[] = [
   { key: 'code', label: 'Code' },
 ];
 
+type SizeFilter = 'all' | 'tiny' | 'small' | 'medium' | 'large';
+
+const SIZE_OPTIONS: { key: SizeFilter; label: string; min: number; max: number }[] = [
+  { key: 'all', label: 'All Sizes', min: 0, max: Infinity },
+  { key: 'tiny', label: '< 1B', min: 0, max: 1 },
+  { key: 'small', label: '1-3B', min: 1, max: 3 },
+  { key: 'medium', label: '3-8B', min: 3, max: 8 },
+  { key: 'large', label: '8B+', min: 8, max: Infinity },
+];
+
+const QUANT_OPTIONS = [
+  { key: 'all', label: 'All' },
+  { key: 'Q4_K_M', label: 'Q4_K_M' },
+  { key: 'Q4_K_S', label: 'Q4_K_S' },
+  { key: 'Q5_K_M', label: 'Q5_K_M' },
+  { key: 'Q6_K', label: 'Q6_K' },
+  { key: 'Q8_0', label: 'Q8_0' },
+];
+
+type FilterDimension = 'org' | 'type' | 'source' | 'size' | 'quant' | null;
+type ImageFilterDimension = 'backend' | 'style' | 'sdVersion' | null;
+
+const STYLE_OPTIONS = [
+  { key: 'all', label: 'All Styles' },
+  { key: 'photorealistic', label: 'Realistic' },
+  { key: 'anime', label: 'Anime' },
+];
+
+const SD_VERSION_OPTIONS = [
+  { key: 'all', label: 'All Versions' },
+  { key: 'sd15', label: 'SD 1.5' },
+  { key: 'sd21', label: 'SD 2.1' },
+  { key: 'sdxl', label: 'SDXL' },
+];
+
+interface FilterState {
+  orgs: string[];
+  type: ModelTypeFilter;
+  source: CredibilityFilter;
+  size: SizeFilter;
+  quant: string;
+  expandedDimension: FilterDimension;
+}
+
+const initialFilterState: FilterState = {
+  orgs: [],
+  type: 'all',
+  source: 'all',
+  size: 'all',
+  quant: 'all',
+  expandedDimension: null,
+};
+
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 type ModelTab = 'text' | 'image';
@@ -81,15 +134,14 @@ export const ModelsScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const [activeTab, setActiveTab] = useState<ModelTab>('text');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searchResults, setSearchResults] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
   const [modelFiles, setModelFiles] = useState<ModelFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [credibilityFilter, setCredibilityFilter] = useState<CredibilityFilter>('all');
-  const [modelTypeFilter, setModelTypeFilter] = useState<ModelTypeFilter>('all');
-  const [showCompatibleOnly, setShowCompatibleOnly] = useState(false);
+  const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const {
@@ -101,7 +153,6 @@ export const ModelsScreen: React.FC = () => {
     downloadedImageModels,
     setDownloadedImageModels,
     addDownloadedImageModel,
-    removeDownloadedImageModel,
     activeImageModelId,
     setActiveImageModelId,
     imageModelDownloading,
@@ -118,11 +169,22 @@ export const ModelsScreen: React.FC = () => {
   const clearModelProgress = (modelId: string) =>
     setImageModelProgress(prev => { const next = { ...prev }; delete next[modelId]; return next; });
 
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
+
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
   const [hfModelsLoading, setHfModelsLoading] = useState(false);
   const [hfModelsError, setHfModelsError] = useState<string | null>(null);
   const [backendFilter, setBackendFilter] = useState<BackendFilter>('all');
+  const [styleFilter, setStyleFilter] = useState<string>('all');
+  const [sdVersionFilter, setSdVersionFilter] = useState<string>('all');
+  const [imageFilterExpanded, setImageFilterExpanded] = useState<ImageFilterDimension>(null);
   const [imageSearchQuery, setImageSearchQuery] = useState('');
+  const [textFiltersVisible, setTextFiltersVisible] = useState(false);
+  const [imageFiltersVisible, setImageFiltersVisible] = useState(false);
+
+  // Fetched details for recommended models (real downloads, likes, files from HF API)
+  const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
 
   const loadHFModels = useCallback(async (forceRefresh = false) => {
     setHfModelsLoading(true);
@@ -156,11 +218,35 @@ export const ModelsScreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadInitialModels();
     loadDownloadedModels();
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fetch real details for recommended models from HuggingFace API
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRecommendedDetails = async () => {
+      const details: Record<string, ModelInfo> = {};
+      await Promise.allSettled(
+        RECOMMENDED_MODELS.map(async (m) => {
+          try {
+            const info = await huggingFaceService.getModelDetails(m.id);
+            if (!cancelled) {
+              details[m.id] = info;
+            }
+          } catch (e) {
+            console.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e);
+          }
+        })
+      );
+      if (!cancelled) {
+        setRecommendedModelDetails(details);
+      }
+    };
+    fetchRecommendedDetails();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -220,18 +306,6 @@ export const ModelsScreen: React.FC = () => {
     }, [selectedModel])
   );
 
-  const loadInitialModels = async () => {
-    setIsLoading(true);
-    try {
-      const results = await huggingFaceService.searchModels('', { limit: 30 });
-      setSearchResults(results);
-    } catch (error) {
-      console.error('Error loading models:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const loadDownloadedModels = async () => {
     const models = await modelManager.getDownloadedModels();
     setDownloadedModels(models);
@@ -244,12 +318,15 @@ export const ModelsScreen: React.FC = () => {
 
   const handleSearch = async () => {
     Keyboard.dismiss();
+    setFilterState(prev => ({ ...prev, expandedDimension: null }));
     if (!searchQuery.trim()) {
-      loadInitialModels();
+      setHasSearched(false);
+      setSearchResults([]);
       return;
     }
 
     setIsLoading(true);
+    setHasSearched(true);
     try {
       const results = await huggingFaceService.searchModels(searchQuery, {
         limit: 30,
@@ -264,15 +341,56 @@ export const ModelsScreen: React.FC = () => {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await loadInitialModels();
     await loadDownloadedModels();
     await loadDownloadedImageModels();
+    if (hasSearched && searchQuery.trim()) {
+      await handleSearch();
+    }
     if (activeTab === 'image') {
       await loadHFModels(true);
     }
     setIsRefreshing(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, loadHFModels]);
+  }, [activeTab, loadHFModels, hasSearched, searchQuery]);
+
+  const handleImportLocalModel = async () => {
+    try {
+      const result = await pick({
+        type: [types.allFiles],
+        allowMultiSelection: false,
+      });
+
+      const file = result[0];
+      if (!file) return;
+
+      const fileName = file.name || 'unknown.gguf';
+
+      if (!fileName.toLowerCase().endsWith('.gguf')) {
+        setAlertState(showAlert('Invalid File', 'Only .gguf model files can be imported.'));
+        return;
+      }
+
+      setIsImporting(true);
+      setImportProgress({ fraction: 0, fileName });
+
+      const model = await modelManager.importLocalModel(
+        file.uri,
+        fileName,
+        (progress) => setImportProgress(progress)
+      );
+
+      addDownloadedModel(model);
+      setAlertState(showAlert('Success', `${model.name} imported successfully!`));
+    } catch (error: any) {
+      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+        return; // User cancelled picker, do nothing
+      }
+      setAlertState(showAlert('Import Failed', error?.message || 'Unknown error'));
+    } finally {
+      setIsImporting(false);
+      setImportProgress(null);
+    }
+  };
 
   // Download from HuggingFace (multi-file download)
   const handleDownloadHuggingFaceModel = async (modelInfo: ImageModelDescriptor) => {
@@ -719,39 +837,6 @@ export const ModelsScreen: React.FC = () => {
     }
   };
 
-  const handleDeleteImageModel = (modelId: string) => {
-    const model = downloadedImageModels.find(m => m.id === modelId);
-    if (!model) return;
-
-    setAlertState(showAlert(
-      'Delete Image Model',
-      `Are you sure you want to delete ${model.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Unload if this is the active model
-              if (activeImageModelId === modelId) {
-                await activeModelService.unloadImageModel();
-              }
-              await modelManager.deleteImageModel(modelId);
-              removeDownloadedImageModel(modelId);
-            } catch (error: any) {
-              setAlertState(showAlert('Error', `Failed to delete: ${error?.message}`));
-            }
-          },
-        },
-      ]
-    ));
-  };
-
-  const handleSetActiveImageModel = async (modelId: string) => {
-    setActiveImageModelId(modelId);
-  };
-
   const handleSelectModel = async (model: ModelInfo) => {
     setSelectedModel(model);
     setIsLoadingFiles(true);
@@ -814,6 +899,90 @@ export const ModelsScreen: React.FC = () => {
   };
 
   const ramGB = hardwareService.getTotalMemoryGB();
+  const deviceRecommendation = useMemo(() => hardwareService.getModelRecommendation(), []);
+
+  const hasActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' || filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all';
+  const hasActiveImageFilters = backendFilter !== 'all' || styleFilter !== 'all' || sdVersionFilter !== 'all';
+
+  const clearFilters = useCallback(() => {
+    setFilterState(initialFilterState);
+  }, []);
+
+  const clearImageFilters = useCallback(() => {
+    setBackendFilter('all');
+    setStyleFilter('all');
+    setSdVersionFilter('all');
+    setImageFilterExpanded(null);
+  }, []);
+
+  const toggleFilterDimension = useCallback((dim: FilterDimension) => {
+    setFilterState(prev => ({
+      ...prev,
+      expandedDimension: prev.expandedDimension === dim ? null : dim,
+    }));
+  }, []);
+
+  const toggleOrg = useCallback((orgKey: string) => {
+    setFilterState(prev => ({
+      ...prev,
+      orgs: prev.orgs.includes(orgKey)
+        ? prev.orgs.filter(o => o !== orgKey)
+        : [...prev.orgs, orgKey],
+    }));
+  }, []);
+
+  const setTypeFilter = useCallback((type: ModelTypeFilter) => {
+    setFilterState(prev => ({
+      ...prev,
+      type,
+      expandedDimension: null,
+    }));
+  }, []);
+
+  const setSourceFilter = useCallback((source: CredibilityFilter) => {
+    setFilterState(prev => ({
+      ...prev,
+      source,
+      expandedDimension: null,
+    }));
+  }, []);
+
+  const setSizeFilter = useCallback((size: SizeFilter) => {
+    setFilterState(prev => ({
+      ...prev,
+      size,
+      expandedDimension: null,
+    }));
+  }, []);
+
+  const setQuantFilter = useCallback((quant: string) => {
+    setFilterState(prev => ({
+      ...prev,
+      quant,
+      expandedDimension: null,
+    }));
+  }, []);
+
+  // Parse approximate param count from model name/ID (e.g. "Llama-3.2-3B" → 3)
+  const parseParamCount = useCallback((model: ModelInfo): number | null => {
+    const match = model.name.match(/(\d+\.?\d*)\s*[Bb]\b/) || model.id.match(/(\d+\.?\d*)\s*[Bb]\b/);
+    return match ? parseFloat(match[1]) : null;
+  }, []);
+
+  // Match org filter against search results (handles quantizer repos like bartowski/Llama-...)
+  const matchesOrgFilter = useCallback((model: ModelInfo, orgs: string[]): boolean => {
+    if (orgs.length === 0) return true;
+    return orgs.some(orgKey => {
+      // Direct author match
+      if (model.author === orgKey) return true;
+      // Name/ID contains the org label (catches quantizer repos)
+      const orgLabel = MODEL_ORGS.find(o => o.key === orgKey)?.label || orgKey;
+      const idLower = model.id.toLowerCase();
+      const nameLower = model.name.toLowerCase();
+      const labelLower = orgLabel.toLowerCase();
+      return idLower.includes(labelLower) || nameLower.includes(labelLower);
+    });
+  }, []);
 
   // Helper to detect model type from tags
   const getModelType = (model: ModelInfo): ModelTypeFilter => {
@@ -848,46 +1017,109 @@ export const ModelsScreen: React.FC = () => {
 
   // Check if model has any compatible files
   const hasCompatibleFiles = (model: ModelInfo): boolean => {
-    if (!model.files || model.files.length === 0) return true; // Assume compatible if no file info
-    return model.files.some(file => {
+    if (!model.files || model.files.length === 0) return true; // No file info yet — show it, filter on detail page
+    const filesWithSize = model.files.filter(f => f.size > 0);
+    if (filesWithSize.length === 0) return true; // Sizes unknown — show it
+    return filesWithSize.some(file => {
       const fileSizeGB = file.size / (1024 * 1024 * 1024);
       return fileSizeGB < ramGB * 0.6;
     });
   };
 
-  // Filter search results by credibility, type, and compatibility
+  // Filter search results by credibility, type, org, size, and compatibility
   const filteredResults = useMemo(() => {
     return searchResults.filter((model) => {
-      // Credibility filter
-      if (credibilityFilter !== 'all' && model.credibility?.source !== credibilityFilter) {
+      // Source filter
+      if (filterState.source !== 'all' && model.credibility?.source !== filterState.source) {
         return false;
       }
 
       // Model type filter
-      if (modelTypeFilter !== 'all' && getModelType(model) !== modelTypeFilter) {
+      if (filterState.type !== 'all' && getModelType(model) !== filterState.type) {
         return false;
       }
 
-      // Compatibility filter
-      if (showCompatibleOnly && !hasCompatibleFiles(model)) {
+      // Org filter
+      if (!matchesOrgFilter(model, filterState.orgs)) {
+        return false;
+      }
+
+      // Size filter
+      if (filterState.size !== 'all') {
+        const params = parseParamCount(model);
+        if (params !== null) {
+          const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
+          if (sizeOpt && (params < sizeOpt.min || params >= sizeOpt.max)) {
+            return false;
+          }
+        }
+      }
+
+      // Compatibility filter — always applied
+      if (!hasCompatibleFiles(model)) {
         return false;
       }
 
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchResults, credibilityFilter, modelTypeFilter, showCompatibleOnly, ramGB]);
+  }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, matchesOrgFilter, parseParamCount, ramGB]);
+
+  // Recommended models as ModelInfo[], filtered by device RAM + active filters, excluding downloaded
+  const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
+    return RECOMMENDED_MODELS
+      .filter(m => m.params <= deviceRecommendation.maxParameters)
+      .filter(m => !downloadedModels.some(d => d.id.startsWith(m.id)))
+      .filter(m => {
+        if (filterState.type !== 'all' && m.type !== filterState.type) return false;
+        if (filterState.orgs.length > 0 && !filterState.orgs.includes(m.org)) return false;
+        if (filterState.size !== 'all') {
+          const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
+          if (sizeOpt && (m.params < sizeOpt.min || m.params >= sizeOpt.max)) return false;
+        }
+        return true;
+      })
+      .map(m => {
+        const fetched = recommendedModelDetails[m.id];
+        if (fetched) {
+          return {
+            ...fetched,
+            name: m.name, // Keep our curated display name
+            description: m.description, // Keep our curated description
+          };
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          author: m.id.split('/')[0],
+          description: m.description,
+          downloads: 0,
+          likes: 0,
+          tags: [],
+          lastModified: '',
+          files: [],
+        };
+      });
+  }, [deviceRecommendation.maxParameters, downloadedModels, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
 
   // Filter HuggingFace image models - must be before any conditional returns
   const filteredHFModels = useMemo(() => {
     const query = imageSearchQuery.toLowerCase().trim();
     return availableHFModels.filter((m) => {
       if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
+      if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
+      // SD version filter (iOS Core ML)
+      if (sdVersionFilter !== 'all') {
+        const nameLower = m.name.toLowerCase();
+        if (sdVersionFilter === 'sdxl' && !nameLower.includes('sdxl') && !nameLower.includes('xl')) return false;
+        if (sdVersionFilter === 'sd21' && !nameLower.includes('2.1') && !nameLower.includes('2-1')) return false;
+        if (sdVersionFilter === 'sd15' && !nameLower.includes('1.5') && !nameLower.includes('1-5') && !nameLower.includes('v1-5')) return false;
+      }
       if (downloadedImageModels.some((d) => d.id === m.id)) return false;
       if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [availableHFModels, backendFilter, downloadedImageModels, imageSearchQuery]);
+  }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery]);
 
   const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
     // Check if any file from this model is downloaded
@@ -902,10 +1134,43 @@ export const ModelsScreen: React.FC = () => {
           isDownloaded={isAnyFileDownloaded}
           onPress={() => handleSelectModel(item)}
           testID={`model-card-${index}`}
+          compact={!hasSearched}
         />
       </AnimatedEntry>
     );
   };
+
+  // Count of active downloads for badge
+  const activeDownloadCount = Object.keys(downloadProgress).length;
+
+  // Total count: downloaded text models + downloaded image models + currently downloading
+  const totalModelCount = downloadedModels.length + downloadedImageModels.length + activeDownloadCount;
+
+  const hfModelToDescriptor = (hfModel: HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] }): ImageModelDescriptor => ({
+    id: hfModel.id,
+    name: hfModel.displayName,
+    description: hfModel._coreml
+      ? `Core ML model from ${hfModel.repo}`
+      : `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
+    downloadUrl: hfModel.downloadUrl,
+    size: hfModel.size,
+    style: guessStyle(hfModel.name),
+    backend: hfModel._coreml ? 'coreml' : hfModel.backend,
+    coremlFiles: hfModel._coremlFiles,
+    repo: hfModel.repo,
+  });
+
+  // Image model recommendation based on device RAM
+  const imageRecommendation = useMemo(() => {
+    if (Platform.OS === 'ios') {
+      if (ramGB < 4) return 'SD 1.5 Palettized recommended for your device';
+      if (ramGB < 6) return 'SD 1.5 or SD 2.1 Palettized recommended';
+      return 'All models supported — SDXL for best quality';
+    }
+    if (ramGB < 4) return 'Smallest CPU models recommended';
+    if (ramGB < 6) return 'CPU models recommended for your device';
+    return 'CPU and NPU models supported';
+  }, [ramGB]);
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
     if (!selectedModel) return null;
@@ -1007,14 +1272,20 @@ export const ModelsScreen: React.FC = () => {
             </View>
           ) : (
             <FlatList
-              data={modelFiles}
+              data={modelFiles.filter(f => {
+                if (f.size <= 0) return false;
+                const sizeGB = f.size / (1024 * 1024 * 1024);
+                if (sizeGB >= ramGB * 0.6) return false;
+                if (filterState.quant !== 'all' && !f.name.includes(filterState.quant)) return false;
+                return true;
+              })}
               renderItem={renderFileItem}
               keyExtractor={(item) => item.name}
               contentContainerStyle={styles.listContent}
               ListEmptyComponent={
                 <Card style={styles.emptyCard}>
                   <Text style={styles.emptyText}>
-                    No GGUF files found for this model.
+                    No compatible files found for this model.
                   </Text>
                 </Card>
               }
@@ -1026,111 +1297,149 @@ export const ModelsScreen: React.FC = () => {
     );
   }
 
-  // Count of active downloads for badge
-  const activeDownloadCount = Object.keys(downloadProgress).length;
-
-  // Total count: downloaded text models + downloaded image models + currently downloading
-  const totalModelCount = downloadedModels.length + downloadedImageModels.length + activeDownloadCount;
-
-  const hfModelToDescriptor = (hfModel: HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] }): ImageModelDescriptor => ({
-    id: hfModel.id,
-    name: hfModel.displayName,
-    description: hfModel._coreml
-      ? `Core ML model from ${hfModel.repo}`
-      : `${hfModel.backend === 'qnn' ? 'NPU' : 'CPU'} model from ${hfModel.repo}`,
-    downloadUrl: hfModel.downloadUrl,
-    size: hfModel.size,
-    style: guessStyle(hfModel.name),
-    backend: hfModel._coreml ? 'coreml' : hfModel.backend,
-    coremlFiles: hfModel._coremlFiles,
-    repo: hfModel.repo,
-  });
-
   // Render image models section
   const renderImageModelsSection = () => (
     <View style={styles.imageModelsSection}>
-      <Text style={styles.imageSectionSubtitle}>
-        Stable Diffusion models for on-device image generation
-      </Text>
+      {/* Device recommendation */}
+      <View style={styles.deviceBanner}>
+        <Text style={styles.deviceBannerText}>
+          {Math.round(ramGB)}GB RAM — {imageRecommendation}
+        </Text>
+      </View>
 
-      {/* Downloaded image models */}
-      {downloadedImageModels.length > 0 && (
-        <View style={styles.downloadedImageModels}>
-          {downloadedImageModels.map((model) => (
-            <Card key={model.id} style={styles.imageModelCard}>
-              <View style={styles.imageModelHeader}>
-                <View style={styles.imageModelInfo}>
-                  <Text style={styles.imageModelName}>{model.name}</Text>
-                  <Text style={styles.imageModelDesc}>{model.description}</Text>
-                  <Text style={styles.imageModelSize}>
-                    {formatBytes(model.size)}
-                  </Text>
-                </View>
-                {activeImageModelId === model.id && (
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>Active</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.imageModelActions}>
-                {activeImageModelId !== model.id && (
-                  <TouchableOpacity
-                    style={styles.setActiveButton}
-                    onPress={() => handleSetActiveImageModel(model.id)}
-                    testID="set-active-image-model"
-                  >
-                    <Text style={styles.setActiveButtonText}>Set Active</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.deleteImageButton}
-                  onPress={() => handleDeleteImageModel(model.id)}
-                >
-                  <Icon name="trash-2" size={18} color={colors.error} />
-                </TouchableOpacity>
-              </View>
-            </Card>
-          ))}
-        </View>
-      )}
+      {/* Search */}
+      <View style={styles.imageSearchRow}>
+        <TextInput
+          style={styles.imageSearchInput}
+          placeholder="Search models..."
+          placeholderTextColor={colors.textMuted}
+          value={imageSearchQuery}
+          onChangeText={setImageSearchQuery}
+          returnKeyType="search"
+        />
+        <TouchableOpacity
+          style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
+          onPress={() => setImageFiltersVisible(v => !v)}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        >
+          <Icon name="sliders" size={14} color={(imageFiltersVisible || hasActiveImageFilters) ? colors.primary : colors.textMuted} />
+          {hasActiveImageFilters && <View style={styles.filterDot} />}
+        </TouchableOpacity>
+      </View>
 
-      {/* Search and filter */}
-      <Text style={styles.availableTitle}>Available for Download</Text>
-      <TextInput
-        style={styles.imageSearchInput}
-        placeholder="Search models..."
-        placeholderTextColor={colors.textMuted}
-        value={imageSearchQuery}
-        onChangeText={setImageSearchQuery}
-        returnKeyType="search"
-      />
-      {Platform.OS !== 'ios' && (
-        <View style={styles.backendFilterRow}>
-          {([
-            { key: 'all' as BackendFilter, label: 'All' },
-            { key: 'mnn' as BackendFilter, label: 'CPU' },
-            { key: 'qnn' as BackendFilter, label: 'NPU' },
-          ]).map((option) => (
+      {/* Image filter pill bar — negative margin to cancel parent padding */}
+      {imageFiltersVisible && <View style={[styles.filterBar, { marginHorizontal: -SPACING.lg }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPillRow}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Backend pill — Android only */}
+          {Platform.OS !== 'ios' && (
             <TouchableOpacity
-              key={option.key}
-              style={[
-                styles.filterChip,
-                backendFilter === option.key && styles.filterChipActive,
-              ]}
-              onPress={() => setBackendFilter(option.key)}
+              style={[styles.filterPill, backendFilter !== 'all' && styles.filterPillActive]}
+              onPress={() => setImageFilterExpanded(prev => prev === 'backend' ? null : 'backend')}
             >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  backendFilter === option.key && styles.filterChipTextActive,
-                ]}
-              >
-                {option.label}
+              <Text style={[styles.filterPillText, backendFilter !== 'all' && styles.filterPillTextActive]}>
+                {backendFilter === 'all' ? 'Backend' : backendFilter === 'mnn' ? 'CPU' : backendFilter === 'qnn' ? 'NPU' : 'Core ML'} {imageFilterExpanded === 'backend' ? '\u25B4' : '\u25BE'}
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
-      )}
+          )}
+
+          {/* SD Version pill — iOS only */}
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={[styles.filterPill, sdVersionFilter !== 'all' && styles.filterPillActive]}
+              onPress={() => setImageFilterExpanded(prev => prev === 'sdVersion' ? null : 'sdVersion')}
+            >
+              <Text style={[styles.filterPillText, sdVersionFilter !== 'all' && styles.filterPillTextActive]}>
+                {sdVersionFilter === 'all' ? 'Version' : SD_VERSION_OPTIONS.find(o => o.key === sdVersionFilter)?.label} {imageFilterExpanded === 'sdVersion' ? '\u25B4' : '\u25BE'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Style pill — Android only (Core ML models don't have style variants) */}
+          {Platform.OS !== 'ios' && (
+            <TouchableOpacity
+              style={[styles.filterPill, styleFilter !== 'all' && styles.filterPillActive]}
+              onPress={() => setImageFilterExpanded(prev => prev === 'style' ? null : 'style')}
+            >
+              <Text style={[styles.filterPillText, styleFilter !== 'all' && styles.filterPillTextActive]}>
+                {styleFilter === 'all' ? 'Style' : STYLE_OPTIONS.find(o => o.key === styleFilter)?.label} {imageFilterExpanded === 'style' ? '\u25B4' : '\u25BE'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Clear */}
+          {hasActiveImageFilters && (
+            <TouchableOpacity style={styles.clearFiltersButton} onPress={clearImageFilters}>
+              <Text style={styles.clearFiltersText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+
+        {/* Expanded: backend */}
+        {imageFilterExpanded === 'backend' && Platform.OS !== 'ios' && (
+          <View style={styles.filterExpandedContent}>
+            <View style={styles.filterChipWrap}>
+              {([
+                { key: 'all' as BackendFilter, label: 'All' },
+                { key: 'mnn' as BackendFilter, label: 'CPU' },
+                { key: 'qnn' as BackendFilter, label: 'NPU' },
+              ]).map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.filterChip, backendFilter === option.key && styles.filterChipActive]}
+                  onPress={() => { setBackendFilter(option.key); setImageFilterExpanded(null); }}
+                >
+                  <Text style={[styles.filterChipText, backendFilter === option.key && styles.filterChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Expanded: SD version */}
+        {imageFilterExpanded === 'sdVersion' && Platform.OS === 'ios' && (
+          <View style={styles.filterExpandedContent}>
+            <View style={styles.filterChipWrap}>
+              {SD_VERSION_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.filterChip, sdVersionFilter === option.key && styles.filterChipActive]}
+                  onPress={() => { setSdVersionFilter(option.key); setImageFilterExpanded(null); }}
+                >
+                  <Text style={[styles.filterChipText, sdVersionFilter === option.key && styles.filterChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Expanded: style */}
+        {imageFilterExpanded === 'style' && Platform.OS !== 'ios' && (
+          <View style={styles.filterExpandedContent}>
+            <View style={styles.filterChipWrap}>
+              {STYLE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[styles.filterChip, styleFilter === option.key && styles.filterChipActive]}
+                  onPress={() => { setStyleFilter(option.key); setImageFilterExpanded(null); }}
+                >
+                  <Text style={[styles.filterChipText, styleFilter === option.key && styles.filterChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>}
 
       {/* Loading / Error / List */}
       {hfModelsLoading && (
@@ -1153,68 +1462,32 @@ export const ModelsScreen: React.FC = () => {
       )}
 
       {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model) => (
-        <Card key={model.id} style={styles.imageModelCard}>
-          <View style={styles.imageModelHeader}>
-            <View style={styles.imageModelInfo}>
-              <View style={styles.modelNameRow}>
-                <Text style={styles.imageModelName}>{model.displayName}</Text>
-              </View>
-              <View style={styles.badgeRow}>
-                <View style={[styles.backendBadge, (model as any)._coreml ? styles.cpuBadge : model.backend === 'qnn' ? styles.npuBadge : styles.cpuBadge]}>
-                  <Text style={styles.backendBadgeText}>
-                    {(model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU'}
-                  </Text>
-                </View>
-                {model.variant && (
-                  <View style={styles.variantBadge}>
-                    <Text style={styles.variantBadgeText}>{model.variant}</Text>
-                  </View>
-                )}
-              </View>
-              {model.variant && (
-                <Text style={styles.variantHint}>
-                  {getVariantLabel(model.variant)}
-                </Text>
-              )}
-              <Text style={styles.imageModelSize}>
-                {formatBytes(model.size)}
-              </Text>
-            </View>
-          </View>
-          {imageModelDownloading.includes(model.id) ? (
-            <View style={styles.imageDownloadProgress}>
-              <Text style={styles.imageDownloadText}>
-                Downloading... {Math.round((imageModelProgress[model.id] || 0) * 100)}%
-              </Text>
-              <View style={styles.imageProgressBar}>
-                <View
-                  style={[
-                    styles.imageProgressFill,
-                    { width: `${(imageModelProgress[model.id] || 0) * 100}%` },
-                  ]}
-                />
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.downloadImageButton}
-              onPress={() => handleDownloadImageModel(hfModelToDescriptor(model))}
-              disabled={imageModelDownloading.includes(model.id)}
-            >
-              <Icon name="download" size={16} color={colors.primary} />
-              <Text style={styles.downloadImageButtonText}>Download</Text>
-            </TouchableOpacity>
-          )}
-        </Card>
+        <ModelCard
+          key={model.id}
+          compact
+          model={{
+            id: model.id,
+            name: model.displayName,
+            author: (model as any)._coreml ? 'Core ML' : model.backend === 'qnn' ? 'NPU' : 'CPU',
+            description: `${formatBytes(model.size)}${model.variant ? ' \u00B7 ' + getVariantLabel(model.variant) : ''}`,
+          }}
+          isDownloading={imageModelDownloading.includes(model.id)}
+          downloadProgress={imageModelProgress[model.id] || 0}
+          onDownload={
+            !imageModelDownloading.includes(model.id)
+              ? () => handleDownloadImageModel(hfModelToDescriptor(model))
+              : undefined
+          }
+        />
       ))}
 
       {!hfModelsLoading && !hfModelsError && filteredHFModels.length === 0 && availableHFModels.length > 0 && (
         <Text style={styles.allDownloadedText}>
           {imageSearchQuery.trim()
             ? 'No models match your search'
-            : backendFilter === 'all'
-              ? 'All available models are downloaded'
-              : `All ${backendFilter === 'mnn' ? 'CPU' : 'NPU'} models are downloaded`}
+            : hasActiveImageFilters
+              ? 'No models match your filters'
+              : 'All available models are downloaded'}
         </Text>
       )}
     </View>
@@ -1240,26 +1513,58 @@ export const ModelsScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
+        {/* Import Local File — above tabs, always visible */}
+        {isImporting && importProgress ? (
+          <View style={styles.importProgressCard}>
+            <View style={styles.importProgressHeader}>
+              <Icon name="file" size={18} color={colors.primary} />
+              <Text style={styles.importProgressText} numberOfLines={1}>
+                Importing {importProgress.fileName}
+              </Text>
+            </View>
+            <View style={styles.imageProgressBar}>
+              <View
+                style={[
+                  styles.imageProgressFill,
+                  { width: `${Math.round(importProgress.fraction * 100)}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.importProgressPercent}>
+              {Math.round(importProgress.fraction * 100)}%
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.importButton}
+            onPress={handleImportLocalModel}
+            testID="import-local-model"
+          >
+            <Icon name="folder-plus" size={20} color={colors.primary} />
+            <Text style={styles.importButtonText}>Import Local File</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Tab Bar */}
         <View style={styles.tabBar}>
-          <Button
-            title="Text Models"
-            variant="secondary"
-            size="medium"
-            active={activeTab === 'text'}
-            onPress={() => setActiveTab('text')}
-            icon={<Icon name="message-square" size={18} color={activeTab === 'text' ? colors.primary : colors.textSecondary} />}
-            style={styles.tab}
-          />
-          <Button
-            title="Image Models"
-            variant="secondary"
-            size="medium"
-            active={activeTab === 'image'}
-            onPress={() => setActiveTab('image')}
-            icon={<Icon name="image" size={18} color={activeTab === 'image' ? colors.primary : colors.textSecondary} />}
-            style={styles.tab}
-          />
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => { setActiveTab('text'); setFilterState(initialFilterState); setTextFiltersVisible(false); setImageFiltersVisible(false); }}
+          >
+            <Text style={[styles.tabText, activeTab === 'text' && styles.tabTextActive]}>
+              Text Models
+            </Text>
+            {activeTab === 'text' && <View style={styles.tabIndicator} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => { setActiveTab('image'); setFilterState(initialFilterState); setTextFiltersVisible(false); setImageFiltersVisible(false); }}
+          >
+            <Text style={[styles.tabText, activeTab === 'image' && styles.tabTextActive]}>
+              Image Models
+            </Text>
+            {activeTab === 'image' && <View style={styles.tabIndicator} />}
+          </TouchableOpacity>
         </View>
 
         {/* Text Models Tab */}
@@ -1276,89 +1581,192 @@ export const ModelsScreen: React.FC = () => {
                 returnKeyType="search"
                 testID="search-input"
               />
+              <TouchableOpacity
+                style={[styles.filterToggle, (textFiltersVisible || hasActiveFilters) && styles.filterToggleActive]}
+                onPress={() => setTextFiltersVisible(v => !v)}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              >
+                <Icon name="sliders" size={14} color={(textFiltersVisible || hasActiveFilters) ? colors.primary : colors.textMuted} />
+                {hasActiveFilters && <View style={styles.filterDot} />}
+              </TouchableOpacity>
               <Button title="Search" size="small" onPress={handleSearch} testID="search-button" />
             </View>
 
-            {/* Filters Section */}
-            <View style={styles.filtersSection}>
-              {/* Compatible Only Toggle */}
-              <View style={styles.toggleRow}>
-                <Text style={styles.toggleLabel}>Show compatible only</Text>
-                <Switch
-                  value={showCompatibleOnly}
-                  onValueChange={setShowCompatibleOnly}
-                  trackColor={{ false: colors.surfaceLight, true: colors.primary + '60' }}
-                  thumbColor={showCompatibleOnly ? colors.primary : colors.textMuted}
-                />
-              </View>
-
-              {/* Model Type Filter */}
-              <View style={styles.filterContainer}>
-                <Text style={styles.filterSectionLabel}>Type</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterScroll}
+            {/* Unified Filter Bar */}
+            {textFiltersVisible && <View style={styles.filterBar}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterPillRow}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Org pill */}
+                <TouchableOpacity
+                  style={[styles.filterPill, filterState.orgs.length > 0 && styles.filterPillActive]}
+                  onPress={() => toggleFilterDimension('org')}
                 >
-                  {MODEL_TYPE_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={option.key}
-                      style={[
-                        styles.filterChip,
-                        modelTypeFilter === option.key && styles.filterChipActive,
-                      ]}
-                      onPress={() => setModelTypeFilter(option.key)}
-                    >
-                      <Text
-                        style={[
-                          styles.filterChipText,
-                          modelTypeFilter === option.key && styles.filterChipTextActive,
-                        ]}
+                  <Text style={[styles.filterPillText, filterState.orgs.length > 0 && styles.filterPillTextActive]}>
+                    Org {filterState.expandedDimension === 'org' ? '\u25B4' : '\u25BE'}
+                  </Text>
+                  {filterState.orgs.length > 0 && (
+                    <View style={styles.filterCountBadge}>
+                      <Text style={styles.filterCountText}>{filterState.orgs.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Type pill */}
+                <TouchableOpacity
+                  style={[styles.filterPill, filterState.type !== 'all' && styles.filterPillActive]}
+                  onPress={() => toggleFilterDimension('type')}
+                >
+                  <Text style={[styles.filterPillText, filterState.type !== 'all' && styles.filterPillTextActive]}>
+                    {filterState.type === 'all' ? 'Type' : MODEL_TYPE_OPTIONS.find(o => o.key === filterState.type)?.label} {filterState.expandedDimension === 'type' ? '\u25B4' : '\u25BE'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Source pill */}
+                <TouchableOpacity
+                  style={[styles.filterPill, filterState.source !== 'all' && styles.filterPillActive]}
+                  onPress={() => toggleFilterDimension('source')}
+                >
+                  <Text style={[styles.filterPillText, filterState.source !== 'all' && styles.filterPillTextActive]}>
+                    {filterState.source === 'all' ? 'Source' : CREDIBILITY_OPTIONS.find(o => o.key === filterState.source)?.label} {filterState.expandedDimension === 'source' ? '\u25B4' : '\u25BE'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Size pill */}
+                <TouchableOpacity
+                  style={[styles.filterPill, filterState.size !== 'all' && styles.filterPillActive]}
+                  onPress={() => toggleFilterDimension('size')}
+                >
+                  <Text style={[styles.filterPillText, filterState.size !== 'all' && styles.filterPillTextActive]}>
+                    {filterState.size === 'all' ? 'Size' : SIZE_OPTIONS.find(o => o.key === filterState.size)?.label} {filterState.expandedDimension === 'size' ? '\u25B4' : '\u25BE'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Quant pill */}
+                <TouchableOpacity
+                  style={[styles.filterPill, filterState.quant !== 'all' && styles.filterPillActive]}
+                  onPress={() => toggleFilterDimension('quant')}
+                >
+                  <Text style={[styles.filterPillText, filterState.quant !== 'all' && styles.filterPillTextActive]}>
+                    {filterState.quant === 'all' ? 'Quant' : filterState.quant} {filterState.expandedDimension === 'quant' ? '\u25B4' : '\u25BE'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Clear button */}
+                {hasActiveFilters && (
+                  <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
+                    <Text style={styles.clearFiltersText}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+
+              {/* Expanded filter content */}
+              {filterState.expandedDimension === 'org' && (
+                <View style={styles.filterExpandedContent}>
+                  <View style={styles.filterChipWrap}>
+                    {MODEL_ORGS.map((org) => (
+                      <TouchableOpacity
+                        key={org.key}
+                        style={[styles.filterChip, filterState.orgs.includes(org.key) && styles.filterChipActive]}
+                        onPress={() => toggleOrg(org.key)}
                       >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
+                        <Text style={[styles.filterChipText, filterState.orgs.includes(org.key) && styles.filterChipTextActive]}>
+                          {org.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
 
-              {/* Credibility Filter */}
-              <View style={styles.filterContainer}>
-                <Text style={styles.filterSectionLabel}>Source</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterScroll}
-                >
-                  {CREDIBILITY_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={option.key}
-                      style={[
-                        styles.filterChip,
-                        credibilityFilter === option.key && styles.filterChipActive,
-                        credibilityFilter === option.key && option.color && {
-                          backgroundColor: option.color + '25',
-                          borderColor: option.color,
-                        },
-                      ]}
-                      onPress={() => setCredibilityFilter(option.key)}
-                    >
-                      <Text
+              {filterState.expandedDimension === 'type' && (
+                <View style={styles.filterExpandedContent}>
+                  <View style={styles.filterChipWrap}>
+                    {MODEL_TYPE_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[styles.filterChip, filterState.type === option.key && styles.filterChipActive]}
+                        onPress={() => setTypeFilter(option.key)}
+                      >
+                        <Text style={[styles.filterChipText, filterState.type === option.key && styles.filterChipTextActive]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {filterState.expandedDimension === 'source' && (
+                <View style={styles.filterExpandedContent}>
+                  <View style={styles.filterChipWrap}>
+                    {CREDIBILITY_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.key}
                         style={[
-                          styles.filterChipText,
-                          credibilityFilter === option.key && styles.filterChipTextActive,
-                          credibilityFilter === option.key && option.color && {
-                            color: option.color,
+                          styles.filterChip,
+                          filterState.source === option.key && styles.filterChipActive,
+                          filterState.source === option.key && option.color && {
+                            backgroundColor: option.color + '25',
+                            borderColor: option.color,
                           },
                         ]}
+                        onPress={() => setSourceFilter(option.key)}
                       >
-                        {option.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            filterState.source === option.key && styles.filterChipTextActive,
+                            filterState.source === option.key && option.color && { color: option.color },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {filterState.expandedDimension === 'size' && (
+                <View style={styles.filterExpandedContent}>
+                  <View style={styles.filterChipWrap}>
+                    {SIZE_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[styles.filterChip, filterState.size === option.key && styles.filterChipActive]}
+                        onPress={() => setSizeFilter(option.key)}
+                      >
+                        <Text style={[styles.filterChipText, filterState.size === option.key && styles.filterChipTextActive]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {filterState.expandedDimension === 'quant' && (
+                <View style={styles.filterExpandedContent}>
+                  <View style={styles.filterChipWrap}>
+                    {QUANT_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[styles.filterChip, filterState.quant === option.key && styles.filterChipActive]}
+                        onPress={() => setQuantFilter(option.key)}
+                      >
+                        <Text style={[styles.filterChipText, filterState.quant === option.key && styles.filterChipTextActive]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>}
 
             {isLoading ? (
               <View style={styles.loadingContainer}>
@@ -1367,7 +1775,7 @@ export const ModelsScreen: React.FC = () => {
               </View>
             ) : (
               <FlatList
-                data={filteredResults}
+                data={hasSearched ? filteredResults : recommendedAsModelInfo}
                 renderItem={renderModelItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.listContent}
@@ -1379,12 +1787,28 @@ export const ModelsScreen: React.FC = () => {
                     tintColor={colors.primary}
                   />
                 }
+                ListHeaderComponent={
+                  !hasSearched ? (
+                    <View>
+                      <View style={styles.deviceBanner}>
+                        <Text style={styles.deviceBannerText}>
+                          {Math.round(ramGB)}GB RAM — models up to {deviceRecommendation.maxParameters}B recommended ({deviceRecommendation.recommendedQuantization})
+                        </Text>
+                      </View>
+                      {recommendedAsModelInfo.length > 0 && (
+                        <Text style={styles.recommendedTitle}>Recommended for your device</Text>
+                      )}
+                    </View>
+                  ) : null
+                }
                 ListEmptyComponent={
                   <Card style={styles.emptyCard}>
                     <Text style={styles.emptyText}>
-                      {credibilityFilter !== 'all'
-                        ? `No ${CREDIBILITY_OPTIONS.find((f: { key: CredibilityFilter; label: string }) => f.key === credibilityFilter)?.label} models found. Try a different filter.`
-                        : 'No models found. Try a different search term.'}
+                      {hasSearched
+                        ? hasActiveFilters
+                          ? 'No models match your filters. Try adjusting or clearing them.'
+                          : 'No models found. Try a different search term.'
+                        : 'No recommended models available.'}
                     </Text>
                   </Card>
                 }
@@ -1464,21 +1888,56 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   tabBar: {
     flexDirection: 'row' as const,
     paddingHorizontal: 16,
-    paddingTop: SPACING.lg,
-    paddingBottom: 16,
-    gap: 8,
+    gap: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: 12,
   },
-  tab: {
-    flex: 1,
+  tabItem: {
+    paddingVertical: 10,
+    alignItems: 'center' as const,
+  },
+  tabText: {
+    ...TYPOGRAPHY.body,
+    color: colors.textMuted,
+  },
+  tabTextActive: {
+    color: colors.text,
+    fontWeight: '700' as const,
+  },
+  tabIndicator: {
+    height: 2,
+    backgroundColor: colors.primary,
+    borderRadius: 1,
+    marginTop: 4,
+    alignSelf: 'stretch' as const,
   },
   imageTabContent: {
     flex: 1,
   },
   searchContainer: {
     flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: 16,
     paddingBottom: 16,
     gap: 8,
+  },
+  filterToggle: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  },
+  filterToggleActive: {
+    backgroundColor: colors.primary + '15',
+  },
+  filterDot: {
+    position: 'absolute' as const,
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
   },
   searchInput: {
     ...TYPOGRAPHY.body,
@@ -1489,35 +1948,112 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingVertical: 12,
     color: colors.text,
   },
-  filtersSection: {
-    marginBottom: 8,
-  },
-  toggleRow: {
+  importButton: {
     flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.surface,
+    justifyContent: 'center' as const,
+    gap: 10,
     marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 8,
+    paddingVertical: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed' as const,
+    borderColor: colors.primary + '60',
     borderRadius: 12,
+    backgroundColor: colors.primary + '08',
   },
-  toggleLabel: {
+  importButtonText: {
     ...TYPOGRAPHY.body,
-    color: colors.text,
+    color: colors.primary,
   },
-  filterContainer: {
+  importProgressCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 8,
+    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 10,
   },
-  filterSectionLabel: {
+  importProgressHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
+  importProgressText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
+    flex: 1,
+  },
+  importProgressPercent: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    paddingHorizontal: 16,
-    marginBottom: 6,
+    textAlign: 'center' as const,
   },
-  filterScroll: {
+  filterBar: {
+    marginBottom: 4,
+    paddingBottom: 4,
+  },
+  filterPillRow: {
     paddingHorizontal: 16,
+    gap: 8,
+    alignItems: 'center' as const,
+  },
+  filterPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  filterPillActive: {
+    backgroundColor: colors.primary + '25',
+    borderColor: colors.primary,
+  },
+  filterPillText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
+  },
+  filterPillTextActive: {
+    color: colors.primary,
+  },
+  filterCountBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 4,
+  },
+  filterCountText: {
+    ...TYPOGRAPHY.labelSmall,
+    color: colors.background,
+    fontWeight: '700' as const,
+  },
+  clearFiltersButton: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  clearFiltersText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.error,
+  },
+  filterExpandedContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  filterChipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
     gap: 8,
   },
   filterChip: {
@@ -1553,8 +2089,27 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: 16,
     paddingBottom: 32,
   },
+  deviceBanner: {
+    backgroundColor: colors.primary + '12',
+    borderRadius: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  deviceBannerText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.primary,
+  },
+  recommendedTitle: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    marginBottom: SPACING.md,
+  },
   modelInfoCard: {
     marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 16,
   },
   authorRow: {
@@ -1688,11 +2243,61 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   deleteImageButton: {
     padding: 8,
   },
+  // Compact downloaded image model rows
+  imageModelCompactRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: 6,
+    gap: 8,
+  },
+  imageModelCompactInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  imageModelCompactName: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
+    fontWeight: '600' as const,
+  },
+  imageModelCompactMeta: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.textMuted,
+  },
+  activeBadgeCompact: {
+    backgroundColor: colors.info + '25',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  activeBadgeCompactText: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.info,
+    fontWeight: '600' as const,
+  },
+  setActiveButtonCompact: {
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  setActiveButtonCompactText: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.primary,
+    fontWeight: '600' as const,
+  },
+  deleteImageButtonCompact: {
+    padding: 4,
+  },
   availableTitle: {
-    ...TYPOGRAPHY.body,
-    color: colors.textSecondary,
-    marginBottom: 12,
-    marginTop: 8,
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textMuted,
+    marginBottom: 8,
   },
   downloadImageButton: {
     flexDirection: 'row' as const,
@@ -1742,14 +2347,20 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 12,
     marginTop: 8,
   },
+  imageSearchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginBottom: 12,
+  },
   imageSearchInput: {
     ...TYPOGRAPHY.body,
+    flex: 1,
     backgroundColor: colors.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
     color: colors.text,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },

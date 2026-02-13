@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, DownloadProgress, ModelFile, ModelCredibility, BackgroundDownloadInfo, ONNXImageModel } from '../types';
@@ -955,6 +956,134 @@ class ModelManager {
 
     await this.saveModelsList(cleanedModels);
     return removedCount;
+  }
+
+  // ============== Local File Import ==============
+
+  /**
+   * Import a local .gguf file from the device into the models directory.
+   * Handles Android content:// URIs by copying to cache first.
+   */
+  async importLocalModel(
+    sourceUri: string,
+    fileName: string,
+    onProgress?: (progress: { fraction: number; fileName: string }) => void
+  ): Promise<DownloadedModel> {
+    // Validate .gguf extension
+    if (!fileName.toLowerCase().endsWith('.gguf')) {
+      throw new Error('Only .gguf files can be imported');
+    }
+
+    await this.initialize();
+
+    // Resolve Android content:// URIs by copying to cache first
+    let resolvedSource = sourceUri;
+    let tempCachePath: string | null = null;
+
+    if (Platform.OS === 'android' && sourceUri.startsWith('content://')) {
+      tempCachePath = `${RNFS.CachesDirectoryPath}/${Date.now()}_${fileName}`;
+      await RNFS.copyFile(sourceUri, tempCachePath);
+      resolvedSource = tempCachePath;
+    }
+
+    try {
+      // Get file size
+      const stat = await RNFS.stat(resolvedSource);
+      const totalBytes = typeof stat.size === 'string' ? parseInt(stat.size, 10) : stat.size;
+
+      // Check destination doesn't already exist
+      const destPath = `${this.modelsDir}/${fileName}`;
+      const destExists = await RNFS.exists(destPath);
+      if (destExists) {
+        throw new Error(`A model file named "${fileName}" already exists`);
+      }
+
+      // Copy file with progress
+      await this.copyFileWithProgress(resolvedSource, destPath, totalBytes, onProgress
+        ? (fraction) => onProgress({ fraction, fileName })
+        : undefined
+      );
+
+      // Parse model name and quantization from filename
+      const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
+      const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
+      const modelName = fileName.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, '');
+
+      // Build DownloadedModel
+      const model: DownloadedModel = {
+        id: `local_import/${fileName}`,
+        name: modelName,
+        author: 'Local Import',
+        filePath: destPath,
+        fileName,
+        fileSize: totalBytes,
+        quantization,
+        downloadedAt: new Date().toISOString(),
+        credibility: {
+          source: 'community',
+          isOfficial: false,
+          isVerifiedQuantizer: false,
+        },
+      };
+
+      // Save to registry
+      const models = await this.getDownloadedModels();
+      const existingIndex = models.findIndex(m => m.id === model.id);
+      if (existingIndex >= 0) {
+        models[existingIndex] = model;
+      } else {
+        models.push(model);
+      }
+      await this.saveModelsList(models);
+
+      return model;
+    } finally {
+      // Clean up temp cache file on Android
+      if (tempCachePath) {
+        await RNFS.unlink(tempCachePath).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Copy a file with progress tracking by polling destination file size.
+   * RNFS.copyFile has no progress callback, so we poll stat() every 500ms.
+   */
+  private async copyFileWithProgress(
+    source: string,
+    dest: string,
+    totalBytes: number,
+    onProgress?: (fraction: number) => void
+  ): Promise<void> {
+    let polling = true;
+
+    // Start polling for progress
+    const pollInterval = setInterval(async () => {
+      if (!polling) return;
+      try {
+        const exists = await RNFS.exists(dest);
+        if (exists) {
+          const stat = await RNFS.stat(dest);
+          const written = typeof stat.size === 'string' ? parseInt(stat.size, 10) : stat.size;
+          onProgress?.(totalBytes > 0 ? Math.min(written / totalBytes, 0.99) : 0);
+        }
+      } catch {
+        // File may not exist yet, ignore
+      }
+    }, 500);
+
+    try {
+      await RNFS.copyFile(source, dest);
+      polling = false;
+      clearInterval(pollInterval);
+      onProgress?.(1);
+    } catch (error) {
+      polling = false;
+      clearInterval(pollInterval);
+      // Clean up partial file
+      await RNFS.unlink(dest).catch(() => {});
+      throw error;
+    }
   }
 
   // ============== Image Model Management ==============
