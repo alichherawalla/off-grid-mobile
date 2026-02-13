@@ -7,7 +7,6 @@
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
-import { useChatStore } from '../../../src/stores/chatStore';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { activeModelService } from '../../../src/services/activeModelService';
@@ -220,10 +219,10 @@ describe('Image Generation Flow Integration', () => {
         image: { model: imageModel, isLoaded: true, isLoading: false },
       });
 
-      let progressCallback: ((progress: any) => void) | undefined;
+      let _progressCallback: ((progress: any) => void) | undefined;
       mockLocalDreamService.generateImage.mockImplementation(
-        async (params, onProgress, onPreview) => {
-          progressCallback = onProgress;
+        async (params, onProgress, _onPreview) => {
+          _progressCallback = onProgress;
           // Simulate progress
           onProgress?.({ step: 5, totalSteps: 20, progress: 0.25 });
           onProgress?.({ step: 10, totalSteps: 20, progress: 0.5 });
@@ -300,7 +299,7 @@ describe('Image Generation Flow Integration', () => {
     });
 
     it('should handle model load failure', async () => {
-      const imageModel = setupImageModelState();
+      setupImageModelState();
 
       // Model not loaded yet
       mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
@@ -327,14 +326,14 @@ describe('Image Generation Flow Integration', () => {
       });
 
       // Long running generation
-      let resolveGeneration: (value: any) => void;
+      let _resolveGeneration: (value: any) => void;
       mockLocalDreamService.generateImage.mockImplementation(async () => {
         return new Promise((resolve) => {
-          resolveGeneration = resolve;
+          _resolveGeneration = resolve;
         });
       });
 
-      const generatePromise = imageGenerationService.generateImage({
+      imageGenerationService.generateImage({
         prompt: 'Long prompt',
       });
 

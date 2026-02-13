@@ -10,11 +10,11 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
-import { resetStores, setupWithActiveModel, createMultipleConversations } from '../../utils/testHelpers';
+import { resetStores, createMultipleConversations } from '../../utils/testHelpers';
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -113,19 +113,19 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('basic rendering', () => {
     it('renders without crashing', () => {
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show some home screen content
     });
 
     it('shows app title or header', () => {
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // May show "Off Grid" or similar
     });
 
     it('shows model sections', () => {
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show text and image model sections
     });
@@ -136,13 +136,13 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('text model card', () => {
     it('shows "No model selected" when no text model is active', () => {
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should indicate no model
     });
 
     it('shows "No models downloaded" when downloadedModels is empty', () => {
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Empty state message
     });
@@ -154,7 +154,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "Llama-3.2-3B"
     });
@@ -169,7 +169,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "Q4_K_M"
     });
@@ -181,7 +181,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "Vision" badge
     });
@@ -190,7 +190,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Tap text model card
       // Should open picker modal
@@ -199,7 +199,7 @@ describe('HomeScreen', () => {
     it('shows loading state when text model is loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { queryByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Should show loading indicator
     });
@@ -210,7 +210,7 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('image model card', () => {
     it('shows "No model selected" when no image model is active', () => {
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should indicate no image model
     });
@@ -222,7 +222,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "SDXL Turbo"
     });
@@ -237,7 +237,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "creative" or "Ready"
     });
@@ -246,7 +246,7 @@ describe('HomeScreen', () => {
       const imageModel = createONNXImageModel();
       useAppStore.setState({ downloadedImageModels: [imageModel] });
 
-      const { getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Tap image model card
       // Should open image picker modal
@@ -261,7 +261,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ name: 'Test Model' });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Open picker and select model
       // expect(activeModelService.loadModel).toHaveBeenCalledWith(model);
@@ -277,7 +277,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ fileSize: 8 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Select large model - should show warning
     });
@@ -292,7 +292,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ fileSize: 16 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Select huge model - should be blocked
     });
@@ -320,7 +320,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Press unload button
       // expect(activeModelService.unloadModel).toHaveBeenCalled();
@@ -361,7 +361,7 @@ describe('HomeScreen', () => {
         deviceInfo: createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 }),
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "8 GB" or similar
     });
@@ -373,7 +373,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show estimated usage (fileSize * 1.5)
     });
@@ -388,7 +388,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show combined total
     });
@@ -403,7 +403,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // May show warning about memory
     });
@@ -420,7 +420,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Press "New Chat"
       // Should create conversation and navigate
@@ -438,14 +438,14 @@ describe('HomeScreen', () => {
         activeConversationId: conversation.id,
       });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Press "Continue Chat"
       // Should navigate to chat with existing conversation
     });
 
     it('navigates to gallery when gallery button is pressed', () => {
-      const { getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Press gallery button
       // expect(mockNavigate).toHaveBeenCalledWith('Gallery');
@@ -459,7 +459,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "2" badge
     });
@@ -476,15 +476,15 @@ describe('HomeScreen', () => {
       ];
       useChatStore.setState({ conversations });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show conversation titles
     });
 
     it('limits recent conversations to 4', () => {
-      const conversationIds = createMultipleConversations(6);
+      const _conversationIds = createMultipleConversations(6);
 
-      const { queryAllByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryAllByTestId: _queryAllByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Should only show 4
     });
@@ -493,7 +493,7 @@ describe('HomeScreen', () => {
       const conversation = createConversation({ title: 'Test Chat' });
       useChatStore.setState({ conversations: [conversation] });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Tap conversation
       // Should navigate to chat
@@ -503,7 +503,7 @@ describe('HomeScreen', () => {
       const conversation = createConversation({ title: 'Delete me' });
       useChatStore.setState({ conversations: [conversation] });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // Swipe to delete
       // Should show confirmation then remove
@@ -512,7 +512,7 @@ describe('HomeScreen', () => {
     it('shows empty state when no conversations', () => {
       useChatStore.setState({ conversations: [] });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show empty state message
     });
@@ -531,7 +531,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "3" or "3 models"
     });
@@ -544,7 +544,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "2" image models
     });
@@ -552,7 +552,7 @@ describe('HomeScreen', () => {
     it('shows count of conversations', () => {
       createMultipleConversations(5);
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // Should show "5" conversations
     });
@@ -565,7 +565,7 @@ describe('HomeScreen', () => {
     it('shows loading overlay when model is loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { queryByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen />);
 
       // Should show loading overlay that blocks touch
     });
@@ -573,7 +573,7 @@ describe('HomeScreen', () => {
     it('disables all interactions during loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
 
       // All buttons should be disabled
     });
@@ -585,7 +585,7 @@ describe('HomeScreen', () => {
         isLoadingModel: true,
       });
 
-      const { queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
 
       // May show "Loading Loading Model..."
     });

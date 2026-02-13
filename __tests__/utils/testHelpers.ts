@@ -320,7 +320,7 @@ export const createMockWhisperContext = (overrides: Record<string, any> = {}) =>
     stop: jest.fn(),
     subscribe: jest.fn(),
   })),
-  transcribe: jest.fn((filePath: string, opts: any) => ({
+  transcribe: jest.fn((_filePath: string, _opts: any) => ({
     promise: Promise.resolve({ result: 'transcribed text' }),
   })),
   ...overrides,

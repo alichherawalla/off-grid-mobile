@@ -9,7 +9,6 @@
  * not just that they work in isolation.
  */
 
-import { useChatStore } from '../../../src/stores/chatStore';
 import { useAppStore } from '../../../src/stores/appStore';
 import { generationService } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
@@ -347,11 +346,11 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let errorCallback: ((error: Error) => void) | null = null;
+      let _errorCallback: ((error: Error) => void) | null = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, _onStream, _onComplete, onError, _onThinking) => {
-          errorCallback = onError!;
+          _errorCallback = onError!;
           throw new Error('Generation failed');
         }
       );

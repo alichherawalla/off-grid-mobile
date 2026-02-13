@@ -7,7 +7,6 @@
 
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 import { modelManager } from '../../../src/services/modelManager';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
 import { huggingFaceService } from '../../../src/services/huggingface';

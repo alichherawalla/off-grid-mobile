@@ -12,7 +12,7 @@ import { llmService } from '../../../src/services/llm';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createMockLlamaContext } from '../../utils/testHelpers';
-import { createMessage, createUserMessage, createAssistantMessage, createSystemMessage } from '../../utils/factories';
+import { createUserMessage, createAssistantMessage, createSystemMessage } from '../../utils/factories';
 
 const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

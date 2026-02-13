@@ -8,9 +8,8 @@
 import { generationService, GenerationState } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { useChatStore } from '../../../src/stores/chatStore';
-import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupWithActiveModel, setupWithConversation } from '../../utils/testHelpers';
-import { createMessage, createDownloadedModel } from '../../utils/factories';
+import { createMessage } from '../../utils/factories';
 
 // Mock the llmService
 jest.mock('../../../src/services/llm', () => ({

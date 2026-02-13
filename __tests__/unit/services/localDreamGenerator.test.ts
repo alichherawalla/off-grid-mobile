@@ -7,7 +7,7 @@
  * Priority: P0 (Critical) - If routing breaks, image generation silently fails.
  */
 
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+// react-native is mocked below; no direct imports needed
 
 // ============================================================================
 // Mock native modules
@@ -331,6 +331,7 @@ describe('LocalDreamGeneratorService', () => {
     });
 
     it('isModelLoaded returns false when not available', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -338,14 +339,14 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.isModelLoaded()).resolves.toBe(false);
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.isModelLoaded()).resolves.toBe(false);
     });
 
     it('getLoadedModelPath returns null when not available', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -353,11 +354,10 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.getLoadedModelPath()).resolves.toBeNull();
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.getLoadedModelPath()).resolves.toBeNull();
     });
 
     it('loadModel throws when not available', async () => {
@@ -391,6 +391,7 @@ describe('LocalDreamGeneratorService', () => {
     });
 
     it('getGeneratedImages returns empty array when not available', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -398,14 +399,14 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.getGeneratedImages()).resolves.toEqual([]);
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.getGeneratedImages()).resolves.toEqual([]);
     });
 
     it('deleteGeneratedImage returns false when not available', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -413,14 +414,14 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.deleteGeneratedImage('img-1')).resolves.toBe(false);
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.deleteGeneratedImage('img-1')).resolves.toBe(false);
     });
 
     it('unloadModel returns true when not available (no-op)', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -428,14 +429,14 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.unloadModel()).resolves.toBe(true);
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.unloadModel()).resolves.toBe(true);
     });
 
     it('cancelGeneration returns true when not available (no-op)', async () => {
+      let svc: any;
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -443,11 +444,10 @@ describe('LocalDreamGeneratorService', () => {
         const { Platform: P } = rn;
         P.select = (opts: any) => opts.default;
 
-        const { localDreamGeneratorService: svc } =
-          require('../../../src/services/localDreamGenerator');
-
-        expect(svc.cancelGeneration()).resolves.toBe(true);
+        svc = require('../../../src/services/localDreamGenerator').localDreamGeneratorService;
       });
+
+      await expect(svc.cancelGeneration()).resolves.toBe(true);
     });
 
     it('getConstants returns defaults when not available', () => {

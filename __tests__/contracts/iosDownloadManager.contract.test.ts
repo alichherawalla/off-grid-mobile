@@ -8,7 +8,6 @@
  * so that backgroundDownloadService.ts works on both platforms unchanged.
  */
 
-import { NativeModules, NativeEventEmitter } from 'react-native';
 
 // The iOS module must match this interface (same as Android)
 interface DownloadManagerModuleInterface {

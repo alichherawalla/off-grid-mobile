@@ -13,7 +13,6 @@ global.fetch = mockFetch as any;
 
 import {
   fetchAvailableCoreMLModels,
-  CoreMLImageModel,
 } from '../../../src/services/coreMLModelBrowser';
 
 // ============================================================================
@@ -280,13 +279,13 @@ describe('CoreMLModelBrowser', () => {
     });
 
     it('returns partial results when one repo fails', async () => {
-      let callCount = 0;
+      let _callCount = 0;
       mockFetch.mockImplementation(async (url: string) => {
         const urlStr = String(url);
 
         // First repo succeeds
         if (urlStr.includes('2-1-base')) {
-          callCount++;
+          _callCount++;
           // Route to success handler for 2-1-base repo
           if (urlStr.endsWith('tree/main')) {
             return { ok: true, json: () => Promise.resolve(topLevelTree) };

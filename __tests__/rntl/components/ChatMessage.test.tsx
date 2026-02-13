@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import {
   createMessage,
@@ -19,7 +19,6 @@ import {
   createAssistantMessage,
   createSystemMessage,
   createImageAttachment,
-  createDocumentAttachment,
   createGenerationMeta,
 } from '../../utils/factories';
 
@@ -32,7 +31,7 @@ jest.mock('../../../src/utils/messageContent', () => ({
 }));
 
 describe('ChatMessage', () => {
-  const defaultProps = {
+  const _defaultProps = {
     message: createUserMessage('Hello world'),
   };
 
@@ -252,7 +251,7 @@ describe('ChatMessage', () => {
     it('handles empty think tags', () => {
       const message = createAssistantMessage('<think></think>Here is the answer.');
 
-      const { getByText, queryByTestId } = render(<ChatMessage message={message} />);
+      const { getByText, queryByTestId: _queryByTestId } = render(<ChatMessage message={message} />);
 
       // Should show the response
       expect(getByText(/Here is the answer/)).toBeTruthy();

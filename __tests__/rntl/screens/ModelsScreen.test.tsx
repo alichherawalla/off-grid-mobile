@@ -13,7 +13,6 @@
  * TODO: Fix Switch mock to enable full render tests.
  */
 
-import React from 'react';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
 import {
@@ -235,7 +234,7 @@ describe('ModelsScreen', () => {
     it('starts download when file is selected', async () => {
       mockDownloadModel.mockResolvedValue('/path/to/model.gguf');
 
-      const result = await mockDownloadModel('model-id', 'model-q4.gguf');
+      await mockDownloadModel('model-id', 'model-q4.gguf');
       expect(mockDownloadModel).toHaveBeenCalled();
     });
 
@@ -308,7 +307,7 @@ describe('ModelsScreen', () => {
     it('downloads image model package', async () => {
       mockDownloadModel.mockResolvedValue('/path/to/image-model.zip');
 
-      const result = await mockDownloadModel('image-model-id', 'model.zip');
+      await mockDownloadModel('image-model-id', 'model.zip');
       expect(mockDownloadModel).toHaveBeenCalled();
     });
 

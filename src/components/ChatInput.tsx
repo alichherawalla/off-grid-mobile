@@ -44,7 +44,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   conversationId,
   imageModelLoaded = false,
   onImageModeChange,
-  _onOpenSettings,
+  onOpenSettings: _onOpenSettings,
   activeImageModelName,
 }) => {
   const { colors } = useTheme();
