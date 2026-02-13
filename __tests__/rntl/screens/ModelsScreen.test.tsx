@@ -191,8 +191,8 @@ describe('ModelsScreen', () => {
 
     it('shows available files for model', async () => {
       const files = [
-        createModelFile({ filename: 'model-q4.gguf' }),
-        createModelFile({ filename: 'model-q8.gguf' }),
+        createModelFile({ name: 'model-q4.gguf' }),
+        createModelFile({ name: 'model-q8.gguf' }),
       ];
       mockGetModelFiles.mockResolvedValue(files);
 
@@ -246,8 +246,8 @@ describe('ModelsScreen', () => {
     it('tracks multiple concurrent downloads', () => {
       useAppStore.setState({
         downloadProgress: {
-          'model-1': { progress: 50, bytesDownloaded: 2000 },
-          'model-2': { progress: 25, bytesDownloaded: 1000 },
+          'model-1': { progress: 50, bytesDownloaded: 2000, totalBytes: 4000 },
+          'model-2': { progress: 25, bytesDownloaded: 1000, totalBytes: 4000 },
         },
       });
 
@@ -363,8 +363,8 @@ describe('ModelsScreen', () => {
     it('tracks active background downloads', () => {
       useAppStore.setState({
         activeBackgroundDownloads: {
-          'model-1': { jobId: 1, filename: 'model.gguf' },
-        },
+          1: { modelId: 'model-1', fileName: 'model.gguf', quantization: 'Q4_K_M', author: 'test', totalBytes: 4000 },
+        } as any,
       });
 
       const active = useAppStore.getState().activeBackgroundDownloads;

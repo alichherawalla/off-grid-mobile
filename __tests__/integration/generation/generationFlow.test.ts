@@ -69,8 +69,8 @@ describe('Generation Flow Integration', () => {
       const conversationId = setupWithConversation({ modelId });
 
       const tokens = ['Hello', ' ', 'world', '!'];
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -101,7 +101,7 @@ describe('Generation Flow Integration', () => {
       expect(generationService.getState().streamingContent).toBe('Hello world!');
 
       // Complete generation
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
 
       // Verify state reset
@@ -113,8 +113,8 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -140,7 +140,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
       expect(onFirstToken).toHaveBeenCalledTimes(1);
 
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
     });
 
@@ -148,8 +148,8 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -172,7 +172,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
       expect(generationService.getState().isThinking).toBe(false);
 
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
     });
   });
@@ -182,7 +182,7 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let completeCallback: (() => void) | null = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, _onStream, onComplete, _onError, _onThinking) => {
@@ -201,7 +201,7 @@ describe('Generation Flow Integration', () => {
       expect(chatState.streamingForConversationId).toBe(conversationId);
       expect(chatState.isThinking).toBe(true);
 
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
     });
 
@@ -209,8 +209,8 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -234,7 +234,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
       expect(getChatState().streamingMessage).toBe('Hello world');
 
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
     });
 
@@ -249,8 +249,8 @@ describe('Generation Flow Integration', () => {
         activeModelId: modelId,
       });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -270,7 +270,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
 
       // Complete generation
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
 
       // Verify message was finalized
@@ -311,8 +311,8 @@ describe('Generation Flow Integration', () => {
         lastTokenCount: 75,
       });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -328,7 +328,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
       streamCallback?.('Response');
       await flushPromises();
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
 
       const chatState = getChatState();
@@ -346,7 +346,7 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let _errorCallback: ((error: Error) => void) | null = null;
+      let _errorCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, _onStream, _onComplete, onError, _onThinking) => {
@@ -428,7 +428,7 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let streamCallback: ((token: string) => void) | null = null;
+      let streamCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, _onComplete, _onError, _onThinking) => {
@@ -477,7 +477,7 @@ describe('Generation Flow Integration', () => {
         activeModelId: modelId,
       });
 
-      let streamCallback: ((token: string) => void) | null = null;
+      let streamCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, _onComplete, _onError, _onThinking) => {
@@ -535,8 +535,8 @@ describe('Generation Flow Integration', () => {
       const modelId = setupWithActiveModel();
       const conversationId = setupWithConversation({ modelId });
 
-      let streamCallback: ((token: string) => void) | null = null;
-      let completeCallback: (() => void) | null = null;
+      let streamCallback: any = null;
+      let completeCallback: any = null;
 
       mockLlmService.generateResponse.mockImplementation(
         async (_messages, onStream, onComplete, _onError, _onThinking) => {
@@ -556,7 +556,7 @@ describe('Generation Flow Integration', () => {
       await flushPromises();
       streamCallback?.('Token');
       await flushPromises();
-      completeCallback?.();
+      completeCallback?.('');
       await generatePromise;
 
       unsubscribe();
@@ -565,15 +565,15 @@ describe('Generation Flow Integration', () => {
       expect(values.length).toBeGreaterThan(1);
 
       // First update after initial state should show generating
-      const generatingState = values.find(v => v.isGenerating);
+      const generatingState = values.find((v: any) => v.isGenerating);
       expect(generatingState).toBeDefined();
 
       // Should have a state with content
-      const contentState = values.find(v => v.streamingContent === 'Token');
+      const contentState = values.find((v: any) => v.streamingContent === 'Token');
       expect(contentState).toBeDefined();
 
       // Last state should be idle
-      const lastState = values[values.length - 1];
+      const lastState: any = values[values.length - 1];
       expect(lastState.isGenerating).toBe(false);
     });
   });

@@ -30,7 +30,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 type MainTabParamListWithNested = {
   HomeTab: undefined;
-  ChatsTab: NavigatorScreenParams<ChatsStackParamList>;
+  ChatsTab: NavigatorScreenParams<ChatsStackParamList> | undefined;
   ProjectsTab: undefined;
   ModelsTab: undefined;
   SettingsTab: undefined;
@@ -177,9 +177,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     // Give UI time to update before starting heavy native operation
     // This prevents the app from appearing frozen
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 100);
+        setTimeout(() => resolve(), 100);
       });
     }));
 
@@ -248,9 +248,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setPickerType(null); // Close modal when loading starts
 
     // Give UI time to update before starting heavy native operation
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 100);
+        setTimeout(() => resolve(), 100);
       });
     }));
 
@@ -365,7 +365,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <AnimatedPressable
             style={styles.modelCard}
             onPress={() => setPickerType('text')}
-            hapticType="selectionClick"
+            hapticType="selection"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="message-square" size={16} color={colors.textMuted} />
@@ -404,7 +404,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             style={styles.modelCard}
             onPress={() => setPickerType('image')}
             testID="image-model-card"
-            hapticType="selectionClick"
+            hapticType="selection"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={colors.textMuted} />
@@ -532,7 +532,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <AnimatedPressable
           style={styles.galleryCard}
           onPress={() => (navigation as any).navigate('Gallery')}
-          hapticType="selectionClick"
+          hapticType="selection"
         >
           <Icon name="grid" size={18} color={colors.primary} />
           <View style={styles.galleryCardInfo}>

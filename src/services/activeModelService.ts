@@ -336,7 +336,7 @@ class ActiveModelService {
         const loadPromise = onnxImageGeneratorService.loadModel(
           model.modelPath,
           imageThreads,
-          model.backend ?? 'auto',
+          model.backend === 'coreml' ? 'auto' : (model.backend ?? 'auto'),
         );
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Image model loading timed out')), timeoutMs);

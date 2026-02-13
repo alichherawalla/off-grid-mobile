@@ -74,7 +74,7 @@ describe('Image Generation Flow Integration', () => {
         imageWidth: 512,
         imageHeight: 512,
         imageThreads: 4,
-      },
+      } as any,
     });
     mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
     return imageModel;
@@ -139,7 +139,7 @@ describe('Image Generation Flow Integration', () => {
           imageWidth: 768,
           imageHeight: 768,
           imageThreads: 4,
-        },
+        } as any,
       });
 
       mockActiveModelService.getActiveModels.mockReturnValue({
@@ -287,7 +287,7 @@ describe('Image Generation Flow Integration', () => {
       useAppStore.setState({
         downloadedImageModels: [],
         activeImageModelId: null,
-        settings: { imageSteps: 20, imageGuidanceScale: 7.5 },
+        settings: { imageSteps: 20, imageGuidanceScale: 7.5 } as any,
       });
 
       const result = await imageGenerationService.generateImage({
@@ -485,7 +485,7 @@ describe('Image Generation Flow Integration', () => {
           imageWidth: 512,
           imageHeight: 512,
           imageThreads: 4,
-        },
+        } as any,
       });
       mockLocalDreamService.getLoadedModelPath.mockResolvedValue(imageModel.modelPath);
 

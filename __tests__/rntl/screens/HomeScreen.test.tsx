@@ -42,11 +42,12 @@ jest.mock('@react-navigation/native', () => {
 // Mock services
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
-    loadModel: jest.fn(() => Promise.resolve()),
-    unloadModel: jest.fn(() => Promise.resolve()),
+    loadTextModel: jest.fn(() => Promise.resolve()),
+    loadImageModel: jest.fn(() => Promise.resolve()),
+    unloadTextModel: jest.fn(() => Promise.resolve()),
     unloadImageModel: jest.fn(() => Promise.resolve()),
     getActiveModels: jest.fn(() => ({ text: null, image: null })),
-    checkMemoryAvailable: jest.fn(() => ({ safe: true })),
+    checkMemoryForModel: jest.fn(() => ({ safe: true })),
     subscribe: jest.fn(() => jest.fn()),
     getResourceUsage: jest.fn(() => ({
       textModelMemory: 0,
@@ -78,6 +79,21 @@ jest.mock('../../../src/services/hardware', () => ({
 import { HomeScreen } from '../../../src/screens/HomeScreen';
 import { activeModelService } from '../../../src/services/activeModelService';
 
+const mockNavigation = {
+  navigate: mockNavigate,
+  goBack: mockGoBack,
+  setOptions: jest.fn(),
+  addListener: jest.fn(() => jest.fn()),
+  dispatch: jest.fn(),
+  reset: jest.fn(),
+  isFocused: jest.fn(() => true),
+  canGoBack: jest.fn(() => false),
+  getParent: jest.fn(),
+  getState: jest.fn(),
+  getId: jest.fn(),
+  setParams: jest.fn(),
+} as any;
+
 const renderWithNavigation = (component: React.ReactElement) => {
   return render(
     <NavigationContainer>
@@ -97,7 +113,7 @@ describe('HomeScreen', () => {
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     });
-    (activeModelService.checkMemoryAvailable as jest.Mock).mockReturnValue({
+    (activeModelService.checkMemoryForModel as jest.Mock).mockReturnValue({
       safe: true,
       severity: 'safe',
     });
@@ -113,19 +129,19 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('basic rendering', () => {
     it('renders without crashing', () => {
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show some home screen content
     });
 
     it('shows app title or header', () => {
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // May show "Off Grid" or similar
     });
 
     it('shows model sections', () => {
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show text and image model sections
     });
@@ -136,13 +152,13 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('text model card', () => {
     it('shows "No model selected" when no text model is active', () => {
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should indicate no model
     });
 
     it('shows "No models downloaded" when downloadedModels is empty', () => {
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Empty state message
     });
@@ -154,7 +170,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "Llama-3.2-3B"
     });
@@ -169,7 +185,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "Q4_K_M"
     });
@@ -181,7 +197,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "Vision" badge
     });
@@ -190,7 +206,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Tap text model card
       // Should open picker modal
@@ -199,7 +215,7 @@ describe('HomeScreen', () => {
     it('shows loading state when text model is loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show loading indicator
     });
@@ -210,7 +226,7 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('image model card', () => {
     it('shows "No model selected" when no image model is active', () => {
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should indicate no image model
     });
@@ -222,7 +238,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "SDXL Turbo"
     });
@@ -237,7 +253,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "creative" or "Ready"
     });
@@ -246,7 +262,7 @@ describe('HomeScreen', () => {
       const imageModel = createONNXImageModel();
       useAppStore.setState({ downloadedImageModels: [imageModel] });
 
-      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Tap image model card
       // Should open image picker modal
@@ -261,14 +277,14 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ name: 'Test Model' });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Open picker and select model
-      // expect(activeModelService.loadModel).toHaveBeenCalledWith(model);
+      // expect(activeModelService.loadTextModel).toHaveBeenCalledWith(model);
     });
 
     it('shows memory check warning when memory is low', async () => {
-      (activeModelService.checkMemoryAvailable as jest.Mock).mockReturnValue({
+      (activeModelService.checkMemoryForModel as jest.Mock).mockReturnValue({
         safe: false,
         warning: true,
         reason: 'May cause performance issues',
@@ -277,13 +293,13 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ fileSize: 8 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Select large model - should show warning
     });
 
     it('blocks model load when memory is critical', async () => {
-      (activeModelService.checkMemoryAvailable as jest.Mock).mockReturnValue({
+      (activeModelService.checkMemoryForModel as jest.Mock).mockReturnValue({
         safe: false,
         critical: true,
         reason: 'Not enough memory',
@@ -292,7 +308,7 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ fileSize: 16 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedModels: [model] });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Select huge model - should be blocked
     });
@@ -320,7 +336,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Press unload button
       // expect(activeModelService.unloadModel).toHaveBeenCalled();
@@ -361,7 +377,7 @@ describe('HomeScreen', () => {
         deviceInfo: createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 }),
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "8 GB" or similar
     });
@@ -373,7 +389,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show estimated usage (fileSize * 1.5)
     });
@@ -388,7 +404,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show combined total
     });
@@ -403,7 +419,7 @@ describe('HomeScreen', () => {
         activeImageModelId: imageModel.id,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // May show warning about memory
     });
@@ -420,7 +436,7 @@ describe('HomeScreen', () => {
         activeModelId: model.id,
       });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Press "New Chat"
       // Should create conversation and navigate
@@ -438,14 +454,14 @@ describe('HomeScreen', () => {
         activeConversationId: conversation.id,
       });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Press "Continue Chat"
       // Should navigate to chat with existing conversation
     });
 
     it('navigates to gallery when gallery button is pressed', () => {
-      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Press gallery button
       // expect(mockNavigate).toHaveBeenCalledWith('Gallery');
@@ -459,7 +475,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "2" badge
     });
@@ -476,7 +492,7 @@ describe('HomeScreen', () => {
       ];
       useChatStore.setState({ conversations });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show conversation titles
     });
@@ -484,7 +500,7 @@ describe('HomeScreen', () => {
     it('limits recent conversations to 4', () => {
       const _conversationIds = createMultipleConversations(6);
 
-      const { queryAllByTestId: _queryAllByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryAllByTestId: _queryAllByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should only show 4
     });
@@ -493,7 +509,7 @@ describe('HomeScreen', () => {
       const conversation = createConversation({ title: 'Test Chat' });
       useChatStore.setState({ conversations: [conversation] });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Tap conversation
       // Should navigate to chat
@@ -503,7 +519,7 @@ describe('HomeScreen', () => {
       const conversation = createConversation({ title: 'Delete me' });
       useChatStore.setState({ conversations: [conversation] });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Swipe to delete
       // Should show confirmation then remove
@@ -512,7 +528,7 @@ describe('HomeScreen', () => {
     it('shows empty state when no conversations', () => {
       useChatStore.setState({ conversations: [] });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show empty state message
     });
@@ -531,7 +547,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "3" or "3 models"
     });
@@ -544,7 +560,7 @@ describe('HomeScreen', () => {
         ],
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "2" image models
     });
@@ -552,7 +568,7 @@ describe('HomeScreen', () => {
     it('shows count of conversations', () => {
       createMultipleConversations(5);
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show "5" conversations
     });
@@ -565,7 +581,7 @@ describe('HomeScreen', () => {
     it('shows loading overlay when model is loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // Should show loading overlay that blocks touch
     });
@@ -573,7 +589,7 @@ describe('HomeScreen', () => {
     it('disables all interactions during loading', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { getByText: _getByText } = renderWithNavigation(<HomeScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // All buttons should be disabled
     });
@@ -585,7 +601,7 @@ describe('HomeScreen', () => {
         isLoadingModel: true,
       });
 
-      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
 
       // May show "Loading Loading Model..."
     });
@@ -596,7 +612,7 @@ describe('HomeScreen', () => {
   // ============================================================================
   describe('error handling', () => {
     it('shows alert on model load failure', async () => {
-      (activeModelService.loadModel as jest.Mock).mockRejectedValue(
+      (activeModelService.loadTextModel as jest.Mock).mockRejectedValue(
         new Error('Failed to load model')
       );
 
@@ -607,7 +623,7 @@ describe('HomeScreen', () => {
     });
 
     it('recovers from load failure', async () => {
-      (activeModelService.loadModel as jest.Mock).mockRejectedValueOnce(
+      (activeModelService.loadTextModel as jest.Mock).mockRejectedValueOnce(
         new Error('Temporary failure')
       );
 

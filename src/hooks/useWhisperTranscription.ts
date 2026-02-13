@@ -98,7 +98,7 @@ export const useWhisperTranscription = (): UseWhisperTranscriptionResult => {
       // This helps Whisper process the speech more accurately
       // User sees "Transcribing..." during this time
       console.log('[Whisper] Capturing trailing audio for', TRAILING_RECORD_TIME, 'ms...');
-      await new Promise(resolve => setTimeout(resolve, TRAILING_RECORD_TIME));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), TRAILING_RECORD_TIME));
 
       // Check if cancelled during the wait
       if (isCancelled.current) {

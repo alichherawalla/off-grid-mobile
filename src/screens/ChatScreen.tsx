@@ -347,9 +347,9 @@ export const ChatScreen: React.FC = () => {
 
       // Give UI time to render the full-screen loading state before heavy native operation
       // Use a longer delay to ensure React has time to complete the re-render
-      await new Promise(resolve => requestAnimationFrame(() => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setTimeout(resolve, 200); // Increased from 50ms to allow full render
+          setTimeout(() => resolve(), 200); // Increased from 50ms to allow full render
         });
       }));
     }
@@ -426,9 +426,9 @@ export const ChatScreen: React.FC = () => {
     modelLoadStartTimeRef.current = Date.now();
 
     // Give UI time to render the full-screen loading state before heavy native operation
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 200);
+        setTimeout(() => resolve(), 200);
       });
     }));
 
@@ -474,7 +474,7 @@ export const ChatScreen: React.FC = () => {
 
     const modelName = activeModel?.name;
     setIsModelLoading(true);
-    setLoadingModel(activeModel);
+    setLoadingModel(activeModel ?? null);
     try {
       await activeModelService.unloadTextModel();
       setSupportsVision(false);

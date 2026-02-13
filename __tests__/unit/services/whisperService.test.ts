@@ -490,7 +490,7 @@ describe('WhisperService', () => {
       const mockContext = {
         id: 'ctx',
         release: jest.fn(),
-        transcribeRealtime: jest.fn(() => Promise.resolve({
+        transcribeRealtime: jest.fn((..._args: any[]) => Promise.resolve({
           stop: jest.fn(),
           subscribe: jest.fn(),
         })),
@@ -506,7 +506,7 @@ describe('WhisperService', () => {
 
       await whisperService.startRealtimeTranscription(jest.fn());
 
-      const callArgs = mockContext.transcribeRealtime.mock.calls[0][0];
+      const callArgs = mockContext.transcribeRealtime.mock.calls[0]![0]!;
       expect(callArgs.audioSessionOnStartIos).toBeUndefined();
       expect(callArgs.audioSessionOnStopIos).toBeUndefined();
     });

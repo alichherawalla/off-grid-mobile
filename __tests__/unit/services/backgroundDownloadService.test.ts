@@ -48,7 +48,7 @@ describe('BackgroundDownloadService', () => {
     jest.spyOn(NativeEventEmitter.prototype, 'addListener').mockImplementation(
       (eventType: string, handler: any) => {
         eventHandlers[eventType] = handler;
-        return { remove: jest.fn() };
+        return { remove: jest.fn() } as any;
       }
     );
 

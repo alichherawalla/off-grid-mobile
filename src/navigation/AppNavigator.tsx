@@ -198,7 +198,7 @@ const MainTabs: React.FC = () => {
         component={HomeScreen}
         options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }}
         listeners={() => ({
-          tabPress: () => { triggerHaptic('selectionClick'); },
+          tabPress: () => { triggerHaptic('selection'); },
         })}
       />
       <Tab.Screen
@@ -207,7 +207,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             e.preventDefault();
             navigation.navigate('ChatsTab', { screen: 'ChatsList' });
           },
@@ -218,7 +218,7 @@ const MainTabs: React.FC = () => {
         component={ProjectsStackNavigator}
         options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }}
         listeners={() => ({
-          tabPress: () => { triggerHaptic('selectionClick'); },
+          tabPress: () => { triggerHaptic('selection'); },
         })}
       />
       <Tab.Screen
@@ -227,7 +227,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
         listeners={({ navigation }) => ({
           tabPress: () => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             navigation.navigate('ModelsTab', { screen: 'ModelsList' });
           },
         })}
@@ -238,7 +238,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }}
         listeners={({ navigation }) => ({
           tabPress: () => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             navigation.navigate('SettingsTab', { screen: 'SettingsMain' });
           },
         })}

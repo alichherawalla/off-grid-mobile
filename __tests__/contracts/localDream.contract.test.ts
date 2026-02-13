@@ -5,6 +5,7 @@
  * matches our TypeScript expectations for image generation.
  */
 
+export {};
 
 // Define the expected interface
 interface LocalDreamModuleInterface {

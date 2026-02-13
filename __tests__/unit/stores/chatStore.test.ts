@@ -194,7 +194,7 @@ describe('chatStore', () => {
       const originalUpdatedAt = getChatState().conversations[0].updatedAt;
 
       // Small delay to ensure different timestamp
-      jest.advanceTimersByTime?.(10) || new Promise(r => setTimeout(r, 10));
+      jest.advanceTimersByTime(10);
 
       setConversationProject(id, 'project-123');
 

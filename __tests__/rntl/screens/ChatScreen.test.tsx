@@ -92,7 +92,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     })),
-    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })),
+    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })) as any,
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: null })),
     subscribe: jest.fn(() => jest.fn()),
   },
@@ -221,7 +221,7 @@ describe('ChatScreen', () => {
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     });
-    (activeModelService.checkMemoryAvailable as jest.Mock).mockReturnValue({
+    ((activeModelService as any).checkMemoryAvailable as jest.Mock).mockReturnValue({
       safe: true,
       severity: 'safe',
     });
