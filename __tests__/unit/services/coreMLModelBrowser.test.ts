@@ -8,12 +8,12 @@
  */
 
 // Mock fetch globally before importing
+declare const global: any;
 const mockFetch = jest.fn();
 global.fetch = mockFetch as any;
 
 import {
   fetchAvailableCoreMLModels,
-  CoreMLImageModel,
 } from '../../../src/services/coreMLModelBrowser';
 
 // ============================================================================
@@ -150,7 +150,7 @@ describe('CoreMLModelBrowser', () => {
       const models = await fetchCoreMLModels(true);
 
       if (models.length > 0) {
-        const model = models[0];
+        const model = models[0]!;
         expect(model).toHaveProperty('id');
         expect(model).toHaveProperty('name');
         expect(model).toHaveProperty('displayName');
@@ -184,7 +184,7 @@ describe('CoreMLModelBrowser', () => {
       if (models.length > 0) {
         // Size should be sum of all file sizes (LFS sizes when available)
         // 250M + 200M + 1500M + 100M + 500 + 800 = ~2050M
-        expect(models[0].size).toBeGreaterThan(0);
+        expect(models[0]!.size).toBeGreaterThan(0);
       }
     });
 
@@ -194,7 +194,7 @@ describe('CoreMLModelBrowser', () => {
       const models = await fetchCoreMLModels(true);
 
       if (models.length > 0) {
-        models[0].files.forEach(file => {
+        models[0]!.files!.forEach(file => {
           expect(file.downloadUrl).toContain('https://huggingface.co/');
           expect(file.downloadUrl).toContain('resolve/main/');
         });
@@ -207,7 +207,7 @@ describe('CoreMLModelBrowser', () => {
       const models = await fetchCoreMLModels(true);
 
       if (models.length > 0) {
-        expect(models[0].displayName).toContain('Core ML');
+        expect(models[0]!.displayName).toContain('Core ML');
       }
     });
 
@@ -280,13 +280,13 @@ describe('CoreMLModelBrowser', () => {
     });
 
     it('returns partial results when one repo fails', async () => {
-      let callCount = 0;
+      let _callCount = 0;
       mockFetch.mockImplementation(async (url: string) => {
         const urlStr = String(url);
 
         // First repo succeeds
         if (urlStr.includes('2-1-base')) {
-          callCount++;
+          _callCount++;
           // Route to success handler for 2-1-base repo
           if (urlStr.endsWith('tree/main')) {
             return { ok: true, json: () => Promise.resolve(topLevelTree) };

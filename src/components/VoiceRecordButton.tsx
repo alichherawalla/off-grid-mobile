@@ -14,7 +14,6 @@ import ReanimatedAnimated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
@@ -83,6 +82,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
       rippleScale.value = 1;
       rippleOpacity.value = 0;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording]);
 
   const rippleStyle = useAnimatedStyle(() => ({

@@ -20,7 +20,7 @@ import { AnimatedPressable } from '../components/AnimatedPressable';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { FONTS, TYPOGRAPHY, SPACING } from '../constants';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { modelManager, hardwareService, activeModelService, ResourceUsage } from '../services';
 import { Conversation, DownloadedModel, ONNXImageModel } from '../types';
@@ -30,7 +30,7 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 type MainTabParamListWithNested = {
   HomeTab: undefined;
-  ChatsTab: NavigatorScreenParams<ChatsStackParamList>;
+  ChatsTab: NavigatorScreenParams<ChatsStackParamList> | undefined;
   ProjectsTab: undefined;
   ModelsTab: undefined;
   SettingsTab: undefined;
@@ -72,11 +72,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     downloadedModels,
     setDownloadedModels,
     activeModelId,
-    setActiveModelId,
+    setActiveModelId: _setActiveModelId,
     downloadedImageModels,
     setDownloadedImageModels,
     activeImageModelId,
-    setActiveImageModelId,
+    setActiveImageModelId: _setActiveImageModelId,
     deviceInfo,
     setDeviceInfo,
     generatedImages,
@@ -98,6 +98,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     isFirstMount.current = false;
 
     return () => task.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refresh memory info periodically and when models change
@@ -176,9 +177,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
     // Give UI time to update before starting heavy native operation
     // This prevents the app from appearing frozen
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 100);
+        setTimeout(() => resolve(), 100);
       });
     }));
 
@@ -247,9 +248,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setPickerType(null); // Close modal when loading starts
 
     // Give UI time to update before starting heavy native operation
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 100);
+        setTimeout(() => resolve(), 100);
       });
     }));
 
@@ -267,7 +268,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setPickerType(null); // Close modal
     try {
       await activeModelService.unloadImageModel();
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
@@ -295,7 +296,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               if (count > 0) {
                 setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
               }
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to unload models'));
             } finally {
               setIsEjecting(false);
@@ -364,7 +365,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <AnimatedPressable
             style={styles.modelCard}
             onPress={() => setPickerType('text')}
-            hapticType="selectionClick"
+            hapticType="selection"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="message-square" size={16} color={colors.textMuted} />
@@ -403,7 +404,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             style={styles.modelCard}
             onPress={() => setPickerType('image')}
             testID="image-model-card"
-            hapticType="selectionClick"
+            hapticType="selection"
           >
             <View style={styles.modelCardHeader}>
               <Icon name="image" size={16} color={colors.textMuted} />
@@ -531,7 +532,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <AnimatedPressable
           style={styles.galleryCard}
           onPress={() => (navigation as any).navigate('Gallery')}
-          hapticType="selectionClick"
+          hapticType="selection"
         >
           <Icon name="grid" size={18} color={colors.primary} />
           <View style={styles.galleryCardInfo}>

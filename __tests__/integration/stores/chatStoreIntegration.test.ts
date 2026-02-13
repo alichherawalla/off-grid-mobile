@@ -8,11 +8,10 @@
 import { useChatStore } from '../../../src/stores/chatStore';
 import {
   resetStores,
-  flushPromises,
   getChatState,
   setupWithConversation,
 } from '../../utils/testHelpers';
-import { createMessage, createGenerationMeta } from '../../utils/factories';
+import { createGenerationMeta } from '../../utils/factories';
 
 describe('ChatStore Streaming Integration', () => {
   beforeEach(() => {

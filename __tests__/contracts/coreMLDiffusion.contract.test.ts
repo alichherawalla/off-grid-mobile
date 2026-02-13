@@ -6,7 +6,7 @@
  * TypeScript bridge (localDreamGenerator.ts) works on both platforms.
  */
 
-import { NativeModules, NativeEventEmitter } from 'react-native';
+export {};
 
 // The CoreMLDiffusionModule must expose the same methods as LocalDreamModule
 interface CoreMLDiffusionModuleInterface {

@@ -34,7 +34,7 @@ export const StorageSettingsScreen: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const { downloadedModels, downloadedImageModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads } = useAppStore();
+  const { downloadedModels, downloadedImageModels, activeBackgroundDownloads, setBackgroundDownload, clearBackgroundDownloads: _clearBackgroundDownloads } = useAppStore();
   const { conversations } = useChatStore();
 
   const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
@@ -47,6 +47,7 @@ export const StorageSettingsScreen: React.FC = () => {
   useEffect(() => {
     loadStorageInfo();
     scanForOrphanedFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadedModels, downloadedImageModels]);
 
   const loadStorageInfo = async () => {
@@ -84,7 +85,7 @@ export const StorageSettingsScreen: React.FC = () => {
               await modelManager.deleteOrphanedFile(file.path);
               setOrphanedFiles(prev => prev.filter(f => f.path !== file.path));
               loadStorageInfo();
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete file'));
             } finally {
               setIsDeleting(null);
@@ -93,6 +94,7 @@ export const StorageSettingsScreen: React.FC = () => {
         },
       ]
     ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDeleteAllOrphaned = useCallback(() => {
@@ -113,7 +115,7 @@ export const StorageSettingsScreen: React.FC = () => {
             for (const file of orphanedFiles) {
               try {
                 await modelManager.deleteOrphanedFile(file.path);
-              } catch (error) {
+              } catch (_error) {
                 console.error('Failed to delete:', file.path);
               }
             }
@@ -124,6 +126,7 @@ export const StorageSettingsScreen: React.FC = () => {
         },
       ]
     ));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orphanedFiles]);
 
   const handleClearStaleDownload = useCallback((downloadId: number) => {

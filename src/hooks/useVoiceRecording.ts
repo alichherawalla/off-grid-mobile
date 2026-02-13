@@ -82,7 +82,7 @@ export const useVoiceRecording = (): UseVoiceRecordingResult => {
       setPartialResult('');
       setFinalResult('');
       await voiceService.startListening();
-    } catch (err) {
+    } catch {
       setError('Failed to start recording');
       setIsRecording(false);
     }
@@ -91,7 +91,7 @@ export const useVoiceRecording = (): UseVoiceRecordingResult => {
   const stopRecording = useCallback(async () => {
     try {
       await voiceService.stopListening();
-    } catch (err) {
+    } catch {
       setError('Failed to stop recording');
     }
   }, []);
@@ -103,7 +103,7 @@ export const useVoiceRecording = (): UseVoiceRecordingResult => {
       setFinalResult('');
       await voiceService.cancelListening();
       setIsRecording(false);
-    } catch (err) {
+    } catch {
       setError('Failed to cancel recording');
     }
   }, []);

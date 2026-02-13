@@ -17,7 +17,7 @@ import { AnimatedListItem } from '../components/AnimatedListItem';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
 import { Project } from '../types';
 import { ProjectsStackParamList } from '../navigation/types';

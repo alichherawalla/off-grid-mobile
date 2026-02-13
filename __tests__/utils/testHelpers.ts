@@ -65,6 +65,7 @@ export const resetStores = (): void => {
       enableGpu: true,
       gpuLayers: 6,
       showGenerationDetails: false,
+      enhanceImagePrompts: false,
     },
     downloadedImageModels: [],
     activeImageModelId: null,
@@ -179,7 +180,7 @@ export const setupWithImageModel = (): string => {
  */
 export const flushPromises = async (): Promise<void> => {
   await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
   });
 };
 
@@ -189,7 +190,7 @@ export const flushPromises = async (): Promise<void> => {
  */
 export const wait = async (ms: number): Promise<void> => {
   await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, ms));
+    await new Promise<void>(resolve => setTimeout(() => resolve(), ms));
   });
 };
 
@@ -273,7 +274,7 @@ export const createStreamingMock = (tokens: string[], delayBetweenTokens = 10) =
     _onThinking?: () => void
   ) => {
     for (const token of tokens) {
-      await new Promise(resolve => setTimeout(resolve, delayBetweenTokens));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), delayBetweenTokens));
       onToken(token);
     }
     onComplete();
@@ -293,7 +294,7 @@ export const createMockLlamaContext = (overrides: Record<string, any> = {}) => (
   reasonNoGPU: 'Test environment',
   model: { nParams: 1000000 },
   release: jest.fn(() => Promise.resolve()),
-  completion: jest.fn(() => Promise.resolve({
+  completion: jest.fn((..._args: any[]) => Promise.resolve({
     text: 'Test completion response',
     tokens_predicted: 10,
     tokens_evaluated: 5,
@@ -320,7 +321,7 @@ export const createMockWhisperContext = (overrides: Record<string, any> = {}) =>
     stop: jest.fn(),
     subscribe: jest.fn(),
   })),
-  transcribe: jest.fn((filePath: string, opts: any) => ({
+  transcribe: jest.fn((_filePath: string, _opts: any) => ({
     promise: Promise.resolve({ result: 'transcribed text' }),
   })),
   ...overrides,

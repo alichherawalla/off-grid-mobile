@@ -1,5 +1,4 @@
 import DeviceInfo from 'react-native-device-info';
-import { NativeModules, Platform } from 'react-native';
 import { DeviceInfo as DeviceInfoType, ModelRecommendation } from '../types';
 import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
 

@@ -48,7 +48,7 @@ describe('BackgroundDownloadService', () => {
     jest.spyOn(NativeEventEmitter.prototype, 'addListener').mockImplementation(
       (eventType: string, handler: any) => {
         eventHandlers[eventType] = handler;
-        return { remove: jest.fn() };
+        return { remove: jest.fn() } as any;
       }
     );
 
@@ -295,50 +295,50 @@ describe('BackgroundDownloadService', () => {
 
       expect(typeof unsub).toBe('function');
       // Verify callback was stored
-      expect(service['progressListeners'].has('progress_42')).toBe(true);
+      expect(service.progressListeners.has('progress_42')).toBe(true);
 
       // Unsubscribe
       unsub();
-      expect(service['progressListeners'].has('progress_42')).toBe(false);
+      expect(service.progressListeners.has('progress_42')).toBe(false);
     });
 
     it('onComplete registers and returns unsubscribe function', () => {
       const callback = jest.fn();
       const unsub = service.onComplete(42, callback);
 
-      expect(service['completeListeners'].has('complete_42')).toBe(true);
+      expect(service.completeListeners.has('complete_42')).toBe(true);
       unsub();
-      expect(service['completeListeners'].has('complete_42')).toBe(false);
+      expect(service.completeListeners.has('complete_42')).toBe(false);
     });
 
     it('onError registers and returns unsubscribe function', () => {
       const callback = jest.fn();
       const unsub = service.onError(42, callback);
 
-      expect(service['errorListeners'].has('error_42')).toBe(true);
+      expect(service.errorListeners.has('error_42')).toBe(true);
       unsub();
-      expect(service['errorListeners'].has('error_42')).toBe(false);
+      expect(service.errorListeners.has('error_42')).toBe(false);
     });
 
     it('onAnyProgress registers global listener', () => {
       const callback = jest.fn();
       service.onAnyProgress(callback);
 
-      expect(service['progressListeners'].has('progress_all')).toBe(true);
+      expect(service.progressListeners.has('progress_all')).toBe(true);
     });
 
     it('onAnyComplete registers global listener', () => {
       const callback = jest.fn();
       service.onAnyComplete(callback);
 
-      expect(service['completeListeners'].has('complete_all')).toBe(true);
+      expect(service.completeListeners.has('complete_all')).toBe(true);
     });
 
     it('onAnyError registers global listener', () => {
       const callback = jest.fn();
       service.onAnyError(callback);
 
-      expect(service['errorListeners'].has('error_all')).toBe(true);
+      expect(service.errorListeners.has('error_all')).toBe(true);
     });
   });
 
@@ -355,8 +355,8 @@ describe('BackgroundDownloadService', () => {
       const event = { downloadId: 42, bytesDownloaded: 1000, totalBytes: 5000, status: 'running', fileName: 'model.gguf', modelId: 'test' };
 
       // Simulate event from NativeEventEmitter
-      if (eventHandlers['DownloadProgress']) {
-        eventHandlers['DownloadProgress'](event);
+      if (eventHandlers.DownloadProgress) {
+        eventHandlers.DownloadProgress(event);
       }
 
       expect(specificCb).toHaveBeenCalledWith(event);
@@ -371,8 +371,8 @@ describe('BackgroundDownloadService', () => {
 
       const event = { downloadId: 42, fileName: 'model.gguf', modelId: 'test', bytesDownloaded: 5000, totalBytes: 5000, status: 'completed', localUri: '/path/model.gguf' };
 
-      if (eventHandlers['DownloadComplete']) {
-        eventHandlers['DownloadComplete'](event);
+      if (eventHandlers.DownloadComplete) {
+        eventHandlers.DownloadComplete(event);
       }
 
       expect(specificCb).toHaveBeenCalledWith(event);
@@ -387,8 +387,8 @@ describe('BackgroundDownloadService', () => {
 
       const event = { downloadId: 42, fileName: 'model.gguf', modelId: 'test', status: 'failed', reason: 'Network error' };
 
-      if (eventHandlers['DownloadError']) {
-        eventHandlers['DownloadError'](event);
+      if (eventHandlers.DownloadError) {
+        eventHandlers.DownloadError(event);
       }
 
       expect(specificCb).toHaveBeenCalledWith(event);
@@ -400,8 +400,8 @@ describe('BackgroundDownloadService', () => {
       const event = { downloadId: 99, bytesDownloaded: 1000, totalBytes: 5000, status: 'running', fileName: 'model.gguf', modelId: 'test' };
 
       expect(() => {
-        if (eventHandlers['DownloadProgress']) {
-          eventHandlers['DownloadProgress'](event);
+        if (eventHandlers.DownloadProgress) {
+          eventHandlers.DownloadProgress(event);
         }
       }).not.toThrow();
     });
@@ -415,7 +415,7 @@ describe('BackgroundDownloadService', () => {
       service.startProgressPolling();
 
       expect(mockDownloadManagerModule.startProgressPolling).toHaveBeenCalled();
-      expect(service['isPolling']).toBe(true);
+      expect(service.isPolling).toBe(true);
     });
 
     it('startProgressPolling is idempotent', () => {
@@ -430,7 +430,7 @@ describe('BackgroundDownloadService', () => {
       service.stopProgressPolling();
 
       expect(mockDownloadManagerModule.stopProgressPolling).toHaveBeenCalled();
-      expect(service['isPolling']).toBe(false);
+      expect(service.isPolling).toBe(false);
     });
 
     it('does nothing when not available', () => {
@@ -462,10 +462,10 @@ describe('BackgroundDownloadService', () => {
 
       service.cleanup();
 
-      expect(service['progressListeners'].size).toBe(0);
-      expect(service['completeListeners'].size).toBe(0);
-      expect(service['errorListeners'].size).toBe(0);
-      expect(service['isPolling']).toBe(false);
+      expect(service.progressListeners.size).toBe(0);
+      expect(service.completeListeners.size).toBe(0);
+      expect(service.errorListeners.size).toBe(0);
+      expect(service.isPolling).toBe(false);
     });
   });
 });

@@ -14,7 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore } from '../stores';
 import { ProjectsStackParamList } from '../navigation/types';
 

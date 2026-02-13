@@ -25,11 +25,11 @@ import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { RECOMMENDED_MODELS, CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
+import { CREDIBILITY_LABELS, TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
-import { huggingFaceService, modelManager, hardwareService, onnxImageGeneratorService, backgroundDownloadService, activeModelService } from '../services';
+import { huggingFaceService, modelManager, hardwareService, backgroundDownloadService, activeModelService } from '../services';
 import { fetchAvailableModels, getVariantLabel, guessStyle, HFImageModel } from '../services/huggingFaceModelBrowser';
-import { fetchAvailableCoreMLModels, CoreMLImageModel } from '../services/coreMLModelBrowser';
+import { fetchAvailableCoreMLModels } from '../services/coreMLModelBrowser';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { ModelInfo, ModelFile, DownloadedModel, ModelSource, ONNXImageModel } from '../types';
 import { RootStackParamList } from '../navigation/types';
@@ -107,7 +107,7 @@ export const ModelsScreen: React.FC = () => {
     imageModelDownloading,
     addImageModelDownloading,
     removeImageModelDownloading,
-    imageModelDownloadIds,
+    imageModelDownloadIds: _imageModelDownloadIds,
     setImageModelDownloadId,
     setBackgroundDownload,
   } = useAppStore();
@@ -160,12 +160,14 @@ export const ModelsScreen: React.FC = () => {
     loadDownloadedModels();
     loadDownloadedImageModels();
     restoreActiveImageDownloads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (activeTab === 'image' && availableHFModels.length === 0 && !hfModelsLoading) {
       loadHFModels();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   // Restore active image model downloads on mount (after app restart)
@@ -253,7 +255,7 @@ export const ModelsScreen: React.FC = () => {
         limit: 30,
       });
       setSearchResults(results);
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Search Error', 'Failed to search models. Please try again.'));
     } finally {
       setIsLoading(false);
@@ -269,6 +271,7 @@ export const ModelsScreen: React.FC = () => {
       await loadHFModels(true);
     }
     setIsRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, loadHFModels]);
 
   // Download from HuggingFace (multi-file download)
@@ -430,7 +433,7 @@ export const ModelsScreen: React.FC = () => {
       });
 
       // Subscribe to completion
-      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async (event) => {
+      const unsubComplete = backgroundDownloadService.onComplete(downloadInfo.downloadId, async (_event) => {
         unsubProgress();
         unsubComplete();
         unsubError();
@@ -756,7 +759,7 @@ export const ModelsScreen: React.FC = () => {
     try {
       const files = await huggingFaceService.getModelFiles(model.id);
       setModelFiles(files);
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to load model files.'));
       setModelFiles([]);
     } finally {
@@ -872,6 +875,7 @@ export const ModelsScreen: React.FC = () => {
 
       return true;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchResults, credibilityFilter, modelTypeFilter, showCompatibleOnly, ramGB]);
 
   // Filter HuggingFace image models - must be before any conditional returns

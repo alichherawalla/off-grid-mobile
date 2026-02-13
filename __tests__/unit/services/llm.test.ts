@@ -12,7 +12,7 @@ import { llmService } from '../../../src/services/llm';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createMockLlamaContext } from '../../utils/testHelpers';
-import { createMessage, createUserMessage, createAssistantMessage, createSystemMessage } from '../../utils/factories';
+import { createUserMessage, createAssistantMessage, createSystemMessage } from '../../utils/factories';
 
 const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
@@ -451,7 +451,7 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const callArgs = ctx.completion.mock.calls[0][0];
+      const callArgs = ctx.completion.mock.calls[0]![0]!;
       expect(callArgs).toHaveProperty('prompt');
       expect(callArgs).not.toHaveProperty('messages');
     });
@@ -510,7 +510,7 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0][0].prompt;
+      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
       expect(prompt).toContain('You are helpful');
     });
 
@@ -526,7 +526,7 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0][0].prompt;
+      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
       expect(prompt).toContain('Q1');
       expect(prompt).toContain('A1');
       expect(prompt).toContain('Q2');
@@ -554,7 +554,7 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0][0].prompt;
+      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
       // The final question should always be included
       expect(prompt).toContain('Final question');
       // System prompt should be preserved
@@ -578,7 +578,7 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0][0].prompt;
+      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
       expect(prompt).toContain('earlier message(s)');
     });
   });

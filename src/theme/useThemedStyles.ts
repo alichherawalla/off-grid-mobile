@@ -18,6 +18,7 @@ export function useThemedStyles<T extends StyleSheet.NamedStyles<T>>(
   const { colors, shadows, isDark } = useTheme();
   return useMemo(
     () => StyleSheet.create(factory(colors, shadows)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isDark],
   );
 }

@@ -10,8 +10,8 @@ class AuthService {
     let hash = 0;
     for (let i = 0; i < passphrase.length; i++) {
       const char = passphrase.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+      hash = ((hash << 5) - hash) + char; // eslint-disable-line no-bitwise
+      hash = hash & hash; // eslint-disable-line no-bitwise
     }
     // Add some complexity with multiple rounds
     const baseHash = Math.abs(hash).toString(16);
@@ -20,8 +20,8 @@ class AuthService {
       let tempHash = 0;
       for (let j = 0; j < extendedHash.length; j++) {
         const char = extendedHash.charCodeAt(j);
-        tempHash = ((tempHash << 5) - tempHash) + char;
-        tempHash = tempHash & tempHash;
+        tempHash = ((tempHash << 5) - tempHash) + char; // eslint-disable-line no-bitwise
+        tempHash = tempHash & tempHash; // eslint-disable-line no-bitwise
       }
       extendedHash = Math.abs(tempHash).toString(16) + extendedHash.slice(0, 8);
     }

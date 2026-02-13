@@ -5,7 +5,7 @@
  * matches our TypeScript expectations for image generation.
  */
 
-import { NativeModules, NativeEventEmitter } from 'react-native';
+export {};
 
 // Define the expected interface
 interface LocalDreamModuleInterface {
@@ -214,7 +214,7 @@ describe('LocalDream Contract', () => {
       };
       (mockLocalDreamModule.generateImage as jest.Mock).mockResolvedValue(mockResult);
 
-      const result = await mockLocalDreamModule.generateImage(validGenerateParams);
+      await mockLocalDreamModule.generateImage(validGenerateParams);
 
       expect(mockLocalDreamModule.generateImage).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -39,19 +39,19 @@ describe('ActiveModelService Integration', () => {
     // Default mock implementations
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null);
-    mockLlmService.loadModel.mockResolvedValue();
-    mockLlmService.unloadModel.mockResolvedValue();
+    mockLlmService.loadModel.mockResolvedValue(undefined);
+    mockLlmService.unloadModel.mockResolvedValue(undefined);
 
     mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
-    mockLocalDreamService.loadModel.mockResolvedValue();
-    mockLocalDreamService.unloadModel.mockResolvedValue();
+    mockLocalDreamService.loadModel.mockResolvedValue(true);
+    mockLocalDreamService.unloadModel.mockResolvedValue(true);
 
     mockHardwareService.getDeviceInfo.mockResolvedValue(createDeviceInfo());
     mockHardwareService.refreshMemoryInfo.mockResolvedValue({
       totalMemory: 8 * 1024 * 1024 * 1024,
       usedMemory: 4 * 1024 * 1024 * 1024,
       availableMemory: 4 * 1024 * 1024 * 1024,
-    });
+    } as any);
 
     // Reset the activeModelService's internal state to match mock state
     await activeModelService.syncWithNativeState();
@@ -62,7 +62,7 @@ describe('ActiveModelService Integration', () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
       useAppStore.setState({ downloadedModels: [model] });
 
-      mockLlmService.loadModel.mockResolvedValue();
+      mockLlmService.loadModel.mockResolvedValue(undefined);
       mockLlmService.isModelLoaded.mockReturnValue(true);
 
       await activeModelService.loadTextModel('test-model-1');
@@ -199,7 +199,7 @@ describe('ActiveModelService Integration', () => {
       const imageModel = createONNXImageModel({ id: 'img-model-1' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
@@ -220,7 +220,7 @@ describe('ActiveModelService Integration', () => {
       const imgModel2 = createONNXImageModel({ id: 'img-2' });
       useAppStore.setState({
         downloadedImageModels: [imgModel1, imgModel2],
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
@@ -246,7 +246,7 @@ describe('ActiveModelService Integration', () => {
       useAppStore.setState({
         downloadedImageModels: [imageModel],
         activeImageModelId: 'img-model',
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
@@ -271,7 +271,7 @@ describe('ActiveModelService Integration', () => {
         activeModelId: 'text-model',
         downloadedImageModels: [imageModel],
         activeImageModelId: 'img-model',
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLlmService.isModelLoaded.mockReturnValue(true);
@@ -451,7 +451,7 @@ describe('ActiveModelService Integration', () => {
         activeModelId: 'text-model',
         downloadedImageModels: [imageModel],
         activeImageModelId: 'img-model',
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLlmService.isModelLoaded.mockReturnValue(true);
@@ -501,7 +501,7 @@ describe('ActiveModelService Integration', () => {
       const imageModel = createONNXImageModel({ id: 'img-model' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        settings: { imageThreads: 4 },
+        settings: { imageThreads: 4 } as any,
       });
 
       mockLlmService.isModelLoaded.mockReturnValue(false);

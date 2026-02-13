@@ -4,8 +4,6 @@
  * Tests for the model card display component.
  */
 
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
 import {
   createDownloadedModel,
   createVisionModel,
@@ -47,7 +45,7 @@ describe('ModelCard', () => {
     });
 
     it('shows active indicator when model is active', () => {
-      const model = createDownloadedModel();
+      const _model = createDownloadedModel();
       const isActive = true;
       expect(isActive).toBe(true);
     });
@@ -71,7 +69,7 @@ describe('ModelCard', () => {
     });
 
     it('shows unload button for active models', () => {
-      const model = createDownloadedModel();
+      const _model = createDownloadedModel();
       const isActive = true;
       const showUnload = isActive;
       expect(showUnload).toBe(true);
