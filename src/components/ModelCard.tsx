@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { useThemedStyles } from '../theme';
+import Icon from 'react-native-vector-icons/Feather';
+import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { QUANTIZATION_INFO, CREDIBILITY_LABELS, TYPOGRAPHY } from '../constants';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
@@ -29,6 +30,7 @@ interface ModelCardProps {
   onDownload?: () => void;
   onDelete?: () => void;
   onSelect?: () => void;
+  compact?: boolean;
 }
 
 export const ModelCard: React.FC<ModelCardProps> = ({
@@ -45,7 +47,9 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onDownload,
   onDelete,
   onSelect,
+  compact,
 }) => {
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const quantInfo = file
@@ -82,6 +86,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
     <TouchableOpacity
       style={[
         styles.card,
+        compact && styles.cardCompact,
         isActive && styles.cardActive,
         !isCompatible && styles.cardIncompatible,
       ]}
@@ -90,151 +95,186 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       disabled={!onPress}
       testID={testID}
     >
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.name} numberOfLines={1}>
-            {model.name}
-          </Text>
-          <View style={styles.authorRow}>
-            <Text style={styles.author}>{model.author}</Text>
-            {credibilityInfo && (
-              <View style={[styles.credibilityBadge, { backgroundColor: credibilityInfo.color + '25' }]}>
-                {credibility?.source === 'lmstudio' && (
-                  <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
+      <View style={styles.cardRow}>
+        {/* Left: all card content */}
+        <View style={styles.cardContent}>
+          {compact ? (
+            <>
+              <View style={styles.compactTopRow}>
+                <View style={styles.compactNameGroup}>
+                  <Text style={[styles.name, styles.compactName]} numberOfLines={1}>
+                    {model.name}
+                  </Text>
+                  <View style={styles.authorTag}>
+                    <Text style={styles.authorTagText}>{model.author}</Text>
+                  </View>
+                  {credibilityInfo && (
+                    <View style={[styles.credibilityBadge, { backgroundColor: credibilityInfo.color + '25' }]}>
+                      {credibility?.source === 'lmstudio' && (
+                        <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
+                      )}
+                      <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
+                        {credibilityInfo.label}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {model.downloads !== undefined && (
+                  <View style={styles.authorTag}>
+                    <Text style={styles.authorTagText}>{formatNumber(model.downloads)} dl</Text>
+                  </View>
                 )}
-                {credibility?.source === 'official' && (
-                  <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>✓</Text>
+              </View>
+              {model.description && (
+                <Text style={styles.descriptionCompact} numberOfLines={1}>
+                  {model.description}
+                </Text>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.name}>{model.name}</Text>
+              <View style={styles.authorRow}>
+                <View style={styles.authorTag}>
+                  <Text style={styles.authorTagText}>{model.author}</Text>
+                </View>
+                {credibilityInfo && (
+                  <View style={[styles.credibilityBadge, { backgroundColor: credibilityInfo.color + '25' }]}>
+                    {credibility?.source === 'lmstudio' && (
+                      <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
+                    )}
+                    {credibility?.source === 'official' && (
+                      <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>✓</Text>
+                    )}
+                    {credibility?.source === 'verified-quantizer' && (
+                      <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>◆</Text>
+                    )}
+                    <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
+                      {credibilityInfo.label}
+                    </Text>
+                  </View>
                 )}
-                {credibility?.source === 'verified-quantizer' && (
-                  <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>◆</Text>
+                {isActive && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>Active</Text>
+                  </View>
                 )}
-                <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
-                  {credibilityInfo.label}
+              </View>
+            </>
+          )}
+
+          {/* Info badges */}
+          <View style={styles.infoRow}>
+            {fileSize > 0 && (
+              <View style={styles.infoBadge}>
+                <Text style={styles.infoText}>
+                  {huggingFaceService.formatFileSize(fileSize)}
                 </Text>
               </View>
             )}
+            {sizeRange && (
+              <View style={[styles.infoBadge, styles.sizeBadge]}>
+                <Text style={styles.infoText}>
+                  {sizeRange.min === sizeRange.max
+                    ? huggingFaceService.formatFileSize(sizeRange.min)
+                    : `${huggingFaceService.formatFileSize(sizeRange.min)} - ${huggingFaceService.formatFileSize(sizeRange.max)}`}
+                </Text>
+              </View>
+            )}
+            {sizeRange && (
+              <View style={styles.infoBadge}>
+                <Text style={styles.infoText}>
+                  {sizeRange.count} {sizeRange.count === 1 ? 'file' : 'files'}
+                </Text>
+              </View>
+            )}
+            {quantInfo && (
+              <View
+                style={[
+                  styles.infoBadge,
+                  quantInfo.recommended && styles.recommendedBadge,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.infoText,
+                    quantInfo.recommended && styles.recommendedText,
+                  ]}
+                >
+                  {file?.quantization || downloadedModel?.quantization}
+                </Text>
+              </View>
+            )}
+            {quantInfo && (
+              <View style={styles.infoBadge}>
+                <Text style={styles.infoText}>{quantInfo.quality}</Text>
+              </View>
+            )}
+            {isVisionModel && (
+              <View style={styles.visionBadge}>
+                <Text style={styles.visionText}>Vision</Text>
+              </View>
+            )}
+            {!isCompatible && (
+              <View style={styles.warningBadge}>
+                <Text style={styles.warningText}>Too large</Text>
+              </View>
+            )}
           </View>
-        </View>
-        {isActive && (
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>Active</Text>
-          </View>
-        )}
-      </View>
 
-      {model.description && (
-        <Text style={styles.description} numberOfLines={2}>
-          {model.description}
-        </Text>
-      )}
+          {!compact && model.downloads !== undefined && model.downloads > 0 && (
+            <View style={styles.statsRow}>
+              <Text style={styles.statsText}>
+                {formatNumber(model.downloads)} downloads
+              </Text>
+              {model.likes !== undefined && model.likes > 0 && (
+                <Text style={styles.statsText}>{formatNumber(model.likes)} likes</Text>
+              )}
+            </View>
+          )}
 
-      <View style={styles.infoRow}>
-        {fileSize > 0 && (
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoText}>
-              {huggingFaceService.formatFileSize(fileSize)}
-            </Text>
-          </View>
-        )}
-        {sizeRange && (
-          <View style={[styles.infoBadge, styles.sizeBadge]}>
-            <Text style={styles.infoText}>
-              {sizeRange.min === sizeRange.max
-                ? huggingFaceService.formatFileSize(sizeRange.min)
-                : `${huggingFaceService.formatFileSize(sizeRange.min)} - ${huggingFaceService.formatFileSize(sizeRange.max)}`}
-            </Text>
-          </View>
-        )}
-        {sizeRange && (
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoText}>
-              {sizeRange.count} {sizeRange.count === 1 ? 'file' : 'files'}
-            </Text>
-          </View>
-        )}
-        {quantInfo && (
-          <View
-            style={[
-              styles.infoBadge,
-              quantInfo.recommended && styles.recommendedBadge,
-            ]}
-          >
-            <Text
-              style={[
-                styles.infoText,
-                quantInfo.recommended && styles.recommendedText,
-              ]}
-            >
-              {file?.quantization || downloadedModel?.quantization}
-            </Text>
-          </View>
-        )}
-        {quantInfo && (
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoText}>{quantInfo.quality}</Text>
-          </View>
-        )}
-        {isVisionModel && (
-          <View style={styles.visionBadge}>
-            <Text style={styles.visionText}>Vision</Text>
-          </View>
-        )}
-        {!isCompatible && (
-          <View style={styles.warningBadge}>
-            <Text style={styles.warningText}>Too large</Text>
-          </View>
-        )}
-      </View>
-
-      {model.downloads !== undefined && (
-        <View style={styles.statsRow}>
-          <Text style={styles.statsText}>
-            {formatNumber(model.downloads)} downloads
-          </Text>
-          {model.likes !== undefined && model.likes > 0 && (
-            <Text style={styles.statsText}>{formatNumber(model.likes)} likes</Text>
+          {isDownloading && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View
+                  style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]}
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {Math.round(downloadProgress * 100)}%
+              </Text>
+            </View>
           )}
         </View>
-      )}
 
-      {isDownloading && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View
-              style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]}
-            />
-          </View>
-          <Text style={styles.progressText}>
-            {Math.round(downloadProgress * 100)}%
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.actions}>
+        {/* Right: vertically centered action icon */}
         {!isDownloaded && !isDownloading && onDownload && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.downloadButton]}
+            style={styles.iconButton}
             onPress={onDownload}
             disabled={!isCompatible}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             testID={testID ? `${testID}-download` : undefined}
           >
-            <Text style={styles.actionButtonText}>Download</Text>
+            <Icon name="download" size={16} color={colors.primary} />
           </TouchableOpacity>
         )}
         {isDownloaded && !isActive && onSelect && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.selectButton]}
+            style={styles.iconButton}
             onPress={onSelect}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.actionButtonText}>Select</Text>
+            <Icon name="check-circle" size={16} color={colors.primary} />
           </TouchableOpacity>
         )}
         {isDownloaded && onDelete && (
           <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
+            style={styles.iconButton}
             onPress={onDelete}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.deleteButtonText}>Delete</Text>
+            <Icon name="trash-2" size={16} color={colors.error} />
           </TouchableOpacity>
         )}
       </View>
@@ -260,6 +300,38 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 16,
     ...shadows.small,
   },
+  cardCompact: {
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 12,
+  },
+  compactTopRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginBottom: 4,
+    gap: 6,
+  },
+  compactNameGroup: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  compactName: {
+    flexShrink: 1,
+  },
+  authorTag: {
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  authorTagText: {
+    ...TYPOGRAPHY.metaSmall,
+    color: colors.textSecondary,
+  },
   cardActive: {
     borderWidth: 2,
     borderColor: colors.primary,
@@ -272,6 +344,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'space-between' as const,
     alignItems: 'flex-start' as const,
     marginBottom: 8,
+  },
+  headerCompact: {
+    marginBottom: 4,
   },
   titleContainer: {
     flex: 1,
@@ -287,7 +362,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   authorRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginTop: 2,
+    marginTop: 4,
+    marginBottom: 6,
     gap: 8,
   },
   credibilityBadge: {
@@ -320,11 +396,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     marginBottom: 12,
   },
+  descriptionCompact: {
+    marginBottom: 4,
+    ...TYPOGRAPHY.meta,
+  },
+  cardRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  cardContent: {
+    flex: 1,
+  },
   infoRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
   },
   infoBadge: {
     backgroundColor: colors.surfaceLight,
@@ -395,34 +481,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     width: 40,
     textAlign: 'right' as const,
   },
-  actions: {
-    flexDirection: 'row' as const,
-    gap: 8,
-    marginTop: 4,
-  },
-  actionButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center' as const,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-  },
-  downloadButton: {
-    borderColor: colors.primary,
-  },
-  selectButton: {
-    borderColor: colors.primary,
-  },
-  deleteButton: {
-    borderColor: colors.error,
-  },
-  actionButtonText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.primary,
-  },
-  deleteButtonText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.error,
+  iconButton: {
+    padding: 4,
+    flexShrink: 0,
   },
 });
