@@ -18,6 +18,7 @@ import {
   setupWithActiveModel,
   setupWithConversation,
   flushPromises,
+  wait,
   getChatState,
   collectSubscriptionValues,
 } from '../../utils/testHelpers';
@@ -225,13 +226,13 @@ describe('Generation Flow Integration', () => {
 
       await flushPromises();
 
-      // Stream tokens
+      // Stream tokens (need wait(60) to allow 50ms token buffer flush)
       streamCallback?.('Hello');
-      await flushPromises();
+      await wait(60);
       expect(getChatState().streamingMessage).toBe('Hello');
 
       streamCallback?.(' world');
-      await flushPromises();
+      await wait(60);
       expect(getChatState().streamingMessage).toBe('Hello world');
 
       completeCallback?.('');
@@ -555,7 +556,7 @@ describe('Generation Flow Integration', () => {
 
       await flushPromises();
       streamCallback?.('Token');
-      await flushPromises();
+      await wait(60);
       completeCallback?.('');
       await generatePromise;
 
@@ -568,9 +569,11 @@ describe('Generation Flow Integration', () => {
       const generatingState = values.find((v: any) => v.isGenerating);
       expect(generatingState).toBeDefined();
 
-      // Should have a state with content
-      const contentState = values.find((v: any) => v.streamingContent === 'Token');
-      expect(contentState).toBeDefined();
+      // Tokens are accumulated internally without notifying subscribers
+      // (by design, to avoid flooding the JS thread). Verify that
+      // the thinking→streaming transition was notified instead.
+      const streamingState = values.find((v: any) => v.isGenerating && !v.isThinking);
+      expect(streamingState).toBeDefined();
 
       // Last state should be idle
       const lastState: any = values[values.length - 1];

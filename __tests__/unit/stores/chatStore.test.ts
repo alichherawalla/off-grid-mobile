@@ -600,4 +600,193 @@ describe('chatStore', () => {
       expect(messages).toEqual([]);
     });
   });
+
+  // ============================================================================
+  // Control Token Stripping
+  // ============================================================================
+  describe('control token stripping', () => {
+    it('strips <|im_start|> tokens during streaming', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Hello<|im_start|>assistant');
+
+      expect(getChatState().streamingMessage).not.toContain('<|im_start|>');
+    });
+
+    it('strips <|im_end|> tokens during streaming', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Hello world<|im_end|>');
+
+      expect(getChatState().streamingMessage).not.toContain('<|im_end|>');
+      expect(getChatState().streamingMessage).toContain('Hello world');
+    });
+
+    it('strips </s> tokens during streaming', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Response</s>');
+
+      expect(getChatState().streamingMessage).not.toContain('</s>');
+    });
+
+    it('strips <|eot_id|> tokens during streaming', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      store.appendToStreamingMessage('Text<|eot_id|>');
+
+      expect(getChatState().streamingMessage).not.toContain('<|eot_id|>');
+    });
+
+    it('strips control tokens on finalize', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      // Simulate tokens arriving with control tokens
+      useChatStore.setState({ streamingMessage: 'Clean content<|im_end|>' });
+      store.finalizeStreamingMessage(convId);
+
+      const msg = getChatState().conversations[0].messages[0];
+      expect(msg.content).toBe('Clean content');
+    });
+
+    it('does not save message that is only control tokens', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.startStreaming(convId);
+      useChatStore.setState({ streamingMessage: '<|im_start|>assistant\n<|im_end|>', streamingForConversationId: convId });
+      store.finalizeStreamingMessage(convId);
+
+      expect(getChatState().conversations[0].messages).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
+  // Title Boundary Edge Cases
+  // ============================================================================
+  describe('title boundary edge cases', () => {
+    it('does not add ellipsis for exactly 50 char message', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const content = 'x'.repeat(50); // exactly 50 chars
+
+      store.addMessage(convId, { role: 'user', content });
+
+      const title = getChatState().conversations[0].title;
+      expect(title).toBe(content);
+      expect(title.endsWith('...')).toBe(false);
+    });
+
+    it('adds ellipsis for 51 char message', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const content = 'x'.repeat(51);
+
+      store.addMessage(convId, { role: 'user', content });
+
+      const title = getChatState().conversations[0].title;
+      expect(title.endsWith('...')).toBe(true);
+      expect(title.length).toBe(53); // 50 + '...'
+    });
+
+    it('does not update title from second user message', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+
+      store.addMessage(convId, { role: 'user', content: 'First question' });
+      store.addMessage(convId, { role: 'user', content: 'Second question' });
+
+      // Title set from first message, not changed by second
+      expect(getChatState().conversations[0].title).toBe('First question');
+    });
+  });
+
+  // ============================================================================
+  // addMessage Edge Cases
+  // ============================================================================
+  describe('addMessage edge cases', () => {
+    it('addMessage on non-existent conversation does not crash', () => {
+      const store = useChatStore.getState();
+
+      // Should not throw
+      const message = store.addMessage('nonexistent-conv', { role: 'user', content: 'Hello' });
+
+      // Message is returned but not stored anywhere meaningful
+      expect(message.id).toBeDefined();
+      expect(getChatState().conversations).toHaveLength(0);
+    });
+
+    it('supports multiple attachments', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const attachments = [
+        createMediaAttachment({ type: 'image', uri: 'file:///photo.jpg' }),
+        createMediaAttachment({ type: 'document', uri: 'file:///doc.pdf' }),
+        createMediaAttachment({ type: 'image', uri: 'file:///photo2.jpg' }),
+      ];
+
+      const message = store.addMessage(
+        convId,
+        { role: 'user', content: 'Look at these' },
+        attachments,
+      );
+
+      expect(message.attachments).toHaveLength(3);
+      expect(message.attachments?.filter(a => a.type === 'image')).toHaveLength(2);
+      expect(message.attachments?.filter(a => a.type === 'document')).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // updateMessage Edge Cases
+  // ============================================================================
+  describe('updateMessage edge cases', () => {
+    it('sets isThinking flag when provided', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const msg = store.addMessage(convId, { role: 'assistant', content: 'Thinking...' });
+
+      store.updateMessage(convId, msg.id, 'Still thinking...', true);
+
+      const updated = getChatState().conversations[0].messages[0];
+      expect(updated.isThinking).toBe(true);
+    });
+
+    it('does not add isThinking when not provided', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      const msg = store.addMessage(convId, { role: 'assistant', content: 'Original' });
+
+      store.updateMessage(convId, msg.id, 'Updated');
+
+      const updated = getChatState().conversations[0].messages[0];
+      expect(updated.isThinking).toBeUndefined();
+    });
+  });
+
+  // ============================================================================
+  // deleteMessagesAfter Edge Cases
+  // ============================================================================
+  describe('deleteMessagesAfter edge cases', () => {
+    it('handles different conversation ID silently', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.addMessage(convId, { role: 'user', content: 'Keep' });
+
+      store.deleteMessagesAfter('wrong-conv-id', 'any-msg-id');
+
+      // Original conversation unchanged
+      expect(getChatState().conversations[0].messages).toHaveLength(1);
+    });
+  });
 });
