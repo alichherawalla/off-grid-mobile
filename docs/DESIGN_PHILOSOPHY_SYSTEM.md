@@ -153,6 +153,13 @@ Dark mode shadows use very tight radius (1-3px) to preserve crisp card edges whi
 - Border: `1px solid colors.border`
 - Shadow: `shadows.small` (subtle elevation)
 - Hover state (if interactive): `backgroundColor: colors.surfaceHover`
+- **Compact variant:** `ModelCard` supports a `compact` prop for dense list views — horizontal layout with content on left and icon actions (download, select, delete) on right. Used for recommended models and image model lists.
+
+#### Icon Action Buttons
+- Small circular touch targets with Feather icons (download, check-circle, trash-2)
+- Transparent background, `colors.textMuted` default, `colors.primary` for active/selected state
+- `hitSlop` for easier mobile tapping
+- Used in compact `ModelCard` and list items instead of full-width text buttons
 
 #### Screen Headers
 
@@ -211,6 +218,14 @@ header: {
 - Padding: `SPACING.md`
 - Border radius: `8px`
 - Monospace font
+
+#### Filter Pills
+- Horizontal scroll of filter options (org, size, quantization, type)
+- Default: `colors.surfaceLight` background, `colors.border` border
+- Active: `colors.primary` border, `colors.primary` text
+- `TYPOGRAPHY.labelSmall` or `TYPOGRAPHY.meta` for pill text
+- Expandable sections with multi-select for dimension filters (e.g., organizations)
+- Clear all filters button when any filter is active
 
 #### Labels & Headers
 - Use `TYPOGRAPHY.label` or `TYPOGRAPHY.labelSmall`
@@ -350,6 +365,8 @@ When building or refactoring a component:
 - Uppercase label for section ("DOWNLOADED MODELS")
 - Metadata as small, muted text
 - Subtle border, no shadow
+- Compact mode: horizontal layout with icon action buttons (download, select, delete) on right
+- Author shown as small pill-style tag, not a full line
 
 ### Example: Chat Message
 

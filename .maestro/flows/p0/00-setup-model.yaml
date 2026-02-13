@@ -155,10 +155,10 @@ tags:
                 timeout: 15000
             - takeScreenshot: 10-files
 
-            # Download the model
+            # Download the model (tap the download icon on the first file card)
             - evalScript: "${console.log('SETUP - Downloading')}"
             - tapOn:
-                text: "Download"
+                id: "file-card-0-download"
             - extendedWaitUntil:
                 visible:
                   text: "Success"

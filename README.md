@@ -33,6 +33,8 @@ OffgridMobile is a React Native application that brings large language models, v
 ## Key Features at a Glance
 
 - **Text Generation** - Multi-model GGUF support, streaming inference, custom system prompts
+- **Bring Your Own Model** - Import local .gguf files from device storage alongside HuggingFace downloads
+- **Smart Model Discovery** - Curated recommendations by device RAM, advanced filters (org, size, quantization, type)
 - **Vision AI** - Multimodal understanding with automatic mmproj handling
 - **Image Generation** - On-device Stable Diffusion (CPU/NPU), real-time preview, background generation
 - **AI Prompt Enhancement** - Use text LLM to expand simple prompts into detailed descriptions for better image quality
@@ -56,7 +58,7 @@ OffgridMobile is a React Native application that brings large language models, v
 
 ### Text Generation
 
-Multi-model LLM inference using llama.cpp compiled for ARM64 Android via llama.rn native bindings. Supports any GGUF-format model compatible with llama.cpp:
+Multi-model LLM inference using llama.cpp compiled for ARM64 Android via llama.rn native bindings. Supports any GGUF-format model compatible with llama.cpp — downloaded from HuggingFace or imported directly from device storage:
 
 - **Streaming inference** with real-time token callbacks
 - **OpenCL GPU offloading** on Qualcomm Adreno GPUs (experimental, optional)
@@ -92,7 +94,8 @@ Multimodal understanding via vision-language models (VLMs) with automatic mmproj
 
 **Supported Vision Models:**
 - SmolVLM (500M, 2.2B) - Fast, compact, 7-10s inference on flagship devices
-- Qwen2-VL, Qwen3-VL - Excellent multilingual vision understanding
+- Qwen3-VL (2B, 8B) - Vision-language with thinking mode, excellent multilingual understanding
+- Gemma 3n E4B - Vision + audio, built for mobile with selective activation
 - LLaVA - Large Language and Vision Assistant
 - MiniCPM-V - Efficient multimodal
 
@@ -731,9 +734,18 @@ Subscribers are weakly held, services never leak references.
 
 **Text Models:**
 - Hugging Face API integration (`src/services/modelManager.ts`)
-- Filters: LM Studio compatible, Official/Verified/Community
+- Curated recommended models filtered by device RAM (Qwen 3, Llama 3.2, Gemma 3, SmolLM3, Phi-4)
+- Advanced filtering: organization (Qwen, Meta, Google, Microsoft, Mistral, DeepSeek, HuggingFace, NVIDIA), size category (tiny/small/medium/large), quantization level, model type (text/vision/code)
+- Filters: LM Studio compatible, Official/Verified/Community credibility badges
 - Automatic GGUF quantization detection
 - RAM compatibility checks based on device memory
+
+**Local Model Import (Bring Your Own Model):**
+- Import `.gguf` files directly from device storage via native file picker
+- Validates file format, parses model name and quantization from filename
+- Handles Android `content://` URIs by copying to app storage
+- Progress tracking during file import
+- Imported models appear alongside downloaded models in the model selector
 
 **Image Models:**
 - xororz HuggingFace repos (pre-converted MNN/QNN)
@@ -795,7 +807,7 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 **Scenario:** User travels with no internet access, needs AI assistance for writing, research, or problem-solving.
 
 **Implementation:**
-- Download Qwen3-2B-Instruct (Q4_K_M, ~2.5GB) once
+- Download Qwen 3 0.6B or Llama 3.2 3B (Q4_K_M) from curated recommendations, or import your own .gguf model from device storage
 - Create project with custom system prompt: "You are a helpful writing assistant..."
 - Generate responses entirely on-device
 - All conversations persist locally
@@ -831,7 +843,7 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 **Scenario:** Developer needs code assistance without sharing proprietary code with cloud services.
 
 **Implementation:**
-- Download Qwen3-Coder or Phi-3-Mini (Q4_K_M)
+- Download Qwen 3 Coder A3B or Phi-4 Mini (Q4_K_M)
 - Create "Code Review" project with system prompt
 - Paste code snippets, receive suggestions
 - All code stays on device
@@ -889,7 +901,7 @@ Prevents OOM crashes by blocking loads that would exceed safe RAM limits.
 - **React Navigation 7.x** - Native navigation
 - **React Native Reanimated 4.x** - Performant native-thread animations
 - **React Native Haptic Feedback** - Haptic responses on interactions
-- **@react-native-documents/picker** - Native document picker for file attachments
+- **@react-native-documents/picker** - Native document picker for file attachments and local model import
 - **@react-native-documents/viewer** - Native document viewer (QuickLook / Intent.ACTION_VIEW)
 
 ### Native Modules
@@ -1055,10 +1067,10 @@ OffgridMobile/
 │   │   ├── AnimatedListItem.tsx    # Entry animation + press feedback combo
 │   │   ├── AnimatedPressable.tsx   # Spring scale + haptic press wrapper
 │   │   ├── AppSheet.tsx            # Custom swipe-to-dismiss bottom sheet
-│   │   ├── ChatInput.tsx           # Message input with attachments
+│   │   ├── ChatInput.tsx           # Message input with attachments, vision/image-mode badges
 │   │   ├── ChatMessage.tsx         # Message bubbles with metadata
 │   │   ├── DebugSheet.tsx          # Developer debug bottom sheet
-│   │   ├── ModelCard.tsx           # Model display card
+│   │   ├── ModelCard.tsx           # Model display card (compact/full modes, icon actions)
 │   │   ├── ModelSelectorModal.tsx  # Quick model switcher
 │   │   ├── GenerationSettingsModal.tsx # Image generation settings
 │   │   ├── ProjectSelectorSheet.tsx # Project picker bottom sheet

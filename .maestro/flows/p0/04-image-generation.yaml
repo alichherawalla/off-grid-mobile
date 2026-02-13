@@ -195,6 +195,14 @@ tags:
 - tapOn:
     id: "chat-settings-icon"
 
+# Expand the IMAGE GENERATION section (collapsed by default)
+- extendedWaitUntil:
+    visible:
+      text: "IMAGE GENERATION"
+    timeout: 5000
+- tapOn:
+    text: "IMAGE GENERATION"
+
 - extendedWaitUntil:
     visible:
       text: "Auto-detect image requests"
