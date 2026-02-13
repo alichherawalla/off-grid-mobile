@@ -494,6 +494,224 @@ describe('generationService', () => {
   });
 
   // ============================================================================
+  // Queue Management
+  // ============================================================================
+  describe('queue management', () => {
+    it('enqueueMessage adds to queue', () => {
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'Hello',
+        messageText: 'Hello',
+      });
+
+      const state = generationService.getState();
+      expect(state.queuedMessages).toHaveLength(1);
+      expect(state.queuedMessages[0].id).toBe('q1');
+    });
+
+    it('enqueueMessage appends multiple items', () => {
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'First',
+        messageText: 'First',
+      });
+      generationService.enqueueMessage({
+        id: 'q2',
+        conversationId: 'conv-1',
+        text: 'Second',
+        messageText: 'Second',
+      });
+
+      expect(generationService.getState().queuedMessages).toHaveLength(2);
+    });
+
+    it('removeFromQueue removes specific item', () => {
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'First',
+        messageText: 'First',
+      });
+      generationService.enqueueMessage({
+        id: 'q2',
+        conversationId: 'conv-1',
+        text: 'Second',
+        messageText: 'Second',
+      });
+
+      generationService.removeFromQueue('q1');
+
+      const queue = generationService.getState().queuedMessages;
+      expect(queue).toHaveLength(1);
+      expect(queue[0].id).toBe('q2');
+    });
+
+    it('clearQueue removes all items', () => {
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'First',
+        messageText: 'First',
+      });
+      generationService.enqueueMessage({
+        id: 'q2',
+        conversationId: 'conv-1',
+        text: 'Second',
+        messageText: 'Second',
+      });
+
+      generationService.clearQueue();
+
+      expect(generationService.getState().queuedMessages).toHaveLength(0);
+    });
+
+    it('notifies listeners on queue changes', () => {
+      const listener = jest.fn();
+      generationService.subscribe(listener);
+      listener.mockClear();
+
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'Hello',
+        messageText: 'Hello',
+      });
+
+      expect(listener).toHaveBeenCalled();
+      const lastCall = listener.mock.calls[listener.mock.calls.length - 1][0];
+      expect(lastCall.queuedMessages).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // Queue Processor
+  // ============================================================================
+  describe('queue processor', () => {
+    it('setQueueProcessor registers callback', () => {
+      const processor = jest.fn();
+      generationService.setQueueProcessor(processor);
+
+      expect((generationService as any).queueProcessor).toBe(processor);
+    });
+
+    it('setQueueProcessor with null clears callback', () => {
+      generationService.setQueueProcessor(jest.fn());
+      generationService.setQueueProcessor(null);
+
+      expect((generationService as any).queueProcessor).toBeNull();
+    });
+
+    it('processNextInQueue aggregates multiple messages', async () => {
+      const processor = jest.fn().mockResolvedValue(undefined);
+      generationService.setQueueProcessor(processor);
+
+      // Enqueue 3 messages
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'First',
+        messageText: 'First',
+        attachments: [{ id: 'att-1', type: 'image' as const, uri: '/img1.jpg' }],
+      });
+      generationService.enqueueMessage({
+        id: 'q2',
+        conversationId: 'conv-1',
+        text: 'Second',
+        messageText: 'Second',
+      });
+      generationService.enqueueMessage({
+        id: 'q3',
+        conversationId: 'conv-1',
+        text: 'Third',
+        messageText: 'Third',
+      });
+
+      // Trigger queue processing by calling private method
+      (generationService as any).processNextInQueue();
+
+      // Wait for async processor
+      await new Promise<void>(resolve => setTimeout(resolve, 10));
+
+      expect(processor).toHaveBeenCalledTimes(1);
+      const combined = processor.mock.calls[0][0];
+      expect(combined.text).toContain('First');
+      expect(combined.text).toContain('Second');
+      expect(combined.text).toContain('Third');
+      expect(combined.attachments).toHaveLength(1); // Only q1 had attachment
+    });
+
+    it('processNextInQueue passes single message directly', async () => {
+      const processor = jest.fn().mockResolvedValue(undefined);
+      generationService.setQueueProcessor(processor);
+
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'Only one',
+        messageText: 'Only one',
+      });
+
+      (generationService as any).processNextInQueue();
+      await new Promise<void>(resolve => setTimeout(resolve, 10));
+
+      expect(processor).toHaveBeenCalledTimes(1);
+      expect(processor.mock.calls[0][0].id).toBe('q1');
+      expect(processor.mock.calls[0][0].text).toBe('Only one');
+    });
+
+    it('processNextInQueue does nothing without processor', () => {
+      generationService.setQueueProcessor(null);
+      generationService.enqueueMessage({
+        id: 'q1',
+        conversationId: 'conv-1',
+        text: 'Hello',
+        messageText: 'Hello',
+      });
+
+      // Should not throw
+      (generationService as any).processNextInQueue();
+
+      // Queue should still have items since no processor handled them
+      // Actually processNextInQueue clears the queue first then calls processor
+      // If no processor, it returns early without clearing
+      expect(generationService.getState().queuedMessages).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // Abort Handling
+  // ============================================================================
+  describe('abort handling', () => {
+    it('ignores tokens after abort is requested', async () => {
+      const convId = setupWithConversation();
+      setupWithActiveModel();
+
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+      ) => {
+        onStream?.('First');
+        // Simulate abort
+        (generationService as any).abortRequested = true;
+        onStream?.('Ignored');
+        await new Promise(() => {}); // Never complete
+      }) as any);
+
+      generationService.generateResponse(convId, [
+        createMessage({ role: 'user', content: 'Hi' }),
+      ]);
+
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+
+      // streamingContent should only have First since abort was set before Ignored
+      const state = generationService.getState();
+      expect(state.streamingContent).toBe('First');
+    });
+  });
+
+  // ============================================================================
   // Integration with Stores
   // ============================================================================
   describe('store integration', () => {

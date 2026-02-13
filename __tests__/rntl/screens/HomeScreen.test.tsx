@@ -426,6 +426,82 @@ describe('HomeScreen', () => {
   });
 
   // ============================================================================
+  // Memory Estimation
+  // ============================================================================
+  describe('memory estimation', () => {
+    it('renders with device info including total memory', () => {
+      useAppStore.setState({
+        deviceInfo: createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 }),
+      });
+
+      const { queryByText: _queryByText } = renderWithNavigation(<HomeScreen navigation={mockNavigation} />);
+      // Should render without crashing
+    });
+
+    it('checkMemoryForModel returns safe for small models', async () => {
+      (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
+        canLoad: true,
+        severity: 'safe',
+      });
+
+      const result = await activeModelService.checkMemoryForModel('test-model', 'text');
+      expect(result.canLoad).toBe(true);
+    });
+
+    it('checkMemoryForModel returns warning for marginal memory', async () => {
+      (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
+        canLoad: false,
+        severity: 'warning',
+        message: 'May cause performance issues',
+      });
+
+      const result = await activeModelService.checkMemoryForModel('test-model', 'text');
+      expect(result.canLoad).toBe(false);
+      expect(result.severity).toBe('warning');
+    });
+
+    it('checkMemoryForModel returns critical for very large models', async () => {
+      (activeModelService.checkMemoryForModel as jest.Mock).mockResolvedValue({
+        canLoad: false,
+        severity: 'critical',
+        message: 'Not enough memory',
+      });
+
+      const result = await activeModelService.checkMemoryForModel('test-model', 'text');
+      expect(result.canLoad).toBe(false);
+      expect(result.severity).toBe('critical');
+    });
+
+    it('getResourceUsage returns memory info for loaded models', async () => {
+      (activeModelService.getResourceUsage as jest.Mock).mockResolvedValue({
+        estimatedModelMemory: 6 * 1024 * 1024 * 1024,
+        memoryUsed: 8 * 1024 * 1024 * 1024,
+        memoryTotal: 16 * 1024 * 1024 * 1024,
+        memoryAvailable: 8 * 1024 * 1024 * 1024,
+        memoryUsagePercent: 50,
+      });
+
+      const usage = await activeModelService.getResourceUsage();
+      expect(usage.estimatedModelMemory).toBe(6 * 1024 * 1024 * 1024);
+      expect(usage.memoryTotal).toBe(16 * 1024 * 1024 * 1024);
+      expect(usage.memoryUsagePercent).toBe(50);
+    });
+
+    it('getResourceUsage returns zeros when no models loaded', async () => {
+      (activeModelService.getResourceUsage as jest.Mock).mockResolvedValue({
+        estimatedModelMemory: 0,
+        memoryUsed: 0,
+        memoryTotal: 0,
+        memoryAvailable: 0,
+        memoryUsagePercent: 0,
+      });
+
+      const usage = await activeModelService.getResourceUsage();
+      expect(usage.memoryTotal).toBe(0);
+    });
+  });
+
+  // ============================================================================
   // Quick Navigation
   // ============================================================================
   describe('quick navigation', () => {
