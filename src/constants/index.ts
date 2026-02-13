@@ -240,7 +240,7 @@ If asked about yourself, you can mention you're a local AI assistant that priori
 export const ONBOARDING_SLIDES = [
   {
     id: 'welcome',
-    title: 'Welcome to Local LLM',
+    title: 'Welcome to Off Grid',
     description: 'Run AI models directly on your device. No internet required, complete privacy.',
     icon: 'cpu',
   },

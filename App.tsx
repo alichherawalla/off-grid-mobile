@@ -1,5 +1,5 @@
 /**
- * Local LLM - On-Device AI Chat Application
+ * Off Grid - On-Device AI Chat Application
  * Private AI assistant that runs entirely on your device
  */
 

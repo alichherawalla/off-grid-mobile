@@ -354,7 +354,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       <View testID="home-screen" style={styles.scrollView}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Local LLM</Text>
+          <Text style={styles.title}>Off Grid</Text>
         </View>
 
         {/* Active Models Section */}

@@ -103,7 +103,7 @@ export const SettingsScreen: React.FC = () => {
               <Text style={styles.aboutValue}>{packageJson.version}</Text>
             </View>
             <Text style={styles.aboutText}>
-              Local LLM brings AI to your device without compromising your privacy.
+              Off Grid brings AI to your device without compromising your privacy.
             </Text>
           </Card>
         </AnimatedEntry>

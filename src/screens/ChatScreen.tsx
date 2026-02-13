@@ -918,10 +918,10 @@ export const ChatScreen: React.FC = () => {
       // Get the source path (remove file:// prefix if present)
       const sourcePath = viewerImageUri.replace('file://', '');
 
-      // Create destination path in Pictures/LocalLLM folder
+      // Create destination path in Pictures/OffgridMobile folder
       const picturesDir = Platform.OS === 'android'
-        ? `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`
-        : `${RNFS.DocumentDirectoryPath}/LocalLLM_Images`;
+        ? `${RNFS.ExternalStorageDirectoryPath}/Pictures/OffgridMobile`
+        : `${RNFS.DocumentDirectoryPath}/OffgridMobile_Images`;
 
       // Create directory if it doesn't exist
       if (!(await RNFS.exists(picturesDir))) {
@@ -939,7 +939,7 @@ export const ChatScreen: React.FC = () => {
       setAlertState(showAlert(
         'Image Saved',
         Platform.OS === 'android'
-          ? `Saved to Pictures/LocalLLM/${fileName}`
+          ? `Saved to Pictures/OffgridMobile/${fileName}`
           : `Saved to ${fileName}`
       ));
     } catch (error: any) {

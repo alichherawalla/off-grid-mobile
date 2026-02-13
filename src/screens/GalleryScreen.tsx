@@ -209,7 +209,7 @@ export const GalleryScreen: React.FC = () => {
       );
 
       const sourcePath = image.imagePath;
-      const picturesDir = `${RNFS.ExternalStorageDirectoryPath}/Pictures/LocalLLM`;
+      const picturesDir = `${RNFS.ExternalStorageDirectoryPath}/Pictures/OffgridMobile`;
 
       if (!(await RNFS.exists(picturesDir))) {
         await RNFS.mkdir(picturesDir);
@@ -221,7 +221,7 @@ export const GalleryScreen: React.FC = () => {
 
       await RNFS.copyFile(sourcePath, destPath);
 
-      setAlertState(showAlert('Image Saved', `Saved to Pictures/LocalLLM/${fileName}`));
+      setAlertState(showAlert('Image Saved', `Saved to Pictures/OffgridMobile/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
     }
