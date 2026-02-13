@@ -142,11 +142,10 @@ tags:
                   text: "Absolute Reality (CPU)"
                 timeout: 5000
 
-            # Tap download button (1st card = index 0)
+            # Tap download icon on 1st image model card
             - evalScript: "${console.log('IMAGE_GEN - Downloading CPU model')}"
             - tapOn:
-                text: "Download"
-                index: 0
+                id: "image-model-card-0-download"
 
             # Wait for download to complete
             - evalScript: "${console.log('IMAGE_GEN - Waiting for download...')}"

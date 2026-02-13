@@ -1300,17 +1300,10 @@ export const ModelsScreen: React.FC = () => {
   // Render image models section
   const renderImageModelsSection = () => (
     <View style={styles.imageModelsSection}>
-      {/* Device recommendation */}
-      <View style={styles.deviceBanner}>
-        <Text style={styles.deviceBannerText}>
-          {Math.round(ramGB)}GB RAM — {imageRecommendation}
-        </Text>
-      </View>
-
       {/* Search */}
-      <View style={styles.imageSearchRow}>
+      <View style={[styles.searchContainer, { paddingHorizontal: 0 }]}>
         <TextInput
-          style={styles.imageSearchInput}
+          style={styles.searchInput}
           placeholder="Search models..."
           placeholderTextColor={colors.textMuted}
           value={imageSearchQuery}
@@ -1325,6 +1318,13 @@ export const ModelsScreen: React.FC = () => {
           <Icon name="sliders" size={14} color={(imageFiltersVisible || hasActiveImageFilters) ? colors.primary : colors.textMuted} />
           {hasActiveImageFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
+      </View>
+
+      {/* Device recommendation */}
+      <View style={styles.deviceBanner}>
+        <Text style={styles.deviceBannerText}>
+          {Math.round(ramGB)}GB RAM — {imageRecommendation}
+        </Text>
       </View>
 
       {/* Image filter pill bar — negative margin to cancel parent padding */}
@@ -1461,7 +1461,7 @@ export const ModelsScreen: React.FC = () => {
         </View>
       )}
 
-      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model) => (
+      {!hfModelsLoading && !hfModelsError && filteredHFModels.map((model, index) => (
         <ModelCard
           key={model.id}
           compact
@@ -1473,6 +1473,7 @@ export const ModelsScreen: React.FC = () => {
           }}
           isDownloading={imageModelDownloading.includes(model.id)}
           downloadProgress={imageModelProgress[model.id] || 0}
+          testID={`image-model-card-${index}`}
           onDownload={
             !imageModelDownloading.includes(model.id)
               ? () => handleDownloadImageModel(hfModelToDescriptor(model))
@@ -1923,8 +1924,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: 8,
   },
   filterToggle: {
-    padding: 8,
-    borderRadius: 8,
+    padding: 12,
+    borderRadius: 12,
     backgroundColor: colors.surface,
   },
   filterToggleActive: {
@@ -2172,7 +2173,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   // Image models section styles
   imageModelsSection: {
     marginBottom: 24,
-    paddingTop: 8,
     paddingHorizontal: 16,
   },
   imageSectionTitle: {
