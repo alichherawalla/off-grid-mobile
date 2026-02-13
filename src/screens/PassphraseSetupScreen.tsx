@@ -14,7 +14,7 @@ import { Button, Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY, FONTS, SPACING } from '../constants';
+import { TYPOGRAPHY, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 
@@ -88,7 +88,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
       }
 
       onComplete();
-    } catch (error) {
+    } catch (_error) {
       setAlertState(showAlert('Error', 'An error occurred. Please try again.'));
     } finally {
       setIsSubmitting(false);
@@ -198,7 +198,7 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

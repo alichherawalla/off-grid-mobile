@@ -1,7 +1,7 @@
 import { initLlama, LlamaContext, RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { Message, MediaAttachment } from '../types';
+import { Message } from '../types';
 import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores';
 
@@ -85,7 +85,9 @@ class LLMService {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
+      // eslint-disable-next-line no-bitwise
       hash = ((hash << 5) - hash) + char;
+      // eslint-disable-next-line no-bitwise
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(16);
@@ -201,7 +203,7 @@ class LLMService {
         if (metadata) {
           const trainCtx = metadata['llama.context_length']
             || metadata['general.context_length']
-            || metadata['context_length'];
+            || metadata.context_length;
           if (trainCtx) {
             const maxModelCtx = parseInt(trainCtx, 10);
             console.log(`[LLM] Model trained context: ${maxModelCtx}, using: ${contextLength}`);
@@ -210,7 +212,7 @@ class LLMService {
             }
           }
         }
-      } catch (e) {
+      } catch {
         // Metadata reading is best-effort
       }
 
@@ -305,7 +307,7 @@ class LLMService {
             vision: support?.vision || true,
             audio: support?.audio || false,
           };
-        } catch (e) {
+        } catch {
           // getMultimodalSupport not available, keep defaults
         }
         console.log('[LLM] Multimodal initialized successfully, vision:', this.multimodalSupport?.vision);
@@ -340,7 +342,7 @@ class LLMService {
         };
         return this.multimodalSupport;
       }
-    } catch (error) {
+    } catch {
       console.log('Multimodal support check not available');
     }
 
@@ -690,15 +692,12 @@ class LLMService {
   private formatMessages(messages: Message[]): string {
     // Format for ChatML-style models (Qwen, etc.)
     let prompt = '';
-    let systemPromptContent = '';
-
     // First pass: collect system prompt content and build conversation
     for (const message of messages) {
       if (message.role === 'system') {
         // Collect system messages (there might be multiple: main + context note)
         if (message.id === 'system') {
           // This is the main project system prompt
-          systemPromptContent = message.content;
           prompt += `<|im_start|>system\n${message.content}<|im_end|>\n`;
         } else {
           // Context notes or other system messages

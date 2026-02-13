@@ -299,7 +299,7 @@ class HuggingFaceService {
       return undefined;
     }
 
-    const modelQuant = this.extractQuantization(modelFileName);
+    // modelQuant intentionally unused; matching is done via modelLower below
     const modelLower = modelFileName.toLowerCase();
 
     // Try to match by quantization level

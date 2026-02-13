@@ -10,7 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
-import { useTheme, getTheme } from './src/theme';
+import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService } from './src/services';
 import { useAppStore, useAuthStore } from './src/stores';
 import { LockScreen } from './src/screens';
@@ -51,6 +51,7 @@ function App() {
 
   useEffect(() => {
     initializeApp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initializeApp = async () => {

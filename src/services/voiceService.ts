@@ -82,11 +82,11 @@ class VoiceService {
     this.callbacks = callbacks;
   }
 
-  private handleSpeechStart = (e: SpeechStartEvent) => {
+  private handleSpeechStart = (_e: SpeechStartEvent) => {
     this.callbacks.onStart?.();
   };
 
-  private handleSpeechEnd = (e: SpeechEndEvent) => {
+  private handleSpeechEnd = (_e: SpeechEndEvent) => {
     this.callbacks.onEnd?.();
   };
 

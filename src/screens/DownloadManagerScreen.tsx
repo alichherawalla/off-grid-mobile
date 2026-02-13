@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { Card, Button } from '../components';
+import { Card } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -106,6 +106,7 @@ export const DownloadManagerScreen: React.FC = () => {
       unsubComplete();
       unsubError();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadActiveDownloads = async () => {
@@ -123,6 +124,7 @@ export const DownloadManagerScreen: React.FC = () => {
     const imageModels = await modelManager.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
     setIsRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRemoveDownload = async (item: DownloadItem) => {
@@ -175,7 +177,7 @@ export const DownloadManagerScreen: React.FC = () => {
                   cancelledKeysRef.current.delete(key);
                 }
               }, 1000);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to remove download'));
             }
           },
@@ -199,7 +201,7 @@ export const DownloadManagerScreen: React.FC = () => {
             try {
               await modelManager.deleteModel(model.id);
               removeDownloadedModel(model.id);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete model'));
             }
           },
@@ -224,7 +226,7 @@ export const DownloadManagerScreen: React.FC = () => {
               await activeModelService.unloadImageModel();
               await modelManager.deleteImageModel(model.id);
               removeDownloadedImageModel(model.id);
-            } catch (error) {
+            } catch (_error) {
               setAlertState(showAlert('Error', 'Failed to delete image model'));
             }
           },
@@ -239,7 +241,7 @@ export const DownloadManagerScreen: React.FC = () => {
 
     // Add active RNFS downloads (iOS and foreground Android)
     Object.entries(downloadProgress).forEach(([key, progress]) => {
-      const [modelId, fileName] = key.split('/').slice(-2);
+      const [_modelId, fileName] = key.split('/').slice(-2);
       const fullModelId = key.substring(0, key.lastIndexOf('/'));
 
       // Skip invalid entries (undefined, null, or malformed keys)

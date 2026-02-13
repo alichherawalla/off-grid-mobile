@@ -1,5 +1,4 @@
 import RNFS from 'react-native-fs';
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, DownloadProgress, ModelFile, ModelCredibility, BackgroundDownloadInfo, ONNXImageModel } from '../types';
 import { APP_CONFIG, LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../constants';
@@ -1124,15 +1123,16 @@ class ModelManager {
         // Only add if it has some content
         if (totalSize > 0) {
           // Determine backend based on directory name patterns
-          const backend: 'mnn' | 'qnn' | 'auto' = modelDirName.includes('qnn') || modelDirName.includes('8gen')
+          const backend: 'mnn' | 'qnn' | 'coreml' = modelDirName.includes('qnn') || modelDirName.includes('8gen')
             ? 'qnn'
-            : modelDirName.includes('mnn')
-              ? 'mnn'
-              : 'auto';
+            : modelDirName.includes('coreml')
+              ? 'coreml'
+              : 'mnn';
 
           const newModel: ONNXImageModel = {
             id: `recovered_${modelDirName}_${Date.now()}`,
             name: modelDirName.replace(/_/g, ' ').replace(/\.(zip|tar|gz)$/i, ''),
+            description: `Recovered ${modelDirName} model`,
             modelPath,
             size: totalSize,
             downloadedAt: new Date().toISOString(),

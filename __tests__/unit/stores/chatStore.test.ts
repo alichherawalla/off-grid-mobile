@@ -6,12 +6,8 @@
  */
 
 import { useChatStore } from '../../../src/stores/chatStore';
-import { resetStores, getChatState, getActiveConversation } from '../../utils/testHelpers';
+import { resetStores, getChatState } from '../../utils/testHelpers';
 import {
-  createConversation,
-  createMessage,
-  createUserMessage,
-  createAssistantMessage,
   createMediaAttachment,
   createGenerationMeta,
 } from '../../utils/factories';
@@ -199,7 +195,7 @@ describe('chatStore', () => {
       const originalUpdatedAt = getChatState().conversations[0].updatedAt;
 
       // Small delay to ensure different timestamp
-      jest.advanceTimersByTime?.(10) || new Promise(r => setTimeout(r, 10));
+      jest.advanceTimersByTime(10);
 
       setConversationProject(id, 'project-123');
 
@@ -326,7 +322,7 @@ describe('chatStore', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      const originalUpdatedAt = getChatState().conversations[0].updatedAt;
+      const _originalUpdatedAt = getChatState().conversations[0].updatedAt;
 
       addMessage(convId, { role: 'user', content: 'Message' });
 

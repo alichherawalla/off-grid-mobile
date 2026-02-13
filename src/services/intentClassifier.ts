@@ -109,7 +109,7 @@ const TEXT_PATTERNS = [
 
   // Math and calculations
   /\b(calculate|compute|solve|evaluate)\b/i,
-  /^\d+\s*[\+\-\*\/\^%]/,  // Math operations like "2+2"
+  /^\d+\s*[+\-*/^%]/,  // Math operations like "2+2"
   /\b\d+\s*(plus|minus|times|divided by|multiplied)\s*\d+\b/i,
   /\b(sum|average|mean|median|percentage|percent)\b/i,
 

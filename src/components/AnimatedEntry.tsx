@@ -48,6 +48,7 @@ export function AnimatedEntry({
     const targetTranslateY = (animate as any).translateY ?? 0;
     opacity.value = withDelay(computedDelay, withTiming(targetOpacity, { duration }));
     translateY.value = withDelay(computedDelay, withTiming(targetTranslateY, { duration }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
   const animatedStyle = useAnimatedStyle(() => ({

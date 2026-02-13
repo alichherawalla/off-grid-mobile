@@ -22,8 +22,6 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   ChatMessage,
   ChatInput,
-  Button,
-  Card,
   ModelSelectorModal,
   GenerationSettingsModal,
   CustomAlert,
@@ -40,8 +38,8 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { APP_CONFIG, SPACING, TYPOGRAPHY } from '../constants';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
-import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService, QueuedMessage } from '../services';
-import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, GenerationMeta, DebugInfo } from '../types';
+import { llmService, modelManager, intentClassifier, activeModelService, generationService, imageGenerationService, ImageGenerationState, onnxImageGeneratorService, hardwareService } from '../services';
+import { Message, MediaAttachment, Project, DownloadedModel, ImageModeState, DebugInfo } from '../types';
 import { ChatsStackParamList } from '../navigation/types';
 
 type ChatScreenRouteProp = RouteProp<ChatsStackParamList, 'Chat'>;
@@ -66,8 +64,6 @@ export const ChatScreen: React.FC = () => {
   const [animateLastN, setAnimateLastN] = useState(0);
   // Track which conversation a generation was started for
   const generatingForConversationRef = useRef<string | null>(null);
-  // Track when generation started for timing
-  const generationStartTimeRef = useRef<number | null>(null);
   // Track model load start time for system messages
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const navigation = useNavigation();
@@ -80,7 +76,7 @@ export const ChatScreen: React.FC = () => {
     activeModelId,
     downloadedModels,
     settings,
-    setActiveModelId,
+    setActiveModelId: _setActiveModelId,
     activeImageModelId,
     downloadedImageModels,
     setDownloadedImageModels,
@@ -146,10 +142,10 @@ export const ChatScreen: React.FC = () => {
     streamingForConversationId,
     isStreaming,
     isThinking,
-    setIsStreaming,
-    setIsThinking,
-    appendToStreamingMessage,
-    finalizeStreamingMessage,
+    setIsStreaming: _setIsStreaming,
+    setIsThinking: _setIsThinking,
+    appendToStreamingMessage: _appendToStreamingMessage,
+    finalizeStreamingMessage: _finalizeStreamingMessage,
     clearStreamingMessage,
     deleteConversation,
     setActiveConversation,
@@ -172,7 +168,7 @@ export const ChatScreen: React.FC = () => {
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
 
   // Track image mode state
-  const [currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
+  const [_currentImageMode, setCurrentImageMode] = useState<ImageModeState>('auto');
 
   // Fullscreen image viewer state
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
@@ -203,6 +199,7 @@ export const ChatScreen: React.FC = () => {
       // This handles the "New Chat" button from ChatsListScreen
       createConversation(activeModelId, undefined, projectId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.conversationId, route.params?.projectId]);
 
   // Clear generation ref and KV cache when conversation changes (user switched chats)
@@ -210,7 +207,7 @@ export const ChatScreen: React.FC = () => {
     // If we switched to a different conversation than what's generating,
     // invalidate the generation so tokens don't leak
     if (generatingForConversationRef.current &&
-        generatingForConversationRef.current !== activeConversationId) {
+      generatingForConversationRef.current !== activeConversationId) {
       generatingForConversationRef.current = null;
     }
 
@@ -232,6 +229,7 @@ export const ChatScreen: React.FC = () => {
     if (activeModelId && activeModel) {
       ensureModelLoaded();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeModelId]);
 
   // Check vision support when activeModel changes (based on mmProjPath metadata)
@@ -255,6 +253,7 @@ export const ChatScreen: React.FC = () => {
       setDownloadedImageModels(models);
     });
     return () => task.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Preload classifier model when LLM classification is enabled with a specific model
@@ -291,6 +290,7 @@ export const ChatScreen: React.FC = () => {
       }
     };
     preloadClassifierModel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId, settings.modelLoadingStrategy]);
 
   useEffect(() => {
@@ -380,9 +380,9 @@ export const ChatScreen: React.FC = () => {
 
       // Give UI time to render the full-screen loading state before heavy native operation
       // Use a longer delay to ensure React has time to complete the re-render
-      await new Promise(resolve => requestAnimationFrame(() => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setTimeout(resolve, 200); // Increased from 50ms to allow full render
+          setTimeout(() => resolve(), 200); // Increased from 50ms to allow full render
         });
       }));
     }
@@ -459,9 +459,9 @@ export const ChatScreen: React.FC = () => {
     modelLoadStartTimeRef.current = Date.now();
 
     // Give UI time to render the full-screen loading state before heavy native operation
-    await new Promise(resolve => requestAnimationFrame(() => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        setTimeout(resolve, 200);
+        setTimeout(() => resolve(), 200);
       });
     }));
 
@@ -507,7 +507,7 @@ export const ChatScreen: React.FC = () => {
 
     const modelName = activeModel?.name;
     setIsModelLoading(true);
-    setLoadingModel(activeModel);
+    setLoadingModel(activeModel ?? null);
     try {
       await activeModelService.unloadTextModel();
       setSupportsVision(false);
@@ -748,7 +748,7 @@ export const ChatScreen: React.FC = () => {
     }
 
     if (shouldClearCache) {
-      await llmService.clearKVCache(false).catch(() => {});
+      await llmService.clearKVCache(false).catch(() => { });
     }
 
     // Use generationService for background-safe generation
@@ -775,16 +775,16 @@ export const ChatScreen: React.FC = () => {
     // but we also call it directly as a fallback
     try {
       await Promise.all([
-        generationService.stopGeneration().catch(() => {}),
-        llmService.stopGeneration().catch(() => {}),
+        generationService.stopGeneration().catch(() => { }),
+        llmService.stopGeneration().catch(() => { }),
       ]);
-    } catch (e) {
+    } catch (_e) {
       // Ignore errors - generation may have already finished
     }
 
     // Stop image generation if in progress
     if (isGeneratingImage) {
-      imageGenerationService.cancelGeneration().catch(() => {});
+      imageGenerationService.cancelGeneration().catch(() => { });
     }
   };
 
@@ -820,7 +820,7 @@ export const ChatScreen: React.FC = () => {
     ));
   };
 
-  const handleCopyMessage = (content: string) => {
+  const handleCopyMessage = (_content: string) => {
     // Copy is handled in ChatMessage component with Alert
   };
 
@@ -831,8 +831,8 @@ export const ChatScreen: React.FC = () => {
       // Delete all messages after this one and resend
       deleteMessagesAfter(activeConversationId, message.id);
       // Remove the user message too, then resend
-      const content = message.content;
-      const attachments = message.attachments;
+      const _content = message.content;
+      const _attachments = message.attachments;
       // Actually we want to keep the message and regenerate the response
       // So just delete the assistant responses after
 
@@ -855,7 +855,7 @@ export const ChatScreen: React.FC = () => {
           .find((m) => m.role === 'user');
         if (previousUserMessage) {
           // Delete this assistant message and any after it
-          const prevIndex = messages.findIndex((m) => m.id === previousUserMessage.id);
+          const _prevIndex = messages.findIndex((m) => m.id === previousUserMessage.id);
           deleteMessagesAfter(activeConversationId, previousUserMessage.id);
           await regenerateResponse(previousUserMessage);
         }
@@ -958,7 +958,7 @@ export const ChatScreen: React.FC = () => {
     try {
       // Request permission on Android
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
+        const _granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
           {
             title: 'Storage Permission',
@@ -1025,26 +1025,26 @@ export const ChatScreen: React.FC = () => {
   const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
   const displayMessages = isThinking && isStreamingForThisConversation
     ? [
-        ...allMessages,
-        {
-          id: 'thinking',
-          role: 'assistant' as const,
-          content: '',
-          timestamp: Date.now(),
-          isThinking: true,
-        },
-      ]
+      ...allMessages,
+      {
+        id: 'thinking',
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+        isThinking: true,
+      },
+    ]
     : streamingMessage && isStreamingForThisConversation
       ? [
-          ...allMessages,
-          {
-            id: 'streaming',
-            role: 'assistant' as const,
-            content: streamingMessage,
-            timestamp: Date.now(),
-            isStreaming: true,
-          },
-        ]
+        ...allMessages,
+        {
+          id: 'streaming',
+          role: 'assistant' as const,
+          content: streamingMessage,
+          timestamp: Date.now(),
+          isStreaming: true,
+        },
+      ]
       : allMessages;
 
   // Track new messages for entry animation
@@ -1341,96 +1341,96 @@ export const ChatScreen: React.FC = () => {
           }
         />
 
-      {/* Project Selector Sheet */}
-      <ProjectSelectorSheet
-        visible={showProjectSelector}
-        onClose={() => setShowProjectSelector(false)}
-        projects={projects}
-        activeProject={activeProject || null}
-        onSelectProject={handleSelectProject}
-      />
+        {/* Project Selector Sheet */}
+        <ProjectSelectorSheet
+          visible={showProjectSelector}
+          onClose={() => setShowProjectSelector(false)}
+          projects={projects}
+          activeProject={activeProject || null}
+          onSelectProject={handleSelectProject}
+        />
 
-      {/* Debug Sheet */}
-      <DebugSheet
-        visible={showDebugPanel}
-        onClose={() => setShowDebugPanel(false)}
-        debugInfo={debugInfo}
-        activeProject={activeProject || null}
-        settings={settings}
-        activeConversation={activeConversation || null}
-      />
+        {/* Debug Sheet */}
+        <DebugSheet
+          visible={showDebugPanel}
+          onClose={() => setShowDebugPanel(false)}
+          debugInfo={debugInfo}
+          activeProject={activeProject || null}
+          settings={settings}
+          activeConversation={activeConversation || null}
+        />
 
-      {/* Model Selector Modal */}
-      <ModelSelectorModal
-        visible={showModelSelector}
-        onClose={() => setShowModelSelector(false)}
-        onSelectModel={handleModelSelect}
-        onUnloadModel={handleUnloadModel}
-        isLoading={isModelLoading}
-        currentModelPath={llmService.getLoadedModelPath()}
-      />
+        {/* Model Selector Modal */}
+        <ModelSelectorModal
+          visible={showModelSelector}
+          onClose={() => setShowModelSelector(false)}
+          onSelectModel={handleModelSelect}
+          onUnloadModel={handleUnloadModel}
+          isLoading={isModelLoading}
+          currentModelPath={llmService.getLoadedModelPath()}
+        />
 
-      {/* Generation Settings Modal */}
-      <GenerationSettingsModal
-        visible={showSettingsPanel}
-        onClose={() => setShowSettingsPanel(false)}
-      />
+        {/* Generation Settings Modal */}
+        <GenerationSettingsModal
+          visible={showSettingsPanel}
+          onClose={() => setShowSettingsPanel(false)}
+        />
 
-      {/* Fullscreen Image Viewer Modal */}
-      <Modal
-        visible={!!viewerImageUri}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setViewerImageUri(null)}
-      >
-        <View style={styles.imageViewerContainer}>
-          <TouchableOpacity
-            style={styles.imageViewerBackdrop}
-            activeOpacity={1}
-            onPress={() => setViewerImageUri(null)}
-          />
-          {viewerImageUri && (
-            <View style={styles.imageViewerContent}>
-              <Image
-                source={{ uri: viewerImageUri }}
-                style={styles.fullscreenImage}
-                resizeMode="contain"
-              />
-              <View style={styles.imageViewerActions}>
-                <TouchableOpacity
-                  style={styles.imageViewerButton}
-                  onPress={handleSaveImage}
-                >
-                  <Icon name="download" size={24} color={colors.text} />
-                  <Text style={styles.imageViewerButtonText}>Save</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.imageViewerButton}
-                  onPress={() => setViewerImageUri(null)}
-                >
-                  <Icon name="x" size={24} color={colors.text} />
-                  <Text style={styles.imageViewerButtonText}>Close</Text>
-                </TouchableOpacity>
+        {/* Fullscreen Image Viewer Modal */}
+        <Modal
+          visible={!!viewerImageUri}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setViewerImageUri(null)}
+        >
+          <View style={styles.imageViewerContainer}>
+            <TouchableOpacity
+              style={styles.imageViewerBackdrop}
+              activeOpacity={1}
+              onPress={() => setViewerImageUri(null)}
+            />
+            {viewerImageUri && (
+              <View style={styles.imageViewerContent}>
+                <Image
+                  source={{ uri: viewerImageUri }}
+                  style={styles.fullscreenImage}
+                  resizeMode="contain"
+                />
+                <View style={styles.imageViewerActions}>
+                  <TouchableOpacity
+                    style={styles.imageViewerButton}
+                    onPress={handleSaveImage}
+                  >
+                    <Icon name="download" size={24} color={colors.text} />
+                    <Text style={styles.imageViewerButtonText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.imageViewerButton}
+                    onPress={() => setViewerImageUri(null)}
+                  >
+                    <Icon name="x" size={24} color={colors.text} />
+                    <Text style={styles.imageViewerButtonText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          )}
-        </View>
-      </Modal>
+            )}
+          </View>
+        </Modal>
 
-      {/* Custom Alert Modal */}
-      <CustomAlert
-        visible={alertState.visible}
-        title={alertState.title}
-        message={alertState.message}
-        buttons={alertState.buttons}
-        onClose={() => setAlertState(hideAlert())}
-      />
+        {/* Custom Alert Modal */}
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          buttons={alertState.buttons}
+          onClose={() => setAlertState(hideAlert())}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,

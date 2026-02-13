@@ -8,8 +8,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { useTheme, useThemedStyles } from '../theme';
-import type { ThemeColors, ThemeShadows } from '../theme';
+import { useTheme } from '../theme';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
@@ -134,6 +133,7 @@ const TabBarIcon: React.FC<{ name: string; focused: boolean }> = ({ name, focuse
 
   useEffect(() => {
     scale.value = withSpring(focused ? 1.1 : 1, { damping: 15, stiffness: 150 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -183,6 +183,7 @@ const MainTabs: React.FC = () => {
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
+        // eslint-disable-next-line react/no-unstable-nested-components
         tabBarIcon: ({ focused }) => (
           <TabBarIcon name={route.name} focused={focused} />
         ),
@@ -197,7 +198,7 @@ const MainTabs: React.FC = () => {
         component={HomeScreen}
         options={{ tabBarLabel: 'Home', tabBarButtonTestID: 'home-tab' }}
         listeners={() => ({
-          tabPress: () => { triggerHaptic('selectionClick'); },
+          tabPress: () => { triggerHaptic('selection'); },
         })}
       />
       <Tab.Screen
@@ -206,7 +207,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Chats', tabBarButtonTestID: 'chats-tab' }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             e.preventDefault();
             navigation.navigate('ChatsTab', { screen: 'ChatsList' });
           },
@@ -217,7 +218,7 @@ const MainTabs: React.FC = () => {
         component={ProjectsStackNavigator}
         options={{ tabBarLabel: 'Projects', tabBarButtonTestID: 'projects-tab' }}
         listeners={() => ({
-          tabPress: () => { triggerHaptic('selectionClick'); },
+          tabPress: () => { triggerHaptic('selection'); },
         })}
       />
       <Tab.Screen
@@ -226,7 +227,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Models', tabBarButtonTestID: 'models-tab' }}
         listeners={({ navigation }) => ({
           tabPress: () => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             navigation.navigate('ModelsTab', { screen: 'ModelsList' });
           },
         })}
@@ -237,7 +238,7 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Settings', tabBarButtonTestID: 'settings-tab' }}
         listeners={({ navigation }) => ({
           tabPress: () => {
-            triggerHaptic('selectionClick');
+            triggerHaptic('selection');
             navigation.navigate('SettingsTab', { screen: 'SettingsMain' });
           },
         })}

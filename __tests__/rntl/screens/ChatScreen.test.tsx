@@ -12,11 +12,11 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
-import { resetStores, setupWithActiveModel, setupWithConversation, setupFullChat } from '../../utils/testHelpers';
+import { resetStores, setupWithActiveModel, setupFullChat } from '../../utils/testHelpers';
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -25,7 +25,6 @@ import {
   createUserMessage,
   createAssistantMessage,
   createVisionModel,
-  createMediaAttachment,
   createImageAttachment,
   createGenerationMeta,
   createProject,
@@ -99,7 +98,7 @@ jest.mock('../../../src/services/activeModelService', () => ({
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     })),
-    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })),
+    checkMemoryAvailable: jest.fn(() => ({ safe: true, severity: 'safe' })) as any,
     checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: null })),
     subscribe: jest.fn(() => jest.fn()),
   },
@@ -228,7 +227,7 @@ describe('ChatScreen', () => {
       text: { modelId: null, modelPath: null, isLoading: false },
       image: { modelId: null, modelPath: null, isLoading: false },
     });
-    (activeModelService.checkMemoryAvailable as jest.Mock).mockReturnValue({
+    ((activeModelService as any).checkMemoryAvailable as jest.Mock).mockReturnValue({
       safe: true,
       severity: 'safe',
     });
@@ -252,7 +251,7 @@ describe('ChatScreen', () => {
     });
 
     it('shows no model state when no model loaded', () => {
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show "No model loaded" or prompt to select
     });
@@ -264,7 +263,7 @@ describe('ChatScreen', () => {
         activeModelId: model.id,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show model name
     });
@@ -272,7 +271,7 @@ describe('ChatScreen', () => {
     it('shows empty chat state for new conversation', () => {
       setupFullChat();
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // May show welcome message or empty state
     });
@@ -374,14 +373,14 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { getByText } = renderWithNavigation(<ChatScreen />);
+      const { getByText: _getByText } = renderWithNavigation(<ChatScreen />);
 
       // System info should be displayed differently
     });
 
     it('scrolls to bottom on new messages', async () => {
-      const { modelId, conversationId } = setupFullChat();
-      const { rerender } = renderWithNavigation(<ChatScreen />);
+      const { modelId: _modelId, conversationId } = setupFullChat();
+      const { rerender: _rerender } = renderWithNavigation(<ChatScreen />);
 
       // Add new message
       useChatStore.getState().addMessage(conversationId, {
@@ -401,7 +400,7 @@ describe('ChatScreen', () => {
       setupFullChat();
       useChatStore.setState({ isThinking: true });
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Should show thinking dots or indicator
     });
@@ -414,7 +413,7 @@ describe('ChatScreen', () => {
         streamingMessage: 'Generating this response',
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show streaming content
     });
@@ -427,7 +426,7 @@ describe('ChatScreen', () => {
         streamingMessage: 'Text',
       });
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Should show cursor animation
     });
@@ -435,7 +434,7 @@ describe('ChatScreen', () => {
     it('updates streaming content as tokens arrive', async () => {
       const { conversationId } = setupFullChat();
 
-      const { queryByText, rerender } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText2, rerender: _rerender } = renderWithNavigation(<ChatScreen />);
 
       useChatStore.setState({
         isStreaming: true,
@@ -457,7 +456,7 @@ describe('ChatScreen', () => {
   // ============================================================================
   describe('sending messages', () => {
     it('sends message when send button is pressed', () => {
-      const { conversationId } = setupFullChat();
+      const { conversationId: _conversationId } = setupFullChat();
 
       const { queryByPlaceholderText } = renderWithNavigation(<ChatScreen />);
 
@@ -471,7 +470,7 @@ describe('ChatScreen', () => {
     });
 
     it('adds user message to conversation', () => {
-      const { conversationId } = setupFullChat();
+      const { conversationId: _conversationId } = setupFullChat();
 
       const { queryByPlaceholderText } = renderWithNavigation(<ChatScreen />);
 
@@ -511,25 +510,25 @@ describe('ChatScreen', () => {
         conversationId: 'test',
       });
 
-      const { queryByPlaceholderText } = renderWithNavigation(<ChatScreen />);
+      const { queryByPlaceholderText: _queryByPlaceholderText } = renderWithNavigation(<ChatScreen />);
 
       // Input should be disabled or show stop button
     });
 
     it('shows stop button during generation', () => {
-      const { conversationId } = setupFullChat();
+      const { conversationId: _conversationId } = setupFullChat();
       (generationService.isGeneratingFor as jest.Mock).mockReturnValue(true);
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Stop button should be visible
     });
 
     it('stops generation when stop is pressed', async () => {
-      const { conversationId } = setupFullChat();
+      const { conversationId: _conversationId } = setupFullChat();
       (generationService.isGeneratingFor as jest.Mock).mockReturnValue(true);
 
-      const { getByTestId } = renderWithNavigation(<ChatScreen />);
+      const { getByTestId: _getByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Press stop
       // expect(mockStopGeneration).toHaveBeenCalled();
@@ -551,7 +550,7 @@ describe('ChatScreen', () => {
     it('shows loading overlay during model load', () => {
       useAppStore.setState({ isLoadingModel: true });
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Loading overlay should be visible
     });
@@ -585,7 +584,7 @@ describe('ChatScreen', () => {
       });
       (llmService.supportsVision as jest.Mock).mockReturnValue(true);
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show "Vision" indicator
     });
@@ -629,7 +628,7 @@ describe('ChatScreen', () => {
         imageGenerationStatus: 'Generating...',
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show "Step 5/20" or progress bar
     });
@@ -653,7 +652,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Image should be displayed
     });
@@ -683,7 +682,7 @@ describe('ChatScreen', () => {
     it('shows image mode toggle when image model loaded', () => {
       setupFullChat();
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Image toggle should be visible
     });
@@ -695,7 +694,7 @@ describe('ChatScreen', () => {
       });
       setupFullChat();
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Image toggle should be hidden
     });
@@ -713,7 +712,7 @@ describe('ChatScreen', () => {
       });
       (llmService.supportsVision as jest.Mock).mockReturnValue(true);
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Camera button should be visible
     });
@@ -722,7 +721,7 @@ describe('ChatScreen', () => {
       setupWithActiveModel();
       (llmService.supportsVision as jest.Mock).mockReturnValue(false);
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Camera button should be hidden
     });
@@ -753,7 +752,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Image should be displayed
     });
@@ -771,7 +770,7 @@ describe('ChatScreen', () => {
     it('shows project selector button', () => {
       setupFullChat();
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Project button should be visible
     });
@@ -784,7 +783,7 @@ describe('ChatScreen', () => {
     });
 
     it('uses project system prompt', async () => {
-      const project = createProject({
+      const _project = createProject({
         systemPrompt: 'You are a coding assistant.',
       });
 
@@ -798,7 +797,7 @@ describe('ChatScreen', () => {
 
       useChatStore.getState().setConversationProject(conversationId, project.id);
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show project name badge
     });
@@ -895,7 +894,7 @@ describe('ChatScreen', () => {
     });
 
     it('opens existing conversation from route params', () => {
-      const { modelId, conversationId } = setupFullChat();
+      const { modelId: _modelId, conversationId } = setupFullChat();
       mockRoute.params = { conversationId };
 
       renderWithNavigation(<ChatScreen />);
@@ -904,7 +903,7 @@ describe('ChatScreen', () => {
     });
 
     it('clears KV cache on conversation switch', async () => {
-      const { conversationId } = setupFullChat();
+      const { conversationId: _conversationId } = setupFullChat();
       const conv2 = createConversation({ title: 'Second chat' });
       useChatStore.setState({
         conversations: [
@@ -927,7 +926,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // May show title in header
     });
@@ -960,7 +959,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show tok/s, GPU, etc.
     });
@@ -982,7 +981,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should not show metadata
     });
@@ -1028,7 +1027,7 @@ describe('ChatScreen', () => {
       });
       setupFullChat();
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Should show "1" badge
     });
@@ -1104,7 +1103,7 @@ describe('ChatScreen', () => {
         activeConversationId: conversationId,
       });
 
-      const { queryByText } = renderWithNavigation(<ChatScreen />);
+      const { queryByText: _queryByText } = renderWithNavigation(<ChatScreen />);
 
       // Thinking content may be collapsed
     });
@@ -1123,7 +1122,7 @@ describe('ChatScreen', () => {
         streamingMessage: '<think>Processing',
       });
 
-      const { queryByTestId } = renderWithNavigation(<ChatScreen />);
+      const { queryByTestId: _queryByTestId } = renderWithNavigation(<ChatScreen />);
 
       // Thinking animation should be visible
     });

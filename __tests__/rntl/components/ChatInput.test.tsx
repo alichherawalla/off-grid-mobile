@@ -64,7 +64,7 @@ jest.mock('../../../src/hooks/useWhisperTranscription', () => ({
 
 // Mock VoiceRecordButton component
 jest.mock('../../../src/components/VoiceRecordButton', () => ({
-  VoiceRecordButton: ({ testID, onStartRecording, onStopRecording, isRecording, isAvailable, disabled }: any) => {
+  VoiceRecordButton: ({ _testID, onStartRecording, onStopRecording, isRecording, isAvailable, disabled }: any) => {
     const { TouchableOpacity, Text } = require('react-native');
     return (
       <TouchableOpacity

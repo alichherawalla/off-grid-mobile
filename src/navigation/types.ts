@@ -1,3 +1,5 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 export type RootStackParamList = {
   Onboarding: undefined;
   ModelDownload: undefined;
@@ -9,10 +11,10 @@ export type RootStackParamList = {
 // Tab navigator params
 export type MainTabParamList = {
   HomeTab: undefined;
-  ChatsTab: undefined;
-  ProjectsTab: undefined;
-  ModelsTab: undefined;
-  SettingsTab: undefined;
+  ChatsTab: NavigatorScreenParams<ChatsStackParamList> | undefined;
+  ProjectsTab: NavigatorScreenParams<ProjectsStackParamList> | undefined;
+  ModelsTab: NavigatorScreenParams<ModelsStackParamList> | undefined;
+  SettingsTab: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
 
 // Stack navigators within tabs

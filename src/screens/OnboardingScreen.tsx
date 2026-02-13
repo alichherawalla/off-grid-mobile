@@ -66,6 +66,7 @@ const SlideContent: React.FC<{
       descOpacity.value = withDelay(300, withTiming(1, { duration: 300 }));
       descTranslateY.value = withDelay(300, withTiming(0, { duration: 300 }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
   const iconStyle = useAnimatedStyle(() => ({

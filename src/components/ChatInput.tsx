@@ -49,7 +49,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   conversationId,
   imageModelLoaded = false,
   onImageModeChange,
-  onOpenSettings,
+  onOpenSettings: _onOpenSettings,
   activeImageModelName,
   queueCount = 0,
   queuedTexts = [],
@@ -71,7 +71,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const {
     isRecording,
-    isModelLoaded,
     isModelLoading,
     isTranscribing,
     partialResult,
@@ -195,8 +194,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (result.assets && result.assets.length > 0) {
         addAttachments(result.assets);
       }
-    } catch (error) {
-      console.error('Error picking image:', error);
+    } catch (pickError) {
+      console.error('Error picking image:', pickError);
     }
   };
 
@@ -212,8 +211,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (result.assets && result.assets.length > 0) {
         addAttachments(result.assets);
       }
-    } catch (error) {
-      console.error('Error taking photo:', error);
+    } catch (cameraError) {
+      console.error('Error taking photo:', cameraError);
     }
   };
 
@@ -461,7 +460,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,

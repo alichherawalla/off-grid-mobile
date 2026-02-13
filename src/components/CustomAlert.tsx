@@ -115,7 +115,7 @@ export const showAlert = (
 // Helper function to hide alert (returns state to set)
 export const hideAlert = (): AlertState => initialAlertState;
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   content: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.md,

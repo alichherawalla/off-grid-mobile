@@ -14,7 +14,6 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAppStore } from '../stores';
 import { llmService, hardwareService } from '../services';
-import { ONNXImageModel } from '../types';
 
 interface SettingConfig {
   key: keyof typeof DEFAULT_SETTINGS;
@@ -140,7 +139,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
     updateSettings({ [key]: value });
   };
 
-  const handleSliderComplete = (key: keyof typeof DEFAULT_SETTINGS, value: number) => {
+  const handleSliderComplete = (_key: keyof typeof DEFAULT_SETTINGS, _value: number) => {
     // Already updated in handleSliderChange, this is now a no-op
     // but kept for compatibility with existing code
   };

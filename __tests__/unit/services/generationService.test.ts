@@ -8,9 +8,8 @@
 import { generationService, GenerationState } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { useChatStore } from '../../../src/stores/chatStore';
-import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores, setupWithActiveModel, setupWithConversation } from '../../utils/testHelpers';
-import { createMessage, createDownloadedModel } from '../../utils/factories';
+import { createMessage } from '../../utils/factories';
 
 // Mock the llmService
 jest.mock('../../../src/services/llm', () => ({
@@ -19,11 +18,12 @@ jest.mock('../../../src/services/llm', () => ({
     isCurrentlyGenerating: jest.fn(),
     generateResponse: jest.fn(),
     stopGeneration: jest.fn(),
-    getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
+    getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0, reasonNoGPU: '' })),
     getPerformanceStats: jest.fn(() => ({
       lastTokensPerSecond: 15,
       lastDecodeTokensPerSecond: 18,
       lastTimeToFirstToken: 0.5,
+      lastGenerationTime: 3.0,
       lastTokenCount: 50,
     })),
   },
@@ -61,11 +61,12 @@ describe('generationService', () => {
     mockedLlmService.isModelLoaded.mockReturnValue(true);
     mockedLlmService.isCurrentlyGenerating.mockReturnValue(false);
     mockedLlmService.stopGeneration.mockResolvedValue(undefined);
-    mockedLlmService.getGpuInfo.mockReturnValue({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 });
+    mockedLlmService.getGpuInfo.mockReturnValue({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0, reasonNoGPU: '' });
     mockedLlmService.getPerformanceStats.mockReturnValue({
       lastTokensPerSecond: 15,
       lastDecodeTokensPerSecond: 18,
       lastTimeToFirstToken: 0.5,
+      lastGenerationTime: 3.0,
       lastTokenCount: 50,
     });
   });
@@ -115,10 +116,10 @@ describe('generationService', () => {
       const convId = setupWithConversation();
 
       // Setup mock to simulate ongoing generation
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         // Never complete - simulates ongoing generation
         await new Promise(() => {});
-      });
+      }) as any);
 
       // Start generation (don't await - it won't complete)
       generationService.generateResponse(convId, [
@@ -126,7 +127,7 @@ describe('generationService', () => {
       ]);
 
       // Give it a moment to start
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       expect(generationService.isGeneratingFor(convId)).toBe(true);
     });
@@ -134,15 +135,15 @@ describe('generationService', () => {
     it('returns false for different conversation during generation', async () => {
       const convId = setupWithConversation();
 
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         await new Promise(() => {});
-      });
+      }) as any);
 
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hello' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       expect(generationService.isGeneratingFor('different-conversation')).toBe(false);
     });
@@ -219,16 +220,16 @@ describe('generationService', () => {
       const convId = setupWithConversation();
 
       // Start a generation that won't complete
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         await new Promise(() => {});
-      });
+      }) as any);
 
       // First generation
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'First' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       // Second generation should return immediately
       await generationService.generateResponse(convId, [
@@ -245,15 +246,15 @@ describe('generationService', () => {
 
       generationService.subscribe(state => stateUpdates.push({ ...state }));
 
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         await new Promise(() => {});
-      });
+      }) as any);
 
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hello' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       // Find the state where isThinking is true
       const thinkingState = stateUpdates.find(s => s.isThinking && s.isGenerating);
@@ -264,15 +265,15 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       const startStreamingSpy = jest.spyOn(useChatStore.getState(), 'startStreaming');
 
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         await new Promise(() => {});
-      });
+      }) as any);
 
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hello' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       expect(startStreamingSpy).toHaveBeenCalledWith(convId);
     });
@@ -284,10 +285,10 @@ describe('generationService', () => {
       // Track the streaming state during generation
       const streamedTokens: string[] = [];
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream,
-        onComplete
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+        onComplete: any
       ) => {
         onStream?.('Hello');
         streamedTokens.push('Hello');
@@ -297,7 +298,7 @@ describe('generationService', () => {
         streamedTokens.push('world');
         onComplete?.('Hello world');
         return 'Hello world';
-      });
+      }) as any);
 
       await generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
@@ -316,15 +317,15 @@ describe('generationService', () => {
       setupWithActiveModel();
       const onFirstToken = jest.fn();
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream,
-        onComplete
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+        onComplete: any
       ) => {
         onStream?.('First');
         onStream?.(' token');
         onComplete?.('First token');
-      });
+      }) as any);
 
       await generationService.generateResponse(
         convId,
@@ -339,14 +340,14 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       setupWithActiveModel();
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream,
-        onComplete
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+        onComplete: any
       ) => {
         onStream?.('Response');
         onComplete?.('Response');
-      });
+      }) as any);
 
       await generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
@@ -362,14 +363,14 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       const clearStreamingSpy = jest.spyOn(useChatStore.getState(), 'clearStreamingMessage');
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        _onStream,
-        _onComplete,
-        onError
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        _onStream: any,
+        _onComplete: any,
+        onError: any
       ) => {
         onError?.(new Error('Generation failed'));
-      });
+      }) as any);
 
       await generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
@@ -413,15 +414,15 @@ describe('generationService', () => {
       setupWithActiveModel();
 
       // Start generation that accumulates content
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any
       ) => {
         onStream?.('Partial');
         onStream?.(' content');
         // Never complete - will be stopped
         await new Promise(() => {});
-      });
+      }) as any);
 
       // Start generation
       generationService.generateResponse(convId, [
@@ -429,7 +430,7 @@ describe('generationService', () => {
       ]);
 
       // Wait for tokens to be processed
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
 
       // Stop generation
       const partial = await generationService.stopGeneration();
@@ -442,15 +443,15 @@ describe('generationService', () => {
       const clearStreamingSpy = jest.spyOn(useChatStore.getState(), 'clearStreamingMessage');
 
       // Start generation without any tokens
-      mockedLlmService.generateResponse.mockImplementation(async () => {
+      mockedLlmService.generateResponse.mockImplementation((async () => {
         await new Promise(() => {});
-      });
+      }) as any);
 
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
 
       await generationService.stopGeneration();
 
@@ -460,19 +461,19 @@ describe('generationService', () => {
     it('resets state after stopping', async () => {
       const convId = setupWithConversation();
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any
       ) => {
         onStream?.('Content');
         await new Promise(() => {});
-      });
+      }) as any);
 
       generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
       ]);
 
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 50));
 
       await generationService.stopGeneration();
 
@@ -500,14 +501,14 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       setupWithActiveModel();
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream,
-        onComplete
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+        onComplete: any
       ) => {
         onStream?.('Token');
         onComplete?.('Token');
-      });
+      }) as any);
 
       await generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),
@@ -523,15 +524,15 @@ describe('generationService', () => {
       const convId = setupWithConversation();
       setupWithActiveModel({ name: 'Test Model' });
 
-      mockedLlmService.generateResponse.mockImplementation(async (
-        _messages,
-        onStream,
-        onComplete
+      mockedLlmService.generateResponse.mockImplementation((async (
+        _messages: any,
+        onStream: any,
+        onComplete: any
       ) => {
         onStream?.('Response');
         onComplete?.('Response');
         return 'Response';
-      });
+      }) as any);
 
       await generationService.generateResponse(convId, [
         createMessage({ role: 'user', content: 'Hi' }),

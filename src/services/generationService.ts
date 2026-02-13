@@ -3,9 +3,7 @@
  * This allows generation to continue even when the user navigates away from the chat screen
  */
 
-import { Platform } from 'react-native';
 import { llmService } from './llm';
-import { activeModelService } from './activeModelService';
 import { useAppStore, useChatStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 

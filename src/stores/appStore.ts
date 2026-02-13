@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DeviceInfo, DownloadedModel, ModelRecommendation, BackgroundDownloadInfo, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage } from '../types';
+import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, ModelLoadingStrategy, GeneratedImage } from '../types';
 
 interface AppState {
   // Theme
@@ -172,7 +172,7 @@ export const useAppStore = create<AppState>()(
       setDownloadProgress: (modelId, progress) =>
         set((state) => {
           if (progress === null) {
-            const { [modelId]: _, ...rest } = state.downloadProgress;
+            const { [modelId]: _removed, ...rest } = state.downloadProgress;
             return { downloadProgress: rest };
           }
           return {
@@ -188,7 +188,7 @@ export const useAppStore = create<AppState>()(
       setBackgroundDownload: (downloadId, info) =>
         set((state) => {
           if (info === null) {
-            const { [downloadId]: _, ...rest } = state.activeBackgroundDownloads;
+            const { [downloadId]: _removed, ...rest } = state.activeBackgroundDownloads;
             return { activeBackgroundDownloads: rest };
           }
           return {
@@ -270,7 +270,7 @@ export const useAppStore = create<AppState>()(
         })),
       removeImageModelDownloading: (modelId) =>
         set((state) => {
-          const { [modelId]: _, ...restIds } = state.imageModelDownloadIds;
+          const { [modelId]: _removed, ...restIds } = state.imageModelDownloadIds;
           return {
             imageModelDownloading: state.imageModelDownloading.filter(id => id !== modelId),
             imageModelDownloadIds: restIds,
@@ -281,7 +281,7 @@ export const useAppStore = create<AppState>()(
       setImageModelDownloadId: (modelId, downloadId) =>
         set((state) => {
           if (downloadId === null) {
-            const { [modelId]: _, ...rest } = state.imageModelDownloadIds;
+            const { [modelId]: _removed, ...rest } = state.imageModelDownloadIds;
             return { imageModelDownloadIds: rest };
           }
           return {
