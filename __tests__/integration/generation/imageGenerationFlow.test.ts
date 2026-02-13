@@ -10,6 +10,7 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { activeModelService } from '../../../src/services/activeModelService';
+import { llmService } from '../../../src/services/llm';
 import {
   resetStores,
   flushPromises,
@@ -17,14 +18,17 @@ import {
   getChatState,
   setupWithConversation,
 } from '../../utils/testHelpers';
-import { createONNXImageModel, createGeneratedImage } from '../../utils/factories';
+import { createONNXImageModel, createGeneratedImage, createMessage } from '../../utils/factories';
+import { Message } from '../../../src/types';
 
 // Mock the services
 jest.mock('../../../src/services/localDreamGenerator');
 jest.mock('../../../src/services/activeModelService');
+jest.mock('../../../src/services/llm');
 
 const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
 const mockActiveModelService = activeModelService as jest.Mocked<typeof activeModelService>;
+const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 
 describe('Image Generation Flow Integration', () => {
   beforeEach(async () => {
@@ -54,6 +58,11 @@ describe('Image Generation Flow Integration', () => {
       image: { model: null, isLoaded: true, isLoading: false },
     });
     mockActiveModelService.loadImageModel.mockResolvedValue();
+
+    // Default LLM service mocks (for prompt enhancement)
+    mockLlmService.isModelLoaded.mockReturnValue(false);
+    mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+    mockLlmService.stopGeneration.mockResolvedValue();
 
     // Reset imageGenerationService state by canceling any in-progress generation
     await imageGenerationService.cancelGeneration().catch(() => {});
@@ -510,6 +519,205 @@ describe('Image Generation Flow Integration', () => {
       expect(message?.generationMeta?.steps).toBe(25);
       expect(message?.generationMeta?.guidanceScale).toBe(8.0);
       expect(message?.generationMeta?.resolution).toBe('512x512');
+    });
+  });
+
+  describe('Prompt Enhancement with Conversation Context', () => {
+    const setupEnhancement = () => {
+      const imageModel = setupImageModelState();
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: imageModel, isLoaded: true, isLoading: false },
+      });
+
+      // Enable enhancement and set up LLM as available
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: true,
+        },
+      });
+      mockLlmService.isModelLoaded.mockReturnValue(true);
+      mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
+      mockLlmService.generateResponse.mockResolvedValue('A beautifully enhanced prompt');
+
+      return imageModel;
+    };
+
+    it('should pass conversation history to enhancement when conversationId provided', async () => {
+      setupEnhancement();
+
+      // Set up a conversation with prior messages
+      const messages: Message[] = [
+        createMessage({ role: 'user', content: 'Draw me a cat' }),
+        createMessage({ role: 'assistant', content: 'Here is a cat image' }),
+        createMessage({ role: 'user', content: 'Make it darker' }),
+      ];
+      const conversationId = setupWithConversation({ messages });
+
+      await imageGenerationService.generateImage({
+        prompt: 'Make it darker',
+        conversationId,
+      });
+
+      // Verify generateResponse was called with conversation context
+      expect(mockLlmService.generateResponse).toHaveBeenCalled();
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // Should have: system + context messages + user enhance prompt
+      // system (1) + conversation messages (3) + user enhance (1) = 5
+      expect(enhancementMessages.length).toBe(5);
+      expect(enhancementMessages[0].role).toBe('system');
+      expect(enhancementMessages[0].content).toContain('conversation history');
+      expect(enhancementMessages[1].content).toBe('Draw me a cat');
+      expect(enhancementMessages[2].content).toBe('Here is a cat image');
+      expect(enhancementMessages[3].content).toBe('Make it darker');
+      expect(enhancementMessages[4].role).toBe('user');
+      expect(enhancementMessages[4].content).toBe('Make it darker');
+    });
+
+    it('should not include conversation context when no conversationId', async () => {
+      setupEnhancement();
+
+      await imageGenerationService.generateImage({
+        prompt: 'A sunset',
+      });
+
+      expect(mockLlmService.generateResponse).toHaveBeenCalled();
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // Should have: system + user enhance prompt only (no context)
+      expect(enhancementMessages.length).toBe(2);
+      expect(enhancementMessages[0].role).toBe('system');
+      expect(enhancementMessages[0].content).not.toContain('conversation history');
+      expect(enhancementMessages[1].role).toBe('user');
+      expect(enhancementMessages[1].content).toBe('A sunset');
+    });
+
+    it('should truncate long messages in conversation context', async () => {
+      setupEnhancement();
+
+      const longContent = 'x'.repeat(1000);
+      const messages: Message[] = [
+        createMessage({ role: 'user', content: longContent }),
+      ];
+      const conversationId = setupWithConversation({ messages });
+
+      await imageGenerationService.generateImage({
+        prompt: 'Enhance this',
+        conversationId,
+      });
+
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // The context message should be truncated to 500 chars
+      const contextMsg = enhancementMessages.find(m => m.id.startsWith('ctx-'));
+      expect(contextMsg).toBeDefined();
+      expect(contextMsg!.content.length).toBe(500);
+    });
+
+    it('should limit conversation context to last 10 messages', async () => {
+      setupEnhancement();
+
+      // Create 15 messages
+      const messages: Message[] = [];
+      for (let i = 0; i < 15; i++) {
+        messages.push(createMessage({
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          content: `Message ${i + 1}`,
+        }));
+      }
+      const conversationId = setupWithConversation({ messages });
+
+      await imageGenerationService.generateImage({
+        prompt: 'Generate image',
+        conversationId,
+      });
+
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // system (1) + last 10 context messages + user enhance (1) = 12
+      expect(enhancementMessages.length).toBe(12);
+      // First context message should be message 6 (index 5), not message 1
+      const firstContextMsg = enhancementMessages[1];
+      expect(firstContextMsg.content).toBe('Message 6');
+    });
+
+    it('should skip system messages from conversation context', async () => {
+      setupEnhancement();
+
+      const messages: Message[] = [
+        createMessage({ role: 'user', content: 'Hello' }),
+        createMessage({ role: 'system', content: 'Model loaded successfully' }),
+        createMessage({ role: 'assistant', content: 'Hi there' }),
+      ];
+      const conversationId = setupWithConversation({ messages });
+
+      await imageGenerationService.generateImage({
+        prompt: 'Draw something',
+        conversationId,
+      });
+
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // system (1) + 2 context (user + assistant, system skipped) + user enhance (1) = 4
+      expect(enhancementMessages.length).toBe(4);
+      const contextMessages = enhancementMessages.filter(m => m.id.startsWith('ctx-'));
+      expect(contextMessages).toHaveLength(2);
+      expect(contextMessages.every(m => m.role !== 'system')).toBe(true);
+    });
+
+    it('should use original prompt when enhancement is disabled', async () => {
+      setupImageModelState();
+      mockActiveModelService.getActiveModels.mockReturnValue({
+        text: { model: null, isLoaded: false, isLoading: false },
+        image: { model: setupImageModelState(), isLoaded: true, isLoading: false },
+      });
+
+      // Enhancement disabled (default)
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          enhanceImagePrompts: false,
+        },
+      });
+
+      const messages: Message[] = [
+        createMessage({ role: 'user', content: 'Draw a cat' }),
+      ];
+      const conversationId = setupWithConversation({ messages });
+
+      await imageGenerationService.generateImage({
+        prompt: 'Make it blue',
+        conversationId,
+      });
+
+      // LLM should not be called for enhancement
+      expect(mockLlmService.generateResponse).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty conversation gracefully', async () => {
+      setupEnhancement();
+
+      const conversationId = setupWithConversation({ messages: [] });
+
+      await imageGenerationService.generateImage({
+        prompt: 'A landscape',
+        conversationId,
+      });
+
+      const callArgs = mockLlmService.generateResponse.mock.calls[0];
+      const enhancementMessages = callArgs[0] as Message[];
+
+      // system + user enhance only (no context from empty conversation)
+      expect(enhancementMessages.length).toBe(2);
+      expect(enhancementMessages[0].role).toBe('system');
+      expect(enhancementMessages[0].content).not.toContain('conversation history');
     });
   });
 });
