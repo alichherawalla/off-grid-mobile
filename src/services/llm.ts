@@ -438,34 +438,26 @@ class LLMService {
       // Prepare completion params
       let completionParams: any;
 
+      // Always use OAI-compatible messages format so llama.rn applies
+      // the model's native chat template from GGUF metadata, instead of
+      // hardcoding ChatML which breaks models that use different templates.
       if (useMultimodal) {
-        // Convert to OpenAI-compatible message format with images
         console.log('[LLM] Converting messages for vision mode...');
-        const oaiMessages = this.convertToOAIMessages(managedMessages);
+      }
+      const oaiMessages = this.convertToOAIMessages(managedMessages);
+      if (useMultimodal) {
         console.log('[LLM] Vision messages prepared, image count:',
           oaiMessages.filter(m => Array.isArray(m.content) && m.content.some((c: any) => c.type === 'image_url')).length);
-        completionParams = {
-          messages: oaiMessages,
-          n_predict: maxTokens,
-          temperature,
-          top_k: 40,
-          top_p: topP,
-          penalty_repeat: repeatPenalty,
-          stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
-        };
-      } else {
-        // Use text-only prompt format
-        const prompt = this.formatMessages(managedMessages);
-        completionParams = {
-          prompt,
-          n_predict: maxTokens,
-          temperature,
-          top_k: 40,
-          top_p: topP,
-          penalty_repeat: repeatPenalty,
-          stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
-        };
       }
+      completionParams = {
+        messages: oaiMessages,
+        n_predict: maxTokens,
+        temperature,
+        top_k: 40,
+        top_p: topP,
+        penalty_repeat: repeatPenalty,
+        stop: ['</s>', '<|end|>', '<|eot_id|>', '<|im_end|>', '<|im_start|>'],
+      };
 
       // Use streaming completion
       console.log('[LLM] 🚀 Calling context.completion... (mode:', useMultimodal ? 'vision' : 'text', ')');
