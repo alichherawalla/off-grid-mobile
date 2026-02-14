@@ -98,7 +98,8 @@ jobs:
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=84V6KCAC49 \
-            | tail -20
+            CODE_SIGN_IDENTITY="Apple Development" \
+            PROVISIONING_PROFILE_SPECIFIER="iOS Team Provisioning Profile: ai.offgridmobile"
 
       - name: Export IPA
         run: |
