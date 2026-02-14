@@ -742,4 +742,341 @@ describe('LLMService', () => {
       expect(settings.nBatch).toBe(256); // unchanged
     });
   });
+
+  // ========================================================================
+  // clearKVCache edge cases
+  // ========================================================================
+  describe('clearKVCache edge cases', () => {
+    it('skips clearing during active generation', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      (llmService as any).isGenerating = true;
+
+      await llmService.clearKVCache();
+
+      expect(ctx.clearCache).not.toHaveBeenCalled();
+    });
+
+    it('passes clearData=true when requested', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      await llmService.clearKVCache(true);
+
+      expect(ctx.clearCache).toHaveBeenCalledWith(true);
+    });
+  });
+
+  // ========================================================================
+  // formatMessages (private, tested via getFormattedPrompt)
+  // ========================================================================
+  describe('formatMessages', () => {
+    it('formats system message with ChatML tags', () => {
+      const messages = [createSystemMessage('You are helpful')];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      expect(prompt).toContain('<|im_start|>system');
+      expect(prompt).toContain('You are helpful');
+      expect(prompt).toContain('<|im_end|>');
+    });
+
+    it('formats user message with ChatML tags', () => {
+      const messages = [createUserMessage('Hello')];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      expect(prompt).toContain('<|im_start|>user');
+      expect(prompt).toContain('Hello');
+    });
+
+    it('formats assistant message with ChatML tags', () => {
+      const messages = [createAssistantMessage('Hi there')];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      expect(prompt).toContain('<|im_start|>assistant');
+      expect(prompt).toContain('Hi there');
+    });
+
+    it('ends with assistant prefix for generation', () => {
+      const messages = [createUserMessage('Hello')];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      expect(prompt.endsWith('<|im_start|>assistant\n')).toBe(true);
+    });
+
+    it('preserves message order', () => {
+      const messages = [
+        createSystemMessage('System'),
+        createUserMessage('Q1'),
+        createAssistantMessage('A1'),
+        createUserMessage('Q2'),
+      ];
+      const prompt = llmService.getFormattedPrompt(messages);
+
+      const systemIdx = prompt.indexOf('System');
+      const q1Idx = prompt.indexOf('Q1');
+      const a1Idx = prompt.indexOf('A1');
+      const q2Idx = prompt.indexOf('Q2');
+
+      expect(systemIdx).toBeLessThan(q1Idx);
+      expect(q1Idx).toBeLessThan(a1Idx);
+      expect(a1Idx).toBeLessThan(q2Idx);
+    });
+  });
+
+  // ========================================================================
+  // convertToOAIMessages (private, tested via generateResponse with vision)
+  // ========================================================================
+  describe('convertToOAIMessages', () => {
+    it('converts text-only message to simple format', () => {
+      const messages = [createUserMessage('Hello')];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      expect(oaiMessages[0].role).toBe('user');
+      expect(oaiMessages[0].content).toBe('Hello');
+    });
+
+    it('converts message with images to multipart format', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'What is this?',
+        timestamp: Date.now(),
+        attachments: [{ id: 'att-1', type: 'image' as const, uri: '/path/to/image.jpg' }],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      expect(Array.isArray(oaiMessages[0].content)).toBe(true);
+      const parts = oaiMessages[0].content;
+      const imagePart = parts.find((p: any) => p.type === 'image_url');
+      const textPart = parts.find((p: any) => p.type === 'text');
+
+      expect(imagePart).toBeDefined();
+      expect(textPart?.text).toBe('What is this?');
+    });
+
+    it('adds file:// prefix to local image URIs', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'Look',
+        timestamp: Date.now(),
+        attachments: [{ id: 'att-2', type: 'image' as const, uri: '/local/path/image.jpg' }],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      const imagePart = oaiMessages[0].content.find((p: any) => p.type === 'image_url');
+      expect(imagePart.image_url.url.startsWith('file://')).toBe(true);
+    });
+
+    it('preserves file:// prefix when already present', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'Look',
+        timestamp: Date.now(),
+        attachments: [{ id: 'att-3', type: 'image' as const, uri: 'file:///path/image.jpg' }],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      const imagePart = oaiMessages[0].content.find((p: any) => p.type === 'image_url');
+      expect(imagePart.image_url.url).toBe('file:///path/image.jpg');
+    });
+
+    it('handles multiple images in one message', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'Compare these',
+        timestamp: Date.now(),
+        attachments: [
+          { id: 'att-4', type: 'image' as const, uri: 'file:///img1.jpg' },
+          { id: 'att-5', type: 'image' as const, uri: 'file:///img2.jpg' },
+        ],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      const imageParts = oaiMessages[0].content.filter((p: any) => p.type === 'image_url');
+      expect(imageParts).toHaveLength(2);
+    });
+
+    it('does not convert assistant messages with images', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'assistant' as const,
+        content: 'Here is the image',
+        timestamp: Date.now(),
+        attachments: [{ id: 'att-6', type: 'image' as const, uri: 'file:///img.jpg' }],
+      }];
+      const oaiMessages = (llmService as any).convertToOAIMessages(messages);
+
+      // Assistant messages should remain as simple string content
+      expect(typeof oaiMessages[0].content).toBe('string');
+    });
+  });
+
+  // ========================================================================
+  // getImageUris
+  // ========================================================================
+  describe('getImageUris', () => {
+    it('extracts image URIs from messages', () => {
+      const messages = [{
+        id: 'msg-1',
+        role: 'user' as const,
+        content: 'Look',
+        timestamp: Date.now(),
+        attachments: [
+          { type: 'image' as const, uri: '/img1.jpg', name: 'img1.jpg' },
+          { type: 'audio' as const, uri: '/voice.wav', name: 'voice.wav' },
+          { type: 'image' as const, uri: '/img2.jpg', name: 'img2.jpg' },
+        ],
+      }];
+      const uris = (llmService as any).getImageUris(messages);
+
+      expect(uris).toHaveLength(2);
+      expect(uris).toContain('/img1.jpg');
+      expect(uris).toContain('/img2.jpg');
+    });
+
+    it('returns empty array when no attachments', () => {
+      const messages = [createUserMessage('Hello')];
+      const uris = (llmService as any).getImageUris(messages);
+
+      expect(uris).toEqual([]);
+    });
+  });
+
+  // ========================================================================
+  // context window tokenize fallback
+  // ========================================================================
+  describe('context window tokenize fallback', () => {
+    it('uses char/4 estimation when tokenize throws', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext({
+        completion: jest.fn(async (_params: any, callback: any) => {
+          callback({ token: 'OK' });
+          return { text: 'OK', tokens_predicted: 1 };
+        }),
+        tokenize: jest.fn(() => Promise.reject(new Error('tokenize failed'))),
+      });
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      // Should not throw despite tokenize failure
+      const messages = [
+        createSystemMessage('System'),
+        createUserMessage('Hello'),
+      ];
+      await expect(llmService.generateResponse(messages)).resolves.toBeDefined();
+    });
+  });
+
+  // ========================================================================
+  // reloadWithSettings
+  // ========================================================================
+  describe('reloadWithSettings', () => {
+    it('unloads existing model and reloads with new settings', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx1 = createMockLlamaContext();
+      const ctx2 = createMockLlamaContext();
+      mockedInitLlama
+        .mockResolvedValueOnce(ctx1 as any)
+        .mockResolvedValueOnce(ctx2 as any);
+
+      await llmService.loadModel('/models/test.gguf');
+
+      await llmService.reloadWithSettings('/models/test.gguf', {
+        nThreads: 8,
+        nBatch: 512,
+        contextLength: 4096,
+      });
+
+      expect(ctx1.release).toHaveBeenCalled();
+      const settings = llmService.getPerformanceSettings();
+      expect(settings.nThreads).toBe(8);
+      expect(settings.nBatch).toBe(512);
+      expect(settings.contextLength).toBe(4096);
+    });
+
+    it('resets state on reload failure when all attempts fail', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama
+        .mockResolvedValueOnce(ctx as any) // initial load
+        .mockRejectedValueOnce(new Error('GPU reload failed')) // GPU attempt
+        .mockRejectedValueOnce(new Error('CPU reload failed')); // CPU fallback
+
+      // Enable GPU so both attempts happen
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, enableGpu: true, gpuLayers: 6 },
+      });
+
+      await llmService.loadModel('/models/test.gguf');
+
+      await expect(
+        llmService.reloadWithSettings('/models/test.gguf', {
+          nThreads: 8,
+          nBatch: 512,
+          contextLength: 4096,
+        })
+      ).rejects.toThrow('CPU reload failed');
+
+      expect(llmService.isModelLoaded()).toBe(false);
+    });
+  });
+
+  // ========================================================================
+  // hashString
+  // ========================================================================
+  describe('hashString', () => {
+    it('returns consistent hash for same input', () => {
+      const hash1 = (llmService as any).hashString('test string');
+      const hash2 = (llmService as any).hashString('test string');
+      expect(hash1).toBe(hash2);
+    });
+
+    it('returns different hashes for different inputs', () => {
+      const hash1 = (llmService as any).hashString('string1');
+      const hash2 = (llmService as any).hashString('string2');
+      expect(hash1).not.toBe(hash2);
+    });
+  });
+
+  // ========================================================================
+  // getModelInfo
+  // ========================================================================
+  describe('getModelInfo', () => {
+    it('returns null without model loaded', async () => {
+      const info = await llmService.getModelInfo();
+      expect(info).toBeNull();
+    });
+
+    it('returns info when model loaded', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      const info = await llmService.getModelInfo();
+      expect(info).not.toBeNull();
+      expect(info?.contextLength).toBeDefined();
+    });
+  });
+
+  // ========================================================================
+  // supportsVision / getMultimodalSupport
+  // ========================================================================
+  describe('vision support helpers', () => {
+    it('supportsVision returns false when no model loaded', () => {
+      expect(llmService.supportsVision()).toBe(false);
+    });
+
+    it('getMultimodalSupport returns null when no model loaded', () => {
+      expect(llmService.getMultimodalSupport()).toBeNull();
+    });
+  });
 });

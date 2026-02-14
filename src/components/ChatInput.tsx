@@ -336,6 +336,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </TouchableOpacity>
           )}
 
+          {/* Vision indicator */}
+          {supportsVision && (
+            <View testID="vision-indicator" style={styles.visionBadge}>
+              <Text style={styles.visionBadgeText}>Vision</Text>
+            </View>
+          )}
+
 
           {/* Image generation mode toggle - only in manual mode (actionable) */}
           {settings.imageGenerationMode === 'manual' && imageModelLoaded && (
@@ -350,6 +357,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 size={20}
                 color={imageMode === 'force' ? colors.primary : colors.textSecondary}
               />
+              {imageMode === 'force' && (
+                <View testID="image-mode-on-badge" style={styles.onBadge}>
+                  <Text style={styles.onBadgeText}>ON</Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
 
@@ -586,5 +598,32 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     fontWeight: '300' as const,
     color: colors.textMuted,
     maxWidth: 140,
+  },
+  onBadge: {
+    position: 'absolute' as const,
+    top: -2,
+    right: -2,
+    backgroundColor: colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+  onBadgeText: {
+    fontSize: 8,
+    fontFamily: FONTS.mono,
+    fontWeight: '700' as const,
+    color: colors.background,
+  },
+  visionBadge: {
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  visionBadgeText: {
+    fontSize: 10,
+    fontFamily: FONTS.mono,
+    fontWeight: '500' as const,
+    color: colors.primary,
   },
 });

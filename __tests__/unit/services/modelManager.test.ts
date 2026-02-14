@@ -1104,4 +1104,375 @@ describe('ModelManager', () => {
       expect(modelManager.isDownloading('test', 'model.gguf')).toBe(false);
     });
   });
+
+  // ========================================================================
+  // resolveStoredPath (private, tested via cast)
+  // ========================================================================
+  describe('resolveStoredPath', () => {
+    const resolveStoredPath = (storedPath: string, currentBaseDir: string) =>
+      (modelManager as any).resolveStoredPath(storedPath, currentBaseDir);
+
+    it('returns re-resolved path when UUID changes', () => {
+      const storedPath = '/old-uuid/Documents/models/mymodel.gguf';
+      const currentBaseDir = '/new-uuid/Documents/models';
+
+      const result = resolveStoredPath(storedPath, currentBaseDir);
+      expect(result).toBe('/new-uuid/Documents/models/mymodel.gguf');
+    });
+
+    it('returns null when stored path does not match base directory pattern', () => {
+      const storedPath = '/completely/different/path/model.gguf';
+      const currentBaseDir = '/new-uuid/Documents/models';
+
+      const result = resolveStoredPath(storedPath, currentBaseDir);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when relative part is empty', () => {
+      // storedPath ends with the marker directory itself (no file after it)
+      const storedPath = '/old-uuid/Documents/models/';
+      const currentBaseDir = '/new-uuid/Documents/models';
+
+      const result = resolveStoredPath(storedPath, currentBaseDir);
+      expect(result).toBeNull();
+    });
+
+    it('handles nested subdirectories', () => {
+      const storedPath = '/old-uuid/Documents/image_models/sd-turbo/model.onnx';
+      const currentBaseDir = '/new-uuid/Documents/image_models';
+
+      const result = resolveStoredPath(storedPath, currentBaseDir);
+      expect(result).toBe('/new-uuid/Documents/image_models/sd-turbo/model.onnx');
+    });
+  });
+
+  // ========================================================================
+  // isMMProjFile (private, tested via cast)
+  // ========================================================================
+  describe('isMMProjFile', () => {
+    const isMMProjFile = (fileName: string) =>
+      (modelManager as any).isMMProjFile(fileName);
+
+    it('detects mmproj filenames', () => {
+      expect(isMMProjFile('model-mmproj-f16.gguf')).toBe(true);
+      expect(isMMProjFile('Qwen3VL-2B-mmproj-Q4_0.gguf')).toBe(true);
+    });
+
+    it('detects projector filenames', () => {
+      expect(isMMProjFile('model-projector-f16.gguf')).toBe(true);
+    });
+
+    it('detects clip .gguf filenames', () => {
+      expect(isMMProjFile('clip-vit-large.gguf')).toBe(true);
+    });
+
+    it('rejects non-mmproj filenames', () => {
+      expect(isMMProjFile('llama-3.2-3B-Q4_K_M.gguf')).toBe(false);
+      expect(isMMProjFile('Qwen3-8B-Instruct-Q4_K_M.gguf')).toBe(false);
+      expect(isMMProjFile('phi-3-mini.gguf')).toBe(false);
+    });
+
+    it('is case-insensitive', () => {
+      expect(isMMProjFile('Model-MMPROJ-F16.GGUF')).toBe(true);
+      expect(isMMProjFile('CLIP-model.gguf')).toBe(true);
+    });
+  });
+
+  // ========================================================================
+  // cleanupMMProjEntries
+  // ========================================================================
+  describe('cleanupMMProjEntries', () => {
+    it('removes mmproj entries from models list', async () => {
+      const storedModels = [
+        { id: 'model1', name: 'Real Model', fileName: 'model-Q4_K_M.gguf', filePath: '/models/model-Q4_K_M.gguf', fileSize: 4000000000 },
+        { id: 'mmproj1', name: 'MMProj', fileName: 'model-mmproj-f16.gguf', filePath: '/models/model-mmproj-f16.gguf', fileSize: 500000000 },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([]);
+
+      const removedCount = await modelManager.cleanupMMProjEntries();
+
+      expect(removedCount).toBe(1);
+      // Saved list should only contain the real model
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        MODELS_STORAGE_KEY,
+        expect.not.stringContaining('mmproj1')
+      );
+    });
+
+    it('handles empty model list', async () => {
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([]);
+
+      const removedCount = await modelManager.cleanupMMProjEntries();
+
+      expect(removedCount).toBe(0);
+    });
+
+    it('links orphaned mmproj files to matching vision models', async () => {
+      const storedModels = [
+        {
+          id: 'vision1',
+          name: 'Qwen3VL-2B-Instruct',
+          fileName: 'Qwen3VL-2B-Instruct-Q4_K_M.gguf',
+          filePath: '/models/Qwen3VL-2B-Instruct-Q4_K_M.gguf',
+          fileSize: 2000000000,
+          isVisionModel: false,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([
+        {
+          name: 'Qwen3VL-2B-Instruct-mmproj-f16.gguf',
+          path: '/models/Qwen3VL-2B-Instruct-mmproj-f16.gguf',
+          size: 300000000,
+          isFile: () => true,
+          isDirectory: () => false,
+        } as any,
+      ]);
+
+      await modelManager.cleanupMMProjEntries();
+
+      // The saved model list should have the mmproj linked
+      const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
+        (call) => call[0] === MODELS_STORAGE_KEY
+      );
+      expect(savedCall).toBeDefined();
+      const savedModels = JSON.parse(savedCall![1]);
+      expect(savedModels[0].isVisionModel).toBe(true);
+      expect(savedModels[0].mmProjFileName).toBe('Qwen3VL-2B-Instruct-mmproj-f16.gguf');
+    });
+
+    it('returns count of removed entries', async () => {
+      const storedModels = [
+        { id: 'm1', name: 'Model', fileName: 'model.gguf', filePath: '/models/model.gguf', fileSize: 1000 },
+        { id: 'p1', name: 'Proj1', fileName: 'proj-mmproj.gguf', filePath: '/models/proj-mmproj.gguf', fileSize: 100 },
+        { id: 'p2', name: 'Proj2', fileName: 'clip-model.gguf', filePath: '/models/clip-model.gguf', fileSize: 100 },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([]);
+
+      const removedCount = await modelManager.cleanupMMProjEntries();
+
+      expect(removedCount).toBe(2);
+    });
+  });
+
+  // ========================================================================
+  // importLocalModel
+  // ========================================================================
+  describe('importLocalModel', () => {
+    beforeEach(() => {
+      // Override Platform.OS for these tests
+      jest.spyOn(require('react-native'), 'Platform', 'get').mockReturnValue({ OS: 'ios' } as any);
+    });
+
+    it('imports valid .gguf file successfully', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)   // modelsDir
+        .mockResolvedValueOnce(true)   // imageModelsDir
+        .mockResolvedValueOnce(false); // destExists = false
+      mockedRNFS.stat.mockResolvedValue({ size: 2000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const result = await modelManager.importLocalModel(
+        '/path/to/source.gguf',
+        'MyModel-Q4_K_M.gguf'
+      );
+
+      expect(result.id).toBe('local_import/MyModel-Q4_K_M.gguf');
+      expect(result.author).toBe('Local Import');
+      expect(result.quantization).toBe('Q4_K_M');
+      expect(result.fileName).toBe('MyModel-Q4_K_M.gguf');
+    });
+
+    it('rejects non-.gguf files', async () => {
+      await expect(
+        modelManager.importLocalModel('/path/to/model.bin', 'model.bin')
+      ).rejects.toThrow('Only .gguf files can be imported');
+    });
+
+    it('rejects when destination already exists', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)  // modelsDir
+        .mockResolvedValueOnce(true)  // imageModelsDir
+        .mockResolvedValue(true);     // destExists = true
+      mockedRNFS.stat.mockResolvedValue({ size: 1000, isFile: () => true } as any);
+
+      await expect(
+        modelManager.importLocalModel('/path/to/source.gguf', 'existing.gguf')
+      ).rejects.toThrow('already exists');
+    });
+
+    it('parses quantization from filename', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockedRNFS.stat.mockResolvedValue({ size: 1000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const result = await modelManager.importLocalModel(
+        '/path/to/source.gguf',
+        'llama-3.2-3B-Q8_0.gguf'
+      );
+
+      expect(result.quantization).toBe('Q8_0');
+    });
+
+    it('sets quantization to Unknown when not parseable', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockedRNFS.stat.mockResolvedValue({ size: 1000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const result = await modelManager.importLocalModel(
+        '/path/to/source.gguf',
+        'custom-model.gguf'
+      );
+
+      expect(result.quantization).toBe('Unknown');
+    });
+
+    it('adds imported model to storage', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockedRNFS.stat.mockResolvedValue({ size: 1000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      await modelManager.importLocalModel('/path/to/source.gguf', 'imported.gguf');
+
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+        MODELS_STORAGE_KEY,
+        expect.stringContaining('local_import/imported.gguf')
+      );
+    });
+
+    it('handles copy failure gracefully', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockedRNFS.stat.mockResolvedValue({ size: 1000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockRejectedValue(new Error('Copy failed'));
+
+      await expect(
+        modelManager.importLocalModel('/path/to/source.gguf', 'fail.gguf')
+      ).rejects.toThrow('Copy failed');
+
+      // Partial file should be cleaned up
+      expect(RNFS.unlink).toHaveBeenCalled();
+    });
+
+    it('reports progress during copy', async () => {
+      mockedRNFS.exists
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false); // dest doesn't exist
+      mockedRNFS.stat.mockResolvedValue({ size: 1000000000, isFile: () => true } as any);
+      (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const onProgress = jest.fn();
+      await modelManager.importLocalModel(
+        '/path/to/source.gguf',
+        'progress-model.gguf',
+        onProgress
+      );
+
+      // At minimum, progress should be called with 1.0 at completion
+      expect(onProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ fraction: 1, fileName: 'progress-model.gguf' })
+      );
+    });
+  });
+
+  // ========================================================================
+  // refreshModelLists
+  // ========================================================================
+  describe('refreshModelLists', () => {
+    it('calls both scan functions and returns combined results', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([]);
+      mockedAsyncStorage.getItem.mockResolvedValue('[]');
+
+      const result = await modelManager.refreshModelLists();
+
+      expect(result).toHaveProperty('textModels');
+      expect(result).toHaveProperty('imageModels');
+      expect(Array.isArray(result.textModels)).toBe(true);
+      expect(Array.isArray(result.imageModels)).toBe(true);
+    });
+
+    it('returns existing models even when scan finds nothing new', async () => {
+      const storedModels = [
+        { id: 'm1', name: 'Model 1', filePath: '/models/m1.gguf', fileName: 'm1.gguf', fileSize: 1000 },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.readDir.mockResolvedValue([
+        { name: 'm1.gguf', path: '/models/m1.gguf', size: 1000, isFile: () => true, isDirectory: () => false } as any,
+      ]);
+
+      const result = await modelManager.refreshModelLists();
+
+      expect(result.textModels.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ========================================================================
+  // saveModelWithMmproj
+  // ========================================================================
+  describe('saveModelWithMmproj', () => {
+    it('updates model with mmproj info and persists', async () => {
+      const storedModels = [
+        { id: 'model1', name: 'Test', filePath: '/models/m1.gguf', fileName: 'm1.gguf', fileSize: 1000 },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await modelManager.saveModelWithMmproj(
+        'model1',
+        '/models/mmproj.gguf',
+        'mmproj.gguf',
+        300000000
+      );
+
+      const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
+        (call) => call[0] === MODELS_STORAGE_KEY
+      );
+      expect(savedCall).toBeDefined();
+      const savedModels = JSON.parse(savedCall![1]);
+      expect(savedModels[0].mmProjPath).toBe('/models/mmproj.gguf');
+      expect(savedModels[0].isVisionModel).toBe(true);
+    });
+
+    it('handles string mmProjFileSize', async () => {
+      const storedModels = [
+        { id: 'model1', name: 'Test', filePath: '/models/m1.gguf', fileName: 'm1.gguf', fileSize: 1000 },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf', 'mmproj.gguf', '300000000' as any);
+
+      const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
+        (call) => call[0] === MODELS_STORAGE_KEY
+      );
+      const savedModels = JSON.parse(savedCall![1]);
+      expect(savedModels[0].mmProjFileSize).toBe(300000000);
+    });
+  });
 });

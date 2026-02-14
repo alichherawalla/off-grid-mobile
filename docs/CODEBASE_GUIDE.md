@@ -98,7 +98,7 @@ OffgridMobile/
 │   │   ├── ChatMessage.tsx              # Single message bubble (streaming, images, metadata)
 │   │   ├── CustomAlert.tsx              # Alert dialog
 │   │   ├── GenerationSettingsModal.tsx  # All generation settings in a modal
-│   │   ├── ModelCard.tsx                # Model browser card with download state
+│   │   ├── ModelCard.tsx                # Model browser card with compact/full modes, icon actions
 │   │   ├── ModelSelectorModal.tsx       # Model picker modal (text + image models)
 │   │   └── VoiceRecordButton.tsx        # Long-press voice recording with waveform
 │   │
@@ -168,7 +168,7 @@ OffgridMobile/
 │   │   └── useThemedStyles.ts           # useThemedStyles() — memoized style factory
 │   │
 │   ├── constants/
-│   │   └── index.ts                    # Model recommendations, quantization info, HF config, typography, spacing
+│   │   └── index.ts                    # Model recommendations, curated models, org filters, quantization info, HF config, typography, spacing
 │   │
 │   └── utils/
 │       └── messageContent.ts           # Strip LLM control tokens from output
@@ -278,10 +278,10 @@ MainTabs
 |--------|---------|-------------|
 | **OnboardingScreen** | 4 welcome slides (privacy, offline, model choice). Shown once. | `onboarding-screen` |
 | **ModelDownloadScreen** | Recommends a model based on device RAM. User downloads or skips. | `model-download-screen` |
-| **HomeScreen** | Dashboard: active text/image models, memory usage (used/total), recent conversations, quick "New Chat" button. | `home-screen`, `new-chat-button` |
+| **HomeScreen** | Dashboard: active text/image models, memory usage (used/total), recent conversations with message preview and smart date formatting, quick "New Chat" button. | `home-screen`, `new-chat-button` |
 | **ChatScreen** | Full chat interface. Streaming messages, model selector, project selector, generation settings, image generation with live preview, voice input, document attachments, debug panel. | `chat-screen`, `chat-input`, `send-button`, `stop-button` |
-| **ChatsListScreen** | Sorted conversation list. Shows title, last message preview, project badge, timestamp. Swipe-to-delete. | `conversation-list` |
-| **ModelsScreen** | Two sections: Text Models and Image Models. Search bar, credibility filters (LM Studio, Official, Verified), type filter (Vision). Download progress, pause/cancel. | `models-screen`, `model-list` |
+| **ChatsListScreen** | Sorted conversation list with compact items. Shows title, last message preview snippet, project badge, timestamp. Swipe-to-delete. | `conversation-list` |
+| **ModelsScreen** | Two sections: Text Models and Image Models. Curated recommendations by RAM, search bar, advanced filters (org, size, quantization, type, credibility). Local .gguf import. Download progress, pause/cancel. Compact card layout with icon actions. | `models-screen`, `model-list` |
 | **ProjectsScreen** | List of system prompt presets. Shows name, description snippet, linked chat count. Default projects: General Assistant, Spanish Learning, Code Review, Writing Helper. | `projects-screen` |
 | **ProjectDetailScreen** | Full project view: name, system prompt, description, linked conversations list. | |
 | **ProjectEditScreen** | Create/edit form: name, description, system prompt, icon selection. | |
@@ -477,6 +477,7 @@ Handles model file lifecycle on disk.
 
 **Responsibilities:**
 - Download from Hugging Face (foreground via RNFS, background via Android DownloadManager)
+- Import local `.gguf` files from device storage (Bring Your Own Model)
 - Store text models in `Documents/local-llm/models/`
 - Store image models in `Documents/image_models/`
 - Track downloaded model metadata in AsyncStorage
@@ -791,15 +792,25 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 **Trigger:** Navigate to Models tab.
 
 **Steps:**
-1. `ModelsScreen` loads → calls `huggingFaceService.searchModels('')`
-2. API returns GGUF models sorted by downloads
-3. Each `ModelCard` shows: name, author, parameter count, downloads, credibility badge
+1. `ModelsScreen` loads → shows curated recommended models filtered by device RAM
+2. Recommended models fetched from HuggingFace API with real metadata (excludes already downloaded)
+3. Each `ModelCard` shows: name, author tag, description, credibility badge, action icons
 4. User can:
-   - **Search**: type query → re-fetches with search term
-   - **Filter by credibility**: LM Studio, Official, Verified toggles → intersection filter
-   - **Filter by type**: Vision toggle → only multimodal models
+   - **Search**: type query → fetches from HuggingFace API with search term
+   - **Filter by organization**: Qwen, Meta, Google, Microsoft, Mistral, DeepSeek, HuggingFace, NVIDIA
+   - **Filter by size**: tiny (<1B), small (1-3B), medium (3-8B), large (8B+)
+   - **Filter by quantization**: Q4_K_M, Q4_K_S, Q5_K_M, Q6_K, Q8_0
+   - **Filter by type**: Text, Vision, Code
+   - **Filter by credibility**: LM Studio, Official, Verified, Community
+   - **Import local model**: Import .gguf files from device storage via file picker
    - **Pull to refresh**: re-fetches from API
    - **Scroll for more**: pagination / infinite scroll
+
+**Filter UI:**
+- Filter pills with expandable sections for multi-select options
+- Active filter indicator dot on filter toggle button
+- Clear all filters button
+- Filters persist within the session
 
 **Credibility badges:**
 | Badge | Color | Meaning |
@@ -856,7 +867,30 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 
 **States:** pending → running → paused → completed / failed
 
-#### 9.3.5 Download Image Model
+#### 9.3.5 Import Local Model (Bring Your Own Model)
+
+**Trigger:** Tap "Import local .gguf" button on Models screen.
+
+**Steps:**
+1. Native file picker opens via `@react-native-documents/picker` (filtered to all files)
+2. User selects a `.gguf` file from device storage
+3. Validation: file must have `.gguf` extension
+4. On Android: if URI is `content://`, file is first copied to app cache directory
+5. File size determined, duplicate check against existing downloaded models
+6. File copied to `Documents/local-llm/models/{fileName}` with progress tracking (500ms polling)
+7. Model name and quantization parsed from filename (e.g., `qwen3-3b-q4_k_m.gguf` → name: "qwen3-3b", quant: "Q4_K_M")
+8. `DownloadedModel` metadata created with `source: 'local-import'`
+9. Saved to `appStore.downloadedModels[]`
+10. Model appears in model selector, ready to load
+
+**Error handling:**
+- Non-GGUF files → error alert
+- Duplicate model → error alert with existing model name
+- Copy failure → cleanup partial file, error alert
+
+**Implementation:** `modelManager.importLocalModel()` in `src/services/modelManager.ts`
+
+#### 9.3.6 Download Image Model
 
 **Trigger:** Tap download on an image model card.
 
@@ -868,7 +902,7 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 5. Create `ONNXImageModel` metadata with detected backend (mnn/qnn) and style
 6. Save to `appStore.downloadedImageModels[]`
 
-#### 9.3.6 Delete Model
+#### 9.3.7 Delete Model
 
 **Trigger:** Long-press model in Downloaded section → Delete, or from Storage Settings.
 
@@ -1570,18 +1604,39 @@ npm run test:e2e:single   # Single Maestro flow
 | 12–16 GB | 13B | Q4_K_M |
 | 16+ GB | 30B | Q4_K_M |
 
-### Recommended Models
+### Recommended Models (Feb 2026)
 
-| Model | Parameters | Min RAM | Description |
-|-------|-----------|---------|-------------|
-| SmolLM2 135M | 0.135B | 2 GB | Ultra-tiny, runs on any device |
-| SmolLM2 360M | 0.36B | 3 GB | Very small but surprisingly capable |
-| Qwen 2.5 0.5B | 0.5B | 3 GB | Tiny but capable, great for basic tasks |
-| Qwen 2.5 1.5B | 1.5B | 4 GB | Excellent balance of size and capability |
-| SmolLM2 1.7B | 1.7B | 4 GB | Best tiny model for general use |
-| Qwen 2.5 3B | 3B | 6 GB | Great quality for most mobile devices |
-| Phi-3 Mini 4K | 3.8B | 6 GB | Microsoft's efficient small model |
-| Llama 2 7B | 7B | 8 GB | Meta's popular chat model |
+| Model | Parameters | Min RAM | Type | Description |
+|-------|-----------|---------|------|-------------|
+| Qwen 3 0.6B | 0.6B | 3 GB | Text | Latest Qwen with thinking mode, ultra-light |
+| Gemma 3 1B | 1B | 3 GB | Text | Google's tiny model, 128K context |
+| Llama 3.2 1B | 1B | 4 GB | Text | Meta's fastest mobile model, 128K context |
+| Gemma 3n E2B | 2B | 4 GB | Text | Google's mobile-first with selective activation |
+| Llama 3.2 3B | 3B | 6 GB | Text | Best quality-to-size ratio for mobile |
+| SmolLM3 3B | 3B | 6 GB | Text | Strong reasoning & 128K context |
+| Phi-4 Mini | 3.8B | 6 GB | Text | Math & reasoning specialist |
+| Qwen 3 8B | 8B | 8 GB | Text | Thinking + non-thinking modes, 100+ languages |
+| Qwen 3 VL 2B | 2B | 4 GB | Vision | Compact vision-language with thinking mode |
+| Gemma 3n E4B | 4B | 6 GB | Vision | Vision + audio, built for mobile |
+| Qwen 3 VL 8B | 8B | 8 GB | Vision | Vision-language with thinking mode |
+| Qwen 3 Coder A3B | 3B | 6 GB | Code | MoE coding model, only 3B active params |
+
+### Organization Filters
+
+The Models screen supports filtering by model organization:
+
+| Key | Label |
+|-----|-------|
+| `Qwen` | Qwen |
+| `meta-llama` | Llama |
+| `google` | Google |
+| `microsoft` | Microsoft |
+| `mistralai` | Mistral |
+| `deepseek-ai` | DeepSeek |
+| `HuggingFaceTB` | HuggingFace |
+| `nvidia` | NVIDIA |
+
+Defined in `MODEL_ORGS` constant (`src/constants/index.ts`).
 
 ### Quantization Quality Ladder
 

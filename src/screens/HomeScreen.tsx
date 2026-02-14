@@ -513,14 +513,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   testID={`conversation-item-${index}`}
                 >
                   <View style={styles.conversationInfo}>
-                    <Text style={styles.conversationTitle} numberOfLines={1}>
-                      {conv.title}
-                    </Text>
-                    <Text style={styles.conversationMeta}>
-                      {conv.messages.length} messages · {formatDate(conv.updatedAt)}
-                    </Text>
+                    <View style={styles.conversationHeader}>
+                      <Text style={styles.conversationTitle} numberOfLines={1}>
+                        {conv.title}
+                      </Text>
+                      <Text style={styles.conversationMeta}>
+                        {formatDate(conv.updatedAt)}
+                      </Text>
+                    </View>
+                    {conv.messages.length > 0 && (() => {
+                      const lastMsg = conv.messages[conv.messages.length - 1];
+                      return (
+                        <Text style={styles.conversationPreview} numberOfLines={1}>
+                          {lastMsg.role === 'user' ? 'You: ' : ''}{lastMsg.content}
+                        </Text>
+                      );
+                    })()}
                   </View>
-                  <Icon name="chevron-right" size={16} color={colors.textMuted} />
+                  <Icon name="chevron-right" size={14} color={colors.textMuted} />
                 </AnimatedListItem>
               </Swipeable>
             ))}
@@ -761,13 +771,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
 }
 
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
@@ -907,31 +921,43 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    marginBottom: SPACING.md,
     ...shadows.small,
   },
   conversationInfo: {
     flex: 1,
   },
+  conversationHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
   conversationTitle: {
-    ...TYPOGRAPHY.h3,
+    ...TYPOGRAPHY.bodySmall,
     color: colors.text,
+    flex: 1,
+    marginRight: SPACING.sm,
   },
   conversationMeta: {
-    ...TYPOGRAPHY.meta,
+    ...TYPOGRAPHY.metaSmall,
     color: colors.textMuted,
-    marginTop: 3,
+  },
+  conversationPreview: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   deleteAction: {
     backgroundColor: colors.errorBackground,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    width: 50,
-    borderRadius: 12,
-    marginBottom: 16,
-    marginLeft: 10,
+    width: 44,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
+    marginLeft: SPACING.sm,
   },
   statsRow: {
     flexDirection: 'row' as const,

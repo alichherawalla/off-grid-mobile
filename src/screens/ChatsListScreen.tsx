@@ -115,9 +115,6 @@ export const ChatsListScreen: React.FC = () => {
           onPress={() => handleChatPress(item)}
           testID={`conversation-item-${index}`}
         >
-          <View style={styles.chatIcon}>
-            <Icon name="message-circle" size={20} color={colors.primary} />
-          </View>
           <View style={styles.chatContent}>
             <View style={styles.chatHeader}>
               <Text style={styles.chatTitle} numberOfLines={1}>
@@ -234,19 +231,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
-    padding: SPACING.lg,
-    borderRadius: 12,
-    marginBottom: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
     ...shadows.small,
-  },
-  chatIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: colors.primary + '20',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    marginRight: SPACING.md,
   },
   chatContent: {
     flex: 1,
@@ -255,21 +244,21 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: SPACING.xs,
   },
   chatTitle: {
-    ...TYPOGRAPHY.body,
+    ...TYPOGRAPHY.bodySmall,
     color: colors.text,
     flex: 1,
     marginRight: SPACING.sm,
   },
   chatDate: {
-    ...TYPOGRAPHY.meta,
+    ...TYPOGRAPHY.metaSmall,
     color: colors.textMuted,
   },
   chatPreview: {
-    ...TYPOGRAPHY.bodySmall,
+    ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
+    marginTop: 1,
   },
   projectBadge: {
     alignSelf: 'flex-start' as const,
@@ -330,9 +319,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.errorBackground,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    width: 50,
-    borderRadius: 12,
-    marginBottom: 16,
-    marginLeft: 10,
+    width: 44,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
+    marginLeft: SPACING.sm,
   },
 });

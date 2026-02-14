@@ -94,18 +94,18 @@ export const ProjectsScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.projectContent}>
-            <Text style={styles.projectName}>{item.name}</Text>
+            <View style={styles.projectNameRow}>
+              <Text style={styles.projectName} numberOfLines={1}>{item.name}</Text>
+              <View style={styles.chatCountTag}>
+                <Icon name="message-circle" size={8} color={colors.textMuted} />
+                <Text style={styles.chatCountText}>{chatCount}</Text>
+              </View>
+            </View>
             {item.description ? (
               <Text style={styles.projectDescription} numberOfLines={1}>
                 {item.description}
               </Text>
             ) : null}
-            <View style={styles.projectMeta}>
-              <Icon name="message-circle" size={10} color={colors.textMuted} />
-              <Text style={styles.projectMetaText}>
-                {chatCount} {chatCount === 1 ? 'chat' : 'chats'}
-              </Text>
-            </View>
           </View>
           <Icon name="chevron-right" size={14} color={colors.textMuted} />
         </AnimatedListItem>
@@ -202,48 +202,56 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: SPACING.lg,
-    borderRadius: 12,
-    marginBottom: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: 10,
+    marginBottom: SPACING.md,
     ...shadows.small,
   },
   projectIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: colors.surface,
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: colors.surfaceLight,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   projectIconText: {
-    ...TYPOGRAPHY.body,
+    ...TYPOGRAPHY.meta,
     color: colors.textMuted,
-    fontWeight: '400' as const,
   },
   projectContent: {
     flex: 1,
   },
-  projectName: {
-    ...TYPOGRAPHY.body,
-    color: colors.text,
-    fontWeight: '400' as const,
-    marginBottom: SPACING.xs,
-  },
-  projectDescription: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: SPACING.xs,
-  },
-  projectMeta: {
+  projectNameRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: SPACING.xs,
   },
-  projectMetaText: {
-    ...TYPOGRAPHY.label,
+  projectName: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
+    fontWeight: '400' as const,
+    flexShrink: 1,
+  },
+  projectDescription: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  chatCountTag: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: SPACING.sm,
+    flexShrink: 0,
+  },
+  chatCountText: {
+    ...TYPOGRAPHY.metaSmall,
     color: colors.textMuted,
   },
   emptyState: {

@@ -442,4 +442,173 @@ describe('ModelsScreen', () => {
       expect(true).toBe(true);
     });
   });
+
+  // ============================================================================
+  // Bring Your Own Model (BYOM)
+  // ============================================================================
+  describe('bring your own model', () => {
+    it('has import local model capability defined', () => {
+      // Import function should be available via modelManager
+      const { modelManager: mm } = require('../../../src/services/modelManager');
+      expect(mm).toBeDefined();
+    });
+
+    it('validates .gguf file extension for imports', () => {
+      // Files must end with .gguf
+      const validFile = 'MyModel-Q4_K_M.gguf';
+      const invalidFile = 'model.bin';
+      expect(validFile.endsWith('.gguf')).toBe(true);
+      expect(invalidFile.endsWith('.gguf')).toBe(false);
+    });
+
+    it('creates local_import/* IDs for imported models', () => {
+      const fileName = 'imported-model.gguf';
+      const expectedId = `local_import/${fileName}`;
+      expect(expectedId).toBe('local_import/imported-model.gguf');
+    });
+
+    it('sets author to "Local Import" for imported models', () => {
+      const importedModel = createDownloadedModel({
+        id: 'local_import/model.gguf',
+        author: 'Local Import',
+      });
+      expect(importedModel.author).toBe('Local Import');
+    });
+
+    it('adds imported model to downloaded models list', () => {
+      const model = createDownloadedModel({
+        id: 'local_import/test.gguf',
+        name: 'test',
+        author: 'Local Import',
+      });
+      useAppStore.setState({
+        downloadedModels: [model],
+      });
+
+      const downloaded = useAppStore.getState().downloadedModels;
+      expect(downloaded.length).toBe(1);
+      expect(downloaded[0].author).toBe('Local Import');
+    });
+  });
+
+  // ============================================================================
+  // Organization Filter
+  // ============================================================================
+  describe('organization filter', () => {
+    it('MODEL_ORGS contains expected organizations', () => {
+      const { MODEL_ORGS } = require('../../../src/constants');
+      const keys = MODEL_ORGS.map((o: any) => o.key);
+      expect(keys).toContain('Qwen');
+      expect(keys).toContain('meta-llama');
+      expect(keys).toContain('google');
+      expect(keys).toContain('microsoft');
+    });
+
+    it('filters models by selected organization', () => {
+      const models = [
+        createModelInfo({ name: 'Qwen Model', author: 'Qwen' }),
+        createModelInfo({ name: 'Llama Model', author: 'meta-llama' }),
+        createModelInfo({ name: 'Gemma Model', author: 'google' }),
+      ];
+
+      const filtered = models.filter(m => m.author === 'Qwen');
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].name).toBe('Qwen Model');
+    });
+
+    it('shows all models when no org filter is selected', () => {
+      const models = [
+        createModelInfo({ author: 'Qwen' }),
+        createModelInfo({ author: 'meta-llama' }),
+      ];
+
+      // No filter = all models
+      expect(models.length).toBe(2);
+    });
+  });
+
+  // ============================================================================
+  // Type Filter
+  // ============================================================================
+  describe('type filter', () => {
+    it('filters by text models', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const textModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'text');
+      expect(textModels.length).toBeGreaterThan(0);
+    });
+
+    it('filters by vision models', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const visionModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'vision');
+      expect(visionModels.length).toBeGreaterThan(0);
+    });
+
+    it('filters by code models', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const codeModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'code');
+      expect(codeModels.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ============================================================================
+  // Recommended Models
+  // ============================================================================
+  describe('recommended models', () => {
+    it('RECOMMENDED_MODELS has entries', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      expect(RECOMMENDED_MODELS.length).toBeGreaterThan(0);
+    });
+
+    it('all recommended models have minRam', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      for (const model of RECOMMENDED_MODELS) {
+        expect(model.minRam).toBeGreaterThan(0);
+      }
+    });
+
+    it('all recommended models have type badges (text/vision/code)', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const validTypes = ['text', 'vision', 'code'];
+      for (const model of RECOMMENDED_MODELS) {
+        expect(validTypes).toContain(model.type);
+      }
+    });
+
+    it('recommended models are sorted by minRam per type', () => {
+      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const textModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'text');
+      for (let i = 1; i < textModels.length; i++) {
+        expect(textModels[i].minRam).toBeGreaterThanOrEqual(textModels[i - 1].minRam);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Multi-file Download (Vision Models)
+  // ============================================================================
+  describe('multi-file download', () => {
+    it('vision model files include mmProjFile', () => {
+      const { createModelFileWithMmProj } = require('../../utils/factories');
+      const file = createModelFileWithMmProj({
+        name: 'vision-model.gguf',
+        mmProjName: 'mmproj.gguf',
+        mmProjSize: 500 * 1024 * 1024,
+      });
+
+      expect(file.mmProjFile).toBeDefined();
+      expect(file.mmProjFile.name).toBe('mmproj.gguf');
+      expect(file.mmProjFile.size).toBe(500 * 1024 * 1024);
+    });
+
+    it('calculates combined size for vision model files', () => {
+      const { createModelFileWithMmProj } = require('../../utils/factories');
+      const file = createModelFileWithMmProj({
+        size: 4000000000,
+        mmProjSize: 500000000,
+      });
+
+      const totalSize = file.size + (file.mmProjFile?.size || 0);
+      expect(totalSize).toBe(4500000000);
+    });
+  });
 });

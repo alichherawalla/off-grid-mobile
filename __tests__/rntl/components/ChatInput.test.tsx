@@ -413,6 +413,35 @@ describe('ChatInput', () => {
       // Toggle is hidden when no model loaded
       expect(queryByTestId('image-mode-toggle')).toBeNull();
     });
+
+    it('ON badge disappears when toggling back to auto', () => {
+      const { getByTestId, queryByTestId } = render(
+        <ChatInput {...defaultProps} imageModelLoaded={true} />
+      );
+
+      const toggle = getByTestId('image-mode-toggle');
+      // Toggle to force
+      fireEvent.press(toggle);
+      expect(queryByTestId('image-mode-on-badge')).toBeTruthy();
+
+      // Toggle back to auto
+      fireEvent.press(toggle);
+      expect(queryByTestId('image-mode-on-badge')).toBeNull();
+    });
+
+    it('hides image mode toggle when settings.imageGenerationMode is not manual', () => {
+      mockUseAppStore.mockReturnValue({
+        settings: {
+          imageGenerationMode: 'auto',
+        },
+      });
+
+      const { queryByTestId } = render(
+        <ChatInput {...defaultProps} imageModelLoaded={true} />
+      );
+
+      expect(queryByTestId('image-mode-toggle')).toBeNull();
+    });
   });
 
   // ============================================================================
@@ -444,6 +473,22 @@ describe('ChatInput', () => {
 
       // Should show "Vision" badge
       expect(getByTestId('vision-indicator')).toBeTruthy();
+    });
+
+    it('hides Vision indicator when vision is not supported', () => {
+      const { queryByTestId } = render(
+        <ChatInput {...defaultProps} supportsVision={false} />
+      );
+
+      expect(queryByTestId('vision-indicator')).toBeNull();
+    });
+
+    it('Vision badge contains correct text', () => {
+      const { getByText } = render(
+        <ChatInput {...defaultProps} supportsVision={true} />
+      );
+
+      expect(getByText('Vision')).toBeTruthy();
     });
   });
 
