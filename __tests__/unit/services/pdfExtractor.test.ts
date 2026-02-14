@@ -54,7 +54,7 @@ describe('PDFExtractor (with native module)', () => {
     const { pdfExtractor } = require('../../../src/services/pdfExtractor');
     const result = await pdfExtractor.extractText('/path/to/file.pdf');
 
-    expect(mockExtractText).toHaveBeenCalledWith('/path/to/file.pdf');
+    expect(mockExtractText).toHaveBeenCalledWith('/path/to/file.pdf', 50000);
     expect(result).toBe('Page 1 content\n\nPage 2 content');
   });
 

@@ -476,10 +476,12 @@ describe('DocumentService', () => {
   // Edge cases: content boundaries
   // ========================================================================
   describe('content boundary edge cases', () => {
-    it('does not truncate content at exactly 50K characters', async () => {
+    it('does not truncate content at exactly maxChars', async () => {
+      // maxChars = floor(contextLength * 4 * 0.5) = floor(2048 * 4 * 0.5) = 4096
+      const maxChars = 4096;
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 50000, isFile: () => true } as any);
-      const exactContent = 'a'.repeat(50000);
+      mockedRNFS.stat.mockResolvedValue({ size: maxChars, isFile: () => true } as any);
+      const exactContent = 'a'.repeat(maxChars);
       mockedRNFS.readFile.mockResolvedValue(exactContent);
 
       const result = await documentService.processDocumentFromPath('/path/to/exact.txt');
@@ -488,10 +490,12 @@ describe('DocumentService', () => {
       expect(result!.textContent).not.toContain('truncated');
     });
 
-    it('truncates content at 50001 characters', async () => {
+    it('truncates content exceeding maxChars', async () => {
+      // maxChars = floor(contextLength * 4 * 0.5) = floor(2048 * 4 * 0.5) = 4096
+      const overMaxChars = 4097;
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 50001, isFile: () => true } as any);
-      const overContent = 'a'.repeat(50001);
+      mockedRNFS.stat.mockResolvedValue({ size: overMaxChars, isFile: () => true } as any);
+      const overContent = 'a'.repeat(overMaxChars);
       mockedRNFS.readFile.mockResolvedValue(overContent);
 
       const result = await documentService.processDocumentFromPath('/path/to/over.txt');
