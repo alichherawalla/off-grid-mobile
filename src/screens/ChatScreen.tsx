@@ -59,6 +59,7 @@ export const ChatScreen: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
   // Message entry animation gating — only animate newly arriving messages
   const lastMessageCountRef = useRef(0);
   const [animateLastN, setAnimateLastN] = useState(0);
@@ -558,10 +559,9 @@ export const ChatScreen: React.FC = () => {
         ? downloadedModels.find(m => m.id === settings.classifierModelId)
         : null;
 
-      // Show status when using LLM classification (only if not already generating)
-      if (useLLM && !isGeneratingImage) {
-        setAppIsGeneratingImage(true);
-        setAppImageGenerationStatus('Preparing classifier...');
+      // Show classifying indicator for LLM-based classification
+      if (useLLM) {
+        setIsClassifying(true);
       }
 
       const intent = await intentClassifier.classifyIntent(text, {
@@ -572,7 +572,9 @@ export const ChatScreen: React.FC = () => {
         modelLoadingStrategy: settings.modelLoadingStrategy,
       });
 
-      // Clear status if not generating image (and we set it during classification)
+      setIsClassifying(false);
+
+      // Clear status if not generating image
       if (intent !== 'image' && useLLM) {
         setAppImageGenerationStatus(null);
         setAppIsGeneratingImage(false);
@@ -581,6 +583,7 @@ export const ChatScreen: React.FC = () => {
       return intent === 'image';
     } catch (error) {
       console.warn('[ChatScreen] Intent classification failed:', error);
+      setIsClassifying(false);
       setAppImageGenerationStatus(null);
       setAppIsGeneratingImage(false);
       return false;
@@ -1309,6 +1312,14 @@ export const ChatScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Intent classification indicator */}
+        {isClassifying && (
+          <View style={styles.classifyingBar}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.classifyingText}>Understanding your request...</Text>
+          </View>
+        )}
+
         {/* Input */}
         <ChatInput
           onSend={handleSend}
@@ -1641,6 +1652,20 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   selectModelButtonText: {
     ...TYPOGRAPHY.body,
     color: colors.primary,
+  },
+  classifyingBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  classifyingText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
   },
   imageProgressContainer: {
     paddingHorizontal: 12,
