@@ -3,10 +3,10 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  Keyboard,
   Image,
   ScrollView,
   Text,
+  Platform,
 } from 'react-native';
 import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
@@ -112,6 +112,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [finalResult, clearResult, conversationId]);
 
+  const inputRef = useRef<TextInput>(null);
+
   const handleSend = () => {
     if ((message.trim() || attachments.length > 0) && !disabled) {
       triggerHaptic('impactMedium');
@@ -119,7 +121,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       onSend(message.trim(), attachments.length > 0 ? attachments : undefined, forceImage);
       setMessage('');
       setAttachments([]);
-      Keyboard.dismiss();
+      // Keep keyboard open and refocus input for quick follow-up messages
+      inputRef.current?.focus();
       // Reset to auto mode after sending with force mode
       if (forceImage) {
         setImageMode('auto');
@@ -259,12 +262,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (attachment) {
         setAttachments(prev => [...prev, attachment]);
       }
-    } catch (error: any) {
-      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
-      console.error('Error picking document:', error);
+    } catch (pickError: any) {
+      if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
+      console.error('Error picking document:', pickError);
       setAlertState(showAlert(
         'Error',
-        error.message || 'Failed to read document',
+        pickError.message || 'Failed to read document',
         [{ text: 'OK' }]
       ));
     }
@@ -392,6 +395,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       {/* Text Input Row - Input + Send Button */}
       <View style={styles.inputRow}>
         <TextInput
+          ref={inputRef}
           testID="chat-input"
           style={styles.input}
           value={message}
@@ -399,8 +403,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
           multiline
-          maxLength={2000}
+          scrollEnabled
           editable={!disabled}
+          blurOnSubmit={false}
+          returnKeyType="default"
         />
         {/* Action buttons on the right side of input */}
         <View style={styles.inputActions}>
@@ -525,8 +531,10 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     fontSize: 14,
     fontFamily: FONTS.mono,
     minHeight: 40,
-    maxHeight: 100,
+    maxHeight: 150,
     textAlignVertical: 'top' as const,
+    paddingTop: Platform.OS === 'ios' ? 8 : 4,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
   },
   inputActions: {
     flexDirection: 'row' as const,

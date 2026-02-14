@@ -925,7 +925,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     padding: SPACING.md,
     color: colors.text,
     minHeight: 100,
-    maxHeight: 200,
+    maxHeight: 300,
     textAlignVertical: 'top' as const,
   },
   editActions: {
