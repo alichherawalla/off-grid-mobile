@@ -1,10 +1,9 @@
 name: Build and Release iOS
 
 on:
-  workflow_run:
-    workflows: ["Build and Release Android"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write

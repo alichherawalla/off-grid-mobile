@@ -799,7 +799,6 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden' as const,
-    minWidth: 260,
   },
   thinkingHeader: {
     flexDirection: 'row' as const,
