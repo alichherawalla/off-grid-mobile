@@ -7,13 +7,6 @@
 	<key>teamID</key>
 	<string>84V6KCAC49</string>
 	<key>signingStyle</key>
-	<string>manual</string>
-	<key>provisioningProfiles</key>
-	<dict>
-		<key>ai.offgridmobile</key>
-		<string>iOS Team Provisioning Profile: ai.offgridmobile</string>
-	</dict>
-	<key>signingCertificate</key>
-	<string>Apple Development</string>
+	<string>automatic</string>
 </dict>
 </plist>
