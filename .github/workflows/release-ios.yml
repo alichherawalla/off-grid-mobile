@@ -1,9 +1,7 @@
 name: Build and Release iOS
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:  # Disabled - manual trigger only for now
 
 permissions:
   contents: write

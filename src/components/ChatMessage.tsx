@@ -704,6 +704,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   assistantBubble: {
     backgroundColor: colors.surface,
     borderBottomLeftRadius: 4,
+    minWidth: '85%',
   },
   attachmentsContainer: {
     flexDirection: 'row' as const,
@@ -799,8 +800,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderRadius: 8,
     marginBottom: 8,
     overflow: 'hidden' as const,
-    minWidth: 260,
-    alignSelf: 'stretch' as const,
+    width: '100%',
   },
   thinkingHeader: {
     flexDirection: 'row' as const,
