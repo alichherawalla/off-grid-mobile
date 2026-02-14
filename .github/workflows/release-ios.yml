@@ -77,8 +77,10 @@ jobs:
         run: |
           PROFILE_PATH=$RUNNER_TEMP/profile.mobileprovision
           echo -n "$IOS_PROVISION_PROFILE" | base64 --decode -o "$PROFILE_PATH"
+          # Extract UUID from profile and copy with UUID-based filename (required by Xcode)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i "$PROFILE_PATH")")
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID".mobileprovision
 
       - name: Sync version to Xcode project
         run: |
