@@ -12,8 +12,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green.svg)](#install)
 
-  https://github.com/user-attachments/assets/c3218c22-6714-4f2b-9c55-4dc1fd8dfe25
-
 </div>
 
 ---
@@ -22,20 +20,21 @@
 
 Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a **complete offline AI suite** — text generation, image generation, vision AI, voice transcription, and document analysis, all running natively on your phone's hardware.
 
-<div align="center">
-<table>
-<tr>
-<td align="center"><img src="screenshots/home-dashboard-top.jpg" width="200" /><br /><b>Dashboard</b></td>
-<td align="center"><img src="screenshots/chat-cpu-metadata.jpg" width="200" /><br /><b>AI Chat</b></td>
-<td align="center"><img src="screenshots/image-generation-complete.jpg" width="200" /><br /><b>Image Generation</b></td>
-<td align="center"><img src="screenshots/browse-models-text.jpg" width="200" /><br /><b>Model Browser</b></td>
-</tr>
-</table>
-</div>
-
 ---
 
 ## What can it do?
+
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="demo-gifs/onboarding.gif" width="200" /><br /><b>Onboarding</b></td>
+<td align="center"><img src="demo-gifs/text-gen.gif" width="200" /><br /><b>Text Generation</b></td>
+<td align="center"><img src="demo-gifs/image-gen.gif" width="200" /><br /><b>Image Generation</b></td>
+<td align="center"><img src="demo-gifs/vision.gif" width="200" /><br /><b>Vision AI</b></td>
+<td align="center"><img src="demo-gifs/attachments.gif" width="200" /><br /><b>Attachments</b></td>
+</tr>
+</table>
+</div>
 
 **Text Generation** — Run Qwen 3, Llama 3.2, Gemma 3, Phi-4, and any GGUF model. Streaming responses, thinking mode, 15-30 tok/s on flagship devices. Bring your own `.gguf` files too.
 
