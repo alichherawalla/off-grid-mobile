@@ -311,28 +311,28 @@ If asked about yourself, you can mention you're a local AI assistant that priori
 // Onboarding slides
 export const ONBOARDING_SLIDES = [
   {
-    id: 'welcome',
-    title: 'Welcome to Off Grid',
-    description: 'Run AI models directly on your device. No internet required, complete privacy.',
+    id: 'freedom',
+    title: 'Your AI.\nNo Strings Attached.',
+    description: 'No subscriptions, no sign-ups, no company reading your chats. An AI that lives on your device and answers to no one else.',
+    icon: 'zap',
+  },
+  {
+    id: 'magic',
+    title: 'Just Talk.\nIt Figures Out the Rest.',
+    description: 'Describe an image \u2014 it creates one. Show it a photo \u2014 it understands. Attach a document \u2014 it reads it. One conversation, no modes, no friction.',
+    icon: 'message-circle',
+  },
+  {
+    id: 'create',
+    title: 'Say It Simply.\nGet Something Stunning.',
+    description: 'Type \u201Ca cat on the moon\u201D and watch your words become a vivid image in seconds. AI enhances your ideas automatically \u2014 no prompt engineering needed.',
+    icon: 'image',
+  },
+  {
+    id: 'hardware',
+    title: 'Tuned for\nYour Hardware.',
+    description: 'Accelerated for Metal, NPU, and Neural Engine. We\u2019ll recommend the perfect model for your phone \u2014 so it flies from the start.',
     icon: 'cpu',
-  },
-  {
-    id: 'privacy',
-    title: 'Your Privacy Matters',
-    description: 'All conversations stay on your device. No data is sent to any server. Your thoughts remain yours.',
-    icon: 'lock',
-  },
-  {
-    id: 'offline',
-    title: 'Works Offline',
-    description: 'Once you download a model, it works without internet. Perfect for travel, remote areas, or privacy-sensitive tasks.',
-    icon: 'wifi-off',
-  },
-  {
-    id: 'models',
-    title: 'Choose Your Model',
-    description: 'Select from various AI models. Smaller models are faster, larger models are smarter. We\'ll help you pick the right one for your device.',
-    icon: 'layers',
   },
 ];
 
