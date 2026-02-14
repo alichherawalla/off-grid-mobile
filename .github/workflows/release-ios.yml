@@ -59,7 +59,7 @@ jobs:
 
           # Import certificate
           CERT_PATH=$RUNNER_TEMP/certificate.p12
-          echo -n "$IOS_CERTIFICATE_P12" | base64 --decode -o "$CERT_PATH"
+          printf '%s' "$IOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
           # Convert password from UTF-8 to Latin-1 (£ char is 2 bytes in UTF-8 but security import expects 1 byte)
           CERT_PASS=$(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | iconv -f UTF-8 -t ISO-8859-1)
           security import "$CERT_PATH" \
@@ -76,7 +76,11 @@ jobs:
           IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo -n "$IOS_PROVISION_PROFILE" | base64 --decode -o ~/Library/MobileDevice/Provisioning\ Profiles/e529cf17-07cc-43e0-94dd-3e2384d002ce.mobileprovision
+          PP_PATH=~/Library/MobileDevice/Provisioning\ Profiles/e529cf17-07cc-43e0-94dd-3e2384d002ce.mobileprovision
+          printf '%s' "$IOS_PROVISION_PROFILE" | base64 --decode > "$PP_PATH"
+          # Verify profile was written correctly
+          ls -la "$PP_PATH"
+          security cms -D -i "$PP_PATH" | head -5
 
       - name: Sync version to Xcode project
         run: |
