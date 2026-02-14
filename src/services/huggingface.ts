@@ -330,22 +330,34 @@ class HuggingFaceService {
   }
 
   private extractDescription(result: HFModelSearchResult): string {
-    // Try to get description from card data or tags
-    if (result.cardData?.pipeline_tag) {
-      return `${result.cardData.pipeline_tag} model`;
+    const name = (result.id.split('/').pop() || '').toLowerCase();
+    const tags = result.tags?.map(t => t.toLowerCase()) || [];
+    const author = result.author || result.id.split('/')[0] || '';
+
+    // Detect model type
+    let type = 'Text generation';
+    if (tags.some(t => t.includes('code')) || name.includes('code') || name.includes('coder')) {
+      type = 'Code generation';
+    } else if (tags.some(t => t.includes('vision') || t.includes('multimodal') || t.includes('image-text')) ||
+      name.includes('vision') || name.includes('vlm') || name.includes('llava')) {
+      type = 'Vision';
     }
 
-    const relevantTags = result.tags?.filter(tag =>
-      !tag.startsWith('license:') &&
-      !tag.startsWith('language:') &&
-      tag !== 'gguf'
-    ).slice(0, 3);
+    // Extract param count from name
+    const paramMatch = name.match(/(\d+\.?\d*)\s*b(?:\b|-)/);
+    const paramStr = paramMatch ? `${paramMatch[1]}B` : null;
 
-    if (relevantTags && relevantTags.length > 0) {
-      return relevantTags.join(', ');
-    }
+    // Extract license
+    const license = result.cardData?.license;
+    const licenseStr = license ? license.toUpperCase().replace(/-/g, ' ') : null;
 
-    return 'GGUF quantized model';
+    // Build description parts
+    const parts: string[] = [type];
+    if (paramStr) parts.push(paramStr);
+    if (licenseStr) parts.push(licenseStr);
+    if (author) parts.push(`by ${author}`);
+
+    return parts.join(' · ');
   }
 
   formatFileSize(bytes: number): string {

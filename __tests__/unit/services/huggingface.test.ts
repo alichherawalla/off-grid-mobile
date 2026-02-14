@@ -304,7 +304,7 @@ describe('HuggingFaceService', () => {
       expect(result.files[0].name).toBe('model.gguf');
     });
 
-    it('extracts description from cardData pipeline_tag', () => {
+    it('generates description with type and author', () => {
       const result = service.transformModelResult({
         id: 'org/model',
         author: 'org',
@@ -315,26 +315,26 @@ describe('HuggingFaceService', () => {
         siblings: [],
       });
 
-      expect(result.description).toBe('text-generation model');
+      expect(result.description).toContain('Text generation');
+      expect(result.description).toContain('org');
     });
 
-    it('extracts description from tags when no cardData', () => {
+    it('detects code model type from tags', () => {
       const result = service.transformModelResult({
-        id: 'org/model',
+        id: 'org/coder-7b',
         author: 'org',
         downloads: 0,
         likes: 0,
-        tags: ['text-generation', 'gguf', 'en'],
+        tags: ['code'],
         siblings: [],
       });
 
-      // Should include relevant tags (excluding license:, language:, gguf)
-      expect(result.description).toContain('text-generation');
+      expect(result.description).toContain('Code generation');
     });
 
-    it('returns default description when no tags or cardData', () => {
+    it('includes param count in description when present in name', () => {
       const result = service.transformModelResult({
-        id: 'org/model',
+        id: 'org/llama-3b-gguf',
         author: 'org',
         downloads: 0,
         likes: 0,
@@ -342,7 +342,7 @@ describe('HuggingFaceService', () => {
         siblings: [],
       });
 
-      expect(result.description).toBe('GGUF quantized model');
+      expect(result.description).toContain('3B');
     });
   });
 
