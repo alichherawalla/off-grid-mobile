@@ -5,8 +5,8 @@ import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, Image
 
 interface AppState {
   // Theme
-  themeMode: 'light' | 'dark';
-  setThemeMode: (mode: 'light' | 'dark') => void;
+  themeMode: 'system' | 'light' | 'dark';
+  setThemeMode: (mode: 'system' | 'light' | 'dark') => void;
 
   // Onboarding
   hasCompletedOnboarding: boolean;
@@ -132,7 +132,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Theme
-      themeMode: 'light' as 'light' | 'dark',
+      themeMode: 'system' as 'system' | 'light' | 'dark',
       setThemeMode: (mode) => set({ themeMode: mode }),
 
       // Onboarding

@@ -755,8 +755,8 @@ describe('appStore', () => {
   // Theme Mode
   // ============================================================================
   describe('themeMode', () => {
-    it('defaults to light mode', () => {
-      expect(getAppState().themeMode).toBe('light');
+    it('defaults to system mode', () => {
+      expect(getAppState().themeMode).toBe('system');
     });
 
     it('setThemeMode switches to dark', () => {
@@ -774,6 +774,15 @@ describe('appStore', () => {
       setThemeMode('light');
 
       expect(getAppState().themeMode).toBe('light');
+    });
+
+    it('setThemeMode can switch to system', () => {
+      const { setThemeMode } = useAppStore.getState();
+
+      setThemeMode('dark');
+      setThemeMode('system');
+
+      expect(getAppState().themeMode).toBe('system');
     });
   });
 
