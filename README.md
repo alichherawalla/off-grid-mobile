@@ -50,26 +50,6 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid is a *
 
 ---
 
-## How it compares
-
-|  | **Off Grid** | PocketPal | Other local LLM apps |
-|---|:---:|:---:|:---:|
-| Text Chat (GGUF) | **Yes** | Yes | Yes |
-| Image Generation | **On-device SD** | No | No |
-| Vision AI | **Yes** | No | Rare |
-| Voice Transcription | **On-device Whisper** | No | No |
-| Document/PDF Attach | **Yes** | No | No |
-| GPU/NPU Acceleration | **OpenCL + QNN + Metal + ANE** | Limited | Varies |
-| Bring Your Own Model | **Yes** | Yes | Sometimes |
-| AI Prompt Enhancement | **Yes** | No | No |
-| Message Queue | **Yes** | No | No |
-| Background Generation | **Yes** | No | No |
-| OOM Prevention | **Yes** | No | No |
-| Dark Mode | **Yes** | Yes | Varies |
-| Open Source | **MIT** | Apache 2.0 | Varies |
-
----
-
 ## Performance
 
 | Task | Flagship | Mid-range |
