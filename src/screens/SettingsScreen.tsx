@@ -52,16 +52,13 @@ export const SettingsScreen: React.FC = () => {
         {/* Theme Selector */}
         <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.themeToggleRow}>
-            <View style={styles.themeToggleInfo}>
-              <Icon name="moon" size={16} color={colors.textSecondary} />
-              <Text style={styles.themeToggleLabel}>Appearance</Text>
-            </View>
+            <Text style={styles.themeToggleLabel}>Appearance</Text>
             <View style={styles.themeSelector}>
               {([
-                { mode: 'system' as const, label: 'System' },
-                { mode: 'light' as const, label: 'Light' },
-                { mode: 'dark' as const, label: 'Dark' },
-              ]).map(({ mode, label }) => (
+                { mode: 'system' as const, icon: 'monitor' },
+                { mode: 'light' as const, icon: 'sun' },
+                { mode: 'dark' as const, icon: 'moon' },
+              ]).map(({ mode, icon }) => (
                 <TouchableOpacity
                   key={mode}
                   style={[
@@ -70,10 +67,11 @@ export const SettingsScreen: React.FC = () => {
                   ]}
                   onPress={() => setThemeMode(mode)}
                 >
-                  <Text style={[
-                    styles.themeSelectorText,
-                    themeMode === mode && styles.themeSelectorTextActive,
-                  ]}>{label}</Text>
+                  <Icon
+                    name={icon}
+                    size={16}
+                    color={themeMode === mode ? colors.background : colors.textMuted}
+                  />
                 </TouchableOpacity>
               ))}
             </View>
@@ -190,11 +188,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: SPACING.lg,
     ...shadows.small,
   },
-  themeToggleInfo: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.sm,
-  },
   themeToggleLabel: {
     ...TYPOGRAPHY.body,
     color: colors.text,
@@ -202,25 +195,19 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   themeSelector: {
     flexDirection: 'row' as const,
     backgroundColor: colors.surfaceLight,
-    borderRadius: 6,
-    padding: 2,
+    borderRadius: 8,
+    padding: 3,
+    gap: 2,
   },
   themeSelectorOption: {
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-    borderRadius: 4,
+    width: 34,
+    height: 30,
+    borderRadius: 6,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   themeSelectorOptionActive: {
     backgroundColor: colors.primary,
-  },
-  themeSelectorText: {
-    ...TYPOGRAPHY.caption,
-    color: colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  themeSelectorTextActive: {
-    color: colors.background,
-    fontWeight: '600' as const,
   },
   navSection: {
     backgroundColor: colors.surface,
