@@ -380,15 +380,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
         </View>
       </Animated.View>
 
-      {/* Explicit cancel button when recording */}
-      {isRecording && (
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={onCancelRecording}
-        >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
-        </TouchableOpacity>
-      )}
+      {/* Release to end — no cancel button needed */}
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}
@@ -411,7 +403,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     height: 36,
     borderRadius: 18,
     borderWidth: 2,
-    borderColor: colors.error,
+    borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
   buttonWrapper: {
@@ -448,7 +440,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderTopColor: 'transparent',
   },
   buttonRecording: {
-    backgroundColor: colors.error,
+    backgroundColor: colors.primary,
   },
   buttonDisabled: {
     opacity: 0.5,
@@ -497,11 +489,11 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   micBody: {
     width: 8,
     height: 12,
-    backgroundColor: colors.textSecondary,
+    backgroundColor: colors.primary,
     borderRadius: 4,
   },
   micBodyRecording: {
-    backgroundColor: colors.text,
+    backgroundColor: colors.surface,
   },
   micBodyAsSend: {
     backgroundColor: colors.text,
@@ -512,7 +504,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   micBase: {
     width: 12,
     height: 3,
-    backgroundColor: colors.textSecondary,
+    backgroundColor: colors.primary,
     borderRadius: 1.5,
     marginTop: 2,
   },
@@ -528,25 +520,11 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     left: -100,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: colors.error + '40',
+    backgroundColor: colors.primary + '40',
     borderRadius: 12,
   },
   cancelHintText: {
-    color: colors.error,
-    fontSize: 12,
-    fontWeight: '500' as const,
-  },
-  cancelButton: {
-    marginLeft: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.error,
-  },
-  cancelButtonText: {
-    color: colors.error,
+    color: colors.primary,
     fontSize: 12,
     fontWeight: '500' as const,
   },
