@@ -18,6 +18,13 @@
       "tintColor": "000000",
       "versions": [
         {
+          "version": "0.0.42",
+          "date": "2026-02-14",
+          "size": 13056961,
+          "downloadURL": "https://github.com/alichherawalla/offline-mobile-llm-manager/releases/download/v0.0.42/OffgridMobile-v0.0.42.ipa",
+          "localizedDescription": "Update to v0.0.42"
+        },
+        {
           "version": "0.0.32",
           "date": "2026-02-14",
           "size": 0,
