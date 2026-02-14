@@ -11,11 +11,9 @@ import ReanimatedAnimated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
-  withSpring,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../components';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -29,20 +27,16 @@ type OnboardingScreenProps = {
 
 const { width } = Dimensions.get('window');
 
-/** Animated slide with staggered entrance for icon, title, description */
+/** Animated slide with staggered entrance for title and description */
 const SlideContent: React.FC<{
   item: typeof ONBOARDING_SLIDES[0];
   isActive: boolean;
   styles: ReturnType<typeof createStyles>;
-  primaryColor: string;
 }> = ({
   item,
   isActive,
   styles,
-  primaryColor,
 }) => {
-  const iconScale = useSharedValue(0.6);
-  const iconOpacity = useSharedValue(0);
   const titleOpacity = useSharedValue(0);
   const titleTranslateY = useSharedValue(16);
   const descOpacity = useSharedValue(0);
@@ -51,28 +45,19 @@ const SlideContent: React.FC<{
   useEffect(() => {
     if (isActive) {
       // Reset
-      iconScale.value = 0.6;
-      iconOpacity.value = 0;
       titleOpacity.value = 0;
       titleTranslateY.value = 16;
       descOpacity.value = 0;
       descTranslateY.value = 16;
 
       // Stagger in
-      iconScale.value = withSpring(1, { damping: 12, stiffness: 150 });
-      iconOpacity.value = withTiming(1, { duration: 300 });
-      titleOpacity.value = withDelay(150, withTiming(1, { duration: 300 }));
-      titleTranslateY.value = withDelay(150, withTiming(0, { duration: 300 }));
-      descOpacity.value = withDelay(300, withTiming(1, { duration: 300 }));
-      descTranslateY.value = withDelay(300, withTiming(0, { duration: 300 }));
+      titleOpacity.value = withTiming(1, { duration: 400 });
+      titleTranslateY.value = withTiming(0, { duration: 400 });
+      descOpacity.value = withDelay(200, withTiming(1, { duration: 400 }));
+      descTranslateY.value = withDelay(200, withTiming(0, { duration: 400 }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
-
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: iconOpacity.value,
-    transform: [{ scale: iconScale.value }],
-  }));
 
   const titleStyle = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
@@ -86,9 +71,6 @@ const SlideContent: React.FC<{
 
   return (
     <View style={styles.slide}>
-      <ReanimatedAnimated.View style={[styles.iconContainer, iconStyle]}>
-        <Icon name={item.icon} size={64} color={primaryColor} />
-      </ReanimatedAnimated.View>
       <ReanimatedAnimated.View style={titleStyle}>
         <Text style={styles.title}>{item.title}</Text>
       </ReanimatedAnimated.View>
@@ -130,7 +112,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const renderSlide = ({ item, index }: { item: typeof ONBOARDING_SLIDES[0]; index: number }) => (
-    <SlideContent item={item} isActive={currentIndex === index} styles={styles} primaryColor={colors.primary} />
+    <SlideContent item={item} isActive={currentIndex === index} styles={styles} />
   );
 
   const renderDots = () => (
@@ -214,7 +196,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -231,18 +213,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: SPACING.xxl,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    marginBottom: SPACING.xxl,
-    ...shadows.medium,
   },
   title: {
     ...TYPOGRAPHY.h1,
