@@ -7,6 +7,8 @@ import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { MediaAttachment } from '../types';
 import { pdfExtractor } from './pdfExtractor';
+import { useAppStore } from '../stores';
+import { APP_CONFIG } from '../constants';
 
 // File extensions we can read as text
 const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.log', '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.swift', '.kt', '.go', '.rs', '.rb', '.php', '.sql', '.sh', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf'];
@@ -90,10 +92,15 @@ class DocumentService {
         throw new Error(`File is too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       }
 
+      // Derive max chars from model context length (~4 chars per token, use half
+      // the context so there's room for conversation + system prompt + response)
+      const contextLength = useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength;
+      const maxChars = Math.floor(contextLength * 4 * 0.5);
+
       // Read file content
       let textContent: string;
       if (isPdf) {
-        textContent = await pdfExtractor.extractText(resolvedPath);
+        textContent = await pdfExtractor.extractText(resolvedPath, maxChars);
       } else {
         textContent = await RNFS.readFile(resolvedPath, 'utf8');
       }
@@ -118,8 +125,7 @@ class DocumentService {
         // If persistent copy failed, keep the temp file as fallback
       }
 
-      // Truncate if too long (keep first 50k chars for context limits)
-      const maxChars = 50000;
+      // Truncate if too long (safety net — native should already limit)
       if (textContent.length > maxChars) {
         textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';
       }
@@ -145,8 +151,8 @@ class DocumentService {
    * Saves to a persistent file so it can be opened later from chat.
    */
   async createFromText(text: string, fileName: string = 'pasted-text.txt'): Promise<MediaAttachment> {
-    // Truncate if too long
-    const maxChars = 50000;
+    const contextLength = useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength;
+    const maxChars = Math.floor(contextLength * 4 * 0.5);
     let textContent = text;
     if (textContent.length > maxChars) {
       textContent = textContent.substring(0, maxChars) + '\n\n... [Content truncated due to length]';

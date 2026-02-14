@@ -1,6 +1,6 @@
 /**
  * PDFExtractor - TypeScript wrapper for native PDF text extraction modules.
- * Uses PDFKit on iOS (built-in) and pdfbox-android on Android.
+ * Uses PDFKit on iOS (built-in) and PDFium on Android (native C++ via JNI).
  */
 
 import { NativeModules } from 'react-native';
@@ -17,14 +17,14 @@ class PDFExtractor {
 
   /**
    * Extract text from a PDF file at the given path.
-   * Returns the full text content of the PDF.
+   * Returns up to maxChars characters of text content.
    */
-  async extractText(filePath: string): Promise<string> {
+  async extractText(filePath: string, maxChars: number = 50000): Promise<string> {
     if (!this.isAvailable()) {
       throw new Error('PDF extraction is not available on this platform');
     }
 
-    return await PDFExtractorModule.extractText(filePath);
+    return await PDFExtractorModule.extractText(filePath, maxChars);
   }
 }
 
