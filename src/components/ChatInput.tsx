@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   TextInput,
   TouchableOpacity,
-  Keyboard,
   Image,
   ScrollView,
   Text,
@@ -263,12 +262,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       if (attachment) {
         setAttachments(prev => [...prev, attachment]);
       }
-    } catch (error: any) {
-      if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) return;
-      console.error('Error picking document:', error);
+    } catch (pickError: any) {
+      if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
+      console.error('Error picking document:', pickError);
       setAlertState(showAlert(
         'Error',
-        error.message || 'Failed to read document',
+        pickError.message || 'Failed to read document',
         [{ text: 'OK' }]
       ));
     }
