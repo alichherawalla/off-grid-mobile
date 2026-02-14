@@ -128,7 +128,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // Swipe-to-dismiss on handle
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 8,
       onPanResponderMove: (_, { dy }) => {
         if (dy > 0) {
