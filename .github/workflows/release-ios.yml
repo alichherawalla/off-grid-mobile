@@ -75,10 +75,12 @@ jobs:
         run: |
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           PP_PATH=~/Library/MobileDevice/Provisioning\ Profiles/e529cf17-07cc-43e0-94dd-3e2384d002ce.mobileprovision
-          printf '%s' "$IOS_PROVISION_PROFILE" | base64 --decode > "$PP_PATH"
-          # Verify profile was written correctly
-          ls -la "$PP_PATH"
-          security cms -D -i "$PP_PATH" | head -5
+          # Write base64 to temp file first to avoid shell interpretation issues
+          printenv IOS_PROVISION_PROFILE > $RUNNER_TEMP/pp_b64.txt
+          base64 --decode -i $RUNNER_TEMP/pp_b64.txt -o "$PP_PATH"
+          # Verify — expected MD5: 445debe413481bd2085dddab92a78c14
+          echo "Decoded profile size: $(wc -c < "$PP_PATH") bytes (expected: 14383)"
+          echo "Decoded profile MD5: $(md5 -q "$PP_PATH")"
 
       - name: Sync version to Xcode project
         run: |
