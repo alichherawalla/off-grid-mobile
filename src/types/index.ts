@@ -23,6 +23,9 @@ export interface ModelInfo {
   lastModified: string;
   files: ModelFile[];
   credibility?: ModelCredibility;
+  modelType?: 'text' | 'vision' | 'code';
+  paramCount?: number;
+  minRamGB?: number;
 }
 
 export interface ModelFile {
