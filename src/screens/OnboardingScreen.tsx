@@ -11,13 +11,14 @@ import ReanimatedAnimated, {
   useAnimatedStyle,
   withTiming,
   withDelay,
+  Easing,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../components';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { ONBOARDING_SLIDES, SPACING, TYPOGRAPHY } from '../constants';
+import { ONBOARDING_SLIDES, SPACING, TYPOGRAPHY, FONTS } from '../constants';
 import { useAppStore } from '../stores';
 import { RootStackParamList } from '../navigation/types';
 
@@ -27,37 +28,60 @@ type OnboardingScreenProps = {
 
 const { width } = Dimensions.get('window');
 
-/** Animated slide with staggered entrance for title and description */
+/** Animated slide with staggered entrance: keyword → title → description */
 const SlideContent: React.FC<{
   item: typeof ONBOARDING_SLIDES[0];
   isActive: boolean;
   styles: ReturnType<typeof createStyles>;
+  accentColor: string;
 }> = ({
   item,
   isActive,
   styles,
+  accentColor,
 }) => {
+  const keywordOpacity = useSharedValue(0);
+  const keywordTranslateY = useSharedValue(24);
   const titleOpacity = useSharedValue(0);
   const titleTranslateY = useSharedValue(16);
   const descOpacity = useSharedValue(0);
-  const descTranslateY = useSharedValue(16);
+  const descTranslateY = useSharedValue(12);
+  const lineWidth = useSharedValue(0);
 
   useEffect(() => {
     if (isActive) {
       // Reset
+      keywordOpacity.value = 0;
+      keywordTranslateY.value = 24;
       titleOpacity.value = 0;
       titleTranslateY.value = 16;
       descOpacity.value = 0;
-      descTranslateY.value = 16;
+      descTranslateY.value = 12;
+      lineWidth.value = 0;
 
-      // Stagger in
-      titleOpacity.value = withTiming(1, { duration: 400 });
-      titleTranslateY.value = withTiming(0, { duration: 400 });
-      descOpacity.value = withDelay(200, withTiming(1, { duration: 400 }));
-      descTranslateY.value = withDelay(200, withTiming(0, { duration: 400 }));
+      const ease = Easing.out(Easing.cubic);
+
+      // Stagger: keyword → line → title → description
+      keywordOpacity.value = withTiming(1, { duration: 500, easing: ease });
+      keywordTranslateY.value = withTiming(0, { duration: 500, easing: ease });
+      lineWidth.value = withDelay(250, withTiming(1, { duration: 400, easing: ease }));
+      titleOpacity.value = withDelay(350, withTiming(1, { duration: 400, easing: ease }));
+      titleTranslateY.value = withDelay(350, withTiming(0, { duration: 400, easing: ease }));
+      descOpacity.value = withDelay(550, withTiming(1, { duration: 400, easing: ease }));
+      descTranslateY.value = withDelay(550, withTiming(0, { duration: 400, easing: ease }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
+
+  const keywordStyle = useAnimatedStyle(() => ({
+    opacity: keywordOpacity.value,
+    transform: [{ translateY: keywordTranslateY.value }],
+  }));
+
+  const lineStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: lineWidth.value }],
+    opacity: lineWidth.value,
+  }));
 
   const titleStyle = useAnimatedStyle(() => ({
     opacity: titleOpacity.value,
@@ -71,12 +95,27 @@ const SlideContent: React.FC<{
 
   return (
     <View style={styles.slide}>
-      <ReanimatedAnimated.View style={titleStyle}>
-        <Text style={styles.title}>{item.title}</Text>
-      </ReanimatedAnimated.View>
-      <ReanimatedAnimated.View style={descStyle}>
-        <Text style={styles.description}>{item.description}</Text>
-      </ReanimatedAnimated.View>
+      <View style={styles.slideInner}>
+        {/* Hero keyword */}
+        <ReanimatedAnimated.View style={keywordStyle}>
+          <Text style={[styles.keyword, { color: accentColor }]}>
+            {item.keyword}
+          </Text>
+        </ReanimatedAnimated.View>
+
+        {/* Accent line */}
+        <ReanimatedAnimated.View style={[styles.accentLine, { backgroundColor: accentColor }, lineStyle]} />
+
+        {/* Title */}
+        <ReanimatedAnimated.View style={titleStyle}>
+          <Text style={styles.title}>{item.title}</Text>
+        </ReanimatedAnimated.View>
+
+        {/* Description */}
+        <ReanimatedAnimated.View style={descStyle}>
+          <Text style={styles.description}>{item.description}</Text>
+        </ReanimatedAnimated.View>
+      </View>
     </View>
   );
 };
@@ -112,7 +151,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const renderSlide = ({ item, index }: { item: typeof ONBOARDING_SLIDES[0]; index: number }) => (
-    <SlideContent item={item} isActive={currentIndex === index} styles={styles} />
+    <SlideContent item={item} isActive={currentIndex === index} styles={styles} accentColor={colors.primary} />
   );
 
   const renderDots = () => (
@@ -210,33 +249,50 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   slide: {
     width,
-    paddingHorizontal: SPACING.xxl,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
+  },
+  slideInner: {
+    paddingHorizontal: SPACING.xxl + 8,
+    alignItems: 'flex-start' as const,
+    width: '100%' as const,
+  },
+  keyword: {
+    fontFamily: FONTS.mono,
+    fontSize: 48,
+    fontWeight: '200' as const,
+    letterSpacing: 6,
+    marginBottom: SPACING.lg,
+  },
+  accentLine: {
+    height: 2,
+    width: 48,
+    marginBottom: SPACING.xl,
   },
   title: {
     ...TYPOGRAPHY.h1,
     color: colors.text,
-    textAlign: 'center' as const,
+    textAlign: 'left' as const,
     marginBottom: SPACING.md,
   },
   description: {
     ...TYPOGRAPHY.body,
     color: colors.textSecondary,
-    textAlign: 'center' as const,
-    lineHeight: 20,
+    textAlign: 'left' as const,
+    lineHeight: 22,
   },
   dotsContainer: {
     flexDirection: 'row' as const,
-    justifyContent: 'center' as const,
+    justifyContent: 'flex-start' as const,
     alignItems: 'center' as const,
     marginVertical: SPACING.xl,
+    paddingHorizontal: SPACING.xxl + 8,
   },
   dot: {
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.primary,
-    marginHorizontal: SPACING.xs,
+    marginRight: SPACING.xs,
   },
   footer: {
     paddingHorizontal: SPACING.xl,

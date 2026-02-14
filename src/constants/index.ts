@@ -312,27 +312,27 @@ If asked about yourself, you can mention you're a local AI assistant that priori
 export const ONBOARDING_SLIDES = [
   {
     id: 'freedom',
+    keyword: 'YOURS',
     title: 'Your AI.\nNo Strings Attached.',
     description: 'No subscriptions, no sign-ups, no company reading your chats. An AI that lives on your device and answers to no one else.',
-    icon: 'anchor',
   },
   {
     id: 'magic',
+    keyword: 'MAGIC',
     title: 'Just Talk.\nIt Figures Out the Rest.',
     description: 'Describe an image \u2014 it creates one. Show it a photo \u2014 it understands. Attach a document \u2014 it reads it. One conversation, no modes, no friction.',
-    icon: 'compass',
   },
   {
     id: 'create',
+    keyword: 'CREATE',
     title: 'Say It Simply.\nGet Something Stunning.',
     description: 'Type \u201Cimagine a cat on the moon\u201D and watch your words become a vivid image in seconds. AI enhances your ideas automatically \u2014 no prompt engineering needed.',
-    icon: 'sunrise',
   },
   {
     id: 'hardware',
+    keyword: 'READY',
     title: 'Tuned for\nYour Hardware.',
     description: 'Accelerated for Metal, NPU, and Neural Engine. We\u2019ll recommend the perfect model for your phone \u2014 so it flies from the start.',
-    icon: 'sliders',
   },
 ];
 
