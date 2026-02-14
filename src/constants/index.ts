@@ -314,25 +314,25 @@ export const ONBOARDING_SLIDES = [
     id: 'freedom',
     title: 'Your AI.\nNo Strings Attached.',
     description: 'No subscriptions, no sign-ups, no company reading your chats. An AI that lives on your device and answers to no one else.',
-    icon: 'zap',
+    icon: 'scissors',
   },
   {
     id: 'magic',
     title: 'Just Talk.\nIt Figures Out the Rest.',
     description: 'Describe an image \u2014 it creates one. Show it a photo \u2014 it understands. Attach a document \u2014 it reads it. One conversation, no modes, no friction.',
-    icon: 'message-circle',
+    icon: 'aperture',
   },
   {
     id: 'create',
     title: 'Say It Simply.\nGet Something Stunning.',
     description: 'Type \u201Ca cat on the moon\u201D and watch your words become a vivid image in seconds. AI enhances your ideas automatically \u2014 no prompt engineering needed.',
-    icon: 'image',
+    icon: 'pen-tool',
   },
   {
     id: 'hardware',
     title: 'Tuned for\nYour Hardware.',
     description: 'Accelerated for Metal, NPU, and Neural Engine. We\u2019ll recommend the perfect model for your phone \u2014 so it flies from the start.',
-    icon: 'cpu',
+    icon: 'activity',
   },
 ];
 
