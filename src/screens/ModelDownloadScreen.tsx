@@ -210,11 +210,15 @@ export const ModelDownloadScreen: React.FC<ModelDownloadScreenProps> = ({
             <ModelCard
               key={model.id}
               testID={`recommended-model-${index}`}
+              compact
               model={{
                 id: model.id,
                 name: model.name,
                 author: model.id.split('/')[0],
                 description: model.description,
+                modelType: model.type,
+                paramCount: model.params,
+                minRamGB: model.minRam,
               }}
               file={recommendedFile}
               isDownloading={isDownloading}

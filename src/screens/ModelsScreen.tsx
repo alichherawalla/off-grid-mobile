@@ -1061,6 +1061,15 @@ export const ModelsScreen: React.FC = () => {
       }
 
       return true;
+    }).map(model => {
+      // Enrich search results with inferred type & param count for badge rendering
+      const type = getModelType(model);
+      const params = parseParamCount(model);
+      return {
+        ...model,
+        modelType: type !== 'image-gen' ? type as 'text' | 'vision' | 'code' : undefined,
+        paramCount: params ?? undefined,
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchResults, filterState.source, filterState.type, filterState.orgs, filterState.size, matchesOrgFilter, parseParamCount, ramGB]);
@@ -1081,11 +1090,13 @@ export const ModelsScreen: React.FC = () => {
       })
       .map(m => {
         const fetched = recommendedModelDetails[m.id];
+        const curatedFields = { modelType: m.type, paramCount: m.params, minRamGB: m.minRam };
         if (fetched) {
           return {
             ...fetched,
             name: m.name, // Keep our curated display name
             description: m.description, // Keep our curated description
+            ...curatedFields,
           };
         }
         return {
@@ -1093,11 +1104,12 @@ export const ModelsScreen: React.FC = () => {
           name: m.name,
           author: m.id.split('/')[0],
           description: m.description,
-          downloads: 0,
+          downloads: -1,
           likes: 0,
           tags: [],
           lastModified: '',
           files: [],
+          ...curatedFields,
         };
       });
   }, [deviceRecommendation.maxParameters, downloadedModels, filterState.type, filterState.orgs, filterState.size, recommendedModelDetails]);
@@ -1134,7 +1146,7 @@ export const ModelsScreen: React.FC = () => {
           isDownloaded={isAnyFileDownloaded}
           onPress={() => handleSelectModel(item)}
           testID={`model-card-${index}`}
-          compact={!hasSearched}
+          compact
         />
       </AnimatedEntry>
     );
