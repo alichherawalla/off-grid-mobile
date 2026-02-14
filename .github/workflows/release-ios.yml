@@ -1,0 +1,164 @@
+name: Build and Release iOS
+
+on:
+  workflow_run:
+    workflows: ["Build and Release Android"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  release-ios:
+    runs-on: macos-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Get version from package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods
+          cd ios && pod install
+
+      - name: Import signing certificate
+        env:
+          IOS_CERTIFICATE_P12: ${{ secrets.IOS_CERTIFICATE_P12 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo -n "$IOS_CERTIFICATE_P12" | base64 --decode -o "$CERT_PATH"
+          security import "$CERT_PATH" \
+            -P "$IOS_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Import provisioning profile
+        env:
+          IOS_PROVISION_PROFILE: ${{ secrets.IOS_PROVISION_PROFILE }}
+        run: |
+          PROFILE_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo -n "$IOS_PROVISION_PROFILE" | base64 --decode -o "$PROFILE_PATH"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Sync version to Xcode project
+        run: |
+          VERSION_CODE=$(date +%s)
+          sed -i '' "s/MARKETING_VERSION = .*/MARKETING_VERSION = ${{ env.VERSION }};/" \
+            ios/OffgridMobile.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = $VERSION_CODE;/" \
+            ios/OffgridMobile.xcodeproj/project.pbxproj
+
+      - name: Build archive
+        run: |
+          xcodebuild archive \
+            -workspace ios/OffgridMobile.xcworkspace \
+            -scheme OffgridMobile \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/OffgridMobile.xcarchive \
+            -destination "generic/platform=iOS" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=84V6KCAC49 \
+            | tail -20
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/OffgridMobile.xcarchive \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
+
+          # Rename IPA
+          mv $RUNNER_TEMP/export/OffgridMobile.ipa \
+             $RUNNER_TEMP/export/OffgridMobile-v${{ env.VERSION }}.ipa
+
+      - name: Upload IPA to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload v${{ env.VERSION }} \
+            "$RUNNER_TEMP/export/OffgridMobile-v${{ env.VERSION }}.ipa" \
+            --clobber
+
+      - name: Update AltStore source JSON
+        run: |
+          IPA_SIZE=$(stat -f%z "$RUNNER_TEMP/export/OffgridMobile-v${{ env.VERSION }}.ipa")
+          TODAY=$(date +%Y-%m-%d)
+          DOWNLOAD_URL="https://github.com/alichherawalla/offline-mobile-llm-manager/releases/download/v${{ env.VERSION }}/OffgridMobile-v${{ env.VERSION }}.ipa"
+
+          # Update altstore-source.json using node for reliable JSON manipulation
+          node -e "
+            const fs = require('fs');
+            const source = JSON.parse(fs.readFileSync('altstore-source.json', 'utf8'));
+            const app = source.apps[0];
+            const newVersion = {
+              version: '${{ env.VERSION }}',
+              date: '${TODAY}',
+              size: ${IPA_SIZE},
+              downloadURL: '${DOWNLOAD_URL}',
+              localizedDescription: 'Update to v${{ env.VERSION }}'
+            };
+            // Replace existing entry for this version or prepend
+            const idx = app.versions.findIndex(v => v.version === '${{ env.VERSION }}');
+            if (idx >= 0) {
+              app.versions[idx] = newVersion;
+            } else {
+              app.versions.unshift(newVersion);
+            }
+            // Keep only the last 10 versions
+            app.versions = app.versions.slice(0, 10);
+            fs.writeFileSync('altstore-source.json', JSON.stringify(source, null, 2) + '\n');
+          "
+
+      - name: Commit updated AltStore source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add altstore-source.json
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update AltStore source for v${{ env.VERSION }} [skip ci]"
+          git push
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true

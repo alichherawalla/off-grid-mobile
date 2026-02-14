@@ -1,0 +1,30 @@
+{
+  "name": "Off Grid",
+  "identifier": "ai.offgridmobile.source",
+  "subtitle": "On-device AI apps",
+  "description": "AltStore source for Off Grid — run LLMs, generate images, and transcribe speech entirely on-device.",
+  "iconURL": "https://raw.githubusercontent.com/alichherawalla/offline-mobile-llm-manager/main/ios/OffgridMobile/Images.xcassets/AppIcon.appiconset/icon.png",
+  "headerURL": "",
+  "website": "https://github.com/alichherawalla/offline-mobile-llm-manager",
+  "sourceURL": "https://raw.githubusercontent.com/alichherawalla/offline-mobile-llm-manager/main/altstore-source.json",
+  "apps": [
+    {
+      "name": "Off Grid",
+      "bundleIdentifier": "ai.offgridmobile",
+      "developerName": "Off Grid",
+      "subtitle": "On-device AI",
+      "localizedDescription": "Run large language models, generate images with Stable Diffusion, and transcribe speech with Whisper — all on-device, fully offline, no cloud required.",
+      "iconURL": "https://raw.githubusercontent.com/alichherawalla/offline-mobile-llm-manager/main/ios/OffgridMobile/Images.xcassets/AppIcon.appiconset/icon.png",
+      "tintColor": "000000",
+      "versions": [
+        {
+          "version": "0.0.32",
+          "date": "2026-02-14",
+          "size": 0,
+          "downloadURL": "https://github.com/alichherawalla/offline-mobile-llm-manager/releases/latest/download/OffgridMobile.ipa",
+          "localizedDescription": "Initial AltStore release."
+        }
+      ]
+    }
+  ]
+}

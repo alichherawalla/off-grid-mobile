@@ -1,4 +1,6 @@
 name: Build and Release Android
+# NOTE: The iOS workflow (release-ios.yml) triggers via workflow_run on this workflow.
+# If you rename this workflow, update the workflow_run trigger in release-ios.yml.
 
 on:
   push:
