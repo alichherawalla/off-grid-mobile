@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.32",
+  "version": "0.0.33",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
