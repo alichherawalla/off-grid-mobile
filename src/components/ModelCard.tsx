@@ -17,6 +17,9 @@ interface ModelCardProps {
     likes?: number;
     credibility?: ModelCredibility;
     files?: ModelFile[];
+    modelType?: 'text' | 'vision' | 'code';
+    paramCount?: number;
+    minRamGB?: number;
   };
   file?: ModelFile;
   downloadedModel?: DownloadedModel;
@@ -119,7 +122,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                     </View>
                   )}
                 </View>
-                {model.downloads !== undefined && (
+                {model.downloads !== undefined && model.downloads > 0 && (
                   <View style={styles.authorTag}>
                     <Text style={styles.authorTagText}>{formatNumber(model.downloads)} dl</Text>
                   </View>
@@ -129,6 +132,27 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                 <Text style={styles.descriptionCompact} numberOfLines={1}>
                   {model.description}
                 </Text>
+              )}
+              {compact && (model.modelType || model.paramCount) && (
+                <View style={[styles.infoRow, { marginTop: 4, marginBottom: 6 }]}>
+                  {model.modelType && (
+                    <View style={[styles.infoBadge, model.modelType === 'vision' ? styles.visionBadge : model.modelType === 'code' ? styles.codeBadge : null]}>
+                      <Text style={[styles.infoText, model.modelType === 'vision' ? styles.visionText : model.modelType === 'code' ? styles.codeText : null]}>
+                        {model.modelType === 'text' ? 'Text' : model.modelType === 'vision' ? 'Vision' : 'Code'}
+                      </Text>
+                    </View>
+                  )}
+                  {model.paramCount && (
+                    <View style={styles.infoBadge}>
+                      <Text style={styles.infoText}>{model.paramCount}B params</Text>
+                    </View>
+                  )}
+                  {model.minRamGB && (
+                    <View style={styles.infoBadge}>
+                      <Text style={styles.infoText}>{model.minRamGB}GB+ RAM</Text>
+                    </View>
+                  )}
+                </View>
               )}
             </>
           ) : (
@@ -160,6 +184,11 @@ export const ModelCard: React.FC<ModelCardProps> = ({
                   </View>
                 )}
               </View>
+              {model.description && (
+                <Text style={styles.description} numberOfLines={2}>
+                  {model.description}
+                </Text>
+              )}
             </>
           )}
 
@@ -399,6 +428,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   descriptionCompact: {
     marginBottom: 4,
     ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
   },
   cardRow: {
     flexDirection: 'row' as const,
@@ -447,6 +477,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   visionText: {
     ...TYPOGRAPHY.meta,
     color: colors.info,
+  },
+  codeBadge: {
+    backgroundColor: colors.warning + '30',
+  },
+  codeText: {
+    ...TYPOGRAPHY.meta,
+    color: colors.warning,
   },
   statsRow: {
     flexDirection: 'row' as const,
