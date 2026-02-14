@@ -62,8 +62,10 @@ jobs:
           # Import certificate
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           echo -n "$IOS_CERTIFICATE_P12" | base64 --decode -o "$CERT_PATH"
+          # Convert password from UTF-8 to Latin-1 (£ char is 2 bytes in UTF-8 but security import expects 1 byte)
+          CERT_PASS=$(printf '%s' "$IOS_CERTIFICATE_PASSWORD" | iconv -f UTF-8 -t ISO-8859-1)
           security import "$CERT_PATH" \
-            -P "$IOS_CERTIFICATE_PASSWORD" \
+            -P "$CERT_PASS" \
             -A \
             -t cert \
             -f pkcs12 \
