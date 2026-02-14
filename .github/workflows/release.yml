@@ -3,9 +3,7 @@ name: Build and Release Android
 # If you rename this workflow, update the workflow_run trigger in release-ios.yml.
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:  # Disabled - manual trigger only for now
 
 permissions:
   contents: write
