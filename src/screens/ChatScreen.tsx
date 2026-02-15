@@ -1136,7 +1136,7 @@ export const ChatScreen: React.FC = () => {
       <KeyboardAvoidingView
         testID="chat-screen"
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Header */}
@@ -1229,7 +1229,7 @@ export const ChatScreen: React.FC = () => {
             onContentSizeChange={handleContentSizeChange}
             onLayout={handleLayout}
             scrollEventThrottle={16}
-            keyboardDismissMode="on-drag"
+            keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
