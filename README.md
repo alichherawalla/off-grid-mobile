@@ -75,7 +75,7 @@ Grab the latest APK from [**GitHub Releases**](https://github.com/alichherawalla
 
 ```bash
 git clone https://github.com/alichherawalla/off-grid-mobile.git
-cd OffgridMobile
+cd off-grid-mobile
 npm install
 
 # Android
