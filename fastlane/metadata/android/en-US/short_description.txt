@@ -1,0 +1,1 @@
+On-device AI suite: chat, image gen, vision, voice. Fully offline, no tracking
