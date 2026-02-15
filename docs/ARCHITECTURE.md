@@ -1121,8 +1121,8 @@ OffgridMobile/
 
 **Android:**
 - JDK 17
-- Android SDK (API 34)
-- Android NDK r26
+- Android SDK (API 36)
+- Android NDK r27
 
 **iOS:**
 - Xcode 15+ with iOS 17 SDK

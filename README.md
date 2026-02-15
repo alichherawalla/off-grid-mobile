@@ -87,7 +87,7 @@ cd ios && pod install && cd ..
 npm run ios
 ```
 
-> Requires Node.js 20+, JDK 17 / Android SDK 34 (Android), Xcode 15+ (iOS). See [full build guide](docs/ARCHITECTURE.md#building-from-source).
+> Requires Node.js 20+, JDK 17 / Android SDK 36 (Android), Xcode 15+ (iOS). See [full build guide](docs/ARCHITECTURE.md#building-from-source).
 
 ---
 
