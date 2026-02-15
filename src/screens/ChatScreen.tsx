@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -1136,7 +1137,7 @@ export const ChatScreen: React.FC = () => {
       <KeyboardAvoidingView
         testID="chat-screen"
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Header */}
@@ -1231,6 +1232,7 @@ export const ChatScreen: React.FC = () => {
             scrollEventThrottle={16}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
+            onTouchStart={() => Keyboard.dismiss()}
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
               autoscrollToTopThreshold: 100,
