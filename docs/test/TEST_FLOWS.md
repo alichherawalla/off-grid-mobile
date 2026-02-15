@@ -10,7 +10,7 @@ This document catalogs every testable flow in the application.
 
 **Current Overall Coverage: ~90% of P0 flows, ~65% of all flows**
 
-See `TEST_PRIORITY_MAP.md` for detailed test status and `TEST_SPEC_FORMAT.md` for how to write tests.
+See `docs/test/TEST_PRIORITY_MAP.md` for detailed test status and `docs/test/TEST_SPEC_FORMAT.md` for how to write tests.
 
 ---
 

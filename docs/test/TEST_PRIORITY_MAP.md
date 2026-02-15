@@ -29,7 +29,7 @@ This document maps all flows to priorities and testing layers.
 **Total: 1208 tests across 29 test suites (all passing)**
 
 ### ✅ Well-Tested Areas (Strong Coverage)
-- **E2E Tests (Maestro)**: 12 comprehensive P0 flows covering text/image generation, model download, app lifecycle
+- **E2E Tests (Maestro)**: 16 comprehensive P0 flows covering text/image generation, model download, attachments, app lifecycle
 - **State Management**: appStore, chatStore, authStore - Excellent unit tests
 - **Generation Service**: State machine, streaming, lifecycle - Very good unit + integration
 - **Image Generation Flow**: Integration tests, progress tracking, E2E - Excellent
@@ -469,6 +469,10 @@ Test full flows on device with real models.
 - ✅ **05b-model-download.yaml** - Model download (5min timeout)
 - ✅ **05b-model-selection.yaml** - Model switching
 - ✅ **05c-model-unload.yaml** - Model unloading
+- ✅ **06a-document-attachment.yaml** - Document attachment
+- ✅ **06b-image-attachment.yaml** - Image attachment
+- ✅ **06c-text-generation-full.yaml** - Full text generation with attachments
+- ✅ **06d-text-generation-retry.yaml** - Retry/regenerate text generation
 - ✅ **07a-image-model-uninstall.yaml** - Image model deletion
 - ✅ **07b-image-model-download.yaml** - Image model download
 - ✅ **07c-image-model-set-active.yaml** - Image model activation
@@ -575,7 +579,7 @@ __tests__/
     ├── coreMLDiffusion.contract.test.ts ✅ (iOS Core ML parity)
     └── iosDownloadManager.contract.test.ts ✅ (18 tests - iOS download parity)
 
-.maestro/flows/p0/ (12 E2E tests) ✅
+.maestro/flows/p0/ (16 E2E tests) ✅
 ├── 00-setup-model.yaml
 ├── 01-app-launch.yaml
 ├── 02-text-generation.yaml
@@ -585,6 +589,10 @@ __tests__/
 ├── 05b-model-download.yaml
 ├── 05b-model-selection.yaml
 ├── 05c-model-unload.yaml
+├── 06a-document-attachment.yaml
+├── 06b-image-attachment.yaml
+├── 06c-text-generation-full.yaml
+├── 06d-text-generation-retry.yaml
 ├── 07a-image-model-uninstall.yaml
 ├── 07b-image-model-download.yaml
 └── 07c-image-model-set-active.yaml
@@ -602,7 +610,7 @@ __tests__/
 ## Bottom Line
 
 **What's Great:**
-- ✅ P0 E2E coverage is excellent (12 comprehensive Maestro flows)
+- ✅ P0 E2E coverage is excellent (16 comprehensive Maestro flows)
 - ✅ State management is thoroughly tested
 - ✅ Service orchestration (generationService, imageGenerationService) is well tested
 - ✅ Contract tests validate native module interfaces (llama.rn, whisper.rn, LocalDream, CoreMLDiffusion, iOS DownloadManager)

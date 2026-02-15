@@ -409,7 +409,7 @@ As the app evolves:
 
 - **Theme System:** `src/theme/` (palettes, hooks, style factory)
 - **Design Tokens:** `src/constants/index.ts` (typography, spacing, fonts)
-- **Codebase Guide:** `docs/CODEBASE_GUIDE.md`
+- **Codebase Guide:** `docs/standards/CODEBASE_GUIDE.md`
 - **Typography:** All Menlo, weights 200-400 only
 - **Inspiration:** Terminal UIs, Linear, Vercel, brutalist web design
 

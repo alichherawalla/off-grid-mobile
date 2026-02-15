@@ -561,7 +561,7 @@ UI components read from stores, services write to stores. Unidirectional data fl
 
 Native Android DownloadManager handles model downloads:
 
-**Implementation** (`android/app/src/main/java/com/localllm/download/DownloadManagerModule.kt`):
+**Implementation** (`android/app/src/main/java/ai/offgridmobile/download/DownloadManagerModule.kt`):
 ```kotlin
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -1079,7 +1079,7 @@ OffgridMobile/
 │       ├── index.ts               # All interfaces and types
 │       └── whisper.rn.d.ts        # Whisper native module types
 ├── android/                 # Android native code
-│   └── app/src/main/java/com/localllm/
+│   └── app/src/main/java/ai/offgridmobile/
 │       ├── MainActivity.kt        # Main activity
 │       ├── MainApplication.kt     # Application entry point
 │       ├── download/              # Background download manager

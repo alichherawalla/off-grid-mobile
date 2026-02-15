@@ -86,20 +86,30 @@ OffgridMobile is a **privacy-first, on-device AI assistant** built with React Na
 ```
 OffgridMobile/
 ├── App.tsx                              # Root component: init, auth gate, navigation
-├── app.json                             # RN app config (name: "OffgridMobile", bundle: ai.offgridmobile)
+├── app.json                             # RN app config (name: "OffgridMobile", displayName: "Off Grid")
 ├── package.json                         # Dependencies & scripts
 ├── tsconfig.json                        # TypeScript config
 │
 ├── src/
+│   ├── assets/
+│   │   └── logo.png                     # App logo
+│   │
 │   ├── components/                      # Reusable UI components
+│   │   ├── AnimatedEntry.tsx            # Animated mount/unmount wrapper
+│   │   ├── AnimatedListItem.tsx         # Animated list item wrapper
+│   │   ├── AnimatedPressable.tsx        # Animated press feedback wrapper
+│   │   ├── AppSheet.tsx                 # Bottom sheet wrapper
 │   │   ├── Button.tsx                   # Styled button
 │   │   ├── Card.tsx                     # Card layout
 │   │   ├── ChatInput.tsx                # Message input bar (text, voice, attachments, image mode)
 │   │   ├── ChatMessage.tsx              # Single message bubble (streaming, images, metadata)
 │   │   ├── CustomAlert.tsx              # Alert dialog
+│   │   ├── DebugSheet.tsx               # Debug info bottom sheet
 │   │   ├── GenerationSettingsModal.tsx  # All generation settings in a modal
 │   │   ├── ModelCard.tsx                # Model browser card with compact/full modes, icon actions
 │   │   ├── ModelSelectorModal.tsx       # Model picker modal (text + image models)
+│   │   ├── ProjectSelectorSheet.tsx     # Project picker bottom sheet
+│   │   ├── ThinkingIndicator.tsx        # Thinking/loading indicator
 │   │   └── VoiceRecordButton.tsx        # Long-press voice recording with waveform
 │   │
 │   ├── screens/                         # Screen components (19 screens)
@@ -146,15 +156,18 @@ OffgridMobile/
 │   │   ├── intentClassifier.ts         # Pattern + LLM intent detection
 │   │   ├── huggingface.ts              # HF API: search, files, credibility
 │   │   ├── huggingFaceModelBrowser.ts  # Image model browsing
+│   │   ├── coreMLModelBrowser.ts       # iOS Core ML model discovery from Apple HF repos
 │   │   ├── whisperService.ts           # Whisper model download/load/transcribe
 │   │   ├── voiceService.ts             # Native voice input bridge
 │   │   ├── authService.ts              # Passphrase hash + keychain
 │   │   ├── hardware.ts                 # Device info, RAM, recommendations
-│   │   ├── backgroundDownloadService.ts # Android DownloadManager bridge
-│   │   └── documentService.ts          # Document text extraction
+│   │   ├── backgroundDownloadService.ts # DownloadManager bridge (Android + iOS)
+│   │   ├── documentService.ts          # Document text extraction
+│   │   └── pdfExtractor.ts             # Native PDF text extraction
 │   │
 │   ├── hooks/
 │   │   ├── useAppState.ts              # AppState foreground/background tracking
+│   │   ├── useFocusTrigger.ts          # Screen focus trigger hook
 │   │   ├── useVoiceRecording.ts        # Voice recording state machine
 │   │   └── useWhisperTranscription.ts  # Whisper transcription hook
 │   │
@@ -171,19 +184,24 @@ OffgridMobile/
 │   │   └── index.ts                    # Model recommendations, curated models, org filters, quantization info, HF config, typography, spacing
 │   │
 │   └── utils/
+│       ├── coreMLModelUtils.ts         # Core ML model path resolution helpers
+│       ├── haptics.ts                  # Haptic feedback utilities
 │       └── messageContent.ts           # Strip LLM control tokens from output
 │
 ├── android/                             # Android native code
-│   └── app/src/main/java/com/localllm/
+│   └── app/src/main/java/ai/offgridmobile/
 │       ├── MainActivity.kt              # Main activity
 │       ├── MainApplication.kt           # Application entry point
 │       ├── localdream/
 │       │   ├── LocalDreamModule.kt      # Stable Diffusion native module
 │       │   └── LocalDreamPackage.kt     # Package registration
-│       └── download/
-│           ├── DownloadManagerModule.kt # Background download native module
-│           ├── DownloadManagerPackage.kt # Package registration
-│           └── DownloadCompleteBroadcastReceiver.kt # Broadcast receiver
+│       ├── download/
+│       │   ├── DownloadManagerModule.kt # Background download native module
+│       │   ├── DownloadManagerPackage.kt # Package registration
+│       │   └── DownloadCompleteBroadcastReceiver.kt # Broadcast receiver
+│       └── pdf/
+│           ├── PDFExtractorModule.kt    # Native PDF text extraction
+│           └── PDFExtractorPackage.kt   # Package registration
 │
 ├── ios/                                 # iOS native code
 │   └── OffgridMobile/
@@ -191,39 +209,55 @@ OffgridMobile/
 │       ├── CoreMLDiffusion/
 │       │   ├── CoreMLDiffusionModule.swift  # Core ML image generation
 │       │   └── CoreMLDiffusionModule.m      # ObjC bridge
-│       └── Download/
-│           ├── DownloadManagerModule.swift   # iOS download manager
-│           └── DownloadManagerModule.m       # ObjC bridge
+│       ├── Download/
+│       │   ├── DownloadManagerModule.swift   # iOS download manager
+│       │   └── DownloadManagerModule.m       # ObjC bridge
+│       └── PDFExtractor/
+│           ├── PDFExtractorModule.swift      # Native PDF text extraction
+│           └── PDFExtractorModule.m          # ObjC bridge
 │
 ├── __tests__/                           # Test suites
 │   ├── unit/                            # Store & service unit tests
+│   │   ├── stores/                      # appStore, chatStore, authStore
+│   │   ├── services/                    # 12 service test files
+│   │   ├── constants/                   # Constants tests
+│   │   └── utils/                       # Utility tests
 │   ├── integration/                     # Multi-service integration tests
-│   ├── contracts/                       # Native module contract tests
-│   ├── rntl/                            # React Native Testing Library component tests
-│   ├── specs/                           # Behavior specifications
+│   │   ├── generation/                  # generationFlow, imageGenerationFlow
+│   │   ├── models/                      # activeModelService
+│   │   └── stores/                      # chatStoreIntegration
+│   ├── contracts/                       # Native module contract tests (7 files)
+│   ├── rntl/                            # React Native Testing Library tests
+│   │   ├── screens/                     # 6 screen tests
+│   │   └── components/                  # 3 component tests
+│   ├── specs/                           # Behavior specifications (YAML)
 │   └── utils/                           # Test helpers & factories
 │
 ├── .maestro/                            # E2E tests (Maestro framework)
-│   ├── config.yaml
-│   ├── flows/p0/                        # 8 critical-path E2E flows
-│   ├── flows/p1/                        # Important-path E2E flows
+│   ├── E2E_TESTING.md                   # E2E testing guide
+│   ├── flows/p0/                        # 16 critical-path E2E flows
+│   ├── flows/p1/                        # Important-path E2E flows (planned)
+│   ├── flows/p2/                        # Nice-to-have E2E flows (planned)
 │   └── utils/
 │
 ├── docs/                                # Documentation
-│   ├── CODEBASE_GUIDE.md                # This file — comprehensive architecture guide
-│   ├── DESIGN_PHILOSOPHY_SYSTEM.md      # Design system reference
-│   ├── VISUAL_HIERARCHY_STANDARD.md     # Visual hierarchy guidelines
-│   ├── IOS_PARITY_PLAN.md              # iOS feature parity plan
-│   ├── TEST_FLOWS.md                    # End-to-end test flows
-│   ├── TEST_COVERAGE_REPORT.md          # Test coverage report
-│   ├── TEST_PRIORITY_MAP.md             # Test priority mapping
-│   └── TEST_SPEC_FORMAT.md              # Test specification format
+│   ├── ARCHITECTURE.md                  # System architecture & build guide
+│   ├── standards/
+│   │   └── CODEBASE_GUIDE.md            # This file — comprehensive architecture guide
+│   ├── design/
+│   │   ├── DESIGN_PHILOSOPHY_SYSTEM.md  # Design system reference
+│   │   └── VISUAL_HIERARCHY_STANDARD.md # Visual hierarchy guidelines
+│   └── test/
+│       ├── CLAUDE_TEST_SKILL.md         # Claude test generation skill
+│       ├── TEST_FLOWS.md                # End-to-end test flows
+│       ├── TEST_COVERAGE_REPORT.md      # Test coverage report
+│       ├── TEST_PRIORITY_MAP.md         # Test priority mapping
+│       └── TEST_SPEC_FORMAT.md          # Test specification format
 │
 ├── patches/                             # patch-package patches
-├── releases/                            # Release APKs
 │
 └── (Claude Code Memory — External)      # NOT in repo
-    ~/.claude/projects/-Users-mac-wednesday-on-device-llm-OffgridMobile/memory/
+    ~/.claude/projects/-Users-mac-wednesday-on-device-llm-LocalLLM/memory/
     └── MEMORY.md                        # Persistent learnings across conversations
 ```
 
@@ -1525,6 +1559,18 @@ User message
 | `stores/authStore.test.ts` | Auth state, lockout logic |
 | `services/generationService.test.ts` | Text generation lifecycle |
 | `services/intentClassifier.test.ts` | Pattern matching, LLM fallback |
+| `services/llm.test.ts` | Model loading, GPU fallback, generation, context |
+| `services/hardware.test.ts` | Device info, memory calculations, recommendations |
+| `services/modelManager.test.ts` | Download lifecycle, storage, orphan detection |
+| `services/backgroundDownloadService.test.ts` | Native events, polling lifecycle |
+| `services/localDreamGenerator.test.ts` | Platform routing, iOS/Android delegation |
+| `services/coreMLModelBrowser.test.ts` | Model discovery, caching, errors |
+| `services/whisperService.test.ts` | Transcription, permissions |
+| `services/documentService.test.ts` | File types, reading, preview |
+| `services/pdfExtractor.test.ts` | PDF text extraction |
+| `services/huggingface.test.ts` | HuggingFace API client |
+| `constants/constants.test.ts` | Constants validation |
+| `utils/coreMLModelUtils.test.ts` | Core ML model path utilities |
 
 ### Integration Tests (`__tests__/integration/`)
 
@@ -1546,30 +1592,50 @@ Tests that verify native module interfaces haven't changed:
 | `whisper.contract.test.ts` | Whisper service contracts |
 | `localDream.contract.test.ts` | LocalDream module contracts |
 | `llamaContext.contract.test.ts` | LlamaContext lifecycle |
+| `coreMLDiffusion.contract.test.ts` | iOS Core ML parity |
+| `iosDownloadManager.contract.test.ts` | iOS download parity |
 
 ### Component Tests (`__tests__/rntl/`)
 
-React Native Testing Library tests for screens:
+React Native Testing Library tests:
+
+**Screens:**
 - `ChatScreen.test.tsx`
 - `ModelsScreen.test.tsx`
 - `HomeScreen.test.tsx`
+- `ChatsListScreen.test.tsx`
+- `ModelSettingsScreen.test.tsx`
+- `ProjectsScreen.test.tsx`
+
+**Components:**
+- `ChatInput.test.tsx`
+- `ChatMessage.test.tsx`
+- `ModelCard.test.tsx`
 
 ### E2E Tests (Maestro, `.maestro/`)
 
 **Configuration:** App ID `ai.offgridmobile`, 30-second default timeout, screenshots on failure.
 
-#### P0 Critical Path Flows
+#### P0 Critical Path Flows (16 flows)
 
 | Flow | File | What It Tests |
 |------|------|---------------|
+| Model Setup | `00-setup-model.yaml` | Model setup utility for other tests |
 | App Launch | `01-app-launch.yaml` | Launch → loading disappears → home screen visible |
 | Text Generation | `02-text-generation.yaml` | Home → new chat → type message → send → assistant responds |
 | Stop Generation | `03-stop-generation.yaml` | Send message → tap stop during streaming → generation halts |
-| Model Loading | `04-model-loading.yaml` | Open model selector → pick model → loading indicator → loaded |
-| Model Download | `05-model-download.yaml` | Models screen → trigger download → progress → complete |
-| Conversation Mgmt | `06-conversation-management.yaml` | Create chats → switch between → delete → verify |
-| Image Generation | `07-image-generation.yaml` | Toggle image mode → send prompt → progress → image appears |
-| App Lifecycle | `08-app-lifecycle.yaml` | Background → foreground → state preserved → auth lock if enabled |
+| Image Generation | `04-image-generation.yaml` | Image generation + auto-download |
+| Model Uninstall | `05a-model-uninstall.yaml` | Model deletion |
+| Model Download | `05b-model-download.yaml` | Models screen → trigger download → progress → complete |
+| Model Selection | `05b-model-selection.yaml` | Model switching between downloaded models |
+| Model Unload | `05c-model-unload.yaml` | Model unloading from memory |
+| Document Attachment | `06a-document-attachment.yaml` | Attach document to chat |
+| Image Attachment | `06b-image-attachment.yaml` | Attach image to chat |
+| Text Gen Full | `06c-text-generation-full.yaml` | Full text generation with attachments |
+| Text Gen Retry | `06d-text-generation-retry.yaml` | Retry/regenerate text generation |
+| Image Model Uninstall | `07a-image-model-uninstall.yaml` | Image model deletion |
+| Image Model Download | `07b-image-model-download.yaml` | Image model download |
+| Image Model Activate | `07c-image-model-set-active.yaml` | Image model activation |
 
 #### Key testIDs Required
 
@@ -1800,7 +1866,7 @@ This project uses **Claude Code** (Anthropic's official CLI) for development ass
 ### Memory Location
 
 ```
-~/.claude/projects/-Users-mac-wednesday-on-device-llm-OffgridMobile/memory/
+~/.claude/projects/-Users-mac-wednesday-on-device-llm-LocalLLM/memory/
 ├── MEMORY.md                    # Main memory file (loaded into Claude's context)
 └── [topic-files].md             # Optional: detailed topic-specific notes
 ```
@@ -1847,7 +1913,7 @@ Update memory files when:
 **Key Learning**: Always separate event delivery tracking from state changes when coordinating
 between native modules and React Native, especially on slow emulators.
 
-**Files Modified**: `android/app/src/main/java/com/localllm/download/DownloadManagerModule.kt`
+**Files Modified**: `android/app/src/main/java/ai/offgridmobile/download/DownloadManagerModule.kt`
 ```
 
 ### Best Practices

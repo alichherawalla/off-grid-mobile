@@ -13,7 +13,7 @@ OffgridMobile has **comprehensive test coverage** across all layers. All P0 user
 ### Key Findings
 
 ✅ **Strengths:**
-- 12 comprehensive Maestro E2E tests covering all P0 flows
+- 16 comprehensive Maestro E2E tests covering all P0 flows
 - Thorough state management tests (chatStore, appStore, authStore)
 - Excellent service orchestration tests (generationService, imageGenerationService)
 - Complete contract tests for native modules (including iOS parity)
@@ -34,7 +34,7 @@ OffgridMobile has **comprehensive test coverage** across all layers. All P0 user
 
 | Layer | Suites | Tests | Quality | Coverage |
 |-------|--------|-------|---------|----------|
-| **E2E (Maestro)** | 12 | 12 | ⭐⭐⭐⭐⭐ | All P0 user flows |
+| **E2E (Maestro)** | 16 | 16 | ⭐⭐⭐⭐⭐ | All P0 user flows |
 | **Integration** | 2 | ~100 | ⭐⭐⭐⭐⭐ | activeModelService, imageGenerationFlow |
 | **Unit - Stores** | 3 | ~300 | ⭐⭐⭐⭐⭐ | appStore, chatStore, authStore |
 | **Unit - Services** | 10 | ~489 | ⭐⭐⭐⭐⭐ | All core services + iOS parity covered |
@@ -57,6 +57,10 @@ All P0 E2E tests are in `.maestro/flows/p0/`:
 | 05b-model-download.yaml | Model download | ~5min |
 | 05b-model-selection.yaml | Model switching | ~30s |
 | 05c-model-unload.yaml | Model unloading | ~20s |
+| 06a-document-attachment.yaml | Document attachment | ~30s |
+| 06b-image-attachment.yaml | Image attachment | ~30s |
+| 06c-text-generation-full.yaml | Full text generation with attachments | ~60s |
+| 06d-text-generation-retry.yaml | Retry/regenerate text generation | ~30s |
 | 07a-image-model-uninstall.yaml | Image model deletion | ~20s |
 | 07b-image-model-download.yaml | Image model download | ~3min |
 | 07c-image-model-set-active.yaml | Image model activation | ~30s |
@@ -344,6 +348,6 @@ describe('Service', () => {
 ---
 
 **See also:**
-- `TEST_PRIORITY_MAP.md` - Detailed flow-by-flow status
-- `TEST_FLOWS.md` - Complete inventory of 350+ flows
-- `TEST_SPEC_FORMAT.md` - How to write new tests
+- `docs/test/TEST_PRIORITY_MAP.md` - Detailed flow-by-flow status
+- `docs/test/TEST_FLOWS.md` - Complete inventory of 350+ flows
+- `docs/test/TEST_SPEC_FORMAT.md` - How to write new tests

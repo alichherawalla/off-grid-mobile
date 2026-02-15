@@ -14,9 +14,9 @@ When you implement or modify a feature, you MUST also create a test specificatio
 ## Reference Documents
 
 Read these files to understand the testing strategy:
-- docs/TEST_FLOWS.md - Comprehensive list of all testable flows
-- docs/TEST_SPEC_FORMAT.md - The YAML spec format to follow
-- docs/TEST_PRIORITY_MAP.md - Priority and testing layer mapping
+- docs/test/TEST_FLOWS.md - Comprehensive list of all testable flows
+- docs/test/TEST_SPEC_FORMAT.md - The YAML spec format to follow
+- docs/test/TEST_PRIORITY_MAP.md - Priority and testing layer mapping
 
 ## Your Responsibilities
 
