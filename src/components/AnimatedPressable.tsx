@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { TouchableOpacity, type TouchableOpacityProps, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,14 +8,26 @@ import Animated, {
 } from 'react-native-reanimated';
 import { triggerHaptic, type HapticType } from '../utils/haptics';
 
-const AnimatedPressableBase = Animated.createAnimatedComponent(Pressable);
+// Use TouchableOpacity instead of Pressable as the base component.
+// Pressable wrapped in Reanimated's Animated.createAnimatedComponent inside
+// a Modal has a known double-tap issue on Android where the first tap gets
+// swallowed by the Dialog touch dispatch layer.
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
-export interface AnimatedPressableProps extends PressableProps {
+export interface AnimatedPressableProps {
   scaleValue?: number;
   hapticType?: HapticType;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
+  onPress?: (event: GestureResponderEvent) => void;
+  onPressIn?: (event: GestureResponderEvent) => void;
+  onPressOut?: (event: GestureResponderEvent) => void;
+  onLongPress?: (event: GestureResponderEvent) => void;
+  testID?: string;
+  hitSlop?: TouchableOpacityProps['hitSlop'];
+  accessibilityLabel?: string;
+  accessibilityRole?: TouchableOpacityProps['accessibilityRole'];
 }
 
 export function AnimatedPressable({
@@ -26,7 +38,12 @@ export function AnimatedPressable({
   children,
   onPressIn,
   onPressOut,
-  ...rest
+  onPress,
+  onLongPress,
+  testID,
+  hitSlop,
+  accessibilityLabel,
+  accessibilityRole,
 }: AnimatedPressableProps) {
   const scale = useSharedValue(1);
   const reducedMotion = useReducedMotion();
@@ -59,14 +76,20 @@ export function AnimatedPressable({
   );
 
   return (
-    <AnimatedPressableBase
-      {...rest}
+    <AnimatedTouchable
+      activeOpacity={1}
       disabled={disabled}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      testID={testID}
+      hitSlop={hitSlop}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
       style={[animatedStyle, { opacity: disabled ? 0.4 : 1, overflow: 'visible' as const }, style]}
     >
       {children}
-    </AnimatedPressableBase>
+    </AnimatedTouchable>
   );
 }

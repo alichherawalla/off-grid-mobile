@@ -445,15 +445,19 @@ describe('LLMService', () => {
       expect(onError).toHaveBeenCalledWith(expect.any(Error));
     });
 
-    it('uses text-only path when no images', async () => {
+    it('uses messages format for text-only path', async () => {
       const ctx = await setupLoadedModel();
       const messages = [createUserMessage('Hello')];
 
       await llmService.generateResponse(messages);
 
       const callArgs = ctx.completion.mock.calls[0]![0]!;
-      expect(callArgs).toHaveProperty('prompt');
-      expect(callArgs).not.toHaveProperty('messages');
+      expect(callArgs).toHaveProperty('messages');
+      expect(callArgs.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'Hello' }),
+        ])
+      );
     });
 
     it('ignores tokens after generation stops', async () => {
@@ -510,8 +514,10 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
-      expect(prompt).toContain('You are helpful');
+      const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
+      const systemMsg = oaiMessages.find((m: any) => m.role === 'system');
+      expect(systemMsg).toBeDefined();
+      expect(systemMsg.content).toContain('You are helpful');
     });
 
     it('keeps all messages when they fit in context', async () => {
@@ -526,10 +532,11 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
-      expect(prompt).toContain('Q1');
-      expect(prompt).toContain('A1');
-      expect(prompt).toContain('Q2');
+      const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
+      const contents = oaiMessages.map((m: any) => m.content);
+      expect(contents).toContain('Q1');
+      expect(contents).toContain('A1');
+      expect(contents).toContain('Q2');
     });
 
     it('truncates old messages while keeping recent ones', async () => {
@@ -554,11 +561,12 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
+      const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
+      const contents = oaiMessages.map((m: any) => m.content);
       // The final question should always be included
-      expect(prompt).toContain('Final question');
+      expect(contents).toContain('Final question');
       // System prompt should be preserved
-      expect(prompt).toContain('System prompt');
+      expect(contents.join(' ')).toContain('System prompt');
     });
 
     it('adds context-note when truncating messages', async () => {
@@ -578,8 +586,9 @@ describe('LLMService', () => {
 
       await llmService.generateResponse(messages);
 
-      const prompt = ctx.completion.mock.calls[0]![0]!.prompt;
-      expect(prompt).toContain('earlier message(s)');
+      const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
+      const allContent = oaiMessages.map((m: any) => m.content).join(' ');
+      expect(allContent).toContain('earlier message(s)');
     });
   });
 

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
@@ -50,19 +49,32 @@ export const SettingsScreen: React.FC = () => {
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
 
-        {/* Dark Mode Toggle */}
+        {/* Theme Selector */}
         <AnimatedEntry index={0} staggerMs={40} trigger={focusTrigger}>
           <View style={styles.themeToggleRow}>
-            <View style={styles.themeToggleInfo}>
-              <Icon name="moon" size={16} color={colors.textSecondary} />
-              <Text style={styles.themeToggleLabel}>Dark Mode</Text>
+            <Text style={styles.themeToggleLabel}>Appearance</Text>
+            <View style={styles.themeSelector}>
+              {([
+                { mode: 'system' as const, icon: 'monitor' },
+                { mode: 'light' as const, icon: 'sun' },
+                { mode: 'dark' as const, icon: 'moon' },
+              ]).map(({ mode, icon }) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[
+                    styles.themeSelectorOption,
+                    themeMode === mode && styles.themeSelectorOptionActive,
+                  ]}
+                  onPress={() => setThemeMode(mode)}
+                >
+                  <Icon
+                    name={icon}
+                    size={16}
+                    color={themeMode === mode ? colors.background : colors.textMuted}
+                  />
+                </TouchableOpacity>
+              ))}
             </View>
-            <Switch
-              value={themeMode === 'dark'}
-              onValueChange={(val) => setThemeMode(val ? 'dark' : 'light')}
-              trackColor={{ false: colors.surfaceLight, true: colors.primary + '60' }}
-              thumbColor={themeMode === 'dark' ? colors.primary : colors.textMuted}
-            />
           </View>
         </AnimatedEntry>
 
@@ -176,14 +188,26 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: SPACING.lg,
     ...shadows.small,
   },
-  themeToggleInfo: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.sm,
-  },
   themeToggleLabel: {
     ...TYPOGRAPHY.body,
     color: colors.text,
+  },
+  themeSelector: {
+    flexDirection: 'row' as const,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 8,
+    padding: 3,
+    gap: 2,
+  },
+  themeSelectorOption: {
+    width: 34,
+    height: 30,
+    borderRadius: 6,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  themeSelectorOptionActive: {
+    backgroundColor: colors.primary,
   },
   navSection: {
     backgroundColor: colors.surface,

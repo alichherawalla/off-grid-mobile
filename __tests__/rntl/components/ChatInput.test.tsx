@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { Keyboard } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
 
@@ -85,6 +86,7 @@ describe('ChatInput', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(Keyboard, 'dismiss');
 
     // Set up default mock implementations
     mockUseWhisperStore.mockReturnValue({
@@ -207,15 +209,62 @@ describe('ChatInput', () => {
       expect(input.props.value).toContain('Line 3');
     });
 
-    it('handles long text input up to maxLength', () => {
+    it('handles long text input with no character limit', () => {
       const { getByTestId } = render(<ChatInput {...defaultProps} />);
 
       const input = getByTestId('chat-input');
-      const longText = 'a'.repeat(2000);
+      const longText = 'a'.repeat(5000);
       fireEvent.changeText(input, longText);
 
-      // Component has maxLength=2000
-      expect(input.props.maxLength).toBe(2000);
+      // No maxLength prop - input should accept unlimited text
+      expect(input.props.maxLength).toBeUndefined();
+    });
+
+    it('has multiline enabled with scrolling for expandable input', () => {
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      const input = getByTestId('chat-input');
+      expect(input.props.multiline).toBe(true);
+      expect(input.props.scrollEnabled).toBe(true);
+    });
+
+    it('does not blur on submit to keep keyboard open for multiline', () => {
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      const input = getByTestId('chat-input');
+      expect(input.props.blurOnSubmit).toBe(false);
+    });
+
+    it('keeps input focused after sending a message', () => {
+      const onSend = jest.fn();
+      const { getByTestId } = render(
+        <ChatInput {...defaultProps} onSend={onSend} />
+      );
+
+      const input = getByTestId('chat-input');
+      fireEvent.changeText(input, 'Test message');
+
+      const sendButton = getByTestId('send-button');
+      fireEvent.press(sendButton);
+
+      // Message should be sent and input cleared
+      expect(onSend).toHaveBeenCalledWith('Test message', undefined, false);
+      expect(input.props.value).toBe('');
+
+      // Keyboard.dismiss should NOT have been called (keyboard stays open)
+      expect(Keyboard.dismiss).not.toHaveBeenCalled();
+    });
+
+    it('accepts text longer than 2000 characters', () => {
+      const { getByTestId } = render(<ChatInput {...defaultProps} />);
+
+      const input = getByTestId('chat-input');
+      const veryLongText = 'a'.repeat(10000);
+      fireEvent.changeText(input, veryLongText);
+
+      // Input should accept the full text with no truncation
+      expect(input.props.value).toBe(veryLongText);
+      expect(input.props.value.length).toBe(10000);
     });
   });
 
