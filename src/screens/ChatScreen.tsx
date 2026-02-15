@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -1229,8 +1230,9 @@ export const ChatScreen: React.FC = () => {
             onContentSizeChange={handleContentSizeChange}
             onLayout={handleLayout}
             scrollEventThrottle={16}
-            keyboardDismissMode="interactive"
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
+            onTouchStart={() => Keyboard.dismiss()}
             maintainVisibleContentPosition={{
               minIndexForVisible: 0,
               autoscrollToTopThreshold: 100,
