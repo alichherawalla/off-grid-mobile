@@ -8,7 +8,7 @@
 
 **Chat. Generate images. See. Listen. All on your phone. All offline. Zero data leaves your device.**
 
-[![GitHub stars](https://img.shields.io/github/stars/alichherawalla/offgrid-mobile?style=social)](https://github.com/alichherawalla/offgrid-mobile)
+[![GitHub stars](https://img.shields.io/github/stars/alichherawalla/off-grid-mobile?style=social)](https://github.com/alichherawalla/off-grid-mobile)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green.svg)](#install)
 
@@ -69,12 +69,12 @@ Tested on Snapdragon 8 Gen 2/3, Apple A17 Pro. Results vary by model size and qu
 
 ### Android — Download APK
 
-Grab the latest APK from [**GitHub Releases**](https://github.com/alichherawalla/offgrid-mobile/releases/latest), install, and start chatting in under 2 minutes.
+Grab the latest APK from [**GitHub Releases**](https://github.com/alichherawalla/off-grid-mobile/releases/latest), install, and start chatting in under 2 minutes.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/alichherawalla/offgrid-mobile.git
+git clone https://github.com/alichherawalla/off-grid-mobile.git
 cd OffgridMobile
 npm install
 
