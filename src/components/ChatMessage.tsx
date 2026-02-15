@@ -218,8 +218,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const handleEdit = () => {
     setEditedContent(message.content);
-    setIsEditing(true);
     setShowActionMenu(false);
+    // Delay opening edit sheet until action menu Modal fully closes
+    // iOS can't handle two Modal transitions simultaneously
+    setTimeout(() => setIsEditing(true), 350);
   };
 
   const handleSaveEdit = () => {
@@ -273,16 +275,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
 
   const messageBody = (
-      <TouchableOpacity
-        testID={isUser ? 'user-message' : 'assistant-message'}
-        style={[
-          styles.container,
-          isUser ? styles.userContainer : styles.assistantContainer,
-        ]}
-        onLongPress={handleLongPress}
-        activeOpacity={0.8}
-        delayLongPress={300}
-      >
+    <TouchableOpacity
+      testID={isUser ? 'user-message' : 'assistant-message'}
+      style={[
+        styles.container,
+        isUser ? styles.userContainer : styles.assistantContainer,
+      ]}
+      activeOpacity={0.8}
+      onLongPress={handleLongPress}
+      delayLongPress={300}
+    >
         <View
           style={[
             styles.bubble,
@@ -461,73 +463,73 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             entering={FadeIn.duration(250)}
           >
           <View testID="generation-meta" style={styles.generationMetaRow}>
-            <Text style={styles.generationMetaText}>
-              {message.generationMeta.gpuBackend || (message.generationMeta.gpu ? 'GPU' : 'CPU')}
-              {message.generationMeta.gpuLayers != null && message.generationMeta.gpuLayers > 0
-                ? ` (${message.generationMeta.gpuLayers}L)`
-                : ''}
-            </Text>
-            {message.generationMeta.modelName && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText} numberOfLines={1}>
-                  {message.generationMeta.modelName}
-                </Text>
-              </>
-            )}
-            {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond) != null &&
-              (message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)! > 0 && (
-                <>
-                  <Text style={styles.generationMetaSep}>·</Text>
-                  <Text style={styles.generationMetaText}>
-                    {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)!.toFixed(1)} tok/s
-                  </Text>
-                </>
-              )}
-            {message.generationMeta.timeToFirstToken != null && message.generationMeta.timeToFirstToken > 0 && (
+          <Text style={styles.generationMetaText}>
+            {message.generationMeta.gpuBackend || (message.generationMeta.gpu ? 'GPU' : 'CPU')}
+            {message.generationMeta.gpuLayers != null && message.generationMeta.gpuLayers > 0
+              ? ` (${message.generationMeta.gpuLayers}L)`
+              : ''}
+          </Text>
+          {message.generationMeta.modelName && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText} numberOfLines={1}>
+                {message.generationMeta.modelName}
+              </Text>
+            </>
+          )}
+          {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond) != null &&
+            (message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)! > 0 && (
               <>
                 <Text style={styles.generationMetaSep}>·</Text>
                 <Text style={styles.generationMetaText}>
-                  TTFT {message.generationMeta.timeToFirstToken.toFixed(1)}s
+                  {(message.generationMeta.decodeTokensPerSecond ?? message.generationMeta.tokensPerSecond)!.toFixed(1)} tok/s
                 </Text>
               </>
             )}
-            {message.generationMeta.tokenCount != null && message.generationMeta.tokenCount > 0 && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText}>
-                  {message.generationMeta.tokenCount} tokens
-                </Text>
-              </>
-            )}
-            {message.generationMeta.steps != null && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText}>
-                  {message.generationMeta.steps} steps
-                </Text>
-              </>
-            )}
-            {message.generationMeta.guidanceScale != null && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText}>
-                  cfg {message.generationMeta.guidanceScale}
-                </Text>
-              </>
-            )}
-            {message.generationMeta.resolution && (
-              <>
-                <Text style={styles.generationMetaSep}>·</Text>
-                <Text style={styles.generationMetaText}>
-                  {message.generationMeta.resolution}
-                </Text>
-              </>
-            )}
+          {message.generationMeta.timeToFirstToken != null && message.generationMeta.timeToFirstToken > 0 && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText}>
+                TTFT {message.generationMeta.timeToFirstToken.toFixed(1)}s
+              </Text>
+            </>
+          )}
+          {message.generationMeta.tokenCount != null && message.generationMeta.tokenCount > 0 && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText}>
+                {message.generationMeta.tokenCount} tokens
+              </Text>
+            </>
+          )}
+          {message.generationMeta.steps != null && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText}>
+                {message.generationMeta.steps} steps
+              </Text>
+            </>
+          )}
+          {message.generationMeta.guidanceScale != null && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText}>
+                cfg {message.generationMeta.guidanceScale}
+              </Text>
+            </>
+          )}
+          {message.generationMeta.resolution && (
+            <>
+              <Text style={styles.generationMetaSep}>·</Text>
+              <Text style={styles.generationMetaText}>
+                {message.generationMeta.resolution}
+              </Text>
+            </>
+          )}
           </View>
           </Animated.View>
         )}
-      </TouchableOpacity>
+    </TouchableOpacity>
   );
 
   return (
