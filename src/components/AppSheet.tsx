@@ -53,6 +53,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const styles = useThemedStyles(createStyles);
 
   const [modalVisible, setModalVisible] = useState(false);
+  // On Android, Modal's Dialog layer swallows the first touch after mount.
+  // We delay enabling touch on the sheet content until the animation settles.
+  const [touchReady, setTouchReady] = useState(Platform.OS !== 'android');
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
@@ -109,13 +112,27 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   useEffect(() => {
     if (visible) {
       setModalVisible(true);
+      if (Platform.OS === 'android') {
+        setTouchReady(false);
+      }
       // Small delay so Modal mounts before we animate
       const timer = setTimeout(animateIn, 16);
       return () => clearTimeout(timer);
     } else if (modalVisible) {
-      animateOut(() => setModalVisible(false));
+      animateOut(() => {
+        setModalVisible(false);
+        setTouchReady(Platform.OS !== 'android');
+      });
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On Android, enable touch after the Modal's Dialog has fully settled
+  useEffect(() => {
+    if (modalVisible && Platform.OS === 'android' && !touchReady) {
+      const timer = setTimeout(() => setTouchReady(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [modalVisible, touchReady]);
 
   // User-initiated dismiss (backdrop tap, Done button, swipe)
   const dismiss = useCallback(() => {
@@ -178,7 +195,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       onRequestClose={dismiss}
       statusBarTranslucent
     >
-      <View style={styles.container}>
+      <View style={styles.container} pointerEvents={touchReady ? 'auto' : 'box-none'}>
         {/* Backdrop */}
         <TouchableWithoutFeedback onPress={dismiss}>
           <Animated.View
