@@ -1,0 +1,29 @@
+Off Grid is a complete offline AI suite that runs entirely on your phone. No cloud, no accounts, no tracking — everything stays on your device.
+
+Most "local LLM" apps give you a text chatbot and call it a day. Off Grid brings text generation, image generation, vision AI, voice transcription, and document analysis together in one app, all running natively on your phone's hardware.
+
+FEATURES
+
+Text Generation
+Run Qwen 3, Llama 3.2, Gemma 3, Phi-4, and any GGUF model. Streaming responses with thinking mode support. 15-30 tokens/sec on flagship devices. Bring your own .gguf files too.
+
+Image Generation
+On-device Stable Diffusion with real-time preview. NPU-accelerated on Snapdragon (5-10s per image). 20+ models including Absolute Reality, DreamShaper, and Anything V5.
+
+Vision AI
+Point your camera at anything and ask questions. SmolVLM, Qwen3-VL, Gemma 3n — analyze documents, describe scenes, read receipts.
+
+Voice Input
+On-device Whisper speech-to-text. Hold to record, auto-transcribe. No audio ever leaves your phone.
+
+Document Analysis
+Attach PDFs, code files, CSVs, and more to your conversations. Native PDF text extraction.
+
+AI Prompt Enhancement
+Simple prompt in, detailed Stable Diffusion prompt out. Your text model automatically enhances image generation prompts.
+
+PRIVACY
+
+Zero data collection. No analytics. No telemetry. No network calls except to download models you choose. No Google Play Services required. Fully works in airplane mode.
+
+Off Grid is free and open source (MIT license).

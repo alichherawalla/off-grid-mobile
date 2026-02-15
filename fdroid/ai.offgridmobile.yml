@@ -1,0 +1,71 @@
+Categories:
+  - Science & Education
+  - Multimedia
+License: MIT
+AuthorName: Mohammed Ali Chherawalla
+AuthorWebSite: https://github.com/alichherawalla
+SourceCode: https://github.com/alichherawalla/off-grid-mobile
+IssueTracker: https://github.com/alichherawalla/off-grid-mobile/issues
+Changelog: https://github.com/alichherawalla/off-grid-mobile/releases
+
+AutoName: Off Grid
+
+Description: |
+  On-device AI suite that runs entirely on your phone. No cloud, no accounts,
+  no tracking. Text generation, image generation, vision AI, voice
+  transcription, and document analysis — all running natively on your
+  phone's hardware.
+
+RepoType: git
+Repo: https://github.com/alichherawalla/off-grid-mobile.git
+
+Builds:
+  - versionName: 0.0.46
+    versionCode: 1771128928
+    commit: v0.0.46
+    subdir: android/app
+    sudo:
+      - sysctl fs.inotify.max_user_watches=524288
+      - curl -Lo node.tar.xz https://nodejs.org/dist/v20.19.5/node-v20.19.5-linux-x64.tar.xz
+      - tar xJf node.tar.xz
+      - cp -a node-v20.19.5-linux-x64/. /usr/local/
+    init: npm install
+    gradle:
+      - yes
+    rm:
+      - ios
+    scanignore:
+      - android/build.gradle
+      - node_modules/react-native/android/com/facebook/react/react-native/*/
+      - node_modules/react-native-reanimated/android/build.gradle
+      - node_modules/react-native-safe-area-context/android/build.gradle
+      - node_modules/react-native-screens/android/build.gradle
+      - node_modules/react-native-vector-icons/android/build.gradle
+      - node_modules/react-native-gesture-handler/android/build.gradle
+      - node_modules/react-native-linear-gradient/android/build.gradle
+      - node_modules/react-native-image-picker/android/build.gradle
+      - node_modules/react-native-fs/android/build.gradle
+      - node_modules/react-native-device-info/android/build.gradle
+      - node_modules/react-native-haptic-feedback/android/build.gradle
+      - node_modules/react-native-zip-archive/android/build.gradle
+      - node_modules/react-native-keychain/android/build.gradle
+      - node_modules/@react-native-async-storage/async-storage/android/build.gradle
+      - node_modules/@react-native-community/blur/android/build.gradle
+      - node_modules/@react-native-community/slider/android/build.gradle
+      - node_modules/@react-native-documents/picker/android/build.gradle
+      - node_modules/@react-native-voice/voice/android/build.gradle
+      - node_modules/lottie-react-native/android/build.gradle
+    scandelete:
+      - node_modules/
+    ndk: r27c
+
+MaintainerNotes: |
+  scanignore is used to allow the React Native local Maven repository
+  and native Android build.gradle files from React Native dependencies.
+  All dependencies are FOSS. The app has zero proprietary dependencies —
+  no Google Play Services, Firebase, analytics, or tracking.
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 0.0.46
+CurrentVersionCode: 1771128928
