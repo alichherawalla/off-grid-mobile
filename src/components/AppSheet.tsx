@@ -107,16 +107,26 @@ export const AppSheet: React.FC<AppSheetProps> = ({
     [translateY, backdropOpacity],
   );
 
+  // Track whether we should animate on next onShow
+  const pendingAnimateIn = useRef(false);
+
   useEffect(() => {
     if (visible) {
+      pendingAnimateIn.current = true;
       setModalVisible(true);
-      // Small delay so Modal mounts before we animate
-      const timer = setTimeout(animateIn, 16);
-      return () => clearTimeout(timer);
     } else if (modalVisible) {
       animateOut(() => setModalVisible(false));
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Called by Modal when the Dialog is fully rendered and ready for touch
+  const handleModalShow = useCallback(() => {
+    if (pendingAnimateIn.current) {
+      pendingAnimateIn.current = false;
+      animateIn();
+    }
+  }, [animateIn]);
+
 
   // User-initiated dismiss (backdrop tap, Done button, swipe)
   const dismiss = useCallback(() => {
@@ -177,6 +187,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       transparent
       animationType="none"
       onRequestClose={dismiss}
+      onShow={handleModalShow}
       statusBarTranslucent
       hardwareAccelerated
     >
