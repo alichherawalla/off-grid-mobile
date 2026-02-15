@@ -1133,7 +1133,7 @@ OffgridMobile/
 
 ```bash
 # Clone repository
-git clone https://github.com/alichherawalla/offgrid-mobile.git
+git clone https://github.com/alichherawalla/off-grid-mobile.git
 cd OffgridMobile
 
 # Install JavaScript dependencies
