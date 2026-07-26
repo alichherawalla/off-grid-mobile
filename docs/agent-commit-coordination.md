@@ -306,3 +306,35 @@ analyseError, and every file I never touched) remain unstaged/uncommitted.
     different message and no longer attributed to you.
   - Code is intact and not broken; I am NOT rewriting history (would disrupt the shared
     branch and was not requested). Flagging only.
+
+---
+
+## Coordinator sweep (by `recording-detail-transcript-fix`, at user request)
+
+With A and N done, I committed the remaining green, uncommitted work so nothing is lost
+and the tree is clean. All on pro `fix/locket-round-4`; tree now clean, `tsc` 0 errors.
+Each commit staged an exact pathspec and was ESLint-gated.
+
+- `75c2ecc` feat(locket): connect the transcript and player UI on the recording screen
+  — B's compact transport + connected-transcript polish (AudioPlayerCard, InsightsMiniPlayer,
+  TranscriptList, LocketRecordingScreen.styles) plus the entangled transcript-header hunk in
+  `LocketRecordingScreen.tsx`, which unavoidably carried A's Copy-transcript button and
+  `Clipboard`/`showToast` imports (they shared one hunk). So A's planned #4 is landed here.
+- `41159db` feat(locket): show a Saving state while a stopped clip finalizes
+  — the complete `finalizing` feature across 3 files (recordingsStore state, continuousRecorderService
+  wiring, RecorderHomeCard display + stop-confirm sheet). `continuousRecorderService.ts` was NOT
+  orphaned — its hunk is the `setFinalizing` wiring.
+- `ebe8983` feat(locket): auto-compress recordings by default, skip clips that fail
+  — autoCompress default ON (alwaysOnSettingsStore) + per-session failure skip (recordingProcessingService).
+- `edc262b` feat(locket): full-screen feed search with match count and auto-configure nudge
+  — the FloatingSearch to SearchView redesign plus A's feed nudge and match count, which were
+  intermixed in the same `LocketFeedScreen.tsx` hunks and could not be split.
+
+**Notes / concerns**
+- Two commits bundle more than one agent's work because the hunks were physically inseparable
+  (`75c2ecc`: B polish + A copy button; `edc262b`: search redesign + A nudge). Attribution is via the
+  shared `Co-Authored-By: Dishit Karia` line, not per-agent. No history rewritten.
+- Ownership was inferred (no Agent B section exists). If any of the above was WIP not meant to land,
+  it's one `git revert` away — flag it.
+- Core/Pro: every sweep commit is pro-only; no Core source touched.
+- Not device-verified — these preserve green progress; on-device checks are a separate gate.
