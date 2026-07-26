@@ -164,8 +164,13 @@ Mine but CO-MINGLED (stage my hunks only, `git add -p`): `pro/locket/screens/Loc
 
 ## Agent: recorder-notification + Upcoming-collapse + row-align (Agent N / "third agent")
 
+> ⚠️ **BRANCH RENAME (per user instruction):** the working branches were bumped up one.
+> **Core: `fix/locket-round-2` → `fix/locket-round-3`. Pro: `fix/locket-round-3` → `fix/locket-round-4`.**
+> Commits ride along automatically (in-place `git branch -m`). All "round-3" pro references
+> in the other sections above are now "round-4"; the user is notifying the other agents.
+
 ### Summary
-All my work is in `pro/` (branch `fix/locket-round-3`). Only core change is this doc.
+All my work is in `pro/` (branch `fix/locket-round-4`). Only core change is this doc.
 - **Persistent Android recorder notification** with Start/Stop actions from the shade:
   idle = non-dismissible "Not recording / Start"; recording = "Recording / Stop"; a
   boot receiver re-posts the idle notification after a reboot. iOS is a declared no-op.
@@ -188,8 +193,8 @@ Co-mingled (I stage ONLY my hunks):
 - `pro/locket/screens/LocketFeedScreen.tsx` — mine: pass `collapsed`/`onToggleCollapsed`
 - `pro/locket/screens/LocketFeedScreen.styles.ts` — mine: `upcomingRow` → `alignItems: 'flex-start'`
 
-### Planned Commits (pro, `fix/locket-round-3`)
-1. `feat(locket): persistent Android recorder notification with Start/Stop from the shade`
+### Planned Commits (pro, `fix/locket-round-4`)
+1. ✅ DONE (`ae7b8aa`) `feat(locket): persistent Android recorder notification with Start/Stop from the shade`
 2. `feat(locket): collapsible Upcoming calendar section on the feed`
 3. `fix(locket): top-align the Upcoming meeting row with the time`
 
