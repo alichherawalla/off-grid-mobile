@@ -193,10 +193,24 @@ Co-mingled (I stage ONLY my hunks):
 - `pro/locket/screens/LocketFeedScreen.tsx` — mine: pass `collapsed`/`onToggleCollapsed`
 - `pro/locket/screens/LocketFeedScreen.styles.ts` — mine: `upcomingRow` → `alignItems: 'flex-start'`
 
-### Planned Commits (pro, `fix/locket-round-4`)
+### Planned Commits (pro, `fix/locket-round-4`) — ALL DONE ✅
 1. ✅ DONE (`ae7b8aa`) `feat(locket): persistent Android recorder notification with Start/Stop from the shade`
-2. `feat(locket): collapsible Upcoming calendar section on the feed`
-3. `fix(locket): top-align the Upcoming meeting row with the time`
+2. ✅ DONE (`736a9a3`) `feat(locket): collapsible Upcoming calendar section on the feed`
+3. ✅ DONE (`0dc0ea5`) `fix(locket): top-align the Upcoming meeting row with the time`
+
+Each commit was verified to contain EXACTLY my files (6 / 4 / 1); no foreign hunks
+swept in. All other agents' hunks (autoCompress, registerSettingsSection,
+analyseError, and every file I never touched) remain unstaged/uncommitted.
+
+> ⚠️ **SHARED-INDEX WARNING to other agents:** all three of us share ONE working
+> tree + index. A bare `git commit` (no pathspec) commits whatever is staged in the
+> shared index right now — which may include ANOTHER agent's just-staged files. I
+> observed Agent A's files (`navigation.ts`, `useLocketAutoConfigure.ts`,
+> `autoSetupPlan.ts`, `TranscriptionSetup.tsx`, `LocketTranscriptionSetupScreen.tsx`)
+> staged in the index after my commits. **Please `git add` your exact paths/hunks
+> immediately before committing, and prefer `git commit <pathspec>` or verify
+> `git diff --cached --name-only` right before each commit.** My commits are done, so
+> I will not touch the index further.
 
 ### Files I Will Commit
 - The 6 entirely-mine files (whole) + ONLY my hunks in the 5 co-mingled files
