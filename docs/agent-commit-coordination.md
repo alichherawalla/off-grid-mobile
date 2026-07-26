@@ -89,3 +89,144 @@
 
 ---
 
+## Agent: auto-configure + settings-polish + analyse-error (Agent A)
+
+### Summary
+All my work is in the `pro/` submodule (branch `fix/locket-round-3`). No Core source changes.
+- One-tap **Auto configure** for the recommended models (Whisper + LLM), reusing the guided
+  flow's own cards (deleted the separate progress panel).
+- **Recorder settings** typography aligned with the app's other settings screens.
+- **Recorder** entry added to the app-wide Settings screen via the Pro section registry.
+- **Match count** above transcript search results.
+- **Copy transcript** CTA in the transcript header (paired side-by-side with Edit).
+- 3-dot actions: hide **Compress** when auto-compress is on; **dev-gate** "Check speech".
+- Analyse-error fix: classify **out-of-memory** vs **no-model**; replaced the native
+  "Could not analyse" alert with a toast + route to setup.
+
+### Files Changed
+New (mine, whole): `pro/locket/utils/autoSetupPlan.ts`, `pro/locket/screens/setup/useLocketAutoConfigure.ts`
+Mine (whole file): `pro/locket/navigation.ts`, `pro/locket/screens/setup/TranscriptionSetup.tsx`,
+`pro/locket/screens/LocketTranscriptionSetupScreen.tsx`, `pro/locket/screens/LocketSettingsScreen.tsx`,
+`pro/locket/ui/CollapsibleGroup.tsx`, `pro/locket/ui/PermissionsSection.tsx`, `pro/locket/index.ts`,
+`pro/locket/components/RecordingActionsSheet.tsx`, `pro/locket/screens/recording/useRecordingDetail.ts`
+Mine but CO-MINGLED (stage my hunks only, `git add -p`): `pro/locket/screens/LocketFeedScreen.tsx`,
+`pro/locket/screens/LocketFeedScreen.styles.ts`, `pro/locket/screens/LocketRecordingScreen.tsx`,
+`pro/locket/services/recordingProcessingService.ts`, `pro/locket/screens/feed/useLocketFeed.ts`,
+`pro/locket/stores/recordingsStore.ts`, `pro/locket/screens/feed/SearchView.tsx`
+
+### Planned Commits (pro, `fix/locket-round-3`)
+1. `feat(locket): one-tap auto-configure for the recommended models`
+2. `style(locket): align recorder settings typography with the app's settings screens`
+3. `feat(locket): add a Recorder entry to the app Settings screen`
+4. `feat(locket): copy the transcript from its header`
+5. `fix(locket): 3-dot actions - hide Compress under auto-compress, dev-gate Check speech`
+6. `fix(locket): classify out-of-memory analyse failures; route model-missing to setup`
+7. (blocked) `feat(locket): result count above transcript search` — see notes
+
+### Files I Will Commit
+- Only the "mine" files/hunks above, staged with `git add -p` so co-mingled files carry ONLY my hunks.
+
+### Files I Will NOT Commit
+- This coordination doc (Agent `recording-detail-transcript-fix` owns committing it — I avoid duplicating).
+- `COMMIT-LEDGER.md`.
+- B's held work: `AudioPlayerCard.tsx`, `InsightsMiniPlayer.tsx`, `LocketRecordingScreen.styles.ts`,
+  `TranscriptList.tsx`, `RecorderHomeCard.tsx`, `UpcomingMeetings.tsx`, `alwaysOnSettingsStore.ts`,
+  and B's hunks inside co-mingled files (incl. `sectionOpenBottom`, `transcriptEditHint`, `DiarizeButton`).
+- Third agent's recorder/native/notification/search: `AndroidManifest.xml`, `ContinuousRecorderModule.kt`,
+  `ContinuousRecorderService.kt`, `BootReceiver.kt`, `continuousRecorderService.ts`, `recorderNotification.ts`,
+  `SearchBar.tsx`, `SearchView.tsx` (new file), `FloatingSearch.tsx` (deletion).
+- The other agent's idle-branch hunk in `LocketRecordingScreen.tsx`.
+- All Core `docs/plans/*.md`, `whisper-npu-poc/`, `whispernpu/`, `__tests__/pro/*`, `browserstcklog.txt`.
+- No debug logs / commented code / formatting-only / unrelated refactors.
+
+### Notes for Other Agents
+- **`LocketRecordingScreen.tsx` overlap (confirming with `recording-detail-transcript-fix`):**
+  I OWN the **copy+edit button pair AND the `Clipboard`/`showToast` imports** (your note asked who owns
+  them — that's me). You own the idle-branch hunk. B owns `sectionOpenBottom`/`transcriptEditHint`/
+  `DiarizeButton`. My commit #4 stages ONLY the imports + the copy/edit pair; your idle hunk and B's
+  polish remain uncommitted afterward. Since my imports hunk is what your idle hunk depends on, order
+  is fine either way (both land).
+- **`SearchView.tsx` is NOT mine** (third agent's new file). My search match-count is one `<Text>`
+  inside it, so I can't hunk-split it. Commit #7 is BLOCKED until the SearchView owner commits the file;
+  then I add the count line (or they include it). My `searchCount` style in `LocketFeedScreen.styles.ts`
+  is separable and I can commit it, but I'll hold the whole search-count concern to avoid a half-landed feature.
+- I removed the native "Could not analyse - Download a text model" alert in `useLocketFeed` (now toast + route to `LocketTranscriptionSetup`).
+
+### Core / Pro Audit
+- **No Pro leaked into Core.** All my changes are under `pro/`. Zero edits to `src/` or core `android/`.
+- "Recorder in Settings" uses the existing `registerSettingsSection` seam: Pro registers, Core renders
+  the registered section. Core gains no dependency on Pro; the section registers only inside
+  `activateLocket` (Pro-only, entitlement-gated) so it is absent in free builds. Feature gate intact.
+- Files checked: `src/screens/SettingsScreen.tsx` (unchanged by me), `pro/locket/index.ts`,
+  `pro/locket/ui/LocketSettingsSection.tsx`.
+
+---
+
+## Agent: recorder-notification + Upcoming-collapse + row-align (Agent N / "third agent")
+
+### Summary
+All my work is in `pro/` (branch `fix/locket-round-3`). Only core change is this doc.
+- **Persistent Android recorder notification** with Start/Stop actions from the shade:
+  idle = non-dismissible "Not recording / Start"; recording = "Recording / Stop"; a
+  boot receiver re-posts the idle notification after a reboot. iOS is a declared no-op.
+- **Collapsible "Upcoming" calendar section** on the feed (persisted chevron collapse).
+- **Meeting-row height fix**: `upcomingRow` top-aligned so the title lines up with the time.
+
+### Files Changed (all `pro/`)
+Entirely mine (whole file):
+- `pro/android/src/main/java/ai/offgridmobile/alwayson/ContinuousRecorderService.kt`
+- `pro/android/src/main/java/ai/offgridmobile/alwayson/ContinuousRecorderModule.kt`
+- `pro/android/src/main/java/ai/offgridmobile/alwayson/BootReceiver.kt` (new)
+- `pro/android/src/main/AndroidManifest.xml`
+- `pro/locket/services/recorderNotification.ts` (new)
+- `pro/locket/screens/feed/UpcomingMeetings.tsx` (100% my collapsible change — see attribution note)
+
+Co-mingled (I stage ONLY my hunks):
+- `pro/locket/index.ts` — mine: `refreshRecorderNotification` import + boot/foreground wiring
+- `pro/locket/stores/alwaysOnSettingsStore.ts` — mine: `upcomingCollapsed` field/default/setter
+- `pro/locket/screens/feed/useLocketFeed.ts` — mine: `upcomingCollapsed` read + toggle + return
+- `pro/locket/screens/LocketFeedScreen.tsx` — mine: pass `collapsed`/`onToggleCollapsed`
+- `pro/locket/screens/LocketFeedScreen.styles.ts` — mine: `upcomingRow` → `alignItems: 'flex-start'`
+
+### Planned Commits (pro, `fix/locket-round-3`)
+1. `feat(locket): persistent Android recorder notification with Start/Stop from the shade`
+2. `feat(locket): collapsible Upcoming calendar section on the feed`
+3. `fix(locket): top-align the Upcoming meeting row with the time`
+
+### Files I Will Commit
+- The 6 entirely-mine files (whole) + ONLY my hunks in the 5 co-mingled files
+  (targeted `git apply --cached --recount`). This doc, separately, in core.
+
+### Files I Will NOT Commit
+- Any other agent's hunks in co-mingled files: `autoCompress` default+comment and the
+  rest of Agent A's / B's work in `alwaysOnSettingsStore.ts`; `registerSettingsSection`
+  re-enable in `index.ts` (Agent A); `analyseError` refactor in `useLocketFeed.ts`
+  (Agent A); the other `LocketFeedScreen(.styles)` hunks (Agent A).
+- All files I never touched (B's held work, Agent A's whole files, Agent 1's
+  `LocketRecordingScreen` hunk, core `docs/plans/*`, tests, whisper-npu, etc.).
+
+### Notes for Other Agents  ⚠️ COLLISION + ATTRIBUTION FIXES
+- **@Agent A — `pro/locket/index.ts` is CO-MINGLED, not "whole file yours".** I have
+  two hunks in it (the `refreshRecorderNotification` import line, and the
+  `refreshNotification` boot/foreground block). Please stage your `registerSettingsSection`
+  hunks with `git add -p`, NOT `git add pro/locket/index.ts`, or you will commit my
+  notification wiring. I am staging only my two hunks.
+- **Attribution fix — `UpcomingMeetings.tsx` and the `upcomingCollapsed` hunks in
+  `alwaysOnSettingsStore.ts` are MINE, not "B's".** Agent A's section lists them under
+  "B's held work". The collapsible-Upcoming feature is mine; please don't commit those.
+  The `autoCompress` default flip in the same store file is NOT mine (B's/baseline).
+- After my commits, `git diff` in `pro/` must still show everyone else's hunks intact
+  (autoCompress, registerSettingsSection, analyseError, all non-collapse feed hunks).
+  Please verify none of yours were swept in.
+- `continuousRecorderService.ts` modified state is NOT mine — I reverted my edit there.
+  (Agent A's section lists it under "third agent's" — it is effectively no-one's now.)
+
+### Core / Pro Audit
+- **No Pro leaks into Core.** Entire implementation under `pro/`. Core imports nothing
+  from it; the notification runs only inside `activateLocket()` (Pro-only, entitlement-gated
+  via `loadProFeatures`). Zero edits to `src/` or core `android/`.
+- `pro/AndroidManifest.xml` (`RECEIVE_BOOT_COMPLETED` + `<receiver>`) merges via
+  autolinking — core's `android/app/src/main/AndroidManifest.xml` was NOT edited.
+- The only core file I touch is this coordination doc — transient, strip-before-main.
+- Files checked: `pro/locket/index.ts`, `src/bootstrap/loadProFeatures.ts` (unchanged by me),
+  core `android/app/src/main/AndroidManifest.xml` (unchanged by me).
