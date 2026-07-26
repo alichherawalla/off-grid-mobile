@@ -60,3 +60,32 @@
   and confirmed I added nothing under `src/` in core.
 - The only core file I touch is this coordination doc under `docs/` — a temporary
   artifact, not code, flagged for strip-before-main.
+
+---
+
+### FINAL REPORT (done)
+- **Core commit** `6c0b44e0` — `docs: update commit coordination` (this doc only).
+- **Pro commit** `0bd5e9d` (branch `fix/locket-round-3`) —
+  `fix(locket): keep the finished transcript visible before Analyse`.
+  Staged via `git apply --cached` of a single-hunk patch so it committed **only**
+  the idle-branch hunk; the file still shows the other agents' hunks as unstaged.
+
+**Intentionally excluded**
+- The copy-to-clipboard button in the idle-state transcript header. It needed the
+  `Clipboard` + `showToast` imports, which live in *another agent's* unstaged hunk.
+  Committing it alone would have made my commit reference missing imports (broken
+  restore point), so I dropped it. Once the import hunk lands, whoever owns the
+  transcript polish can add a copy button to the idle header to match the analysed one.
+- All other modified/untracked files, and all other hunks in
+  `LocketRecordingScreen.tsx` (imports, analysed-branch copy+edit pair,
+  `transcriptHeaderSectionsFlush`, `sectionOpenBottom`, `transcriptEditHint`).
+
+**Concerns for other agents**
+- My committed hunk uses `vm.segments`, `vm.speakerRows`, `vm.playFrom`,
+  `activeStartMs`, `AnalyseCta`, `TranscriptList` — all present at HEAD, so my
+  commit is self-contained and green on its own.
+- The pro submodule pointer in core is now advanced by my pro commit. I did **not**
+  stage that pointer bump — leaving it for whoever owns the core-side submodule bump.
+
+---
+
