@@ -99,3 +99,8 @@ docs/DEVICE_SESSION_COMMENTARY.md
 
 # Device wire-capture logs (raw, large, session-specific — kept locally, not versioned)
 docs/wire-captures/
+
+# On-device diarization embedder model (test build; ~28MB)
+pro/android/src/main/assets/diar/
+poc-archive/
+android/app/src/main/assets/cactus-models/
