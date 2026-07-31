@@ -47,10 +47,17 @@ describe('cross-screen analysis sync (rendered): every state reads the SAME on T
     const { NavigationContainer } = require('@react-navigation/native');
     const { createNativeStackNavigator } = require('@react-navigation/native-stack');
     const { getRegisteredScreens } = require('../../src/navigation/screenRegistry');
-    const { useRecordingsStore } = require('@offgrid/pro/locket/stores');
+    const { useRecordingsStore, useAlwaysOnSettingsStore } = require('@offgrid/pro/locket/stores');
+    const { useWhisperStore } = require('../../src/stores');
     /* eslint-enable @typescript-eslint/no-var-requires */
 
     // Fresh store per case so the day's counts/rows are only this recording.
+    // A transcription model must exist or the feed renders the first-run setup card instead of
+    // the timeline. And autoAnalyse is ON by default now: with an un-analysed clip on today it
+    // fires on mount, fails with 'no-model' (no LLM here), and the feed routes itself to setup -
+    // burying the timeline behind an aria-hidden screen. Neither is what this test is about.
+    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+    useAlwaysOnSettingsStore.setState({ autoAnalyse: false });
     useRecordingsStore.setState({ recordings: [], jobs: [] });
 
     // --- Precondition via the REAL store writers (device-leaf) ---------------------------------
@@ -84,10 +91,6 @@ describe('cross-screen analysis sync (rendered): every state reads the SAME on T
     await act(async () => { await Promise.resolve(); });
 
     // --- Surface 1: Today "Recordings" (day) list ---------------------------------------------
-    await waitFor(() => ui.getByTestId('today-switcher'));
-    await act(async () => { fireEvent.press(ui.getByTestId('today-switcher')); await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('switcher-recordings'));
-    await act(async () => { fireEvent.press(ui.getByTestId('switcher-recordings')); await Promise.resolve(); });
     await waitFor(() => ui.getByTestId(`today-clip-${id}`));
     // sparkle present ⇔ list offers to analyse it ⇔ list reads NOT analysed.
     const todayAnalysed = ui.queryByTestId(`today-analyse-${id}`) == null;
@@ -151,10 +154,6 @@ describe('cross-screen RUNNING sync (rendered): analysing clip A must not desync
           React.createElement(Stack.Screen, { key: sc.name, name: sc.name, component: sc.component }))));
     const ui = render(React.createElement(App));
     await act(async () => { await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('today-switcher'));
-    await act(async () => { fireEvent.press(ui.getByTestId('today-switcher')); await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('switcher-recordings'));
-    await act(async () => { fireEvent.press(ui.getByTestId('switcher-recordings')); await Promise.resolve(); });
     await waitFor(() => ui.getByTestId(`today-clip-${b}`));
 
     // Today: A (being analysed) shows no sparkle; B (untouched) STILL shows its sparkle.

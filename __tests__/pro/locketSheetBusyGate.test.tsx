@@ -36,9 +36,16 @@ describe('3-dot sheet respects the shared processing signal (rendered)', () => {
     const { NavigationContainer } = require('@react-navigation/native');
     const { createNativeStackNavigator } = require('@react-navigation/native-stack');
     const { getRegisteredScreens } = require('../../src/navigation/screenRegistry');
-    const { useRecordingsStore } = require('@offgrid/pro/locket/stores');
+    const { useRecordingsStore, useAlwaysOnSettingsStore } = require('@offgrid/pro/locket/stores');
+    const { useWhisperStore } = require('../../src/stores');
     /* eslint-enable @typescript-eslint/no-var-requires */
 
+    // A transcription model must exist or the feed renders the first-run setup card instead of
+    // the timeline. And autoAnalyse is ON by default now: with an un-analysed clip on today it
+    // fires on mount, fails with 'no-model' (no LLM here), and the feed routes itself to setup -
+    // burying the timeline behind an aria-hidden screen. Neither is what this test is about.
+    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+    useAlwaysOnSettingsStore.setState({ autoAnalyse: false });
     useRecordingsStore.setState({ recordings: [], jobs: [] });
     const NOW = Date.now();
     // Pin to :30 of the current hour (same-bucket as NOW, always mid-bucket → never straddles a
@@ -68,10 +75,6 @@ describe('3-dot sheet respects the shared processing signal (rendered)', () => {
     await act(async () => { await Promise.resolve(); });
 
     // Today → Recordings list → this clip's 3-dot menu.
-    await waitFor(() => ui.getByTestId('today-switcher'));
-    await act(async () => { fireEvent.press(ui.getByTestId('today-switcher')); await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('switcher-recordings'));
-    await act(async () => { fireEvent.press(ui.getByTestId('switcher-recordings')); await Promise.resolve(); });
     await waitFor(() => ui.getByTestId(`today-kebab-${id}`));
     await act(async () => { fireEvent.press(ui.getByTestId(`today-kebab-${id}`)); await Promise.resolve(); });
 

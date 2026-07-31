@@ -26,14 +26,22 @@ describe('processing clip shows a green card (rendered)', () => {
     /* eslint-disable @typescript-eslint/no-var-requires */
     const React = require('react');
     const { StyleSheet } = require('react-native');
-    const { render, fireEvent, waitFor, act } = requireRTL();
+    const { render, waitFor, act } = requireRTL();
     await installPro();
     const { NavigationContainer } = require('@react-navigation/native');
     const { createNativeStackNavigator } = require('@react-navigation/native-stack');
     const { getRegisteredScreens } = require('../../src/navigation/screenRegistry');
-    const { useRecordingsStore } = require('@offgrid/pro/locket/stores');
+    const { useRecordingsStore, useAlwaysOnSettingsStore } = require('@offgrid/pro/locket/stores');
+    const { useWhisperStore } = require('../../src/stores');
     /* eslint-enable @typescript-eslint/no-var-requires */
 
+    // A transcription model must exist or the feed renders the first-run setup card instead of
+    // the timeline. And autoAnalyse is ON by default now: with an un-analysed clip on today it
+    // fires on mount, fails with 'no-model' (no LLM here), and the feed routes itself to setup -
+    // burying the timeline behind an aria-hidden screen. Neither is what this test is about, so
+    // both are pinned rather than inherited from defaults that can move.
+    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+    useAlwaysOnSettingsStore.setState({ autoAnalyse: false });
     useRecordingsStore.setState({ recordings: [], jobs: [] });
     const NOW = Date.now();
     const midHour = new Date(NOW); midHour.setMinutes(30, 0, 0);
@@ -58,15 +66,14 @@ describe('processing clip shows a green card (rendered)', () => {
     const ui = render(React.createElement(App));
     await act(async () => { await Promise.resolve(); });
 
-    await waitFor(() => ui.getByTestId('today-switcher'));
-    await act(async () => { fireEvent.press(ui.getByTestId('today-switcher')); await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('switcher-recordings'));
-    await act(async () => { fireEvent.press(ui.getByTestId('switcher-recordings')); await Promise.resolve(); });
     await waitFor(() => ui.getByTestId(`today-clip-${id}`));
 
-    // The green left-border (borderLeftWidth 3) is unique to the clipProcessing style — present ⇔ green.
+    // clipProcessing is a faint primary-tinted BACKGROUND (`${colors.primary}0F`), not the green
+    // left border this used to assert - e60e565 changed the treatment. The 8-digit hex with the
+    // 0F alpha suffix is unique to that style, so its presence is the signal.
     const card = ui.getByTestId(`today-clip-${id}`);
     const flat = StyleSheet.flatten(card.props.style);
-    expect(flat.borderLeftWidth === 3).toBe(green);
+    const tinted = typeof flat.backgroundColor === 'string' && /0F$/i.test(flat.backgroundColor);
+    expect(tinted).toBe(green);
   });
 });

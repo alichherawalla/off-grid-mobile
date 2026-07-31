@@ -22,13 +22,20 @@ describe('repair progress shows on the feed card (rendered)', () => {
     const boundary = installNativeBoundary({ fs: true });
     const React = require('react');
     const { StyleSheet } = require('react-native');
-    const { render, fireEvent, waitFor, act, within } = requireRTL();
+    const { render, waitFor, act, within } = requireRTL();
     await installPro();
     const { NavigationContainer } = require('@react-navigation/native');
     const { createNativeStackNavigator } = require('@react-navigation/native-stack');
     const { getRegisteredScreens } = require('../../src/navigation/screenRegistry');
-    const { useRecordingsStore } = require('@offgrid/pro/locket/stores');
+    const { useRecordingsStore, useAlwaysOnSettingsStore } = require('@offgrid/pro/locket/stores');
+    const { useWhisperStore } = require('../../src/stores');
 
+    // A transcription model must exist or the feed renders the first-run setup card instead of
+    // the timeline. And autoAnalyse is ON by default now: with an un-analysed clip on today it
+    // fires on mount, fails with 'no-model' (no LLM here), and the feed routes itself to setup -
+    // burying the timeline behind an aria-hidden screen. Neither is what this test is about.
+    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+    useAlwaysOnSettingsStore.setState({ autoAnalyse: false });
     useRecordingsStore.setState({ recordings: [], jobs: [] });
     const NOW = Date.now();
     // Clearly in the past (today) so it's visible without a prunedAt - a mid-repair clip has none.
@@ -49,10 +56,6 @@ describe('repair progress shows on the feed card (rendered)', () => {
     const ui = render(React.createElement(App));
     await act(async () => { await Promise.resolve(); });
 
-    await waitFor(() => ui.getByTestId('today-switcher'));
-    await act(async () => { fireEvent.press(ui.getByTestId('today-switcher')); await Promise.resolve(); });
-    await waitFor(() => ui.getByTestId('switcher-recordings'));
-    await act(async () => { fireEvent.press(ui.getByTestId('switcher-recordings')); await Promise.resolve(); });
     await waitFor(() => ui.getByTestId(`today-clip-${id}`));
 
     // Repair starts NOW (clip already displayed) - exactly what recordingRepair emits mid-run.
