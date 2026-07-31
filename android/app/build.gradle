@@ -86,6 +86,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1784144537
         versionName "0.0.103"
+        // Launcher label via a placeholder so a coexisting build type can rename itself.
+        // Default keeps the real name (@string/app_name = "Off Grid AI"); releaseLocket overrides it.
+        manifestPlaceholders = [appName: "@string/app_name"]
     }
     signingConfigs {
         debug {
@@ -128,6 +131,16 @@ android {
             signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+        // A release-configured build (JS bundled, minified - production-like) but with the ".locket"
+        // applicationId suffix + launcher name, so it installs ALONGSIDE the normal ai.offgridmobile
+        // build instead of replacing it. Build: assembleReleaseLocket.
+        releaseLocket {
+            initWith release
+            applicationIdSuffix ".locket"
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            matchingFallbacks = ['release']
+            manifestPlaceholders = [appName: "Off Grid Locket"]
         }
     }
     packaging {

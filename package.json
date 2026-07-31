@@ -4,6 +4,11 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
+    "apk:release": "cd android && ./gradlew assembleRelease",
+    "apk:locket": "cd android && ./gradlew assembleReleaseLocket",
+    "apk:locket:install": "npm run apk:locket && npm run apk:locket:push",
+    "apk:locket:push": "adb install -r android/app/build/outputs/apk/releaseLocket/app-releaseLocket.apk",
+    "apk:locket:launch": "adb shell monkey -p ai.offgridmobile.locket -c android.intent.category.LAUNCHER 1",
     "ios": "react-native run-ios",
     "ios:device": "./scripts/ios-device.sh",
     "lint": "eslint . && npm run lint:android && npm run lint:ios",
