@@ -533,6 +533,37 @@ class WhisperService {
    * memory warning silently kills a transcription the model was loaded for, and the clip
    * surfaces as "Failed to transcribe" through no fault of its own.
    */
+  /**
+   * Listeners for the REALTIME (live dictation / voice mode) session boundary.
+   *
+   * Exists so a background consumer of the single whisper context can yield to a foreground
+   * one. Watching `isCurrentlyTranscribing()` would be wrong: it is also true while a
+   * background file transcription runs, so a listener would pause itself. `stopFn` is the
+   * realtime session specifically, which is what makes this signal safe to react to.
+   *
+   * Mirrors generationService.subscribe: fires immediately with the current value so a late
+   * subscriber is never out of step.
+   */
+  private realtimeListeners = new Set<(active: boolean) => void>();
+
+  subscribeRealtime(listener: (active: boolean) => void): () => void {
+    this.realtimeListeners.add(listener);
+    listener(this.isRealtimeTranscribing());
+    return () => this.realtimeListeners.delete(listener);
+  }
+
+  /** True while a live dictation / voice-mode session holds the context (NOT a file pass). */
+  isRealtimeTranscribing(): boolean {
+    return this.stopFn !== null;
+  }
+
+  private notifyRealtime(): void {
+    const active = this.isRealtimeTranscribing();
+    this.realtimeListeners.forEach((l) => {
+      try { l(active); } catch { /* a listener must never break transcription */ }
+    });
+  }
+
   isFileTranscribing(): boolean {
     return this.fileTranscribeStop !== null;
   }
@@ -694,6 +725,7 @@ class WhisperService {
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
       this.stopFn = stop;
+      this.notifyRealtime(); // a foreground session now holds the context
 
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {
@@ -731,6 +763,7 @@ class WhisperService {
           });
           this.isTranscribing = false;
           this.stopFn = null;
+          this.notifyRealtime();
           // Signal that native processing is complete - safe to release context
           resolveTranscriptionStopped();
         });
@@ -740,6 +773,7 @@ class WhisperService {
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
       this.stopFn = null;
+      this.notifyRealtime();
       resolveTranscriptionStopped();
       throw error;
     }
@@ -754,6 +788,7 @@ class WhisperService {
       // finishRealtimeTranscribeJob on the native side.
       const fn = this.stopFn;
       this.stopFn = null;
+      this.notifyRealtime();
       if (fn) {
         // Guard: only call stop if context still exists
         // Calling stop on a freed context causes SIGSEGV
@@ -783,6 +818,7 @@ class WhisperService {
     // Atomic grab-and-clear to match stopTranscription's pattern and prevent double-stop
     const fn = this.stopFn;
     this.stopFn = null;
+    this.notifyRealtime();
     if (fn && this.context) {
       try { fn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
     }
