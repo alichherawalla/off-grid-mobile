@@ -524,6 +524,19 @@ class WhisperService {
     }
   }
 
+  /**
+   * True while a whole-file transcription is in flight on the loaded context.
+   *
+   * Exposed so model residency can veto eviction (`canEvict`) instead of unloading the model
+   * out from under a running job. `unloadModel` already cancels such a job to avoid a
+   * use-after-free, which whisper.rn reports as `Code: -999` - so without this veto an iOS
+   * memory warning silently kills a transcription the model was loaded for, and the clip
+   * surfaces as "Failed to transcribe" through no fault of its own.
+   */
+  isFileTranscribing(): boolean {
+    return this.fileTranscribeStop !== null;
+  }
+
   async unloadModel(): Promise<void> {
     if (!this.context) return;
     // Stop active transcription to prevent SIGSEGV on a freed context.

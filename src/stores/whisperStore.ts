@@ -176,8 +176,19 @@ export const useWhisperStore = create<WhisperState>()(
             logMemory(`whisper:beforeLoad model=${downloadedModelId} ~${sizeMB}MB`).catch(() => {});
             await whisperService.loadModel(modelPath, options);
             logMemory('whisper:afterLoad').catch(() => {});
+            // canEvict: residency's veto - never reclaim whisper while a file transcription is
+            // running on it. Without this, an iOS memory warning unloads the model mid-job (the
+            // unload cancels the native transcribe to avoid a use-after-free), whisper.rn returns
+            // Code: -999, and the clip is reported as "Failed to transcribe" - observed on device
+            // firing 0.5-0.9s after the transcribe started, at 5-9% memory use. Mirrors the veto
+            // the TTS resident already registers for active playback.
             modelResidencyManager.register(
-              { key: 'whisper', type: 'whisper', sizeMB },
+              {
+                key: 'whisper',
+                type: 'whisper',
+                sizeMB,
+                canEvict: () => !whisperService.isFileTranscribing(),
+              },
               () => get().unloadModel(),
             );
             return true;
