@@ -1,5 +1,36 @@
 PODS:
   - boost (1.84.0)
+  - Cactus (1.13.1):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - NitroModules
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React-callinvoker
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
+    - ZIPFoundation (~> 0.9)
   - DoubleConversion (1.1.6)
   - fast_float (8.0.0)
   - FBLazyVector (0.83.1)
@@ -41,6 +72,35 @@ PODS:
   - MMKV (2.4.0):
     - MMKVCore (~> 2.4.0)
   - MMKVCore (2.4.0)
+  - NitroModules (0.33.9):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React-callinvoker
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
   - OffgridPro (0.0.1):
     - boost
     - DoubleConversion
@@ -3523,9 +3583,11 @@ PODS:
     - SocketRocket
     - Yoga
   - Yoga (0.0.0)
+  - ZIPFoundation (0.9.20)
 
 DEPENDENCIES:
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
+  - Cactus (from `../node_modules/cactus-react-native`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
@@ -3533,6 +3595,7 @@ DEPENDENCIES:
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - llama-rn (from `../node_modules/llama.rn`)
+  - NitroModules (from `../node_modules/react-native-nitro-modules`)
   - OffgridPro (from `../pro/ios`)
   - onnxruntime-objc
   - "op-sqlite (from `../node_modules/@op-engineering/op-sqlite`)"
@@ -3645,10 +3708,13 @@ SPEC REPOS:
     - opencv-rne
     - SocketRocket
     - SSZipArchive
+    - ZIPFoundation
 
 EXTERNAL SOURCES:
   boost:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
+  Cactus:
+    :path: "../node_modules/cactus-react-native"
   DoubleConversion:
     :podspec: "../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec"
   fast_float:
@@ -3664,6 +3730,8 @@ EXTERNAL SOURCES:
     :tag: hermes-v0.14.0
   llama-rn:
     :path: "../node_modules/llama.rn"
+  NitroModules:
+    :path: "../node_modules/react-native-nitro-modules"
   OffgridPro:
     :path: "../pro/ios"
   op-sqlite:
@@ -3865,6 +3933,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
+  Cactus: ecedb8da47dc5924d7729eaedf93fdd082ebc716
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
   FBLazyVector: 309703e71d3f2f1ed7dc7889d58309c9d77a95a4
@@ -3874,7 +3943,8 @@ SPEC CHECKSUMS:
   llama-rn: e6be4084699f0237fe0156c5f826cdaeb59e399e
   MMKV: 86859fdfa2b0b21db1fd6e48788474a6416a2c77
   MMKVCore: 3d16ce9f7d411e135020915fde98a056859a1efa
-  OffgridPro: c60bd1f326de83302835ae75857777b92f949fe8
+  NitroModules: 1ef0796714251dbdaea49af187e291d8b6a7c5ea
+  OffgridPro: 9daaa05c89e5291828e4440162e7434a707c1564
   onnxruntime-c: 412ab51682e622e3d77ddc9176aa92517d171820
   onnxruntime-objc: f88cca350e7603f81c31b5823f3ddfaa67da9f84
   op-sqlite: bafff369cecaee4fe65c89eec47deaba26f2db95
@@ -3978,7 +4048,8 @@ SPEC CHECKSUMS:
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
   whisper-rn: 7566faf9b7d78e39ab9fc634cb90fdee81177793
   Yoga: 5456bb010373068fc92221140921b09d126b116e
+  ZIPFoundation: dfd3d681c4053ff7e2f7350bc4e53b5dba3f5351
 
 PODFILE CHECKSUM: 7e3cc52eb1420b70214416b0f5e4aca31f6ba1c7
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2
