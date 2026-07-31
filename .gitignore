@@ -113,3 +113,6 @@ pro/android/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
 *.aab
 *.ipa
 pro/android/libs/sherpa-onnx-static-1.13.4.jar
+
+# Local Claude Code skill lockfile - machine state, not project config.
+skills-lock.json
