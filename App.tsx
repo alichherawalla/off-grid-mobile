@@ -81,6 +81,9 @@ function App() {
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
   // it live — no restart needed.
   const AppRoot = useSlot(SLOTS.appRoot);
+  // Root-mounted recorder prompt (the speech-model download sheet). Its own slot, because
+  // appRoot already holds the TTS engine bridge and a slot maps to ONE component.
+  const SttModelPrompt = useSlot(SLOTS.sttModelPrompt);
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
@@ -367,6 +370,7 @@ function App() {
       <SafeAreaProvider>
         <SystemBars style={isDark ? 'light' : 'dark'} />
         {AppRoot ? <AppRoot /> : null}
+        {SttModelPrompt ? <SttModelPrompt /> : null}
         <NavigationContainer
           theme={{
             dark: isDark,

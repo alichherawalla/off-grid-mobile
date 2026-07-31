@@ -22,11 +22,17 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useWhisperStore } from '../../stores';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { WHISPER_MODELS, whisperService } from '../../services';
+import {
+  listSttModels,
+  type SttModel,
+} from '../../services/modelDownloadService/providers/sttModelRegistry';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
+
+const BYTES_PER_MB = 1024 * 1024;
 
 const formatSize = (mb: number): string => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`);
 
@@ -89,6 +95,74 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
   );
 };
 
+/**
+ * A speech model contributed through `sttModelRegistry` rather than shipped in the whisper
+ * catalogue. This tab used to render `WHISPER_MODELS` directly, so a registered model was
+ * invisible here no matter what the download provider knew about it - the reason Parakeet was
+ * downloadable and manageable from the Download Manager yet absent from the Models screen.
+ *
+ * Core stays ignorant of what is registered: the row is built entirely from the registry's
+ * hooks (`filesPresent`, `download`, `remove`), so this works for any future model without
+ * core importing pro.
+ */
+const RegisteredSttCard: React.FC<{
+  model: SttModel;
+  index: number;
+  onChanged: () => void;
+}> = ({ model, index, onChanged }) => {
+  const [present, setPresent] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const probe = useCallback(() => {
+    let alive = true;
+    model.filesPresent()
+      .then((p) => { if (alive) setPresent(p); })
+      .catch(() => { if (alive) setPresent(false); });
+    return () => { alive = false; };
+  }, [model]);
+  useEffect(() => probe(), [probe]);
+
+  const sizeMb = Math.round(model.sizeBytes / BYTES_PER_MB);
+
+  const download = (): void => {
+    setBusy(true);
+    // The registrant owns the transport and drives its own progress into the shared
+    // downloadStore, so the Download Manager shows the combined bar. This screen only needs
+    // to know when it finished, to re-probe disk.
+    model.download()
+      .catch((e) => logger.error(`[Transcription] ${model.id} download failed:`, e))
+      .finally(() => { setBusy(false); probe(); onChanged(); });
+  };
+
+  const remove = (): void => {
+    if (!model.remove) return;
+    model.remove()
+      .catch((e) => logger.error(`[Transcription] ${model.id} remove failed:`, e))
+      .finally(() => { probe(); onChanged(); });
+  };
+
+  return (
+    <ModelCard
+      compact
+      model={{
+        id: model.id,
+        name: model.displayName,
+        author: `${sizeMb} MB`,
+        // The licence credit rides on the card, which is the one place a person browsing
+        // models will see it (Parakeet is CC-BY-4.0 and requires attribution).
+        description: model.attribution ?? 'Speech-to-text model',
+      }}
+      isDownloaded={present === true && !busy}
+      isDownloading={busy}
+      downloadProgress={0}
+      testID={`transcription-registered-card-${index}`}
+      onPress={present === true || busy ? undefined : download}
+      onDownload={present === true || busy ? undefined : download}
+      onDelete={present === true && model.remove ? remove : undefined}
+    />
+  );
+};
+
 export const TranscriptionModelsTab: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -107,6 +181,14 @@ export const TranscriptionModelsTab: React.FC = () => {
   // Download Manager shows "failed" — the model just becomes downloadable again. Disk probes
   // are deferred until nothing is downloading so an in-flight file isn't mistaken for absent.
   const { stateFor: downloadStateFor, anyDownloading } = useSttDownloadState();
+
+  // Registered (non-whisper) speech models. Read on focus rather than once at module load,
+  // because registration happens during pro activation - which can land after this module is
+  // first evaluated, and can happen again when Pro is unlocked at runtime.
+  const [registered, setRegistered] = useState<SttModel[]>(() => listSttModels());
+  useFocusEffect(
+    useCallback(() => { setRegistered(listSttModels()); }, []),
+  );
 
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
@@ -179,6 +261,18 @@ export const TranscriptionModelsTab: React.FC = () => {
 
       <Text style={styles.sectionLabel}>Multilingual - 99 languages</Text>
       {MULTI_MODELS.map((m, i) => renderWhisperCard(m, ENGLISH_MODELS.length + i))}
+
+      {/* Models contributed by a registrant rather than the whisper catalogue. The section only
+          appears when something registered - on iOS nothing does, so the tab looks exactly as it
+          did. Whatever registers decides its own platform availability; this renders the list. */}
+      {registered.length > 0 ? (
+        <>
+          <Text style={styles.sectionLabel}>Other engines</Text>
+          {registered.map((m, i) => (
+            <RegisteredSttCard key={m.id} model={m} index={i} onChanged={refreshPresentModels} />
+          ))}
+        </>
+      ) : null}
 
       <CustomAlert visible={alertState.visible} title={alertState.title}
         message={alertState.message} buttons={alertState.buttons}
