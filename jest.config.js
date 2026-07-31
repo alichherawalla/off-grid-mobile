@@ -62,7 +62,7 @@ module.exports = {
     // (the only RNFS native module we ship — see metro.config.js).
     '^react-native-fs$': '<rootDir>/src/shims/react-native-fs.ts',
   },
-  transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@react-native-.*|moti|@motify|@gorhom|@shopify|@ronradtke|@op-engineering|@offgrid)/)',],
+  transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@react-native-.*|moti|@motify|@gorhom|@shopify|@ronradtke|@op-engineering|@offgrid|cactus-react-native)/)',],
   testEnvironment: 'node',
   clearMocks: true,
   verbose: true,
