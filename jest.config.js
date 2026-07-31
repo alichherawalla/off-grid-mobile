@@ -37,7 +37,12 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   testPathIgnorePatterns: [
     '/node_modules/', '/android/', '/ios/', '/e2e/', 'App.test.tsx',
-    // pro/ ships its own suite run in the pro repo's CI — never run those from here.
+    // pro/'s OWN suite is excluded from THIS config and runs through pro/jest.config.js
+    // (`cd pro && npm run test:pro`), which inherits this file and re-includes that path.
+    // It is NOT run by pro's CI: that checks out core and runs THIS config, so anything
+    // under pro/__tests__ is skipped there. Treat a test moved into pro/ as not running in
+    // CI until pro's workflow invokes pro/jest.config.js. (Eight VAD-declutter tests were
+    // moved there in pro@87dd505 believing otherwise, and silently stopped running.)
     // Anchored to <rootDir>/pro/ so it ignores ONLY the submodule's own tests, NOT this
     // repo's __tests__/pro/** pro-dependent suites (a bare '/pro/' matched both).
     // The pro-DEPENDENT suites under this repo's __tests__ DO run against the real pro
