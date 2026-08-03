@@ -559,6 +559,21 @@ export interface WhisperFake {
   holdNextLoad(): void;
   /** Release a load held via holdNextLoad(). No-op if not held. */
   releaseLoad(): void;
+  /** HOLD the next file transcribe (context.transcribe) open until releaseTranscribe() - the
+   *  device-shaped window a real whole-file transcribe occupies (tens of seconds), so anything
+   *  that runs DURING an in-flight transcription (e.g. an iOS memory warning) is observable.
+   *  One-shot. */
+  holdNextTranscribe(): void;
+  /** Resolve a transcribe held via holdNextTranscribe(). No-op if not held. */
+  releaseTranscribe(): void;
+  /** True while a held transcribe is still in flight (never resolved, never stopped). */
+  transcribeInFlight(): boolean;
+  /** Script the ggml Silero VAD (initWhisperVad → ctx.detectSpeech) the locket declutter/trim scan uses.
+   *  Segments are VadSegment[] with t0/t1 in CENTISECONDS (vadDetect maps t*10 → ms). Default = one 0–30s
+   *  speech run; setVadSegments([]) models silence (→ 'none'); scriptVadThrow() makes EVERY detectSpeech
+   *  throw — the swallowed per-chunk error the fail-open path must treat as 'unknown', never as silence. */
+  setVadSegments(segs: Array<{ t0: number; t1: number }>): void;
+  scriptVadThrow(throwIt?: boolean): void;
 }
 
 function makeWhisperFake(): WhisperFake {
@@ -568,13 +583,38 @@ function makeWhisperFake(): WhisperFake {
   // Load hold: opens the in-flight model-load window a real (seconds-long) ggml init has.
   let loadHoldPending = false;
   let loadHoldRelease: (() => void) | null = null;
+  let txHoldPending = false;
+  let txHoldResolve: ((v: unknown) => void) | null = null;
+  // ggml Silero VAD (initWhisperVad → ctx.detectSpeech), used by the locket declutter/trim scan.
+  let vadSegments: Array<{ t0: number; t1: number }> = [{ t0: 0, t1: 3000 }]; // default: 0–30s speech (centiseconds)
+  let vadThrows = false;
+  const vadContext: Record<string, jest.Mock> = {
+    detectSpeech: jest.fn(async () => {
+      if (vadThrows) throw new Error('detectSpeech failed (native VAD error)');
+      return vadSegments;
+    }),
+    release: jest.fn(async () => {}),
+  };
   const context: Record<string, jest.Mock> = {
     // Faithful to whisper.rn: transcribe(path, opts) returns { stop, promise }, the promise resolving to
     // { result, segments } — this is the method whisperService.transcribeFile (the voice-mode file path) drives.
-    transcribe: jest.fn((_path: string) => ({
-      stop: jest.fn(async () => {}),
-      promise: Promise.resolve({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] }),
-    })),
+    transcribe: jest.fn((_path: string) => {
+      const done = { result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] };
+      if (!txHoldPending) {
+        return { stop: jest.fn(async () => {}), promise: Promise.resolve(done) };
+      }
+      txHoldPending = false;
+      // Parked until releaseTranscribe() - or until stop(), which is what unloadModel calls to
+      // cancel the native job. whisper.rn surfaces that cancellation as Code: -999.
+      const promise = new Promise((res) => { txHoldResolve = res; });
+      return {
+        stop: jest.fn(async () => {
+          const f = txHoldResolve; txHoldResolve = null;
+          f?.({ result: '', segments: [], isAborted: true });
+        }),
+        promise,
+      };
+    }),
     transcribeFile: jest.fn(async () => ({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] })),
     transcribeRealtime: jest.fn(async () => {
       rtActive = true; // native mic session starts capturing
@@ -597,11 +637,15 @@ function makeWhisperFake(): WhisperFake {
       return context;
     }),
     releaseAllWhisper: jest.fn(async () => {}),
+    // Named export the locket VAD path imports: `import { initWhisperVad } from 'whisper.rn'`.
+    initWhisperVad: jest.fn(async () => vadContext),
     // Some call sites read module-level too; mirror the context.
     transcribeFile: context.transcribeFile,
   };
   return {
     module,
+    setVadSegments: (segs: Array<{ t0: number; t1: number }>) => { vadSegments = segs; },
+    scriptVadThrow: (throwIt = true) => { vadThrows = throwIt; },
     emitRealtime: ({ text, isCapturing, recordingTime, noData }) => {
       if (!realtimeCb) return;
       realtimeCb({
@@ -616,6 +660,12 @@ function makeWhisperFake(): WhisperFake {
     realtimeActive: () => rtActive,
     holdNextLoad: () => { loadHoldPending = true; },
     releaseLoad: () => { const f = loadHoldRelease; loadHoldRelease = null; f?.(); },
+    holdNextTranscribe: () => { txHoldPending = true; },
+    releaseTranscribe: () => {
+      const f = txHoldResolve; txHoldResolve = null;
+      f?.({ result: fileTranscript, segments: [{ text: fileTranscript, t0: 0, t1: 100 }] });
+    },
+    transcribeInFlight: () => txHoldResolve != null,
   };
 }
 
@@ -705,6 +755,44 @@ function makeFsFake(): FsFake {
 }
 
 // ---------------------------------------------------------------------------
+// Fake: AudioNormalizer (NativeModules.AudioNormalizer) — the native WAV slicer/concat/compressor the
+// locket VAD scan (extractWavSlice) and trim (concatWavSlices/compressToAac/normalizeToWav16kMono) use.
+// Each op WRITES its output to the (memfs) disk so the real downstream reads (stat/exists/unlink) find a
+// file — outputs are device-shaped SIZES derived from the args, so the real trim math runs on top.
+// Needs the fs fake to seed; install with { fs: true, audio: true }.
+// ---------------------------------------------------------------------------
+
+export interface AudioNormalizerFake { module: Record<string, jest.Mock>; }
+
+function makeAudioNormalizerFake(seedFile?: (path: string, sizeBytes: number) => void): AudioNormalizerFake {
+  // 16k mono 16-bit PCM = 32000 bytes/sec — used to size slice/concat outputs realistically.
+  const pcmBytes = (ms: number) => 44 + Math.max(0, Math.round((ms / 1000) * 32000));
+  let n = 0;
+  const module: Record<string, jest.Mock> = {
+    extractWavSlice: jest.fn(async (_src: string, _startMs: number, durationMs: number) => {
+      const p = `/docs/slice-${++n}.wav`;
+      seedFile?.(p, pcmBytes(durationMs));
+      return p;
+    }),
+    concatWavSlices: jest.fn(async (_src: string, ranges: Array<{ startMs: number; durationMs: number }>, outPath: string) => {
+      const kept = ranges.reduce((a, r) => a + (r.durationMs || 0), 0);
+      seedFile?.(outPath, pcmBytes(kept));
+      return outPath;
+    }),
+    compressToAac: jest.fn(async (_src: string, outPath: string) => {
+      const sizeBytes = 50_000; // a small AAC backup
+      seedFile?.(outPath, sizeBytes);
+      return { path: outPath, sizeBytes };
+    }),
+    normalizeToWav16kMono: jest.fn(async (_in: string, outPath: string) => {
+      seedFile?.(outPath, 5_000_000);
+      return outPath;
+    }),
+  };
+  return { module };
+}
+
+// ---------------------------------------------------------------------------
 // installNativeBoundary — seed the set, then freshly require services/stores on top.
 // ---------------------------------------------------------------------------
 
@@ -723,6 +811,9 @@ export interface InstallOpts {
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
   whisper?: boolean;
+  /** Seed the native AudioNormalizer (WAV slice/concat/compress) — the locket VAD-scan + trim boundary.
+   *  Needs { fs: true } (its outputs are written to the memfs disk). */
+  audio?: boolean;
 }
 
 export interface NativeBoundary {
@@ -739,6 +830,8 @@ export interface NativeBoundary {
   download?: DownloadFake;
   /** Driveable whisper STT context — present only when installed with { whisper: true }. */
   whisper?: WhisperFake;
+  /** Native AudioNormalizer (WAV slice/concat/compress) — present only when installed with { audio: true }. */
+  audio?: AudioNormalizerFake;
   /** Re-read RAM at the leaf mid-test (e.g. simulate OS pressure between a pre-check and the load). */
   setRam(profile: RamProfile): void;
   /** Fire the OS 'memoryWarning' AppState event the app's residency manager listens to (auto-eviction). */
@@ -787,6 +880,9 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   const whisperFake = opts.whisper ? makeWhisperFake() : undefined;
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
 
+  // Native AudioNormalizer (WAV slice/concat/compress) — outputs written to the memfs disk.
+  const audioFake = opts.audio ? makeAudioNormalizerFake(fsFake?.seedFile) : undefined;
+
    
   const RN = require('react-native');
   RN.NativeModules.LiteRTModule = litert.module;
@@ -794,6 +890,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   RN.NativeModules.LocalDreamModule = diffusion.module;
   RN.NativeModules.CoreMLDiffusionModule = diffusion.module;
   if (downloadFake) RN.NativeModules.DownloadManagerModule = downloadFake.module;
+  if (audioFake) RN.NativeModules.AudioNormalizer = audioFake.module;
   // Mic permission is a device boundary: whisper STT refuses to start recording without RECORD_AUDIO
   // granted (whisperService.requestPermissions → PermissionsAndroid.request). Grant it when whisper is
   // installed so the real STT flow runs; the default jest PermissionsAndroid returns undefined (= denied).
@@ -856,5 +953,5 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     Object.defineProperty(RN.Platform, 'Version', { value: profile.platform === 'android' ? 34 : '17.0', configurable: true });
   };
 
-  return { litert, litertEvents: handle, diffusion, fs: fsFake, llama: llamaFake, download: downloadFake, whisper: whisperFake, setRam, emitMemoryWarning: () => appState.handle.emit('memoryWarning') };
+  return { litert, litertEvents: handle, diffusion, fs: fsFake, llama: llamaFake, download: downloadFake, whisper: whisperFake, audio: audioFake, setRam, emitMemoryWarning: () => appState.handle.emit('memoryWarning') };
 }

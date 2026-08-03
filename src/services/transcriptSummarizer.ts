@@ -131,7 +131,7 @@ function resolveContextTokens(): { tokens: number; source: string } {
 async function generateSummaryText(
   systemPrompt: string,
   userText: string,
-  opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
+  opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number; remoteOnly?: boolean },
 ): Promise<string> {
   const { maxTokens, onToken } = opts;
   const messages: Message[] = [
@@ -171,12 +171,21 @@ async function generateSummaryText(
         });
       } catch (e) {
         if (emittedAny) throw e;
+        // remoteOnly (an auto/unattended analyse where on-device compute is unsafe, e.g. iOS while
+        // recording): do NOT fall back to LiteRT/local - that would run the LLM on-device unattended
+        // (jetsam risk). Surface the remote error so the caller marks the clip un-analysed + backs off.
+        if (opts.remoteOnly) throw e;
         logger.warn(
           `[TranscriptSummarizer] remote summary failed before streaming, falling back to on-device: ${String(e)}`,
         );
         // fall through to LiteRT / local
       }
     }
+  }
+
+  // remoteOnly but no remote served it (not active, or fell through above): refuse on-device.
+  if (opts.remoteOnly) {
+    throw new Error('Remote backend required for this summary but unavailable');
   }
 
   // LiteRT: run on a throwaway, tools-free conversation so it never pollutes a
@@ -279,12 +288,17 @@ class TranscriptSummarizerService {
       // Applied only on the final single-pass / combine pass so intermediate
       // map/reduce partials stay free-form. Ignored by LiteRT/remote for now.
       grammar?: string;
+      // Forbid the on-device (LiteRT/local) fallback: an auto/unattended analyse where running the
+      // LLM on-device is unsafe (iOS while recording) must FAIL rather than silently run local.
+      // Defaults off, so chat and manual callers are unaffected.
+      remoteOnly?: boolean;
     },
   ): Promise<string> {
     const onProgress = opts?.onProgress;
     const onToken = opts?.onToken;
     const grammar = opts?.grammar;
     const repeatPenalty = opts?.repeatPenalty;
+    const remoteOnly = opts?.remoteOnly;
     const mapPrompt = opts?.systemPrompt ?? SUMMARIZER_SYSTEM_PROMPT;
     const combinePrompt = opts?.combinePrompt ?? COMBINE_SYSTEM_PROMPT;
     this._isSummarizing = true;
@@ -306,7 +320,7 @@ class TranscriptSummarizerService {
       // Small enough to summarize in one pass.
       if (chunks.length <= 1) {
         this.emit({ phase: 'mapping', current: 1, total: 1 }, onProgress);
-        const summary = await this.summarizeOne(mapPrompt, chunks[0] ?? text, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty });
+        const summary = await this.summarizeOne(mapPrompt, chunks[0] ?? text, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty, remoteOnly });
         this.emit({ phase: 'done' }, onProgress);
         return summary.trim();
       }
@@ -319,7 +333,7 @@ class TranscriptSummarizerService {
         await llmService.clearKVCache(true);
         // Stream each part as it is written so the map phase is visible, not a
         // multi-minute static counter. The final combine restreams the answer.
-        const part = await this.summarizeOne(mapPrompt, chunks[i], { maxTokens: CHUNK_SUMMARY_TOKENS, onToken });
+        const part = await this.summarizeOne(mapPrompt, chunks[i], { maxTokens: CHUNK_SUMMARY_TOKENS, onToken, remoteOnly });
         partials.push(part.trim());
       }
 
@@ -341,7 +355,7 @@ class TranscriptSummarizerService {
       // Final combine pass into one coherent summary. Streamed to the caller.
       this.emit({ phase: 'combining' }, onProgress);
       await llmService.clearKVCache(true);
-      const finalSummary = await this.summarizeOne(combinePrompt, combined, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty });
+      const finalSummary = await this.summarizeOne(combinePrompt, combined, { maxTokens: FINAL_SUMMARY_TOKENS, onToken, grammar, repeatPenalty, remoteOnly });
 
       this.emit({ phase: 'done' }, onProgress);
       return finalSummary.trim();
@@ -357,10 +371,10 @@ class TranscriptSummarizerService {
   private async summarizeOne(
     systemPrompt: string,
     input: string,
-    opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number },
+    opts: { maxTokens: number; onToken?: (delta: string) => void; grammar?: string; repeatPenalty?: number; remoteOnly?: boolean },
   ): Promise<string> {
     // Dispatches to the active backend (local llama.rn / LiteRT / remote).
-    const out = await generateSummaryText(systemPrompt, input, { maxTokens: opts.maxTokens, onToken: opts.onToken, grammar: opts.grammar, repeatPenalty: opts.repeatPenalty });
+    const out = await generateSummaryText(systemPrompt, input, { maxTokens: opts.maxTokens, onToken: opts.onToken, grammar: opts.grammar, repeatPenalty: opts.repeatPenalty, remoteOnly: opts.remoteOnly });
     // Backstop for tag-based reasoning that slipped through (<think>...</think>).
     return stripControlTokens(out);
   }

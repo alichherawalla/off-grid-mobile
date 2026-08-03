@@ -1,9 +1,16 @@
 /**
- * STT (Whisper) download provider. Wraps the EXISTING working bridge — it does not
- * reinvent downloading: completed models come from whisperService (disk), in-flight
- * from the shared downloadStore, and retry/cancel/remove delegate to the same
- * service-level calls the Download Manager already uses (whisperService.downloadModel
- * / deleteModel, backgroundDownloadService.cancelDownload, downloadStore.remove).
+ * STT download provider. Wraps the EXISTING working bridge — it does not reinvent
+ * downloading: completed whisper models come from whisperService (disk), in-flight from
+ * the shared downloadStore, and retry/cancel/remove delegate to the same service-level
+ * calls the Download Manager already uses (whisperService.downloadModel / deleteModel,
+ * backgroundDownloadService.cancelDownload, downloadStore.remove).
+ *
+ * It also serves every model in `sttModelRegistry`, so a speech model that isn't in
+ * core's whisper catalogue (Parakeet, run by pro's sherpa engine) is still a first-class
+ * managed model. Every operation routes by id: a registered id goes to that model's own
+ * hooks, anything else is whisper's. `ModelDownloadType` is a closed union with one
+ * provider per type, so extending THIS provider is what keeps the contract intact
+ * without core ever importing pro — see sttModelRegistry for the reasoning.
  *
  * Capabilities: STT is NOT resumable (the foreground download dies on app-kill) →
  * reconcile() strands an interrupted in-flight download as a retriable error rather
@@ -15,6 +22,7 @@ import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore'
 import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
+import { getSttModel, listSttModels, type SttModel } from './sttModelRegistry';
 import type { DownloadProvider, ModelDownload } from '../types';
 
 const STT_CAPABILITIES = {
@@ -24,6 +32,20 @@ const STT_CAPABILITIES = {
   resumable: false,        // foreground download dies on app-kill
   determinateProgress: true,
 } as const;
+
+/**
+ * A registered model's capabilities are read off the hooks it actually supplied, so the
+ * UI can never render a control the model cannot honour (the capability-as-data rule).
+ * Registered models share whisper's resumable/progress characteristics: the same
+ * foreground transport, with real byte counts.
+ */
+const capabilitiesOf = (model: SttModel): ModelDownload['capabilities'] => ({
+  cancel: typeof model.cancel === 'function',
+  retry: true,
+  remove: typeof model.remove === 'function',
+  resumable: false,
+  determinateProgress: true,
+});
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** The store keys STT models as `whisper-<id>`; the uniform id uses the bare id. */
@@ -41,14 +63,19 @@ export const sttProvider: DownloadProvider = {
 
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
-    // In-flight (downloadStore).
+    // In-flight (downloadStore) — covers whisper AND registered models, since a
+    // registered model's download() drives the same store under modelType 'stt'.
     for (const e of Object.values(useDownloadStore.getState().downloads)) {
       if (e.modelType !== 'stt') continue;
       const bare = bareId(e.modelId);
+      const registered = getSttModel(bare);
       out.push({
-        id: uniformDownloadId('stt', e.modelId), modelType: 'stt', name: e.fileName || bare,
+        id: uniformDownloadId('stt', e.modelId), modelType: 'stt',
+        name: registered?.displayName ?? e.fileName ?? bare,
         sizeBytes: e.totalBytes, bytesDownloaded: e.bytesDownloaded, progress: e.progress,
-        status: mapStoreStatus(e.status), capabilities: STT_CAPABILITIES, error: e.errorMessage,
+        status: mapStoreStatus(e.status),
+        capabilities: registered ? capabilitiesOf(registered) : STT_CAPABILITIES,
+        error: e.errorMessage,
       });
     }
     // Completed (on disk) — skip ones that also have a live in-flight entry.
@@ -63,11 +90,42 @@ export const sttProvider: DownloadProvider = {
         capabilities: STT_CAPABILITIES, filePath: m.filePath,
       });
     }
+    // Registered models that are fully on disk. Their download() REMOVES the store row on
+    // success (completed models are listed from disk, not from the in-flight store), so
+    // without this pass a finished Parakeet vanished from the Models screen entirely - it
+    // was neither in-flight nor in whisper's catalogue. Probed per model and best-effort:
+    // one model failing its disk check must not blank the whole list.
+    for (const model of listSttModels()) {
+      const id = uniformDownloadId('stt', model.id);
+      if (inflight.has(id)) continue;
+      try {
+        if (!(await model.filesPresent())) continue;
+      } catch (err) {
+        logger.log(`[DL-SM] ${id} list: filesPresent failed err=${msg(err)}`);
+        continue;
+      }
+      out.push({
+        id, modelType: 'stt', name: model.displayName, sizeBytes: model.sizeBytes,
+        bytesDownloaded: model.sizeBytes, progress: 1, status: 'completed',
+        capabilities: capabilitiesOf(model),
+      });
+    }
     return out;
   },
 
   async cancel(id: string): Promise<void> {
-    const entry = findEntry(downloadId(id));
+    const modelId = downloadId(id);
+    const registered = getSttModel(modelId);
+    if (registered) {
+      // The model owns its transport, so it owns aborting it. Only reachable when it
+      // declared cancel:true, but guarded anyway - the service must never invent a call.
+      await registered.cancel?.()
+        .catch(err => logger.log(`[DL-SM] ${id} cancel: model cancel failed err=${msg(err)}`));
+      const row = findEntry(modelId);
+      if (row) useDownloadStore.getState().remove(row.modelKey);
+      return;
+    }
+    const entry = findEntry(modelId);
     if (!entry) return;
     await backgroundDownloadService.cancelDownload(entry.downloadId)
       .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
@@ -76,6 +134,27 @@ export const sttProvider: DownloadProvider = {
 
   async retry(id: string): Promise<void> {
     const modelId = downloadId(id);
+    const registered = getSttModel(modelId);
+    if (registered) {
+      // Drop the dead row first: the model's own download() refuses to add a duplicate
+      // store entry, so a stale failed row would block the restart. Fire-and-forget with a
+      // logged failure, mirroring the whisper path - and if the restart dies before it can
+      // register its own row, restore the failed one so the download stays visible and
+      // removable instead of disappearing from the manager.
+      const row = findEntry(modelId);
+      if (row) useDownloadStore.getState().remove(row.modelKey);
+      registered.download().catch(err => {
+        logger.log(`[DL-SM] ${id} retry: model re-download failed err=${msg(err)}`);
+        if (row && !useDownloadStore.getState().downloads[row.modelKey]) {
+          useDownloadStore.getState().add({
+            ...row,
+            status: 'failed',
+            errorMessage: err instanceof Error ? err.message : 'Retry failed',
+          });
+        }
+      });
+      return;
+    }
     // Clear the dead native task + stale store row, then re-download (whisperService
     // refuses to start while an entry exists) — the same recovery the manager uses.
     const entry = findEntry(modelId);
@@ -101,6 +180,18 @@ export const sttProvider: DownloadProvider = {
 
   async remove(id: string): Promise<void> {
     const modelId = downloadId(id);
+    const registered = getSttModel(modelId);
+    if (registered) {
+      // Cancel any transfer first so a delete during a download can't leave the loop
+      // writing files back into the directory we just wiped.
+      await registered.cancel?.()
+        .catch(err => logger.log(`[DL-SM] ${id} remove: model cancel failed err=${msg(err)}`));
+      const row = findEntry(modelId);
+      if (row) useDownloadStore.getState().remove(row.modelKey);
+      await registered.remove?.()
+        .catch(err => logger.log(`[DL-SM] ${id} remove: model delete failed err=${msg(err)}`));
+      return;
+    }
     const entry = findEntry(modelId);
     if (entry) {
       await backgroundDownloadService.cancelDownload(entry.downloadId)

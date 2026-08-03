@@ -17,6 +17,7 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { warmUpPackagerLocalNetwork } from './src/utils/packagerLocalNetworkWarmup';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { checkProStatus } from './src/services/proLicenseService';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -70,10 +71,19 @@ const ensureRemoteServerStoreHydrated = async () => {
 
 function App() {
   useDownloadListeners();
+  // Dev iOS only: re-issue RN's packager probe now that we have a foreground UI,
+  // so iOS can actually present the Local Network permission alert it refuses to
+  // show during didFinishLaunchingWithOptions. See packagerLocalNetworkWarmup.ts.
+  useEffect(() => {
+    void warmUpPackagerLocalNetwork();
+  }, []);
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
   // it live — no restart needed.
   const AppRoot = useSlot(SLOTS.appRoot);
+  // Root-mounted recorder prompt (the speech-model download sheet). Its own slot, because
+  // appRoot already holds the TTS engine bridge and a slot maps to ONE component.
+  const SttModelPrompt = useSlot(SLOTS.sttModelPrompt);
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
@@ -360,6 +370,7 @@ function App() {
       <SafeAreaProvider>
         <SystemBars style={isDark ? 'light' : 'dark'} />
         {AppRoot ? <AppRoot /> : null}
+        {SttModelPrompt ? <SttModelPrompt /> : null}
         <NavigationContainer
           theme={{
             dark: isDark,

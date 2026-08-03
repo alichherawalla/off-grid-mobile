@@ -12,6 +12,6 @@ module.exports = {
   // purpose — a global transform changed dynamic-import behavior elsewhere (e.g. loadProFeatures'
   // `await import('@offgrid/pro')`) and broke the pro-bootstrap tests. No effect on the RN build.
   overrides: isTest
-    ? [{ test: /pro\/locket\/screens\//, plugins: ['@babel/plugin-transform-dynamic-import'] }]
+    ? [{ test: /pro\/locket\/(screens|stores)\//, plugins: ['@babel/plugin-transform-dynamic-import'] }]
     : [],
 };

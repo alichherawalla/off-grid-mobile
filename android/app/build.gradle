@@ -84,8 +84,11 @@ android {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1784144537
-        versionName "0.0.103"
+        versionCode 1784267770
+        versionName "0.0.104"
+        // Launcher label via a placeholder so a coexisting build type can rename itself.
+        // Default keeps the real name (@string/app_name = "Off Grid AI"); releaseLocket overrides it.
+        manifestPlaceholders = [appName: "@string/app_name"]
     }
     signingConfigs {
         debug {
@@ -129,6 +132,16 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+        // A release-configured build (JS bundled, minified - production-like) but with the ".locket"
+        // applicationId suffix + launcher name, so it installs ALONGSIDE the normal ai.offgridmobile
+        // build instead of replacing it. Build: assembleReleaseLocket.
+        releaseLocket {
+            initWith release
+            applicationIdSuffix ".locket"
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            matchingFallbacks = ['release']
+            manifestPlaceholders = [appName: "Off Grid Locket"]
+        }
     }
     packaging {
         jniLibs {
@@ -137,16 +150,37 @@ android {
             // stores .so files inside the APK zip — File.exists() returns false for them and
             // exec() fails with EACCES (error=13) because you can't fork-exec from a zip entry.
             useLegacyPackaging = true
+            // libc++_shared.so is shipped by many native modules (reanimated, llama.rn,
+            // whisper.rn, react-native-audio-api, executorch, gesture-handler, screens,
+            // worklets, op-sqlite). pickFirst resolves the duplicate at merge time.
+            // (No libonnxruntime.so entry: that collision no longer exists. It was between the
+            // Whisper-NPU PoC's -qnn AAR and the OLD community sherpa AAR; the PoC is gone, and
+            // since the switch to the official k2-fsa static build sherpa ships a single
+            // libsherpa-onnx-jni.so with ORT linked in, no separate libonnxruntime.so.)
+            pickFirsts += ['**/libc++_shared.so']
+            // arm64-only: drop x86/x86_64/armeabi-v7a copies of EVERY native lib, including
+            // those from dependency AARs (onnxruntime, litertlm, ...) that ndk.abiFilters can't
+            // reach. Every flagship + BrowserStack real device is arm64-v8a. This cuts ~255 MB.
+            // NOTE: also strips x86 from debug, so x86 EMULATORS won't run this build - use a
+            // real arm64 device (or comment this out for emulator work). Test-build only.
+            excludes += ['**/x86/**', '**/x86_64/**', '**/armeabi-v7a/**']
         }
     }
     aaptOptions {
         // Prevent AAPT from compressing .gguf model files — they must be copied byte-for-byte
-        noCompress 'gguf'
+        // 'zip': the bundled Cactus STT model zips (assets/cactus-models/*.zip) are already
+        // compressed; storing them keeps the build fast and lets unzipAssets read them directly.
+        noCompress 'gguf', 'zip'
     }
 }
 
 configurations.all {
     exclude group: 'com.android.support'
+    // NOTE: do NOT re-add an `exclude` for com.microsoft.onnxruntime:onnxruntime-android. It
+    // existed only while the -qnn AAR (a superset) was on the classpath for the Whisper-NPU PoC.
+    // With that gone, this artifact is the ONLY thing providing ai.onnxruntime.*, which pro's
+    // SileroVad needs for the recorder's live VAD gate - excluding it fails at runtime with
+    // NoClassDefFoundError, not at build time.
 }
 
 dependencies {
@@ -167,6 +201,12 @@ dependencies {
 
     // LiteRT-LM on-device LLM inference (pinned — do not use latest.release)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.11.0")
+
+    // (Whisper-on-NPU PoC dropped: the onnxruntime-android-qnn + qnn-runtime dependencies were
+    // removed with it. ONNX Runtime is still needed on Android - pro's SileroVad (the recorder's
+    // live VAD gate) is the one consumer of ai.onnxruntime.* - and pro declares
+    // onnxruntime-android itself, so nothing needs to be declared here. Research kept in
+    // pro/docs/plans/whisper-npu-poc-*.md; removed artifacts in ~/Desktop/offgrid-npu-archive.)
 
     // Download layer — Room + WorkManager + OkHttp
     def room_version = "2.8.2"

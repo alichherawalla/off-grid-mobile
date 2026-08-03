@@ -566,6 +566,27 @@ jest.mock('react-native-zip-archive', () => ({
   zip: jest.fn(() => Promise.resolve('/mock/zipped/path')),
 }));
 
+// react-native-nitro-modules + cactus-react-native: the native NitroModules TurboModule cannot load in
+// jest (it throws "Failed to get NitroModules" at require). Cactus (an STT engine) pulls nitro in
+// transitively, so requiring the @offgrid/pro ROOT (which activates locket → the STT engines) throws and
+// aborts pro activation — no screens/slots register, and any rendered pro test can't mount. Stub both
+// (external native npm packages, same as llama.rn/whisper.rn above) so pro loads in tests. CactusSTT is
+// only used inside functions, so a dummy class import is enough.
+jest.mock('react-native-nitro-modules', () => ({
+  NitroModules: {
+    get: jest.fn(() => ({})),
+    createHybridObject: jest.fn(() => ({})),
+    box: jest.fn((v: unknown) => v),
+  },
+}));
+jest.mock('cactus-react-native', () => ({
+  CactusSTT: class {
+    init = jest.fn(async () => {});
+    transcribe = jest.fn(async () => ({ text: '' }));
+    release = jest.fn(async () => {});
+  },
+}));
+
 
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');

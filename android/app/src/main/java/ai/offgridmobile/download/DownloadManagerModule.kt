@@ -83,7 +83,7 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                 val downloadId = UUID.randomUUID().toString()
                 val destination = File(
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                    "${downloadId}_${fileName}",
+                    stagingFileName(url, fileName),
                 ).absolutePath
 
                 val entity = DownloadEntity(
@@ -507,6 +507,31 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     companion object {
+        /**
+         * Where a transfer stages its bytes before JS moves the finished file into place.
+         *
+         * DERIVED FROM THE URL, deliberately. It used to be "${randomUUID}_$fileName", which made
+         * resume impossible to reach: WorkerDownload resumes by measuring the bytes already at
+         * `destination` and sending `Range: bytes=N-`, but a retry minted a fresh UUID, so the path
+         * never existed, N was always 0, and every retry restarted from scratch. On a 652 MB file
+         * that failed at 600 MB, that is 600 MB thrown away - the plumbing for resume was all
+         * present and simply unreachable.
+         *
+         * Hashing the URL gives both properties we need at once:
+         *  - the SAME url resolves to the same staging file, so a retry finds the partial and resumes;
+         *  - a DIFFERENT url resolves elsewhere, so a partial from a previous model version is never
+         *    resumed into. (A real case: parakeet v2 -> v3 changed the URL but kept the filename.)
+         *
+         * The filename is kept as a readable suffix, sanitised because it reaches the filesystem.
+         */
+        @JvmStatic
+        fun stagingFileName(url: String, fileName: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256").digest(url.toByteArray())
+            val key = digest.take(8).joinToString("") { "%02x".format(it) }
+            val safe = File(fileName).name.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(80)
+            return "${key}_$safe"
+        }
+
         const val NAME = "DownloadManagerModule"
         const val PREFS_NAME = "OffgridWorkerDownloads"
         const val DOWNLOADS_KEY = "downloads"

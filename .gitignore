@@ -99,3 +99,20 @@ docs/DEVICE_SESSION_COMMENTARY.md
 
 # Device wire-capture logs (raw, large, session-specific — kept locally, not versioned)
 docs/wire-captures/
+
+# On-device diarization embedder model (test build; ~28MB)
+pro/android/src/main/assets/diar/
+poc-archive/
+android/app/src/main/assets/cactus-models/
+pro/android/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
+
+# Built app binaries. These land in the repo root from a local/BrowserStack build run
+# (whisper-npu-s23.apk was 803MB, OffgridMobile.ipa 75MB) and were untracked but NOT
+# ignored - one `git add .` from being committed into a repo whose .git is already ~9GB.
+*.apk
+*.aab
+*.ipa
+pro/android/libs/sherpa-onnx-static-1.13.4.jar
+
+# Local Claude Code skill lockfile - machine state, not project config.
+skills-lock.json

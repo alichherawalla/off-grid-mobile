@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext (HTTP) to localhost and emulator host for Metro bundler + LocalDream -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
+    <!-- NOTE: the previous <domain-config> for localhost/127.0.0.1/10.0.2.2 was removed. It was
+         redundant (the base-config below already permits cleartext to every host, so localhost +
+         Metro + LocalDream still work), and the mere PRESENCE of any <domain-config> forces
+         Android into strict hostname-aware TrustManager mode app-wide - which broke the WhisperKit
+         SDK's model download (its ktor TLS validation isn't hostname-aware). Dropping the redundant
+         block is behavior-neutral for cleartext and lets non-hostname-aware clients connect. -->
     <!-- Allow cleartext (HTTP) to local network LLM servers (Ollama :11434, LM Studio :1234, LocalAI :8080).
          NOTE: Android network_security_config.xml has no IP-range wildcard support — <domain> only
          matches exact hostnames or IPs, not CIDR ranges. The base-config is therefore the only
