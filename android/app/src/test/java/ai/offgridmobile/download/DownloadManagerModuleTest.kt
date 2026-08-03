@@ -303,5 +303,60 @@ class DownloadManagerModuleTest {
             as android.app.NotificationManager
         assertNotNull(mgr.getNotificationChannel("model_downloads"))
     }
+
+    // ── DownloadManagerModule.stagingFileName — the resume path ──────────────
+    //
+    // WorkerDownload resumes by measuring bytes already at `destination` and sending
+    // `Range: bytes=N-`. That only ever fires if a retry lands on the SAME path as the attempt
+    // before it, which is what these guard. The staging name used to embed a fresh UUID, so N was
+    // always 0 and a 652 MB download that died at 600 MB started over.
+
+    private val v2Url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/encoder.int8.onnx"
+    private val v3Url = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/main/encoder.int8.onnx"
+
+    @Test
+    fun stagingFileNameIsStableForTheSameUrl() {
+        // THE fix: a retry must resolve to the same partial file, or resume can never engage.
+        assertEquals(
+            DownloadManagerModule.stagingFileName(v2Url, "encoder.int8.onnx"),
+            DownloadManagerModule.stagingFileName(v2Url, "encoder.int8.onnx"),
+        )
+    }
+
+    @Test
+    fun stagingFileNameDiffersWhenTheModelVersionChanges() {
+        // Same filename, different URL - the real parakeet v2 -> v3 switch. These must NOT collide,
+        // or a retry would resume a v3 download on top of a half-written v2 file.
+        assertFalse(
+            DownloadManagerModule.stagingFileName(v2Url, "encoder.int8.onnx") ==
+                DownloadManagerModule.stagingFileName(v3Url, "encoder.int8.onnx"),
+        )
+    }
+
+    @Test
+    fun stagingFileNameSeparatesDifferentFilesFromTheSameRepo() {
+        val encoder = "https://huggingface.co/repo/resolve/main/encoder.int8.onnx"
+        val decoder = "https://huggingface.co/repo/resolve/main/decoder.int8.onnx"
+        assertFalse(
+            DownloadManagerModule.stagingFileName(encoder, "encoder.int8.onnx") ==
+                DownloadManagerModule.stagingFileName(decoder, "decoder.int8.onnx"),
+        )
+    }
+
+    @Test
+    fun stagingFileNameSanitisesPathSeparatorsAndKeepsItReadable() {
+        val name = DownloadManagerModule.stagingFileName(v3Url, "../../etc/pass wd.onnx")
+        assertFalse("must not escape the staging dir", name.contains("/"))
+        assertTrue("keeps a readable suffix", name.endsWith("pass_wd.onnx"))
+    }
+
+    @Test
+    fun stagingFileNameContainsNoUuid() {
+        // A regression guard on the actual defect: any random component reintroduces it.
+        val a = DownloadManagerModule.stagingFileName(v3Url, "encoder.int8.onnx")
+        val b = DownloadManagerModule.stagingFileName(v3Url, "encoder.int8.onnx")
+        assertEquals(a, b)
+        assertFalse(a.contains("-")) // UUIDs are hyphenated; the hash+filename here is not
+    }
 }
 
