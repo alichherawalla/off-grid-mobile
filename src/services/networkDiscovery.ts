@@ -31,16 +31,96 @@ const TIMEOUT_MS = 500;
 const BATCH_SIZE = 50;
 const BATCH_DELAY_MS = 50;
 
-/** Probe a single host:port — resolves true if it responds with an HTTP status */
-async function probe(ip: string, port: number, path: string): Promise<boolean> {
+/**
+ * Why a probe did not find a server. A bare boolean made every failure look the
+ * same, which is exactly what made "scan finds nothing" undiagnosable: a denied
+ * iOS Local Network permission, a connection refusal, a wrong probe path, and a
+ * host that simply is not there all collapsed to `false`. The class + latency
+ * separate them:
+ *  - `timeout` at the full TIMEOUT_MS  → nothing answered (host absent, or our
+ *    own JS thread was too busy to service the socket in time),
+ *  - a fast rejection (single-digit ms) → refused/blocked locally (permission),
+ *  - `httpNNN`                          → something IS listening, wrong path/status.
+ */
+interface ProbeOutcome {
+  ok: boolean;
+  status?: number;
+  errorName?: string;
+  errorMessage?: string;
+  ms: number;
+}
+
+/** Probe a single host:port — reports the outcome class so failures are diagnosable */
+async function probe(ip: string, port: number, path: string): Promise<ProbeOutcome> {
+  const startedAt = Date.now();
   return new Promise(resolve => {
     const controller = new AbortController();
-    const timer = setTimeout(() => { controller.abort(); resolve(false); }, TIMEOUT_MS);
+    const settle = (outcome: Omit<ProbeOutcome, 'ms'>) =>
+      resolve({ ...outcome, ms: Date.now() - startedAt });
+    const timer = setTimeout(
+      () => { controller.abort(); settle({ ok: false, errorName: 'timeout' }); },
+      TIMEOUT_MS,
+    );
 
     fetch(`http://${ip}:${port}${path}`, { signal: controller.signal }) // NOSONAR — LAN-only probe; HTTPS requires certs on private IPs
-      .then(res => { clearTimeout(timer); resolve(res.status === 200); })
-      .catch(() => { clearTimeout(timer); resolve(false); });
+      .then(res => { clearTimeout(timer); settle({ ok: res.status === 200, status: res.status }); })
+      .catch((err: unknown) => {
+        clearTimeout(timer);
+        const error = err as { name?: string; message?: string };
+        settle({
+          ok: false,
+          errorName: error?.name ?? 'Error',
+          errorMessage: String(error?.message ?? err).slice(0, 120),
+        });
+      });
   });
+}
+
+/** One outcome's class, e.g. 'ok200' | 'http404' | 'timeout' | 'TypeError'. */
+function outcomeClass(outcome: ProbeOutcome): string {
+  if (outcome.ok) return 'ok200';
+  if (outcome.status != null) return `http${outcome.status}`;
+  return outcome.errorName ?? 'error';
+}
+
+/**
+ * Collapse 254 probe outcomes into ONE log line. The latency spread is the tell:
+ * every probe sitting at the full TIMEOUT_MS means nothing on the subnet answered
+ * (or the JS thread starved), while a uniformly fast failure means the OS rejected
+ * the connections before they left the device.
+ */
+function summarizeOutcomes(outcomes: ProbeOutcome[]): string {
+  if (outcomes.length === 0) return 'no probes ran';
+  const byClass = new Map<string, number>();
+  let totalMs = 0;
+  let minMs = Infinity;
+  let maxMs = 0;
+  for (const outcome of outcomes) {
+    const key = outcomeClass(outcome);
+    byClass.set(key, (byClass.get(key) ?? 0) + 1);
+    totalMs += outcome.ms;
+    minMs = Math.min(minMs, outcome.ms);
+    maxMs = Math.max(maxMs, outcome.ms);
+  }
+  const classes = [...byClass.entries()].map(([k, n]) => `${k}=${n}`).join(' ');
+  const avgMs = Math.round(totalMs / outcomes.length);
+  return `${classes} | latency avg=${avgMs}ms min=${minMs}ms max=${maxMs}ms`;
+}
+
+/** Distinct rejection messages (deduped + counted) — 254 identical errors are ONE signal. */
+function distinctErrors(outcomes: ProbeOutcome[], limit = 3): string {
+  const counts = new Map<string, number>();
+  for (const outcome of outcomes) {
+    if (outcome.errorMessage) {
+      counts.set(outcome.errorMessage, (counts.get(outcome.errorMessage) ?? 0) + 1);
+    }
+  }
+  if (counts.size === 0) return 'none';
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([msg, n]) => `"${msg}" x${n}`)
+    .join(' ; ');
 }
 
 /** Run up to BATCH_SIZE probes concurrently with a small delay between batches */
@@ -171,35 +251,52 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
     subnetsToScan = [base];
   }
 
-  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetsToScan.map(s => `${s}.0/24`).join(', ')} | ${subnetsToScan.length * 254 * PROVIDERS.length} total probes | batch size: ${BATCH_SIZE} | timeout: ${TIMEOUT_MS}ms`);
+  const subnetList = subnetsToScan.map((s) => `${s}.0/24`).join(', ');
+  const probeCount = subnetsToScan.length * 254 * PROVIDERS.length;
+  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetList} | ${probeCount} total probes | batch size: ${BATCH_SIZE} | timeout: ${TIMEOUT_MS}ms`);
 
   try {
     const discovered: DiscoveredServer[] = [];
     const seenEndpoints = new Set<string>();
 
-    const recordIfFound = (target: string, provider: typeof PROVIDERS[0]) => (found: boolean) => {
-      if (!found) return;
+    const recordIfFound = (target: string, provider: typeof PROVIDERS[0]) => (outcome: ProbeOutcome) => {
+      if (!outcome.ok) {
+        // A host that ANSWERED but not with 200 is the one failure worth naming
+        // individually: something is listening and we are rejecting it (wrong probe
+        // path, auth, or a server that reports models elsewhere). Bounded — only
+        // responding hosts reach here, never the 254 silent ones.
+        if (outcome.status != null) {
+          log(`${target}:${provider.port}${provider.probePath} answered HTTP ${outcome.status} in ${outcome.ms}ms — NOT counted (need 200)`);
+        }
+        return outcome;
+      }
       const endpoint = `http://${target}:${provider.port}`; // NOSONAR — LAN endpoint
       if (!seenEndpoints.has(endpoint)) {
         seenEndpoints.add(endpoint);
-        log(`Found ${provider.name} at ${target}:${provider.port}`);
+        log(`Found ${provider.name} at ${target}:${provider.port} (${outcome.ms}ms)`);
         discovered.push({ endpoint, type: provider.type, name: `${provider.name} (${target})` });
       }
+      return outcome;
     };
+
+    const scanStartedAt = Date.now();
 
     await Promise.all(subnetsToScan.map(async (base) => {
       for (const provider of PROVIDERS) {
         log(`Probing ${base}.1-254 for ${provider.name} on port ${provider.port}...`);
+        const providerStartedAt = Date.now();
         const tasks = Array.from({ length: 254 }, (_, i) => {
           const target = `${base}.${i + 1}`;
           return () => probe(target, provider.port, provider.probePath).then(recordIfFound(target, provider));
         });
-        await runBatch(tasks);
-        log(`Done probing ${base}.x for ${provider.name}`);
+        const outcomes = await runBatch(tasks);
+        // The whole point of the sweep's diagnostics: WHY the 254 hosts said no.
+        log(`Done probing ${base}.x for ${provider.name} in ${Date.now() - providerStartedAt}ms — ${summarizeOutcomes(outcomes)}`);
+        log(`  ${provider.name} rejection messages: ${distinctErrors(outcomes)}`);
       }
     }));
 
-    log(`Scan complete — found ${discovered.length} server(s)`);
+    log(`Scan complete in ${Date.now() - scanStartedAt}ms — found ${discovered.length} server(s)`);
     return discovered;
   } catch (error) {
     log(`Scan error: ${error instanceof Error ? error.message : String(error)}`);

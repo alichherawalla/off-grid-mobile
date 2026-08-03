@@ -1,5 +1,5 @@
 import { ragDatabase } from './database';
-import { chunkDocument } from './chunking';
+import { chunkDocument, type Chunk } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
 import { documentService } from '../documentService';
@@ -9,6 +9,7 @@ import logger from '../../utils/logger';
 export type { RagDocument, RagSearchResult } from './database';
 ;
 export { chunkDocument } from './chunking';
+export type { Chunk } from './chunking';
 export { retrievalService } from './retrieval';
 ;
 
@@ -91,6 +92,42 @@ class RagService {
     return docId;
   }
 
+  /**
+   * Index pre-built chunks of in-memory text (e.g. a recording transcript) under
+   * a project, without reading from a file. Each chunk may carry metadata
+   * (recordingId, startMs, eventTitle) so a search hit can cite + seek its source.
+   * Does not de-dupe; callers that re-index should delete the old doc first.
+   */
+  async indexText(params: {
+    projectId: string;
+    docName: string;
+    docPath: string;
+    chunks: Chunk[];
+    fileSize?: number;
+  }): Promise<number> {
+    const { projectId, docName, docPath, chunks, fileSize } = params;
+    await this.ensureReady();
+    if (chunks.length === 0) throw new Error('No content to index');
+
+    const size = fileSize ?? chunks.reduce((n, c) => n + c.content.length, 0);
+    const docId = ragDatabase.insertDocument({ projectId, name: docName, path: docPath, size });
+    const rowIds = ragDatabase.insertChunks(docId, chunks);
+
+    try {
+      await embeddingService.load();
+      const texts = chunks.map((c) => c.content);
+      const embeddings = await embeddingService.embedBatch(texts);
+      const entries = rowIds.map((rowId, i) => ({ chunkRowid: rowId, docId, embedding: embeddings[i] }));
+      ragDatabase.insertEmbeddingsBatch(entries);
+      logger.log(`[RAG] Generated ${embeddings.length} embeddings for ${docName}`);
+    } catch (err) {
+      logger.error('[RAG] indexText embedding failed (non-fatal):', err);
+    }
+
+    logger.log(`[RAG] Indexed text "${docName}": ${chunks.length} chunks`);
+    return docId;
+  }
+
   async backfillEmbeddings(projectId: string): Promise<number> {
     await this.ensureReady();
     const docs = ragDatabase.getDocumentsByProject(projectId);
@@ -132,6 +169,28 @@ class RagService {
     return ragDatabase.getDocumentsByProject(projectId);
   }
 
+  /** Update a document's display name only (no re-embed), found by its `path` (docPath). Used when a
+   *  source is renamed so search hits + citations follow the new title. No-op if there's no such doc. */
+  async renameDocumentByPath(path: string, name: string): Promise<void> {
+    await this.ensureReady();
+    const doc = ragDatabase.getDocumentByPath(path);
+    if (doc) ragDatabase.renameDocument(doc.id, name);
+  }
+
+  /** The concatenated indexed text for a document identified by its `path` (docPath).
+   *  Lets the doc preview render text-indexed docs (e.g. recorder transcripts added via
+   *  indexText, whose `path` is a synthetic id with no backing file). Null if there's no
+   *  such doc or it has no chunks. */
+  async getIndexedText(path: string): Promise<string | null> {
+    await this.ensureReady();
+    const doc = ragDatabase.getDocumentByPath(path);
+    if (!doc) return null;
+    const chunks = ragDatabase.getChunksByDocument(doc.id);
+    if (chunks.length === 0) return null;
+    const text = chunks.map((c) => c.content).join('\n\n').trim();
+    return text || null;
+  }
+
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
     await this.ensureReady();
     ragDatabase.toggleEnabled(docId, enabled);
@@ -143,6 +202,16 @@ class RagService {
       return retrievalService.searchWithBudget({ projectId, query, contextLength });
     }
     return retrievalService.search(projectId, query);
+  }
+
+  /**
+   * Retrieve within ONE document of a project (its docPath), budget-fitted. Backs "chat
+   * with this recording": the conversation is scoped to a recording's doc, so every turn
+   * retrieves only that recording's relevant chunks instead of the whole project.
+   */
+  async searchProjectDocument(params: { projectId: string; query: string; docPath: string; contextLength: number }) {
+    await this.ensureReady();
+    return retrievalService.searchDocument(params);
   }
 
   async deleteProjectDocuments(projectId: string): Promise<void> {

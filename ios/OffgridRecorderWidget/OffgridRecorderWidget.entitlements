@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Must match the app's group exactly. This is the only channel through which the widget
+	     can learn whether the recorder is running: the two processes share nothing else. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.ai.offgridmobile</string>
+	</array>
+</dict>
+</plist>

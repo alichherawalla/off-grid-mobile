@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.BenchmarkInfo
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.ExperimentalApi
@@ -65,33 +66,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
             return minOf((base * scalar).toLong(), 180_000L)
         }
 
-        /** Headroom reserved for the OS and rest of the app, never given to the KV cache. */
-        private const val TOKEN_BUDGET_HEADROOM_MB = 768L
-        /** Never clamp below this — a model should still load with a usable context. */
-        private const val MIN_TOKEN_FLOOR = 1024
-        /** Conservative upper bound on KV-cache cost per token (MB) for litert at these sizes. */
-        private const val KV_MB_PER_TOKEN = 0.15
-
-        /**
-         * Pure token-budget clamp (no Android deps, unit-testable). Reserve model weights
-         * + headroom; spend the rest on KV cache at [KV_MB_PER_TOKEN]/token. Never returns
-         * more than [requested] and never below [MIN_TOKEN_FLOOR].
-         */
-        fun clampMaxTokens(requested: Int, availMb: Long, modelMb: Long): Int {
-            val kvBudgetMb = availMb - modelMb - TOKEN_BUDGET_HEADROOM_MB
-            if (kvBudgetMb <= 0) {
-                // No KV budget after weights + headroom. Don't force MIN_TOKEN_FLOOR —
-                // that can still overcommit and hit the native OOM this clamp exists to
-                // avoid. Spend only what sits between the weights and available RAM
-                // (eating into the headroom reserve as a last resort), capped at the
-                // floor; if even the weights don't fit, fall to 1 token and let the
-                // caller's memory guard reject the load.
-                val lastResortTokens = ((availMb - modelMb) / KV_MB_PER_TOKEN).toInt()
-                return requested.coerceAtMost(lastResortTokens.coerceIn(1, MIN_TOKEN_FLOOR))
-            }
-            val affordableTokens = (kvBudgetMb / KV_MB_PER_TOKEN).toInt()
-            return requested.coerceAtMost(maxOf(MIN_TOKEN_FLOOR, affordableTokens))
-        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -107,7 +81,29 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     private val pendingToolCalls = ConcurrentHashMap<String, CompletableDeferred<String>>()
     private var configuredMaxTokens: Int = 4096
 
+    // DEV-only constrained decoding (LLGuidance: json_schema / lark / regex).
+    // Set from JS via setConstrainedDecoding() before resetConversation. The map
+    // contract below is UNVERIFIED - every use is wrapped so a wrong shape logs
+    // and falls back to unconstrained generation, never crashing the chat path.
+    @Volatile private var constrainedEnabled = false
+    @Volatile private var constraintType = ""
+    @Volatile private var constraintString = ""
+
     override fun getName(): String = "LiteRTModule"
+
+    // -------------------------------------------------------------------------
+    // setConstrainedDecoding (DEV) — arm/disarm an LLGuidance constraint that
+    // resetConversation + sendMessage will apply. type = json_schema|lark|regex.
+    // -------------------------------------------------------------------------
+
+    @ReactMethod
+    fun setConstrainedDecoding(enabled: Boolean, type: String, constraint: String, promise: Promise) {
+        constrainedEnabled = enabled && constraint.isNotEmpty()
+        constraintType = type
+        constraintString = constraint
+        Log.i(TAG, "[DevGrammar-LiteRT] setConstrainedDecoding enabled=$constrainedEnabled type=$type len=${constraint.length}")
+        promise.resolve(null)
+    }
 
     // -------------------------------------------------------------------------
     // loadModel
@@ -120,11 +116,15 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
 
         scope.launch {
             try {
-                // Clamp the token budget to what free RAM can actually hold. The KV cache
-                // grows with the budget, and an over-budget request aborts engine creation
-                // (SIGABRT in nativeCreateEngine) or segfaults during inference. Degrading
-                // to a smaller context keeps the app working instead of crashing.
-                configuredMaxTokens = resolveSafeMaxTokens(modelPath, maxNumTokens)
+                // Honor the requested token budget as-is. The UI slider already caps it to
+                // a per-device ceiling (12K on ≤8GB RAM, 32K above) and warns past a safe
+                // threshold, and the JS load path (activeModelService canLoad guard) refuses
+                // the load up front when the model won't fit free RAM — the same contract the
+                // llama.rn path runs under. The old native RAM heuristic here was a redundant
+                // second guard that mis-fired, crushing valid budgets to a 1024 floor on
+                // ordinary devices (e.g. an 8GB phone with a 3GB model), so a direct question
+                // or an attached transcript overflowed a context far smaller than requested.
+                configuredMaxTokens = maxNumTokens
                 // Unload any existing engine first
                 cleanupEngine()
 
@@ -137,10 +137,9 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 supportsAudio = audioEnabled
 
                 Log.i(TAG, "loadModel — success on backend=$activeBackend vision=$supportsVision audio=$supportsAudio maxNumTokens=$configuredMaxTokens")
-                // Resolve what we ACTUALLY configured, not just the backend: resolveSafeMaxTokens
-                // may have clamped the context below the requested budget to fit free RAM. JS
-                // adopts the effective value so compaction thresholds + the context-usage bar
-                // reflect reality (they were stale at the requested figure otherwise).
+                // Report the configured budget back to JS so compaction thresholds + the
+                // context-usage bar read from the real value (it equals the requested budget
+                // now that nothing downclamps it, but JS still adopts whatever we configured).
                 val result = com.facebook.react.bridge.Arguments.createMap().apply {
                     putString("backend", activeBackend)
                     putInt("maxNumTokens", configuredMaxTokens)
@@ -238,6 +237,7 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     // resetConversation — closes and recreates Conversation only, Engine stays
     // -------------------------------------------------------------------------
 
+    @OptIn(ExperimentalApi::class)
     @ReactMethod
     fun resetConversation(systemPrompt: String, temperature: Double, topK: Int, topP: Double, toolsJson: String, historyJson: String, promise: Promise) {
         val safe = SafePromise(promise, TAG)
@@ -266,6 +266,16 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                         topP = topP,
                         temperature = temperature,
                     )
+                }
+
+                // DEV: constrained decoding is a per-conversation experimental flag,
+                // so it must be set before createConversation. Guarded - a missing/renamed
+                // API in a future SDK must not break conversation setup.
+                try {
+                    ExperimentalFlags.enableConversationConstrainedDecoding = constrainedEnabled
+                    if (constrainedEnabled) debugLog("[DevGrammar-LiteRT] enableConversationConstrainedDecoding=true (type=$constraintType len=${constraintString.length})")
+                } catch (e: Throwable) {
+                    Log.w(TAG, "[DevGrammar-LiteRT] could not set constrained-decoding flag: ${e.message}")
                 }
 
                 val toolProviders = buildToolProviders(toolsJson)
@@ -409,16 +419,37 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
                 safe.reject("LITERT_NO_CONV", "No conversation. Call resetConversation first.", null)
                 return@launch
             }
-
             currentJob = launch {
                 try {
                     val contents = buildSendContents(imageUris, audioUris, text, safe) ?: return@launch
 
+                    // DEV: attach an LLGuidance constraint via OptionalArgs. The exact
+                    // map shape is UNVERIFIED (C++ docs only), so if building/starting the
+                    // constrained flow throws we log and fall back to an unconstrained send
+                    // - a probe that can reveal the contract from logs without breaking chat.
+                    val flow = if (constrainedEnabled && constraintString.isNotEmpty()) {
+                        try {
+                            val optionalArgs = mapOf(
+                                "decoding_constraint" to mapOf(
+                                    "constraint_type" to constraintType,
+                                    "constraint_string" to constraintString,
+                                ),
+                            )
+                            Log.i(TAG, "[DevGrammar-LiteRT] sending WITH decoding_constraint type=$constraintType len=${constraintString.length}")
+                            conv.sendMessageAsync(contents, optionalArgs)
+                        } catch (e: Throwable) {
+                            Log.w(TAG, "[DevGrammar-LiteRT] constrained send failed to start (${e.message}); falling back unconstrained")
+                            conv.sendMessageAsync(contents)
+                        }
+                    } else {
+                        conv.sendMessageAsync(contents)
+                    }
+
                     var tokenCount = 0
-                    conv.sendMessageAsync(contents)
+                    flow
                         .collect { message ->
                             tokenCount++
-                            if (tokenCount == 1) Log.i(TAG, "sendMessage — first message from model (audio=${audioUris.size} image=${imageUris.size})")
+                            if (tokenCount == 1) Log.i(TAG, "sendMessage — first message from model (audio=${audioUris.size} image=${imageUris.size} constrained=${constrainedEnabled && constraintString.isNotEmpty()})")
                             dispatchStreamToken(message)
                         }
 
@@ -543,9 +574,33 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
         }
         try {
             conv.close()
-            Log.d(TAG, "closeConversationSafely — closed")
+            Log.d(TAG, "closeConversationSafely — closed id=${System.identityHashCode(conv)}")
         } catch (e: Exception) {
             Log.w(TAG, "closeConversationSafely — error: ${e.message}")
+        }
+
+        // litert-uaf mitigation (crash observed on the fbjni "HybridData Dest"
+        // GC thread during insight generation). Insight runs churn conversations
+        // hard: reset -> close -> recreate, back to back. Each finished generation
+        // leaves fbjni HybridData peers (event/bridge objects) waiting to be
+        // reclaimed on the GC finalizer thread. Under that churn the reclaim can
+        // fire LATER, in the middle of the NEXT conversation's active decode, and
+        // dereference memory that is already gone -> SIGSEGV (fault 0x0101..).
+        // We are at a quiescent point here: the previous generation is cancelled
+        // and joined (above) and the next one has not started, so drain the
+        // reference queue NOW, off the decode path, so those reclaims do not
+        // overlap live native work. This is a mitigation aimed at the observed
+        // timing, not a proven root-cause fix - verify on-device before relying on it.
+        try {
+            System.gc()
+            System.runFinalization()
+            // gc() only ENQUEUES fbjni's phantom-ref reclaims; the "HybridData
+            // Dest" thread drains them asynchronously. Yield briefly (non-blocking,
+            // we are in a suspend fun) so that thread runs the reclaims before the
+            // caller creates the next conversation and starts a fresh decode.
+            delay(16)
+        } catch (e: Throwable) {
+            Log.w(TAG, "closeConversationSafely — gc drain skipped: ${e.message}")
         }
     }
 
@@ -619,36 +674,6 @@ class LiteRTModule(private val reactContext: ReactApplicationContext) :
     private fun visionBackendFor(mainBackend: Backend): Backend =
         if (mainBackend is Backend.CPU || shouldSkipGpu()) Backend.CPU() else Backend.GPU()
 
-    /** Current free system RAM in MB. */
-    private fun availableRamMb(): Long {
-        val am = reactContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val info = ActivityManager.MemoryInfo()
-        am.getMemoryInfo(info)
-        return info.availMem / (1024 * 1024)
-    }
-
-    /**
-     * Clamp the requested token budget to what free RAM can hold. The KV cache grows
-     * with the budget, so an over-budget request aborts engine creation or segfaults
-     * during inference under memory pressure. We reserve the model weights plus headroom
-     * and estimate the rest as KV cache, never going below a 1024-token floor so a model
-     * still loads. Returns the requested value unchanged when memory is comfortable or
-     * when we can't measure it.
-     */
-    private fun resolveSafeMaxTokens(modelPath: String, requested: Int): Int {
-        return try {
-            val avail = availableRamMb()
-            val modelMb = (File(modelPath).length() / (1024 * 1024)).coerceAtLeast(0)
-            val safe = clampMaxTokens(requested, avail, modelMb)
-            if (safe < requested) {
-                Log.w(TAG, "resolveSafeMaxTokens — clamping tokens $requested -> $safe (avail=${avail}MB, model=${modelMb}MB)")
-            }
-            safe
-        } catch (e: Exception) {
-            Log.w(TAG, "resolveSafeMaxTokens — failed, using requested $requested: ${e.message}")
-            requested
-        }
-    }
 
     /**
      * Decode image URI → Bitmap → PNG bytes.

@@ -66,10 +66,30 @@ function isImageRow(r: NativeDownloadRow): boolean {
   return r.modelType === 'image' || (r.modelId?.startsWith('image:') ?? false);
 }
 
+/**
+ * A part of a multi-file model that is already represented by ONE aggregate row the owner drives
+ * itself (it declares `aggregated: true` in metadataJson when starting the transfer).
+ *
+ * Without this, hydration resurrects every part as its own Download Manager entry: a model shipped
+ * as four loose files came back after a restart as four rows titled by filename, quantization
+ * "Unknown", each showing its own byte total - beside the aggregate row that is supposed to be the
+ * single source of truth. Same shape as the mmproj-sidecar exclusion above; generalised because
+ * "several native transfers, one user-visible model" is not specific to any one model.
+ */
+function isAggregatedPart(r: NativeDownloadRow): boolean {
+  if (!r.metadataJson) return false;
+  try {
+    return (JSON.parse(r.metadataJson) as { aggregated?: boolean }).aggregated === true;
+  } catch {
+    return false; // unparseable metadata is not a reason to hide a download
+  }
+}
+
 function getParentRows(rows: NativeDownloadRow[], mmProjIds: Set<string>): NativeDownloadRow[] {
   return rows.filter(r =>
     !mmProjIds.has(r.downloadId) &&
     !isMmProjFileName(r.fileName) &&
+    !isAggregatedPart(r) &&
     r.status !== 'cancelled' &&
     // Keep COMPLETED image rows — native finished but JS finalization (unzip+register)
     // may not have run. Text COMPLETED rows are safe to drop (already in AsyncStorage).

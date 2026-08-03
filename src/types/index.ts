@@ -161,6 +161,13 @@ export interface MediaAttachment {
   fileName?: string;
   textContent?: string; // documents: extracted text
   fileSize?: number; // documents: file size in bytes
+  // Transcript attachments (a document sourced from a recording). When present,
+  // the document text came from a recording's transcript; the range fields are
+  // set when the user attached a timestamp-to-timestamp slice rather than the
+  // whole transcript, so the chat can cite/seek back into the audio.
+  recordingId?: string;
+  transcriptStartMs?: number; // documents: start of the attached transcript range
+  transcriptEndMs?: number; // documents: end of the attached transcript range
   audioFormat?: 'wav' | 'mp3'; // audio attachments: format for model input
   audioDurationSeconds?: number; // audio attachments: recorded duration in seconds
 }
@@ -243,6 +250,11 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   projectId?: string;
+  // When set, the conversation is scoped to ONE document within its project (the
+  // docPath, e.g. a recording id) - every turn retrieves only that document's chunks.
+  // Backs "chat with this recording": the transcript stays in context across the whole
+  // conversation via bounded per-turn retrieval, not a one-shot attachment.
+  sourceDocPath?: string;
   compactionSummary?: string;
   compactionCutoffMessageId?: string;
 }

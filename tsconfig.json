@@ -10,7 +10,7 @@
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": [
-    "**/node_modules", "**/Pods", "pro/**",
+    "**/node_modules", "**/Pods", "pro/**", "poc-archive/**",
     // Tests that import the private pro/ submodule, which the public repo's CI does
     // not check out — so tsc cannot resolve their imports there. Keep in lockstep
     // with jest.config.js testPathIgnorePatterns; both lists exclude the same set.

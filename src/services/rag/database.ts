@@ -19,6 +19,8 @@ export interface RagSearchResult {
   content: string;
   position: number;
   score: number;
+  // JSON string of per-chunk metadata (recordingId, startMs, eventTitle, ...) or null.
+  metadata?: string | null;
 }
 
 interface StoredEmbedding {
@@ -28,6 +30,7 @@ interface StoredEmbedding {
   content: string;
   position: number;
   embedding: number[];
+  metadata?: string | null;
 }
 
 class RagDatabase {
@@ -55,9 +58,17 @@ class RagDatabase {
           content TEXT NOT NULL,
           doc_id INTEGER NOT NULL,
           position INTEGER NOT NULL,
+          metadata TEXT,
           FOREIGN KEY (doc_id) REFERENCES rag_documents(id)
         )`
       );
+      // Older installs created rag_chunks without the metadata column; add it.
+      // Throws "duplicate column" on DBs that already have it - safe to ignore.
+      try {
+        this.db.executeSync('ALTER TABLE rag_chunks ADD COLUMN metadata TEXT');
+      } catch {
+        // column already exists
+      }
       this.db.executeSync(
         `CREATE TABLE IF NOT EXISTS rag_embeddings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,8 +108,8 @@ class RagDatabase {
     try {
       for (const chunk of chunks) {
         const result = db.executeSync(
-          'INSERT INTO rag_chunks (content, doc_id, position) VALUES (?, ?, ?)',
-          [chunk.content, docId, chunk.position]
+          'INSERT INTO rag_chunks (content, doc_id, position, metadata) VALUES (?, ?, ?, ?)',
+          [chunk.content, docId, chunk.position, chunk.metadata ? JSON.stringify(chunk.metadata) : null]
         );
         if (result.insertId == null) throw new Error(`Failed to insert chunk at position ${chunk.position}`);
         rowIds.push(result.insertId);
@@ -141,7 +152,7 @@ class RagDatabase {
   getEmbeddingsByProject(projectId: string): StoredEmbedding[] {
     const db = this.getDb();
     const result = db.executeSync(
-      `SELECT e.chunk_rowid, e.doc_id, d.name, c.content, c.position, e.embedding
+      `SELECT e.chunk_rowid, e.doc_id, d.name, c.content, c.position, c.metadata, e.embedding
        FROM rag_embeddings e
        JOIN rag_chunks c ON e.chunk_rowid = c.id
        JOIN rag_documents d ON e.doc_id = d.id
@@ -189,15 +200,34 @@ class RagDatabase {
     return (result.rows ?? []) as unknown as RagDocument[];
   }
 
+  // Look up a document by its `path`. For file-backed docs `path` is a filesystem
+  // path; for text-indexed docs (indexText) it's a synthetic id (e.g. a recordingId).
+  getDocumentByPath(path: string): RagDocument | null {
+    const db = this.getDb();
+    const result = db.executeSync(
+      'SELECT id, project_id, name, path, size, created_at, enabled FROM rag_documents WHERE path = ? LIMIT 1',
+      [path]
+    );
+    const rows = (result.rows ?? []) as unknown as RagDocument[];
+    return rows[0] ?? null;
+  }
+
   toggleEnabled(docId: number, enabled: boolean): void {
     const db = this.getDb();
     db.executeSync('UPDATE rag_documents SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, docId]);
   }
 
+  // Rename a document's display name only - no re-embed. For a title change the chunks/embeddings
+  // are unchanged; only the name shown in search hits + citations needs to follow.
+  renameDocument(docId: number, name: string): void {
+    const db = this.getDb();
+    db.executeSync('UPDATE rag_documents SET name = ? WHERE id = ?', [name, docId]);
+  }
+
   getChunksByProject(projectId: string, topK: number = 5): RagSearchResult[] {
     const db = this.getDb();
     const result = db.executeSync(
-      `SELECT c.doc_id, d.name, c.content, c.position, 0 as score
+      `SELECT c.doc_id, d.name, c.content, c.position, c.metadata, 0 as score
        FROM rag_chunks c JOIN rag_documents d ON c.doc_id = d.id
        WHERE d.project_id = ? AND d.enabled = 1
        ORDER BY c.position LIMIT ?`,

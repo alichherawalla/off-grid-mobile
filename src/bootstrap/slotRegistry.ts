@@ -54,8 +54,16 @@ function _clearSlotsForTesting(): void {
 /** Known slot names, centralised so core and pro stay in sync. */
 export const SLOTS = {
   /** Always-mounted root component(s) rendered near the app root (e.g. the TTS
-   *  engine bridge). Mounted regardless of screen. */
+   *  engine bridge). Mounted regardless of screen.
+   *  NOTE: one component per slot name - this one is TAKEN by pro's audio EngineBridge.
+   *  Registering another component here REPLACES it and silently breaks TTS. Anything else
+   *  needing a root mount gets its own slot, like `sttModelPrompt` below. */
   appRoot: 'app.root',
+  /** A root-mounted prompt owned by the recorder: the speech-model download sheet. It has to
+   *  live at the root rather than on a screen because a transcription (and therefore a
+   *  download-on-first-use) can be kicked off from the feed, a clip, or a background trigger -
+   *  a sheet mounted on any one screen would miss the others. Absent in free builds. */
+  sttModelPrompt: 'stt.modelPrompt',
   /** Replaces the chat input row when audio (voice) interface mode is active. */
   chatInputAudioMode: 'chatInput.audioMode',
   /** Voice-mode empty-state hero (big "tap to speak" mic) shown in the message
@@ -78,4 +86,8 @@ export const SLOTS = {
    *  download/management). The tab itself only appears when this is
    *  registered, so free builds show just Text/Image. */
   modelsScreenVoiceTab: 'modelsScreen.voiceTab',
+  /** Compact recorder entry on the Home screen (Pro): a tap-to-record card that
+   *  starts/stops the recorder and links to the recordings list. Replaces the
+   *  old dedicated Recorder tab. Absent in free builds. */
+  homeRecorder: 'home.recorder',
 } as const;
