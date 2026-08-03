@@ -169,6 +169,14 @@ class RagService {
     return ragDatabase.getDocumentsByProject(projectId);
   }
 
+  /** Update a document's display name only (no re-embed), found by its `path` (docPath). Used when a
+   *  source is renamed so search hits + citations follow the new title. No-op if there's no such doc. */
+  async renameDocumentByPath(path: string, name: string): Promise<void> {
+    await this.ensureReady();
+    const doc = ragDatabase.getDocumentByPath(path);
+    if (doc) ragDatabase.renameDocument(doc.id, name);
+  }
+
   /** The concatenated indexed text for a document identified by its `path` (docPath).
    *  Lets the doc preview render text-indexed docs (e.g. recorder transcripts added via
    *  indexText, whose `path` is a synthetic id with no backing file). Null if there's no
