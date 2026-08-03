@@ -30,6 +30,9 @@ jest.mock('../../../src/services/whisperService', () => ({
     loadModel: jest.fn(async () => { mockWhisperNativeLoaded = true; }),
     unloadModel: jest.fn(async () => { mockWhisperNativeLoaded = false; }),
     isModelLoaded: () => mockWhisperNativeLoaded,
+    // No file transcription is in flight in any of these scenarios, so eviction is never
+    // vetoed - which is what these cases are about.
+    isFileTranscribing: () => false,
     isModelDownloaded: jest.fn(async () => true),
     deleteModel: jest.fn(async () => {}),
     downloadModel: jest.fn(async () => '/models/x'),
