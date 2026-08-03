@@ -217,6 +217,13 @@ class RagDatabase {
     db.executeSync('UPDATE rag_documents SET enabled = ? WHERE id = ?', [enabled ? 1 : 0, docId]);
   }
 
+  // Rename a document's display name only - no re-embed. For a title change the chunks/embeddings
+  // are unchanged; only the name shown in search hits + citations needs to follow.
+  renameDocument(docId: number, name: string): void {
+    const db = this.getDb();
+    db.executeSync('UPDATE rag_documents SET name = ? WHERE id = ?', [name, docId]);
+  }
+
   getChunksByProject(projectId: string, topK: number = 5): RagSearchResult[] {
     const db = this.getDb();
     const result = db.executeSync(

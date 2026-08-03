@@ -47,6 +47,16 @@ if [ -n "$PUSHED_JS" ]; then
   echo "▶ TypeScript type check..."
   npx tsc --noEmit
 
+  # The root tsconfig EXCLUDES pro/** (the public repo's CI does not check the submodule out), so
+  # the check above only sees a pro file when a core file imports it - and pro screens are reached
+  # through the registry at runtime, not by an import. That left every pro-only screen, hook and
+  # service completely untypechecked on push; two real errors were sitting in the tree unseen.
+  # pro has its own tsconfig, so run it too whenever the submodule is actually present.
+  if [ -f pro/tsconfig.json ]; then
+    echo "▶ TypeScript type check (pro submodule)..."
+    npx tsc --noEmit -p pro/tsconfig.json
+  fi
+
   echo "▶ JS/TS tests (related to changed files)..."
   echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests
 

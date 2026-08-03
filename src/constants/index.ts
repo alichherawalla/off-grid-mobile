@@ -197,6 +197,17 @@ export const TYPOGRAPHY = {
     fontFamily: FONTS.mono,
     fontWeight: '400' as const,
   },
+  // Reading text: list rows you actually read rather than scan past (follow-ups, key points).
+  // The scale had nothing between `body` (14) and `h2` (16, the screen-title token), so every
+  // list sat at 14 whether it was a settings row or a paragraph - and reaching for h2 would give
+  // list rows the weight of a heading. lineHeight is set here because the body tokens have none,
+  // which is what actually made these lists feel cramped.
+  bodyLarge: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontFamily: FONTS.mono,
+    fontWeight: '400' as const,
+  },
 
   // Labels (whispers)
   label: {
