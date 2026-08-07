@@ -472,6 +472,9 @@ class WhisperService {
     options?: {
       language?: string;
       onProgress?: (progress: number) => void;
+      /** Decode threads. Omitted, whisper.rn resolved to n_processors=1 on device - one core of eight,
+       *  CPU-only - making a 60s window take minutes. Any caller the user waits on should pass it. */
+      maxThreads?: number;
     }
   ): Promise<string> {
     if (!this.context) {
@@ -481,6 +484,7 @@ class WhisperService {
     const { promise } = this.context.transcribe(filePath, {
       language: options?.language || 'en',
       onProgress: options?.onProgress,
+      ...(options?.maxThreads ? { maxThreads: options.maxThreads } : {}),
     });
     this.fileTranscribes += 1; // residency's veto, released in the finally below
     try {
