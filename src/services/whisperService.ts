@@ -29,6 +29,9 @@ class WhisperService {
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
   private isReleasingContext: boolean = false;
+  /** In-flight load, shared by concurrent callers so only ONE native context is ever created. */
+  private loadPromise: Promise<void> | null = null;
+  private loadingModelPath: string | null = null;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
   private activeDownloadId: string | null = null;
@@ -55,12 +58,9 @@ class WhisperService {
     // Content-Length once the download starts.
     const totalBytes = model.size * 1024 * 1024;
     const modelKey = makeModelKey(`whisper-${modelId}`, fileName);
-    // Publish a QUEUED row to the CANONICAL store IMMEDIATELY, before the (possibly
-    // slot-limited) native start — the same pattern text/image use (startModelDownload).
-    // Previously the store entry was only added AFTER a concurrency slot opened, so a
-    // queued STT download had no canonical entry and the Transcription tab fell back to
-    // the whisper store's progress=0 and rendered "0%" instead of "Queued". Every card
-    // now reads this one store, so queued looks identical across Text/Image/STT.
+    // Publish a QUEUED row to the CANONICAL store IMMEDIATELY, before the (possibly slot-limited)
+    // native start — the pattern text/image use. Added only AFTER a slot opened, a queued STT download
+    // had no canonical entry and the Transcription tab rendered "0%" instead of "Queued".
     const QUEUED_PLACEHOLDER_ID = `queued:${modelKey}`;
     useDownloadStore.getState().add({
       modelKey,
@@ -177,17 +177,34 @@ class WhisperService {
   }
 
   async loadModel(modelPath: string): Promise<void> {
+    // SHARE an in-flight load. The checks below are correct sequentially, useless concurrently: a
+    // 400MB model takes seconds, so a second caller sees context===null, runs its own initWhisper and
+    // overwrites this.context, leaking a native allocation nothing can release. Observed on device:
+    // 4 contexts, none removed, 4 x 406MB, kernel then killed the foreground app (1.85GB swap).
+    if (this.loadPromise) {
+      if (this.loadingModelPath === modelPath) return this.loadPromise;
+      await this.loadPromise.catch(() => {}); // other model: let it settle, path check below swaps
+    }
     if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
     if (this.context && this.currentModelPath === modelPath) return;
     if (this.isReleasingContext) {
       logger.log('[WhisperService] Waiting for context release to finish before loading');
       await this.contextReleasePromise;
     }
+    this.loadingModelPath = modelPath;
+    this.loadPromise = this.doLoadModel(modelPath);
+    try {
+      await this.loadPromise;
+    } finally {
+      this.loadPromise = null;
+      this.loadingModelPath = null;
+    }
+  }
 
-    // Validate model file before passing to native layer.
-    // Native initWithModelPath calls abort() on invalid files, crashing the app.
+  /** The actual load. Only ever reached through `loadModel`, which serialises it. */
+  private async doLoadModel(modelPath: string): Promise<void> {
+    // Native initWithModelPath calls abort() on invalid files, crashing the app, so validate first.
     await this.validateModelFile(modelPath);
-
     logger.log(`[Whisper] Loading model: ${modelPath}`);
     try {
       this.context = await initWhisper({ filePath: modelPath });
@@ -358,9 +375,7 @@ class WhisperService {
         // [WIRE] raw realtime transcription event shape from-device (voice-mode STT path) — full result +
         // segments + timing, so we can ground the realtime-transcript fixtures (distinct from file transcribe).
         logger.log(`[WIRE-STT-REALTIME] ${JSON.stringify(evt)}`);
-
         const { isCapturing, data, processTime, recordingTime } = evt;
-
         if (isCapturing) {
           // Live partial — surface immediately for the "listening…" preview.
           onResult({
@@ -371,7 +386,6 @@ class WhisperService {
           });
           return;
         }
-
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
         logger.log('[WhisperService] Recording finished');
@@ -464,11 +478,9 @@ class WhisperService {
       language: options?.language || 'en',
       onProgress: options?.onProgress,
     });
-
     const __res = await promise;
-    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
-    const { result } = __res;
-    return cleanTranscription(result);
+    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result from-device
+    return cleanTranscription(__res.result);
   }
 }
 
