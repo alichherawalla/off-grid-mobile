@@ -32,6 +32,10 @@ class WhisperService {
   /** In-flight load, shared by concurrent callers so only ONE native context is ever created. */
   private loadPromise: Promise<void> | null = null;
   private loadingModelPath: string | null = null;
+  /** File transcriptions in flight. Residency's eviction veto: unloading mid-decode cancels the native
+   *  job and whisper.rn returns empty, which reads as a clip that transcribed to nothing. */
+  private fileTranscribes = 0;
+  isFileTranscribing(): boolean { return this.fileTranscribes > 0; }
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
   private activeDownloadId: string | null = null;
@@ -478,9 +482,14 @@ class WhisperService {
       language: options?.language || 'en',
       onProgress: options?.onProgress,
     });
-    const __res = await promise;
-    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result from-device
-    return cleanTranscription(__res.result);
+    this.fileTranscribes += 1; // residency's veto, released in the finally below
+    try {
+      const __res = await promise;
+      logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result from-device
+      return cleanTranscription(__res.result);
+    } finally {
+      this.fileTranscribes -= 1;
+    }
   }
 }
 
