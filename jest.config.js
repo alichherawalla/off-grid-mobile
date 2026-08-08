@@ -35,11 +35,22 @@ module.exports = {
   preset: 'react-native',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-  // Point babel-jest at the root config EXPLICITLY. pro/ has its own package.json, which makes it a
-  // separate Babel package: a test file living inside it resolved no config at all, so TypeScript
-  // syntax (`import type`) failed to parse. Naming the config crosses that boundary.
   transform: {
-    '^.+\\.(js|jsx|ts|tsx|mjs)$': ['babel-jest', { configFile: require.resolve('./babel.config.js') }],
+    // pro/ has its own package.json, which makes it a separate Babel package - so a test file living
+    // inside it resolved no Babel config at all and TypeScript syntax (`import type`) failed to parse.
+    // Naming the config crosses that boundary.
+    //
+    // SCOPED to pro's own tests on purpose. Setting `configFile` globally also disables per-package
+    // .babelrc lookup inside node_modules, which several React Native libraries rely on.
+    '<rootDir>/pro/__tests__/.*\\.(js|jsx|ts|tsx)$':
+      ['babel-jest', { configFile: require.resolve('./babel.config.js') }],
+    '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
+    // NOT optional. `transform` REPLACES the preset's map rather than merging with it, and
+    // react-native/jest-preset defines two entries. Overriding with only the code one silently drops
+    // the asset transformer, so requiring a png or svg returns its raw bytes - which surfaces as
+    // unrelated rendered tests failing an assertion, nowhere near the cause.
+    '^.+\\.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp)$':
+      require.resolve('react-native/jest/assetFileTransformer.js'),
   },
   testPathIgnorePatterns: [
     '/node_modules/', '/android/', '/ios/', '/e2e/', 'App.test.tsx',
