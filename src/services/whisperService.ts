@@ -466,25 +466,23 @@ class WhisperService {
 
   isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
 
-  // Transcribe a single audio file
+  /** Transcribe one file. `maxThreads` is not optional in practice - omitted, whisper.rn resolved to
+   *  one core of eight on device. `prompt` biases decoding toward names it would otherwise guess at. */
   async transcribeFile(
     filePath: string,
     options?: {
       language?: string;
       onProgress?: (progress: number) => void;
-      /** Decode threads. Omitted, whisper.rn resolved to n_processors=1 on device - one core of eight,
-       *  CPU-only - making a 60s window take minutes. Any caller the user waits on should pass it. */
       maxThreads?: number;
+      prompt?: string;
     }
   ): Promise<string> {
-    if (!this.context) {
-      throw new Error('No Whisper model loaded');
-    }
-
+    if (!this.context) throw new Error('No Whisper model loaded');
     const { promise } = this.context.transcribe(filePath, {
       language: options?.language || 'en',
       onProgress: options?.onProgress,
       ...(options?.maxThreads ? { maxThreads: options.maxThreads } : {}),
+      ...(options?.prompt ? { prompt: options.prompt } : {}),
     });
     this.fileTranscribes += 1; // residency's veto, released in the finally below
     try {
