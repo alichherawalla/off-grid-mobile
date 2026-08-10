@@ -105,21 +105,31 @@ class ActiveModelService {
    * below missed and re-loaded it (unload+load) every time the chat called
    * loadTextModel — the "second loader" seen only for LiteRT models.
    */
-  private isTextModelCurrent(modelId: string): boolean {
+  private isTextModelCurrent(modelId: string, needsVision = false): boolean {
     if (this.loadedTextModelId !== modelId) return false;
     const model = useAppStore.getState().downloadedModels.find(m => m.id === modelId);
-    return model?.engine === 'litert'
-      ? liteRTService.isModelLoaded()
-      : llmService.isModelLoaded();
+    if (model?.engine === 'litert') return liteRTService.isModelLoaded();
+    if (!llmService.isModelLoaded()) return false;
+    // A text-only load of a model that HAS a projector is not "current" for a caller that wants
+    // vision. Without this, a background load that skipped the projector to save memory would leave
+    // chat unable to see images and no path back: the id matches, so every later load short-circuits
+    // and the projector is never initialised.
+    return !(needsVision && model?.mmProjPath && !llmService.getMultimodalSupport()?.vision);
   }
 
+  /**
+   * @param opts.skipVision Load WITHOUT the multimodal projector, even when the model has one.
+   *   For background work that only needs text: a projector is hundreds of megabytes of CLIP weights
+   *   on a device already holding a speech model. A later caller that does want vision reloads, which
+   *   `isTextModelCurrent` now allows for.
+   */
   async loadTextModel(
     modelId: string,
     timeoutMs: number = 120000,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; skipVision?: boolean },
   ): Promise<void> {
     // Fast path — model already loaded (no lock; just sync the store).
-    if (this.isTextModelCurrent(modelId)) {
+    if (this.isTextModelCurrent(modelId, !opts?.skipVision)) {
       const store = useAppStore.getState();
       if (store.activeModelId !== modelId) {
         store.setActiveModelId(modelId);
@@ -135,10 +145,10 @@ class ActiveModelService {
   private async doLoadTextModelLocked(
     modelId: string,
     timeoutMs: number,
-    opts?: { override?: boolean },
+    opts?: { override?: boolean; skipVision?: boolean },
   ): Promise<void> {
     // Re-check after acquiring — a queued call may have loaded it already.
-    if (this.isTextModelCurrent(modelId)) {
+    if (this.isTextModelCurrent(modelId, !opts?.skipVision)) {
       const store = useAppStore.getState();
       if (store.activeModelId !== modelId) {
         store.setActiveModelId(modelId);
@@ -177,6 +187,7 @@ class ActiveModelService {
       store,
       timeoutMs,
       override: !!opts?.override || modelResidencyManager.hasSessionOverride(modelId),
+      skipVision: opts?.skipVision,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.setLoadedText(id);

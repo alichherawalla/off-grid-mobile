@@ -35,14 +35,34 @@ module.exports = {
   preset: 'react-native',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
+  transform: {
+    // pro/ has its own package.json, which makes it a separate Babel package - so a test file living
+    // inside it resolved no Babel config at all and TypeScript syntax (`import type`) failed to parse.
+    // Naming the config crosses that boundary.
+    //
+    // SCOPED to pro's own tests on purpose. Setting `configFile` globally also disables per-package
+    // .babelrc lookup inside node_modules, which several React Native libraries rely on.
+    '<rootDir>/pro/__tests__/.*\\.(js|jsx|ts|tsx)$':
+      ['babel-jest', { configFile: require.resolve('./babel.config.js') }],
+    '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
+    // NOT optional. `transform` REPLACES the preset's map rather than merging with it, and
+    // react-native/jest-preset defines two entries. Overriding with only the code one silently drops
+    // the asset transformer, so requiring a png or svg returns its raw bytes - which surfaces as
+    // unrelated rendered tests failing an assertion, nowhere near the cause.
+    '^.+\\.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp)$':
+      require.resolve('react-native/jest/assetFileTransformer.js'),
+  },
   testPathIgnorePatterns: [
     '/node_modules/', '/android/', '/ios/', '/e2e/', 'App.test.tsx',
-    // pro/ ships its own suite run in the pro repo's CI — never run those from here.
-    // Anchored to <rootDir>/pro/ so it ignores ONLY the submodule's own tests, NOT this
-    // repo's __tests__/pro/** pro-dependent suites (a bare '/pro/' matched both).
-    // The pro-DEPENDENT suites under this repo's __tests__ DO run against the real pro
-    // when it's checked out, and are ignored only when pro is genuinely absent.
-    '<rootDir>/pro/',
+    // Everything inside the submodule EXCEPT its own test suite.
+    //
+    // Anchored to <rootDir>/pro/ so it ignores only the submodule, NOT this repo's __tests__/pro/**
+    // pro-dependent suites (a bare '/pro/' matched both). The negative lookahead is the correction:
+    // `<rootDir>/pro/` on its own also skipped pro/__tests__, and pro has no separate runner —
+    // `pro`'s own `npm test` is `cd .. && npx jest`, i.e. THIS config. So a test moved into the
+    // submodule to keep pro source out of the public repo silently stopped executing. Two had been
+    // sitting there unrun. Pro-only tests belong in pro; they still have to run from here.
+    '<rootDir>/pro/(?!__tests__)',
     ...(proExists ? [] : proDependentTestPaths),
   ],
   // Stale agent git-worktrees under .claude/worktrees/ each carry a full repo copy (incl. their own

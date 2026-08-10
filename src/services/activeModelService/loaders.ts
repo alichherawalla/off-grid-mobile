@@ -86,6 +86,10 @@ export interface TextLoadContext {
   /** User forced this load ("Load Anyway"/continue) — skip the conservative native
    *  memory gate so the loader's own fallbacks try instead of a hard block. */
   override?: boolean;
+  /** Load WITHOUT the multimodal projector even when the model ships one. For background work that
+   *  only needs text: the projector is hundreds of megabytes of CLIP weights that will never be read,
+   *  on a device that is usually also holding a speech model. */
+  skipVision?: boolean;
   onLoaded: (modelId: string) => void;
   onError: () => void;
   onFinally: () => void;
@@ -185,7 +189,10 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
 
-    const mmProjPath = await resolveMmProjPath(ctx.model, ctx.modelId);
+    // Resolving the projector also PERSISTS the link on first discovery, so skipping the resolve
+    // entirely is deliberate: a text-only load must not be the thing that decides which projector this
+    // model is paired with. That belongs to a load that actually intends to use it.
+    const mmProjPath = ctx.skipVision ? undefined : await resolveMmProjPath(ctx.model, ctx.modelId);
 
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {

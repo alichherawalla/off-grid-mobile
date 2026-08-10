@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -135,6 +136,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     action?.();
   };
 
+  const HomeRecorderCard = useSlot(SLOTS.homeRecorder);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View testID="home-screen" style={styles.scrollView}>
@@ -199,6 +202,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </Card>
             )
           }
+
+          {/* Pro's conversation/recorder card. Renders nothing when the slot is empty (free build). */}
+          {HomeRecorderCard ? <HomeRecorderCard /> : null}
 
           {/* Recent Conversations */}
           {

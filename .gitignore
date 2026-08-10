@@ -94,3 +94,9 @@ docs/DEVICE_SESSION_COMMENTARY.md
 
 # Device wire-capture logs (raw, large, session-specific — kept locally, not versioned)
 docs/wire-captures/
+
+# Loop simulator: generated fixtures and audio (949 MB). Rebuilt by sim/loop/*.mjs.
+sim/
+
+# Screenshots pasted in during device sessions.
+image*.png

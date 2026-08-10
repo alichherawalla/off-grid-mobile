@@ -149,7 +149,16 @@ export const useWhisperStore = create<WhisperState>()(
             }
             await whisperService.loadModel(modelPath);
             modelResidencyManager.register(
-              { key: 'whisper', type: 'whisper', sizeMB },
+              {
+                key: 'whisper',
+                type: 'whisper',
+                sizeMB,
+                // Residency owns eviction, but it must not evict the context out from under a running
+                // decode: unloading cancels the native job and whisper.rn returns an empty result, so
+                // the clip reads as transcribed-to-nothing rather than as interrupted. This veto is how
+                // the owner is told "not right now" instead of the caller second-guessing the policy.
+                canEvict: () => !whisperService.isFileTranscribing(),
+              },
               () => get().unloadModel(),
             );
             return true;

@@ -53,6 +53,9 @@ function _clearSlotsForTesting(): void {
 
 /** Known slot names, centralised so core and pro stay in sync. */
 export const SLOTS = {
+  /** A card on the Home screen, above recent conversations. Pro registers the recorder /
+   *  conversation surface here; a free build leaves it empty and Home is unchanged. */
+  homeRecorder: 'home.recorder',
   /** Always-mounted root component(s) rendered near the app root (e.g. the TTS
    *  engine bridge). Mounted regardless of screen. */
   appRoot: 'app.root',

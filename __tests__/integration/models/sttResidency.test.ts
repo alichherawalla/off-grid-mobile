@@ -33,6 +33,9 @@ jest.mock('../../../src/services/whisperService', () => ({
     isModelDownloaded: jest.fn(async () => true),
     deleteModel: jest.fn(async () => {}),
     downloadModel: jest.fn(async () => '/models/x'),
+    // Residency asks before evicting. Nothing is decoding in these tests, so it is always free to go;
+    // the veto itself is covered where transcription is actually in flight.
+    isFileTranscribing: () => false,
   },
   WHISPER_MODELS: [{ id: 'base', size: 142 }],
 }));

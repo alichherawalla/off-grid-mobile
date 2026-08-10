@@ -13,6 +13,7 @@ import {
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
   describeGpuFallback, isTruncatedResult,
 } from './llmHelpers';
+import { buildConstrainedCompletionParams, type ConstrainedCompletionOpts } from './llmConstraints';
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
 import { hardwareService } from './hardware';
@@ -400,8 +401,8 @@ class LLMService {
     if (!this.multimodalInitialized) return false;
     return messages.some(m => m.attachments?.some(a => a.type === 'image'));
   }
-  /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
-  async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+  /** Capped completion for background work. `opts` constrains the shape; omitting it changes nothing. */
+  async generateWithMaxTokens(messages: Message[], maxTokens: number, opts?: ConstrainedCompletionOpts): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -410,13 +411,12 @@ class LLMService {
     let fullResponse = '';
     const ctx = this.context;
     const completionWork = safeCompletion(ctx, () => ctx.completion(
-      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
+      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens, ...buildConstrainedCompletionParams(opts) },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-
   /** Ephemeral, tools-free routing pass for two-pass tool selection (not user-facing). */
   async generateToolSelection(systemPrompt: string, userText: string): Promise<string> {
     const messages: Message[] = [
