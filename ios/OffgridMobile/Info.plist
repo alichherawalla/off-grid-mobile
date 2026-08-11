@@ -101,6 +101,14 @@
 	<array>
 		<string>arm64</string>
 	</array>
+	<!-- Ambient recording continues with the screen locked and the app backgrounded. Without this iOS
+	     suspends the audio session the moment the app leaves the foreground, so the recorder stops the
+	     instant the screen locks - which is most of when an ambient recorder is meant to work. It does
+	     NOT survive a force-quit or an OS termination; that is a platform limit, not a configuration. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

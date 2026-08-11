@@ -16,7 +16,13 @@ end
 
 target 'OffgridMobile' do
   config = use_native_modules!
-  
+
+  # onnxruntime-objc ships no module map, and OffgridPro is a Swift pod that imports it for the
+  # recorder's Silero VAD. Without this, pod install fails outright with "The Swift pod `OffgridPro`
+  # depends upon `onnxruntime-objc`, which does not define modules" - so this line is what makes the
+  # ambient recorder buildable on iOS at all, not a tuning preference.
+  pod 'onnxruntime-objc', :modular_headers => true
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
