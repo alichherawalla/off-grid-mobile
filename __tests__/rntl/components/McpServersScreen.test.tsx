@@ -45,7 +45,7 @@ jest.mock('@react-navigation/native', () => {
 jest.mock('../../../src/services/tools/extensions', () => ({ getToolExtensions: () => [] }));
 
 const mockAppState = { settings: { enabledTools: [] as string[] }, updateSettings: jest.fn(), activeModelId: undefined, downloadedModels: [] as any[] };
-const mockRemoteState = { activeRemoteTextModelId: 'remote-1' };
+const mockRemoteState = { activeRemoteTextModelId: 'remote-1', servers: [] as any[] };
 jest.mock('../../../src/stores', () => ({
   useAppStore: (selector?: any) => (selector ? selector(mockAppState) : mockAppState),
   useRemoteServerStore: (selector?: any) => (selector ? selector(mockRemoteState) : mockRemoteState),

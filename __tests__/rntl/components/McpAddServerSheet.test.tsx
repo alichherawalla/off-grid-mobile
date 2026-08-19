@@ -124,4 +124,31 @@ maybe('McpAddServerSheet', () => {
     expect(useMcpStore.getState().servers).toHaveLength(1);
     expect(props.onAddedPreset).not.toHaveBeenCalled();
   });
+
+  it('lists a paired Off Grid desktop and calls onAddDesktop when tapped', () => {
+    const props = baseProps();
+    const onAddDesktop = jest.fn();
+    const desktops = [
+      { id: 'pc-1', name: 'My Mac', endpoint: 'http://192.168.1.18:7878' },
+    ] as any;
+    const { getByTestId } = render(
+      <McpAddServerSheet {...props} desktops={desktops} onAddDesktop={onAddDesktop} />,
+    );
+    fireEvent.press(getByTestId('mcp-desktop-pc-1'));
+    expect(onAddDesktop).toHaveBeenCalledWith(desktops[0]);
+  });
+
+  it('marks a desktop whose /mcp companion is already added as connected', () => {
+    useMcpStore.setState({
+      servers: [{ id: 'c', name: 'My Mac tools', url: 'http://192.168.1.18:7878/mcp', authMode: 'header' }],
+    });
+    const desktops = [
+      { id: 'pc-1', name: 'My Mac', endpoint: 'http://192.168.1.18:7878' },
+    ] as any;
+    const { getByText } = render(
+      <McpAddServerSheet {...baseProps()} desktops={desktops} onAddDesktop={jest.fn()} />,
+    );
+    // Feather icons render as their name via the mock; the connected row shows check-circle.
+    expect(getByText('check-circle')).toBeTruthy();
+  });
 });
