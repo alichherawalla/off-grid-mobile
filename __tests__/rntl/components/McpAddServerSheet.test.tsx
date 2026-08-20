@@ -78,6 +78,20 @@ maybe('McpAddServerSheet', () => {
     expect(props.onAddCustom).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a "Scan a desktop QR" button that calls onScan (only when provided)', () => {
+    const withScan = render(<McpAddServerSheet {...baseProps()} onScan={jest.fn()} />);
+    expect(withScan.queryByTestId('scan-desktop-qr')).toBeTruthy();
+
+    const onScan = jest.fn();
+    const r = render(<McpAddServerSheet {...baseProps()} onScan={onScan} />);
+    fireEvent.press(r.getByTestId('scan-desktop-qr'));
+    expect(onScan).toHaveBeenCalledTimes(1);
+
+    // No scan handler -> no scan button (older callers / manual-only).
+    const noScan = render(<McpAddServerSheet {...baseProps()} />);
+    expect(noScan.queryByTestId('scan-desktop-qr')).toBeNull();
+  });
+
   it('lists the preset rows', () => {
     const props = baseProps();
     const { getByTestId } = render(<McpAddServerSheet {...props} />);

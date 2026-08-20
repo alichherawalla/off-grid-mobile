@@ -41,6 +41,15 @@ jest.mock('react-native-edge-to-edge', () => ({
   NavigationBar: () => null,
 }));
 
+// react-native-vision-camera is a native module (NitroModules); stub it so any
+// screen that imports the QR scanner can render in jest without the native view.
+jest.mock('react-native-vision-camera', () => ({
+  Camera: () => null,
+  useCameraDevice: () => undefined,
+  useCameraPermission: () => ({ hasPermission: false, requestPermission: jest.fn() }),
+  useCodeScanner: (config: unknown) => config,
+}));
+
 // ============================================================================
 // AsyncStorage Mock
 // ============================================================================
