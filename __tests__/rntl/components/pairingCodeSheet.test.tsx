@@ -18,10 +18,12 @@ jest.mock('react-native-vector-icons/Feather', () => {
   return ({ name, ...props }: any) => <Text {...props}>{name}</Text>;
 });
 
-// The sheet is a modal wrapper; render its children inline so the test can drive the
-// content without a navigation/provider host.
+// The sheet is a modal wrapper; render its children inline (respecting `visible`, as
+// the real one does) so the test can drive the content and observe it hiding while
+// the scanner is open.
 jest.mock('@offgrid/core/components/AppSheet', () => ({
-  AppSheet: ({ children }: { children: React.ReactNode }) => children,
+  AppSheet: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
+    visible ? children : null,
 }));
 
 jest.mock('../../../src/theme', () => {
@@ -86,6 +88,14 @@ maybe('PairingCodeSheet scan-to-pair', () => {
     // Global vision-camera mock reports no permission, so the scanner asks for it -
     // proof the scanner surface mounted.
     expect(getByText('Camera access needed')).toBeTruthy();
+  });
+
+  it('hides the pairing sheet while the scanner is open (one modal at a time)', () => {
+    // iOS presents one modal at a time; the sheet must yield so the scanner can show.
+    const { getByTestId, queryByTestId } = render(<PairingCodeSheet {...baseProps()} />);
+    expect(queryByTestId('sync-test-input')).toBeTruthy();
+    fireEvent.press(getByTestId('sync-test-scan'));
+    expect(queryByTestId('sync-test-input')).toBeNull();
   });
 
   it('pairs from a scanned QR via the same onPair as typing', async () => {
