@@ -55,6 +55,10 @@ jest.mock('../../../pro/mcp/mcpService', () => ({
   connectServer: jest.fn(), disconnectServer: jest.fn(), signOutServer: jest.fn(),
 }));
 
+// The paired-desktops tools section pulls in the sync store + grant service (→ syncService,
+// which does not load under jest). This suite is about the MCP server cards, so stub it out.
+jest.mock('../../../pro/ui/CompanionToolsSection', () => ({ CompanionToolsSection: () => null }));
+
 type ScreenModule = typeof import('../../../pro/ui/McpServersScreen');
 type StoreModule = typeof import('../../../pro/mcp/mcpStore');
 
