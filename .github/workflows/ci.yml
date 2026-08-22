@@ -183,6 +183,11 @@ jobs:
 
       - name: Run Jest tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        env:
+          # The serial RN + jsdom suite retains more than Node's default 2 GB heap before
+          # coverage is written. The macOS runner has 14 GB; keep enough headroom for native
+          # tooling while allowing the complete suite to finish without weakening the gate.
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npx jest --coverage --forceExit --runInBand
 
       - name: Install Android NDK
