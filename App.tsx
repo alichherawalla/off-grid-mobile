@@ -16,7 +16,7 @@ import { hardwareService, modelManager, authService, ragService, remoteServerMan
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
-import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { initDebugLogFile, appendDebugLine, stopDebugLogFile } from './src/utils/debugLogFile';
 import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -33,6 +33,8 @@ import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
+
+let stopStartupProbe: (() => void) | null = null;
 
 // Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
 // is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).
@@ -60,7 +62,7 @@ if (__DEV__) {
   // Immediately after the sink exists, so the first sample lands before anything heavy runs. The app
   // was being killed by iOS at launch with the log going silent half a second in; this says where it
   // stops and what memory was doing when it did.
-  startStartupMemoryProbe();
+  stopStartupProbe = startStartupMemoryProbe();
 }
 
 const ensureRemoteServerStoreHydrated = async () => {
@@ -72,6 +74,12 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
+  useEffect(() => () => {
+    stopStartupProbe?.();
+    stopStartupProbe = null;
+    stopDebugLogFile();
+  }, []);
+
   useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
@@ -205,7 +213,11 @@ function App() {
     })().catch((error) => {
       logger.error('[App] Download-state recovery failed:', error);
     });
-  }, [setDownloadedModels, setDownloadedImageModels]);
+  }, [
+    reattachTextDownloadRecovery,
+    setDownloadedModels,
+    setDownloadedImageModels,
+  ]);
 
   const initializeApp = useCallback(async () => {
     try {

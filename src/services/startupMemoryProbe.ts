@@ -27,6 +27,8 @@ const TICK_MS = 1_000;
 const WINDOW_MS = 120_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
+let subscriptions: Array<{ remove(): void }> = [];
+let probeRun = 0;
 
 const mb = (bytes: unknown): number =>
   Math.round((Number(bytes) || 0) / (1024 * 1024));
@@ -40,9 +42,10 @@ const mb = (bytes: unknown): number =>
 async function sample(): Promise<string> {
   // Optional-chained through NativeModules itself: under jest there is no native layer at all, and a
   // diagnostic must never be the thing that breaks a caller.
-  const mod = (NativeModules as Record<string, unknown> | undefined)?.[
-    'DeviceMemoryModule'
-  ] as { getMemoryInfo?: () => Promise<Record<string, unknown>> } | undefined;
+  const modules = NativeModules as Record<string, unknown> | undefined;
+  const mod = modules?.DeviceMemoryModule as
+    | { getMemoryInfo?: () => Promise<Record<string, unknown>> }
+    | undefined;
   if (!mod?.getMemoryInfo) return 'no DeviceMemoryModule';
   try {
     const info = await mod.getMemoryInfo();
@@ -59,41 +62,62 @@ async function sample(): Promise<string> {
  *
  * Called as early as possible in startup so the first tick lands before anything heavy runs.
  */
-export function startStartupMemoryProbe(): void {
-  if (!__DEV__ || timer) return;
+export function startStartupMemoryProbe(): () => void {
+  if (!__DEV__ || timer) return stopStartupMemoryProbe;
+  const activeRun = ++probeRun;
   const startedAt = Date.now();
   logger.log(`[MEM-PROBE] start platform=${Platform.OS}`);
 
   const tick = (): void => {
     const elapsed = Date.now() - startedAt;
-    void sample().then((reading) => {
-      // Seconds since launch leads the line: the whole point is WHEN, so it should be readable
-      // without doing arithmetic on timestamps.
-      logger.log(`[MEM-PROBE] t=${(elapsed / 1000).toFixed(1)}s ${reading}`);
-      // Straight to disk: a sample still sitting in a buffer when the OS kills us is the sample we
-      // needed most.
-      flushDebugLogNow();
-    });
+    sample()
+      .then(reading => {
+        if (activeRun !== probeRun) return;
+        // Seconds since launch leads the line: the whole point is WHEN, so it should be readable
+        // without doing arithmetic on timestamps.
+        logger.log(`[MEM-PROBE] t=${(elapsed / 1000).toFixed(1)}s ${reading}`);
+        // Straight to disk: a sample still sitting in a buffer when the OS kills us is the sample we
+        // needed most.
+        flushDebugLogNow();
+      })
+      .catch(() => undefined);
     if (elapsed >= WINDOW_MS) stopStartupMemoryProbe();
   };
 
   // The OS's own signals, on the same timeline as the samples. A memory warning immediately before
   // the ticks stop says the kill was memory; ticks stopping with no warning says the thread blocked.
-  AppState.addEventListener('memoryWarning', () => {
-    logger.log(`[MEM-PROBE] OS MEMORY WARNING t=${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
-    flushDebugLogNow();
-  });
-  AppState.addEventListener('change', (state) => {
-    logger.log(`[MEM-PROBE] appState=${state} t=${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
-  });
+  subscriptions = [
+    AppState.addEventListener('memoryWarning', () => {
+      logger.log(
+        `[MEM-PROBE] OS MEMORY WARNING t=${(
+          (Date.now() - startedAt) /
+          1000
+        ).toFixed(1)}s`,
+      );
+      flushDebugLogNow();
+    }),
+    AppState.addEventListener('change', state => {
+      logger.log(
+        `[MEM-PROBE] appState=${state} t=${(
+          (Date.now() - startedAt) /
+          1000
+        ).toFixed(1)}s`,
+      );
+    }),
+  ];
 
   tick();
   timer = setInterval(tick, TICK_MS);
+  return stopStartupMemoryProbe;
 }
 
-function stopStartupMemoryProbe(): void {
-  if (!timer) return;
-  clearInterval(timer);
+export function stopStartupMemoryProbe(): void {
+  const wasRunning = timer !== null || subscriptions.length > 0;
+  probeRun += 1;
+  if (timer !== null) clearInterval(timer);
   timer = null;
+  subscriptions.forEach(subscription => subscription.remove());
+  subscriptions = [];
+  if (!wasRunning) return;
   logger.log('[MEM-PROBE] stop');
 }
