@@ -111,7 +111,7 @@ export function startStartupMemoryProbe(): () => void {
   return stopStartupMemoryProbe;
 }
 
-export function stopStartupMemoryProbe(): void {
+function stopStartupMemoryProbe(): void {
   const wasRunning = timer !== null || subscriptions.length > 0;
   probeRun += 1;
   if (timer !== null) clearInterval(timer);
