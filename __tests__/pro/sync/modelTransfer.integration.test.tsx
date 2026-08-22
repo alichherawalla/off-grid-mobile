@@ -372,6 +372,13 @@ describe('Pro mobile model transfer journey', () => {
     ).resolves.toBe(false);
 
     fireEvent.press(ui.getByLabelText('Back'));
+    const whisperPath = `${modelTransferFsBoundary.DocumentDirectoryPath}/whisper-models/ggml-base.bin`;
+    const whisperBytes = Buffer.alloc(11 * 1024 * 1024);
+    await modelTransferFsBoundary.module.writeFile(
+      whisperPath,
+      whisperBytes.toString('base64'),
+      'base64',
+    );
     fireEvent.press(ui.getByTestId(`sync-send-model-${remoteDevice.id}`));
     await waitFor(() =>
       expect(
@@ -402,6 +409,24 @@ describe('Pro mobile model transfer journey', () => {
         ),
       ).toBeTruthy(),
     );
+    // The same aggregated picker resolves Whisper from its own disk registry and sends the real
+    // package to a Mac. This is the Android/iOS -> macOS route that was absent when transfer queried
+    // only the text-model registry.
+    returnedModel = undefined;
+    returnedFileName = undefined;
+    fireEvent.press(
+      ui.getByTestId('transfer-model-ggerganov/whisper.cpp/base'),
+    );
+    fireEvent.press(ui.getByTestId('send-selected-model'));
+    await waitFor(
+      () =>
+        expect(
+          ui!.getByText(`Whisper Base is available on ${remoteDevice.name}.`),
+        ).toBeTruthy(),
+      { timeout: 5000 },
+    );
+    expect(returnedFileName).toBe('ggml-base.bin');
+    expect(returnedModel).toEqual(whisperBytes);
     // Not asserted: the sheet's "Sent <file>" progress line. The completion state replaces it, so
     // matching it means catching a moment that has already passed - and the outcome is covered twice
     // over, by the sentence the user reads and by the peer holding the exact bytes.
@@ -409,7 +434,7 @@ describe('Pro mobile model transfer journey', () => {
 
   // A phone whose every model is vision-capable used to be told it had nothing to send: the send side
   // refused any model with an mmproj, while the receiving side had installed those packages all along.
-  it('offers a vision package to a paired device and withholds a runtime that device cannot run', async () => {
+  it('offers vision and Whisper packages to a Mac and withholds a runtime it cannot run', async () => {
     const vision = createVisionModel({
       id: 'google/gemma-4-E2B/gemma-4-E2B-it-Q4_K_M.gguf',
       name: 'Gemma 4 E2B',
@@ -447,10 +472,14 @@ describe('Pro mobile model transfer journey', () => {
         { ...liteRT, filePath: `${modelsDir}/${liteRT.fileName}` },
       ]),
     );
-    const iPhone: DeviceInfo = {
-      id: 'paired-iphone',
-      name: 'iPhone',
-      platform: 'ios',
+    modelTransferFsBoundary.seedFile(
+      `${modelTransferFsBoundary.DocumentDirectoryPath}/whisper-models/ggml-base.bin`,
+      142 * 1024 * 1024,
+    );
+    const mac: DeviceInfo = {
+      id: 'paired-mac',
+      name: 'Mac',
+      platform: 'macos',
       version: '1.0.0',
       host: '192.168.1.20',
       port: 51000,
@@ -458,7 +487,7 @@ describe('Pro mobile model transfer journey', () => {
 
     ui = render(
       <NavigationContainer>
-        <ModelTransferSheet target={iPhone} onClose={() => {}} />
+        <ModelTransferSheet target={mac} onClose={() => {}} />
       </NavigationContainer>,
     );
 
@@ -468,6 +497,11 @@ describe('Pro mobile model transfer journey', () => {
     );
     // LiteRT exists only on Android, so an iPhone is never offered one.
     expect(ui.queryByTestId(`transfer-model-${liteRT.id}`)).toBeNull();
+    // Download Manager and model transfer both discover Whisper from its real disk registry.
+    expect(
+      ui.getByTestId('transfer-model-ggerganov/whisper.cpp/base'),
+    ).toBeTruthy();
+    expect(ui.getByText('Whisper Base')).toBeTruthy();
     // Its size is the whole package, not just the primary file.
     expect(ui.getByText(/4\.5 GB|4\.49 GB/)).toBeTruthy();
   });
