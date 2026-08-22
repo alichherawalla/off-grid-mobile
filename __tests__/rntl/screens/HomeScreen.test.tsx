@@ -34,6 +34,7 @@ import {
 import { Linking, Clipboard } from 'react-native';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
+import * as networkDiscovery from '../../../src/services/networkDiscovery';
 
 // Mock requestAnimationFrame
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
@@ -320,6 +321,29 @@ describe('HomeScreen', () => {
     if (!activeModelService.ejectAll) {
       (activeModelService as any).ejectAll = mockEjectAll;
     }
+  });
+
+  describe('LAN discovery lifecycle', () => {
+    it('runs discovery after a pre-scan unmount and remount', async () => {
+      jest.useFakeTimers();
+      const discoverySpy = jest.spyOn(networkDiscovery, 'discoverLANServers').mockResolvedValue([]);
+      useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: true });
+
+      const firstMount = renderHomeScreen();
+      await act(async () => undefined);
+      firstMount.unmount();
+
+      const secondMount = renderHomeScreen();
+      await act(async () => {
+        jest.advanceTimersByTime(3000);
+        await Promise.resolve();
+      });
+
+      expect(discoverySpy).toHaveBeenCalledTimes(1);
+      secondMount.unmount();
+      discoverySpy.mockRestore();
+      jest.useRealTimers();
+    });
   });
 
   // ============================================================================

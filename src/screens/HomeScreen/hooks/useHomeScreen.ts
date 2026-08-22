@@ -20,7 +20,7 @@ export type { HomeScreenNavigationProp, ModelPickerType, LoadingState };
 
 // Track if we've synced native state to avoid repeated calls
 let hasInitializedNativeSync = false;
-let hasRunLANDiscovery = false;
+let lanDiscoveryState: 'idle' | 'scheduled' | 'complete' = 'idle';
 
 function deleteConversationWithAlert(
   conversation: Conversation,
@@ -128,8 +128,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         hasInitializedNativeSync = true;
         activeModelService.syncWithNativeState();
       }
-      if (!hasRunLANDiscovery) {
-        hasRunLANDiscovery = true;
+      if (lanDiscoveryState === 'idle') {
+        lanDiscoveryState = 'scheduled';
         // One-time default for the auto-discover toggle: fresh installs → OFF; grandfather users who
         // already had a gateway → ON. Guard on the remote-server store being hydrated so we read the
         // real (persisted) server list, not the empty initial state. runLANDiscovery self-gates on
@@ -147,13 +147,20 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         if (!persistApi?.hasHydrated || persistApi.hasHydrated()) migrateAutoDiscover();
         else persistApi.onFinishHydration?.(migrateAutoDiscover);
         // Delay LAN scan so the home screen is fully rendered and interactive first
-        lanDiscoveryTimer = setTimeout(runLANDiscovery, 3000);
+        lanDiscoveryTimer = setTimeout(() => {
+          lanDiscoveryState = 'complete';
+          lanDiscoveryTimer = null;
+          runLANDiscovery();
+        }, 3000);
       }
     });
     isFirstMount.current = false;
     return () => {
       task.cancel();
-      if (lanDiscoveryTimer !== null) clearTimeout(lanDiscoveryTimer);
+      if (lanDiscoveryTimer !== null) {
+        clearTimeout(lanDiscoveryTimer);
+        lanDiscoveryState = 'idle';
+      }
     };
 
   }, []);
