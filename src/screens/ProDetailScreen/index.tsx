@@ -29,7 +29,6 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { ProManageSection } from './ProManageSection';
 import { ProIncludedSection } from './ProIncludedSection';
 import { ProUnlockModal } from './ProUnlockModal';
-import { useHasRegisteredScreen } from '../../navigation/screenRegistry';
 import type { RootStackParamList } from '../../navigation/types';
 
 // Off Grid AI Pro is the ambient intelligence layer across desktop + phone, not a
@@ -70,7 +69,6 @@ export const ProDetailScreen: React.FC = () => {
   const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
   const isProActive = useAppStore(s => s.isProActive);
   const hasProAccess = useAppStore(selectHasProAccess);
-  const hasSyncBootstrap = useHasRegisteredScreen('Sync');
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const pricing = getPricingCopy();
   const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
@@ -217,14 +215,6 @@ export const ProDetailScreen: React.FC = () => {
               onPress={openVerifyModal}
               style={styles.verifyButton}
             />
-            {hasSyncBootstrap ? (
-              <Button
-                title="Use Pro from another device"
-                variant="secondary"
-                onPress={() => navigation.navigate('Sync')}
-                style={styles.verifyButton}
-              />
-            ) : null}
           </>
         )}
 

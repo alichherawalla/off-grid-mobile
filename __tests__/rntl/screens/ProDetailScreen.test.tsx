@@ -76,8 +76,9 @@ describe('ProDetailScreen', () => {
   });
 
   it('renders the Get Pro call-to-action when the user is not Pro', () => {
-    const { queryAllByText } = render(<ProDetailScreen />);
+    const { queryAllByText, queryByText } = render(<ProDetailScreen />);
     expect(queryAllByText('Get Pro').length).toBeGreaterThan(0);
+    expect(queryByText('Use Pro from another device')).toBeNull();
   });
 
   it('Get Pro opens the web pay page directly without a modal', () => {
