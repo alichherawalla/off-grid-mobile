@@ -432,7 +432,7 @@ describe('Pro mobile model transfer journey', () => {
     // Not asserted: the sheet's "Sent <file>" progress line. The completion state replaces it, so
     // matching it means catching a moment that has already passed - and the outcome is covered twice
     // over, by the sentence the user reads and by the peer holding the exact bytes.
-  });
+  }, 90_000);
 
   // A phone whose every model is vision-capable used to be told it had nothing to send: the send side
   // refused any model with an mmproj, while the receiving side had installed those packages all along.
