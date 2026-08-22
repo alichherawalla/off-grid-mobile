@@ -607,6 +607,27 @@ describe('HomeScreen', () => {
       expect(getByText(/Hi there, how can I help/)).toBeTruthy();
     });
 
+    it('shows a clean enhanced-prompt preview without model protocol', () => {
+      const conv = createConversation({
+        title: 'Draw a dog',
+        messages: [
+          createMessage({ role: 'user', content: 'Draw a dog' }),
+          createMessage({
+            role: 'assistant',
+            content:
+              '<think>__LABEL:Enhanced prompt__\nA sleek black dog in soft morning light.</think>',
+          }),
+        ],
+      });
+      useChatStore.setState({ conversations: [conv] });
+
+      const { getByText, queryByText } = renderHomeScreen();
+      expect(
+        getByText('A sleek black dog in soft morning light.'),
+      ).toBeTruthy();
+      expect(queryByText(/<think>|__LABEL:/)).toBeNull();
+    });
+
     it('shows "You: " prefix for last user message', () => {
       const conv = createConversation({
         title: 'User Preview Test',
