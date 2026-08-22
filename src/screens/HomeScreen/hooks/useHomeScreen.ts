@@ -121,6 +121,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   } = useRemoteModelHandlers({ activeModelId, setPickerType, setLoadingState, setAlertState });
 
   useEffect(() => {
+    let lanDiscoveryTimer: ReturnType<typeof setTimeout> | null = null;
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
       if (!hasInitializedNativeSync) {
@@ -146,11 +147,14 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         if (!persistApi?.hasHydrated || persistApi.hasHydrated()) migrateAutoDiscover();
         else persistApi.onFinishHydration?.(migrateAutoDiscover);
         // Delay LAN scan so the home screen is fully rendered and interactive first
-        setTimeout(runLANDiscovery, 3000);
+        lanDiscoveryTimer = setTimeout(runLANDiscovery, 3000);
       }
     });
     isFirstMount.current = false;
-    return () => task.cancel();
+    return () => {
+      task.cancel();
+      if (lanDiscoveryTimer !== null) clearTimeout(lanDiscoveryTimer);
+    };
 
   }, []);
 
