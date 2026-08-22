@@ -423,7 +423,9 @@ describe('Pro mobile model transfer journey', () => {
         expect(
           ui!.getByText(`Whisper Base is available on ${remoteDevice.name}.`),
         ).toBeTruthy(),
-      { timeout: 5000 },
+      // This moves a real 11 MB model through the transport. The full pre-push suite runs other
+      // integration tests at the same time, so allow the transfer to finish under that load.
+      { timeout: 60000 },
     );
     expect(returnedFileName).toBe('ggml-base.bin');
     expect(returnedModel).toEqual(whisperBytes);
