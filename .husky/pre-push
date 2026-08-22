@@ -54,7 +54,10 @@ if [ -n "$PUSHED_JS" ]; then
   npx tsc --noEmit
 
   echo "▶ JS/TS tests (related to changed files)..."
-  echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests
+  # Rendered RN journeys share native-boundary state and are memory-heavy. Parallel workers
+  # starve one another and turn normal 10-second journeys into false multi-minute timeouts.
+  # CI runs this same graph serially; keep the local merge gate deterministic too.
+  echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests --runInBand
 
   echo "▶ Architecture gate (dependency-cruiser)..."
   npm run depcruise
