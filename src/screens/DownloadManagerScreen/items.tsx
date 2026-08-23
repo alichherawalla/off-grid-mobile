@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -254,7 +255,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         )}
         {isRepairingVision && (
           <View style={styles.repairingBadge} testID="repairing-vision-badge">
-            <ActivityIndicator size="small" color={colors.primary} />
+            <LoadingDots color={colors.primary} />
             <Text style={styles.repairingBadgeText}>Repairing</Text>
           </View>
         )}

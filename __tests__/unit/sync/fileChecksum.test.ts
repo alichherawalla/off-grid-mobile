@@ -1,4 +1,5 @@
 import { CHUNK_SIZE } from '@offgrid/sync';
+import { NativeModules, Platform } from 'react-native';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { fileTransferChecksum } from '../../../src/services/sync/fileChecksum';
 
@@ -10,6 +11,7 @@ jest.mock('react-native-fs', () => {
 });
 
 const fs = modelTransferFsBoundary.module;
+const originalPlatformOS = Platform.OS;
 
 /**
  * The checksum the receiving device checks a transfer against.
@@ -43,10 +45,16 @@ describe('the checksum a transfer is verified against', () => {
 
   beforeEach(() => {
     modelTransferFsBoundary.reset();
+    NativeModules.StreamingHashModule = undefined;
+    jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: originalPlatformOS,
+    });
     jest.restoreAllMocks();
   });
 
@@ -120,6 +128,24 @@ describe('the checksum a transfer is verified against', () => {
     // The reason the native call exists: a multi-gigabyte model read over the bridge takes minutes, and it
     // happens before the transfer is on screen, so the app looks hung.
     expect(fs.read).not.toHaveBeenCalled();
+  });
+
+  it('uses the constant-memory iOS hash boundary for a model file', async () => {
+    const bytes = await write('/docs/model.gguf', Buffer.alloc(CHUNK_SIZE * 4));
+    const nativeHex = await fs.hash('/docs/model.gguf', 'sha512');
+    const sha512 = jest.fn(async () => nativeHex);
+    NativeModules.StreamingHashModule = { sha512 };
+    fs.hash.mockClear();
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+
+    await fileTransferChecksum('/docs/model.gguf', bytes);
+
+    expect(sha512).toHaveBeenCalledWith('/docs/model.gguf');
+    expect(fs.hash).not.toHaveBeenCalled();
+    expect(fs.read).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('[Checksum] streaming 1MB through iOS'),
+    );
   });
 
   it('says in the log why it is about to read a large file the slow way', async () => {

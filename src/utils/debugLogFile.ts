@@ -18,6 +18,7 @@
  * unbounded. Logging must NEVER throw, so every FS call is best-effort.
  */
 import RNFS from 'react-native-fs';
+import { statFile } from './fileStat';
 
 const LOG_PATH = `${RNFS.DocumentDirectoryPath}/offgrid-debug.log`;
 /** Rotate (keep the tail) once the file exceeds this, so it can't grow forever. */
@@ -64,8 +65,8 @@ async function flush(): Promise<void> {
   buffer = [];
   try {
     await RNFS.appendFile(LOG_PATH, chunk, 'utf8');
-    const stat = await RNFS.stat(LOG_PATH).catch(() => null);
-    if (stat && Number(stat.size) > MAX_BYTES) {
+    const stat = await statFile(LOG_PATH);
+    if (stat && stat.size > MAX_BYTES) {
       // Keep only the most recent half so the file stays bounded but useful.
       const content = await RNFS.readFile(LOG_PATH, 'utf8').catch(() => '');
       await RNFS.writeFile(LOG_PATH, content.slice(-Math.floor(MAX_BYTES / 2)), 'utf8').catch(() => {});
@@ -78,6 +79,18 @@ async function flush(): Promise<void> {
 function scheduleFlush(): void {
   if (timer) return;
   timer = setTimeout(() => { flush().catch(() => {}); }, FLUSH_MS);
+}
+
+/**
+ * Write everything buffered RIGHT NOW, without waiting for the flush timer.
+ *
+ * For a line you must not lose. The timer-based flush is scheduled work, so a step that blocks the
+ * JS thread - or a process the OS is about to kill - never reaches it, and the log stops exactly
+ * where the interesting part begins. That is how an 11-second main-thread block left no trace.
+ */
+export function flushDebugLogNow(): void {
+  if (!enabled) return;
+  flush().catch(() => {});
 }
 
 /** Begin capturing to the file. Idempotent; no-op outside __DEV__. */

@@ -95,7 +95,8 @@ describe('chatStore', () => {
 
   describe('deleteConversation', () => {
     it('removes conversation from list', () => {
-      const { createConversation, deleteConversation } = useChatStore.getState();
+      const { createConversation, deleteConversation } =
+        useChatStore.getState();
 
       const id = createConversation('test-model');
       expect(getChatState().conversations).toHaveLength(1);
@@ -106,7 +107,8 @@ describe('chatStore', () => {
     });
 
     it('clears activeConversationId if deleted conversation was active', () => {
-      const { createConversation, deleteConversation } = useChatStore.getState();
+      const { createConversation, deleteConversation } =
+        useChatStore.getState();
 
       const id = createConversation('test-model');
       expect(getChatState().activeConversationId).toBe(id);
@@ -117,7 +119,8 @@ describe('chatStore', () => {
     });
 
     it('preserves activeConversationId if different conversation deleted', () => {
-      const { createConversation, deleteConversation } = useChatStore.getState();
+      const { createConversation, deleteConversation } =
+        useChatStore.getState();
 
       const first = createConversation('model-1');
       const second = createConversation('model-2'); // This becomes active
@@ -130,7 +133,8 @@ describe('chatStore', () => {
 
   describe('setActiveConversation', () => {
     it('updates activeConversationId', () => {
-      const { createConversation, setActiveConversation } = useChatStore.getState();
+      const { createConversation, setActiveConversation } =
+        useChatStore.getState();
 
       const first = createConversation('model-1');
       createConversation('model-2'); // This becomes active
@@ -141,7 +145,8 @@ describe('chatStore', () => {
     });
 
     it('can set to null', () => {
-      const { createConversation, setActiveConversation } = useChatStore.getState();
+      const { createConversation, setActiveConversation } =
+        useChatStore.getState();
 
       createConversation('model-1');
       setActiveConversation(null);
@@ -152,7 +157,8 @@ describe('chatStore', () => {
 
   describe('getActiveConversation', () => {
     it('returns active conversation', () => {
-      const { createConversation, getActiveConversation } = useChatStore.getState();
+      const { createConversation, getActiveConversation } =
+        useChatStore.getState();
 
       const id = createConversation('test-model', 'Test Title');
 
@@ -171,7 +177,8 @@ describe('chatStore', () => {
 
   describe('setConversationProject', () => {
     it('sets projectId on conversation', () => {
-      const { createConversation, setConversationProject } = useChatStore.getState();
+      const { createConversation, setConversationProject } =
+        useChatStore.getState();
 
       const id = createConversation('test-model');
       setConversationProject(id, 'project-123');
@@ -180,7 +187,8 @@ describe('chatStore', () => {
     });
 
     it('clears projectId when null passed', () => {
-      const { createConversation, setConversationProject } = useChatStore.getState();
+      const { createConversation, setConversationProject } =
+        useChatStore.getState();
 
       const id = createConversation('test-model', undefined, 'project-123');
       setConversationProject(id, null);
@@ -189,7 +197,8 @@ describe('chatStore', () => {
     });
 
     it('updates updatedAt', () => {
-      const { createConversation, setConversationProject } = useChatStore.getState();
+      const { createConversation, setConversationProject } =
+        useChatStore.getState();
 
       const id = createConversation('test-model');
       const originalUpdatedAt = getChatState().conversations[0].updatedAt;
@@ -199,7 +208,9 @@ describe('chatStore', () => {
 
       setConversationProject(id, 'project-123');
 
-      expect(getChatState().conversations[0].updatedAt).not.toBe(originalUpdatedAt);
+      expect(getChatState().conversations[0].updatedAt).not.toBe(
+        originalUpdatedAt,
+      );
     });
   });
 
@@ -225,7 +236,10 @@ describe('chatStore', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      const message = addMessage(convId, { role: 'assistant', content: 'Response' });
+      const message = addMessage(convId, {
+        role: 'assistant',
+        content: 'Response',
+      });
 
       expect(message.id).toBeDefined();
       expect(typeof message.id).toBe('string');
@@ -237,16 +251,22 @@ describe('chatStore', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      addMessage(convId, { role: 'user', content: 'What is machine learning?' });
+      addMessage(convId, {
+        role: 'user',
+        content: 'What is machine learning?',
+      });
 
-      expect(getChatState().conversations[0].title).toBe('What is machine learning?');
+      expect(getChatState().conversations[0].title).toBe(
+        'What is machine learning?',
+      );
     });
 
     it('truncates long titles to 50 chars with ellipsis', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      const longContent = 'This is a very long message that should be truncated when used as a title';
+      const longContent =
+        'This is a very long message that should be truncated when used as a title';
       addMessage(convId, { role: 'user', content: longContent });
 
       const title = getChatState().conversations[0].title;
@@ -258,7 +278,10 @@ describe('chatStore', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      addMessage(convId, { role: 'assistant', content: 'Hello, how can I help?' });
+      addMessage(convId, {
+        role: 'assistant',
+        content: 'Hello, how can I help?',
+      });
 
       expect(getChatState().conversations[0].title).toBe('New Conversation');
     });
@@ -277,10 +300,11 @@ describe('chatStore', () => {
 
       const convId = createConversation('test-model');
       const attachment = createMediaAttachment({ type: 'image' });
-      const message = addMessage(
-        convId,
-        { role: 'user', content: 'Check this image', attachments: [attachment] },
-      );
+      const message = addMessage(convId, {
+        role: 'user',
+        content: 'Check this image',
+        attachments: [attachment],
+      });
 
       expect(message.attachments).toHaveLength(1);
       expect(message.attachments?.[0].type).toBe('image');
@@ -290,10 +314,11 @@ describe('chatStore', () => {
       const { createConversation, addMessage } = useChatStore.getState();
 
       const convId = createConversation('test-model');
-      const message = addMessage(
-        convId,
-        { role: 'assistant', content: 'Response', generationTimeMs: 1500 },
-      );
+      const message = addMessage(convId, {
+        role: 'assistant',
+        content: 'Response',
+        generationTimeMs: 1500,
+      });
 
       expect(message.generationTimeMs).toBe(1500);
     });
@@ -303,10 +328,12 @@ describe('chatStore', () => {
 
       const convId = createConversation('test-model');
       const meta = createGenerationMeta({ gpu: true, tokensPerSecond: 25.5 });
-      const message = addMessage(
-        convId,
-        { role: 'assistant', content: 'Response', generationTimeMs: 1000, generationMeta: meta },
-      );
+      const message = addMessage(convId, {
+        role: 'assistant',
+        content: 'Response',
+        generationTimeMs: 1000,
+        generationMeta: meta,
+      });
 
       expect(message.generationMeta?.gpu).toBe(true);
       expect(message.generationMeta?.tokensPerSecond).toBe(25.5);
@@ -327,18 +354,22 @@ describe('chatStore', () => {
 
   describe('updateMessageContent', () => {
     it('updates message content', () => {
-      const { createConversation, addMessage, updateMessageContent } = useChatStore.getState();
+      const { createConversation, addMessage, updateMessageContent } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       const message = addMessage(convId, { role: 'user', content: 'Original' });
 
       updateMessageContent(convId, message.id, 'Updated');
 
-      expect(getChatState().conversations[0].messages[0].content).toBe('Updated');
+      expect(getChatState().conversations[0].messages[0].content).toBe(
+        'Updated',
+      );
     });
 
     it('preserves other message properties', () => {
-      const { createConversation, addMessage, updateMessageContent } = useChatStore.getState();
+      const { createConversation, addMessage, updateMessageContent } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       const message = addMessage(convId, { role: 'user', content: 'Original' });
@@ -355,7 +386,8 @@ describe('chatStore', () => {
 
   describe('deleteMessage', () => {
     it('removes message from conversation', () => {
-      const { createConversation, addMessage, deleteMessage } = useChatStore.getState();
+      const { createConversation, addMessage, deleteMessage } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       const msg1 = addMessage(convId, { role: 'user', content: 'First' });
@@ -371,7 +403,8 @@ describe('chatStore', () => {
 
   describe('deleteMessagesAfter', () => {
     it('removes messages after specified message', () => {
-      const { createConversation, addMessage, deleteMessagesAfter } = useChatStore.getState();
+      const { createConversation, addMessage, deleteMessagesAfter } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       const msg1 = addMessage(convId, { role: 'user', content: 'First' });
@@ -386,7 +419,8 @@ describe('chatStore', () => {
     });
 
     it('preserves conversation if message not found', () => {
-      const { createConversation, addMessage, deleteMessagesAfter } = useChatStore.getState();
+      const { createConversation, addMessage, deleteMessagesAfter } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       addMessage(convId, { role: 'user', content: 'First' });
@@ -417,7 +451,8 @@ describe('chatStore', () => {
 
   describe('appendToStreamingMessage', () => {
     it('accumulates tokens', () => {
-      const { createConversation, startStreaming, appendToStreamingMessage } = useChatStore.getState();
+      const { createConversation, startStreaming, appendToStreamingMessage } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       startStreaming(convId);
@@ -430,7 +465,8 @@ describe('chatStore', () => {
     });
 
     it('sets isStreaming to true and isThinking to false', () => {
-      const { createConversation, startStreaming, appendToStreamingMessage } = useChatStore.getState();
+      const { createConversation, startStreaming, appendToStreamingMessage } =
+        useChatStore.getState();
 
       const convId = createConversation('test-model');
       startStreaming(convId);
@@ -530,7 +566,8 @@ describe('chatStore', () => {
 
       store.startStreaming(convId);
       useChatStore.setState({
-        streamingMessage: '<|channel>thought\nThis is the thinking part.<channel|>This is the response.',
+        streamingMessage:
+          '<|channel>thought\nThis is the thinking part.<channel|>This is the response.',
         streamingForConversationId: convId,
       });
       store.finalizeStreamingMessage(convId);
@@ -548,13 +585,16 @@ describe('chatStore', () => {
       // Generation cut off by maxTokens while still in the thought channel — no <channel|>,
       // no answer. The raw tag must NOT leak in as the message (the iOS truncation bug).
       useChatStore.setState({
-        streamingMessage: '<|channel>thought\nThe user said hi. I should respond politely',
+        streamingMessage:
+          '<|channel>thought\nThe user said hi. I should respond politely',
         streamingForConversationId: convId,
       });
       store.finalizeStreamingMessage(convId);
 
       const message = getChatState().conversations[0].messages[0];
-      expect(message.reasoningContent).toBe('The user said hi. I should respond politely');
+      expect(message.reasoningContent).toBe(
+        'The user said hi. I should respond politely',
+      );
       expect(message.content).not.toContain('<|channel>thought');
       expect(message.content.trim()).toBe('');
     });
@@ -565,7 +605,8 @@ describe('chatStore', () => {
 
       store.startStreaming(convId);
       useChatStore.setState({
-        streamingMessage: '<|channel|>analysis<|message|>This is the analysis.<|channel|>final<|message|>This is the final response.',
+        streamingMessage:
+          '<|channel|>analysis<|message|>This is the analysis.<|channel|>final<|message|>This is the final response.',
         streamingForConversationId: convId,
       });
       store.finalizeStreamingMessage(convId);
@@ -584,13 +625,16 @@ describe('chatStore', () => {
 
       store.startStreaming(convId);
       useChatStore.setState({
-        streamingMessage: 'The user is asking what is happening.</think>Hello! How can I help?',
+        streamingMessage:
+          'The user is asking what is happening.</think>Hello! How can I help?',
         streamingForConversationId: convId,
       });
       store.finalizeStreamingMessage(convId);
 
       const message = getChatState().conversations[0].messages[0];
-      expect(message.reasoningContent).toBe('The user is asking what is happening.');
+      expect(message.reasoningContent).toBe(
+        'The user is asking what is happening.',
+      );
       expect(message.content).toBe('Hello! How can I help?');
     });
 
@@ -758,7 +802,10 @@ describe('chatStore', () => {
       const convId = store.createConversation('test-model');
 
       store.startStreaming(convId);
-      useChatStore.setState({ streamingMessage: '<|im_start|>assistant\n<|im_end|>', streamingForConversationId: convId });
+      useChatStore.setState({
+        streamingMessage: '<|im_start|>assistant\n<|im_end|>',
+        streamingForConversationId: convId,
+      });
       store.finalizeStreamingMessage(convId);
 
       expect(getChatState().conversations[0].messages).toHaveLength(0);
@@ -813,7 +860,10 @@ describe('chatStore', () => {
       const store = useChatStore.getState();
 
       // Should not throw
-      const message = store.addMessage('nonexistent-conv', { role: 'user', content: 'Hello' });
+      const message = store.addMessage('nonexistent-conv', {
+        role: 'user',
+        content: 'Hello',
+      });
 
       // Message is returned but not stored anywhere meaningful
       expect(message.id).toBeDefined();
@@ -829,14 +879,19 @@ describe('chatStore', () => {
         createMediaAttachment({ type: 'image', uri: 'file:///photo2.jpg' }),
       ];
 
-      const message = store.addMessage(
-        convId,
-        { role: 'user', content: 'Look at these', attachments },
-      );
+      const message = store.addMessage(convId, {
+        role: 'user',
+        content: 'Look at these',
+        attachments,
+      });
 
       expect(message.attachments).toHaveLength(3);
-      expect(message.attachments?.filter(a => a.type === 'image')).toHaveLength(2);
-      expect(message.attachments?.filter(a => a.type === 'document')).toHaveLength(1);
+      expect(message.attachments?.filter(a => a.type === 'image')).toHaveLength(
+        2,
+      );
+      expect(
+        message.attachments?.filter(a => a.type === 'document'),
+      ).toHaveLength(1);
     });
   });
 
@@ -847,7 +902,10 @@ describe('chatStore', () => {
     it('sets isThinking flag to true', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
-      const msg = store.addMessage(convId, { role: 'assistant', content: 'Thinking...' });
+      const msg = store.addMessage(convId, {
+        role: 'assistant',
+        content: 'Thinking...',
+      });
 
       store.updateMessageThinking(convId, msg.id, true);
 
@@ -858,7 +916,11 @@ describe('chatStore', () => {
     it('sets isThinking flag to false', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
-      const msg = store.addMessage(convId, { role: 'assistant', content: 'Original', isThinking: true });
+      const msg = store.addMessage(convId, {
+        role: 'assistant',
+        content: 'Original',
+        isThinking: true,
+      });
 
       store.updateMessageThinking(convId, msg.id, false);
 
@@ -906,6 +968,26 @@ describe('chatStore', () => {
       store.setStreamingMessage('Replaced');
 
       expect(getChatState().streamingMessage).toBe('Replaced');
+    });
+  });
+
+  describe('resetStreamingSegment', () => {
+    it('clears only the current answer and reasoning while preserving reply identity', () => {
+      const store = useChatStore.getState();
+      const convId = store.createConversation('test-model');
+      store.startStreaming(convId);
+      const replyId = getChatState().streamingMessageUuid;
+      store.setStreamingMessage('consumed answer');
+      store.appendToStreamingReasoningContent('consumed reasoning');
+
+      store.resetStreamingSegment();
+
+      const state = getChatState();
+      expect(state.streamingMessage).toBe('');
+      expect(state.streamingReasoningContent).toBe('');
+      expect(state.streamingForConversationId).toBe(convId);
+      expect(state.streamingMessageUuid).toBe(replyId);
+      expect(state.isStreaming).toBe(true);
     });
   });
 
@@ -1121,7 +1203,10 @@ describe('chatStore', () => {
     it('deleteMessage updates updatedAt', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
-      const msg = store.addMessage(convId, { role: 'user', content: 'To delete' });
+      const msg = store.addMessage(convId, {
+        role: 'user',
+        content: 'To delete',
+      });
       const beforeTime = getChatState().conversations[0].updatedAt;
 
       jest.advanceTimersByTime(100);
@@ -1139,7 +1224,10 @@ describe('chatStore', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
 
-      store.addMessage(convId, { role: 'system', content: 'System prompt text' });
+      store.addMessage(convId, {
+        role: 'system',
+        content: 'System prompt text',
+      });
 
       expect(getChatState().conversations[0].title).toBe('New Conversation');
     });
@@ -1148,7 +1236,10 @@ describe('chatStore', () => {
       const store = useChatStore.getState();
       const convId = store.createConversation('test-model');
 
-      const msg = store.addMessage(convId, { role: 'system', content: 'You are helpful' });
+      const msg = store.addMessage(convId, {
+        role: 'system',
+        content: 'You are helpful',
+      });
 
       expect(msg.role).toBe('system');
       expect(getChatState().conversations[0].messages[0].role).toBe('system');
@@ -1209,9 +1300,11 @@ describe('chatStore', () => {
   });
 
   describe('streaming TTS answer gating (only the answer is spoken)', () => {
-     
-    const { registerHook, _clearHooksForTesting } = require('../../../src/bootstrap/hookRegistry');
-     
+    const {
+      registerHook,
+      _clearHooksForTesting,
+    } = require('../../../src/bootstrap/hookRegistry');
+
     const { useAppStore } = require('../../../src/stores/appStore');
     let spoken: string[];
 
@@ -1222,7 +1315,9 @@ describe('chatStore', () => {
     });
 
     it('withholds inline reasoning until </think>, then speaks only the answer (thinking on)', () => {
-      useAppStore.setState({ settings: { ...useAppStore.getState().settings, thinkingEnabled: true } });
+      useAppStore.setState({
+        settings: { ...useAppStore.getState().settings, thinkingEnabled: true },
+      });
       const store = useChatStore.getState();
       const convId = store.createConversation('m');
       store.startStreaming(convId);
@@ -1234,7 +1329,12 @@ describe('chatStore', () => {
     });
 
     it('speaks content normally when thinking is disabled', () => {
-      useAppStore.setState({ settings: { ...useAppStore.getState().settings, thinkingEnabled: false } });
+      useAppStore.setState({
+        settings: {
+          ...useAppStore.getState().settings,
+          thinkingEnabled: false,
+        },
+      });
       const store = useChatStore.getState();
       const convId = store.createConversation('m');
       store.startStreaming(convId);

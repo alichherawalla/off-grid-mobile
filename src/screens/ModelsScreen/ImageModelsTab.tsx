@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TextInput, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { ModelCard } from '../../components';
@@ -192,7 +193,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
 
         {hfModelsLoading && (
           <View style={styles.hfLoadingContainer}>
-            <ActivityIndicator size="small" color={colors.primary} />
+            <LoadingDots color={colors.primary} />
             <Text style={styles.loadingText}>Loading models...</Text>
           </View>
         )}

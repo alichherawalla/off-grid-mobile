@@ -62,6 +62,17 @@ type ToolResultBubbleProps = {
   durationLabel: string;
   content: string;
   hasDetails: boolean;
+  /** A call still in flight reads in the accent colour; a finished one is muted. */
+  active?: boolean;
+  /**
+   * What this row IS, named by whoever renders it. The layout is shared; the identity is not - a
+   * call the model asked for and the result that came back are different facts, and a surface that
+   * cannot tell them apart cannot assert on either.
+   */
+  rowTestID?: string;
+  labelTestID?: string;
+  /** This row is the head of a call/result pair, so it sits close to the row that answers it. */
+  paired?: boolean;
   styles: ReturnType<typeof createStyles>;
   colors: any;
 };
@@ -74,23 +85,31 @@ const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
   durationLabel,
   content,
   hasDetails,
+  active = false,
+  rowTestID = 'tool-message',
+  labelTestID,
+  paired = false,
   styles,
   colors,
 }) => {
   const [expanded, toggle] = useAccordionExpanded(`tool-result:${stableKey}`);
+  const tone = active ? colors.primary : colors.textMuted;
   return (
-    <View testID="tool-message" style={styles.systemInfoContainer}>
+    <View
+      testID={rowTestID}
+      style={paired ? styles.toolRowPaired : styles.toolRow}
+    >
       <TouchableOpacity
         style={styles.toolStatusRow}
         onPress={hasDetails ? toggle : undefined}
         activeOpacity={hasDetails ? 0.6 : 1}
         disabled={!hasDetails}
       >
-        <Icon name={toolIcon} size={13} color={colors.textMuted} />
+        <Icon name={toolIcon} size={13} color={tone} />
         <Text
-          style={styles.toolStatusText}
+          style={[styles.toolStatusText, { color: tone }]}
           numberOfLines={expanded ? undefined : 2}
-          testID={`tool-result-label-${toolName || 'unknown'}`}
+          testID={labelTestID ?? `tool-result-label-${toolName || 'unknown'}`}
         >
           {toolLabel}
           {durationLabel}
@@ -160,18 +179,25 @@ export const ToolResultMessage: React.FC<{
   // Prefer toolCallId (carried on every tool-result message and stable across the
   // streaming→finalized remount); fall back to the message id.
   const stableKey = message.toolCallId || message.id;
+  // A tool result is its own message, so it carries the assistant column itself. Without this it sat
+  // in a different column from the requested call it answers - one inset from the screen, the other
+  // inset inside the 85% reply column - and a reader saw two indents instead of one list.
   return (
-    <ToolResultBubble
-      stableKey={stableKey}
-      toolIcon={toolIcon}
-      toolLabel={toolLabel}
-      toolName={message.toolName || 'unknown'}
-      durationLabel={durationLabel}
-      content={message.content}
-      hasDetails={hasDetails}
-      styles={styles}
-      colors={colors}
-    />
+    <View style={styles.toolMessageRow}>
+      <View style={styles.toolCallReplyContent}>
+        <ToolResultBubble
+          stableKey={stableKey}
+          toolIcon={toolIcon}
+          toolLabel={toolLabel}
+          toolName={message.toolName || 'unknown'}
+          durationLabel={durationLabel}
+          content={message.content}
+          hasDetails={hasDetails}
+          styles={styles}
+          colors={colors}
+        />
+      </View>
+    </View>
   );
 };
 
@@ -181,29 +207,45 @@ export const SyncedToolArtifacts: React.FC<{
   colors: ReturnType<typeof useTheme>['colors'];
 }> = ({ message, styles, colors }) => (
   <>
-    {message.toolArtifacts?.map((artifact, index) => (
-      <ToolResultBubble
-        key={`${artifact.name}:${index}`}
-        stableKey={`${message.uuid ?? message.id}:${artifact.name}:${index}`}
-        toolIcon={getToolIcon(artifact.name)}
-        toolLabel={getToolLabel(artifact.name, artifact.result)}
-        toolName={artifact.name}
-        durationLabel=""
-        content={artifact.result}
-        hasDetails={artifact.result.length > 0}
-        styles={styles}
-        colors={colors}
-      />
-    ))}
+    {message.toolArtifacts?.map((artifact, index) => {
+      const running = artifact.status === 'running';
+      return (
+        <ToolResultBubble
+          key={`${artifact.name}:${index}`}
+          stableKey={`${message.uuid ?? message.id}:${artifact.name}:${index}`}
+          toolIcon={getToolIcon(artifact.name)}
+          toolLabel={
+            running
+              ? `Using ${artifact.name}...`
+              : getToolLabel(artifact.name, artifact.result)
+          }
+          toolName={artifact.name}
+          durationLabel=""
+          content={artifact.result}
+          hasDetails={!running && artifact.result.length > 0}
+          active={running}
+          styles={styles}
+          colors={colors}
+        />
+      );
+    })}
   </>
 );
 
+/**
+ * The calls an assistant turn asked for, one row each.
+ *
+ * Each call is its own row through the shared component rather than N rows crammed into a single
+ * container. Grouping them was what made four or five calls arrive as one dense block at 2px apart
+ * while every finished result sat 16px from its neighbour - the same tool, two rhythms, in one
+ * transcript.
+ */
 export const ToolCallMessage: React.FC<{
   message: Message;
   styles: any;
   colors: any;
 }> = ({ message, styles, colors }) => (
-  <View testID="tool-call-message" style={styles.systemInfoContainer}>
+  <View testID="tool-call-message">
     {message.toolCalls?.map((tc, i) => {
       let argsPreview = '';
       try {
@@ -212,16 +254,22 @@ export const ToolCallMessage: React.FC<{
         argsPreview = tc.arguments;
       }
       return (
-        <View key={`${tc.id || i}`} style={styles.toolStatusRow}>
-          <Icon name={getToolIcon(tc.name)} size={13} color={colors.primary} />
-          <Text
-            style={[styles.toolStatusText, { color: colors.primary }]}
-            numberOfLines={1}
-          >
-            Using {tc.name}
-            {argsPreview ? `: ${argsPreview}` : ''}
-          </Text>
-        </View>
+        <ToolResultBubble
+          key={`${tc.id || i}`}
+          stableKey={`${message.uuid ?? message.id}:call:${tc.id || i}`}
+          toolIcon={getToolIcon(tc.name)}
+          toolLabel={`Using ${tc.name}${argsPreview ? `: ${argsPreview}` : ''}`}
+          toolName={tc.name}
+          durationLabel=""
+          content=""
+          hasDetails={false}
+          active
+          paired
+          rowTestID="tool-call-row"
+          labelTestID={`tool-call-label-${tc.name || 'unknown'}`}
+          styles={styles}
+          colors={colors}
+        />
       );
     })}
   </View>

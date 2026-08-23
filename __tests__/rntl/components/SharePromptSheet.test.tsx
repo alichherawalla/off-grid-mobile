@@ -26,12 +26,13 @@ describe('SharePromptSheet', () => {
     useAppStore.setState({ hasEngagedSharePrompt: false });
   });
 
-  it('renders message, buttons, and dismiss link', () => {
+  it('renders message, support actions, and both dismissal choices', () => {
     const { getByText } = renderSheet();
     expect(getByText(/Off Grid AI is completely free/)).toBeTruthy();
     expect(getByText('Star on GitHub')).toBeTruthy();
     expect(getByText('Share on X')).toBeTruthy();
     expect(getByText('Maybe later')).toBeTruthy();
+    expect(getByText("Don't show again")).toBeTruthy();
   });
 
   it('opens GitHub URL, marks engaged, and closes on Star press', () => {
@@ -59,5 +60,13 @@ describe('SharePromptSheet', () => {
     fireEvent.press(getByText('Maybe later'));
     expect(onClose).toHaveBeenCalled();
     expect(useAppStore.getState().hasEngagedSharePrompt).toBe(false);
+  });
+
+  it("persists the dismissal and closes on Don't show again press", () => {
+    const { getByText, onClose } = renderSheet();
+    fireEvent.press(getByText("Don't show again"));
+    expect(onClose).toHaveBeenCalled();
+    expect(useAppStore.getState().hasEngagedSharePrompt).toBe(true);
+    expect(Linking.openURL).not.toHaveBeenCalled();
   });
 });

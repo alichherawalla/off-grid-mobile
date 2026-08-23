@@ -1,5 +1,6 @@
 import { RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
 import { Message, MediaAttachment } from '../types';
+import { modelImageAttachments } from './llmImageInput';
 
 /**
  * PRODUCT RULE: every voice note is transcribed (whisper) and ONLY its transcript is sent to the
@@ -24,7 +25,7 @@ export function formatLlamaMessages(messages: Message[], supportsVision: boolean
       let content = message.content;
       if (message.attachments && message.attachments.length > 0) {
         const imageMarkers = supportsVision
-          ? message.attachments.filter(a => a.type === 'image').map(() => '<__media__>').join('')
+          ? modelImageAttachments(message.attachments).map(() => '<__media__>').join('')
           : '';
         const audioMarkers = supportsAudio
           ? modelAudioAttachments(message.attachments).map(() => '<__media__>').join('')
@@ -43,12 +44,8 @@ export function formatLlamaMessages(messages: Message[], supportsVision: boolean
 export function extractImageUris(messages: Message[]): string[] {
   const uris: string[] = [];
   for (const message of messages) {
-    if (message.attachments) {
-      for (const attachment of message.attachments) {
-        if (attachment.type === 'image') {
-          uris.push(attachment.uri);
-        }
-      }
+    for (const attachment of modelImageAttachments(message.attachments)) {
+      uris.push(attachment.uri);
     }
   }
   return uris;
@@ -71,7 +68,7 @@ function toFileUrl(uri: string, requireFilePrefix = false): string {
 
 function buildMediaParts(message: Message, supportsAudio: boolean): RNLlamaMessagePart[] {
   const parts: RNLlamaMessagePart[] = [];
-  for (const a of message.attachments?.filter(att => att.type === 'image') ?? []) {
+  for (const a of modelImageAttachments(message.attachments)) {
     parts.push({ type: 'image_url', image_url: { url: toFileUrl(a.uri) } });
   }
   if (supportsAudio) {
@@ -93,7 +90,8 @@ export function buildOAIMessages(messages: Message[], supportsAudio = false): RN
       const toolCallText = message.toolCalls.map(formatToolCallAsText).join('\n');
       return { role: 'assistant' as const, content: message.content ? `${message.content}\n${toolCallText}` : toolCallText };
     }
-    const hasImage = message.role === 'user' && message.attachments?.some(a => a.type === 'image');
+    const hasImage =
+      message.role === 'user' && modelImageAttachments(message.attachments).length > 0;
     const hasAudio = supportsAudio && message.role === 'user' && modelAudioAttachments(message.attachments).length > 0;
     if (!hasImage && !hasAudio) return { role: message.role, content: message.content };
     return { role: message.role, content: buildMediaParts(message, supportsAudio) };

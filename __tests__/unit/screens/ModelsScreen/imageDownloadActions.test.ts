@@ -12,14 +12,32 @@ import {
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
 import { makeImageDownloadDeps } from '../../../utils/factories';
 
-jest.mock('react-native-fs', () => ({
-  exists: jest.fn(() => Promise.resolve(true)),
-  mkdir: jest.fn(() => Promise.resolve()),
-  unlink: jest.fn(() => Promise.resolve()),
-  writeFile: jest.fn(() => Promise.resolve()),
-  // Default: every part is present + non-empty (validateMultifileComplete passes).
-  stat: jest.fn(() => Promise.resolve({ size: 500000 })),
-}));
+jest.mock('react-native-fs', () => {
+  const files = new Set<string>();
+  const stat = jest.fn((_path: string) => Promise.resolve({ size: 500000 }));
+  return {
+    exists: jest.fn(() => Promise.resolve(true)),
+    mkdir: jest.fn(() => Promise.resolve()),
+    unlink: jest.fn(() => Promise.resolve()),
+    writeFile: jest.fn(() => Promise.resolve()),
+    stat,
+    readDir: jest.fn(async (parent: string) =>
+      Promise.all(
+        [...files]
+          .filter(path => path.substring(0, path.lastIndexOf('/')) === parent)
+          .map(async path => ({
+            name: path.substring(path.lastIndexOf('/') + 1),
+            path,
+            size: (await stat(path)).size,
+            isFile: () => true,
+            isDirectory: () => false,
+          })),
+      ),
+    ),
+    __recordFile: (path: string) => files.add(path),
+    __resetFiles: () => files.clear(),
+  };
+});
 
 jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(() => Promise.resolve('/unzipped')),
@@ -63,7 +81,15 @@ const mockGetImageModelsDirectory = jest.fn(() => '/mock/image-models');
 const mockAddDownloadedImageModel = jest.fn((_m?: any) => Promise.resolve());
 const mockMoveCompletedDownload = jest.fn((_id: string, _targetPath: string) => Promise.resolve('/moved.zip'));
 const mockStartDownload = jest.fn((_params: any) => Promise.resolve({ downloadId: 'zip-42' }));
-const mockDownloadFileTo = jest.fn((_opts: any): { downloadIdPromise?: Promise<string>; promise: Promise<void> } => ({ promise: Promise.resolve() }));
+const mockDownloadFileTo = jest.fn(
+  (opts: any): {
+    downloadIdPromise?: Promise<string>;
+    promise: Promise<void>;
+  } => {
+    (RNFS as any).__recordFile(opts.destPath);
+    return { promise: Promise.resolve() };
+  },
+);
 const mockOnComplete = jest.fn((_id: string, cb: Function) => { completeCallbacks.push(cb); return jest.fn(); });
 const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push(cb); return jest.fn(); });
 const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
@@ -150,6 +176,7 @@ function makeCoreMLModelInfo(overrides: Partial<ImageModelDescriptor> = {}): Ima
 describe('imageDownloadActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (RNFS as any).__resetFiles();
     jest.requireMock('react-native-fs').exists.mockResolvedValue(false);
     completeCallbacks = [];
     errorCallbacks = [];

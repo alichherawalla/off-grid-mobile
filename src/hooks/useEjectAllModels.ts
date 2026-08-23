@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { activeModelService } from '../services';
+import { ejectAllModelsForUser } from '../services/userModelEjection';
 import { useAppStore, useRemoteServerStore } from '../stores';
 
 /**
  * Thin View-side projection for the "Eject All" control, shared by Home + Chat.
  *
  * - `hasActiveModel` is derived REACTIVELY from the stores (the projection layer).
- * - the unload SIDE-EFFECT is NOT here: `ejectAll` dispatches to
- *   activeModelService.ejectAll(), the single owner of the unload sequence (local
- *   unload + remote disconnect + count). No screen re-implements it; that's what let
- *   one screen wire Eject All and another stub it.
+ * - the unload SIDE-EFFECT is NOT here: `ejectAll` dispatches to the shared user
+ *   ejection coordinator. No screen re-implements cancellation or unloading.
  * - `isEjecting` is the ephemeral in-flight flag for this dispatch (spinner only).
  */
 export function useEjectAllModels(): {
@@ -28,7 +26,7 @@ export function useEjectAllModels(): {
   const ejectAll = async (): Promise<number> => {
     setIsEjecting(true);
     try {
-      const { count } = await activeModelService.ejectAll();
+      const { count } = await ejectAllModelsForUser();
       return count;
     } finally {
       setIsEjecting(false);

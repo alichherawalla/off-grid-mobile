@@ -117,6 +117,10 @@ const record = (name, passed, detail) => {
   results.push({ name, passed, detail });
   console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`);
 };
+const transferRate = (bytes, startedAt) => {
+  const seconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
+  return `${(bytes / 1024 / 1024 / seconds).toFixed(1)} MiB/s in ${seconds.toFixed(2)} s`;
+};
 
 // ---------------------------------------------------------------- phone -> Mac
 {
@@ -140,6 +144,7 @@ const record = (name, passed, detail) => {
   if (!endpoint?.url) {
     record(`${label} -> mac`, false, `no endpoint: ${JSON.stringify(endpoint)}`);
   } else {
+    const startedAt = process.hrtime.bigint();
     const sender = run(phone, [
       'stream',
       requestId,
@@ -160,7 +165,7 @@ const record = (name, passed, detail) => {
       `${label} -> mac`,
       same,
       same
-        ? `${size} bytes, sha256 matches`
+        ? `${size} bytes, sha256 matches, ${transferRate(size, startedAt)}`
         : `sender=${JSON.stringify(sent)} receiver=${JSON.stringify(landed)}`
     );
   }
@@ -186,6 +191,7 @@ const record = (name, passed, detail) => {
   if (!offered?.url) {
     record(`mac -> ${label}`, false, `no endpoint: ${JSON.stringify(offered)}`);
   } else {
+    const startedAt = process.hrtime.bigint();
     const mac = run('node', [
       join(here, 'desktop-side.mjs'),
       'stream',
@@ -211,7 +217,7 @@ const record = (name, passed, detail) => {
       `mac -> ${label}`,
       same,
       same
-        ? `${size} bytes, sha256 matches`
+        ? `${size} bytes, sha256 matches, ${transferRate(size, startedAt)}`
         : `sender=${JSON.stringify(sent)} receiver=${JSON.stringify(landed)}`
     );
   }

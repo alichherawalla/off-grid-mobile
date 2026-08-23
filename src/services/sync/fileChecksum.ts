@@ -1,7 +1,21 @@
 import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
-import { CHUNK_SIZE, checksumFromSha512Hex, IncrementalChecksum } from '@offgrid/sync';
+import { NativeModules, Platform } from 'react-native';
+import {
+  CHUNK_SIZE,
+  checksumFromSha512Hex,
+  IncrementalChecksum,
+} from '@offgrid/sync';
 import logger from '../../utils/logger';
+
+type StreamingHashModule = {
+  sha512(path: string): Promise<string>;
+};
+
+function streamingHashModule(): StreamingHashModule | undefined {
+  if (Platform.OS !== 'ios') return undefined;
+  return NativeModules.StreamingHashModule as StreamingHashModule | undefined;
+}
 
 /**
  * The transfer checksum of a file on this device.
@@ -20,11 +34,23 @@ export async function fileTransferChecksum(
   size: number,
 ): Promise<string> {
   try {
-    const hex = await RNFS.hash(path, 'sha512');
+    // RNFS.hash on iOS creates one NSData for the complete file. A multi-gigabyte model therefore
+    // makes iOS kill the app before the transfer starts. Our native boundary reads a fixed-size
+    // chunk at a time and keeps memory use constant.
+    const nativeStreamingHash = streamingHashModule();
+    if (nativeStreamingHash) {
+      logger.log(
+        `[Checksum] streaming ${Math.round(size / 1_000_000)}MB through iOS`,
+      );
+    }
+    const hex = await (nativeStreamingHash?.sha512(path) ??
+      RNFS.hash(path, 'sha512'));
     return checksumFromSha512Hex(hex);
   } catch (error) {
     logger.warn(
-      `[Checksum] native hash unavailable, reading ${Math.round(size / 1_000_000)}MB in chunks: ${
+      `[Checksum] native hash unavailable, reading ${Math.round(
+        size / 1_000_000,
+      )}MB in chunks: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );

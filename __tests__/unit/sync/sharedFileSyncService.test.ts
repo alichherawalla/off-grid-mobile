@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MAX_SHARED_FILE_BYTES } from '@offgrid/sync';
+import {
+  createSharedFileStateFields,
+  createSharedFileTransferMetadata,
+  MAX_SHARED_FILE_BYTES,
+} from '@offgrid/sync';
 import type { SyncMutation } from '@offgrid/core/services/sync/mutation';
 
 // The service reaches Sync, which reaches the sockets and the discovery service. Those are the device,
@@ -42,7 +46,7 @@ jest.mock('react-native-fs', () => {
  * filesystem stands in, and there are no peers connected - which is not a gap but the state a phone is in
  * most of the time.
  */
-describe("the files this phone offers the rest of the mesh", () => {
+describe('the files this phone offers the rest of the mesh', () => {
   const IMAGE_ID = '11111111-1111-4111-8111-111111111111';
   const OTHER_IMAGE_ID = '22222222-2222-4222-8222-222222222222';
   const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333';
@@ -89,6 +93,7 @@ describe("the files this phone offers the rest of the mesh", () => {
   async function generatedImageOnDisk(
     id: string,
     bytes = 2048,
+    conversationId?: string,
   ): Promise<void> {
     const path = `/docs/generated/${id}.png`;
     await write(path, bytes);
@@ -106,6 +111,7 @@ describe("the files this phone offers the rest of the mesh", () => {
           width: 512,
           height: 512,
           createdAt: '2026-08-04T09:00:00.000Z',
+          ...(conversationId ? { conversationId } : {}),
         },
       ],
     } as never);
@@ -171,7 +177,11 @@ describe("the files this phone offers the rest of the mesh", () => {
 
   async function write(path: string, bytes: number): Promise<void> {
     disk.push({ path, bytes });
-    await fs.writeFile(path, Buffer.alloc(bytes, 0x41).toString('base64'), 'base64');
+    await fs.writeFile(
+      path,
+      Buffer.alloc(bytes, 0x41).toString('base64'),
+      'base64',
+    );
   }
 
   async function launch(): Promise<void> {
@@ -189,6 +199,9 @@ describe("the files this phone offers the rest of the mesh", () => {
       },
     } as never);
     await service.start({
+      stageStateMutation: (mutation: SyncMutation) => {
+        mutations.push(mutation);
+      },
       recordStateMutation: (mutation: SyncMutation) => {
         mutations.push(mutation);
       },
@@ -239,6 +252,11 @@ describe("the files this phone offers the rest of the mesh", () => {
         width: 512,
         height: 512,
         metadata_json: expect.stringContaining('lighthouse'),
+        // What the bytes ARE, which the record id cannot say: a re-mint gives the same picture a new
+        // id, so a peer keyed only on the id cannot see an echo of a file it already holds. Matched as
+        // a sha256 rather than a literal, because pinning the fixture's digest would make an unrelated
+        // change to the sample bytes look like a wire-format regression.
+        content_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       });
     });
 
@@ -251,6 +269,52 @@ describe("the files this phone offers the rest of the mesh", () => {
       // picture that has never gone anywhere belongs to the gallery, and showing it here would turn a
       // transfer list into a second copy of the photo library.
       expect(service.files()).toEqual([]);
+    });
+
+    it('waits for its durable message identity before it enters the mesh', async () => {
+      await generatedImageOnDisk(IMAGE_ID, 2048, CONVERSATION_ID);
+      await launch();
+
+      // The gallery store is written before the chat message at image completion. Publishing in this
+      // gap produces a gallery-only control that cannot put the received bytes back into the bubble.
+      expect(putIds()).toEqual([]);
+
+      useChatStore.setState({
+        conversations: [
+          {
+            id: CONVERSATION_ID,
+            title: 'A generated picture',
+            messages: [
+              {
+                id: 'local-generated',
+                uuid: MESSAGE_ID,
+                role: 'assistant',
+                content: 'Generated image for: "a lighthouse"',
+                timestamp: 1_700_000_000_000,
+                attachments: [
+                  {
+                    id: IMAGE_ID,
+                    type: 'image',
+                    uri: `file:///docs/generated/${IMAGE_ID}.png`,
+                  },
+                ],
+              },
+            ],
+            createdAt: 1_700_000_000_000,
+            updatedAt: 1_700_000_000_000,
+          },
+        ],
+      } as never);
+      await settle();
+
+      expect(putIds()).toEqual([IMAGE_ID]);
+      expect(
+        mutations.find(mutation => mutation.entityId === IMAGE_ID)?.fields,
+      ).toMatchObject({
+        kind: 'generated_media',
+        conversation_id: CONVERSATION_ID,
+        message_id: MESSAGE_ID,
+      });
     });
 
     it('is not admitted twice when the app is opened again', async () => {
@@ -346,13 +410,15 @@ describe("the files this phone offers the rest of the mesh", () => {
     it('is skipped while its message has no durable identity yet', async () => {
       await attachmentOnDisk();
       useChatStore.setState({
-        conversations: useChatStore.getState().conversations.map(conversation => ({
-          ...conversation,
-          messages: conversation.messages.map(message => ({
-            ...message,
-            uuid: undefined,
+        conversations: useChatStore
+          .getState()
+          .conversations.map(conversation => ({
+            ...conversation,
+            messages: conversation.messages.map(message => ({
+              ...message,
+              uuid: undefined,
+            })),
           })),
-        })),
       } as never);
 
       await launch();
@@ -386,7 +452,9 @@ describe("the files this phone offers the rest of the mesh", () => {
       // Asked again, and it is not withdrawn twice: the withdrawal is already travelling, and a second
       // one would be a delete for a record the far device has already dropped.
       mutations = [];
-      useAppStore.setState({ generatedImages: [...useAppStore.getState().generatedImages] } as never);
+      useAppStore.setState({
+        generatedImages: [...useAppStore.getState().generatedImages],
+      } as never);
       await settle();
       expect(deletedIds()).toEqual([]);
     });
@@ -452,39 +520,351 @@ describe("the files this phone offers the rest of the mesh", () => {
     it('waits for the bytes when only the record has arrived', async () => {
       await launch();
 
-      service.applyControlPut(ARRIVING_ID, {
-        kind: 'generated_media',
-        name: 'from-the-mac.png',
-        mimeType: 'image/png',
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      // A received record is not one of this phone's active outgoing controls.
+      expect(service.files()).toEqual([]);
+      expect(service.canPublishControl('the-ipad', ARRIVING_ID)).toBe(false);
+    });
+
+    /**
+     * The bytes, staged exactly where the transfer sink leaves them.
+     *
+     * Not a shortcut past the transfer: this IS the boundary a completed transfer hands over - a metadata
+     * file and the payload beside it, under the staging root. Everything after it (does the description
+     * match, where does the file belong, what is it hashed as) is the real code under test.
+     */
+    async function bytesStagedFor(control: {
+      syncId: string;
+      kind: string;
+      name: string;
+      mimeType: string;
+      fileSize: number;
+      createdAt: string;
+    }): Promise<void> {
+      const directory = `/caches/sync-shared-files/${encodeURIComponent(
+        control.syncId,
+      )}`;
+      await fs.mkdir(directory);
+      // Built by the SENDER's own builder, not hand-rolled here: the envelope carries a type and a
+      // version the receiver checks, and a literal in a test would drift from them silently.
+      await fs.writeFile(
+        `${directory}/metadata.json`,
+        JSON.stringify(createSharedFileTransferMetadata(control as never)),
+        'utf8',
+      );
+      await write(`${directory}/${control.name}`, control.fileSize);
+    }
+
+    /**
+     * The file as the far device describes it.
+     *
+     * Turned into BOTH shapes by the producers the app uses - `createSharedFileStateFields` for the
+     * record on the wire (snake_case) and `createSharedFileTransferMetadata` for the envelope beside the
+     * bytes (camelCase). Written by hand, the two drift, and the control parser rejects an unknown key
+     * outright: a camelCase `mimeType` makes the whole control parse as null, so nothing happens at all
+     * and a test asserting "no file yet" passes for the wrong reason.
+     */
+    const ARRIVING = {
+      syncId: ARRIVING_ID,
+      kind: 'generated_media' as const,
+      name: 'from-the-mac.png',
+      mimeType: 'image/png',
+      fileSize: 1024,
+      createdAt: '2026-08-04T09:00:00.000Z',
+    };
+    const ARRIVING_RECORD = createSharedFileStateFields(ARRIVING as never);
+
+    /** Where an imported shared file lands. Composed the way the importer composes it. */
+    const IMPORTED_PATH = `/docs/shared_files/${ARRIVING.kind}/${ARRIVING_ID}-${ARRIVING.name}`;
+
+    const FROM_THE_MAC = {
+      originDeviceId: 'fp-the-mac',
+      originDeviceName: 'Off Grid AI Desktop',
+    };
+
+    it('is imported, and becomes a file this phone actually holds', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      // The record is the phone's now: listed as a transferred file, owned by the device that sent it,
+      // and sitting under this app's own storage rather than in the staging area it arrived in.
+      const [file] = service.files();
+      expect(file?.syncId).toBe(ARRIVING_ID);
+      expect(file?.name).toBe(ARRIVING.name);
+      expect(file?.localPath).toBe(IMPORTED_PATH);
+      expect(file?.provenance?.originDeviceId).toBe(
+        FROM_THE_MAC.originDeviceId,
+      );
+      // AVAILABLE, which is a different claim from "a record exists": the bytes are here, so this phone
+      // can serve them back to a peer whose copy went missing.
+      expect(file?.available).toBe(true);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
+      // Stamped with what the bytes ARE. The record id is re-minted on identity churn; this is not.
+      expect(file?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('re-homes a peer image when the durable winner corrects attachment to generated media', async () => {
+      const name = 'corrected-image.png';
+      const attachment = {
+        syncId: ARRIVING_ID,
+        kind: 'message_attachment' as const,
+        name,
+        mimeType: 'image/jpeg',
         fileSize: 1024,
         createdAt: '2026-08-04T09:00:00.000Z',
-      });
-      await new Promise(resolve => setTimeout(resolve, 10));
+        conversationId: CONVERSATION_ID,
+        messageId: MESSAGE_ID,
+      };
+      const generated = {
+        ...attachment,
+        kind: 'generated_media' as const,
+        mimeType: 'image/png',
+        metadataJson: JSON.stringify({ prompt: 'a corrected image' }),
+      };
+      const oldPath = `/docs/shared_files/message_attachment/${ARRIVING_ID}-${name}`;
+      const newPath = `/docs/shared_files/generated_media/${ARRIVING_ID}-${name}`;
+      useChatStore.setState({
+        conversations: [
+          {
+            id: CONVERSATION_ID,
+            title: 'Image from the Mac',
+            messages: [
+              {
+                id: 'local-message',
+                uuid: MESSAGE_ID,
+                role: 'assistant',
+                content: 'Generated image',
+                timestamp: 1_700_000_000_000,
+                attachments: [],
+              },
+            ],
+            createdAt: 1_700_000_000_000,
+            updatedAt: 1_700_000_000_000,
+          },
+        ],
+      } as never);
+      await launch();
+      await bytesStagedFor(attachment);
+      service.applyControlPut(
+        ARRIVING_ID,
+        createSharedFileStateFields(attachment),
+        FROM_THE_MAC,
+      );
+      await settle();
+      expect(await fs.exists(oldPath)).toBe(true);
 
-      // The record travels on the state channel and the bytes come separately, so for a moment the phone
-      // knows about a file it does not have. It must not be offered onward as if it did.
+      const durableFields = createSharedFileStateFields(generated);
+      service.setDurableControlLog({
+        fields: syncId => (syncId === ARRIVING_ID ? durableFields : undefined),
+        entityIds: () => [ARRIVING_ID],
+      });
+      await settle();
+
+      expect(service.files()[0]).toMatchObject({
+        syncId: ARRIVING_ID,
+        kind: 'generated_media',
+        localPath: newPath,
+        provenance: FROM_THE_MAC,
+      });
+      expect(await fs.exists(newPath)).toBe(true);
+      expect(await fs.exists(oldPath)).toBe(false);
+
+      mutations = [];
+      await service.stateReady(PREFERENCES);
+      await settle();
+      expect(putIds()).not.toContain(ARRIVING_ID);
+    });
+
+    it('is deleted from this phone, bytes included, when the far device withdraws it', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+      // Precondition, so the removal below is an observed transition rather than an always-true.
+      expect(service.files()).toHaveLength(1);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
+
+      service.applyControlDelete(ARRIVING_ID);
+      await settle();
+
+      // A person who deletes a file means it, on every device. The row goes AND the bytes go - leaving
+      // the file behind would keep the storage this phone is holding for a record nobody can see.
       expect(service.files()).toEqual([]);
-      expect(service.canSendControl('the-ipad', ARRIVING_ID)).toBe(false);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(false);
+    });
+
+    it('is not imported at all when the bytes are described differently', async () => {
+      await launch();
+      // Same file, but the staged envelope says it is bigger than the record claims.
+      await bytesStagedFor({ ...ARRIVING, fileSize: 2048 });
+
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      // Identity has to agree before anything is written into the library. These are the last bytes that
+      // can be checked against the description, so a disagreement discards them rather than importing a
+      // file under a record that does not describe it.
+      expect(service.files()).toEqual([]);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(false);
+    });
+
+    /**
+     * The same picture, offered again under a fresh record id.
+     *
+     * Identities are re-minted - a device repairs its install, a record is re-admitted - and the file
+     * itself does not change when that happens. So an arriving record has to be recognised by what its
+     * bytes ARE, not by the id it wears, or one download becomes a pile of identical files each
+     * re-offered to every other device.
+     */
+    it('is not imported again when the same bytes arrive under a new id', async () => {
+      const REMINTED_ID = '88888888-8888-4888-8888-888888888888';
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+      const contentHash = service.files()[0]?.contentHash;
+      expect(contentHash).toMatch(/^[0-9a-f]{64}$/);
+
+      // The far device now describes the same file under a new id, and sends the bytes again.
+      const REMINTED = { ...ARRIVING, syncId: REMINTED_ID, contentHash };
+      await bytesStagedFor(REMINTED);
+      service.applyControlPut(
+        REMINTED_ID,
+        createSharedFileStateFields(REMINTED as never),
+        FROM_THE_MAC,
+      );
+      await settle();
+
+      // One file, still the one already here. A second row would show the user the same picture twice,
+      // and this phone would then offer both of them on to every other device it is paired with.
+      expect(service.files().map(file => file.syncId)).toEqual([ARRIVING_ID]);
+      expect(
+        await fs.exists(
+          `/docs/shared_files/${ARRIVING.kind}/${REMINTED_ID}-${ARRIVING.name}`,
+        ),
+      ).toBe(false);
+      // And the bytes that came with it are dropped rather than left in the staging area, which would
+      // hold storage for a copy nothing will ever read.
+      expect(
+        await fs.exists(
+          `/caches/sync-shared-files/${REMINTED_ID}/${ARRIVING.name}`,
+        ),
+      ).toBe(false);
+    });
+
+    /** Make the platform refuse to hash one path, without touching any other file. */
+    function hashingFailsFor(path: string): () => void {
+      const hash = fs.hash as unknown as jest.Mock;
+      const real = hash.getMockImplementation()!;
+      hash.mockImplementation(async (target: string, algorithm: string) => {
+        if (target === path) throw new Error('Could not read the file');
+        return real(target, algorithm);
+      });
+      return () => hash.mockImplementation(real);
+    }
+
+    it('still arrives when the phone cannot hash it', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+
+      // The hash is how duplicates are spotted later; it is not what makes the file usable now. A file
+      // the user can open, with no content claim on it, is the right outcome - refusing the import over
+      // a failed digest would lose a file that arrived perfectly well.
+      const [file] = service.files();
+      expect(file?.localPath).toBe(IMPORTED_PATH);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
+      expect(file?.contentHash).toBeUndefined();
+    });
+
+    it('is hashed on the next launch, and then recognises its own bytes coming back', async () => {
+      const REMINTED_ID = '99999999-9999-4999-8999-999999999999';
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+      expect(service.files()[0]?.contentHash).toBeUndefined();
+
+      // The imported file is on the phone's disk now, and disk outlives a launch.
+      disk.push({ path: IMPORTED_PATH, bytes: ARRIVING.fileSize });
+      await relaunch();
+      // Only once state has replayed does the library mean anything, so that is when it is repaired.
+      await service.stateReady(PREFERENCES);
+      await settle();
+
+      // Stamped from the bytes this device actually holds. This is what repairs a library admitted
+      // before the field existed, or by a launch where hashing failed.
+      const contentHash = service.files()[0]?.contentHash;
+      expect(contentHash).toMatch(/^[0-9a-f]{64}$/);
+
+      // And the point of stamping it: the guard now works for the file that was already here. Without
+      // the backfill a record making no content claim cannot recognise an echo of itself, so the same
+      // download lands again on every identity change.
+      const REMINTED = { ...ARRIVING, syncId: REMINTED_ID, contentHash };
+      await bytesStagedFor(REMINTED);
+      service.applyControlPut(
+        REMINTED_ID,
+        createSharedFileStateFields(REMINTED as never),
+        FROM_THE_MAC,
+      );
+      await settle();
+
+      expect(service.files().map(file => file.syncId)).toEqual([ARRIVING_ID]);
+    });
+
+    it('is left unhashed when its bytes are no longer on the phone', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+
+      // Relaunched without replaying the imported file: the bytes are gone, the record is not.
+      await relaunch();
+      await service.stateReady(PREFERENCES);
+      await settle();
+
+      // Nothing to hash, so nothing is claimed. Stamping a record whose file has gone would give the
+      // duplicate guard a content claim this device cannot serve, and the phone would then refuse the
+      // very copy a peer could have used to heal it.
+      const [file] = service.files();
+      expect(file?.syncId).toBe(ARRIVING_ID);
+      expect(file?.contentHash).toBeUndefined();
+      expect(file?.available).toBe(false);
     });
 
     it('stops waiting when the record is withdrawn again', async () => {
       await launch();
-      service.applyControlPut(ARRIVING_ID, {
-        kind: 'generated_media',
-        name: 'from-the-mac.png',
-        mimeType: 'image/png',
-        fileSize: 1024,
-        createdAt: '2026-08-04T09:00:00.000Z',
-      });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
 
       service.applyControlDelete(ARRIVING_ID);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await settle();
 
       // Deleted on the far device before its bytes ever got here. Nothing is left waiting for a transfer
       // that will never be asked for.
       expect(service.files()).toEqual([]);
     });
   });
-
 });

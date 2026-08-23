@@ -7,7 +7,10 @@ jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/var/mobile/Containers/Data/Application/CURRENT-UUID/Documents',
 }));
 
-import { resolveDocumentPath } from '../../../src/utils/resolveDocumentPath';
+import {
+  resolveDocumentPath,
+  resolveOwnedDocumentPath,
+} from '../../../src/utils/resolveDocumentPath';
 
 const CURRENT = '/var/mobile/Containers/Data/Application/CURRENT-UUID/Documents';
 
@@ -34,5 +37,24 @@ describe('resolveDocumentPath', () => {
 
   it('returns empty input unchanged', () => {
     expect(resolveDocumentPath('')).toBe('');
+  });
+});
+
+describe('resolveOwnedDocumentPath', () => {
+  const models = `${CURRENT}/models`;
+
+  it('maps the private iOS container spelling to the current RNFS model directory', () => {
+    const stored =
+      '/private/var/mobile/Containers/Data/Application/OLD/Documents/models/Qwen.gguf';
+
+    expect(resolveOwnedDocumentPath(stored, models)).toBe(`${models}/Qwen.gguf`);
+  });
+
+  it('rejects paths outside the owned directory', () => {
+    expect(resolveOwnedDocumentPath(`${CURRENT}/attachments/Qwen.gguf`, models)).toBeNull();
+  });
+
+  it('rejects traversal even when the text starts inside the owned directory', () => {
+    expect(resolveOwnedDocumentPath(`${models}/../secret.gguf`, models)).toBeNull();
   });
 });

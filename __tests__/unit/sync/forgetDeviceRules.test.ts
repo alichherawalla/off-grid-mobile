@@ -45,17 +45,17 @@ beforeEach(async () => {
 
 describe('a device leaving the mesh', () => {
   it('takes both its sharing rule and its receive rule with it', async () => {
-    // The user had set this phone up specifically: send it screenshots, but do not accept its chats.
+    // The user had set this phone up specifically: send it screenshots, but do not accept its files.
     await ambientShareService.setRule({
       source: 'screenshot',
       destinationId: THE_PHONE,
       mode: 'auto'
     } as never);
-    await receivePreferences.setDeviceCategory(THE_PHONE, 'chats', false);
+    await receivePreferences.setDeviceCategory(THE_PHONE, 'files', false);
     expect(
       ambientShareService.snapshot().rules.some(rule => rule.destinationId === THE_PHONE)
     ).toBe(true);
-    expect(receivePreferences.accepts(THE_PHONE, 'chats')).toBe(false);
+    expect(receivePreferences.accepts(THE_PHONE, 'files')).toBe(false);
 
     await forgetDeviceRules(THE_PHONE);
 
@@ -64,7 +64,7 @@ describe('a device leaving the mesh', () => {
     expect(
       ambientShareService.snapshot().rules.some(rule => rule.destinationId === THE_PHONE)
     ).toBe(false);
-    expect(receivePreferences.accepts(THE_PHONE, 'chats')).toBe(true);
+    expect(receivePreferences.accepts(THE_PHONE, 'files')).toBe(true);
   });
 
   it('leaves every other device\'s rules alone', async () => {

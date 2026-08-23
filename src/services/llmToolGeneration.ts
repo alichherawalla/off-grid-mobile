@@ -128,7 +128,8 @@ export interface ToolGenerationDeps {
   isGemma4Model: boolean;
   disableCtxShift: boolean;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
-  convertToOAIMessages: (messages: Message[]) => any[];
+  /** Async because it also drops images whose file is gone — see LLMService.convertToOAIMessages. */
+  convertToOAIMessages: (messages: Message[]) => Promise<any[]>;
   setPerformanceStats: (stats: any) => void;
   setIsGenerating: (v: boolean) => void;
 }
@@ -149,7 +150,7 @@ export async function generateWithToolsImpl(
     // Reserve context space for tool schemas (~100 tokens per tool)
     const toolTokenReserve = options.tools.length * 100;
     const managed = await deps.manageContextWindow(messages, toolTokenReserve);
-    const oaiMessages = deps.convertToOAIMessages(managed);
+    const oaiMessages = await deps.convertToOAIMessages(managed);
     const { settings } = useAppStore.getState();
     const startTime = Date.now();
     let firstTokenMs = 0;

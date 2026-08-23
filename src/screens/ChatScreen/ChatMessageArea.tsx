@@ -1,11 +1,25 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, FlatList, Text, Keyboard, Platform, StyleSheet } from 'react-native';
+import {
+  View,
+  FlatList,
+  Text,
+  Keyboard,
+  Platform,
+  StyleSheet,
+} from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard, MtpAdviceCard } from '../../components';
+import {
+  ChatInput,
+  ThinkingIndicator,
+  ModelFailureCard,
+  ImageGenAdviceCard,
+  MtpAdviceCard,
+  VisionRepairAdviceCard,
+} from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
@@ -14,6 +28,7 @@ import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
+import { useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { useIsProActive } from '../../hooks/useIsProActive';
@@ -47,7 +62,10 @@ const FOOTER_SAFE_CAP = 4;
 // Home-indicator / gesture-nav overlays sit at ~24px or below on the devices we
 // target; a 3-button nav bar is taller. Above this, treat the inset as opaque.
 const OVERLAY_INSET_MAX = 24;
-export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom: number): number => {
+export const computeFooterPaddingBottom = (
+  keyboardVisible: boolean,
+  insetBottom: number,
+): number => {
   if (keyboardVisible) return 0;
   // Opaque nav bar (tall inset): pad the full inset so controls clear it.
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
@@ -60,8 +78,11 @@ export const computeFooterPaddingBottom = (keyboardVisible: boolean, insetBottom
 // After a completed turn (text or image), the last message is an assistant reply, so
 // the bar hides — it read as misplaced when it lingered after a finished image turn.
 // Checking the tail role is modality-agnostic: any completed turn ends with 'assistant'.
-export const shouldShowEvictedBar = (chat: ReturnType<typeof useChatScreen>): boolean => {
-  if (!chat.textModelEvicted || chat.isModelLoading || chat.isCompacting) return false;
+export const shouldShowEvictedBar = (
+  chat: ReturnType<typeof useChatScreen>,
+): boolean => {
+  if (!chat.textModelEvicted || chat.isModelLoading || chat.isCompacting)
+    return false;
   if (chat.isGeneratingImage) return false;
   if (!chat.activeModelId || chat.activeModelInfo?.isRemote) return false;
   const last = chat.displayMessages[chat.displayMessages.length - 1];
@@ -70,15 +91,20 @@ export const shouldShowEvictedBar = (chat: ReturnType<typeof useChatScreen>): bo
 
 // "Model unloaded to free memory — tap to continue": the active text model was evicted
 // (e.g. an image/TTS load in voice mode) but stays selected. Tapping reloads it.
-const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles: any; colors: any }> = ({
-  visible, onPress, styles, colors,
-}) => {
+const ModelEvictedBar: React.FC<{
+  visible: boolean;
+  onPress: () => void;
+  styles: any;
+  colors: any;
+}> = ({ visible, onPress, styles, colors }) => {
   if (!visible) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)}>
       <AnimatedPressable style={styles.pendingSettingsBar} onPress={onPress}>
         <Icon name="cpu" size={16} color={colors.warning} />
-        <Text style={styles.pendingSettingsText}>Model unloaded to free memory — tap to continue</Text>
+        <Text style={styles.pendingSettingsText}>
+          Model unloaded to free memory — tap to continue
+        </Text>
         <Icon name="refresh-cw" size={14} color={colors.warning} />
       </AnimatedPressable>
     </Animated.View>
@@ -87,9 +113,12 @@ const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles:
 
 // Small status bar above the input: classifying takes precedence over the
 // background model-load indicator.
-const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any }> = ({
-  loading, classifying, modelName, styles,
-}) => {
+const ModelStatusBar: React.FC<{
+  loading: boolean;
+  classifying: boolean;
+  modelName?: string;
+  styles: any;
+}> = ({ loading, classifying, modelName, styles }) => {
   // The app's OWN "working" indicator, not the platform ActivityIndicator. On Android that renders a
   // Material arc whose tapered end reads as a static rotate glyph — the bar looked like it was
   // offering a retry button rather than telling you a model was loading (device-confirmed). The
@@ -98,7 +127,10 @@ const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelNa
   if (classifying) {
     return (
       <View style={styles.classifyingBar}>
-        <ThinkingIndicator text="Understanding your request..." textStyle={styles.classifyingText} />
+        <ThinkingIndicator
+          text="Understanding your request..."
+          textStyle={styles.classifyingText}
+        />
       </View>
     );
   }
@@ -116,12 +148,18 @@ const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelNa
 };
 
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
-  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem,
+  flatListRef,
+  isNearBottomRef,
+  chat,
+  styles,
+  colors,
+  handleScroll,
+  renderItem,
 }) => {
   // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
   const [isListReady, setIsListReady] = useState(false);
   const hasScrolledRef = React.useRef(false);
-  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
+  const interfaceMode = useUiModeStore(s => s.interfaceMode);
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
   // Subscribe to Pro activation so this re-renders the moment a license is
@@ -133,16 +171,24 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   useIsProActive();
   // extToolCount is the live MCP tool count (the email/calendar extension reports 0
   // here because those live in settings.enabledTools — see EmailCalendarExtension).
-  const extToolCount = getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
+  // Subscribed, not read at render: deactivating an MCP server cleared the store but the mounted
+  // chat never re-rendered, so the badge said 3 while the Pro tools screen said none.
+  const extToolCount = useExtensionToolCount();
   // Pro tools (email/calendar) are toggled through settings.enabledTools, so count
   // how many of them are on and fold MCP in — this is the "Pro Tools" badge.
-  const proToolIds = getToolExtensions().flatMap(e => (e.getToolDefinitions?.() ?? []).map(t => t.id));
-  const proToolsActiveCount = proToolIds.filter(id => chat.enabledTools.includes(id)).length;
+  const proToolIds = getToolExtensions().flatMap(e =>
+    (e.getToolDefinitions?.() ?? []).map(t => t.id),
+  );
+  const proToolsActiveCount = proToolIds.filter(id =>
+    chat.enabledTools.includes(id),
+  ).length;
   const proToolsCount = proToolsActiveCount + extToolCount;
   // The free Tools page lists only AVAILABLE_TOOLS, so its badge counts just those
   // (pro email/calendar ids are surfaced under Pro Tools instead, not double-counted).
   const freeToolIds = new Set(AVAILABLE_TOOLS.map(t => t.id));
-  const freeToolsCount = chat.enabledTools.filter(id => freeToolIds.has(id)).length;
+  const freeToolsCount = chat.enabledTools.filter(id =>
+    freeToolIds.has(id),
+  ).length;
   const totalToolCount = freeToolsCount + proToolsCount;
   const handleProToolsPress = useOpenProTools();
   const showSettingsDot = totalToolCount > 3 && !toolCountHintDismissed;
@@ -157,13 +203,19 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   // Platform.OS layout branching.
   const insets = useSafeAreaInsets();
   const keyboardVisible = useKeyboardVisible();
-  const footerPaddingBottom = computeFooterPaddingBottom(keyboardVisible, insets.bottom);
+  const footerPaddingBottom = computeFooterPaddingBottom(
+    keyboardVisible,
+    insets.bottom,
+  );
   const isStreaming = chat.isStreaming || chat.isThinking;
   const prevIsStreamingRef = useRef(isStreaming);
   useEffect(() => {
     prevIsStreamingRef.current = isStreaming;
   }, [isStreaming]);
-  const activeModelRepoId = chat.activeModelId?.split('/').slice(0, 2).join('/');
+  const activeModelRepoId = chat.activeModelId
+    ?.split('/')
+    .slice(0, 2)
+    .join('/');
   const handleRepairVision = activeModelRepoId
     ? () => tabNav.navigate('DownloadManager')
     : undefined;
@@ -178,14 +230,17 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         // builds / chat mode fall back to the standard empty chat.
         (() => {
           const AudioEmpty = getSlot(SLOTS.chatEmptyAudio);
-          return AudioEmpty && interfaceMode === 'audio' ? <AudioEmpty /> : (
-        <EmptyChat
-          styles={styles} colors={colors}
-          activeModel={chat.activeModel}
-          activeModelName={chat.activeModelName}
-          activeProject={chat.activeProject}
-          setShowProjectSelector={chat.setShowProjectSelector}
-        />
+          return AudioEmpty && interfaceMode === 'audio' ? (
+            <AudioEmpty />
+          ) : (
+            <EmptyChat
+              styles={styles}
+              colors={colors}
+              activeModel={chat.activeModel}
+              activeModelName={chat.activeModelName}
+              activeProject={chat.activeProject}
+              setShowProjectSelector={chat.setShowProjectSelector}
+            />
           );
         })()
       ) : (
@@ -194,7 +249,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           style={isListReady ? undefined : hiddenStyle.hidden}
           data={chat.displayMessages}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={item => item.id}
           extraData={interfaceMode}
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
@@ -211,32 +266,46 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
-          onLayout={(e) => {
+          onLayout={e => {
             const newHeight = e.nativeEvent.layout.height;
             const prevHeight = flatListHeightRef.current;
             flatListHeightRef.current = newHeight;
             if (prevHeight > 0 && newHeight < prevHeight) {
-              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 50);
+              setTimeout(
+                () => flatListRef.current?.scrollToEnd({ animated: true }),
+                50,
+              );
             }
           }}
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           onTouchStart={() => Keyboard.dismiss()}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 100 }}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 100,
+          }}
           removeClippedSubviews={Platform.OS !== 'android'}
         />
       )}
       {chat.showScrollToBottom && chat.displayMessages.length > 0 && (
-        <Animated.View entering={FadeIn.duration(150)} style={scrollToBottomStyle}>
-          <AnimatedPressable hapticType="impactLight" style={styles.scrollToBottomButton} onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}>
+        <Animated.View
+          entering={FadeIn.duration(150)}
+          style={scrollToBottomStyle}
+        >
+          <AnimatedPressable
+            hapticType="impactLight"
+            style={styles.scrollToBottomButton}
+            onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          >
             <Icon name="chevron-down" size={20} color={colors.textSecondary} />
           </AnimatedPressable>
         </Animated.View>
       )}
       {chat.isGeneratingImage && (
         <ImageProgressIndicator
-          styles={styles} colors={colors}
+          styles={styles}
+          colors={colors}
           imagePreviewPath={chat.imagePreviewPath}
           imageGenerationStatus={chat.imageGenerationStatus}
           imageGenerationProgress={chat.imageGenerationProgress}
@@ -252,7 +321,10 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         styles={styles}
       />
       {chat.isCompacting && (
-        <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          style={styles.classifyingBar}
+        >
           <ThinkingIndicator text="Compacting your conversation..." />
         </Animated.View>
       )}
@@ -269,17 +341,26 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       <ImageGenAdviceCard />
       {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
       <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
-      {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
-        <Animated.View entering={FadeIn.duration(200)}>
-          <AnimatedPressable testID="reload-model-banner" style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
-            <Icon name="alert-circle" size={16} color={colors.warning} />
-            <Text style={styles.pendingSettingsText}>
-              Settings changed — tap to reload model
-            </Text>
-            <Icon name="refresh-cw" size={14} color={colors.warning} />
-          </AnimatedPressable>
-        </Animated.View>
-      )}
+      {/* A vision model missing its projector: repairable from here, because this is where the
+          user finds out they cannot attach a photo. */}
+      <VisionRepairAdviceCard onRepaired={chat.handleReloadTextModel} />
+      {chat.hasPendingSettings &&
+        !chat.isCompacting &&
+        !chat.activeModelInfo?.isRemote && (
+          <Animated.View entering={FadeIn.duration(200)}>
+            <AnimatedPressable
+              testID="reload-model-banner"
+              style={styles.pendingSettingsBar}
+              onPress={chat.handleReloadTextModel}
+            >
+              <Icon name="alert-circle" size={16} color={colors.warning} />
+              <Text style={styles.pendingSettingsText}>
+                Settings changed — tap to reload model
+              </Text>
+              <Icon name="refresh-cw" size={14} color={colors.warning} />
+            </AnimatedPressable>
+          </Animated.View>
+        )}
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
           selected — reload it on demand, even a large model. This flat "tap to continue"
           snackbar sits directly above the composer, BELOW the rounded cards. */}
@@ -290,39 +371,42 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         colors={colors}
       />
       <View
-        onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
-        style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
+        onLayout={e => setInputHeight(e.nativeEvent.layout.height)}
+        style={{
+          backgroundColor: colors.background,
+          paddingBottom: footerPaddingBottom,
+        }}
       >
-          <ChatInput
-            onSend={chat.handleSend}
-            onStop={chat.handleStop}
-            disabled={!chat.hasActiveModel}
-            isGenerating={chat.isStreaming || chat.isThinking}
-            supportsVision={chat.supportsVision}
-            visionNeedsRepair={chat.visionNeedsRepair}
-            conversationId={chat.activeConversationId}
-            imageModelLoaded={chat.imageModelLoaded}
-            onOpenSettings={() => chat.setShowSettingsPanel(true)}
-            queueCount={chat.queueCount}
-            queuedTexts={chat.queuedTexts}
-            onClearQueue={() => generationService.clearQueue()}
-            placeholder={getPlaceholderText({
-              hasModel: chat.hasActiveModel,
-              isModelLoading: chat.isModelLoading,
-              supportsVision: chat.supportsVision,
-              imageOnly: chat.imageModelLoaded && !chat.hasTextModel,
-            })}
-            onToolsPress={() => tabNav.navigate('Tools')}
-            enabledToolCount={freeToolsCount}
-            showSettingsDot={showSettingsDot}
-            mcpToolCount={proToolsCount}
-            onMcpPress={handleProToolsPress}
-            supportsToolCalling={chat.supportsToolCalling}
-            supportsThinking={chat.supportsThinking}
-            onRepairVision={handleRepairVision}
-            isRemote={chat.activeModelInfo.isRemote}
-            onImagePress={chat.handleImagePress}
-          />
+        <ChatInput
+          onSend={chat.handleSend}
+          onStop={chat.handleStop}
+          disabled={!chat.hasActiveModel}
+          isGenerating={chat.isStreaming || chat.isThinking}
+          supportsVision={chat.supportsVision}
+          visionNeedsRepair={chat.visionNeedsRepair}
+          conversationId={chat.activeConversationId}
+          imageModelLoaded={chat.imageModelLoaded}
+          onOpenSettings={() => chat.setShowSettingsPanel(true)}
+          queueCount={chat.queueCount}
+          queuedTexts={chat.queuedTexts}
+          onClearQueue={() => generationService.clearQueue()}
+          placeholder={getPlaceholderText({
+            hasModel: chat.hasActiveModel,
+            isModelLoading: chat.isModelLoading,
+            supportsVision: chat.supportsVision,
+            imageOnly: chat.imageModelLoaded && !chat.hasTextModel,
+          })}
+          onToolsPress={() => tabNav.navigate('Tools')}
+          enabledToolCount={freeToolsCount}
+          showSettingsDot={showSettingsDot}
+          mcpToolCount={proToolsCount}
+          onMcpPress={handleProToolsPress}
+          supportsToolCalling={chat.supportsToolCalling}
+          supportsThinking={chat.supportsThinking}
+          onRepairVision={handleRepairVision}
+          isRemote={chat.activeModelInfo.isRemote}
+          onImagePress={chat.handleImagePress}
+        />
       </View>
     </>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { LoadingDots } from './LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { useThemedStyles, useTheme } from '../theme';
@@ -395,7 +396,7 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
     <>
       {isRepairingVision ? (
         <View style={styles.iconButton} testID={tid('repairing-vision')}>
-          <ActivityIndicator size="small" color={colors.warning} />
+          <LoadingDots color={colors.warning} />
         </View>
       ) : (
         onRepairVision && <ActionButton icon="tool" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />

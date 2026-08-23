@@ -37,8 +37,16 @@ export const HOOKS = {
   audioCanSpeak: 'audio.canSpeak',
   /** (text: string, messageId: string) => void — speak a message aloud. */
   audioSpeak: 'audio.speak',
-  /** () => void — stop any in-progress speech. */
+  /** () => boolean — whether speech is playing or being generated right now. Hands-free asks before
+   *  it re-opens the mic, so the assistant is never recorded as if it were the person talking. */
+  audioIsSpeaking: 'audio.isSpeaking',
+  /** () => void — stop speech that is running or pending, WITHOUT disturbing an idle engine. Fired at
+   *  the start of a turn to kill stale playback; must stay cheap because it runs constantly. */
   audioStop: 'audio.stop',
+  /** () => void — the person LEFT. Stop and tear down unconditionally: there is no warm engine worth
+   *  protecting for a screen nobody is on, and a guard that reasons about flags is exactly how audio
+   *  kept playing after the chat was closed. */
+  audioStopForExit: 'audio.stopForExit',
   /** (content: string) => void — fired as the assistant message streams; pro
    *  uses it to synthesize/play speech sentence-by-sentence while generation is
    *  still in progress (no-op unless voice mode + engine ready). */
@@ -63,7 +71,14 @@ export const HOOKS = {
   /** (mutation: SyncMutation) => void — a core data owner committed a record
    *  change. Pro records it in the state-sync op-log; free builds do nothing. */
   syncRecordLocalMutation: 'sync.recordLocalMutation',
+  /** (conversationId: string) => void — a local resend/regenerate replaced the reply. Pro drops the
+   *  live previews it holds for the conversation; the durable tombstone is emitted by the caller. */
+  chatStreamDiscardConversation: 'chatStream.discardConversation',
+
   /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
    *  a document lifecycle change. Pro transfers or reconciles it with peers. */
   syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
+  /** (text: string, timestamp: number) => void — core copied text locally. Pro records it through
+   *  the shared clipboard owner instead of waiting for a delayed native clipboard notification. */
+  clipboardRecordLocalText: 'clipboard.recordLocalText',
 } as const;

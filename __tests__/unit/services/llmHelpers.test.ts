@@ -1,5 +1,4 @@
 import {
-  getMaxContextForDevice,
   getGpuLayersForDevice,
   BYTES_PER_GB,
   supportsNativeThinking,
@@ -25,36 +24,6 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 const GB = BYTES_PER_GB;
-
-describe('getMaxContextForDevice', () => {
-  it('caps at 2048 for 3GB RAM', () => {
-    expect(getMaxContextForDevice(3 * GB)).toBe(2048);
-  });
-
-  it('caps at 2048 for 4GB RAM (iPhone XS)', () => {
-    expect(getMaxContextForDevice(4 * GB)).toBe(2048);
-  });
-
-  it('caps at 2048 for 6GB RAM', () => {
-    expect(getMaxContextForDevice(6 * GB)).toBe(2048);
-  });
-
-  it('caps at 4096 for 8GB RAM', () => {
-    expect(getMaxContextForDevice(8 * GB)).toBe(4096);
-  });
-
-  it('caps at 4096 for 7GB RAM', () => {
-    expect(getMaxContextForDevice(7 * GB)).toBe(4096);
-  });
-
-  it('caps at 8192 for 12GB RAM', () => {
-    expect(getMaxContextForDevice(12 * GB)).toBe(8192);
-  });
-
-  it('caps at 8192 for 16GB RAM', () => {
-    expect(getMaxContextForDevice(16 * GB)).toBe(8192);
-  });
-});
 
 describe('getGpuLayersForDevice', () => {
   it('disables GPU on 3GB RAM device', () => {
@@ -501,6 +470,13 @@ describe('buildCompletionParams', () => {
     expect(params.top_p).toBe(0.95);
     expect(params.penalty_repeat).toBe(1.1);
     expect(params.stop).toBeDefined();
+  });
+
+  it('passes the selected max tokens without a fixed context-ratio cap', () => {
+    const params = buildCompletionParams(
+      { ...defaultSettings, maxTokens: 65536 },
+    );
+    expect(params.n_predict).toBe(65536);
   });
 });
 

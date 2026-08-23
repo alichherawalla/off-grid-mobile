@@ -42,6 +42,12 @@
 // rather than aspirational: autoincrement, foreign keys, JOINs, ORDER BY, blob round-trips and the
 // migrations are all the database's own behaviour now.
 import { DatabaseSync } from 'node:sqlite';
+import { defaultNativeFileSystemBoundary } from '../harness/nativeFileSystem';
+
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
 
 type OpSqliteResult = { rows: Record<string, unknown>[]; insertId: number; rowsAffected: number };
 
@@ -340,9 +346,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
 // deleted validateFileType / size check WOULD fail. This is the data-layer proof behind
 // the KB "unsupported/oversized doc rejected" requirement.
 describe('BATCH 9 — KB rejects unsupported / oversized docs (real DocumentService)', () => {
-  const RNFS = require('react-native-fs');
-
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => defaultNativeFileSystemBoundary.reset());
 
   it('rejects an unsupported file type (.exe) before touching the filesystem', async () => {
     jest.isolateModules(() => { /* keep real module */ });
@@ -354,8 +358,10 @@ describe('BATCH 9 — KB rejects unsupported / oversized docs (real DocumentServ
 
   it('rejects a file larger than the 5MB max (case: oversized)', async () => {
     const realDocService = jest.requireActual('../../src/services/documentService').documentService;
-    RNFS.exists.mockResolvedValue(true);
-    RNFS.stat.mockResolvedValue({ size: 6 * 1024 * 1024, isFile: () => true }); // 6MB > 5MB cap
+    defaultNativeFileSystemBoundary.seedFile(
+      '/mock/documents/big.txt',
+      6 * 1024 * 1024,
+    );
     await expect(
       realDocService.processDocumentFromPath('/mock/documents/big.txt', 'big.txt'),
     ).rejects.toThrow('File is too large');

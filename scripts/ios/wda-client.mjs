@@ -60,6 +60,15 @@ export class WdaClient {
     return this.#sessionId;
   }
 
+  /** Reuse WDA's active session without relaunching or terminating the foreground app. */
+  async attach() {
+    const status = await this.#get('/status');
+    const sessionId = status.value?.sessionId ?? status.sessionId ?? null;
+    if (!sessionId) throw new Error('WDA has no active session to attach to');
+    this.#sessionId = sessionId;
+    return sessionId;
+  }
+
   #requireSession() {
     if (!this.#sessionId) throw new Error('No WDA session - call session() first');
     return this.#sessionId;
@@ -89,7 +98,7 @@ export class WdaClient {
     const wanted = needle.toLowerCase();
     let found = null;
     const walk = (node) => {
-      if (!node || found) return;
+      if (!node) return;
       // EVERY identifying field, not the first non-empty one. `label || name || value` short-circuits, and that
       // hid every testID on Android: React Native puts testID in resource-id (node.name), but an accessible
       // container also gets a synthesised content-desc (node.label) built from its children - so label was always
@@ -97,6 +106,21 @@ export class WdaClient {
       const fields = [node.label, node.name, node.value].map((f) => `${f ?? ''}`);
       const hit = fields.find((f) => f.toLowerCase().includes(wanted));
       if (hit !== undefined && node.rect && node.rect.width > 0) {
+        // Prefer the SMALLEST, most exact match. Keeping the last match found meant a full-width
+        // wrapper won over the control inside it: searching the file picker for "Open" returned
+        // {x:0,y:119,w:440,h:63} - the row containing the search field - so every tap landed in the
+        // search box and raised the keyboard while the Open button, untouched, stayed top-right.
+        // The run then reported a successful tap and waited forever for a screen that never came.
+        const better = (() => {
+          if (!found) return true;
+          const exact = (value) => value.trim().toLowerCase() === wanted;
+          if (exact(hit) !== exact(found.label)) return exact(hit);
+          return node.rect.width * node.rect.height < found.rect.width * found.rect.height;
+        })();
+        if (!better) {
+          (node.children || []).forEach(walk);
+          return;
+        }
         found = {
           // The matched field, so a caller that searched by testID gets the testID back rather than the
           // description that happens to sit beside it.
@@ -164,6 +188,74 @@ export class WdaClient {
   /** Send text to the focused field. Tap the field first so it has focus. */
   async type(text) {
     await this.#post(`/session/${this.#requireSession()}/wda/keys`, { value: [...text] });
+  }
+
+  /** Replace a React Native text field by its testID/accessibility identifier. */
+  async replaceTestId(testId, text) {
+    if (!/^[a-z0-9_./-]+$/i.test(testId)) throw new Error(`unsafe iOS testID: ${testId}`);
+    const sid = this.#requireSession();
+    const found = await this.#post(`/session/${sid}/element`, {
+      using: 'accessibility id',
+      value: testId,
+    });
+    const element = found.value?.['element-6066-11e4-a52e-4f735466cecf'] ?? found.value?.ELEMENT;
+    if (!element) throw new Error(`iOS could not find text field ${testId}`);
+    await this.#post(`/session/${sid}/element/${element}/clear`, {});
+    await this.#post(`/session/${sid}/element/${element}/value`, { value: [...text] });
+  }
+
+  /**
+   * Dismiss the soft keyboard.
+   *
+   * The project editor's Save control sits below a multiline field and UNDER the keyboard, so a tap
+   * aimed at Save lands on a key instead. Android's client hides the keyboard before Save for the
+   * same reason; this is the iOS counterpart. Not `back()` - that is an edge swipe, which would
+   * leave the editor rather than close the keyboard.
+   */
+  /** Top edge of the on-screen keyboard, or null when it is not up. */
+  async keyboardTop() {
+    let top = null;
+    const walk = node => {
+      if (!node) return;
+      if (node.type === 'Keyboard' && node.rect && node.rect.height > 0) {
+        top = node.rect.y;
+      }
+      (node.children || []).forEach(walk);
+    };
+    walk(await this.source());
+    return top;
+  }
+
+  async keyboardShown() {
+    return (await this.keyboardTop()) !== null;
+  }
+
+  /**
+   * Ask the keyboard to close. Returns whether it actually went away.
+   *
+   * Deliberately does NOT fall back to tapping a blind coordinate above the keyboard: on the paste-
+   * note sheet that lands on Back and DISCARDS what was typed. A helper that silently destroys the
+   * user's input is worse than one that reports it could not close the keyboard - callers position
+   * the control instead (see keyboardTop).
+   */
+  async hideKeyboard() {
+    if (!(await this.keyboardShown())) return true;
+    const sid = this.#requireSession();
+    // WDA's dismiss only works when the keyboard carries a Done/return affordance. A multiline
+    // field has none, so the result is CHECKED rather than swallowed.
+    await this.#post(`/session/${sid}/wda/keyboard/dismiss`, {}).catch(
+      () => {},
+    );
+    if (!(await this.keyboardShown())) return true;
+    // WDA's dismiss does nothing for a multiline field, which has no return key. Our own sheets put
+    // a Done bar above the keyboard for exactly this - so press THAT. It is a real control found in
+    // the tree, not a coordinate guessed above the keyboard.
+    const done = await this.findByLabel('Dismiss keyboard');
+    if (done) {
+      await this.tap(done.center.x, done.center.y);
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
+    return !(await this.keyboardShown());
   }
 
   /** Back one screen. iOS has no hardware back, so this is the edge-swipe-from-left gesture. */
@@ -249,16 +341,33 @@ export class WdaClient {
    * A test that passes on iOS and fails on Android with "no such element" is almost always this.
    */
   async scrollToLabel(needle, { maxSwipes = 8, ...options } = {}) {
-    const existing = await this.findByLabel(needle);
-    if (existing) return existing;
     const { width, height } = await this.windowSize();
     const x = Math.round(width / 2);
+    // "Found" has to mean "reachable". A row that is merely PRESENT can still be half under the tab
+    // bar, and tapping its centre then hits the tab bar instead - which is how a freshly created
+    // project, visible at the bottom of the list, could not be opened. Keep scrolling until its
+    // centre is clear of the chrome at both ends.
+    const TAB_BAR = 110;
+    const STATUS_BAR = 60;
+    const reachable = (element) =>
+      element &&
+      element.center.y < height - TAB_BAR &&
+      element.center.y > STATUS_BAR;
+
+    let seen = await this.findByLabel(needle);
+    if (reachable(seen)) return seen;
     for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
       await this.swipe(x, Math.round(height * 0.75), x, Math.round(height * 0.3));
       await new Promise((resolve) => setTimeout(resolve, 500));
       const found = await this.findByLabel(needle).catch(() => null);
-      if (found) return found;
+      if (reachable(found)) return found;
+      if (found) seen = found;
     }
+    // Present but never clear of the chrome: a list that ENDS with the target keeps it low no matter
+    // how much more you scroll, and on a sheet there is no tab bar over it anyway. Preferring a
+    // reachable position is right; refusing a present one outright turned a findable control into
+    // "did not appear after 8 swipes".
+    if (seen) return seen;
     throw new Error(`"${needle}" did not appear after ${maxSwipes} swipes.${options.hint ? ` ${options.hint}` : ''}`);
   }
 

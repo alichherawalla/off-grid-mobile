@@ -13,6 +13,8 @@ export const WEDNESDAY_URL = 'https://wednesday.is';
 // Off Grid AI Desktop: the free, open-source desktop app (not a Pro feature).
 // Linked from Pro screens and from remote-server discovery alike.
 export const OFF_GRID_DESKTOP_URL = 'https://getoffgridai.co/desktop';
+export const OFF_GRID_DESKTOP_BENEFIT =
+  'More power, same privacy. Run bigger models on Mac or Windows and keep every device in sync.';
 
 export const PRO_AHA_FEATURES = [
   'Ambient across your devices',

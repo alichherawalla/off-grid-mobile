@@ -133,52 +133,56 @@ export class AdbClient {
   async source() {
     // /data/local/tmp, not /sdcard: always writable by the shell user and unaffected by scoped storage.
     const remote = '/data/local/tmp/offgrid-ui-dump.xml';
-    await this.#adb(['shell', 'rm', '-f', remote]).catch(() => {});
-    // --compressed is not an optimisation here, it is the only mode that works on this app. The plain dump waits
-    // for an idle window and this app never fully idles (a live recording indicator, lists that keep updating),
-    // so it fails every time with "could not get idle state" - while --compressed skips that wait and succeeds.
-    // What compression drops is nodes not marked important for accessibility, which is precisely the set no test
-    // targets: testIDs and accessibility labels survive.
-    const said = await this.#adb(['shell', 'uiautomator', 'dump', '--compressed', remote]).catch(
-      (cause) => cause.message,
-    );
-    const xml = await this.#adb(['shell', 'cat', remote]).catch(() => '');
-    // A notification arriving mid-run pulls the shade over the app, and the dump then describes SystemUI instead.
-    // On a real phone this happens constantly - it is not a setup problem to fix once at the start. Collapsing and
-    // re-reading makes it self-healing; without it a run fails with a hierarchy full of other apps' notifications,
-    // which is exactly how this was found.
-    if (xml.includes('com.android.systemui:id/notification')) {
-      await this.#adb(['shell', 'cmd', 'statusbar', 'collapse']).catch(() => {});
-      await new Promise((resolve) => setTimeout(resolve, 600));
+    let lastSaid = '';
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       await this.#adb(['shell', 'rm', '-f', remote]).catch(() => {});
-      await this.#adb(['shell', 'uiautomator', 'dump', '--compressed', remote]).catch(() => {});
-      const reread = await this.#adb(['shell', 'cat', remote]).catch(() => '');
-      if (reread.includes('<hierarchy')) return parseUiAutomatorXml(reread);
+      // --compressed is not an optimisation here, it is the only mode that works on this app. The plain dump waits
+      // for an idle window and this app never fully idles (a live recording indicator, lists that keep updating),
+      // so it fails every time with "could not get idle state" - while --compressed skips that wait and succeeds.
+      // What compression drops is nodes not marked important for accessibility, which is precisely the set no test
+      // targets: testIDs and accessibility labels survive.
+      lastSaid = await this.#adb(['shell', 'uiautomator', 'dump', '--compressed', remote]).catch(
+        (cause) => cause.message,
+      );
+      let xml = await this.#adb(['shell', 'cat', remote]).catch(() => '');
+      // A notification arriving mid-run pulls the shade over the app, and the dump then describes SystemUI instead.
+      // On a real phone this happens constantly - it is not a setup problem to fix once at the start. Collapsing and
+      // re-reading makes it self-healing; without it a run fails with a hierarchy full of other apps' notifications,
+      // which is exactly how this was found.
+      if (xml.includes('com.android.systemui:id/notification')) {
+        await this.#adb(['shell', 'cmd', 'statusbar', 'collapse']).catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await this.#adb(['shell', 'rm', '-f', remote]).catch(() => {});
+        await this.#adb(['shell', 'uiautomator', 'dump', '--compressed', remote]).catch(() => {});
+        xml = await this.#adb(['shell', 'cat', remote]).catch(() => '');
+      }
+      if (xml.includes('<hierarchy')) return parseUiAutomatorXml(xml);
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
     }
-    if (!xml.includes('<hierarchy')) {
-      // uiautomator exits 0 even when it fails, so the dump's own words and the file's absence are the signal.
-      const why = /could not get idle state/i.test(said)
-        ? 'the screen never went idle (something is animating or continuously re-rendering)'
-        : said.trim().split('\n')[0] || 'uiautomator produced no dump';
-      throw new Error(`Could not read the view hierarchy: ${why}`);
-    }
-    return parseUiAutomatorXml(xml);
+    // uiautomator exits 0 even when it fails, so the dump's own words and the file's absence are the signal.
+    const why = /could not get idle state/i.test(lastSaid)
+      ? 'the screen never went idle (something is animating or continuously re-rendering)'
+      : lastSaid.trim().split('\n')[0] || 'uiautomator produced no dump after 3 attempts';
+    throw new Error(`Could not read the view hierarchy: ${why}`);
   }
 
   /** First element whose label, name or value contains `needle`, case-insensitively. */
   async findByLabel(needle) {
     const wanted = needle.toLowerCase();
-    let found = null;
+    let exact = null;
+    let partial = null;
     const walk = (node) => {
-      if (!node || found) return;
+      if (!node) return;
       // EVERY identifying field, not the first non-empty one. `label || name || value` short-circuits, and that
       // hid every testID on Android: React Native puts testID in resource-id (node.name), but an accessible
       // container also gets a synthesised content-desc (node.label) built from its children - so label was always
       // truthy and name was never examined. The symptom was believing the platform did not expose testIDs at all.
       const fields = [node.label, node.name, node.value].map((f) => `${f ?? ''}`);
-      const hit = fields.find((f) => f.toLowerCase().includes(wanted));
+      const exactHit = fields.find((field) => field.toLowerCase() === wanted);
+      const partialHit = fields.find((field) => field.toLowerCase().includes(wanted));
+      const hit = exactHit ?? partialHit;
       if (hit !== undefined && node.rect && node.rect.width > 0) {
-        found = {
+        const match = {
           // The matched field, so a caller that searched by testID gets the testID back rather than the
           // description that happens to sit beside it.
           label: hit,
@@ -189,11 +193,16 @@ export class AdbClient {
             y: Math.round(node.rect.y + node.rect.height / 2),
           },
         };
+        if (exactHit !== undefined && !exact) exact = match;
+        else if (!partial) partial = match;
       }
       (node.children || []).forEach(walk);
     };
     walk(await this.source());
-    return found;
+    // React Native can place a concatenation of every child testID on an accessible parent. That
+    // parent appears before the actual control in UiAutomator's tree. A substring-first walk taps the
+    // large parent centre instead of the exact child (for example, Send resolves to the Models header).
+    return exact ?? partial;
   }
 
   /** Tap an absolute point. */
@@ -363,6 +372,20 @@ export class AdbClient {
   async pull(remotePath, localPath) {
     await this.#adb(['pull', remotePath, localPath]);
   }
+
+  /** Stage a fixture on the device before a UI-only picker journey selects it. */
+  async push(localPath, remotePath) {
+    await this.#adb(['push', localPath, remotePath]);
+  }
+
+  /** Read a file from this debug build's private app container without copying it to shared storage. */
+  async readAppFile(packageName, relativePath) {
+    if (!/^[a-z][a-z0-9_.]+$/i.test(packageName)) throw new Error(`unsafe Android package: ${packageName}`);
+    if (!/^[a-z0-9_./-]+$/i.test(relativePath) || relativePath.includes('..')) {
+      throw new Error(`unsafe Android app file: ${relativePath}`);
+    }
+    return this.#adb(['exec-out', 'run-as', packageName, 'cat', relativePath]);
+  }
 }
 
 /**
@@ -398,7 +421,14 @@ export function parseUiAutomatorXml(xml) {
     }
     const attributes = {};
     for (const pair of attributeText.matchAll(/([\w-]+)="([^"]*)"/g)) {
-      attributes[pair[1]] = pair[2];
+      attributes[pair[1]] = pair[2]
+        .replace(/&#(\d+);/g, (_, value) => String.fromCodePoint(Number(value)))
+        .replace(/&#x([\da-f]+);/gi, (_, value) => String.fromCodePoint(Number.parseInt(value, 16)))
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
     }
 
     const bounds = attributes.bounds?.match(/\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/);

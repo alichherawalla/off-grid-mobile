@@ -12,17 +12,23 @@
 
 import {
   generateResponseImpl,
-  generateRemoteWithToolsImpl,
-  generateRemoteResponseImpl,
   buildToolLoopHandlersImpl,
 } from '../../../src/services/generationServiceHelpers';
+import {
+  generateRemoteWithToolsImpl,
+  generateRemoteResponseImpl,
+} from '../../../src/services/generationRemoteHelpers';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
     isModelLoaded: jest.fn(() => false),
     isCurrentlyGenerating: jest.fn(() => false),
     generateResponse: jest.fn(),
-    getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
+    getGpuInfo: jest.fn(() => ({
+      gpu: false,
+      gpuBackend: 'CPU',
+      gpuLayers: 0,
+    })),
     getPerformanceStats: jest.fn(() => ({
       lastTokensPerSecond: 10,
       lastDecodeTokensPerSecond: 12,
@@ -50,6 +56,7 @@ jest.mock('../../../src/stores', () => ({
       startStreaming: jest.fn(),
       clearStreamingMessage: jest.fn(),
       appendToStreamingMessage: jest.fn(),
+      resetStreamingSegment: jest.fn(),
       finalizeStreamingMessage: jest.fn(),
     })),
   },
@@ -86,16 +93,32 @@ const mockedRunToolLoop = runToolLoop as jest.Mock;
 
 function liteRTAppState(modelProps: any = {}) {
   return {
-    downloadedModels: [{ id: 'litert-1', name: 'LiteRT', engine: 'litert', ...modelProps }],
+    downloadedModels: [
+      { id: 'litert-1', name: 'LiteRT', engine: 'litert', ...modelProps },
+    ],
     activeModelId: 'litert-1',
     downloadedImageModels: [],
     activeImageModelId: null,
-    settings: { liteRTTemperature: 0.7, liteRTTopP: 0.9, temperature: 0.7, topP: 0.9, maxTokens: 512, thinkingEnabled: false, cacheType: 'q8_0' },
+    settings: {
+      liteRTTemperature: 0.7,
+      liteRTTopP: 0.9,
+      temperature: 0.7,
+      topP: 0.9,
+      maxTokens: 512,
+      thinkingEnabled: false,
+      cacheType: 'q8_0',
+    },
   };
 }
 
 function makeServiceSvc(overrides: any = {}) {
-  const state = { isGenerating: false, isThinking: true, startTime: Date.now() - 1000, streamingContent: '', ...overrides.state };
+  const state = {
+    isGenerating: false,
+    isThinking: true,
+    startTime: Date.now() - 1000,
+    streamingContent: '',
+    ...overrides.state,
+  };
   const { state: _s, ...rest } = overrides;
   return {
     state,
@@ -123,6 +146,7 @@ function chatStoreMock(overrides: any = {}) {
     startStreaming: jest.fn(),
     clearStreamingMessage: jest.fn(),
     appendToStreamingMessage: jest.fn(),
+    resetStreamingSegment: jest.fn(),
     finalizeStreamingMessage: jest.fn(),
     ...overrides,
   };
@@ -148,10 +172,17 @@ describe('runLiteRTResponseImpl — image support guard', () => {
     await expect(
       generateResponseImpl(svc, {
         conversationId: 'conv-1',
-        messages: [{
-          id: '1', timestamp: 0, role: 'user' as const, content: 'look',
-          attachments: [{ id: 'i', type: 'image' as const, uri: 'file:///pic.png' }],
-        }],
+        messages: [
+          {
+            id: '1',
+            timestamp: 0,
+            role: 'user' as const,
+            content: 'look',
+            attachments: [
+              { id: 'i', type: 'image' as const, uri: 'file:///pic.png' },
+            ],
+          },
+        ],
       }),
     ).rejects.toThrow(/does not support images/);
 
@@ -171,14 +202,23 @@ describe('runLiteRTResponseImpl — image support guard', () => {
     const svc = makeServiceSvc();
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{
-        id: '1', timestamp: 0, role: 'user' as const, content: 'look',
-        attachments: [{ id: 'i', type: 'image' as const, uri: 'file:///pic.png' }],
-      }],
+      messages: [
+        {
+          id: '1',
+          timestamp: 0,
+          role: 'user' as const,
+          content: 'look',
+          attachments: [
+            { id: 'i', type: 'image' as const, uri: 'file:///pic.png' },
+          ],
+        },
+      ],
     });
 
     expect(mockedLiteRT.sendMessage).toHaveBeenCalledWith(
-      'look', expect.any(Object), { imageUris: ['file:///pic.png'], audioUris: [] },
+      'look',
+      expect.any(Object),
+      { imageUris: ['file:///pic.png'], audioUris: [] },
     );
   });
 });
@@ -197,14 +237,20 @@ describe('runLiteRTResponseImpl — streaming callbacks', () => {
     mockedLiteRT.sendMessage.mockImplementation((_t: any, cbs: any) => {
       cbs.onToken('he');
       cbs.onToken('llo'); // second token: firstTokenReceived already true, flushTimer set
-      cbs.onComplete('hello', '', { decodeTokensPerSecond: 9, ttft: 0.5, prefillTokenCount: 4 });
+      cbs.onComplete('hello', '', {
+        decodeTokensPerSecond: 9,
+        ttft: 0.5,
+        prefillTokenCount: 4,
+      });
       return Promise.resolve();
     });
 
     const svc = makeServiceSvc();
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
       onFirstToken,
     });
 
@@ -231,7 +277,9 @@ describe('runLiteRTResponseImpl — streaming callbacks', () => {
 
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
     });
 
     expect(svc.state.streamingContent).toBe('');
@@ -249,7 +297,9 @@ describe('runLiteRTResponseImpl — streaming callbacks', () => {
     const svc = makeServiceSvc();
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
     });
 
     expect(svc.reasoningBuffer).toBe('thinking...');
@@ -267,7 +317,9 @@ describe('runLiteRTResponseImpl — streaming callbacks', () => {
 
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
     });
 
     expect(svc.reasoningBuffer).toBe('');
@@ -285,7 +337,9 @@ describe('runLiteRTResponseImpl — streaming callbacks', () => {
     const svc = makeServiceSvc({ state: { startTime: null } });
     await generateResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
     });
 
     // onComplete falls back to stats?.ttft (null stats -> stats stays null)
@@ -318,7 +372,9 @@ describe('runLiteRTResponseImpl — catch block', () => {
     await expect(
       generateResponseImpl(svc, {
         conversationId: 'conv-1',
-        messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+        messages: [
+          { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+        ],
       }),
     ).resolves.toBeUndefined();
   });
@@ -336,7 +392,9 @@ describe('generateRemoteWithToolsImpl', () => {
 
     await generateRemoteWithToolsImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
       options: { enabledToolIds: ['web_search'] },
     });
 
@@ -352,7 +410,9 @@ describe('generateRemoteWithToolsImpl', () => {
     await expect(
       generateRemoteWithToolsImpl(svc, {
         conversationId: 'conv-1',
-        messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+        messages: [
+          { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+        ],
         options: { enabledToolIds: ['web_search'] },
       }),
     ).rejects.toThrow('No remote provider available');
@@ -362,19 +422,30 @@ describe('generateRemoteWithToolsImpl', () => {
   it('runs the tool loop and finalizes when a provider is present and not aborted', async () => {
     mockedGetState.mockReturnValue(liteRTAppState());
     const store = chatStoreMock();
-    const provider = { type: 'openai', capabilities: { supportsThinking: false } };
+    const provider = {
+      type: 'openai',
+      capabilities: { supportsThinking: false },
+    };
     const svc = makeServiceSvc({
       getCurrentProvider: () => provider,
-      state: { isGenerating: false, startTime: Date.now() - 500, streamingContent: 'done' },
+      state: {
+        isGenerating: false,
+        startTime: Date.now() - 500,
+        streamingContent: 'done',
+      },
     });
 
     await generateRemoteWithToolsImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
       options: { enabledToolIds: ['web_search'], projectId: 'proj-1' },
     });
 
-    expect(mockedRunToolLoop).toHaveBeenCalledWith(expect.objectContaining({ forceRemote: true }));
+    expect(mockedRunToolLoop).toHaveBeenCalledWith(
+      expect.objectContaining({ forceRemote: true }),
+    );
     expect(svc.forceFlushTokens).toHaveBeenCalled();
     expect(store.finalizeStreamingMessage).toHaveBeenCalled();
     expect(svc.checkSharePrompt).toHaveBeenCalled();
@@ -384,14 +455,22 @@ describe('generateRemoteWithToolsImpl', () => {
   it('skips finalize when the generation was aborted during the tool loop', async () => {
     mockedGetState.mockReturnValue(liteRTAppState());
     const store = chatStoreMock();
-    const provider = { type: 'openai', capabilities: { supportsThinking: false } };
+    const provider = {
+      type: 'openai',
+      capabilities: { supportsThinking: false },
+    };
     const svc = makeServiceSvc({ getCurrentProvider: () => provider });
     // prepareGeneration clears abortRequested; the tool loop aborts mid-run.
-    mockedRunToolLoop.mockImplementationOnce(() => { svc.abortRequested = true; return Promise.resolve(); });
+    mockedRunToolLoop.mockImplementationOnce(() => {
+      svc.abortRequested = true;
+      return Promise.resolve();
+    });
 
     await generateRemoteWithToolsImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
       options: { enabledToolIds: [] },
     });
 
@@ -414,7 +493,9 @@ describe('buildToolLoopHandlersImpl', () => {
   });
 
   it('onStream accumulates content, captures remote TTFT on first content token, and schedules a flush', () => {
-    const svc = makeServiceSvc({ state: { streamingContent: '', startTime: Date.now() - 200 } });
+    const svc = makeServiceSvc({
+      state: { streamingContent: '', startTime: Date.now() - 200 },
+    });
     const handlers = buildToolLoopHandlersImpl(svc);
 
     handlers.onStream({ content: 'first' });
@@ -426,7 +507,9 @@ describe('buildToolLoopHandlersImpl', () => {
   });
 
   it('onStream string form is normalised to a content chunk', () => {
-    const svc = makeServiceSvc({ state: { streamingContent: '', startTime: null } });
+    const svc = makeServiceSvc({
+      state: { streamingContent: '', startTime: null },
+    });
     const handlers = buildToolLoopHandlersImpl(svc);
     handlers.onStream('plain');
     expect(svc.state.streamingContent).toBe('plain');
@@ -450,12 +533,18 @@ describe('buildToolLoopHandlersImpl', () => {
   });
 
   it('onStreamReset flushes pending tokens and clears the streaming buffers', () => {
-    const svc = makeServiceSvc({ state: { streamingContent: 'partial' }, tokenBuffer: 'partial' });
+    const store = chatStoreMock();
+    const svc = makeServiceSvc({
+      state: { streamingContent: 'partial' },
+      tokenBuffer: 'partial',
+    });
     const handlers = buildToolLoopHandlersImpl(svc);
     handlers.onStreamReset();
     expect(svc.forceFlushTokens).toHaveBeenCalled();
     expect(svc.state.streamingContent).toBe('');
     expect(svc.tokenBuffer).toBe('');
+    expect(svc.reasoningBuffer).toBe('');
+    expect(store.resetStreamingSegment).toHaveBeenCalledTimes(1);
   });
 
   it('onFinalResponse sets streaming content and appends to the chat store', () => {
@@ -468,7 +557,9 @@ describe('buildToolLoopHandlersImpl', () => {
   });
 
   it('does not re-capture TTFT when streamingContent is already non-empty', () => {
-    const svc = makeServiceSvc({ state: { streamingContent: 'prior', startTime: Date.now() - 200 } });
+    const svc = makeServiceSvc({
+      state: { streamingContent: 'prior', startTime: Date.now() - 200 },
+    });
     const handlers = buildToolLoopHandlersImpl(svc);
     handlers.onStream({ content: 'more' });
     // streamingContent was not empty -> TTFT capture guard is skipped
@@ -485,7 +576,11 @@ describe('generateRemoteResponseImpl', () => {
   });
 
   function makeProvider(generate: jest.Mock) {
-    return { type: 'openai', capabilities: { supportsThinking: true }, generate };
+    return {
+      type: 'openai',
+      capabilities: { supportsThinking: true },
+      generate,
+    };
   }
 
   it('throws when no provider is available', async () => {
@@ -494,7 +589,9 @@ describe('generateRemoteResponseImpl', () => {
     await expect(
       generateRemoteResponseImpl(svc, {
         conversationId: 'conv-1',
-        messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+        messages: [
+          { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+        ],
       }),
     ).rejects.toThrow('No remote provider available');
     expect(svc.resetState).toHaveBeenCalled();
@@ -515,7 +612,9 @@ describe('generateRemoteResponseImpl', () => {
 
     await generateRemoteResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
       onFirstToken: jest.fn(),
     });
 
@@ -550,7 +649,9 @@ describe('generateRemoteResponseImpl', () => {
 
     await generateRemoteResponseImpl(svc, {
       conversationId: 'conv-1',
-      messages: [{ id: '1', timestamp: 0, role: 'user' as const, content: 'hi' }],
+      messages: [
+        { id: '1', timestamp: 0, role: 'user' as const, content: 'hi' },
+      ],
     });
 
     expect(svc.state.streamingContent).toBe('');

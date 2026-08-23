@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
 import { loadDownloadedModels, saveModelsList } from './storage';
@@ -10,7 +11,7 @@ import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
 export { isMMProjFile };
 
-export function parseSizeInt(size: string | number): number {
+function parseSizeInt(size: string | number): number {
   return typeof size === 'string' ? Number.parseInt(size, 10) : size;
 }
 
@@ -119,8 +120,8 @@ export interface ReconcileImageModelsOpts {
 async function isValidZip(zipPath: string): Promise<boolean> {
   if (!(await RNFS.exists(zipPath))) return false;
   try {
-    const stat = await RNFS.stat(zipPath);
-    const size = parseSizeInt(stat.size);
+    const stat = await statFile(zipPath);
+    const size = stat?.size ?? 0;
     if (!Number.isFinite(size) || size <= 0) return false;
   } catch {
     return false;
@@ -431,4 +432,3 @@ async function doScanForUntrackedTextModels(
 
   return discoveredModels;
 }
-

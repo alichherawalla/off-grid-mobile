@@ -27,14 +27,17 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 type DataModule = typeof import('@offgrid/pro/sync/syncControlCenterData');
-type SectionModule = typeof import('@offgrid/pro/ui/SyncScreen/TransferActivitySection');
+type SectionModule =
+  typeof import('@offgrid/pro/ui/SyncScreen/TransferActivitySection');
 
 let projectMobileSyncActivity: DataModule['projectMobileSyncActivity'];
 let TransferActivitySection: SectionModule['TransferActivitySection'];
 let available = true;
 
 beforeAll(() => {
-  const data = requirePro<DataModule>('@offgrid/pro/sync/syncControlCenterData');
+  const data = requirePro<DataModule>(
+    '@offgrid/pro/sync/syncControlCenterData',
+  );
   const section = requirePro<SectionModule>(
     '@offgrid/pro/ui/SyncScreen/TransferActivitySection',
   );
@@ -54,8 +57,6 @@ const handlers = () => ({
   cancelTransfer: jest.fn(),
   dismissLiveTransfer: jest.fn(),
   dismissCompletedTransfer: jest.fn(async () => undefined),
-  retryKnowledge: jest.fn(async () => undefined),
-  dismissKnowledge: jest.fn(),
   retryAmbient: jest.fn(async () => undefined),
   cancelAmbient: jest.fn(async () => undefined),
   dismissAmbient: jest.fn(async () => undefined),
@@ -73,7 +74,6 @@ const project = (
   projectMobileSyncActivity({
     transfers: [],
     completedTransfers: [],
-    knowledgeActivity: [],
     modelJobs: [],
     ambientActivity: [],
     files: [],
@@ -192,15 +192,60 @@ describePro('the Activity list', () => {
     if (!guard()) return;
     const acts = handlers();
     const rows = [
-      { requestId: 't-q', status: 'queued', direction: 'send', fileName: 'Queued.png' },
-      { requestId: 't-s', status: 'transferring', direction: 'send', fileName: 'Sending.png' },
-      { requestId: 't-r', status: 'transferring', direction: 'receive', fileName: 'Receiving.png' },
-      { requestId: 't-fs', status: 'failed', direction: 'send', fileName: 'FailedSend.png' },
-      { requestId: 't-fr', status: 'failed', direction: 'receive', fileName: 'FailedReceive.png' },
-      { requestId: 't-cs', status: 'completed', direction: 'send', fileName: 'SentOk.png' },
-      { requestId: 't-cr', status: 'completed', direction: 'receive', fileName: 'GotIt.png' },
-      { requestId: 't-x', status: 'cancelled', direction: 'send', fileName: 'Stopped.png' },
-    ].map(row => ({ ...row, deviceId: THE_MAC, bytesTransferred: 1, totalBytes: 2 }));
+      {
+        requestId: 't-q',
+        status: 'queued',
+        direction: 'send',
+        fileName: 'Queued.png',
+      },
+      {
+        requestId: 't-s',
+        status: 'transferring',
+        direction: 'send',
+        fileName: 'Sending.png',
+      },
+      {
+        requestId: 't-r',
+        status: 'transferring',
+        direction: 'receive',
+        fileName: 'Receiving.png',
+      },
+      {
+        requestId: 't-fs',
+        status: 'failed',
+        direction: 'send',
+        fileName: 'FailedSend.png',
+      },
+      {
+        requestId: 't-fr',
+        status: 'failed',
+        direction: 'receive',
+        fileName: 'FailedReceive.png',
+      },
+      {
+        requestId: 't-cs',
+        status: 'completed',
+        direction: 'send',
+        fileName: 'SentOk.png',
+      },
+      {
+        requestId: 't-cr',
+        status: 'completed',
+        direction: 'receive',
+        fileName: 'GotIt.png',
+      },
+      {
+        requestId: 't-x',
+        status: 'cancelled',
+        direction: 'send',
+        fileName: 'Stopped.png',
+      },
+    ].map(row => ({
+      ...row,
+      deviceId: THE_MAC,
+      bytesTransferred: 1,
+      totalBytes: 2,
+    }));
 
     const projection = project(acts, { transfers: rows as never });
     const ui = render(
@@ -230,7 +275,7 @@ describePro('the Activity list', () => {
       checked += 1;
     }
     expect(checked).toBe(Object.keys(expected).length);
-  })
+  });
 
   it('shows how far a live transfer has got, in bytes as well as percent', () => {
     if (!guard()) return;
@@ -259,7 +304,90 @@ describePro('the Activity list', () => {
     // whether to keep the phone awake. Both are on the row.
     expect(ui.getByText(/25%/)).toBeTruthy();
     expect(ui.getByText(/MB \/ /)).toBeTruthy();
-  })
+    expect(ui.queryByText(/MB\/s/)).toBeNull();
+  });
+
+  it('shows one model job instead of one raw row for every file in a vision package', async () => {
+    if (!guard()) return;
+    const acts = handlers();
+    const modelJob = {
+      id: 'vision-job',
+      direction: 'send',
+      peerDeviceId: THE_MAC,
+      peerName: 'The Mac',
+      modelId: 'google/gemma-vision',
+      modelName: 'Gemma Vision',
+      fileCount: 2,
+      bytesTotal: 8 * 1024 * 1024,
+      bytesTransferred: 4 * 1024 * 1024,
+      phase: 'transferring',
+      startedAt: NOW - 10_000,
+      transferStartedAt: NOW - 3_000,
+      transferStartedBytes: 1 * 1024 * 1024,
+      updatedAt: NOW,
+      packageId: 'vision-package',
+      requestIds: ['model-primary', 'model-projector'],
+    } as const;
+    const projection = project(acts, {
+      modelJobs: [modelJob] as never,
+      transfers: [
+        {
+          requestId: 'model-projector',
+          deviceId: THE_MAC,
+          fileName: 'gemma-mmproj-F16.gguf',
+          direction: 'send',
+          status: 'transferring',
+          bytesTransferred: 500,
+          totalBytes: 1_000,
+          mimeType: 'application/vnd.offgrid.model',
+          kind: 'model',
+        },
+        {
+          requestId: 'ordinary-file',
+          deviceId: THE_MAC,
+          fileName: 'Notes.txt',
+          direction: 'send',
+          status: 'transferring',
+          bytesTransferred: 50,
+          totalBytes: 100,
+          mimeType: 'text/plain',
+          kind: 'files',
+        },
+      ] as never,
+      completedTransfers: [
+        {
+          requestId: 'model-primary',
+          deviceId: THE_MAC,
+          deviceName: 'The Mac',
+          fileName: 'gemma-Q4_K_M.gguf',
+          direction: 'send',
+          status: 'completed',
+          bytesTransferred: 2_000,
+          totalBytes: 2_000,
+          updatedAt: NOW - 1,
+          mimeType: 'application/vnd.offgrid.model',
+          kind: 'model',
+        },
+      ] as never,
+    });
+
+    const ui = render(
+      <TransferActivitySection projection={projection} onOpen={jest.fn()} />,
+    );
+
+    expect(ui.getAllByText('Gemma Vision')).toHaveLength(1);
+    expect(ui.queryByText('gemma-Q4_K_M.gguf')).toBeNull();
+    expect(ui.queryByText('gemma-mmproj-F16.gguf')).toBeNull();
+    expect(ui.getByText('Notes.txt')).toBeTruthy();
+    expect(ui.getByText('4 MB / 8 MB · 1.0 MB/s')).toBeTruthy();
+
+    fireEvent.press(
+      ui.getByTestId(`sync-activity-cancel-model:${modelJob.id}`),
+    );
+    await Promise.resolve();
+    expect(acts.cancelModel).toHaveBeenCalledWith(modelJob.id);
+    expect(acts.cancelTransfer).not.toHaveBeenCalled();
+  });
 
   /**
    * The sweep. This is the test that makes a dead button impossible.
@@ -270,17 +398,6 @@ describePro('the Activity list', () => {
     const projection = project(acts, {
       transfers: [liveSend, completedReceive],
       ambientActivity: [failedAmbientSend],
-      knowledgeActivity: [
-        {
-          key: 'kd-1',
-          deviceId: THE_MAC,
-          syncId: '33333333-3333-4333-8333-333333333333',
-          fileName: 'A shared document.pdf',
-          fileSize: 4096,
-          status: 'failed',
-          error: 'refused',
-        },
-      ] as never,
       modelJobs: [
         {
           id: 'job-1',
@@ -309,19 +426,24 @@ describePro('the Activity list', () => {
     // summing every handler's calls, as this did, would pass a Retry button wired to a dismiss handler, which is
     // precisely the dead-button class this test exists to rule out. Grouped by verb rather than mapped per row so
     // the test does not re-encode the projection's routing table.
-    const byVerb: Record<'retry' | 'cancel' | 'dismiss', Array<keyof Handlers>> = {
-      retry: ['retryKnowledge', 'retryAmbient', 'retryModel'],
+    const byVerb: Record<
+      'retry' | 'cancel' | 'dismiss',
+      Array<keyof Handlers>
+    > = {
+      retry: ['retryAmbient', 'retryModel'],
       cancel: ['cancelTransfer', 'cancelAmbient', 'cancelModel'],
       dismiss: [
         'dismissLiveTransfer',
         'dismissCompletedTransfer',
-        'dismissKnowledge',
         'dismissAmbient',
         'dismissModel',
       ],
     };
     const callsIn = (verb: 'retry' | 'cancel' | 'dismiss') =>
-      byVerb[verb].reduce((total, name) => total + acts[name].mock.calls.length, 0);
+      byVerb[verb].reduce(
+        (total, name) => total + acts[name].mock.calls.length,
+        0,
+      );
 
     const pressed: string[] = [];
     // Open is the fourth button and it is the caller's job rather than the projection's, so it is checked the
@@ -337,7 +459,11 @@ describePro('the Activity list', () => {
         const state = item.actions[action];
         if (!state.visible || !state.enabled) continue;
         const button = ui.getByTestId(`sync-activity-${action}-${item.id}`);
-        const before = { retry: callsIn('retry'), cancel: callsIn('cancel'), dismiss: callsIn('dismiss') };
+        const before = {
+          retry: callsIn('retry'),
+          cancel: callsIn('cancel'),
+          dismiss: callsIn('dismiss'),
+        };
 
         fireEvent.press(button);
         await Promise.resolve();
@@ -356,7 +482,9 @@ describePro('the Activity list', () => {
         } catch {
           throw new Error(
             `${action} on "${item.id}" did not reach exactly a ${action} handler. ` +
-              `retry:${callsIn('retry')} cancel:${callsIn('cancel')} dismiss:${callsIn('dismiss')} ` +
+              `retry:${callsIn('retry')} cancel:${callsIn(
+                'cancel',
+              )} dismiss:${callsIn('dismiss')} ` +
               `(before retry:${before.retry} cancel:${before.cancel} dismiss:${before.dismiss})`,
           );
         }
@@ -365,8 +493,8 @@ describePro('the Activity list', () => {
     }
 
     // And the sweep has to have swept a real spread, or it would pass on one button and prove almost nothing.
-    // Four rows are in play here - a live send, a completed receive, a failed ambient share, a failed knowledge
-    // document and a failed model job - and between them they offer more than a couple of controls.
+    // Four rows are in play here - a live send, a completed receive, a failed ambient share, and a failed model
+    // job - and between them they offer more than a couple of controls.
     expect(pressed.length).toBeGreaterThanOrEqual(4);
   });
 

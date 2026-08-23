@@ -4,7 +4,11 @@ import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import { SWEET_SPOT_SIZE } from '../../utils/imageGenAdvice';
+import {
+  defaultImageSteps,
+  MAX_IMAGE_STEPS,
+  SWEET_SPOT_SIZE,
+} from '../../utils/imageGenAdvice';
 import { createStyles } from './styles';
 
 const ClearGPUCacheButton: React.FC = () => {
@@ -35,8 +39,8 @@ export const ImageQualityBasicSliders: React.FC = () => {
         testID="image-steps"
         label="Image Steps"
         description="4-8 steps for speed, 20-50 for quality"
-        value={settings.imageSteps || 8}
-        min={4} max={50} step={1}
+        value={settings.imageSteps || defaultImageSteps(Platform.OS)}
+        min={4} max={MAX_IMAGE_STEPS} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 
@@ -84,6 +88,10 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
           <View style={styles.settingHeader}>
             <Text style={styles.settingLabel}>GPU Acceleration</Text>
             <Switch
+              testID="image-gpu-acceleration"
+              accessibilityLabel={`GPU Acceleration, ${
+                (settings.imageUseOpenCL ?? true) ? 'ON' : 'OFF'
+              }`}
               value={settings.imageUseOpenCL ?? true}
               onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
               trackColor={{ false: colors.surfaceLight, true: colors.primary }}

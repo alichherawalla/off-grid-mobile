@@ -212,14 +212,7 @@ describe('staging a picked file', () => {
    * of ours is stood in for.
    */
   const reportsSize = (size: number | string) =>
-    fs.stat.mockImplementationOnce(async (path: string) => ({
-      path,
-      name: path.slice(path.lastIndexOf('/') + 1),
-      size: size as number,
-      isFile: () => true,
-      isDirectory: () => false,
-      mtime: new Date(0),
-    }));
+    modelTransferFsBoundary.setReportedFileSize('/docs/inbox/holiday.png', size);
 
   it('accepts a size reported as text, the way the native layer sends it', async () => {
     reportsSize('5');

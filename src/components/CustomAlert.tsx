@@ -3,8 +3,8 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
+import { LoadingDots } from './LoadingDots';
 import { AppSheet } from './AppSheet';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -58,7 +58,7 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator size="small" color={colors.primary} style={styles.loadingIndicator} />
+          <LoadingDots color={colors.primary} style={styles.loadingIndicator} />
         ) : null}
         {message ? <Text style={[styles.message, prominentMessage && styles.messageProminent]}>{message}</Text> : null}
         <View style={styles.buttonContainer}>

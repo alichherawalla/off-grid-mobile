@@ -154,11 +154,12 @@ hardcodes `status: 'completed'` converts a lost record into a durable lie.
 
 **Design to abstractions, not concrete implementations.** When there are multiple interchangeable implementations of a thing (TTS engines, model backends, providers, storage), the rest of the app must depend on a single interface/service layer - never branch on a concrete type.
 
-**Before every code edit, stop and ask three questions - out loud, in the response:**
+**Before every code edit, stop and ask four questions - out loud, in the response:**
 
 1. **Is there enough here to abstract?** Two or more concrete cases handled by the same caller (text vs vision vs image models, Slack vs Mail surfaces, kokoro vs piper TTS) means there's a seam. One case, used once, is not - don't abstract speculatively (YAGNI).
 2. **Can we apply SOLID here?** Mainly: does one thing own one responsibility (SRP), and do callers depend on an interface rather than the concretes (DSP)? A `kind === 'x'` / `instanceof` / per-type `switch` in a caller - *especially in the renderer* - is the tell that the decision belongs behind a service.
 3. **Are we actually using it?** A mapping or rule must be defined ONCE and reused. If the same kind→modality map, the same routing `if`, or the same capability check appears in two layers (e.g. main process AND renderer), that's duplication, not abstraction - collapse it to a single source of truth and have both sides call it.
+4. **Does YAGNI say to stop?** Build only what the current requirement needs. Do not add speculative extension points, policies, state, or compatibility paths for hypothetical callers; reuse the smallest existing seam that solves the observed case.
 
 If the answer to 1 is "no", say so and write the simple version. If "yes", build the seam before piling on the second concrete branch - retrofitting after drift is the expensive path.
 

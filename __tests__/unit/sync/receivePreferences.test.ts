@@ -36,15 +36,15 @@ describe('what this phone will accept, and from whom', () => {
     it('reads back the answer it was given before', async () => {
       const first = store();
       await first.load();
-      await first.setCategory('chats', false);
+      await first.setCategory('files', false);
 
       const next = store();
       await next.load();
 
       // The setting has to survive the app closing, or every launch quietly starts accepting things the user
       // turned off.
-      expect(next.accepts('the-mac', 'chats')).toBe(false);
-      expect(next.accepts('the-mac', 'files')).toBe(true);
+      expect(next.accepts('the-mac', 'files')).toBe(false);
+      expect(next.accepts('the-mac', 'models')).toBe(true);
     });
 
     it('falls back to accepting everything when what is stored is not readable', async () => {
@@ -78,21 +78,23 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setEnabled(false);
+      await receiving.setOptionalEnabled(false);
 
       // One switch that means it: "stop accepting" cannot leave a category quietly still arriving.
-      for (const category of ['files', 'chats', 'models', 'projects']) {
+      for (const category of ['files', 'models', 'clipboard']) {
         expect(receiving.accepts('the-mac', category)).toBe(false);
         expect(receiving.accepts('the-ipad', category)).toBe(false);
       }
+      expect(receiving.accepts('the-mac', 'chats')).toBe(true);
+      expect(receiving.accepts('the-mac', 'projects')).toBe(true);
     });
 
     it('accepts again when it is switched back on', async () => {
       const receiving = store();
       await receiving.load();
-      await receiving.setEnabled(false);
+      await receiving.setOptionalEnabled(false);
 
-      await receiving.setEnabled(true);
+      await receiving.setOptionalEnabled(true);
 
       expect(receiving.accepts('the-mac', 'files')).toBe(true);
     });
@@ -103,12 +105,11 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setCategory('chats', false);
+      await receiving.setCategory('files', false);
 
-      expect(receiving.accepts('the-mac', 'chats')).toBe(false);
-      expect(receiving.accepts('the-ipad', 'chats')).toBe(false);
-      // The point of per-category: someone who does not want chats on their phone still wants the files.
-      expect(receiving.accepts('the-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-mac', 'files')).toBe(false);
+      expect(receiving.accepts('the-ipad', 'files')).toBe(false);
+      expect(receiving.accepts('the-mac', 'models')).toBe(true);
     });
 
     it('decides an op-log entity by the category it belongs to', async () => {
@@ -119,8 +120,8 @@ describe('what this phone will accept, and from whom', () => {
 
       // The mapping from entity to category is the shared package's, asked here rather than restated: a second
       // copy of it would let the phone refuse what the Mac accepts.
-      expect(receiving.acceptsEntity('the-mac', 'message')).toBe(false);
-      expect(receiving.acceptsEntity('the-mac', 'conversation')).toBe(false);
+      expect(receiving.acceptsEntity('the-mac', 'message')).toBe(true);
+      expect(receiving.acceptsEntity('the-mac', 'conversation')).toBe(true);
     });
 
     it('decides an arriving file by the kind it declares', async () => {
@@ -155,10 +156,11 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setDeviceEnabled('the-work-mac', false);
+      await receiving.setDeviceOptionalEnabled('the-work-mac', false);
 
       expect(receiving.accepts('the-work-mac', 'files')).toBe(false);
-      expect(receiving.accepts('the-work-mac', 'chats')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'models')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'chats')).toBe(true);
       // A device the user distrusts is a per-device decision; the rest of their mesh is unaffected.
       expect(receiving.accepts('the-mac', 'files')).toBe(true);
     });
@@ -167,17 +169,17 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setDeviceCategory('the-work-mac', 'chats', false);
+      await receiving.setDeviceCategory('the-work-mac', 'files', false);
 
-      expect(receiving.accepts('the-work-mac', 'chats')).toBe(false);
-      expect(receiving.accepts('the-work-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-work-mac', 'files')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'models')).toBe(true);
       expect(receiving.accepts('the-mac', 'chats')).toBe(true);
     });
 
     it('forgets a device s rules when it leaves the mesh', async () => {
       const receiving = store();
       await receiving.load();
-      await receiving.setDeviceEnabled('the-work-mac', false);
+      await receiving.setDeviceOptionalEnabled('the-work-mac', false);
 
       await receiving.forgetDevice('the-work-mac');
 
@@ -203,7 +205,7 @@ describe('what this phone will accept, and from whom', () => {
     it('gives a new subscriber the current answer immediately', async () => {
       const receiving = store();
       await receiving.load();
-      await receiving.setCategory('chats', false);
+      await receiving.setCategory('files', false);
       const seen: ReceivePolicy[] = [];
 
       receiving.subscribe(policy => seen.push(policy));
@@ -211,7 +213,7 @@ describe('what this phone will accept, and from whom', () => {
       // The settings screen draws from the first call: without it every toggle would render as its default
       // until something else changed.
       expect(seen).toHaveLength(1);
-      expect(seen[0].disabledCategories).toContain('chats');
+      expect(seen[0].disabledCategories).toContain('files');
     });
 
     it('tells subscribers about every change', async () => {
@@ -220,10 +222,14 @@ describe('what this phone will accept, and from whom', () => {
       const seen: ReceivePolicy[] = [];
       receiving.subscribe(policy => seen.push(policy));
 
-      await receiving.setEnabled(false);
-      await receiving.setEnabled(true);
+      await receiving.setOptionalEnabled(false);
+      await receiving.setOptionalEnabled(true);
 
-      expect(seen.map(({ enabled }) => enabled)).toEqual([true, false, true]);
+      expect(seen.map(({ optionalEnabled }) => optionalEnabled)).toEqual([
+        true,
+        false,
+        true,
+      ]);
     });
 
     it('stops telling a subscriber that unsubscribed', async () => {
@@ -233,7 +239,7 @@ describe('what this phone will accept, and from whom', () => {
       const unsubscribe = receiving.subscribe(policy => seen.push(policy));
 
       unsubscribe();
-      await receiving.setEnabled(false);
+      await receiving.setOptionalEnabled(false);
 
       // A screen that has gone away must not be re-rendered, and on this store that would mean holding it in
       // memory for the life of the app.
@@ -246,18 +252,18 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
       const seen: boolean[] = [];
-      receiving.subscribe(({ enabled }) => seen.push(enabled));
+      receiving.subscribe(({ optionalEnabled }) => seen.push(optionalEnabled));
       jest
         .spyOn(AsyncStorage, 'setItem')
         .mockRejectedValueOnce(new Error('the disk is full'));
 
-      await expect(receiving.setEnabled(false)).rejects.toThrow(
+      await expect(receiving.setOptionalEnabled(false)).rejects.toThrow(
         'the disk is full',
       );
 
       // Optimistic and then reverted, visibly: a toggle that stayed off while still accepting everything is
       // the worst outcome available here - the user believes they refused something they did not.
-      expect(receiving.get().enabled).toBe(true);
+      expect(receiving.get().optionalEnabled).toBe(true);
       expect(seen).toEqual([true, false, true]);
     });
 
@@ -268,20 +274,22 @@ describe('what this phone will accept, and from whom', () => {
         .spyOn(AsyncStorage, 'setItem')
         .mockRejectedValueOnce(new Error('the disk is full'));
 
-      const failing = receiving.setEnabled(false).catch(() => undefined);
-      await receiving.setCategory('chats', false);
+      const failing = receiving
+        .setOptionalEnabled(false)
+        .catch(() => undefined);
+      await receiving.setCategory('files', false);
       await failing;
 
       // The user turned receiving off, it failed, and they then turned chats off. The failure must not roll
       // back the decision that came after it.
-      expect(receiving.get().disabledCategories).toContain('chats');
+      expect(receiving.get().disabledCategories).toContain('files');
     });
 
     it('writes what it was asked to write', async () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setDeviceCategory('the-work-mac', 'chats', false);
+      await receiving.setDeviceCategory('the-work-mac', 'files', false);
 
       // Read back through storage: the next launch reads exactly these bytes, so a policy that lived only in
       // memory would look like the setting never took.
@@ -289,7 +297,7 @@ describe('what this phone will accept, and from whom', () => {
         (await AsyncStorage.getItem(STORAGE_KEY)) ?? 'null',
       );
       expect(stored.devices['the-work-mac'].disabledCategories).toContain(
-        'chats',
+        'files',
       );
     });
   });

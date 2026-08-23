@@ -4,6 +4,7 @@ import {
   SHARED_FILE_ENTITY,
   createKnowledgeDocumentStateFields,
   createSharedFileStateFields,
+  isRuntimeOnlyMessage,
   type SharedFileDescriptor,
 } from '@offgrid/sync';
 import type { Conversation, Message, Project } from '../../types';
@@ -12,9 +13,10 @@ import { serializeMessageContext } from './messageContext';
 
 /** Stable wire entity names shared with Off Grid Desktop. */
 export const CORE_SYNC_ENTITIES = {
+  // Dependency order is wire order: parents must materialize before children.
+  project: 'project',
   conversation: 'conversation',
   message: 'message',
-  project: 'project',
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
@@ -65,6 +67,10 @@ const MODEL_SETTING_DESCRIPTORS: Readonly<
     accepts: finiteInRange(0, 2),
   },
   maxTokens: { localKey: 'maxTokens', accepts: integerInRange(1, 1_048_576) },
+  maxToolCalls: {
+    localKey: 'maxToolCalls',
+    accepts: integerInRange(1, 100),
+  },
   systemPrompt: {
     localKey: 'systemPrompt',
     accepts: value => typeof value === 'string',
@@ -180,7 +186,21 @@ export function messagePutMutation(
   conversationId: string,
   message: Message,
 ): SyncMutation | null {
-  if (!message.uuid) return null;
+  if (
+    !message.uuid ||
+    // A thinking row is live UI state, not a completed chat turn. Image prompt enhancement creates
+    // one with "Enhancing your prompt..." and later either replaces it with the labelled,
+    // supporting-context message or deletes it. Publishing this intermediate row made peers render
+    // it as a normal assistant answer, complete with reply actions, until the later mutation arrived.
+    message.isThinking === true ||
+    isRuntimeOnlyMessage({
+      role: message.role,
+      content: message.content,
+      notice: message.isSystemInfo,
+    })
+  ) {
+    return null;
+  }
   return {
     entity: CORE_SYNC_ENTITIES.message,
     entityId: message.uuid,

@@ -178,7 +178,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }),
   });
 
-  const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, startRecording, stopRecording, cancelRecording } = useVoiceInput({
+  const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, isAwaitingSpeech, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
     onTranscript: voiceHandlers.onTranscript,
     onAudioAttachment: voiceHandlers.onAudioAttachment,
@@ -364,7 +364,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <View style={styles.pill}>
           {isRecording ? (
             // Push-to-talk hint inline in the composer (WhatsApp pattern) — see RecordingHint.
-            <RecordingHint />
+            <RecordingHint awaitingSpeech={isAwaitingSpeech} />
           ) : (
             <>
               <TextInput

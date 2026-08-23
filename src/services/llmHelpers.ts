@@ -11,6 +11,8 @@ import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from '
 import { HTP_ENABLED } from '../config/featureFlags';
 
 const RESPONSE_RESERVE = 512;
+/** Prompt compaction target. Output length is the user's model-aware maxTokens setting. */
+export const CONTEXT_PROMPT_BUDGET_RATIO = 0.55;
 const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
 const DEFAULT_BATCH = 512;
 const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
@@ -406,16 +408,18 @@ export async function fitMessagesInBudget(
   }
   return result;
 }
-// The device-capacity rules live in their own module (llmDeviceLimits): they answer one question
-// from the device's memory alone and need no engine. Re-exported so callers keep one import.
-export { BYTES_PER_GB, getMaxContextForDevice, getGpuLayersForDevice } from './llmDeviceLimits';
+// Pure GPU hardware rules live in their own module and need no engine.
+export { BYTES_PER_GB, getGpuLayersForDevice } from './llmDeviceLimits';
 export { validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext } from './llmSafetyChecks';
 const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
 }, options?: { disableCtxShift?: boolean }): Record<string, any> {
+  const requestedMaxTokens = Math.max(1, Math.floor(settings.maxTokens || RESPONSE_RESERVE));
   return {
-    n_predict: settings.maxTokens || RESPONSE_RESERVE,
+    // Do not impose a second app-owned output ceiling. The setting surface already
+    // uses the model's context maximum; llama.rn owns the actual per-turn fit.
+    n_predict: requestedMaxTokens,
     temperature: settings.temperature ?? 0.7,
     top_k: 40,
     top_p: settings.topP ?? 0.95,

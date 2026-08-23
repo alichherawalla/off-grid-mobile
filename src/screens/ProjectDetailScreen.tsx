@@ -176,7 +176,7 @@ export const ProjectDetailScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="project-detail-screen">
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -246,6 +246,7 @@ export const ProjectDetailScreen: React.FC = () => {
                 size="small"
                 onPress={handleNewChat}
                 disabled={!hasModels}
+                testID="project-new-chat"
                 icon={
                   <Icon
                     name="plus"
@@ -279,6 +280,7 @@ export const ProjectDetailScreen: React.FC = () => {
                     size="small"
                     onPress={handleNewChat}
                     style={styles.emptyStateButton}
+                    testID="project-start-chat"
                   />
                 )}
               </View>

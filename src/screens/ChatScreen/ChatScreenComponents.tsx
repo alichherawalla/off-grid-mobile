@@ -5,8 +5,8 @@ import {
   TouchableOpacity,
   Modal,
   Image,
-  ActivityIndicator,
 } from 'react-native';
+import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ModelSelectorModal } from '../../components';
@@ -53,7 +53,7 @@ export const NoModelScreen: React.FC<{
         // remain with no feedback — the user thinks nothing happened. Show a loading
         // indicator instead of the "Select Model" prompt.
         <>
-          <ActivityIndicator size="large" color={colors.primary} testID="no-model-loading-indicator" />
+          <LoadingDots color={colors.primary} size={8} testID="no-model-loading-indicator" />
           <Text style={[styles.noModelTitle, styles.noModelLoadingTitle]}>Loading Model</Text>
           <Text style={styles.noModelText}>Getting your model ready. This can take a moment.</Text>
         </>

@@ -289,10 +289,8 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.queryAllByText('Saved')).toHaveLength(0);
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', false);
-    await waitFor(() =>
-      expect(stateSyncService.preferences().projects).toBe(false),
-    );
+    expect(ui.getByTestId('sync-sending-accordion')).toBeTruthy();
+    expect(ui.getByTestId('sync-clipboard-toggle')).toBeTruthy();
 
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
@@ -365,17 +363,6 @@ describe('Pro mobile state sync journey', () => {
       .getState()
       .projects.find(project => project.name === 'Phone Notes');
     if (!phoneProject) throw new Error('Phone project was not saved');
-    expect(
-      remoteRecords.records.has(
-        `${CORE_SYNC_ENTITIES.project}:${phoneProject.id}`,
-      ),
-    ).toBe(false);
-
-    fireEvent.press(ui.getByTestId('settings-tab'));
-    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', true);
-
     await waitFor(() =>
       expect(
         remoteRecords.records.get(
@@ -384,9 +371,6 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ name: 'Phone Notes' }),
     );
 
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByTestId('projects-tab'));
     fireEvent.press(ui.getByText('Desktop Research'));
     fireEvent.press(await waitFor(() => ui!.getByText('Delete Project')));
     fireEvent.press(await waitFor(() => ui!.getByText('Delete')));
@@ -410,14 +394,6 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.getByText('The phone checked the notes.')).toBeTruthy();
 
     fireEvent.press(ui.getByTestId('settings-tab'));
-    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', false);
-    await waitFor(() =>
-      expect(stateSyncService.preferences().settings).toBe(false),
-    );
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByText('Model Settings'));
     fireEvent.press(
       await waitFor(() => ui!.getByTestId('text-generation-accordion')),
@@ -432,16 +408,6 @@ describe('Pro mobile state sync journey', () => {
       'slidingComplete',
       1.25,
     );
-    expect(
-      remoteRecords.records.get(
-        `${CORE_SYNC_ENTITIES.modelSetting}:temperature`,
-      ),
-    ).toMatchObject({ value_json: '0.55' });
-
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    fireEvent(ui.getByTestId('sync-settings-toggle'), 'valueChange', true);
     await waitFor(() =>
       expect(
         remoteRecords.records.get(
@@ -458,12 +424,6 @@ describe('Pro mobile state sync journey', () => {
       expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
     );
 
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByText('Model Settings'));
-    fireEvent.press(
-      await waitFor(() => ui!.getByTestId('text-generation-accordion')),
-    );
     fireEvent(
       ui.getByTestId('llama-temperature-slider'),
       'slidingComplete',

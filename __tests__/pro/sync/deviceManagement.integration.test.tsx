@@ -138,7 +138,7 @@ describe('Pro mobile saved-device management journey', () => {
     _clearSectionsForTesting();
   });
 
-  it('disconnects, reconnects, renames persistently, and forgets a paired desktop', async () => {
+  it('disconnects, reconnects, pairs again from an offline row, and forgets a paired desktop', async () => {
     // This desktop has been on the licence all along, as a real paired peer would be: the roster is
     // built from installations, so a peer with none is a peer the phone cannot show.
     mesh.register({
@@ -159,6 +159,7 @@ describe('Pro mobile saved-device management journey', () => {
       pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
       getSharedSecret: deviceId =>
         remotePersistence.getActive(deviceId)?.sharedSecret,
       pairingPersistence: remotePersistence,
@@ -205,17 +206,27 @@ describe('Pro mobile saved-device management journey', () => {
     const connectedRow = await waitFor(() =>
       ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
     );
-    expect(within(connectedRow).getByText(/Connected/)).toBeTruthy();
-    expect(
-      within(connectedRow).getByLabelText('Rename Off Grid AI Desktop'),
-    ).toBeTruthy();
-    expect(within(connectedRow).queryByText('Rename')).toBeNull();
+    expect(within(connectedRow).getByText(/Connected · WiFi/)).toBeTruthy();
+    expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
+    fireEvent.press(ui.getByTestId('sync-rename-this-device'));
+    expect(await waitFor(() => ui!.getByText('Rename this device'))).toBeTruthy();
+    fireEvent.changeText(
+      ui.getByTestId('sync-rename-this-device-input'),
+      'Travel Phone',
+    );
+    fireEvent.press(ui.getByTestId('sync-rename-this-device-save'));
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-this-device').props.children).toBe(
+        'Travel Phone',
+      ),
+    );
+    expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
 
     fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
     await waitFor(() =>
       expect(
         within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
-          /Nearby/,
+          /Offline/,
         ),
       ).toBeTruthy(),
     );
@@ -255,28 +266,76 @@ describe('Pro mobile saved-device management journey', () => {
     );
     fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
-    fireEvent.press(ui.getByTestId(`sync-rename-${remoteDevice.id}`));
-    await waitFor(() =>
-      expect(ui!.getByText('Rename Off Grid AI Desktop')).toBeTruthy(),
-    );
-    fireEvent.changeText(ui.getByTestId('sync-rename-input'), 'Studio Mac');
-    fireEvent.press(ui.getByTestId('sync-rename-save'));
+    const pairingBeforeRepair = JSON.parse(storedPairings() ?? '{}').pairings[
+      remoteDevice.id
+    ];
+    const installationIdsBeforeRepair = mesh
+      .installations()
+      .map(installation => installation.fingerprint)
+      .sort();
+    await remote.engine.stop();
+    getDiscoveryBoundaries().at(-1)!.lose(remoteDevice.id);
     await waitFor(() =>
       expect(
         within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
-          'Studio Mac',
+          /Offline/,
         ),
       ).toBeTruthy(),
     );
-    expect(JSON.parse(storedPairings() ?? '{}')).toEqual(
-      expect.objectContaining({
-        pairings: expect.objectContaining({
-          [remoteDevice.id]: expect.objectContaining({ alias: 'Studio Mac' }),
-        }),
-      }),
+    const offlineRow = ui.getByTestId(`sync-paired-${remoteDevice.id}`);
+    expect(
+      within(offlineRow).queryByTestId(`sync-disconnect-${remoteDevice.id}`),
+    ).toBeNull();
+    expect(within(offlineRow).queryByLabelText(/Rename/)).toBeNull();
+    // The row is already offline, so it has no second Disconnect. Pair again is a separate key action
+    // that asks for the code the desktop shows now.
+    fireEvent.press(ui.getByTestId(`sync-repair-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(ui!.getByText('Pair with Off Grid AI Desktop')).toBeTruthy(),
     );
+    expect(ui.getByTestId('sync-pairing-code-input')).toBeTruthy();
+    expect(ui.getByText('Pair again')).toBeTruthy();
+
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
+    fireEvent.changeText(
+      ui.getByTestId('sync-pairing-code-input'),
+      TYPED_PAIRING_CODE,
+    );
+    fireEvent.press(ui.getByTestId('sync-pairing-code-confirm'));
+
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Connected/,
+        ),
+      ).toBeTruthy(),
+    );
+    const pairingAfterRepair = JSON.parse(storedPairings() ?? '{}').pairings[
+      remoteDevice.id
+    ];
+    expect(pairingAfterRepair.secret).not.toBe(pairingBeforeRepair.secret);
+    expect(
+      mesh
+        .installations()
+        .map(({ fingerprint }) => fingerprint)
+        .sort(),
+    ).toEqual(installationIdsBeforeRepair);
+    expect(JSON.parse(storedPairings() ?? '{}').tombstones).toEqual({});
 
     await remote.engine.stop();
+    getDiscoveryBoundaries().at(-1)!.lose(remoteDevice.id);
     await waitFor(() =>
       expect(
         within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
@@ -289,10 +348,10 @@ describe('Pro mobile saved-device management journey', () => {
     // because evicting frees a seat as well as ending the trust.
     fireEvent.press(ui.getByTestId(`sync-forget-${remoteDevice.id}`));
     await waitFor(() =>
-      expect(ui!.getByText('Evict Studio Mac?')).toBeTruthy(),
+      expect(ui!.getByText('Evict Off Grid AI Desktop?')).toBeTruthy(),
     );
     expect(
-      ui.getByText(/removes Studio Mac from your licensed devices/),
+      ui.getByText(/removes Off Grid AI Desktop from your licensed devices/),
     ).toBeTruthy();
     fireEvent.press(ui.getByText('Evict device'));
     await waitFor(() =>
@@ -304,7 +363,9 @@ describe('Pro mobile saved-device management journey', () => {
     // though the removal had failed. The revocation is still tracked and retried in the background;
     // what is gone is the removed device's presence on this screen.
     await waitFor(() =>
-      expect(ui!.queryByTestId(`sync-discovered-${remoteDevice.id}`)).toBeNull(),
+      expect(
+        ui!.queryByTestId(`sync-discovered-${remoteDevice.id}`),
+      ).toBeNull(),
     );
     expect(ui.queryByText(/Could not reach/)).toBeNull();
     expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
@@ -313,6 +374,7 @@ describe('Pro mobile saved-device management journey', () => {
       pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
       getSharedSecret: deviceId =>
         remotePersistence.getActive(deviceId)?.sharedSecret,
       pairingPersistence: remotePersistence,

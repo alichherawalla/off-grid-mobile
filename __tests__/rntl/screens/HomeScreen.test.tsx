@@ -376,9 +376,11 @@ describe('HomeScreen', () => {
       expect(getByTestId('home-screen')).toBeTruthy();
     });
 
-    it('shows app title', () => {
-      const { getByText } = renderHomeScreen();
+    it('shows the app logo beside the title without the old guided-tour dot', () => {
+      const { getByTestId, getByText, queryByTestId } = renderHomeScreen();
+      expect(getByTestId('home-app-logo')).toBeTruthy();
       expect(getByText('Off Grid AI')).toBeTruthy();
+      expect(queryByTestId('guided-tour-trigger')).toBeNull();
     });
 
     it('shows Text and Image model card labels', () => {

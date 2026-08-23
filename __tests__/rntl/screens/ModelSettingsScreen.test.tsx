@@ -42,7 +42,7 @@ const renderScreen = () => {
   return render(
     <NavigationContainer>
       <ModelSettingsScreen />
-    </NavigationContainer>
+    </NavigationContainer>,
   );
 };
 
@@ -111,7 +111,6 @@ describe('ModelSettingsScreen', () => {
       const { getByText } = renderWithSections('text');
       expect(getByText(/Configure LLM behavior/)).toBeTruthy();
     });
-
   });
 
   // ============================================================================
@@ -165,7 +164,9 @@ describe('ModelSettingsScreen', () => {
 
       fireEvent.changeText(input, 'You are a coding assistant.');
 
-      expect(useAppStore.getState().settings.systemPrompt).toBe('You are a coding assistant.');
+      expect(useAppStore.getState().settings.systemPrompt).toBe(
+        'You are a coding assistant.',
+      );
     });
   });
 
@@ -176,7 +177,11 @@ describe('ModelSettingsScreen', () => {
     it('renders the toggle with label and description', () => {
       const { getByText } = renderWithSections('text');
       expect(getByText('Show Generation Details')).toBeTruthy();
-      expect(getByText('Display GPU, model, tok/s, and image settings below each message')).toBeTruthy();
+      expect(
+        getByText(
+          'Display GPU, model, tok/s, and image settings below each message',
+        ),
+      ).toBeTruthy();
     });
 
     it('defaults to off', () => {
@@ -238,7 +243,6 @@ describe('ModelSettingsScreen', () => {
 
       expect(useAppStore.getState().settings.flashAttn).toBe(false);
     });
-
   });
 
   // ============================================================================
@@ -252,14 +256,18 @@ describe('ModelSettingsScreen', () => {
       useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
       const { getByTestId } = renderWithSections('text');
       fireEvent.press(getByTestId('model-loading-mode-aggressive-button'));
-      expect(useAppStore.getState().settings.modelLoadingMode).toBe('aggressive');
+      expect(useAppStore.getState().settings.modelLoadingMode).toBe(
+        'aggressive',
+      );
     });
 
     it('selects conservative', () => {
       useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
       const { getByTestId } = renderWithSections('text');
       fireEvent.press(getByTestId('model-loading-mode-conservative-button'));
-      expect(useAppStore.getState().settings.modelLoadingMode).toBe('conservative');
+      expect(useAppStore.getState().settings.modelLoadingMode).toBe(
+        'conservative',
+      );
     });
   });
 
@@ -458,7 +466,6 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('Batch Size')).toBeTruthy();
       expect(getByText('512')).toBeTruthy();
     });
-
   });
 
   // ============================================================================
@@ -469,7 +476,10 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
       const tempSlider = sliders.find((s: any) => s.props.value === 0.7);
       if (tempSlider) {
@@ -482,7 +492,10 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
       const maxTokensSlider = sliders.find((s: any) => s.props.value === 1024);
       if (maxTokensSlider) {
@@ -495,9 +508,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const stepsSlider = sliders.find((s: any) => s.props.value === 8 && s.props.maximumValue === 50);
+      const stepsSlider = sliders.find(
+        (s: any) => s.props.value === 8 && s.props.maximumValue === 50,
+      );
       if (stepsSlider) {
         fireEvent(stepsSlider, 'slidingComplete', 30);
         expect(useAppStore.getState().settings.imageSteps).toBe(30);
@@ -508,9 +526,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const threadsSlider = sliders.find((s: any) => s.props.value === 1 && s.props.maximumValue === 12);
+      const threadsSlider = sliders.find(
+        (s: any) => s.props.value === 1 && s.props.maximumValue === 12,
+      );
       if (threadsSlider) {
         fireEvent(threadsSlider, 'slidingComplete', 8);
         expect(useAppStore.getState().settings.nThreads).toBe(8);
@@ -521,13 +544,44 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const ctxSlider = sliders.find((s: any) => s.props.value === 4096 && s.props.maximumValue === 32768);
+      const ctxSlider = sliders.find(
+        (s: any) => s.props.value === 4096 && s.props.maximumValue === 32768,
+      );
       if (ctxSlider) {
         fireEvent(ctxSlider, 'slidingComplete', 4096);
         expect(useAppStore.getState().settings.contextLength).toBe(4096);
       }
+    });
+
+    it('lets context reach the model ceiling and caps max tokens at the context', () => {
+      useAppStore.getState().setModelMaxContext(262144);
+      const { UNSAFE_getAllByType } = renderWithSections('text');
+      const { View } = require('react-native');
+      const sliders = UNSAFE_getAllByType(View).filter(
+        (view: any) =>
+          view.props.onSlidingComplete &&
+          view.props.testID?.endsWith('-slider'),
+      );
+
+      // The model may not be asked to WRITE more than the context that has to hold it, so the
+      // output slider stops at the chosen context, not at the model's trained ceiling.
+      const contextLength = useAppStore.getState().settings.contextLength;
+      expect(
+        sliders.find(
+          (slider: any) => slider.props.testID === 'llama-max-tokens-slider',
+        )?.props.maximumValue,
+      ).toBe(contextLength);
+      expect(
+        sliders.find(
+          (slider: any) =>
+            slider.props.testID === 'llama-context-length-slider',
+        )?.props.maximumValue,
+      ).toBe(262144);
     });
   });
 
@@ -579,15 +633,23 @@ describe('ModelSettingsScreen', () => {
 
       beforeEach(() => {
         originalOS = Platform.OS;
-        Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true });
+        Object.defineProperty(Platform, 'OS', {
+          get: () => 'android',
+          configurable: true,
+        });
       });
 
       afterEach(() => {
-        Object.defineProperty(Platform, 'OS', { get: () => originalOS, configurable: true });
+        Object.defineProperty(Platform, 'OS', {
+          get: () => originalOS,
+          configurable: true,
+        });
       });
 
       it('shows Inference Backend section and GPU Layers slider when backend is OpenCL', () => {
-        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
+        useAppStore
+          .getState()
+          .updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
         const { getByText, getByTestId } = renderWithSections('text');
         expect(getByText('Inference Backend')).toBeTruthy();
         // Label now names the backend: "GPU Layers (OpenCL)". Assert the slider by its
@@ -596,7 +658,13 @@ describe('ModelSettingsScreen', () => {
       });
 
       it('does not clamp gpuLayers when flashAttn turned on with layers > 1', () => {
-        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 8 });
+        useAppStore
+          .getState()
+          .updateSettings({
+            inferenceBackend: 'opencl',
+            flashAttn: false,
+            gpuLayers: 8,
+          });
         const { getByTestId } = renderWithSections('text');
         fireEvent.press(getByTestId('flash-attn-on-button'));
         expect(useAppStore.getState().settings.flashAttn).toBe(true);
@@ -605,7 +673,9 @@ describe('ModelSettingsScreen', () => {
       });
 
       it('updates inferenceBackend to cpu when CPU button is pressed', () => {
-        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
+        useAppStore
+          .getState()
+          .updateSettings({ inferenceBackend: 'opencl', gpuLayers: 6 });
         const { getByTestId } = renderWithSections('text');
 
         fireEvent.press(getByTestId('backend-cpu-button'));
@@ -623,10 +693,20 @@ describe('ModelSettingsScreen', () => {
       });
 
       it('updates gpuLayers when GPU Layers slider completes', () => {
-        useAppStore.getState().updateSettings({ inferenceBackend: 'opencl', flashAttn: false, gpuLayers: 6 });
+        useAppStore
+          .getState()
+          .updateSettings({
+            inferenceBackend: 'opencl',
+            flashAttn: false,
+            gpuLayers: 6,
+          });
         const { getByTestId } = renderWithSections('text');
 
-        fireEvent(getByTestId('gpu-layers-stepper-slider'), 'slidingComplete', 7);
+        fireEvent(
+          getByTestId('gpu-layers-stepper-slider'),
+          'slidingComplete',
+          7,
+        );
 
         expect(useAppStore.getState().settings.gpuLayers).toBe(7);
       });
@@ -641,9 +721,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const topPSlider = sliders.find((s: any) => s.props.value === 0.9 && s.props.maximumValue === 1.0);
+      const topPSlider = sliders.find(
+        (s: any) => s.props.value === 0.9 && s.props.maximumValue === 1.0,
+      );
       if (topPSlider) {
         fireEvent(topPSlider, 'slidingComplete', 0.95);
         expect(useAppStore.getState().settings.topP).toBe(0.95);
@@ -654,9 +739,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const rpSlider = sliders.find((s: any) => s.props.value === 1.1 && s.props.maximumValue === 2.0);
+      const rpSlider = sliders.find(
+        (s: any) => s.props.value === 1.1 && s.props.maximumValue === 2.0,
+      );
       if (rpSlider) {
         fireEvent(rpSlider, 'slidingComplete', 1.3);
         expect(useAppStore.getState().settings.repeatPenalty).toBe(1.3);
@@ -667,9 +757,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const batchSlider = sliders.find((s: any) => s.props.value === 256 && s.props.maximumValue === 512);
+      const batchSlider = sliders.find(
+        (s: any) => s.props.value === 256 && s.props.maximumValue === 512,
+      );
       if (batchSlider) {
         fireEvent(batchSlider, 'slidingComplete', 128);
         expect(useAppStore.getState().settings.nBatch).toBe(128);
@@ -680,9 +775,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const gsSlider = sliders.find((s: any) => s.props.value === 7.5 && s.props.maximumValue === 20);
+      const gsSlider = sliders.find(
+        (s: any) => s.props.value === 7.5 && s.props.maximumValue === 20,
+      );
       if (gsSlider) {
         fireEvent(gsSlider, 'slidingComplete', 10);
         expect(useAppStore.getState().settings.imageGuidanceScale).toBe(10);
@@ -693,9 +793,14 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
-      const itSlider = sliders.find((s: any) => s.props.value === 4 && s.props.maximumValue === 8);
+      const itSlider = sliders.find(
+        (s: any) => s.props.value === 4 && s.props.maximumValue === 8,
+      );
       if (itSlider) {
         fireEvent(itSlider, 'slidingComplete', 6);
         expect(useAppStore.getState().settings.imageThreads).toBe(6);
@@ -706,10 +811,18 @@ describe('ModelSettingsScreen', () => {
       const { UNSAFE_getAllByType } = renderWithSections('image');
       const { View } = require('react-native');
       const allViews = UNSAFE_getAllByType(View);
-      const sliders = allViews.filter((v: any) => v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'));
+      const sliders = allViews.filter(
+        (v: any) =>
+          v.props.onSlidingComplete && v.props.testID?.endsWith('-slider'),
+      );
 
       // Min is the shared 256 floor (SWEET_SPOT_SIZE) — same as the chat modal, no divergence.
-      const sizeSlider = sliders.find((s: any) => s.props.value === 512 && s.props.maximumValue === 512 && s.props.minimumValue === 256);
+      const sizeSlider = sliders.find(
+        (s: any) =>
+          s.props.value === 512 &&
+          s.props.maximumValue === 512 &&
+          s.props.minimumValue === 256,
+      );
       expect(sizeSlider).toBeTruthy();
       fireEvent(sizeSlider!, 'slidingComplete', 320);
       expect(useAppStore.getState().settings.imageWidth).toBe(320);
@@ -735,7 +848,9 @@ describe('ModelSettingsScreen', () => {
             expect(after).toBe('manual');
             return;
           }
-          useAppStore.getState().updateSettings({ imageGenerationMode: 'auto' });
+          useAppStore
+            .getState()
+            .updateSettings({ imageGenerationMode: 'auto' });
         }
       }
     });
@@ -747,8 +862,11 @@ describe('ModelSettingsScreen', () => {
   describe('max tokens display formatting', () => {
     it('shows raw number when maxTokens < 1024', () => {
       useAppStore.getState().updateSettings({ maxTokens: 512, nBatch: 256 });
-      const { getAllByText } = renderWithSections('text');
-      expect(getAllByText('512').length).toBe(1);
+      const { getAllByText, queryByText } = renderWithSections('text');
+      // Under 1024 the value reads as itself rather than a rounded "0K". It appears more than once
+      // because max tokens is capped BY the context, so both controls legitimately show 512.
+      expect(getAllByText('512').length).toBeGreaterThan(0);
+      expect(queryByText('0K')).toBeNull();
     });
 
     it('shows K format when maxTokens >= 1024', () => {
@@ -764,9 +882,14 @@ describe('ModelSettingsScreen', () => {
   // ============================================================================
   describe('context length display formatting', () => {
     it('shows raw number when contextLength < 1024', () => {
-      useAppStore.getState().updateSettings({ contextLength: 512, nBatch: 256 });
-      const { getAllByText } = renderWithSections('text');
-      expect(getAllByText('512').length).toBe(1);
+      useAppStore
+        .getState()
+        .updateSettings({ contextLength: 512, nBatch: 256 });
+      const { getAllByText, queryByText } = renderWithSections('text');
+      // Under 1024 the value reads as itself rather than a rounded "0K". It appears more than
+      // once because max tokens is capped BY the context, so both controls show 512.
+      expect(getAllByText('512').length).toBeGreaterThan(0);
+      expect(queryByText('0K')).toBeNull();
     });
   });
 
@@ -781,6 +904,7 @@ describe('ModelSettingsScreen', () => {
           systemPrompt: undefined as any,
           temperature: undefined as any,
           maxTokens: undefined as any,
+          maxToolCalls: undefined as any,
           topP: undefined as any,
           repeatPenalty: undefined as any,
           contextLength: undefined as any,
@@ -803,6 +927,9 @@ describe('ModelSettingsScreen', () => {
           aggressiveModelLoading: undefined as any,
           cacheType: undefined as any,
           showGenerationDetails: undefined as any,
+          voiceTurnMode: 'silence' as const,
+          voiceSilenceAfterSpeechMs: 5_000,
+          voiceSpeakerDrainMs: 2_000,
           enhanceImagePrompts: undefined as any,
           enabledTools: undefined as any,
           thinkingEnabled: undefined as any,
@@ -819,7 +946,7 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('0.90')).toBeTruthy(); // topP || 0.9
       expect(getByText('1.10')).toBeTruthy(); // repeatPenalty || 1.1
       expect(getAllByText('1').length).toBeGreaterThan(0); // undefined falls back to cpuThreadsSliderValue (1)
-      expect(getByText('8')).toBeTruthy(); // imageSteps || 8
+      expect(getByText('50')).toBeTruthy(); // imageSteps || the platform default
       expect(getByText('7.5')).toBeTruthy(); // imageGuidanceScale || 7.5
     });
 
@@ -836,7 +963,9 @@ describe('ModelSettingsScreen', () => {
     });
 
     it('shows manual mode text when imageGenerationMode is not auto', () => {
-      useAppStore.getState().updateSettings({ imageGenerationMode: undefined as any });
+      useAppStore
+        .getState()
+        .updateSettings({ imageGenerationMode: undefined as any });
       const { getByText } = renderWithSections('image');
       expect(getByText(/Only generate images when you tap/)).toBeTruthy();
     });
@@ -895,7 +1024,9 @@ describe('ModelSettingsScreen', () => {
 
     // HTP is currently disabled via HTP_UI_ENABLED feature flag
     it('locks KV cache display to f16 on HTP backend', () => {
-      useAppStore.getState().updateSettings({ inferenceBackend: 'htp', cacheType: 'q4_0' });
+      useAppStore
+        .getState()
+        .updateSettings({ inferenceBackend: 'htp', cacheType: 'q4_0' });
       const { getByText } = renderWithSections('text');
       expect(getByText(/Full precision/)).toBeTruthy();
     });
@@ -990,7 +1121,7 @@ describe('Speech sections — Transcription (STT) + Text to Speech (TTS)', () =>
     fireEvent.press(view.getByTestId('transcription-accordion'));
     // the row appears and shows the "no model yet" state (whisper store empty in a fresh app)
     expect(view.getByTestId('stt-open-picker')).toBeTruthy();
-    expect(view.getByText('None selected — tap to choose')).toBeTruthy();
+    expect(view.getByText('No model selected. Tap to choose.')).toBeTruthy();
   });
 
   it('does NOT show Text to Speech without the pro TTS slot (free build)', () => {

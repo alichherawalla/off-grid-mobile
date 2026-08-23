@@ -12,6 +12,38 @@ Verdict legend:
 
 ---
 
+## Projects screen does not refresh after desktop project sync - 2026-08-20
+
+**Verdict: instrument-and-revisit.**
+
+Observed during the attended desktop-to-mobile E2E: a project created on desktop and populated with
+the four Off Grid AI fixture documents reached the sync mesh, but the already-open mobile Projects
+screen did not show the new project in real time. Determine whether the project row was materialized
+while the screen's query/cache failed to invalidate, or whether materialization itself was delayed.
+The acceptance case is that an open Projects screen updates without navigation, rescan, or restart.
+
+---
+
+## Synced iPhone image is missing from the Desktop Gallery - 2026-08-20
+
+**Verdict: instrument-and-revisit.**
+
+Observed during the physical iPhone generated-image journey. The iPhone showed the live generation,
+the final image, and the new Gallery item. Desktop received and decoded the same image in the synced
+chat, and the PNG exists in Desktop's uploads directory. However, Desktop's
+`listGeneratedImages()` result has no entry for that file, so the Generated Images Gallery does not
+show it.
+
+Evidence: `.artifacts/e2e-flows/generated-image-sync/ios-to-mesh-2026-08-20T05-07-45-131Z/`.
+The received file id is `5579552F-121E-4228-9BB7-B9F9C7541D69.png`.
+
+Determine whether the desktop sync importer skips Gallery metadata registration, or whether the
+Gallery reads a separate index that does not refresh after a synced image arrives. The acceptance
+case is that one synced generated image appears in both the receiving chat and the Desktop Gallery
+without a restart or manual refresh.
+
+---
+
 ## Tooling gates — remaining follow-ups
 
 The tooling spine is installed + enforced (depcruise 0 violations, knip 0 issues, sonarjs wired,
@@ -424,6 +456,7 @@ target. The shared layer is largely complete; these are the app-side holes.
 
 | PM10 | **Android has no screenshot watcher, so automatic screenshot sharing cannot work.** `ScreenshotSyncSource` calls `nativeScreenshotBoundary.observe()` and swallows the failure with the comment "Android and older iOS builds do not expose this native watcher". iOS ships `ios/SyncScreenshotModule.swift`; there is no Kotlin counterpart (`android/.../ai/offgridmobile/` has clipboard, devicememory, directory, download, litert, localdream, pdf, sync - no screenshot). The UI therefore reports "automatic sharing is not available" on Android. This is the platform-parity rule violated exactly as rules.md describes it: a capability that exists on one platform and silently no-ops on the other. | real gap, user-reported 2026-07-30. Android CAN do this: a `ContentObserver` on `MediaStore.Images` filtered to the Screenshots bucket. Until then the gap must be declared capability DATA, not a swallowed throw. |
 | PM11 | **"For your safety, share another folder" when sharing Downloads on Android is the OS refusing, not our bug.** `SyncDirectorySourceModule.kt` uses the Storage Access Framework (`DocumentsContract` tree URIs), and Android 11+ refuses to grant SAF access to the `Download` directory (and `Android/data`, `Android/obb`) - that sentence is stock Android picker copy. So the app offers Downloads as a share target and the OS then declines it, which reads to the user as our failure. | real gap, user-reported 2026-07-30. Fix is not a permission: on Android, enumerate downloads through `MediaStore.Downloads` (API 29+), which needs no SAF grant, and stop routing that category through the folder picker. Do NOT retry SAF against Download - it cannot be granted. |
+| PM12 | **Late-pair full graph has service-level proof but no real Desktop-to-Mobile app journey.** Shared anti-entropy now handles more than 10,000 ops and byte-bounds large chat records. Mobile integration tests prove exact generated-image, attachment, and knowledge-document bytes across two real sync engines. Desktop separately proves exact late-pair bytes with SQLite and a temporary filesystem. | Open verification gap, 2026-08-13. Pair the actual apps only after project settings, chat text, enhanced prompt, reasoning, a completed tool, image, attachment, and knowledge document exist. Verify all records and bytes after pairing and after receiver restart, in both directions, on physical iOS and Android. |
 
 **Verified as already correct (no code needed):**
 
@@ -653,3 +686,532 @@ edit.
 
 Bounded until then: the exposure is one already-streaming file, not every reconnection from then on. Raised by
 Greptile on mobile-pro#47, where the thread is deliberately left open so the seam stays tracked.
+
+---
+
+## A tool-heavy turn's FINAL ANSWER reaches peers LONG after its tool calls do
+
+**Verdict:** instrument-and-revisit — the delay is real and large; the trigger is unknown.
+
+Observed 16 Aug 2026, run `iostools20260816161658`, guided six-tool journey driven from iOS.
+
+iOS finished the turn completely: thinking block, six tool calls, and a full answer
+("Off Grid AI & OGAM — Complete Overview", OGAM as a Product, Business Metrics…). macOS and
+Windows both hold the same conversation and **every tool call**, read straight off each desktop:
+
+```
+messageCount: 16, hasMarker: true
+tail: … read_wiki_structure Completed in 1611 ms / read_wiki_contents Completed in 3872 ms /
+      ask_question Completed in 17045 ms / search_knowledge_base Completed in 550 ms /
+      search_knowledge_base Completed in 758 ms / ask_question Completed in 14718 ms
+hasOgamOverview: false
+```
+
+At that moment the transcript on both desktops ENDED at the last tool call, with no assistant
+message after it. It did arrive later - Mac saw it appear on every device some minutes afterwards -
+so this is LATENCY, not loss. The delay was long enough to read as a failure while watching.
+
+How long, and what finally triggered it, are NOT yet measured. A first reading claimed the answer
+never synced; that was wrong, and a second reading could not be compared because the desktops had
+moved to a different conversation by then. Measure it properly before theorising: stamp the moment
+the primary settles, then poll ONE peer on that same conversation until the answer appears, and
+report the interval.
+
+**Why it matters:** the mesh looks healthy. The conversation is there, the tool activity is there,
+timings are there. A user on their Mac sees a turn that apparently did a lot of work and concluded
+nothing. It reads as the model failing, not as sync dropping the last message.
+
+**Where to start:** whatever writes tool-result/artifact events syncs; the terminal assistant
+message for a long tool-using turn does not. Compare against the plain `run-normal` journey, whose
+final answer DOES reach all four devices - so this is specific to the tool-heavy path or to message
+size, not to sync in general.
+
+---
+
+## "Preparing reply" state never reaches peer devices
+
+**Verdict:** instrument-and-revisit.
+
+While the primary device is working, peers show nothing. There is no "preparing reply" or thinking
+indicator on the other devices, so a person watching their desktop cannot tell the difference
+between "my phone is mid-answer" and "nothing is happening". Reported by Mac, 16 Aug 2026, during
+the guided journey.
+
+Related to the entry above: the peers do eventually receive tool events, so SOMETHING streams -
+what is missing is any signal that a turn is in flight.
+
+---
+
+## DeepWiki `ask_question` returns a validation error
+
+**Verdict:** fix-the-guard.
+
+In the guided six-tool run the model reported, in its own thinking:
+
+```
+ask_question - FAILED due to validation error, but the tool was attempted/triggered
+```
+
+The desktops show `ask_question Completed in 17045 ms` and again `Completed in 14718 ms`, so the
+call is dispatched and returns - it is the arguments or the response shape that fail validation,
+not the transport. Five of the six named tools (search_knowledge_base, web_search, read_url,
+read_wiki_structure, read_wiki_contents) succeeded in the same turn.
+
+Worth checking what the DeepWiki MCP server expects for `ask_question` against what is being sent.
+
+---
+
+## Test coverage we know we are missing (Mac's list, 16 Aug 2026)
+
+**Verdict:** instrument-and-revisit — none of these are known failures. They are capabilities we
+ship and do not exercise, which is how today's defects survived: the PDF-in-a-message bug had been
+predicted from a diff for VOICE NOTES weeks earlier and was only found when someone actually sent
+one.
+
+### Models and hardware
+
+- **Huge models — eviction and co-residency.** Run with something like Qwythos 9B (5.5 GB) and prove
+  eviction and co-residency behave: what gets unloaded, what survives, and that the device does not
+  die instead of evicting. iOS matters most here - a memory breach there is an uncatchable jetsam
+  SIGKILL, so the engine's GPU→CPU→CPU@2048 ladder cannot save it.
+- **GPU and NPU selection.** Prove the chosen backend is the one actually used, read back from
+  "show generation details" rather than assumed from a setting.
+
+### Voice
+
+- **Voice mode end to end** - STT in, TTS out, on a real device.
+
+### Clipboard
+
+- **Copying OUTSIDE the app** reflects in the in-app clipboard, on both Android and iOS.
+
+#### Android external clipboard capture is not available through Accessibility
+
+**Verdict:** platform-limit; replace the false automatic path with an explicit Android
+`ACTION_PROCESS_TEXT` selection action.
+
+Verified on a physical Android 16 Oppo device on 2026-08-20. Clipboard Sync was enabled, the React
+Native observer was active, and Android reported `SyncClipboardAccessibilityService` as both enabled
+and bound. A Chrome select-all followed by the system floating-toolbar Copy still produced no local
+clipboard item:
+
+- Chrome emitted no `TYPE_VIEW_TEXT_SELECTION_CHANGED` event for the selection.
+- The system floating toolbar emitted no Accessibility event for its Copy action.
+- `ClipboardManager.OnPrimaryClipChangedListener` was not called while Off Grid was in the
+  background.
+- `flagIncludeNotImportantViews` did not change those results.
+
+This is the Android security contract, not a permission-refresh bug. From Android 10, a background app
+cannot read clipboard data unless it has focus or is the default input method. An Accessibility grant
+is not an exception. The current service can help only in apps and system builds that voluntarily emit
+both the selection and Copy events, so it cannot support the product claim that anything copied on
+Android is captured.
+
+The maintainable end state is an explicit `ACTION_PROCESS_TEXT` action in Android's text-selection
+menu, labelled "Copy to Off Grid". The selected app sends the text directly to Off Grid under the
+user's tap, so no background clipboard read, default-keyboard role, focus-stealing overlay, polling,
+or broad screen traversal is required. The Android UI must describe this explicit action and must not
+present Accessibility as universal clipboard access. Keep the existing native observer only as a
+best-effort capability where the OS supplies the required events.
+
+### Ambient sharing, both ways round
+
+Each of these needs the negative case as well as the positive, because a permission that fails open
+is invisible when you only test that sharing works:
+
+- screenshots ARE synced when allowed / are NOT synced when disallowed
+- downloads ARE synced when allowed / are NOT synced when disallowed
+
+### Model transfer between devices
+
+- image models send and WORK on the receiver
+- vision models send and WORK on the receiver
+- text models send and WORK on the receiver
+- STT models send and WORK on the receiver
+- the right models are offered to send, based on what the RECEIVER is
+
+"Arrives" and "works on the receiver" are different claims, and only the second one is the feature.
+
+### The ones Mac's list did not name, ranked by what they would cost us
+
+Highest risk first, because these are the ones where the failure is silent or unrecoverable rather
+than merely wrong.
+
+1. **Peer-pushed model settings, with no device-fit check.** `contextLength`, `maxTokens`,
+   `gpuLayers`, `nThreads` and `nBatch` are writable by a paired desktop and validated for TYPE and
+   RANGE only - never against what the receiving device can actually honour. Desktop offers maxTokens
+   up to 32768 and ctxSize up to 131072; a phone sitting at 4096 accepts them. The mutations are
+   per-key, so a maxTokens change alone lands on a phone whose context never moved, giving
+   `n_predict > n_ctx` - llama.cpp rejects the turn before inference while the settings screen still
+   reads 4096. On iOS the memory case is worse than wrong: a breach is an uncatchable jetsam
+   SIGKILL, so the engine's GPU→CPU→CPU@2048 fallback ladder cannot catch it. There is in-repo
+   precedent - appStoreMigrations.ts documents a removed MCP auto-boost that pinned context to 32768
+   and caused OOM crashes needing a repair migration. Sync can now reproduce that state from a peer,
+   with no migration to undo it. **Test: push each of those keys from desktop to a phone that cannot
+   honour them, and to an iPhone specifically.**
+
+2. **`maxToolCalls` is synced as well.** A peer set to 1 turns a single-tool request into a "tool
+   limit reached" notice instead of an answer. The default also moved from 3/5 to 25.
+
+3. **"Arrives" and "works on the receiver" are different claims.** Worth stating explicitly against
+   every transfer item above: only the second one is the feature. A model that lands and will not
+   load is a failure that a transfer test scores as a pass.
+
+4. **Every non-image attachment kind except PDF.** describeAttachment now classifies audio and video,
+   but only PDF has been SEEN working end to end. The voice note is the exact case this defect was
+   predicted for in the v0.0.103 review and it remains unproven on desktop.
+
+5. **A receiver that does not already have the model** - the download-on-demand path, as distinct
+   from transfer between two devices that both happen to have it.
+
+6. **Interrupted transfers** - background the app, drop wifi, lock the phone mid-send, then resume.
+
+7. **Offline behaviour.** Entitlement reconciliation reports "License service unavailable" with no
+   network. Prove offline access genuinely stays usable rather than degrading into a lock-out - the
+   home screen already had one of those, where a card that was still loading had no way into Sync.
+
+8. **The five-device replacement flow** at the licence limit, including the failure mode where the
+   oldest membership cannot be removed (`replacement_incomplete`).
+
+9. **The vision journeys still only run from Android.** vision-image-sync and vision-answer-sync are
+   Android-hardcoded. The iOS system photo picker exposes no addressable cells - only PXG* layout
+   groups and one concatenated label - so the iOS path needs the geometric-tap approach now used in
+   multi-attachment-sync.
+
+---
+
+## Model memory: the estimate is unscientific, inconsistent, and fails silently
+
+**Verdict:** fix-the-guard — three defects in one decision, found together on 16 Aug 2026 when
+Qwythos 9B (5.5 GB) would not load on an iPhone and the chat sat unusable with no explanation.
+
+### 1. The estimate ignores context length, which is the term that actually varies
+
+```ts
+estimateModelRam(model, multiplier = 1.5) {
+  return this.getModelTotalSize(model) * multiplier   // file size only
+}
+```
+
+Observed: `[MEM-SM] makeRoomFor text sizeMB=12387 budgetMB=9121 os_procAvailMB=5189 fits=false`.
+That 12387 is 5632 MB x 2.2. Reducing the context length to ~1k made the same model load
+immediately - the gate never saw the change, because context is not an input to it.
+
+Real memory decomposes as:
+
+```
+total = weights + KV cache + compute buffer + slack
+KV_bytes = 2 x n_layers x n_kv_heads x head_dim x n_ctx x bytes_per_element
+```
+
+Only WEIGHTS scale with file size. For a 9B with ~48 layers and GQA (8 KV heads x 128), f16 KV is
+roughly 196 KB per token: ~0.2 GB at 1k context, ~1.5 GB at 8k, ~6.3 GB at 32k, ~25 GB at 128k. A
+single file-size multiplier is being asked to hide a 100x spread, so it must be wrong in one
+direction or the other - it refuses big models that would fit at small context, and admits small
+models at 131072 context that will not. On iOS the second case is an uncatchable jetsam kill.
+
+Everything needed is already available: the GGUF header carries block_count,
+attention.head_count_kv, attention.key_length/value_length and context_length; llama.cpp prints its
+own tensor, KV and compute buffer sizes at load; and `[WIRE-RAM] footprintBytes` is already logged
+after every load, so predicted-vs-real can be calibrated per backend from real runs. This is how
+Ollama's scheduler decides layer offload, and what the HF/LM Studio calculators do.
+
+### 2. The multipliers are not derived from anything
+
+`TEXT_MODEL_OVERHEAD_MULTIPLIER = 1.5` is commented only "CPU: KV cache, activations, etc."
+`TEXT_MODEL_GPU_OVERHEAD_MULTIPLIER = 2.2` was chosen to "mirror the image estimator's
+ANE(1.8)->GPU(2.5) bump" after ONE device incident (2026-07-14, 8.2 GB estimated against 11.4 GB
+real). The file above them records that flat percentages were removed because they "wrongly treated
+a 12GB iPhone like a 6GB one" - a flat multiplier makes the same mistake one level down, treating
+every model's runtime shape as proportional to its file.
+
+### 3. Two owners compute it differently, and one of them fails silently
+
+```ts
+// modelPreloader.ts - default 1.5x, and a bare return
+const sizeMB = toMB(hardwareService.estimateModelRam(model));
+if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
+
+// activeModelService/index.ts - backend-aware 2.2x on GPU
+estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend))
+```
+
+For Qwythos that is 8448 MB versus 12387 MB - the preloader believes it fits and the authoritative
+gate refuses. Two answers to "how much memory does this model need", kept in step by hand.
+
+**No silent drops.** A refusal is a decision the user has to be told about. Today the only trace was
+`fits=false` in a debug log, while the chat still said "Type a message below to begin chatting with
+Qwythos" - a model that was never coming. Whatever the gate decides, the surface must say so, name
+the numbers (needs X, budget Y, free Z), and offer the actionable next step - lower the context
+length, choose a smaller model, or free memory - rather than leaving a chat that looks ready and is
+not.
+
+### How to fix it: one owner, a real formula, and a card that tells the user
+
+**One owner.** memoryBudget.ts is already documented as "the single memory-budget owner ... so
+residency, the pre-load check, and the model lists all agree". The ESTIMATE needs the same
+treatment: one `estimateModelMemory({ model, contextSettings, backend })` that modelPreloader,
+activeModelService, the model lists and the UI all call. Today modelPreloader answers 8448 MB and
+activeModelService answers 12387 MB for the same model.
+
+**A real formula.** PocketPal (github.com/a-ghorbani/pocketpal-ai, src/utils/memoryEstimator.ts)
+does exactly the decomposition, and it is worth copying:
+
+```
+total = (weights + KV cache + compute buffer) * 1.1        // 1.1 on a COMPUTED number
+KV    = n_layers * effectiveCtx * n_embd_head_k * n_head_kv * bytesPerK
+      + n_layers * effectiveCtx * n_embd_head_v * n_head_kv * bytesPerV
+compute = (n_vocab + n_embd) * n_ubatch * 4
+fallback when GGUF metadata is missing = size * 1.2
+```
+
+Details they get right that a multiplier cannot express:
+
+- KV cache quantisation is exact, not assumed: f16 2.0, q8_0 1.0625 (34/32), q4_0 0.5625 bytes per
+  element, and K and V are computed separately because they can be quantised differently.
+- Sliding-window attention: `effectiveCtx = min(n_ctx, sliding_window)`, so a Gemma-style model is
+  not charged for KV it will never allocate.
+- The mmproj (vision projector) is added separately rather than folded into a multiplier.
+- Metadata is validated first (NaN / non-positive / missing), falling back to size * 1.2 rather than
+  silently computing nonsense.
+
+Their BUDGET side is calibrated rather than assumed:
+
+```
+ceiling  = max(largestSuccessfulLoad, availableMemoryCeiling)
+fallback = min(totalMemory * 0.6, totalMemory - 1.2GB)
+status   = fits | warning (fits in total but not in ceiling) | will not fit
+```
+
+They learn the ceiling from the largest model that has actually loaded on that device. We already
+log `[WIRE-RAM] footprintBytes` after every load, so the same calibration is available to us - the
+difference is we throw the measurement away and they keep it.
+
+**A card that tells the user.** MtpAdviceCard is the existing in-chat pattern: dismissible, a title,
+and ONE action ("Turn on speculative decoding and reload the model"), rendered from ChatMessageArea.
+A memory refusal belongs there, naming the numbers and the way out:
+
+  "Qwythos 9B needs about 12.4 GB at 32k context. This device has 12 GB."
+  -> Reduce context to 8k and load  /  Choose a smaller model
+
+Silence is the defect. Today the only trace of the refusal was `fits=false` in a debug log while the
+chat said "Type a message below to begin chatting with Qwythos" - a model that was never coming.
+
+---
+
+## A synced file can deadlock: bytes arrive, control never re-applies (16 Aug 2026)
+
+**Symptom, from the device.** An image generated on iPhone rendered on macOS, Windows and iOS but
+stayed a spinner on Android. The gallery counted it (`1`) while the grid showed nothing - the file was
+staged but never imported.
+
+**The evidence (Android logcat, 21:02:33):**
+
+```
+[StateSync] ops from=9d25c24e received=1 applied=0 shared_file:1
+transfer_offer_accepted  resumeOffset=504593  delivered=true      <- already had every byte
+shared_file_decided      result=waiting_for_control  reason=control_missing
+transfer_settled         status=completed  bytes=504593
+```
+
+`received=1 applied=0` repeats. Per `state-sync.ts:102`, that means the op was ALREADY KNOWN.
+
+**The loop.** It is self-sustaining and silent:
+
+1. Android holds the bytes AND holds the `shared_file` control op in its oplog.
+2. `ControlledFileSync.controls` (an in-memory `Map`, `controlled-file-sync.ts:204`) has no entry for
+   that syncId, so reconcile answers `control_missing`.
+3. `sharedFileSyncService.ts:337` correctly asks the peer to repair the `control`.
+4. The peer answers by re-announcing (`shared-file-repair.ts:320`). `OpLog.record` returns the
+   already-recorded op unchanged, so it carries the SAME opId.
+5. Android dedups it by opId -> `applied=0` -> the materializer never fires -> `applyControlPut` is
+   never called -> the map stays empty. Back to 2, forever.
+
+**This is the SSOT failure `shared/CLAUDE.md` describes.** Two sources answer "does a control exist for
+this file": the durable oplog (yes) and the in-memory `controls` map (no). They are kept in step by
+hand - the map is only ever written by an op that APPLIES - so any op already in the log leaves the map
+cold, and version vectors then stop the peer from ever helping. `oplog.ts:198-200` names this exact
+hazard: "an ephemeral materializer cannot recover and peers correctly decline to resend already-seen
+ops."
+
+**Not mobile-specific.** `controlled-file-sync.ts`, `oplog.ts` and `shared-file-repair.ts` are all in
+`@offgrid/sync`. Every host shares the defect; Android is the device that hit the cold-map condition.
+
+**Still open - why the map was cold.** `stateSyncService.ts:217` DOES call `rematerializeAll()` on
+start, which should rebuild it. Two untested candidates:
+- `parseControl` returned null on replay, so `applyControlPut` returned `"ignored"` and never set the
+  map (`controlled-file-sync.ts:222`) - a silent drop by itself.
+- `compact()` (`stateSyncService.ts:221`) dropped the superseded control op while the version vector
+  kept claiming it, so there is nothing left to replay but peers still refuse to resend.
+
+**The fix shape (do not implement yet).** Make the durable log the only source: rebuild `controls` by
+replaying the log, and make a `control` repair request force re-materialisation of that syncId rather
+than re-broadcasting an op the peer will discard. A repair that cannot make progress must surface -
+a file waiting on a control that will never come is exactly the silent drop we said we cannot afford.
+
+**Cover it.** No test asserts a control arriving BEFORE its bytes and then the app restarting, which is
+the shape of this bug.
+
+---
+
+## The selected text model is never resident on a 3-model device (16 Aug 2026, iPhone)
+
+Found by `scripts/e2e/model-eviction-journey.mjs`, which walks residency up one model at a time and
+reads the app's own Models sheet between each step.
+
+```
+1. at rest                             image + voice + speech
+2. after a typed turn                  image + voice + speech
+3. after a spoken turn                 image + voice + speech
+4. after an image request              image + voice + speech
+
+never resident at any stage: text
+  text    Qwythos-9B-v2-GGUF                (selected, never loaded)
+* image   3.6 GB  SD 1.5 Palettized (Core ML)
+* voice   0.3 GB  Kokoro TTS · Warm
+* speech  0.1 GB  Base
+```
+
+Three sidecars hold 4.0 GB and the model the user chose cannot get in. The app still answers and still
+draws, so nothing on screen says the chosen model is not the one running - except one in-chat line,
+captured on device:
+
+> Prompt enhancement skipped - Generating from your original prompt - Not enough free memory to load
+> this model. Close other apps or choose a smaller model.
+
+That message is right, and it is the only signal. It does not name what was needed, what was
+available, or what would fix it, and it appears only on the enhancement path - a plain chat turn with
+the same problem says nothing at all.
+
+**Ties directly to the memory-estimate work above.** The refusal is the estimator's verdict reaching
+the surface. Two questions this run raises that the current estimator cannot answer:
+
+- Would the text model fit if the image model (3.6 GB, idle) were evicted first? Nothing appears to
+  consider that trade - the image sidecar stays resident across every stage including two turns that
+  never needed it.
+- Qwythos loaded earlier in the same session once the context was lowered to 1k, which the gate's
+  cost model cannot express, since it is context-blind. Still unexplained, still open.
+
+**Cover it.** The journey is the regression test: any change to the cost model should be run against
+it, and `never resident at any stage: text` should become empty.
+
+
+## Voice: hands-free, barge-in and note trimming — 2026-08-17
+
+Built and merged in one session on `release/sync-feedback`. **None of it is device-verified**; the
+notes below say exactly which part is proven and how.
+
+### Open
+
+- **Desktop consumes none of it.** `@offgrid/speech` now owns the turn decision
+  (`SpeechEndpointTimer`, `canArmHandsFreeTurn`), the mode labels, the onset look-back and the WAV
+  trim math. Mobile uses all of it; desktop uses none. Parity was asked for explicitly, so SSOT here
+  is structural only until desktop's recorder is wired to the same package. **This is the top item.**
+- **Barge-in is NOT possible on this audio stack, and the attempt is backed out.** Talking over the
+  assistant cannot interrupt it. An AVAudioSession MODE is only a hint; real cancellation needs the
+  voice-processing I/O unit driving INPUT and OUTPUT together so it has a reference for what the
+  speaker plays. Our TTS goes out through an ordinary `AudioContext`, which that unit never sees, so on
+  device the mic recorded the assistant and speech detection fired on the assistant's own voice - iOS
+  AND Android alike. The Oboe `VoiceCommunication` patch was reverted for the same reason: it asks for
+  a cancelling capture source while playback leaves by another path, so it bought nothing and carried a
+  blank-audio risk on some devices (google/oboe#2123). `audioRecorderService.isEchoCancelled()` is the
+  single owner and returns false; when playback and capture share a voice-processing engine it returns
+  true and hands-free listens through the assistant with no other change. **Real fix: give TTS playback
+  and mic capture one voice-processing engine** - native/library work, not a setting.
+- **Voice processing degrades PLAYBACK, which is how TTS went silent.** `ensurePlayback` deliberately
+  leaves an active record session alone, so one recorded turn in a voice-processing mode left every
+  later playback voice-processed. Ordinary turns no longer request it. Guard rows are on the release
+  checklist (#202, #203).
+- **THE design gap: speaking and listening are not serialized.** They are one resource with one
+  holder - the assistant or the person, never both - and the code models them as two independent
+  subsystems (TTS state in `pro`, mic phase in core) with a 400ms poll guessing when it is safe. Every
+  fault today came from that: TTS pausing the moment it started (the mic armed in the gap between
+  generation ending and speech beginning), autoplay killed by an arm, the assistant recorded as the
+  person. The settle-ticks and abandon-guard in `useHandsFreeArming` are symptoms, not a design.
+
+  **The shape it wants:** one owner of the floor with event-driven handoff -
+  `assistant speaking → person listening → recording → transcribing → generating → assistant speaking`.
+  Exactly one holder; illegal states (mic open while speaking, two turns at once) become
+  unrepresentable instead of raced against.
+
+  **What forces the poll:** there is no "the assistant finished speaking" EVENT. Core cannot subscribe
+  to pro's TTS state, so `audio.isSpeaking` is a question that must be re-asked. Needs an
+  `audio.onSpeechEnded` hook fired by pro on playback completion, a floor owner in core that serializes
+  transitions, and `useHandsFreeArming` collapsing into a listener on it rather than a timer. Three
+  files, no new behaviour - it makes today's behaviour correct by construction instead of by timing.
+  **Desktop should be wired to the floor owner, not to the poll.**
+
+- **Idle hands-free stalls rather than ends.** The wait for speech is 120s, so two devices left
+  pointing at each other both go quiet and it reads as frozen, not finished.
+- **`@offgrid/speech` is a mixed package.** It was a gateway speech client (console/desktop) and now
+  also holds on-device turn logic. Same domain, but the name promises less than it holds.
+
+### Verified, and how
+
+- **WAV trim math** — proven in node against real WAV bytes, not on device: chunk-walking finds `data`
+  behind a LIST chunk (offset 70), a 1.5s cut of a 2s file yields `copyFrom 48044 / copyBytes 16000`,
+  the rewritten header declares the kept length, and garbage / over-trim / zero-trim are all refused.
+  The **file I/O around it is NOT verified** — no trim has run on a device.
+- **VAD auto-stop** — verified on device earlier in the session, with rms/floor/speech in the log.
+
+### Fixed while doing this, worth knowing
+
+- `recordingController.stop()` required phase `'recording'` while `toggle()` offered to stop a
+  `'listening'` turn, so stop was silently refused mid-listen. Live in every hands-free build before
+  `42147394`.
+- Phase had two writers (endpoint + recorder) that could disagree; callers now report facts and the
+  controller derives. `echoCancelled` was hardcoded `true` away from the code that configures capture;
+  the recorder owns it and derives iOS's answer from the session mode actually applied.
+
+### Open, added while making the voice delays user-chosen + putting replay in the session
+
+- **Trailing silence is not trimmed.** `finaliseRecording` calls `trimWavFront` only, so the person's
+  chosen end-of-turn window (up to 5s of dead air) rides into every file and Whisper transcribes
+  through it. The tail cut belongs in the same pure planner (`wav-trim.ts`), keeping ~300ms of
+  hangover so the last syllable is not clipped. Shortening the window in settings shrinks the tail but
+  does not remove it.
+- **Post-reply hand-back overhead beyond the drain is unmeasured.** The chosen drain accounts for the
+  speaker's tail; whatever the device adds on top (mic spin-up, audio-session switching) has never been
+  read off a real log. Measure before tuning anything.
+- **Replay-in-the-session and the two delay settings are code-complete, NOT device-verified.** The
+  machine transitions are pure and typecheck/lint/package tests are clean, but no phone has run them:
+  the replay-while-listening contention, the paused-replay hand-back, and the settings rows all need
+  the on-device pass.
+- **Queued outbound transfers do not follow a peer to its new address, and never expire.** Seen live:
+  the phone's pending WAVs all say "To OGAD x.x.x.64" while discovery is finding the same Mac at
+  .31 - inbound from .31 completes in seconds, outbound to .64 sits at 0% forever. The durable
+  SQLite op-store makes these rows survive restarts (correctly), which turns two missing rules into
+  a permanent pileup: (1) re-target queued items when the same device id is rediscovered at a new
+  host - the sibling of the existing "follow a peer that comes back on a new port" fix; (2) an
+  expiry/failed transition for a peer that stays unreachable, instead of pending-forever.
+- **A sender dying mid-batch leaves the receiver full of zombie rows.** Seen live: desktop was
+  sending a 90-item batch (its log shows one file importing every ~3s, serial); the desktop process
+  was killed mid-batch and Android's Sync activity froze with 35 rows at "Receiving - 0%, 0 B" from
+  the vanished peer. Two defects, both SSOT-shaped: (1) receiver rows are created at OFFER time and
+  nothing reconciles them when the sender disappears - no timeout, no failed transition, they sit
+  "in progress" forever; (2) admission marks the whole batch in-progress up front while transfer is
+  actually serial, so "35 in progress" describes the queue, not the wire. Any crash or quit
+  reproduces this; it does not need a kill.
+
+## Voice: the three RED realtime tests are GREEN, but NOT device-verified (2026-08-18)
+
+All three had ONE root cause. `recordingController.start()` both dispatched `userStart` - which the
+session driver obeys by opening the microphone - AND called `handlers.start()`. One tap therefore ran
+`startRealtimeTranscription` twice and entered the native `transcribeRealtime` twice while the first
+session was still coming up. That is the "State: -100" collision (B12), and it never needed a
+double-tap. Stack-captured at the boundary, not inferred.
+
+Fixed: a synchronous in-flight latch in `useWhisperTranscription` (the old guard read `isRecording`
+from a closure and `whisperService.isTranscribing` was only set after an await for permissions, so two
+asks fit inside the window); `useVoiceSessionDriver` made edge-triggered, which is what its contract
+already claimed; `nextVoiceSession` `userStart` made a no-op when already listening.
+
+**Still owed: a device pass.** Every symptom in this area's history (B12, B26, B28) was device-only, and
+these fixes are verified against faked native leaves. Three flows to run on a phone:
+1. Text model resident, tap mic, speak - does the transcript land? (was the silent-empty-composer case)
+2. Tap the mic twice quickly - any "State: -100", or does the transcript arrive?
+3. Fresh voice-model download, then tap mic - does the spinner become a live recording?
+
+**Do not make `useVoiceSessionDriver` level-triggered again.** `voiceSession.dispatch` notifies on a
+phase change so the hero can show "Recording you now"; with a level-triggered driver that same
+notification opens a second recording mid-turn. The two belong together and each says so in a comment.

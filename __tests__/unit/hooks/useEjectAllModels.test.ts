@@ -21,19 +21,15 @@
  * button appears the moment a model becomes active, which is the entire point of a reactive derivation. Zustand
  * needs no native module (its persistence goes through AsyncStorage, stood in for at the boundary already).
  *
- * activeModelService is still stood in for: it owns the real unload, and this hook's contract is that it
- * DELEGATES there. Asserting the delegation is this test's job; performing a real unload is the service's.
+ * The user ejection coordinator is still stood in for: it owns the stop-and-unload journey, and this hook's
+ * contract is that it DELEGATES there. Performing native unloads is outside this hook fixture.
  */
 import { renderHook, act } from '@testing-library/react-native';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 
 const mockEjectAll = jest.fn(async () => ({ count: 2 }));
-jest.mock('../../../src/services', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    ejectAll: () => mockEjectAll(),
-  },
+jest.mock('../../../src/services/userModelEjection', () => ({
+  ejectAllModelsForUser: () => mockEjectAll(),
 }));
 
 import { useEjectAllModels } from '../../../src/hooks/useEjectAllModels';

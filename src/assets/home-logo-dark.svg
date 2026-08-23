@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+<defs>
+  <linearGradient id="bgDark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1B1F1D"/>
+    <stop offset="52%" stop-color="#0D100F"/>
+    <stop offset="100%" stop-color="#060807"/>
+  </linearGradient>
+  <linearGradient id="rimDark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#4A544F"/>
+    <stop offset="38%" stop-color="#252C28"/>
+    <stop offset="100%" stop-color="#030504"/>
+  </linearGradient>
+  <linearGradient id="sldark" x1="0" y1="1" x2="1" y2="0">
+    <stop offset="0%" stop-color="#83F9A2"/>
+    <stop offset="24%" stop-color="#42E886"/>
+    <stop offset="58%" stop-color="#16C66F"/>
+    <stop offset="100%" stop-color="#006B42"/>
+  </linearGradient>
+  <filter id="cardDepthDark" x="-12%" y="-12%" width="124%" height="135%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="24" result="cardBlurFar"/>
+    <feOffset in="cardBlurFar" dx="0" dy="24" result="cardOffsetFar"/>
+    <feFlood flood-color="#000000" flood-opacity="0.58" result="cardFarColor"/>
+    <feComposite in="cardFarColor" in2="cardOffsetFar" operator="in" result="cardFar"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="cardBlurNear"/>
+    <feOffset in="cardBlurNear" dx="0" dy="3" result="cardOffsetNear"/>
+    <feFlood flood-color="#000000" flood-opacity="0.5" result="cardNearColor"/>
+    <feComposite in="cardNearColor" in2="cardOffsetNear" operator="in" result="cardNear"/>
+    <feMerge><feMergeNode in="cardFar"/><feMergeNode in="cardNear"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="markDepthDark" x="-30%" y="-30%" width="170%" height="185%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="50" result="farBlur"/>
+    <feOffset in="farBlur" dx="0" dy="76" result="farOffset"/>
+    <feFlood flood-color="#00A961" flood-opacity="0.25" result="farColor"/>
+    <feComposite in="farColor" in2="farOffset" operator="in" result="farShadow"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="nearBlur"/>
+    <feOffset in="nearBlur" dx="0" dy="26" result="nearOffset"/>
+    <feFlood flood-color="#000000" flood-opacity="0.64" result="nearColor"/>
+    <feComposite in="nearColor" in2="nearOffset" operator="in" result="nearShadow"/>
+    <feGaussianBlur in="SourceAlpha" stdDeviation="16" result="liftBlur"/>
+    <feOffset in="liftBlur" dx="-10" dy="-12" result="liftOffset"/>
+    <feFlood flood-color="#6EFF9A" flood-opacity="0.14" result="liftColor"/>
+    <feComposite in="liftColor" in2="liftOffset" operator="in" result="liftGlow"/>
+    <feMerge>
+      <feMergeNode in="farShadow"/>
+      <feMergeNode in="nearShadow"/>
+      <feMergeNode in="liftGlow"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+</defs>
+<rect x="76" y="56" width="1048" height="1048" rx="170" fill="url(#bgDark)" filter="url(#cardDepthDark)"/>
+<rect x="77.5" y="57.5" width="1045" height="1045" rx="168.5" fill="none" stroke="url(#rimDark)" stroke-width="3"/>
+<g transform="translate(190.4,190.4) scale(0.4)" filter="url(#markDepthDark)"><g transform="translate(0.000000,2048.000000) scale(0.100000,-0.100000)"
+fill="url(#sldark)" stroke="#B7FFD0" stroke-opacity="0.13" stroke-width="8" paint-order="stroke fill">
+<path d="M4660 17509 c-659 -4 -959 -9 -990 -17 -25 -6 -65 -11 -90 -12 -25 0
+-62 -9 -83 -20 -20 -11 -45 -20 -54 -20 -10 0 -36 -9 -58 -19 -22 -11 -47 -23
+-55 -26 -8 -3 -33 -17 -55 -30 -22 -14 -51 -30 -65 -37 -39 -20 -188 -136
+-234 -182 -58 -58 -175 -230 -176 -257 0 -9 -9 -28 -20 -42 -11 -14 -20 -39
+-20 -56 0 -18 -8 -48 -19 -69 -30 -61 -41 -376 -45 -1388 -2 -679 -6 -926 -15
+-942 -12 -22 -12 -22 -1029 -16 -1087 7 -1171 4 -1242 -38 -59 -37 -118 -99
+-147 -156 -28 -55 -28 -55 -28 -481 0 -424 0 -426 23 -462 12 -20 22 -42 22
+-49 0 -18 101 -110 120 -110 9 0 27 -8 40 -17 23 -17 99 -18 1135 -23 l1110
+-5 3 -741 c2 -613 0 -743 -11 -753 -10 -8 -320 -12 -1115 -13 -1100 -3 -1100
+-3 -1131 -25 -16 -13 -34 -23 -39 -23 -15 0 -112 -102 -112 -118 0 -8 -10 -31
+-22 -51 -23 -36 -23 -37 -23 -472 0 -436 0 -436 29 -492 33 -66 97 -135 135
+-144 14 -3 42 -14 61 -25 33 -17 84 -18 1127 -18 654 0 1094 -4 1098 -9 3 -5
+5 -323 6 -706 0 -514 -3 -701 -12 -711 -9 -12 -185 -14 -1114 -16 -999 -3
+-1105 -5 -1121 -19 -11 -9 -30 -19 -44 -22 -39 -9 -102 -76 -135 -141 -30 -59
+-30 -59 -30 -495 0 -435 0 -436 23 -472 12 -20 22 -43 22 -51 0 -24 84 -102
+140 -131 52 -27 52 -27 1150 -27 604 0 1104 -2 1112 -5 11 -4 12 -196 10
+-1105 -3 -1080 -3 -1100 17 -1167 32 -107 83 -152 194 -174 100 -19 137 -6
+255 90 54 44 172 153 263 243 91 89 213 204 270 253 89 77 224 207 689 665
+132 130 471 454 481 461 10 6 423 405 584 564 55 55 168 163 249 240 82 77
+166 162 188 188 38 49 38 49 38 3353 0 3305 0 3305 31 3372 21 44 51 85 89
+122 57 55 70 61 195 90 24 5 1311 9 3243 10 3183 0 3203 0 3242 -20 22 -11 45
+-20 53 -20 20 0 93 -80 122 -135 25 -45 28 -65 37 -225 6 -96 8 -330 5 -520
+-5 -291 -3 -357 10 -420 19 -86 21 -90 86 -142 48 -38 50 -38 138 -38 89 0 90
+0 157 44 37 25 119 98 183 163 132 134 466 456 519 499 19 16 53 46 75 68 47
+45 570 552 631 611 22 22 70 65 105 95 57 49 141 130 514 495 56 55 181 174
+276 265 96 91 233 221 304 290 72 69 154 148 184 175 29 28 157 153 285 278
+455 448 532 524 616 602 47 44 105 107 130 140 45 60 45 60 45 145 0 59 -5 94
+-16 115 -9 17 -25 48 -35 70 -30 63 -178 204 -269 256 -44 26 -91 50 -105 54
+-14 4 -34 14 -45 21 -11 8 -27 14 -36 14 -9 0 -36 9 -60 20 -24 11 -64 20 -88
+20 -24 0 -71 7 -104 16 -56 14 -561 16 -5447 17 -2962 1 -5810 -1 -6330 -4z"/>
+<path d="M17579 15600 c-72 -22 -203 -133 -523 -444 -154 -149 -287 -278 -296
+-286 -9 -8 -54 -49 -101 -90 -87 -77 -166 -153 -422 -403 -321 -314 -384 -374
+-442 -422 -61 -52 -173 -158 -431 -412 -254 -248 -377 -366 -419 -402 -124
+-104 -700 -668 -733 -718 -16 -26 -17 -192 -22 -2988 -5 -2839 -6 -2962 -23
+-3007 -23 -59 -80 -118 -149 -155 -53 -28 -53 -28 -3053 -31 -2979 -3 -3000
+-3 -3040 17 -22 11 -52 22 -67 25 -17 4 -45 29 -80 73 -53 67 -53 67 -58 523
+-5 412 -7 457 -22 480 -10 13 -18 31 -18 38 0 23 -49 74 -95 99 -55 29 -149
+32 -203 6 -20 -10 -75 -48 -122 -86 -66 -53 -899 -870 -1714 -1682 -66 -66
+-169 -164 -397 -379 -78 -73 -661 -643 -973 -951 -45 -44 -178 -172 -296 -285
+-306 -293 -487 -477 -526 -536 -32 -48 -34 -56 -34 -135 0 -67 4 -90 20 -114
+11 -16 20 -37 20 -45 0 -55 302 -330 362 -330 8 0 23 -9 33 -20 10 -11 30 -20
+44 -20 14 0 40 -9 56 -20 17 -11 42 -20 56 -20 15 0 47 -9 72 -20 45 -20 61
+-20 6499 -18 5381 3 6458 5 6471 16 9 8 45 16 79 19 35 3 77 14 94 24 17 11
+43 19 56 19 14 0 37 9 51 20 14 11 32 20 40 20 9 0 22 6 29 12 24 23 77 58
+100 67 33 13 235 197 243 221 3 11 10 20 15 20 9 0 26 27 54 86 8 17 22 36 30
+44 9 7 16 22 16 34 0 11 9 35 20 51 11 17 20 39 20 50 0 11 7 31 17 44 9 14
+19 58 24 105 5 44 13 110 19 146 6 42 10 661 10 1783 -1 945 2 1722 5 1727 4
+6 428 10 1142 10 1136 0 1136 0 1172 22 59 35 119 98 148 157 28 56 28 56 28
+497 0 441 0 441 -29 497 -35 70 -89 125 -156 160 -52 27 -52 27 -1168 27 -615
+0 -1123 4 -1130 9 -10 6 -13 150 -15 717 l-2 709 1130 5 c1023 5 1132 7 1155
+21 14 9 36 19 50 22 29 7 120 88 120 107 0 7 10 29 23 49 22 36 22 37 22 481
+0 445 0 445 -27 500 -28 57 -87 119 -149 158 -36 22 -36 22 -1167 22 -983 0
+-1132 2 -1145 15 -13 13 -15 94 -11 597 2 321 0 650 -4 731 -4 82 -3 155 1
+163 7 12 168 14 1128 14 1120 0 1120 0 1184 30 64 30 145 101 145 128 0 8 9
+29 20 48 20 31 21 49 23 461 2 428 2 428 -26 478 -35 62 -88 118 -147 153 -45
+27 -45 27 -1175 30 -621 1 -1133 6 -1138 11 -5 5 -8 234 -7 509 1 484 0 503
+-20 563 -43 126 -152 186 -271 149z"/>
+</g></g></svg>

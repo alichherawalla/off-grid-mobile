@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import { modelManager } from '../../services';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { DownloadedModel } from '../../types';
+import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 export type GgufFileRef = { uri: string; name: string; size: number };
 
@@ -47,7 +48,7 @@ export async function importGgufFiles(
 
   if (files.length === 1) {
     const resolvedFileName = files[0].name ?? 'unknown';
-    const isLitert = resolvedFileName.toLowerCase().endsWith('.litertlm');
+    const isLitert = isLiteRTFileName(resolvedFileName);
 
     let liteRTVision = false;
     if (isLitert) {

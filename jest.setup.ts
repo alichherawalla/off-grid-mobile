@@ -214,6 +214,12 @@ jest.mock('react-native/jest/mockNativeComponent', () => {
   };
 });
 
+// TouchableOpacity forwards refs to View. Give that public host boundary the same faithful
+// measurement callback as mockNativeComponent so shared anchored controls work in rendered tests.
+(require('react-native').View.prototype as {
+  measureInWindow?: (callback: (...values: number[]) => void) => void;
+}).measureInWindow = callback => callback(0, 0, 100, 40);
+
 // react-native-audio-api mock
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
@@ -318,29 +324,64 @@ jest.mock(
 );
 
 // react-native-fs mock
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/mock/documents',
-  CachesDirectoryPath: '/mock/caches',
-  ExternalDirectoryPath: '/mock/external',
-  MainBundlePath: '/mock/bundle',
-  downloadFile: jest.fn(() => ({
-    jobId: 1,
-    promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
-  })),
-  stopDownload: jest.fn(),
-  exists: jest.fn(() => Promise.resolve(false)),
-  mkdir: jest.fn(() => Promise.resolve()),
-  unlink: jest.fn(() => Promise.resolve()),
-  readDir: jest.fn(() => Promise.resolve([])),
-  readFile: jest.fn(() => Promise.resolve('')),
-  writeFile: jest.fn(() => Promise.resolve()),
-  stat: jest.fn(() => Promise.resolve({ size: 1000000, isFile: () => true })),
-  read: jest.fn(() => Promise.resolve('GGUF')),
-  copyFile: jest.fn(() => Promise.resolve()),
-  copyFileAssets: jest.fn(() => Promise.resolve()),
-  moveFile: jest.fn(() => Promise.resolve()),
-  hash: jest.fn(() => Promise.resolve('mockhash')),
-}));
+jest.mock('react-native-fs', () => {
+  const exists = jest.fn((_path: string) => Promise.resolve(false));
+  const stat = jest.fn((_path: string) =>
+    Promise.resolve({ size: 1000000, isFile: () => true }),
+  );
+  const readDir = jest.fn(async (parent: string) => {
+    // Production now asks the parent directory for safe file metadata because RNFS.stat can abort
+    // iOS on stale paths. Keep old native-boundary fixtures valid: their latest exists(path) and
+    // stat(path) answers describe the directory entry without a second exists call.
+    const lastExistsCall = exists.mock.calls.at(-1);
+    const requestedPath = lastExistsCall?.[0];
+    if (typeof requestedPath !== 'string') return [];
+    const fullPath = requestedPath.startsWith('file://')
+      ? decodeURIComponent(requestedPath.slice(7))
+      : requestedPath;
+    const cut = fullPath.lastIndexOf('/');
+    const actualParent = cut === 0 ? '/' : fullPath.slice(0, cut);
+    if (cut < 0 || actualParent !== parent) return [];
+    const existsResult = exists.mock.results.at(-1)?.value;
+    if (!(await existsResult)) return [];
+    const facts = await stat(requestedPath);
+    return [
+      {
+        name: fullPath.slice(cut + 1),
+        path: fullPath,
+        size: facts.size,
+        mtime: (facts as { mtime?: Date }).mtime,
+        isFile: facts.isFile ?? (() => true),
+        isDirectory:
+          (facts as { isDirectory?: () => boolean }).isDirectory ??
+          (() => false),
+      },
+    ];
+  });
+  return {
+    DocumentDirectoryPath: '/mock/documents',
+    CachesDirectoryPath: '/mock/caches',
+    ExternalDirectoryPath: '/mock/external',
+    MainBundlePath: '/mock/bundle',
+    downloadFile: jest.fn(() => ({
+      jobId: 1,
+      promise: Promise.resolve({ statusCode: 200, bytesWritten: 1000 }),
+    })),
+    stopDownload: jest.fn(),
+    exists,
+    mkdir: jest.fn(() => Promise.resolve()),
+    unlink: jest.fn(() => Promise.resolve()),
+    readDir,
+    readFile: jest.fn(() => Promise.resolve('')),
+    writeFile: jest.fn(() => Promise.resolve()),
+    stat,
+    read: jest.fn(() => Promise.resolve('GGUF')),
+    copyFile: jest.fn(() => Promise.resolve()),
+    copyFileAssets: jest.fn(() => Promise.resolve()),
+    moveFile: jest.fn(() => Promise.resolve()),
+    hash: jest.fn(() => Promise.resolve('mockhash')),
+  };
+});
 
 // react-native-device-info mock
 jest.mock('react-native-device-info', () => ({

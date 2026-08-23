@@ -10,9 +10,24 @@ import { createStyles } from './styles';
  * the pill, where the thumb is. Living in the composer (not as a floating pill over the mic) keeps
  * it always visible and never overlapping the mic (device 2026-07-15).
  */
-export const RecordingHint: React.FC = () => {
+export const RecordingHint: React.FC<{
+  /** Hands-free: the mic is open but nobody has spoken, so nothing is being captured yet. */
+  awaitingSpeech?: boolean;
+}> = ({ awaitingSpeech = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  // Hands-free opens the recorder BEFORE the turn begins, so the red dot and "slide to cancel" were
+  // shown at someone whose words were not being captured yet. Waiting says so instead.
+  if (awaitingSpeech) {
+    return (
+      <View style={styles.recordingRow} testID="awaiting-speech-hint">
+        <Icon name="mic" size={16} color={colors.textMuted} />
+        <View style={styles.slideToCancel}>
+          <Text style={styles.slideToCancelText}>Waiting for your voice</Text>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.recordingRow} testID="recording-hint">
       <View style={styles.recordingDot} />

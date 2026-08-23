@@ -53,13 +53,26 @@ beforeAll(() => {
 
 const FILTERS = ['all', 'approvals', 'transfers', 'recent'] as const;
 
+const chooseFilter = (
+  ui: ReturnType<typeof render>,
+  filter: (typeof FILTERS)[number],
+): void => {
+  fireEvent.press(ui.getByTestId('sync-notifications-filter'));
+  fireEvent.press(
+    ui.getByTestId(`sync-notifications-filter-option-${filter}`),
+  );
+};
+
 describePro('the notifications screen filter', () => {
   it('offers every filter, with All chosen to begin with', () => {
     const ui = render(<SyncNotificationsScreen />);
+    fireEvent.press(ui.getByTestId('sync-notifications-filter'));
 
     // All four are reachable. A filter that is not rendered is a section the user can never isolate.
     for (const filter of FILTERS) {
-      expect(ui.queryByTestId(`sync-notifications-filter-${filter}`)).not.toBeNull();
+      expect(
+        ui.queryByTestId(`sync-notifications-filter-option-${filter}`),
+      ).not.toBeNull();
     }
   });
 
@@ -73,7 +86,7 @@ describePro('the notifications screen filter', () => {
   it('keeps the approvals answer visible when the user narrows to Approvals', () => {
     const ui = render(<SyncNotificationsScreen />);
 
-    fireEvent.press(ui.getByTestId('sync-notifications-filter-approvals'));
+    chooseFilter(ui, 'approvals');
 
     // Narrowing to a section must not empty the screen of the very thing being narrowed to.
     expect(ui.queryByText('No files are waiting for approval.')).not.toBeNull();
@@ -82,7 +95,7 @@ describePro('the notifications screen filter', () => {
   it('drops the approvals section entirely when the user narrows to Transfers', () => {
     const ui = render(<SyncNotificationsScreen />);
 
-    fireEvent.press(ui.getByTestId('sync-notifications-filter-transfers'));
+    chooseFilter(ui, 'transfers');
 
     // The whole purpose of the filter. Still showing approvals here would make it decorative.
     expect(ui.queryByText('No files are waiting for approval.')).toBeNull();
@@ -91,7 +104,7 @@ describePro('the notifications screen filter', () => {
   it('drops the approvals section when the user narrows to Recent', () => {
     const ui = render(<SyncNotificationsScreen />);
 
-    fireEvent.press(ui.getByTestId('sync-notifications-filter-recent'));
+    chooseFilter(ui, 'recent');
 
     expect(ui.queryByText('No files are waiting for approval.')).toBeNull();
   });
@@ -99,9 +112,9 @@ describePro('the notifications screen filter', () => {
   it('comes back to everything when the user chooses All again', () => {
     const ui = render(<SyncNotificationsScreen />);
 
-    fireEvent.press(ui.getByTestId('sync-notifications-filter-transfers'));
+    chooseFilter(ui, 'transfers');
     expect(ui.queryByText('No files are waiting for approval.')).toBeNull();
-    fireEvent.press(ui.getByTestId('sync-notifications-filter-all'));
+    chooseFilter(ui, 'all');
 
     // A filter the user cannot undo traps them on a partial view of their own device.
     expect(ui.queryByText('No files are waiting for approval.')).not.toBeNull();

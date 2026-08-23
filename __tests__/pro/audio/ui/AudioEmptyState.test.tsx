@@ -3,7 +3,7 @@
  *
  * Drives the REAL recordingController (the single owner of the record phase the
  * hero reads and writes) and asserts what the user SEES (mic vs stop glyph, the
- * "Tap to speak" / "Recording - tap to stop" title) and what a tap DOES (dispatches
+ * "Tap to speak" / "Recording you now" title) and what a tap DOES (dispatches
  * toggle() → the controller's real handlers fire in the right lifecycle order,
  * proving the second-tap-stops fix, not the old write-only start-only bug).
  */
@@ -20,15 +20,17 @@ jest.mock('react-native-vector-icons/Feather', () => {
 
 import { AudioEmptyState } from '@offgrid/pro/audio/ui/AudioEmptyState';
 import { recordingController } from '@offgrid/core/services/recordingController';
+import { voiceSession } from '@offgrid/core/services/voiceSession';
 
 afterEach(() => {
   // No pollution: the controller is a module singleton — reset phase/handlers/listeners.
   recordingController._reset();
+    voiceSession._resetForTesting();
 });
 
 function registerRecorder() {
-  const start = jest.fn(() => recordingController.setPhase('recording'));
-  const stop = jest.fn(() => recordingController.setPhase('transcribing'));
+  const start = jest.fn(() => (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard')));
+  const stop = jest.fn(() => voiceSession.dispatch('turnCaptured'));
   const cancel = jest.fn();
   const unregister = recordingController.registerHandlers({ start, stop, cancel });
   return { start, stop, cancel, unregister };
@@ -55,7 +57,7 @@ describe('AudioEmptyState', () => {
     expect(recordingController.getPhase()).toBe('recording');
   });
 
-  it('reflects the authoritative recording phase: shows the stop glyph and "Recording - tap to stop" after START', () => {
+  it('reflects the authoritative recording phase: shows the stop glyph and "Recording you now" after START', () => {
     registerRecorder();
     render(<AudioEmptyState />);
 
@@ -63,7 +65,7 @@ describe('AudioEmptyState', () => {
 
     expect(screen.getByTestId('icon-square')).toBeTruthy();
     expect(screen.queryByTestId('icon-mic')).toBeNull();
-    expect(screen.getByText('Recording - tap to stop')).toBeTruthy();
+    expect(screen.getByText('Recording you now')).toBeTruthy();
     expect(screen.queryByText('Tap to speak')).toBeNull();
   });
 
@@ -85,17 +87,17 @@ describe('AudioEmptyState', () => {
 
     // A phase change from ANOTHER mic (footer) — the hero reads the same source.
     act(() => {
-      recordingController.setPhase('recording');
+      (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard'));
     });
 
     expect(screen.getByTestId('icon-square')).toBeTruthy();
-    expect(screen.getByText('Recording - tap to stop')).toBeTruthy();
+    expect(screen.getByText('Recording you now')).toBeTruthy();
   });
 
   it('unsubscribes on unmount: a later phase change does not throw or update a torn-down tree', () => {
     const { unmount } = render(<AudioEmptyState />);
     unmount();
     // Would throw "update on unmounted" if the effect cleanup did not unsubscribe.
-    expect(() => act(() => recordingController.setPhase('recording'))).not.toThrow();
+    expect(() => act(() => (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard')))).not.toThrow();
   });
 });

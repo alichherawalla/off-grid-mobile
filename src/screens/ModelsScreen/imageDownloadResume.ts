@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
@@ -39,13 +40,7 @@ async function validateModelDir(modelDir: string, backend?: string): Promise<boo
 async function validateZipArtifact(zipPath: string, expectedBytes: number): Promise<boolean> {
   if (!(await RNFS.exists(zipPath))) return false;
 
-  let actualSize = 0;
-  try {
-    const zipStat = await RNFS.stat(zipPath);
-    actualSize = Number(zipStat.size);
-  } catch {
-    return false;
-  }
+  const actualSize = (await statFile(zipPath))?.size ?? 0;
 
   if (!Number.isFinite(actualSize) || actualSize <= 0) {
     return false;

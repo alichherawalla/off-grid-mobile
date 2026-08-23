@@ -1,4 +1,4 @@
-import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import {
   ogamModelTransferBlocker,
   type TransferredModelManifest,
@@ -29,12 +29,8 @@ export async function registerTransferredModelFile(
 
   for (const file of manifest.files) {
     const filePath = `${modelsDir}/${file.name}`;
-    const stat = await RNFS.stat(filePath);
-    const actualSize =
-      typeof stat.size === 'string'
-        ? Number.parseInt(stat.size, 10)
-        : stat.size;
-    if (!stat.isFile() || actualSize !== file.sizeBytes) {
+    const stat = await statFile(filePath);
+    if (!stat?.isFile || stat.size !== file.sizeBytes) {
       throw new Error('Transferred model file does not match its manifest');
     }
   }
@@ -66,6 +62,10 @@ export async function registerTransferredModelFile(
     file: pseudoFile,
     resolvedLocalPath: primaryPath,
     mmProjPath: projectorPath,
+    // The sender's provenance, when it had any. A received package has no download URL of its own
+    // to parse, so this is the only way the copy keeps a repairable source; without it a
+    // transferred vision model missing its projector had nowhere to fetch one from.
+    origin: manifest.origin,
   });
   const author =
     manifest.source === 'local'

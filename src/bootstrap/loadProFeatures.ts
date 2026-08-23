@@ -1,3 +1,4 @@
+import logger from '../utils/logger';
 import { registerToolExtension } from '../services/tools/extensions';
 import { registerScreen } from '../navigation/screenRegistry';
 import { registerSettingsSection } from '../components/settings/sectionRegistry';
@@ -13,16 +14,19 @@ import { selectHasProAccess } from '../stores/proAccessSlice';
 export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
   try {
+    logger.log('[BOOT-PRO] require(@offgrid/pro)');
     pro = require('@offgrid/pro');
   } catch {
     return false; // free / contributor build: package not installed
   }
+  logger.log('[BOOT-PRO] require returned');
   if (!pro) {
     return false; // proStub.js returns null — free build via metro extraNodeModules
   }
   if (typeof pro.configureProEntitlementProvider === 'function') {
     pro.configureProEntitlementProvider(registerProEntitlementProvider);
   }
+  logger.log('[BOOT-PRO] proEntitlementLifecycle.start');
   await proEntitlementLifecycle.start();
 
   // DEV ONLY: unlock pro features locally (audio mode, MCP) without a purchase so
@@ -33,6 +37,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   const { useAppStore } = require('../stores/appStore');
   const DEV_UNLOCK_PRO = __DEV__ && !useAppStore.getState().devProDisabled;
 
+  logger.log('[BOOT-PRO] getProLicenseInfo');
   const licenseInfo = await getProLicenseInfo();
   const credentialActive = isPro ?? licenseInfo.isPro;
   const credentialSaved =
@@ -64,6 +69,7 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
     return false; // every other paid feature stays dormant
   }
 
+  logger.log('[BOOT-PRO] pro.activate');
   pro.activate({
     registerToolExtension,
     registerScreen,
@@ -87,5 +93,6 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
       console.warn('[pro] MCP OAuth adapters not configured:', err);
     }
   }
+  logger.log('[BOOT-PRO] done');
   return true;
 }

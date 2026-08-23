@@ -2,121 +2,79 @@ import React, { useState } from 'react';
 import { Text } from 'react-native';
 import { AdvancedToggle, Card } from '../../components';
 import { SliderSetting } from '../../components/SliderSetting';
+import {
+  BackendSelector,
+  BatchSizeSlider,
+  CpuThreadsSlider,
+  FlashAttentionToggle,
+  KvCacheTypeToggle,
+  LiteRTBackendSelector,
+  ModelLoadingModeSelector,
+  ShowGenerationDetailsToggle,
+  SpeculativeDecodingToggle,
+} from '../../components/settings/textGenAdvancedSections';
+import { useTextGenerationSettings } from '../../hooks/useTextGenerationSettings';
 import { useThemedStyles } from '../../theme';
-import { useAppStore, selectIsLiteRT } from '../../stores';
-import { hardwareService } from '../../services';
 import { createStyles } from './styles';
-import { TextGenerationAdvanced, LiteRTTextGenerationAdvanced } from './TextGenerationAdvanced';
-import { ShowGenerationDetailsToggle } from '../../components/settings/textGenAdvancedSections';
-
-const formatContext = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(0)}K` : String(v);
-const formatMaxTokens = (v: number) => v >= 1024 ? `${(v / 1024).toFixed(1)}K` : String(v);
-
-// ─── LiteRT Settings ─────────────────────────────────────────────────────────
-
-const LiteRTTextSettings: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-  const modelMaxContext = useAppStore((s) => s.modelMaxContext);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const isLargeRam = hardwareService.getTotalMemoryGB() > 8;
-  const contextMax = modelMaxContext ?? (isLargeRam ? 32768 : 12288);
-  const contextWarnThreshold = isLargeRam ? 16384 : 8192;
-
-  const temperature = settings?.liteRTTemperature ?? 0.7;
-  const maxTokens = settings?.liteRTMaxTokens ?? 4096;
-
-  return (
-    <Card style={styles.section}>
-      <Text style={styles.settingHelp}>Configure LiteRT model behavior.</Text>
-
-      <SliderSetting
-        testID="litert-temperature"
-        label="Temperature"
-        description="Higher = more creative, Lower = more focused"
-        value={temperature}
-        min={0} max={2} step={0.05} decimals={2}
-        onChange={(value) => updateSettings({ liteRTTemperature: value })}
-      />
-
-      <SliderSetting
-        testID="litert-max-tokens"
-        label="Max Tokens"
-        description="Total token budget — input, history, and output combined (requires reload)"
-        warning={maxTokens > contextWarnThreshold ? 'High context uses significant RAM — may slow or crash on some devices' : null}
-        value={maxTokens}
-        min={512} max={contextMax} step={1024}
-        formatValue={formatContext}
-        onChange={(value) => updateSettings({ liteRTMaxTokens: value })}
-      />
-
-      <ShowGenerationDetailsToggle />
-
-      <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="text-advanced-toggle" />
-      {showAdvanced && <LiteRTTextGenerationAdvanced />}
-    </Card>
-  );
-};
-
-// ─── Llama Settings ───────────────────────────────────────────────────────────
-
-const LlamaTextSettings: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
-  const modelMaxContext = useAppStore((s) => s.modelMaxContext);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const llmSliderMax = modelMaxContext ?? 32768;
-
-  const maxTokens = settings?.maxTokens ?? 512;
-  const contextLength = settings?.contextLength ?? 2048;
-
-  return (
-    <Card style={styles.section}>
-      <Text style={styles.settingHelp}>Configure LLM behavior for text responses.</Text>
-
-      <SliderSetting
-        testID="llama-temperature"
-        label="Temperature"
-        description="Higher = more creative, Lower = more focused"
-        value={settings?.temperature ?? 0.7}
-        min={0} max={2} step={0.05} decimals={2}
-        onChange={(value) => updateSettings({ temperature: value })}
-      />
-
-      <SliderSetting
-        testID="llama-max-tokens"
-        label="Max Tokens"
-        description="Maximum response length"
-        value={maxTokens}
-        min={64} max={8192} step={64}
-        formatValue={formatMaxTokens}
-        onChange={(value) => updateSettings({ maxTokens: value })}
-      />
-
-      <SliderSetting
-        testID="llama-context-length"
-        label="Context Length"
-        description="KV cache size — larger uses more RAM (requires reload)"
-        warning={contextLength > 8192 ? 'High context uses significant RAM and may crash on some devices' : null}
-        value={contextLength}
-        min={512} max={llmSliderMax} step={1024}
-        formatValue={formatContext}
-        onChange={(value) => updateSettings({ contextLength: value })}
-      />
-
-      <ShowGenerationDetailsToggle />
-
-      <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="text-advanced-toggle" />
-      {showAdvanced && <TextGenerationAdvanced />}
-    </Card>
-  );
-};
-
-// ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export const TextGenerationSection: React.FC = () => {
-  const isLiteRT = useAppStore(selectIsLiteRT);
-  return isLiteRT ? <LiteRTTextSettings /> : <LlamaTextSettings />;
+  const styles = useThemedStyles(createStyles);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const { isLiteRT, llama, liteRT, toolCalls } = useTextGenerationSettings();
+
+  return (
+    <Card style={styles.section}>
+      <Text style={styles.settingHelp}>
+        {isLiteRT
+          ? 'Configure LiteRT model behavior.'
+          : 'Configure LLM behavior for text responses.'}
+      </Text>
+
+      {isLiteRT ? (
+        <>
+          <SliderSetting testID="litert-temperature" {...liteRT.temperature} />
+          <SliderSetting testID="litert-max-tokens" {...liteRT.maxTokens} />
+        </>
+      ) : (
+        <>
+          <SliderSetting testID="llama-temperature" {...llama.temperature} />
+          <SliderSetting testID="llama-max-tokens" {...llama.maxTokens} />
+          <SliderSetting
+            testID="llama-context-length"
+            {...llama.contextLength}
+          />
+        </>
+      )}
+
+      <ShowGenerationDetailsToggle />
+      <AdvancedToggle
+        isExpanded={showAdvanced}
+        onPress={() => setShowAdvanced(current => !current)}
+        testID="text-advanced-toggle"
+      />
+      {showAdvanced ? (
+        isLiteRT ? (
+          <>
+            <SliderSetting testID="litert-top-p" {...liteRT.topP} />
+            <SliderSetting testID="max-tool-calls" {...toolCalls} />
+            <LiteRTBackendSelector />
+            <ModelLoadingModeSelector />
+          </>
+        ) : (
+          <>
+            <SliderSetting testID="llama-top-p" {...llama.topP} />
+            <SliderSetting testID="repeat-penalty" {...llama.repeatPenalty} />
+            <SliderSetting testID="max-tool-calls" {...toolCalls} />
+            <CpuThreadsSlider />
+            <BatchSizeSlider />
+            <BackendSelector />
+            <FlashAttentionToggle />
+            <SpeculativeDecodingToggle />
+            <KvCacheTypeToggle />
+            <ModelLoadingModeSelector />
+          </>
+        )
+      ) : null}
+    </Card>
+  );
 };

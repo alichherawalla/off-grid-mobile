@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Linking, Text } from 'react-native';
 import Markdown from '@ronradtke/react-native-markdown-display';
+import { preprocessChatMarkdown } from '@offgrid/sync';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
@@ -11,7 +12,7 @@ import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
  * Lookahead handles chains like 5*5*5*5 in a single pass.
  */
 export function preprocessMarkdown(text: string): string {
-  return text.replaceAll(/(\d)\*(?=\d)/g, String.raw`$1\*`);
+  return preprocessChatMarkdown(text);
 }
 
 /** Custom link rule — renders as inline Text so it wraps correctly inside list items */
@@ -30,7 +31,9 @@ function createLinkRule(onPress: (url: string) => void) {
 
 /** Drop the trailing newline markdown-it appends to code blocks. */
 function trimTrailingNewline(content: string): string {
-  return typeof content === 'string' && content.endsWith('\n') ? content.slice(0, -1) : content;
+  return typeof content === 'string' && content.endsWith('\n')
+    ? content.slice(0, -1)
+    : content;
 }
 
 /**
@@ -46,13 +49,25 @@ const selectableRules = {
       {children}
     </Text>
   ),
-  fence: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (
+  fence: (
+    node: any,
+    _children: any,
+    ...[, styles, inheritedStyles = {}]: any[]
+  ) => (
     <Text key={node.key} style={[inheritedStyles, styles.fence]} selectable>
       {trimTrailingNewline(node.content)}
     </Text>
   ),
-  code_block: (node: any, _children: any, ...[, styles, inheritedStyles = {}]: any[]) => (
-    <Text key={node.key} style={[inheritedStyles, styles.code_block]} selectable>
+  code_block: (
+    node: any,
+    _children: any,
+    ...[, styles, inheritedStyles = {}]: any[]
+  ) => (
+    <Text
+      key={node.key}
+      style={[inheritedStyles, styles.code_block]}
+      selectable
+    >
       {trimTrailingNewline(node.content)}
     </Text>
   ),
@@ -82,7 +97,11 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   );
 
   return (
-    <Markdown style={markdownStyles} onLinkPress={handleLinkPress} rules={rules}>
+    <Markdown
+      style={markdownStyles}
+      onLinkPress={handleLinkPress}
+      rules={rules}
+    >
       {processed}
     </Markdown>
   );

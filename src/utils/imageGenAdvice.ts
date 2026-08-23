@@ -32,11 +32,20 @@ export const QUALITY_STEP_FLOOR = 20;
  */
 export const SWEET_SPOT_SIZE = 256;
 
-/** Default guidance scale and step count — the SAME values every slider shows, so a
- *  stale/0 setting can't fall back to a different literal, and "Reset to Defaults"
- *  restores the image params too (Q12). */
+/** Default guidance scale and platform step counts. */
 export const DEFAULT_IMAGE_GUIDANCE = 7.5;
-export const DEFAULT_IMAGE_STEPS = 8;
+export const MAX_IMAGE_STEPS = 50;
+const IMAGE_STEP_DEFAULTS = {
+  android: 8,
+  ios: MAX_IMAGE_STEPS,
+} as const;
+
+/** One owner for the platform default. Persisted user values still take precedence. */
+export function defaultImageSteps(platform: string): number {
+  return platform === 'ios'
+    ? IMAGE_STEP_DEFAULTS.ios
+    : IMAGE_STEP_DEFAULTS.android;
+}
 
 export function getImageGenAdvice(opts: {
   backend?: string | null;

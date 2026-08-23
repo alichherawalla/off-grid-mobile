@@ -1,0 +1,9 @@
+Off Grid AI is building a private intelligence layer that connects people, devices, systems, data, and conversations without forcing sensitive information into the cloud. Its goal is simple: enable every person to operate with the intelligence and capabilities of the entire enterprise.
+
+The platform has three core products. Off Grid AI Mobile and Desktop run AI locally on phones and computers, allowing users to work with text, voice, images, documents, and personal context while keeping raw data on-device. Off Grid AI Console brings this intelligence into the enterprise, combining it with company systems and knowledge to create governed agents, apps, and automations.
+
+The key difference is that intelligence is captured where work actually happens, then transformed into useful signals that can be shared safely. Enterprises can apply permissions, policies, auditability, evaluations, and human approvals without sacrificing speed.
+
+Off Grid AI is open source and already has more than 180,000 downloads, thousands of GitHub stars, and meaningful early revenue. The broader vision is to give organizations the agility of a startup while retaining the security, reliability, and governance required by large enterprises.
+
+For individuals, this means AI that remembers context privately. For enterprises, it means turning distributed knowledge into repeatable execution.

@@ -10,9 +10,11 @@
  *   System prompt  ~5-10%   (varies)
  *   Summary        12%      (SUMMARY_BUDGET_RATIO)
  *   Recent msgs    ~35-40%  (fills remaining prompt budget)
- *   Generation     45%      (reserved for response)
+ *   Generation     40%      (reserved for response)
+ *   Native overhead 5%      (template, tools, and media)
  */
 import { llmService } from './llm';
+import { CONTEXT_PROMPT_BUDGET_RATIO } from './llmHelpers';
 import { useChatStore } from '../stores/chatStore';
 import { Message } from '../types';
 import logger from '../utils/logger';
@@ -23,9 +25,6 @@ const CONTEXT_FULL_PATTERNS = [
   'context window exceeded',
   'context length exceeded',
 ];
-
-/** Fraction of context reserved for the prompt (rest is for output) */
-const PROMPT_BUDGET_RATIO = 0.55;
 
 /** Fraction of context allocated to the summary */
 const SUMMARY_BUDGET_RATIO = 0.12;
@@ -97,7 +96,7 @@ class ContextCompactionService {
       const ctxLength = llmService.getPerformanceSettings().contextLength || 2048;
       const summaryTokenBudget = Math.floor(ctxLength * SUMMARY_BUDGET_RATIO);
       const systemTokens = await this.countTokens(systemPrompt);
-      const recentTokenBudget = Math.max(0, Math.floor(ctxLength * PROMPT_BUDGET_RATIO) - summaryTokenBudget - systemTokens);
+      const recentTokenBudget = Math.max(0, Math.floor(ctxLength * CONTEXT_PROMPT_BUDGET_RATIO) - summaryTokenBudget - systemTokens);
 
       const nonSystem = allMessages.filter(m => m.role !== 'system');
       logger.log(`[ContextCompaction] ${nonSystem.length} messages, ctx=${ctxLength}, summaryBudget=${summaryTokenBudget}, recentBudget=${recentTokenBudget}`);

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
@@ -86,7 +87,7 @@ export const ModelsManagerSheet: React.FC<Props> = ({
               {/* Fixed-width eject column right of the label so all four rows align; empty when not resident. */}
               <View style={styles.ejectSlot}>
                 {resident && (ejectingRow === row.type
-                  ? <ActivityIndicator size="small" color={colors.error} />
+                  ? <LoadingDots color={colors.error} />
                   : (
                     <TouchableOpacity
                       testID={`models-row-${row.type}-eject`}
@@ -112,7 +113,7 @@ export const ModelsManagerSheet: React.FC<Props> = ({
                 )}
               </View>
               {isLoading
-                ? <ActivityIndicator size="small" color={colors.primary} />
+                ? <LoadingDots color={colors.primary} />
                 : <Icon name="chevron-right" size={16} color={colors.textMuted} />}
             </AnimatedPressable>
           );
@@ -126,7 +127,7 @@ export const ModelsManagerSheet: React.FC<Props> = ({
             onPress={onEject}
           >
             {isEjecting
-              ? <ActivityIndicator size="small" color={colors.error} />
+              ? <LoadingDots color={colors.error} />
               : <Icon name="power" size={14} color={colors.error} />}
             <Text style={styles.ejectText}>Eject All Models</Text>
           </AnimatedPressable>

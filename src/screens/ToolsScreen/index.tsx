@@ -47,6 +47,7 @@ export const ToolsScreen: React.FC = () => {
           onPress={() => navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          testID="tools-back"
         >
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
@@ -106,6 +107,8 @@ export const ToolsScreen: React.FC = () => {
                 onValueChange={() => handleToggleTool(tool.id)}
                 trackColor={{ false: colors.border, true: `${colors.primary}80` }}
                 thumbColor={isEnabled ? colors.primary : colors.textMuted}
+                accessibilityLabel={`${tool.displayName}, ${isEnabled ? 'ON' : 'OFF'}`}
+                testID={`tool-picker-toggle-${tool.id}`}
               />
             </View>
           );

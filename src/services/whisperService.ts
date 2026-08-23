@@ -258,8 +258,7 @@ class WhisperService {
       maxLen?: number;
     }
   ): Promise<void> {
-    logger.log('[WhisperService] startRealtimeTranscription called');
-    logger.log('[WhisperService] Context exists:', !!this.context);
+    logger.log(`[WhisperService] start (context=${!!this.context})`);
     logger.log('[WhisperService] isTranscribing:', this.isTranscribing);
 
     if (!this.context) {
@@ -336,6 +335,9 @@ class WhisperService {
         maxLen: options?.maxLen || 0, // 0 = no limit
         realtimeAudioSec: 30, // Process in 30-second chunks
         realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
+        // Decode only slices that contain speech, so a quiet room is not decoded into invented
+        // words. This does NOT end the turn - only useVoiceInput does that, in voice mode.
+        useVad: true,
         ...(Platform.OS === 'ios' && {
           audioSessionOnStartIos: {
             category: 'PlayAndRecord',
@@ -371,6 +373,7 @@ class WhisperService {
           });
           return;
         }
+
 
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.

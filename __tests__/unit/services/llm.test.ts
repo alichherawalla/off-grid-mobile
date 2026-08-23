@@ -18,9 +18,9 @@ const mockedInitLlama = initLlama as jest.MockedFunction<typeof initLlama>;
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
 /**
- * Helper: sets up mocks for auto context scaling tests.
+ * Helper: sets up mocks for configured context-loading tests.
  */
-function setupScalingTest({
+function setupContextLoadTest({
   modelContextLength,
   userContextLength,
   contextCount = 1,
@@ -2048,47 +2048,44 @@ describe('LLMService', () => {
   // ========================================================================
   // Auto context scaling
   // ========================================================================
-  describe('auto context scaling', () => {
-    it('loads at 4096 default context without a second init when model supports ≥4096', async () => {
-      setupScalingTest({
+  describe('configured context loading', () => {
+    it('passes the selected 4096 context directly without a second init', async () => {
+      setupContextLoadTest({
         modelContextLength: '8192',
         userContextLength: 4096, // default
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      // targetCtx = min(8192, 4096, deviceMax=4096) = 4096 = initial.actualLength → no second init
       expect(initLlama).toHaveBeenCalledTimes(1);
       expect(initLlama).toHaveBeenCalledWith(
         expect.objectContaining({ n_ctx: 4096 }),
       );
     });
 
-    it('does not scale when user set a custom context length', async () => {
-      setupScalingTest({
+    it('passes a custom context length directly', async () => {
+      setupContextLoadTest({
         modelContextLength: '8192',
         userContextLength: 1024,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      // userIsOnDefault = false → no scaling check
       expect(initLlama).toHaveBeenCalledTimes(1);
+      expect(initLlama).toHaveBeenCalledWith(
+        expect.objectContaining({ n_ctx: 1024 }),
+      );
     });
 
-    it('scales up when user is on default and model supports larger ctx than default', async () => {
-      // This can only trigger if deviceMaxCtx > APP_CONFIG.maxContextLength
-      // (e.g. device with >8GB RAM where deviceMaxCtx = 8192)
-      // Simulate by setting userContextLength below deviceMaxCtx
-      const [ctx1] = setupScalingTest({
+    it('does not perform a second metadata-driven scaling init', async () => {
+      const [ctx1] = setupContextLoadTest({
         modelContextLength: '8192',
-        userContextLength: 2048, // below default — treated as custom (userIsOnDefault = false)
+        userContextLength: 2048,
         contextCount: 1,
       });
 
       await llmService.loadModel('/models/test.gguf');
 
-      // userIsOnDefault = 2048 === 4096 = false → no scaling
       expect(initLlama).toHaveBeenCalledTimes(1);
       expect(ctx1.release).not.toHaveBeenCalled();
     });

@@ -165,6 +165,9 @@ describe('mobile Sync discovery wiring (real orchestrator + RnDiscovery, fake ze
 
     z.emitResolved(resolvedSvc());
     await flush();
+    // The shared reconnect path re-resolves a failed cached address before it reports failure.
+    z.emitResolved(resolvedSvc());
+    await flush();
 
     expect(failures).toEqual([
       { name: 'Laptop', message: 'connect ECONNREFUSED' },

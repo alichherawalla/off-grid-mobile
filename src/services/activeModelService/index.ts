@@ -395,7 +395,7 @@ class ActiveModelService {
     const hasTextModel =
       !!store.activeModelId ||
       !!this.loadedTextModelId ||
-      llmService.isModelLoaded();
+      !!getActiveEngineService()?.isModelLoaded();
     const hasImageModel =
       !!store.activeImageModelId || !!this.loadedImageModelId;
     if (hasTextModel) {

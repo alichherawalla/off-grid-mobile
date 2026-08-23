@@ -31,7 +31,8 @@ function createMockDeps(overrides: Partial<ToolGenerationDeps> = {}): ToolGenera
     isGemma4Model: false,
     disableCtxShift: false,
     manageContextWindow: jest.fn(async (msgs: Message[]) => msgs),
-    convertToOAIMessages: jest.fn((msgs: Message[]) =>
+    // Async, matching the real converter: it drops images whose file is gone before building.
+    convertToOAIMessages: jest.fn(async (msgs: Message[]) =>
       msgs.map(m => ({ role: m.role, content: m.content })),
     ),
     setPerformanceStats: jest.fn(),
@@ -220,7 +221,7 @@ describe('generateWithToolsImpl', () => {
     it('delegates to manageContextWindow and convertToOAIMessages', async () => {
       const managed = [createUserMessage('managed')];
       const manageContextWindow = jest.fn(async () => managed);
-      const convertToOAIMessages = jest.fn(() => [{ role: 'user', content: 'managed' }]);
+      const convertToOAIMessages = jest.fn(async () => [{ role: 'user', content: 'managed' }]);
       const completion = jest.fn(async (_params: any, _cb: any) => ({}));
 
       const deps = createMockDeps({

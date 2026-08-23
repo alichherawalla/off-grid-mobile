@@ -3,9 +3,9 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   Linking,
 } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import { Card } from '../components';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS, OFF_GRID_DESKTOP_URL } from '../constants';
@@ -63,7 +63,7 @@ export const ServerCard: React.FC<{
           </Text>
         </View>
         {isConnecting && (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <LoadingDots color={colors.primary} />
         )}
         {!isConnecting && isConnected && (
           <View style={[styles.connectedBadge, { backgroundColor: `${colors.success}20`, borderColor: colors.success }]} testID={`discovered-server-${server.id}-connected`}>
@@ -106,7 +106,7 @@ export const NetworkSection: React.FC<{
 
       {isCheckingNetwork && !hasServers && (
         <View style={styles.scanningRow}>
-          <ActivityIndicator size="small" color={colors.textSecondary} />
+          <LoadingDots color={colors.textSecondary} />
           <Text style={styles.scanningText}>Scanning your network...</Text>
         </View>
       )}
@@ -144,7 +144,7 @@ export const NetworkSection: React.FC<{
           disabled={busy}
         >
           {busy
-            ? <ActivityIndicator size="small" color={colors.primary} />
+            ? <LoadingDots color={colors.primary} />
             : <Text style={[styles.actionButtonText, { color: colors.primary }]}>Scan Network</Text>}
         </TouchableOpacity>
         <TouchableOpacity

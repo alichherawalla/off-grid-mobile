@@ -91,6 +91,23 @@
         </intent-filter>
       </activity>
 
+      <!-- Android does not let normal background apps read the system clipboard. This explicit
+           selection-menu action receives only the text the user chose and stores it until the
+           existing clipboard sync owner can import it. -->
+      <activity
+          android:name="ai.offgridmobile.clipboard.ProcessTextActivity"
+          android:label="@string/process_text_action_label"
+          android:exported="true"
+          android:excludeFromRecents="true"
+          android:noHistory="true"
+          android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <intent-filter>
+          <action android:name="android.intent.action.PROCESS_TEXT" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="text/plain" />
+        </intent-filter>
+      </activity>
+
 <!-- Receiver for background download completion events -->
       <receiver
           android:name=".download.DownloadCompleteBroadcastReceiver"
@@ -116,5 +133,6 @@
           android:enabled="true"
           android:exported="false"
           android:foregroundServiceType="dataSync" />
+
     </application>
 </manifest>

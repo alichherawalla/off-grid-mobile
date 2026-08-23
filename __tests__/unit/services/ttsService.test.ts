@@ -57,7 +57,6 @@ const makeMockContext = (vocoderEnabled = true) => ({
   releaseVocoder: jest.fn().mockResolvedValue(undefined),
   release: jest.fn().mockResolvedValue(undefined),
   getFormattedAudioCompletion: jest.fn().mockResolvedValue({ prompt: 'p', grammar: 'g' }),
-  getAudioCompletionGuideTokens: jest.fn().mockResolvedValue([1, 2, 3]),
   completion: jest.fn().mockResolvedValue({ audio_tokens: [10, 20, 30] }),
   decodeAudioTokens: jest.fn().mockResolvedValue(new Array(2400).fill(0.1)),
 });
@@ -204,9 +203,12 @@ describe('ttsService', () => {
 
       const audio = await ttsService.generate('hello world');
 
-      expect(ctx.getFormattedAudioCompletion).toHaveBeenCalled();
-      expect(ctx.getAudioCompletionGuideTokens).toHaveBeenCalledWith('hello world');
-      expect(ctx.completion).toHaveBeenCalled();
+      expect(ctx.getFormattedAudioCompletion).toHaveBeenCalledWith({
+        prompt: 'hello world',
+      });
+      expect(ctx.completion).toHaveBeenCalledWith(
+        expect.not.objectContaining({ guide_tokens: expect.anything() }),
+      );
       expect(ctx.decodeAudioTokens).toHaveBeenCalled();
 
       expect(audio.samples).toBeInstanceOf(Float32Array);

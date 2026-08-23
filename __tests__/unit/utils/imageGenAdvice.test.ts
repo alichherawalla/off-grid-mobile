@@ -5,7 +5,20 @@
  *  - >256 is very slow on a mid-tier GPU,
  *  - <256 is GARBAGE (SD1.5 below training res), not just smaller.
  */
-import { getImageGenAdvice, QUALITY_STEP_FLOOR, SWEET_SPOT_SIZE } from '../../../src/utils/imageGenAdvice';
+import {
+  defaultImageSteps,
+  getImageGenAdvice,
+  MAX_IMAGE_STEPS,
+  QUALITY_STEP_FLOOR,
+  SWEET_SPOT_SIZE,
+} from '../../../src/utils/imageGenAdvice';
+
+describe('defaultImageSteps', () => {
+  it('keeps Android at 8 steps and moves iOS to the slider maximum', () => {
+    expect(defaultImageSteps('android')).toBe(8);
+    expect(defaultImageSteps('ios')).toBe(MAX_IMAGE_STEPS);
+  });
+});
 
 describe('getImageGenAdvice', () => {
   it('gives NO advice for the NPU (qnn) path', () => {

@@ -21,7 +21,11 @@ const createLayoutStyles = (colors: ThemeColors) => ({
   headerLeft: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 8,
+    gap: SPACING.sm,
+  },
+  appLogo: {
+    width: SPACING.xxl + SPACING.sm,
+    height: SPACING.xxl + SPACING.sm,
   },
   headerActions: {
     flexDirection: 'row' as const,

@@ -29,9 +29,15 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   headerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 2 },
   headerSubtitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, overflow: 'hidden' as const },
   headerSubtitleDivider: { ...TYPOGRAPHY.meta, color: colors.textMuted, flexShrink: 0 },
-  headerProjectRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, flexShrink: 0 },
+  // The project name yields, the model control does not. These two shared one row with the shrink
+  // rule the wrong way round - the project refused to give ground while the model was allowed to -
+  // so a long project name squeezed the model selector to nothing and the user could not see, or
+  // tap, which model was loaded. The model label is fixed text ("Models") plus two small icons, so
+  // it has a bounded width and can safely refuse to shrink; a project name is arbitrarily long and
+  // is the thing that should truncate. `minWidth: 0` lets its Text actually ellipsize.
+  headerProjectRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 3, flexShrink: 1, minWidth: 0 },
   headerSubtitle: { ...TYPOGRAPHY.h3, color: colors.textMuted, flexShrink: 1 },
-  modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 1, overflow: 'hidden' as const },
+  modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 0, overflow: 'hidden' as const },
   remoteIcon: { marginRight: 4 },
   modelSelectorArrow: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginLeft: SPACING.xs },
   modeToggleWrap: { marginLeft: 'auto' as const },

@@ -1,19 +1,15 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, CustomAlert, hideAlert } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
-import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
-import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
-import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
-import { useOnboardingChecklistNavigation } from './hooks/useOnboardingChecklistNavigation';
 import { RecentConversations } from './components/RecentConversations';
 import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
@@ -38,13 +34,11 @@ type HomeScreenProps = {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
   const HomeNotificationsButton = useSlot(SLOTS.homeNotificationsButton);
   const { isSyncUnlocked, openSync, openSyncNotifications } = useOpenSync();
-  const { sheetVisible, openSheet, closeSheet, showIcon } =
-    useOnboardingSheet();
 
   const {
     pickerType,
@@ -82,8 +76,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     continueChat,
     handleDeleteConversation,
   } = useHomeScreen(navigation);
-
-  const { handleStepPress } = useOnboardingChecklistNavigation({ navigation, closeSheet });
 
   // ── Collapsed Models control ──────────────────────────────────────────────
   const [modelsManagerOpen, setModelsManagerOpen] = React.useState(false);
@@ -146,8 +138,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         >
           <View style={styles.header}>
             <View style={styles.headerLeft}>
+              <Image
+                source={
+                  isDark
+                    ? require('../../assets/home-logo-dark.png')
+                    : require('../../assets/home-logo-light.png')
+                }
+                style={styles.appLogo}
+                resizeMode="contain"
+                accessible={false}
+                testID="home-app-logo"
+              />
               <Text style={styles.title}>Off Grid AI</Text>
-              {showIcon && <PulsatingIcon onPress={openSheet} />}
             </View>
             <View style={styles.headerActions}>
               {HomeNotificationsButton ? (
@@ -340,12 +342,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         message={alertState.message}
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
-      />
-
-      <OnboardingSheet
-        visible={sheetVisible}
-        onClose={closeSheet}
-        onStepPress={handleStepPress}
       />
     </SafeAreaView>
   );

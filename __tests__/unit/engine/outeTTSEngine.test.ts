@@ -6,15 +6,10 @@
  * present-but-truncated file is treated as NOT downloaded (instead of being
  * reported complete as the old RNFS-exists check did).
  */
-const mockFiles: Record<string, number> = {};
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/doc',
-  exists: jest.fn((p: string) => Promise.resolve(p in mockFiles)),
-  stat: jest.fn((p: string) => Promise.resolve({ size: mockFiles[p] ?? 0, isFile: () => true })),
-  mkdir: jest.fn(() => Promise.resolve()),
-  unlink: jest.fn((p: string) => { delete mockFiles[p]; return Promise.resolve(); }),
-  downloadFile: jest.fn(() => ({ promise: Promise.resolve({ statusCode: 200 }) })),
-}));
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
 
 const mockIsAvailable = jest.fn(() => true);
 const mockDownloadFileTo = jest.fn();
@@ -27,24 +22,31 @@ jest.mock('@offgrid/core/services/backgroundDownloadService', () => ({
 
 import { OuteTTSEngine } from '../../../pro/audio/engine/tts/engines/outetts/OuteTTSEngine';
 import { OUTETTS_BACKBONE, OUTETTS_VOCODER } from '../../../pro/audio/engine/tts/engines/outetts/models';
+import { defaultNativeFileSystemBoundary } from '../../harness/nativeFileSystem';
 
-const pathFor = (filename: string) => `/doc/tts-models/${filename}`;
+const pathFor = (filename: string) =>
+  `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/tts-models/${filename}`;
 
 describe('OuteTTSEngine downloads', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    for (const k of Object.keys(mockFiles)) delete mockFiles[k];
+    defaultNativeFileSystemBoundary.reset();
     // Default: a successful full-size download lands the file on disk.
     mockIsAvailable.mockReturnValue(true);
     mockDownloadFileTo.mockImplementation(({ destPath, params }: any) => {
-      mockFiles[destPath] = params.totalBytes;
+      defaultNativeFileSystemBoundary.seedFile(destPath, params.totalBytes);
       return { downloadIdPromise: Promise.resolve('1'), promise: Promise.resolve() };
     });
   });
 
   it('treats a truncated file on disk as not-downloaded', async () => {
-    mockFiles[pathFor(OUTETTS_BACKBONE.filename)] = 1000; // tiny / partial
-    mockFiles[pathFor(OUTETTS_VOCODER.filename)] = OUTETTS_VOCODER.sizeBytes; // full
+    defaultNativeFileSystemBoundary.seedFile(
+      pathFor(OUTETTS_BACKBONE.filename),
+      1000,
+    );
+    defaultNativeFileSystemBoundary.seedFile(
+      pathFor(OUTETTS_VOCODER.filename),
+      OUTETTS_VOCODER.sizeBytes,
+    );
 
     const states = await new OuteTTSEngine().checkAssetStatus();
     const backbone = states.find(s => s.asset.id === 'backbone');
@@ -68,7 +70,10 @@ describe('OuteTTSEngine downloads', () => {
     mockIsAvailable.mockReturnValue(false);
     const RNFS = require('react-native-fs');
     RNFS.downloadFile.mockImplementation(({ toFile }: any) => {
-      mockFiles[toFile] = OUTETTS_BACKBONE.sizeBytes;
+      defaultNativeFileSystemBoundary.seedFile(
+        toFile,
+        OUTETTS_BACKBONE.sizeBytes,
+      );
       return { promise: Promise.resolve({ statusCode: 200 }) };
     });
 
@@ -80,11 +85,15 @@ describe('OuteTTSEngine downloads', () => {
 
   it('rejects and cleans up when the downloaded file is incomplete', async () => {
     mockDownloadFileTo.mockImplementation(({ destPath }: any) => {
-      mockFiles[destPath] = 1000; // truncated
+      defaultNativeFileSystemBoundary.seedFile(destPath, 1000);
       return { downloadIdPromise: Promise.resolve('1'), promise: Promise.resolve() };
     });
 
     await expect(new OuteTTSEngine().downloadAssets(['backbone'])).rejects.toThrow(/incomplete/i);
-    expect(mockFiles[pathFor(OUTETTS_BACKBONE.filename)]).toBeUndefined(); // unlinked
+    expect(
+      await defaultNativeFileSystemBoundary.exists(
+        pathFor(OUTETTS_BACKBONE.filename),
+      ),
+    ).toBe(false);
   });
 });

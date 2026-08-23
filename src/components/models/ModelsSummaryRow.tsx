@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text } from 'react-native';
+import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -37,7 +38,7 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
       <View style={styles.header}>
         <Text style={styles.label}>Models</Text>
         {isLoading
-          ? <ActivityIndicator size="small" color={colors.primary} />
+          ? <LoadingDots color={colors.primary} />
           : <Icon name="chevron-down" size={14} color={colors.textMuted} />}
       </View>
       <View style={styles.icons}>

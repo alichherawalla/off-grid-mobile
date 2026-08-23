@@ -103,8 +103,9 @@ describe('what the phone remembers about ambient sharing', () => {
         loaded.policy.rules.find(rule => rule.source === source)?.mode;
       expect(modeFor('screenshot')).toBe('auto');
       expect(modeFor('download')).toBe('off');
-      expect(modeFor('generated_media')).toBe('off');
-      expect(modeFor('message_attachment')).toBe('off');
+      // Durable chat media follows its message. It is not an ambient preference or a second switch.
+      expect(modeFor('generated_media')).toBeUndefined();
+      expect(modeFor('message_attachment')).toBeUndefined();
     });
 
     it('applies each rule to every device until told otherwise', async () => {
@@ -157,8 +158,10 @@ describe('what the phone remembers about ambient sharing', () => {
 
       const loaded = await new AmbientShareStateStore().load(preferences());
 
-      // A relaunch during a transfer has to know a send was under way, or the file is neither sent nor queued.
-      expect(loaded.deliveries).toEqual([sending]);
+      // An in-memory send cannot still be live after restart. Clear the transient phase so reconnect retries it.
+      expect(loaded.deliveries).toEqual([
+        { ...sending, transferStatus: undefined },
+      ]);
     });
 
     it('keeps the reason a delivery failed', async () => {
@@ -276,7 +279,7 @@ describe('what the phone remembers about ambient sharing', () => {
       expect(
         loaded.policy.rules.find(rule => rule.source === 'download')?.mode,
       ).toBe('auto');
-      expect(loaded.policy.rules).toHaveLength(4);
+      expect(loaded.policy.rules).toHaveLength(2);
     });
 
     it('keeps a rule whose document kinds are unreadable, without them', async () => {

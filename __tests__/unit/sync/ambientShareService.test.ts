@@ -107,6 +107,7 @@ describe('sharing a file to another device without being asked', () => {
     });
     await ambientShareService.start(PREFERENCES, {
       destinations: () => destinations,
+      files: () => [...files.values()],
       getFile: (syncId: string) => files.get(syncId),
       // Made on this device, so there is no origin to keep it away from.
       originOf: () => undefined,
@@ -441,6 +442,60 @@ describe('sharing a file to another device without being asked', () => {
   });
 
   describe('the other device not being there', () => {
+    it('sends older chat files when their first destination pairs later', async () => {
+      const harness = await launch();
+      harness.destinations.splice(0);
+      const generated = screenshot('generated-before-pair', {
+        kind: 'generated_media',
+      });
+      const attachment = screenshot('attachment-before-pair', {
+        kind: 'message_attachment',
+      });
+      harness.files.set(generated.syncId, generated);
+      harness.files.set(attachment.syncId, attachment);
+
+      await harness.service.handleCapture(generated);
+      await harness.service.handleCapture(attachment);
+      expect(harness.scheduled).toEqual([]);
+
+      harness.destinations.push({
+        deviceId: THE_MAC,
+        deviceName: "Mac's MacBook Pro",
+        connected: true,
+      });
+      await harness.service.connected(THE_MAC);
+
+      expect(harness.scheduled.map(item => item.file.syncId)).toEqual([
+        generated.syncId,
+        attachment.syncId,
+      ]);
+      expect(harness.service.allowsState(THE_MAC, generated.syncId)).toBe(
+        true,
+      );
+      expect(harness.service.allowsState(THE_MAC, attachment.syncId)).toBe(
+        true,
+      );
+    });
+
+    it('does not turn a new pairing into screenshot history backfill', async () => {
+      const harness = await launch();
+      harness.destinations.splice(0);
+      const olderScreenshot = screenshot('screenshot-before-pair');
+      harness.files.set(olderScreenshot.syncId, olderScreenshot);
+
+      harness.destinations.push({
+        deviceId: THE_MAC,
+        deviceName: "Mac's MacBook Pro",
+        connected: true,
+      });
+      await harness.service.connected(THE_MAC);
+
+      expect(harness.scheduled).toEqual([]);
+      expect(
+        harness.service.allowsState(THE_MAC, olderScreenshot.syncId),
+      ).toBe(false);
+    });
+
     it('waits for it when the user asked for that', async () => {
       const harness = await launch();
       harness.destinations[0]!.connected = false;
@@ -520,6 +575,29 @@ describe('sharing a file to another device without being asked', () => {
 
       // Reconnecting is not a reason to send everything again. Only what has not finished is retried.
       expect(harness.scheduled).toHaveLength(1);
+    });
+
+    it('still sends a second file when neither of them says what it contains', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      // Two different screenshots, neither carrying a content hash - which is what a file admitted by
+      // an older build looks like.
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      harness.files.set(idOf('shot-2'), screenshot('shot-2'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      await harness.scheduled[0]!.completed();
+
+      await harness.service.handleCapture(screenshot('shot-2'));
+
+      // The duplicate check is keyed on what the bytes ARE. Two files making no claim about their
+      // content are not thereby the same file - reading "no hash" as a match would suppress the second
+      // screenshot, and the user would watch one photo reach their Mac and never see the next.
+      expect(harness.scheduled).toHaveLength(2);
+      expect(harness.scheduled[1]!.file.syncId).toBe(idOf('shot-2'));
     });
 
     it('retries a file whose transfer had failed', async () => {
@@ -1048,6 +1126,216 @@ describe('sharing a file to another device without being asked', () => {
           file: expect.objectContaining({ name: 'shot-2.png' }),
         }),
       ]);
+    });
+
+    it('does not list a voice note that is waiting to go', async () => {
+      const harness = await launch();
+      harness.destinations[0]!.connected = false;
+      await harness.service.setOfflineBehavior('queue');
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      // A message attachment goes to every paired device with no rule to set - the catalogue says
+      // `send: always` - so recording a voice note queues one delivery per device on its own.
+      const note = screenshot('note-1', {
+        kind: 'message_attachment',
+        name: 'note-1.m4a',
+        mimeType: 'audio/mp4',
+      });
+      harness.files.set(note.syncId, note);
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+
+      await harness.service.handleCapture(note);
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      // Both are genuinely waiting for the Mac to come back.
+      expect(
+        harness.service.deliverySnapshot().map(delivery => delivery.status),
+      ).toEqual(['queued', 'queued']);
+      // Only one of them is the user's business. A voice note's home is its chat bubble, and the
+      // catalogue hides that kind from Activity - so a person who records twenty notes on a train
+      // does not come home to twenty "Pending" rows burying the screenshot that actually needs them.
+      expect(
+        harness.service.activitySnapshot().map(row => row.file.name),
+      ).toEqual(['shot-1.png']);
+    });
+  });
+
+  /**
+   * Re-sending bytes to a device whose own copy has gone.
+   *
+   * A peer that has lost a file asks the devices that might still hold it. Answering is how a mesh
+   * heals itself, but "may I send you these bytes again" is a consent question, not a plumbing one -
+   * and this phone keeps its answer in two fields (an approval state and a transfer state) where the
+   * Mac keeps one. Reading those two fields wrongly has both failure modes:
+   *
+   *  - too strict, and the phone refuses to heal a file it has already sent. The Mac healed it and the
+   *    phone did not, on the same mesh, for the same file - which is the bug this rule was written for.
+   *  - too loose, and a peer gets bytes the user never agreed to send by claiming to have lost them.
+   *
+   * The service runs for real, and every state below is arrived at the way the app arrives at it.
+   */
+  describe('healing a copy the far device lost', () => {
+    async function autoRule(harness: Harness): Promise<void> {
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+    }
+
+    it('refuses a file that was never offered to that device', async () => {
+      const harness = await launch();
+
+      // No delivery at all: this phone has no record of agreeing to send that peer anything. A repair
+      // request is not a way to ask for a file the user never shared.
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(false);
+    });
+
+    it('refuses a file still waiting for the user to say yes', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'ask',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      expect(harness.service.deliverySnapshot()).toEqual([
+        expect.objectContaining({ status: 'prompt' }),
+      ]);
+
+      // The sheet is still up. Healing here would hand over a file on a peer's word, before the person
+      // whose file it is had answered - and they might have been about to say no.
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(false);
+    });
+
+    it('refuses a file that is only queued for a device that is away', async () => {
+      const harness = await launch();
+      harness.destinations[0]!.connected = false;
+      await harness.service.setOfflineBehavior('queue');
+      await autoRule(harness);
+      await harness.service.handleCapture(screenshot('shot-1'));
+      expect(harness.service.deliverySnapshot()).toEqual([
+        expect.objectContaining({ status: 'queued' }),
+      ]);
+
+      // Consent exists, but no bytes have ever left. There is nothing there to have gone missing, so
+      // this is a first send pretending to be a repair.
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(false);
+    });
+
+    it('allows a file whose transfer is still running', async () => {
+      const harness = await launch();
+      await autoRule(harness);
+
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      // Mid-flight, which is exactly when a peer notices a half-written file and asks again. Refusing
+      // now leaves the far device holding a partial file with no way to complete it.
+      expect(harness.service.deliverySnapshot()).toEqual([
+        expect.objectContaining({ transferStatus: 'sending' }),
+      ]);
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(true);
+    });
+
+    it('allows a file it has already finished sending', async () => {
+      const harness = await launch();
+      await autoRule(harness);
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      await harness.scheduled[0]!.completed();
+
+      // The one that matters. A finished delivery is precisely what a peer asks to repair when its own
+      // copy has gone, and this phone used to refuse while the Mac obliged - so the same file healed on
+      // one device and stayed missing on the other.
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(true);
+    });
+
+    it('allows a file whose transfer failed', async () => {
+      const harness = await launch();
+      await autoRule(harness);
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      await harness.scheduled[0]!.failed(new Error('Connection lost'));
+
+      // A failure is a file the far device may be holding half of. Consent was given and the bytes
+      // started moving; asking again is the repair working as intended.
+      expect(harness.service.allowsRepair(THE_MAC, idOf('shot-1'))).toBe(true);
+    });
+
+    it('allows a file it never sent because the device already had those bytes', async () => {
+      const harness = await launch();
+      const hash =
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      const first = screenshot('shot-1', { contentHash: hash });
+      // The same picture, re-minted under a second id - the shape that makes the sender skip a send.
+      const again = screenshot('shot-2', { contentHash: hash });
+      harness.files.set(first.syncId, first);
+      harness.files.set(again.syncId, again);
+      await harness.service.handleCapture(first);
+      await harness.scheduled[0]!.completed();
+
+      await harness.service.handleCapture(again);
+
+      // Nothing was sent for the second record, because those bytes are already there.
+      expect(harness.scheduled).toHaveLength(1);
+      // And it is still repairable. The peer HAS these bytes on this phone's own reckoning, so when it
+      // loses them, "I never sent you that" would be the phone contradicting itself.
+      expect(harness.service.allowsRepair(THE_MAC, again.syncId)).toBe(true);
+    });
+  });
+
+  describe('the question the sheet puts to the user', () => {
+    async function pendingQuestion(): Promise<Harness> {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'ask',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      return harness;
+    }
+
+    it('still names the device when the roster has not loaded it yet', async () => {
+      const harness = await pendingQuestion();
+
+      // Deliveries come back from storage before the mesh roster does, so early in a launch the
+      // destination id is all there is to go on.
+      harness.destinations.length = 0;
+
+      // The user is being asked to make a decision about a device, so the sentence has to name one.
+      // An empty name reads as "Share shot-1.png with ?" - a question nobody can answer.
+      expect(harness.service.approvals().items).toEqual([
+        expect.objectContaining({
+          deviceId: THE_MAC,
+          title: 'Share shot-1.png with Paired device?',
+        }),
+      ]);
+    });
+
+    it('drops a question about a file that has since gone, and asks again if it comes back', async () => {
+      const harness = await pendingQuestion();
+
+      harness.files.delete(idOf('shot-1'));
+
+      // Approving this would send nothing, so putting it in front of the user is asking them to decide
+      // something that has already been decided for them.
+      expect(harness.service.approvals().items).toEqual([]);
+      // The consent row itself stays: the question is derived from what exists right now, not deleted
+      // the first time a file is briefly unreadable. Put the file back and the user is asked again.
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      expect(harness.service.approvals().items).toHaveLength(1);
     });
   });
 });

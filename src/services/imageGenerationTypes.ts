@@ -39,6 +39,8 @@ export interface ImageGenerationState {
   previewPath: string | null;
   prompt: string | null;
   conversationId: string | null;
+  /** Stable id for the assistant message this live image turn will create. */
+  messageId: string | null;
   error: string | null;
   result: GeneratedImage | null;
 }
@@ -71,11 +73,4 @@ export interface RunGenerationOptions {
   imageWidth: number;
   imageHeight: number;
   useOpenCL: boolean;
-}
-
-export interface UpdateEnhancementOptions {
-  conversationId: string | undefined;
-  tempMessageId: string | null;
-  enhancedPrompt: string;
-  originalPrompt: string;
 }

@@ -19,6 +19,7 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
+import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 type ZipImportDeps = {
   addDownloadedImageModel: (model: ONNXImageModel) => void;
@@ -115,7 +116,7 @@ export function useModelsScreen() {
   const isPickingRef = useRef(false);
 
   const validateImportFiles = (resolvedFiles: Array<{ name: string; uri: string }>): string | null => {
-    const singleLitert = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.litertlm');
+    const singleLitert = resolvedFiles.length === 1 && isLiteRTFileName(resolvedFiles[0].name);
     if (singleLitert && !isLiteRTAvailable()) {
       return 'litert_unsupported';
     }

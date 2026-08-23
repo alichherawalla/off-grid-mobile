@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
+import { NO_COMPRESSION, unzip, zip } from 'react-native-zip-archive';
 import {
   FileTransferManager,
   IncrementalChecksum,
@@ -17,6 +18,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
 import { useWhisperStore } from '../../../src/stores/whisperStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
+import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import {
@@ -26,6 +28,7 @@ import {
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { createPeerEntitlement } from '../../harness/peerEntitlement';
 import { createKeygenFake } from '../../harness/keygenFake';
+import { transferredImageManifest } from '../../../src/services/modelManager/imageTransfer';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -141,6 +144,24 @@ describe('Pro mobile model package receiver', () => {
     // Pairing is a Pro capability, so a receiver that is not Pro refuses the Mac before any model is
     // offered. The rest of this suite is about what happens AFTER two devices are paired.
     useAppStore.getState().setProActive(true);
+    useAppStore.getState().setDownloadedImageModels([]);
+    (unzip as jest.Mock).mockImplementation(
+      async (_archive: string, target: string) => {
+        for (const component of [
+          'TextEncoder.mlmodelc',
+          'VAEDecoder.mlmodelc',
+          'Unet.mlmodelc',
+        ]) {
+          modelTransferFsBoundary.seedDir(`${target}/${component}`);
+        }
+        modelTransferFsBoundary.seedTextFile(`${target}/merges.txt`, 'merge');
+        modelTransferFsBoundary.seedTextFile(
+          `${target}/vocab.json`,
+          '{"token":1}',
+        );
+        return target;
+      },
+    );
     await useWhisperStore.getState().refreshPresentModels();
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
@@ -230,7 +251,7 @@ describe('Pro mobile model package receiver', () => {
     return { mobile, transfers };
   }
 
-  it('admits grouped vision and Whisper packages while rejecting image and Parakeet', async () => {
+  it('admits vision, Whisper, and same-runtime Core ML packages while rejecting incompatible runtimes', async () => {
     const { mobile, transfers } = await connectDesktop();
 
     const primary = modelBytes(96 * 1024 + 4, 0x31);
@@ -260,6 +281,16 @@ describe('Pro mobile model package receiver', () => {
         packageMetadata('vision-package', visionManifest, 0),
       ),
     );
+    const primaryJob = modelTransferJobs.activeFor(
+      'desktop-package-source',
+      visionManifest.id,
+    );
+    expect(primaryJob).toEqual(
+      expect.objectContaining({
+        bytesTransferred: primary.length,
+        bytesTotal: primary.length + projector.length,
+      }),
+    );
 
     const modelsDirectory = modelManager.getModelsDirectory();
     await expect(
@@ -275,6 +306,16 @@ describe('Pro mobile model package receiver', () => {
         projector,
         packageMetadata('vision-package', visionManifest, 1),
       ),
+    );
+    const completedVisionJob = modelTransferJobs
+      .list()
+      .find(job => job.packageId === 'vision-package');
+    expect(completedVisionJob).toEqual(
+      expect.objectContaining({
+        phase: 'completed',
+        bytesTransferred: primary.length + projector.length,
+        bytesTotal: primary.length + projector.length,
+      }),
     );
     // The projector lands under the name THIS device gives a projector - the model's own stem, the same
     // rule a download uses - not the name the sender happened to have for it. That is what keeps the
@@ -320,6 +361,126 @@ describe('Pro mobile model package receiver', () => {
       }),
     ]);
     expect(useWhisperStore.getState().presentModelIds).toContain('base.en');
+
+    const imageArchive = Buffer.alloc(48 * 1024, 0x49);
+    imageArchive.write('PK\u0003\u0004', 0, 'binary');
+    const coreMLManifest = transferredImageManifest(
+      {
+        id: 'mobile-coreml-image',
+        name: 'Mobile Core ML Image',
+        description: 'A received Core ML image model',
+        modelPath: '/sender/image_models/mobile-coreml-image',
+        downloadedAt: '2026-08-20T00:00:00.000Z',
+        size: 128 * 1024,
+        backend: 'coreml',
+        attentionVariant: 'split_einsum',
+      },
+      'ios',
+      imageArchive.length,
+    );
+    await transfers.sendFile(
+      mobile.id,
+      packageSource(
+        imageArchive,
+        packageMetadata('coreml-image-package', coreMLManifest, 0),
+      ),
+    );
+    const imageRoot = `${modelManager.getImageModelsDirectory()}/mobile-coreml-image`;
+    await expect(modelManager.getDownloadedImageModels()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'mobile-coreml-image',
+        name: 'Mobile Core ML Image',
+        backend: 'coreml',
+        modelPath: imageRoot,
+        attentionVariant: 'split_einsum',
+      }),
+    ]);
+    expect(useAppStore.getState().downloadedImageModels).toEqual([
+      expect.objectContaining({ id: 'mobile-coreml-image' }),
+    ]);
+    await expect(
+      modelTransferFsBoundary.exists(`${imageRoot}/Unet.mlmodelc`),
+    ).resolves.toBe(true);
+    await expect(
+      modelTransferFsBoundary.exists(
+        `${modelManager.getImageModelsDirectory()}/.sync-install-${
+          coreMLManifest.files[0].name
+        }`,
+      ),
+    ).resolves.toBe(false);
+
+    const lowSpaceManifest = transferredImageManifest(
+      {
+        id: 'too-large-coreml-image',
+        name: 'Too Large Core ML Image',
+        description: '',
+        modelPath: '/sender/image_models/too-large-coreml-image',
+        downloadedAt: '2026-08-20T00:00:00.000Z',
+        size: 8_000_000_000,
+        backend: 'coreml',
+      },
+      'ios',
+      imageArchive.length,
+    );
+    modelTransferFsBoundary.module.getFSInfo.mockResolvedValueOnce({
+      freeSpace: 2_000_000_000,
+      totalSpace: 128_000_000_000,
+    });
+    await expect(
+      transfers.sendFile(
+        mobile.id,
+        packageSource(
+          imageArchive,
+          packageMetadata('low-space-image-package', lowSpaceManifest, 0),
+        ),
+      ),
+    ).rejects.toThrow('not enough storage to receive and install');
+    await expect(
+      modelTransferFsBoundary.exists(
+        `${modelManager.getImageModelsDirectory()}/too-large-coreml-image`,
+      ),
+    ).resolves.toBe(false);
+
+    const incompleteManifest = transferredImageManifest(
+      {
+        id: 'incomplete-coreml-image',
+        name: 'Incomplete Core ML Image',
+        description: '',
+        modelPath: '/sender/image_models/incomplete-coreml-image',
+        downloadedAt: '2026-08-20T00:00:00.000Z',
+        size: 128 * 1024,
+        backend: 'coreml',
+      },
+      'ios',
+      imageArchive.length,
+    );
+    (unzip as jest.Mock).mockImplementationOnce(
+      async (_archive: string, target: string) => {
+        for (const component of [
+          'TextEncoder.mlmodelc',
+          'VAEDecoder.mlmodelc',
+          'Unet.mlmodelc',
+        ]) {
+          modelTransferFsBoundary.seedDir(`${target}/${component}`);
+        }
+        modelTransferFsBoundary.seedTextFile(`${target}/merges.txt`, 'merge');
+        return target;
+      },
+    );
+    await expect(
+      transfers.sendFile(
+        mobile.id,
+        packageSource(
+          imageArchive,
+          packageMetadata('incomplete-image-package', incompleteManifest, 0),
+        ),
+      ),
+    ).rejects.toThrow('missing vocab.json');
+    await expect(
+      modelTransferFsBoundary.exists(
+        `${modelManager.getImageModelsDirectory()}/incomplete-coreml-image`,
+      ),
+    ).resolves.toBe(false);
 
     const imageManifest: TransferredModelManifest = {
       id: 'off-grid/mobile-image',
@@ -377,5 +538,77 @@ describe('Pro mobile model package receiver', () => {
     ).rejects.toThrow(
       'this model runs only on Mac, so it cannot be sent to iPhone or iPad',
     );
+  }, 30_000);
+
+  it('stages image archives natively and removes them after a failed send', async () => {
+    await connectDesktop();
+    const modelRoot = `${modelManager.getImageModelsDirectory()}/sendable-coreml`;
+    modelTransferFsBoundary.seedDir(modelRoot);
+    for (const component of [
+      'TextEncoder.mlmodelc',
+      'VAEDecoder.mlmodelc',
+      'Unet.mlmodelc',
+    ]) {
+      modelTransferFsBoundary.seedDir(`${modelRoot}/${component}`);
+    }
+    modelTransferFsBoundary.seedTextFile(`${modelRoot}/merges.txt`, 'merge');
+    modelTransferFsBoundary.seedTextFile(
+      `${modelRoot}/vocab.json`,
+      '{"token":1}',
+    );
+    await modelManager.addDownloadedImageModel({
+      id: 'sendable-coreml',
+      name: 'Sendable Core ML',
+      description: '',
+      modelPath: modelRoot,
+      downloadedAt: '2026-08-20T00:00:00.000Z',
+      size: 64 * 1024,
+      backend: 'coreml',
+    });
+
+    (zip as jest.Mock).mockImplementation(
+      async (source: string, target: string, compression: number) => {
+        expect(source).toBe(modelRoot);
+        expect(compression).toBe(NO_COMPRESSION);
+        await modelTransferFsBoundary.module.writeFile(
+          target,
+          Buffer.from('PK\u0003\u0004native archive').toString('base64'),
+          'base64',
+        );
+        return target;
+      },
+    );
+    const jsReadsBefore = modelTransferFsBoundary.module.read.mock.calls.length;
+
+    modelTransferFsBoundary.module.getFSInfo.mockResolvedValueOnce({
+      freeSpace: 1_000_000,
+      totalSpace: 128_000_000_000,
+    });
+    await expect(
+      modelTransferService.sendModel(
+        'desktop-package-source',
+        'image:sendable-coreml',
+        'ios',
+      ),
+    ).rejects.toThrow('not enough storage to prepare this image model');
+    expect(zip).not.toHaveBeenCalled();
+
+    // The stand-in peer has no model sink. The send fails after staging, which exercises the same
+    // finally-cleanup used when a person cancels an active transfer.
+    await expect(
+      modelTransferService.sendModel(
+        'desktop-package-source',
+        'image:sendable-coreml',
+        'ios',
+      ),
+    ).rejects.toThrow();
+    expect(modelTransferFsBoundary.module.read.mock.calls.length).toBe(
+      jsReadsBefore,
+    );
+    await expect(
+      modelTransferFsBoundary.module.readDir(
+        `${modelTransferFsBoundary.module.CachesDirectoryPath}/model-transfer-staging`,
+      ),
+    ).resolves.toEqual([]);
   }, 30_000);
 });

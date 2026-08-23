@@ -12,12 +12,34 @@ export interface ToolExtension {
   canHandle(toolName: string): boolean;
   execute(call: ToolCall): Promise<ToolResult>;
   enabledToolCount(): number;
+  /**
+   * Notify when the answer to `enabledToolCount` may have changed.
+   *
+   * The count is read imperatively at render time, so a surface showing it never re-renders on its
+   * own when the extension's backing store moves - deactivating an MCP server left the chat's
+   * "Pro Tools" badge at the old count until the screen was remounted. Optional: an extension whose
+   * count is constant (email/calendar returns 0) has nothing to report.
+   */
+  subscribe?(listener: () => void): () => void;
 }
 
 const extensions: ToolExtension[] = [];
+const listeners = new Set<() => void>();
 
 export function registerToolExtension(ext: ToolExtension): void {
-  if (!extensions.some(e => e.id === ext.id)) extensions.push(ext);
+  if (extensions.some(e => e.id === ext.id)) return;
+  extensions.push(ext);
+  // The registry is an external store to anyone rendering from it, and an extension can register
+  // AFTER a consumer mounted (Pro activates at runtime). Without this, useExtensionToolCount only
+  // picked a late extension up by accident - useIsProActive's re-render plus an inline subscribe
+  // happened to re-wire it. Mirrors screenRegistry, which exists for exactly this case.
+  listeners.forEach(l => l());
+}
+
+/** Registry-change subscription: fires when an extension registers (or tests clear the set). */
+export function subscribeToolExtensions(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function getToolExtensions(): ToolExtension[] {
@@ -26,4 +48,5 @@ export function getToolExtensions(): ToolExtension[] {
 
 export function _clearExtensionsForTesting(): void {
   extensions.length = 0;
+  listeners.forEach(l => l());
 }

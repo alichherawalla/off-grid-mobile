@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ONNXImageModel, RemoteModel } from '../../types';
@@ -61,7 +62,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             </View>
             <TouchableOpacity style={styles.unloadButton} onPress={onUnloadImageModel} disabled={isAnyLoading}>
               {isLoadingImage ? (
-                <ActivityIndicator size="small" color={colors.error} />
+                <LoadingDots color={colors.error} />
               ) : (
                 <>
                   <Icon name="power" size={16} color={colors.error} />
@@ -126,7 +127,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                   </View>
                 </View>
                 {isLoadingThis ? (
-                  <ActivityIndicator testID="model-row-loading" size="small" color={colors.info} />
+                  <LoadingDots color={colors.info} testID="model-row-loading" />
                 ) : (isCurrent && !loadInProgress) ? (
                   <View style={[styles.checkmark, styles.checkmarkImage]}>
                     <Icon name="check" size={16} color={colors.background} />

@@ -77,20 +77,20 @@ export const ProjectEditScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="project-edit-screen">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoid}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton} testID="project-edit-cancel">
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
             {existingProject ? 'Edit Project' : 'New Project'}
           </Text>
-          <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
+          <TouchableOpacity onPress={handleSave} style={styles.headerButton} testID="project-edit-save">
             <Text style={styles.saveText}>Save</Text>
           </TouchableOpacity>
         </View>
@@ -108,6 +108,7 @@ export const ProjectEditScreen: React.FC = () => {
               onChangeText={(text) => setFormData({ ...formData, name: text })}
               placeholder="e.g., Spanish Learning, Code Review"
               placeholderTextColor={colors.textMuted}
+              testID="project-edit-name"
             />
 
           {/* Description */}
@@ -118,6 +119,7 @@ export const ProjectEditScreen: React.FC = () => {
             onChangeText={(text) => setFormData({ ...formData, description: text })}
             placeholder="Brief description of this project"
             placeholderTextColor={colors.textMuted}
+            testID="project-edit-description"
           />
 
           {/* System Prompt */}
@@ -133,6 +135,7 @@ export const ProjectEditScreen: React.FC = () => {
             placeholderTextColor={colors.textMuted}
             multiline
             textAlignVertical="top"
+            testID="project-edit-system-prompt"
           />
 
           <Text style={styles.tip}>

@@ -11,6 +11,8 @@
  */
 
 import React from 'react';
+import { voiceSession } from '../../../src/services/voiceSession';
+import { recordingController } from '../../../src/services/recordingController';
 import { Keyboard, Platform } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
@@ -109,6 +111,11 @@ describe('ChatInput', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // The voice session and recording controller are module singletons; without a reset one test's
+    // session state (a turn left mid-listen) leaks into the next, so a later tap is refused and the
+    // test fails only WHEN RUN AFTER another - green in isolation, red in the suite.
+    voiceSession._resetForTesting();
+    recordingController._reset();
     jest.spyOn(Keyboard, 'dismiss');
     Object.defineProperty(Platform, 'OS', {
       configurable: true,

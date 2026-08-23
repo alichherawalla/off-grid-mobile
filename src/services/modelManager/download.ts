@@ -1,5 +1,6 @@
 /* eslint-disable max-lines */
 import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import { ModelFile, BackgroundDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
 import { backgroundDownloadService } from '../backgroundDownloadService';
@@ -174,8 +175,7 @@ async function checkMmProjExists(path: string | null, expectedSize?: number): Pr
   const exists = await RNFS.exists(path);
   if (!exists || !expectedSize) return exists;
   try {
-    const stat = await RNFS.stat(path);
-    const actualSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
+    const actualSize = (await statFile(path))?.size ?? 0;
     if (actualSize < expectedSize) {
       logger.warn(`[ModelManager] mmproj partial (${actualSize}/${expectedSize}), re-downloading`);
       await RNFS.unlink(path).catch(() => {});

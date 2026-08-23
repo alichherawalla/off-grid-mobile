@@ -21,11 +21,15 @@ import { render } from '@testing-library/react-native';
 // The sheet's module graph reaches the sync services, which construct a NativeEventEmitter over the native TCP
 // and mDNS modules at import time. Those are the genuine device boundaries; the component under test is pure.
 jest.mock('react-native-tcp-socket', () => {
-  const { createNativeTcpBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeTcpBoundary() };
 });
 jest.mock('react-native-zeroconf', () => {
-  const { createNativeDiscoveryBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
 });
 
@@ -35,10 +39,14 @@ const describePro = proIsPresent() ? describe : describe.skip;
 
 type SheetModule = typeof import('@offgrid/pro/ui/ModelTransferSheet');
 let ModelTransferStatus: SheetModule['ModelTransferStatus'];
+let formatModelTransferDetail: SheetModule['formatModelTransferDetail'];
 
 beforeAll(() => {
   const mod = requirePro<SheetModule>('@offgrid/pro/ui/ModelTransferSheet');
-  if (mod) ModelTransferStatus = mod.ModelTransferStatus;
+  if (mod) {
+    ModelTransferStatus = mod.ModelTransferStatus;
+    formatModelTransferDetail = mod.formatModelTransferDetail;
+  }
 });
 
 /** A transfer in whatever state the case needs. Bytes default to a half-finished 4 GB model. */
@@ -51,9 +59,49 @@ const transfer = (over: Record<string, unknown> = {}) =>
     bytesTransferred: 2_000_000_000,
     totalBytes: 4_000_000_000,
     ...over,
-  }) as never;
+  } as never);
 
 describePro('the model transfer card', () => {
+  it('shows megabytes moved, total megabytes, and the transfer rate', () => {
+    expect(
+      formatModelTransferDetail({
+        phase: 'transferring',
+        bytesTransferred: 1_500_000_000,
+        bytesTotal: 5_500_000_000,
+        startedAt: 1_000,
+        updatedAt: 31_000,
+        transferStartedAt: 1_000,
+        transferStartedBytes: 0,
+      } as never),
+    ).toBe('1,500 MB / 5,500 MB · 50.0 MB/s');
+  });
+
+  it('does not count resumed bytes as bytes moved during this transfer interval', () => {
+    expect(
+      formatModelTransferDetail({
+        phase: 'transferring',
+        bytesTransferred: 2_500_000_000,
+        bytesTotal: 5_500_000_000,
+        startedAt: 1_000,
+        updatedAt: 11_000,
+        transferStartedAt: 1_000,
+        transferStartedBytes: 2_000_000_000,
+      } as never),
+    ).toBe('2,500 MB / 5,500 MB · 50.0 MB/s');
+  });
+
+  it('shows an unknown rate until payload bytes move', () => {
+    expect(
+      formatModelTransferDetail({
+        phase: 'queued',
+        bytesTransferred: 0,
+        bytesTotal: 5_500_000_000,
+        startedAt: 1_000,
+        updatedAt: 1_000,
+      } as never),
+    ).toBe('0 MB / 5,500 MB · — MB/s');
+  });
+
   it.each([
     ['send', 'completed', 'Sent gemma.gguf'],
     ['receive', 'completed', 'Received gemma.gguf'],
@@ -61,24 +109,33 @@ describePro('the model transfer card', () => {
     ['receive', 'failed', 'Could not receive gemma.gguf'],
     ['send', 'transferring', 'Sending gemma.gguf'],
     ['receive', 'transferring', 'Receiving gemma.gguf'],
-  ])('says the right thing for a %s that is %s', (direction, status, expected) => {
-    const ui = render(
-      <ModelTransferStatus progress={transfer({ direction, status })} />,
-    );
+  ])(
+    'says the right thing for a %s that is %s',
+    (direction, status, expected) => {
+      const ui = render(
+        <ModelTransferStatus progress={transfer({ direction, status })} />,
+      );
 
-    // Six combinations, one string each. Getting the direction wrong tells the user their transfer went the
-    // other way, which is not a wording nit on a device they are holding while it happens.
-    expect(ui.queryByText(expected)).not.toBeNull();
-  });
+      // Six combinations, one string each. Getting the direction wrong tells the user their transfer went the
+      // other way, which is not a wording nit on a device they are holding while it happens.
+      expect(ui.queryByText(expected)).not.toBeNull();
+    },
+  );
 
   it('names the other device, and which way the file is going', () => {
     const sending = render(
-      <ModelTransferStatus progress={transfer({ direction: 'send' })} peerName="Mac's MacBook Pro" />,
+      <ModelTransferStatus
+        progress={transfer({ direction: 'send' })}
+        peerName="Mac's MacBook Pro"
+      />,
     );
     expect(sending.queryByText("To Mac's MacBook Pro")).not.toBeNull();
 
     const receiving = render(
-      <ModelTransferStatus progress={transfer({ direction: 'receive' })} peerName="Mac's iPhone" />,
+      <ModelTransferStatus
+        progress={transfer({ direction: 'receive' })}
+        peerName="Mac's iPhone"
+      />,
     );
     expect(receiving.queryByText("From Mac's iPhone")).not.toBeNull();
   });
@@ -94,7 +151,10 @@ describePro('the model transfer card', () => {
   it('reports the percentage transferred', () => {
     const ui = render(
       <ModelTransferStatus
-        progress={transfer({ bytesTransferred: 1_000_000_000, totalBytes: 4_000_000_000 })}
+        progress={transfer({
+          bytesTransferred: 1_000_000_000,
+          totalBytes: 4_000_000_000,
+        })}
       />,
     );
 
@@ -105,7 +165,11 @@ describePro('the model transfer card', () => {
     // A queued transfer has no total until the offer is answered. NaN% is what an unguarded division renders.
     const ui = render(
       <ModelTransferStatus
-        progress={transfer({ status: 'queued', bytesTransferred: 0, totalBytes: 0 })}
+        progress={transfer({
+          status: 'queued',
+          bytesTransferred: 0,
+          totalBytes: 0,
+        })}
       />,
     );
 
@@ -118,7 +182,10 @@ describePro('the model transfer card', () => {
     // declared total by a few bytes at the very end.
     const ui = render(
       <ModelTransferStatus
-        progress={transfer({ bytesTransferred: 4_200_000_000, totalBytes: 4_000_000_000 })}
+        progress={transfer({
+          bytesTransferred: 4_200_000_000,
+          totalBytes: 4_000_000_000,
+        })}
       />,
     );
 
@@ -143,19 +210,22 @@ describePro('the model transfer card', () => {
     },
   );
 
-  it.each(['completed', 'failed'])('offers Dismiss once the transfer is %s', status => {
-    const ui = render(
-      <ModelTransferStatus
-        progress={transfer({ status })}
-        onCancel={() => {}}
-        onDismiss={() => {}}
-      />,
-    );
+  it.each(['completed', 'failed'])(
+    'offers Dismiss once the transfer is %s',
+    status => {
+      const ui = render(
+        <ModelTransferStatus
+          progress={transfer({ status })}
+          onCancel={() => {}}
+          onDismiss={() => {}}
+        />,
+      );
 
-    // Stopped: Cancel would be a dead button, and the row needs a way off the screen.
-    expect(ui.queryByTestId('dismiss-model-transfer')).not.toBeNull();
-    expect(ui.queryByTestId('cancel-model-transfer')).toBeNull();
-  });
+      // Stopped: Cancel would be a dead button, and the row needs a way off the screen.
+      expect(ui.queryByTestId('dismiss-model-transfer')).not.toBeNull();
+      expect(ui.queryByTestId('cancel-model-transfer')).toBeNull();
+    },
+  );
 
   it('offers no control at all when the caller handed it no handler', () => {
     const ui = render(<ModelTransferStatus progress={transfer()} />);
@@ -168,7 +238,10 @@ describePro('the model transfer card', () => {
   it('surfaces the reason a transfer failed', () => {
     const ui = render(
       <ModelTransferStatus
-        progress={transfer({ status: 'failed', error: 'the other device ran out of space' })}
+        progress={transfer({
+          status: 'failed',
+          error: 'the other device ran out of space',
+        })}
         onDismiss={() => {}}
       />,
     );

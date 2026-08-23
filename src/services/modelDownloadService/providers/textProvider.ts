@@ -157,8 +157,9 @@ export const textProvider: DownloadProvider = {
         .catch(err => logger.log(`[DL-SM] ${id} remove: mmproj native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await modelManager.deleteModel(key)
-      .catch(err => logger.log(`[DL-SM] ${id} remove: delete failed err=${msg(err)}`));
+    // Disk is the first durable owner. Do not remove the registry row when deletion fails: doing so
+    // makes the UI claim success while startup discovery registers the same bytes again.
+    await modelManager.deleteModel(key);
     useAppStore.getState().removeDownloadedModel(key);
   },
 

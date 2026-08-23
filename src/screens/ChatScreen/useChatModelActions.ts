@@ -39,8 +39,8 @@ type ModelActionDeps = {
   clearStreamingMessage: () => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   addMessage: (convId: string, msg: any) => void;
-  setIsModelLoading: SetState<boolean>;
-  setLoadingModel: SetState<DownloadedModel | null>;
+  setIsModelLoading: (loading: boolean) => void;
+  setLoadingModel: (model: DownloadedModel | null) => void;
   setSupportsVision: SetState<boolean>;
   setShowModelSelector: SetState<boolean>;
   setAlertState: SetState<AlertState>;

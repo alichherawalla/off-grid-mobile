@@ -363,7 +363,7 @@ autoDetectMethod: 'pattern' | 'llm'
 - Enabled tools - Configure which tools are available for tool-calling models
 
 **Image Model Settings:**
-- Steps (4-50) - Quality vs speed (default: 20)
+- Steps (4-50) - Quality vs speed (default: 50 on iOS, 8 on Android)
 - Guidance scale (1-20) - Prompt adherence (default: 7.5)
 - Seed (random/fixed) - Reproducibility control
 - Resolution (256x256-512x512) - Output size

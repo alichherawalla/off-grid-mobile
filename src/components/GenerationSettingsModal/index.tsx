@@ -6,27 +6,16 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
+import { VoiceTurnSettings } from '../settings/voiceSections';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
+import { WhisperPickerSheet } from '../models/WhisperPickerSheet';
+import {
+  NO_TRANSCRIPTION_MODEL_LABEL,
+  useTranscriptionModelSetting,
+} from '../../hooks/useTranscriptionModelSetting';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
-import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE, DEFAULT_IMAGE_STEPS } from '../../utils/imageGenAdvice';
-
-const DEFAULT_SETTINGS = {
-  temperature: 0.7,
-  maxTokens: 1024,
-  topP: 0.9,
-  repeatPenalty: 1.1,
-  contextLength: 4096,
-  nThreads: 0,
-  nBatch: 512,
-  // Reset the image params too, from the same single source the pipeline honors — a
-  // reset previously left a custom image size/guidance untouched (Q12).
-  imageWidth: SWEET_SPOT_SIZE,
-  imageHeight: SWEET_SPOT_SIZE,
-  imageGuidanceScale: DEFAULT_IMAGE_GUIDANCE,
-  imageSteps: DEFAULT_IMAGE_STEPS,
-};
 
 interface GenerationSettingsModalProps {
   visible: boolean;
@@ -53,11 +42,14 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { updateSettings } = useAppStore();
+  const resetSettings = useAppStore((state) => state.resetSettings);
+  const { modelName: sttModelName } = useTranscriptionModelSetting();
 
   const [performanceStats, setPerformanceStats] = useState(llmService.getPerformanceStats());
   const [imageSettingsOpen, setImageSettingsOpen] = useState(false);
   const [textSettingsOpen, setTextSettingsOpen] = useState(false);
+  const [sttSettingsOpen, setSttSettingsOpen] = useState(false);
+  const [whisperPickerOpen, setWhisperPickerOpen] = useState(false);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(false);
   // TTS settings come from the pro audio feature via a slot. Free builds have
   // no TTS section.
@@ -68,10 +60,6 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
       setPerformanceStats(llmService.getPerformanceStats());
     }
   }, [visible]);
-
-  const handleResetDefaults = () => {
-    updateSettings(DEFAULT_SETTINGS);
-  };
 
   const hasConversationActions = !!(onOpenProject || onOpenGallery || onDeleteConversation);
 
@@ -121,6 +109,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           ]}
           onPress={() => setImageSettingsOpen(!imageSettingsOpen)}
           activeOpacity={0.7}
+          testID="modal-image-accordion"
         >
           <Text style={styles.accordionTitle}>IMAGE GENERATION</Text>
           <Icon
@@ -158,6 +147,41 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           </>
         )}
 
+        {/* SPEECH TO TEXT SETTINGS */}
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => setSttSettingsOpen(!sttSettingsOpen)}
+          activeOpacity={0.7}
+          testID="modal-transcription-accordion"
+        >
+          <Text style={styles.accordionTitle}>SPEECH TO TEXT</Text>
+          <Icon
+            name={sttSettingsOpen ? 'chevron-up' : 'chevron-down'}
+            size={16}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+        {sttSettingsOpen && (
+          <View style={styles.sectionCard}>
+            <TouchableOpacity
+              style={styles.modelPickerButton}
+              onPress={() => setWhisperPickerOpen(true)}
+              activeOpacity={0.7}
+              testID="modal-stt-open-picker"
+            >
+              <View style={styles.modelPickerContent}>
+                <Text style={styles.modelPickerLabel}>Transcription model</Text>
+                <Text style={styles.modelPickerValue}>
+                  {sttModelName ?? NO_TRANSCRIPTION_MODEL_LABEL}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            {/* Voice mode ends a turn on silence. Lives with STT because it is about listening. */}
+            <VoiceTurnSettings />
+          </View>
+        )}
+
         {/* TTS SETTINGS (pro audio feature) */}
         {TtsSection && (
           <>
@@ -179,12 +203,18 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           </>
         )}
 
-        <TouchableOpacity style={styles.resetButton} onPress={handleResetDefaults}>
+        <TouchableOpacity style={styles.resetButton} onPress={resetSettings}>
           <Text style={styles.resetButtonText}>Reset to Defaults</Text>
         </TouchableOpacity>
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+      {whisperPickerOpen ? (
+        <WhisperPickerSheet
+          visible
+          onClose={() => setWhisperPickerOpen(false)}
+        />
+      ) : null}
     </AppSheet>
   );
 };

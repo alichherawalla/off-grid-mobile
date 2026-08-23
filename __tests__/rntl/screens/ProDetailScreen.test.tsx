@@ -10,7 +10,10 @@ import { Alert, Linking } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { projectPersonalMeshActivationFailure } from '@offgrid/sync';
 import { useAppStore } from '../../../src/stores/appStore';
-import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
+import {
+  OFF_GRID_DESKTOP_BENEFIT,
+  OFF_GRID_DESKTOP_URL,
+} from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
 
 const PAY_URL = 'https://offgridmobileai.co/pay';
@@ -86,7 +89,9 @@ describe('ProDetailScreen', () => {
   });
 
   it('links to Off Grid AI Desktop from the Pro pitch', () => {
-    const { getByText } = render(<ProDetailScreen />);
+    const { getByText, queryByText } = render(<ProDetailScreen />);
+    expect(getByText(OFF_GRID_DESKTOP_BENEFIT)).toBeTruthy();
+    expect(queryByText(/building this through July/i)).toBeNull();
     fireEvent.press(getByText('Get Off Grid AI Desktop'));
     expect(linkingSpy).toHaveBeenCalledWith(
       withUtm(OFF_GRID_DESKTOP_URL, 'pro-detail'),

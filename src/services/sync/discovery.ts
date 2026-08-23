@@ -73,7 +73,9 @@ export function buildDiscovery(
       ? {}
       : { discoverable: args.discoverable }),
     getSharedSecret: args.getSharedSecret,
-    ...(args.hasCredential ? { hasCredential: args.hasCredential } : {}),
+    hasCredential:
+      args.hasCredential ??
+      (deviceId => args.getSharedSecret(deviceId) !== undefined),
     getMembershipId: args.getMembershipId,
     ...(args.admitSilently ? { admitSilently: args.admitSilently } : {}),
     onDiscovered: args.onDiscovered,

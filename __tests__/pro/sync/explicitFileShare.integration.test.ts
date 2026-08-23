@@ -32,12 +32,16 @@
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 jest.mock('react-native-tcp-socket', () => {
-  const { createNativeTcpBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeTcpBoundary() };
 });
 
 jest.mock('react-native-zeroconf', () => {
-  const { createNativeDiscoveryBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
 });
 
@@ -52,7 +56,8 @@ jest.mock('@react-native-documents/picker', () => ({
 
 import { proIsPresent, requirePro } from '../helpers/requirePro';
 
-type HookModule = typeof import('@offgrid/pro/ui/SyncScreen/useExplicitFileShare');
+type HookModule =
+  typeof import('@offgrid/pro/ui/SyncScreen/useExplicitFileShare');
 type ServiceModule = typeof import('@offgrid/pro/sync/sharedFileSyncService');
 
 type StateSyncModule = typeof import('@offgrid/pro/sync/stateSyncService');
@@ -60,17 +65,27 @@ type SyncServiceModule = typeof import('@offgrid/pro/sync/syncService');
 
 let useExplicitFileShare: HookModule['useExplicitFileShare'];
 let sharedFileSyncService: ServiceModule['sharedFileSyncService'];
+let stopStateSync: (() => Promise<void>) | undefined;
+let stopSync: (() => Promise<void>) | undefined;
 
 const describePro = proIsPresent() ? describe : describe.skip;
 
 beforeAll(async () => {
-  const hook = requirePro<HookModule>('@offgrid/pro/ui/SyncScreen/useExplicitFileShare');
-  const service = requirePro<ServiceModule>('@offgrid/pro/sync/sharedFileSyncService');
-  const stateSync = requirePro<StateSyncModule>('@offgrid/pro/sync/stateSyncService');
+  const hook = requirePro<HookModule>(
+    '@offgrid/pro/ui/SyncScreen/useExplicitFileShare',
+  );
+  const service = requirePro<ServiceModule>(
+    '@offgrid/pro/sync/sharedFileSyncService',
+  );
+  const stateSync = requirePro<StateSyncModule>(
+    '@offgrid/pro/sync/stateSyncService',
+  );
   const sync = requirePro<SyncServiceModule>('@offgrid/pro/sync/syncService');
   if (!hook || !service || !stateSync || !sync) return;
   useExplicitFileShare = hook.useExplicitFileShare;
   sharedFileSyncService = service.sharedFileSyncService;
+  stopStateSync = () => stateSync.stateSyncService.stop();
+  stopSync = () => sync.syncService.stop();
 
   // The app's bootstrap, not a shortcut. The real service refuses with "Sync is not ready yet." until it has
   // been started and wired to the state-sync owner - a precondition the previous, mocked version of this file
@@ -78,9 +93,10 @@ beforeAll(async () => {
   // without publishControl the control record is never published and every send fails as a transfer error when
   // it is really a half-built service.
   await sharedFileSyncService.start({
+    stageStateMutation: (mutation: never) =>
+      stateSync.stateSyncService.stageMutation(mutation),
     recordStateMutation: (mutation: never) =>
       stateSync.stateSyncService.recordMutation(mutation),
-    requestStateSync: (deviceId: string) => stateSync.stateSyncService.requestSync(deviceId),
     publishControl: (deviceId: string, syncId: string) =>
       stateSync.stateSyncService.sendSharedFileRecord(deviceId, syncId),
   } as never);
@@ -88,11 +104,25 @@ beforeAll(async () => {
   await sync.syncService.start();
 });
 
-const CONNECTED_MAC = { id: 'the-mac', name: 'The Mac', status: 'connected' } as never;
+afterAll(async () => {
+  await stopStateSync?.();
+  await stopSync?.();
+});
+
+const CONNECTED_MAC = {
+  id: 'the-mac',
+  name: 'The Mac',
+  status: 'connected',
+} as never;
 
 /** What the picker hands back when the user chooses a file. */
 const picked = (over: Record<string, unknown> = {}) => [
-  { uri: 'content://downloads/report.pdf', name: 'report.pdf', type: 'application/pdf', ...over },
+  {
+    uri: 'content://downloads/report.pdf',
+    name: 'report.pdf',
+    type: 'application/pdf',
+    ...over,
+  },
 ];
 
 const cancelled = () => {
@@ -109,7 +139,10 @@ describePro('sharing a file to a paired device', () => {
   it('says nothing at all when the user backs out of the picker', async () => {
     mockPicker.pick.mockRejectedValue(cancelled());
     const { result } = renderHook(() =>
-      useExplicitFileShare({ destinationId: 'the-mac', devices: [CONNECTED_MAC] }),
+      useExplicitFileShare({
+        destinationId: 'the-mac',
+        devices: [CONNECTED_MAC],
+      }),
     );
 
     await act(async () => {
@@ -126,7 +159,10 @@ describePro('sharing a file to a paired device', () => {
   it('does say something when the share genuinely fails', async () => {
     mockPicker.pick.mockRejectedValue(new Error('the file could not be read'));
     const { result } = renderHook(() =>
-      useExplicitFileShare({ destinationId: 'the-mac', devices: [CONNECTED_MAC] }),
+      useExplicitFileShare({
+        destinationId: 'the-mac',
+        devices: [CONNECTED_MAC],
+      }),
     );
 
     await act(async () => {
@@ -134,7 +170,9 @@ describePro('sharing a file to a paired device', () => {
     });
 
     // Silence on a real failure is the worse bug of the two: the user believes the file is on its way.
-    await waitFor(() => expect(result.current.error).toBe('the file could not be read'));
+    await waitFor(() =>
+      expect(result.current.error).toBe('the file could not be read'),
+    );
     expect(result.current.message).toBeNull();
   });
 
@@ -157,12 +195,15 @@ describePro('sharing a file to a paired device', () => {
     let releasePicker: (value: unknown) => void = () => {};
     mockPicker.pick.mockImplementation(
       () =>
-        new Promise((resolve) => {
+        new Promise(resolve => {
           releasePicker = resolve;
         }),
     );
     const { result } = renderHook(() =>
-      useExplicitFileShare({ destinationId: 'the-mac', devices: [CONNECTED_MAC] }),
+      useExplicitFileShare({
+        destinationId: 'the-mac',
+        devices: [CONNECTED_MAC],
+      }),
     );
 
     let first: Promise<void> = Promise.resolve();
@@ -182,5 +223,4 @@ describePro('sharing a file to a paired device', () => {
       await first;
     });
   });
-
 });

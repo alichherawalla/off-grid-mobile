@@ -60,7 +60,6 @@ export const SettingsScreen: React.FC = () => {
   const themeMode = useAppStore(s => s.themeMode);
   const setThemeMode = useAppStore(s => s.setThemeMode);
   const completeChecklistStep = useAppStore(s => s.completeChecklistStep);
-  const resetChecklist = useAppStore(s => s.resetChecklist);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
   const deviceInfo = useAppStore(s => s.deviceInfo);
   // Hidden once the user dismisses it, or once Pro is active (the upsell makes no
@@ -180,6 +179,7 @@ export const SettingsScreen: React.FC = () => {
                 title: 'Model Settings',
                 desc: 'System prompt, generation, and performance',
                 screen: 'ModelSettings' as const,
+                testID: 'open-model-settings',
               },
               {
                 icon: 'wifi',
@@ -332,15 +332,6 @@ export const SettingsScreen: React.FC = () => {
               >
                 <Icon name="rotate-ccw" size={14} color={colors.textMuted} />
                 <Text style={styles.devButtonText}>Reset Onboarding</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.devButton}
-                onPress={resetChecklist}
-              >
-                <Icon name="list" size={14} color={colors.textMuted} />
-                <Text style={styles.devButtonText}>
-                  Reset Onboarding Checklist
-                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.devButton}

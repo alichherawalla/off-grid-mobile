@@ -18,41 +18,23 @@ import {
   QWEN3_TTS_TALKER,
 } from '@offgrid/pro/audio/engine/tts/engines/qwen3/models';
 import { backgroundDownloadService } from '@offgrid/core/services/backgroundDownloadService';
+import { defaultNativeFileSystemBoundary } from '../../../harness/nativeFileSystem';
 
-// ── RNFS in-memory fake ─────────────────────────────────────────────────────
-// A real filesystem model: a Set of "existing" paths + a size map. The engine's
-// real _isAssetPresent / _ensureDir / unlink logic runs against it.
-const fs = {
-  present: new Set<string>(),
-  sizes: new Map<string, number>(),
-};
-function resetFs() {
-  fs.present.clear();
-  fs.sizes.clear();
-}
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../../../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
+
 /** Mark an asset's file as fully present at its expected size. */
 function placeAssetFull(dir: string, filename: string, sizeBytes: number) {
   const path = `${dir}/${filename}`;
-  fs.present.add(path);
-  fs.sizes.set(path, sizeBytes);
+  defaultNativeFileSystemBoundary.seedFile(path, sizeBytes);
 }
 
 const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/tts-models/qwen3`;
 
 beforeEach(() => {
-  resetFs();
-  (RNFS.exists as jest.Mock).mockImplementation(async (p: string) => fs.present.has(p));
-  (RNFS.mkdir as jest.Mock).mockImplementation(async (p: string) => {
-    fs.present.add(p);
-  });
-  (RNFS.stat as jest.Mock).mockImplementation(async (p: string) => {
-    if (!fs.present.has(p)) throw new Error('ENOENT');
-    return { size: fs.sizes.get(p) ?? 0, isFile: () => true };
-  });
-  (RNFS.unlink as jest.Mock).mockImplementation(async (p: string) => {
-    fs.present.delete(p);
-    fs.sizes.delete(p);
-  });
+  defaultNativeFileSystemBoundary.reset();
   // Default: native downloader NOT available → RNFS fallback path. Individual
   // tests override this spy. Restored in afterEach (jest.restoreAllMocks).
   jest.spyOn(backgroundDownloadService, 'isAvailable').mockReturnValue(false);
@@ -117,18 +99,20 @@ describe('Qwen3TTSEngine — asset presence (both branches)', () => {
     const engine = new Qwen3TTSEngine();
     // Below the 0.9 valid-size ratio → still "not-downloaded".
     const path = `${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`;
-    fs.present.add(path);
-    fs.sizes.set(path, Math.floor(QWEN3_TTS_TALKER.sizeBytes * 0.5));
+    defaultNativeFileSystemBoundary.seedFile(
+      path,
+      Math.floor(QWEN3_TTS_TALKER.sizeBytes * 0.5),
+    );
 
     const states = await engine.checkAssetStatus();
     expect(states.find(s => s.asset.id === 'talker')!.status).toBe('not-downloaded');
   });
 
-  it('treats a file whose stat throws as not present (catch branch)', async () => {
+  it('treats a file whose parent cannot be read as not present', async () => {
     const engine = new Qwen3TTSEngine();
     const path = `${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`;
-    fs.present.add(path); // exists true...
-    (RNFS.stat as jest.Mock).mockRejectedValueOnce(new Error('stat blew up'));
+    defaultNativeFileSystemBoundary.seedFile(path, QWEN3_TTS_TALKER.sizeBytes);
+    (RNFS.readDir as jest.Mock).mockRejectedValueOnce(new Error('readDir blew up'));
 
     const states = await engine.checkAssetStatus();
     expect(states.find(s => s.asset.id === 'talker')!.status).toBe('not-downloaded');
@@ -172,8 +156,7 @@ describe('Qwen3TTSEngine — download flow (RNFS fallback path)', () => {
       const asset = QWEN3_TTS_ASSETS.find(a => toFile.endsWith(a.filename))!;
       progress({ bytesWritten: asset.sizeBytes / 2, contentLength: asset.sizeBytes });
       progress({ bytesWritten: asset.sizeBytes, contentLength: asset.sizeBytes });
-      fs.present.add(toFile);
-      fs.sizes.set(toFile, asset.sizeBytes);
+      defaultNativeFileSystemBoundary.seedFile(toFile, asset.sizeBytes);
       return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: asset.sizeBytes }) };
     });
 
@@ -196,8 +179,7 @@ describe('Qwen3TTSEngine — download flow (RNFS fallback path)', () => {
     (RNFS.downloadFile as jest.Mock).mockImplementation(({ toFile, progress }: any) => {
       const asset = QWEN3_TTS_ASSETS.find(a => toFile.endsWith(a.filename))!;
       progress({ bytesWritten: 0, contentLength: 0 }); // unknown total
-      fs.present.add(toFile);
-      fs.sizes.set(toFile, asset.sizeBytes);
+      defaultNativeFileSystemBoundary.seedFile(toFile, asset.sizeBytes);
       return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 0 }) };
     });
 
@@ -216,8 +198,7 @@ describe('Qwen3TTSEngine — download flow (RNFS fallback path)', () => {
     (RNFS.downloadFile as jest.Mock).mockImplementation(({ toFile }: any) => {
       const asset = QWEN3_TTS_ASSETS.find(a => toFile.endsWith(a.filename))!;
       downloaded.push(asset.id);
-      fs.present.add(toFile);
-      fs.sizes.set(toFile, asset.sizeBytes);
+      defaultNativeFileSystemBoundary.seedFile(toFile, asset.sizeBytes);
       return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: asset.sizeBytes }) };
     });
 
@@ -263,15 +244,21 @@ describe('Qwen3TTSEngine — download flow (RNFS fallback path)', () => {
     (RNFS.downloadFile as jest.Mock).mockImplementation(({ toFile }: any) => {
       // "Succeeds" (200) but writes a truncated file below the valid-size ratio.
       const asset = QWEN3_TTS_ASSETS.find(a => toFile.endsWith(a.filename))!;
-      fs.present.add(toFile);
-      fs.sizes.set(toFile, Math.floor(asset.sizeBytes * 0.1));
+      defaultNativeFileSystemBoundary.seedFile(
+        toFile,
+        Math.floor(asset.sizeBytes * 0.1),
+      );
       return { jobId: 1, promise: Promise.resolve({ statusCode: 200, bytesWritten: 1 }) };
     });
 
     await expect(engine.downloadAssets(['talker'])).rejects.toThrow(/Download incomplete for/);
     expect(engine.getPhase()).toBe('error');
     // Truncated partial was unlinked.
-    expect(fs.present.has(`${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`)).toBe(false);
+    expect(
+      await defaultNativeFileSystemBoundary.exists(
+        `${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -285,8 +272,7 @@ describe('Qwen3TTSEngine — download flow (native background-downloader path)',
       .mockImplementation(({ destPath, onProgress }: any) => {
         const asset = QWEN3_TTS_ASSETS.find(a => destPath.endsWith(a.filename))!;
         onProgress(asset.sizeBytes, asset.sizeBytes); // 100%
-        fs.present.add(destPath);
-        fs.sizes.set(destPath, asset.sizeBytes);
+        defaultNativeFileSystemBoundary.seedFile(destPath, asset.sizeBytes);
         return { downloadIdPromise: Promise.resolve('bg-1'), promise: Promise.resolve() };
       });
 
@@ -312,8 +298,7 @@ describe('Qwen3TTSEngine — download flow (native background-downloader path)',
         const asset = QWEN3_TTS_ASSETS.find(a => destPath.endsWith(a.filename))!;
         onProgress(0, 0); // unknown total → guarded to 0
         onProgress(asset.sizeBytes, asset.sizeBytes);
-        fs.present.add(destPath);
-        fs.sizes.set(destPath, asset.sizeBytes);
+        defaultNativeFileSystemBoundary.seedFile(destPath, asset.sizeBytes);
         return { downloadIdPromise: Promise.resolve('bg-3'), promise: Promise.resolve() };
       });
 
@@ -434,7 +419,11 @@ describe('Qwen3TTSEngine — initialize / release lifecycle', () => {
     expect(engine.getPhase()).toBe('idle');
     expect(engine.isFullyDownloaded()).toBe(false);
     for (const a of QWEN3_TTS_ASSETS) {
-      expect(fs.present.has(`${MODELS_DIR}/${a.filename}`)).toBe(false);
+      expect(
+        await defaultNativeFileSystemBoundary.exists(
+          `${MODELS_DIR}/${a.filename}`,
+        ),
+      ).toBe(false);
     }
   });
 });
@@ -447,7 +436,11 @@ describe('Qwen3TTSEngine — deleteAssets', () => {
     await engine.deleteAssets(['talker']);
 
     // talker gone from disk + state; others remain.
-    expect(fs.present.has(`${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`)).toBe(false);
+    expect(
+      await defaultNativeFileSystemBoundary.exists(
+        `${MODELS_DIR}/${QWEN3_TTS_TALKER.filename}`,
+      ),
+    ).toBe(false);
     expect(engine.isFullyDownloaded()).toBe(false);
     const status = await engine.checkAssetStatus();
     expect(status.find(s => s.asset.id === 'talker')!.status).toBe('not-downloaded');

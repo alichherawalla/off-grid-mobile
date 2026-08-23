@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import {
   DownloadedModel,
   LiteRTDownloadedModel,
@@ -8,7 +9,7 @@ import {
 } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel } from './storage';
 import { copyFileWithProgress } from './copyFile';
-import { parseSizeInt } from './scan';
+import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 export interface ImportLocalModelOpts {
   sourceUri: string;
@@ -44,7 +45,7 @@ function resolveUri(uri: string): string {
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
   const { sourceUri, fileName, modelsDir, sourceSize, engine: _engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
 
-  const isLitert = fileName.toLowerCase().endsWith('.litertlm');
+  const isLitert = isLiteRTFileName(fileName);
   if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {
     throw new Error('Only .gguf and .litertlm files can be imported');
   }
@@ -69,8 +70,7 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
   const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
   const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
   const modelName = fileName.replace(/\.gguf$/i, '').replace(/\.litertlm$/i, '').replace(/[_-]Q\d+.*/i, '');
-  const destStat = await RNFS.stat(destPath);
-  const fileSize = parseSizeInt(destStat.size);
+  const fileSize = (await statFile(destPath))?.size ?? 0;
 
   const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
   const baseModel = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
@@ -100,10 +100,9 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
         ? (fraction: number) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
         : undefined,
     });
-    const mmProjStat = await RNFS.stat(mmProjDestPath);
     llamaModel.mmProjPath = mmProjDestPath;
     llamaModel.mmProjFileName = mmProjFileName;
-    llamaModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
+    llamaModel.mmProjFileSize = (await statFile(mmProjDestPath))?.size ?? 0;
     llamaModel.isVisionModel = true;
   }
 

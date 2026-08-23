@@ -13,8 +13,10 @@ interface ToolsSentCollapsibleProps {
    * of the tool names if the caller can't supply one.
    */
   stableKey?: string;
-  /** ChatMessage styles (systemInfoContainer / toolStatusRow / toolStatusText /
-   *  toolDetailContainer) — passed in so text and audio modes share one look. */
+  /** ChatMessage styles (toolRow / toolStatusRow / toolStatusText / toolDetailContainer) - passed
+   *  in so text and audio modes share one look. This row uses the SAME container as every other
+   *  tool row: left in the old centred one it was the only row not taking the column's width, so
+   *  its label truncated to "Tools sent in requ..." with empty space beside it. */
   styles: any;
   colors: any;
 }
@@ -29,7 +31,7 @@ const ToolsSentCollapsibleInner: React.FC<ToolsSentCollapsibleProps> = ({ names,
   const [expanded, toggle] = useAccordionExpanded(key);
   if (!names?.length) return null;
   return (
-    <View testID="tools-sent-collapsible" style={styles.systemInfoContainer}>
+    <View testID="tools-sent-collapsible" style={styles.toolRow}>
       <TouchableOpacity style={styles.toolStatusRow} onPress={toggle} activeOpacity={0.6}>
         <Icon name="tool" size={13} color={colors.textMuted} />
         <Text style={styles.toolStatusText} numberOfLines={1}>

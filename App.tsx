@@ -17,6 +17,7 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine } from './src/utils/debugLogFile';
+import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
@@ -56,6 +57,10 @@ if (__DEV__) {
   logger.warn = tap('warn');
   logger.error = tap('error');
   initDebugLogFile();
+  // Immediately after the sink exists, so the first sample lands before anything heavy runs. The app
+  // was being killed by iOS at launch with the log going silent half a second in; this says where it
+  // stops and what memory was doing when it did.
+  startStartupMemoryProbe();
 }
 
 const ensureRemoteServerStoreHydrated = async () => {
@@ -193,6 +198,7 @@ function App() {
       await modelManager.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
         logger.error('[App] Image model reconciliation failed:', error);
       });
+      logger.log('[BOOT] refresh model lists');
       const { textModels, imageModels } = await modelManager.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
@@ -204,6 +210,7 @@ function App() {
   const initializeApp = useCallback(async () => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
+      logger.log('[BOOT] app store hydrate');
       await ensureAppStoreHydrated();
 
       // Project the persisted "aggressive model loading" setting onto the residency
@@ -220,6 +227,7 @@ function App() {
 
       // Phase 1: Quick initialization - get app ready to show UI
       // Initialize hardware detection
+      logger.log('[BOOT] device info');
       const deviceInfo = await hardwareService.getDeviceInfo();
       setDeviceInfo(deviceInfo);
 
@@ -227,9 +235,11 @@ function App() {
       setModelRecommendation(recommendation);
 
       // Initialize model manager and load downloaded models list
+      logger.log('[BOOT] modelManager.initialize');
       await modelManager.initialize();
 
       // Clean up any mmproj files that were incorrectly added as standalone models
+      logger.log('[BOOT] cleanup mmproj entries');
       await modelManager.cleanupMMProjEntries();
 
       // Scan for any models that may have been downloaded externally or
@@ -243,6 +253,7 @@ function App() {
 
       // Ensure remote server store is hydrated before initializing providers,
       // so getServers() / activeServerId reads see persisted data.
+      logger.log('[BOOT] remote server hydrate');
       await ensureRemoteServerStoreHydrated();
 
       // Initialize remote server providers in the background — don't block
@@ -252,6 +263,7 @@ function App() {
       });
 
       // Check if passphrase is set and lock app if needed
+      logger.log('[BOOT] auth passphrase check');
       const hasPassphrase = await authService.hasPassphrase();
       if (hasPassphrase && authEnabled) {
         setLocked(true);
@@ -265,12 +277,14 @@ function App() {
         // read, then activate only the capabilities that entitlement permits.
         // loadProFeatures separately projects cached credential access from a
         // Debug developer unlock; Sync reconciliation owns device admission.
+        logger.log('[BOOT] load pro features');
         await loadProFeatures();
       } catch (proError) {
         logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
       }
 
       // Show the UI immediately
+      logger.log('[BOOT] startup complete');
       setIsInitializing(false);
 
       // Reconcile downloaded Whisper models against disk at startup. presentModelIds

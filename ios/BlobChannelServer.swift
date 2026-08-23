@@ -1,6 +1,19 @@
 import Foundation
 import Network
 
+/// Network.framework read sizes for the two HTTP phases.
+///
+/// The body is authenticated one complete frame at a time. Returning smaller pieces only adds
+/// callbacks and copies because no piece can be opened or written before the rest of its frame.
+enum BlobReceiveWindow {
+  static let header = (minimum: 1, maximum: 1 << 16)
+
+  static func body(sealedBytesRemaining: Int) -> (minimum: Int, maximum: Int) {
+    let exact = max(1, sealedBytesRemaining)
+    return (minimum: exact, maximum: exact)
+  }
+}
+
 /// Where this iPhone accepts the bytes of one transfer.
 ///
 /// The receiving device hosts, so the sender only has to make an outbound connection - the shape that
@@ -152,7 +165,11 @@ final class BlobChannelServer {
     }
 
     func read() {
-      connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) {
+      let window = nextReceiveWindow()
+      connection.receive(
+        minimumIncompleteLength: window.minimum,
+        maximumLength: window.maximum
+      ) {
         [weak self] data, _, complete, error in
         guard let self else { return }
         trace("received \(data?.count ?? 0) bytes complete=\(complete) error=\(String(describing: error))")
@@ -161,6 +178,12 @@ final class BlobChannelServer {
         if complete { return self.finish() }
         if self.connection.state == .ready || self.transfer != nil { self.read() }
       }
+    }
+
+    private func nextReceiveWindow() -> (minimum: Int, maximum: Int) {
+      guard let cipher, frame < cipher.frameCount else { return BlobReceiveWindow.header }
+      return BlobReceiveWindow.body(
+        sealedBytesRemaining: cipher.sealedLength(frame) - held.count)
     }
 
     private func consume(_ data: Data) {
@@ -178,7 +201,17 @@ final class BlobChannelServer {
         }
         head = parsed
         transfer = claimed
-        if !start(claimed) { return fail() }
+        guard claimed.frameBytes > 0, claimed.offset >= 0, claimed.offset <= claimed.fileSize,
+          claimed.offset == claimed.fileSize || claimed.offset % claimed.frameBytes == 0,
+          let frames = try? BlobFrameCipher(
+            key: claimed.key, nonce: claimed.nonce, fileSize: claimed.fileSize,
+            frameBytes: claimed.frameBytes),
+          parsed.contentLength == frames.sealedRemainder(from: claimed.offset)
+        else {
+          server?.settle(parsed.requestId, false)
+          return refuse()
+        }
+        if !start(claimed, frames: frames) { return fail() }
         if parsed.expectsContinue { send("HTTP/1.1 100 Continue\r\n\r\n", close: false) }
         if !body.isEmpty { write(Data(body)) }
         return
@@ -186,7 +219,7 @@ final class BlobChannelServer {
       write(data)
     }
 
-    private func start(_ transfer: Pending) -> Bool {
+    private func start(_ transfer: Pending, frames: BlobFrameCipher) -> Bool {
       let path = transfer.destinationPath
       try? FileManager.default.createDirectory(
         at: URL(fileURLWithPath: path).deletingLastPathComponent(),
@@ -194,11 +227,7 @@ final class BlobChannelServer {
       if transfer.offset == 0 || !FileManager.default.fileExists(atPath: path) {
         FileManager.default.createFile(atPath: path, contents: nil)
       }
-      guard let handle = FileHandle(forWritingAtPath: path),
-        let frames = try? BlobFrameCipher(
-          key: transfer.key, nonce: transfer.nonce, fileSize: transfer.fileSize,
-          frameBytes: transfer.frameBytes)
-      else { return false }
+      guard let handle = FileHandle(forWritingAtPath: path) else { return false }
       // Resuming appends: what is already here was verified when it arrived, so it stays and the
       // count continues from it. Whatever lay past the resume point was part of a frame that never
       // finished arriving, so it goes - the side that writes the payload owns what is in it.
@@ -210,6 +239,7 @@ final class BlobChannelServer {
       }
       file = handle
       cipher = frames
+      held.reserveCapacity(transfer.frameBytes + BlobFrameCipher.tagBytes)
       return true
     }
 
@@ -217,16 +247,23 @@ final class BlobChannelServer {
     /// tampered with or cut short fails instead of landing as a plausible-looking file.
     private func write(_ data: Data) {
       guard let head, let transfer, let cipher, let file else { return }
-      held.append(data)
-      while frame < cipher.frameCount, held.count >= cipher.sealedLength(frame) {
-        let length = cipher.sealedLength(frame)
-        let sealed = held.prefix(length)
-        held = held.dropFirst(length)
-        guard let plain = try? cipher.open(Data(sealed), index: frame) else { return fail() }
-        file.write(plain)
-        written += plain.count
-        frame += 1
-        server?.report(head.requestId, min(written, transfer.fileSize))
+      var cursor = data.startIndex
+      while cursor < data.endIndex, frame < cipher.frameCount {
+        let needed = cipher.sealedLength(frame) - held.count
+        let available = data.distance(from: cursor, to: data.endIndex)
+        let count = min(needed, available)
+        let end = data.index(cursor, offsetBy: count)
+        held.append(contentsOf: data[cursor..<end])
+        cursor = end
+
+        if held.count == cipher.sealedLength(frame) {
+          guard let plain = try? cipher.open(held, index: frame) else { return fail() }
+          file.write(plain)
+          written += plain.count
+          frame += 1
+          held.removeAll(keepingCapacity: true)
+          server?.report(head.requestId, min(written, transfer.fileSize))
+        }
       }
       if frame >= cipher.frameCount { finish() }
     }

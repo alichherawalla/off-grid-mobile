@@ -14,10 +14,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
-  ActivityIndicator,
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { LoadingDots } from '../../components/LoadingDots';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -142,7 +142,7 @@ export const ProManageSection: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.card}>
-        <ActivityIndicator color={colors.primary} />
+        <LoadingDots color={colors.primary} />
       </View>
     );
   }
@@ -207,7 +207,7 @@ export const ProManageSection: React.FC = () => {
             Remove the saved licence so this phone can use a different one.
           </Text>
         </View>
-        {resetting ? <ActivityIndicator color={colors.primary} /> : null}
+        {resetting ? <LoadingDots color={colors.primary} /> : null}
       </TouchableOpacity>
     </View>
   );

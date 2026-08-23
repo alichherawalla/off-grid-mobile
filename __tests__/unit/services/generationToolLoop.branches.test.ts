@@ -15,6 +15,7 @@ import {
   ToolLoopContext,
   parseToolCallsFromText,
   buildLiteRTHistory,
+  toolStepLimitNotice,
 } from '../../../src/services/generationToolLoop';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
@@ -31,7 +32,13 @@ const mockSetIsThinking = jest.fn();
 let mockAppState: any = {
   downloadedModels: [],
   activeModelId: null,
-  settings: { temperature: 0.7, maxTokens: 1024, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+  settings: {
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: 0.9,
+    liteRTTemperature: 0.7,
+    liteRTTopP: 0.9,
+  },
 };
 
 jest.mock('../../../src/stores', () => ({
@@ -93,14 +100,17 @@ jest.mock('../../../src/services/litertToolSelector', () => ({
   selectRelevantTools: (...args: any[]) => mockSelectRelevantTools(...args),
 }));
 
-const mockedGenerateResponseWithTools = llmService.generateResponseWithTools as jest.Mock;
+const mockedGenerateResponseWithTools =
+  llmService.generateResponseWithTools as jest.Mock;
 const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
 
 function makeMessage(overrides: Partial<Message> = {}): Message {
   return createMessage({ content: 'Hello', ...overrides } as any);
 }
 
-function createContext(overrides: Partial<ToolLoopContext> = {}): ToolLoopContext {
+function createContext(
+  overrides: Partial<ToolLoopContext> = {},
+): ToolLoopContext {
   return {
     conversationId: 'conv-1',
     messages: [makeMessage()],
@@ -116,9 +126,16 @@ function createContext(overrides: Partial<ToolLoopContext> = {}): ToolLoopContex
 function resetMocks() {
   jest.clearAllMocks();
   mockExecuteToolCall.mockReset();
-  mockExecuteToolCall.mockResolvedValue({ toolCallId: 'tc-1', name: 'web_search', content: 'result', durationMs: 10 });
+  mockExecuteToolCall.mockResolvedValue({
+    toolCallId: 'tc-1',
+    name: 'web_search',
+    content: 'result',
+    durationMs: 10,
+  });
   mockedGenerateResponseWithTools.mockReset();
-  mockGetToolsAsOpenAISchema.mockReturnValue([{ type: 'function', function: { name: 'web_search' } }]);
+  mockGetToolsAsOpenAISchema.mockReturnValue([
+    { type: 'function', function: { name: 'web_search' } },
+  ]);
   mockGetToolExtensions.mockReturnValue([]);
   mockedLiteRT.isModelLoaded.mockReturnValue(false);
   mockedLiteRT.prepareConversation.mockResolvedValue(undefined);
@@ -126,7 +143,13 @@ function resetMocks() {
   mockAppState = {
     downloadedModels: [],
     activeModelId: null,
-    settings: { temperature: 0.7, maxTokens: 1024, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+    settings: {
+      temperature: 0.7,
+      maxTokens: 1024,
+      topP: 0.9,
+      liteRTTemperature: 0.7,
+      liteRTTopP: 0.9,
+    },
   };
 }
 
@@ -135,7 +158,8 @@ function resetMocks() {
 // ===========================================================================
 describe('parseToolCallsFromText — invoke & namespaced blocks', () => {
   it('parses <invoke name="..."><parameter ...> blocks (lines 146-152)', () => {
-    const text = 'Pre <invoke name="read_url"><parameter name="url">https://x.com</parameter></invoke> Post';
+    const text =
+      'Pre <invoke name="read_url"><parameter name="url">https://x.com</parameter></invoke> Post';
     const result = parseToolCallsFromText(text);
 
     expect(result.toolCalls).toHaveLength(1);
@@ -145,7 +169,8 @@ describe('parseToolCallsFromText — invoke & namespaced blocks', () => {
   });
 
   it('parses multiple parameters inside one invoke block', () => {
-    const text = '<invoke name="calc"><parameter name="a">1</parameter><parameter name="b">2</parameter></invoke>';
+    const text =
+      '<invoke name="calc"><parameter name="a">1</parameter><parameter name="b">2</parameter></invoke>';
     const result = parseToolCallsFromText(text);
     expect(result.toolCalls[0].arguments).toEqual({ a: '1', b: '2' });
   });
@@ -154,7 +179,8 @@ describe('parseToolCallsFromText — invoke & namespaced blocks', () => {
     // The top-level parseInvokeBlocks pass (line 182) sees the invoke, then the
     // namespace pass (lines 186-191) re-parses the wrapper body — both add the call.
     // Asserting both confirms the namespace branch (187-191) executed.
-    const text = 'mcp:tool_call <invoke name="search"><parameter name="q">hi</parameter></invoke></mcp:tool_call>';
+    const text =
+      'mcp:tool_call <invoke name="search"><parameter name="q">hi</parameter></invoke></mcp:tool_call>';
     const result = parseToolCallsFromText(text);
 
     expect(result.toolCalls).toHaveLength(2);
@@ -175,7 +201,8 @@ describe('parseToolCallsFromText — invoke & namespaced blocks', () => {
   it('skips a namespaced wrapper already covered by an earlier matched range', () => {
     // The <tool_call> block fully contains a ns:tool_call substring; the alreadyMatched
     // guard (line 187) must skip re-parsing the inner namespaced wrapper.
-    const text = '<tool_call>{"name":"web_search","arguments":{"query":"x mcp:tool_call</mcp:tool_call>"}}</tool_call>';
+    const text =
+      '<tool_call>{"name":"web_search","arguments":{"query":"x mcp:tool_call</mcp:tool_call>"}}</tool_call>';
     const result = parseToolCallsFromText(text);
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0].name).toBe('web_search');
@@ -196,10 +223,15 @@ describe('runToolLoop — Gemma text parsing branches', () => {
 
   it('parseGemmaColonArgs: JSON body with prefix matching name (lines 72-74)', async () => {
     // colon args start with the tool name then a JSON object -> JSON.parse branch
-    mockTextThenFinal('<|tool_call>call:web_search:web_search{"query":"jsonbody"}<tool_call|>');
+    mockTextThenFinal(
+      '<|tool_call>call:web_search:web_search{"query":"jsonbody"}<tool_call|>',
+    );
     await runToolLoop(createContext());
     expect(mockExecuteToolCall).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'web_search', arguments: { query: 'jsonbody' } }),
+      expect.objectContaining({
+        name: 'web_search',
+        arguments: { query: 'jsonbody' },
+      }),
     );
   });
 
@@ -209,7 +241,10 @@ describe('runToolLoop — Gemma text parsing branches', () => {
     await runToolLoop(createContext());
     // web_search with empty args -> backfilled from last user query
     expect(mockExecuteToolCall).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'web_search', arguments: { query: 'Hello' } }),
+      expect.objectContaining({
+        name: 'web_search',
+        arguments: { query: 'Hello' },
+      }),
     );
   });
 
@@ -224,19 +259,61 @@ describe('runToolLoop — Gemma text parsing branches', () => {
   });
 
   it('web_search queries[] is normalised into query (line 107)', async () => {
-    mockTextThenFinal('<|tool_call>call:web_search{"queries":["first","second"]}<tool_call|>');
+    mockTextThenFinal(
+      '<|tool_call>call:web_search{"queries":["first","second"]}<tool_call|>',
+    );
     await runToolLoop(createContext());
     expect(mockExecuteToolCall).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'web_search', arguments: expect.objectContaining({ query: 'first' }) }),
+      expect.objectContaining({
+        name: 'web_search',
+        arguments: expect.objectContaining({ query: 'first' }),
+      }),
     );
   });
 
   it('web_search queries as a string is normalised into query (line 107 non-array)', async () => {
-    mockTextThenFinal('<|tool_call>call:web_search{"queries":"onlyone"}<tool_call|>');
+    mockTextThenFinal(
+      '<|tool_call>call:web_search{"queries":"onlyone"}<tool_call|>',
+    );
     await runToolLoop(createContext());
     expect(mockExecuteToolCall).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'web_search', arguments: expect.objectContaining({ query: 'onlyone' }) }),
+      expect.objectContaining({
+        name: 'web_search',
+        arguments: expect.objectContaining({ query: 'onlyone' }),
+      }),
     );
+  });
+});
+
+describe('runToolLoop — bounded multi-tool completion', () => {
+  beforeEach(resetMocks);
+
+  it('stops after the configured tool steps and preserves the tool context for the next message', async () => {
+    mockAppState.settings.maxToolCalls = 3;
+    for (let index = 0; index < 3; index += 1) {
+      mockedGenerateResponseWithTools.mockResolvedValueOnce({
+        fullResponse: '',
+        toolCalls: [
+          {
+            id: `tc-${index}`,
+            name: 'web_search',
+            arguments: { query: `query-${index}` },
+          },
+        ],
+      });
+    }
+    const ctx = createContext();
+    await runToolLoop(ctx);
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    expect(mockedGenerateResponseWithTools).toHaveBeenCalledTimes(3);
+    expect(
+      mockedGenerateResponseWithTools.mock.calls.every(
+        call => call[1].tools.length > 0,
+      ),
+    ).toBe(true);
+    expect(mockAddMessage).toHaveBeenCalledTimes(6);
+    expect(ctx.onFinalResponse).toHaveBeenCalledWith(toolStepLimitNotice(3));
   });
 });
 
@@ -260,7 +337,9 @@ describe('buildLiteRTHistory', () => {
   });
 
   it('returns [] when the last user message is the first message', () => {
-    const messages: Message[] = [makeMessage({ role: 'user', content: 'only one' })];
+    const messages: Message[] = [
+      makeMessage({ role: 'user', content: 'only one' }),
+    ];
     expect(buildLiteRTHistory(messages)).toEqual([]);
   });
 
@@ -283,7 +362,13 @@ describe('runToolLoop — LiteRT loop branches', () => {
     mockAppState = {
       downloadedModels: [{ id: 'litert-1', engine: 'litert' }],
       activeModelId: 'litert-1',
-      settings: { temperature: 0.7, maxTokens: 512, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+      settings: {
+        temperature: 0.7,
+        maxTokens: 512,
+        topP: 0.9,
+        liteRTTemperature: 0.7,
+        liteRTTopP: 0.9,
+      },
     };
     mockedLiteRT.isModelLoaded.mockReturnValue(true);
   });
@@ -304,11 +389,13 @@ describe('runToolLoop — LiteRT loop branches', () => {
 
   it('streams native onToken/onReasoning through ctx.onStream (lines 415-416)', async () => {
     const onStream = jest.fn();
-    mockedLiteRT.generateRaw.mockImplementation(async (_t: any, _m: any, handlers: any) => {
-      handlers.onToken('tok');
-      handlers.onReasoning('reason');
-      return 'done';
-    });
+    mockedLiteRT.generateRaw.mockImplementation(
+      async (_t: any, _m: any, handlers: any) => {
+        handlers.onToken('tok');
+        handlers.onReasoning('reason');
+        return 'done';
+      },
+    );
 
     const ctx = createContext({
       messages: [makeMessage({ role: 'user', content: 'hi' })],
@@ -316,19 +403,26 @@ describe('runToolLoop — LiteRT loop branches', () => {
     });
     await runToolLoop(ctx);
 
-    expect(onStream).toHaveBeenCalledWith(expect.objectContaining({ content: 'tok' }));
-    expect(onStream).toHaveBeenCalledWith(expect.objectContaining({ reasoningContent: 'reason' }));
+    expect(onStream).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'tok' }),
+    );
+    expect(onStream).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoningContent: 'reason' }),
+    );
   });
 
   it('retries without tools when the native FC parser hard-fails (lines 423-431)', async () => {
     let call = 0;
     mockedLiteRT.generateRaw.mockImplementation(async () => {
       call++;
-      if (call === 1) throw new Error('Failed to parse FC calls (Status Code: 3)');
+      if (call === 1)
+        throw new Error('Failed to parse FC calls (Status Code: 3)');
       return 'recovered answer';
     });
 
-    const ctx = createContext({ messages: [makeMessage({ role: 'user', content: 'hi' })] });
+    const ctx = createContext({
+      messages: [makeMessage({ role: 'user', content: 'hi' })],
+    });
     await runToolLoop(ctx);
 
     // generateRaw called twice (with tools, then retry without tools)
@@ -339,10 +433,33 @@ describe('runToolLoop — LiteRT loop branches', () => {
     expect(ctx.onFinalResponse).toHaveBeenCalledWith('recovered answer');
   });
 
+  it('uses the same configured stop notice for the native LiteRT tool loop', async () => {
+    mockAppState.settings.maxToolCalls = 3;
+    mockedLiteRT.generateRaw.mockImplementation(
+      async (_text: any, _media: any, handlers: any) => {
+        for (let index = 0; index < 4; index += 1) {
+          await handlers.onToolCall('web_search', { query: `query-${index}` });
+        }
+        return 'This model response must not replace the product stop notice.';
+      },
+    );
+
+    const ctx = createContext({
+      messages: [makeMessage({ role: 'user', content: 'hi' })],
+    });
+    await runToolLoop(ctx);
+
+    expect(mockExecuteToolCall).toHaveBeenCalledTimes(3);
+    expect(mockAddMessage).toHaveBeenCalledTimes(6);
+    expect(ctx.onFinalResponse).toHaveBeenCalledWith(toolStepLimitNotice(3));
+  });
+
   it('rethrows a non-parse error without retrying (line 427 negative branch)', async () => {
     mockedLiteRT.generateRaw.mockRejectedValue(new Error('out of memory'));
 
-    const ctx = createContext({ messages: [makeMessage({ role: 'user', content: 'hi' })] });
+    const ctx = createContext({
+      messages: [makeMessage({ role: 'user', content: 'hi' })],
+    });
     await expect(runToolLoop(ctx)).rejects.toThrow('out of memory');
     expect(mockedLiteRT.generateRaw).toHaveBeenCalledTimes(1);
   });
@@ -355,7 +472,10 @@ describe('runToolLoop — precise date/time context for calendar tools', () => {
   beforeEach(resetMocks);
 
   it('appends a precise time-of-day note to the latest user message when a calendar tool is enabled', async () => {
-    mockedGenerateResponseWithTools.mockResolvedValue({ fullResponse: 'ok', toolCalls: [] });
+    mockedGenerateResponseWithTools.mockResolvedValue({
+      fullResponse: 'ok',
+      toolCalls: [],
+    });
 
     const ctx = createContext({
       enabledToolIds: ['create_calendar_event'],
@@ -368,7 +488,8 @@ describe('runToolLoop — precise date/time context for calendar tools', () => {
 
     const sentMessages = mockedGenerateResponseWithTools.mock.calls[0][0];
     // The STABLE date stays in the system prefix (kept cacheable turn-to-turn)...
-    const sysContent = sentMessages.find((m: Message) => m.role === 'system')!.content as string;
+    const sysContent = sentMessages.find((m: Message) => m.role === 'system')!
+      .content as string;
     expect(sysContent).toContain('The current date is');
     // ...while the EXACT time-of-day is appended to the latest user message instead,
     // so the large system+tools prefix is not invalidated each turn (the TTFT fix).
@@ -381,7 +502,10 @@ describe('runToolLoop — precise date/time context for calendar tools', () => {
   });
 
   it('uses the date-only context when no time-sensitive tool is enabled', async () => {
-    mockedGenerateResponseWithTools.mockResolvedValue({ fullResponse: 'ok', toolCalls: [] });
+    mockedGenerateResponseWithTools.mockResolvedValue({
+      fullResponse: 'ok',
+      toolCalls: [],
+    });
 
     const ctx = createContext({
       enabledToolIds: ['web_search'],
@@ -390,7 +514,8 @@ describe('runToolLoop — precise date/time context for calendar tools', () => {
     await runToolLoop(ctx);
 
     const sentMessages = mockedGenerateResponseWithTools.mock.calls[0][0];
-    const sysContent = sentMessages.find((m: Message) => m.role === 'system')!.content as string;
+    const sysContent = sentMessages.find((m: Message) => m.role === 'system')!
+      .content as string;
     expect(sysContent).toContain('current date is');
     expect(sysContent).not.toContain('current date and time is');
   });
@@ -406,15 +531,18 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
     { type: 'function', function: { name: 'calculator' } },
   ];
   function extWithSchemas(names: string[]) {
-    return [{
-      canHandle: () => false,
-      execute: jest.fn(),
-      getSystemPromptHint: () => '',
-      enabledToolCount: () => names.length,
-      parseToolCalls: () => [],
-      stripFromVisibleText: (t: string) => t,
-      getOpenAISchemas: () => names.map(n => ({ type: 'function', function: { name: n } })),
-    }];
+    return [
+      {
+        canHandle: () => false,
+        execute: jest.fn(),
+        getSystemPromptHint: () => '',
+        enabledToolCount: () => names.length,
+        parseToolCalls: () => [],
+        stripFromVisibleText: (t: string) => t,
+        getOpenAISchemas: () =>
+          names.map(n => ({ type: 'function', function: { name: n } })),
+      },
+    ];
   }
 
   beforeEach(() => {
@@ -422,7 +550,13 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
     mockAppState = {
       downloadedModels: [{ id: 'litert-1', engine: 'litert' }],
       activeModelId: 'litert-1',
-      settings: { temperature: 0.7, maxTokens: 512, topP: 0.9, liteRTTemperature: 0.7, liteRTTopP: 0.9 },
+      settings: {
+        temperature: 0.7,
+        maxTokens: 512,
+        topP: 0.9,
+        liteRTTemperature: 0.7,
+        liteRTTopP: 0.9,
+      },
     };
     mockedLiteRT.isModelLoaded.mockReturnValue(true);
     mockGetToolsAsOpenAISchema.mockReturnValue(builtIn);
@@ -430,7 +564,9 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
   });
 
   it('keeps only the ext tools the router selected, plus built-ins (lines 642-648)', async () => {
-    mockGetToolExtensions.mockReturnValue(extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']));
+    mockGetToolExtensions.mockReturnValue(
+      extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']),
+    );
     mockSelectRelevantTools.mockResolvedValue(['mcp_b']);
 
     const ctx = createContext({
@@ -440,14 +576,19 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
     await runToolLoop(ctx);
 
     expect(mockSelectRelevantTools).toHaveBeenCalled();
-    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!.tools as any[];
+    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!
+      .tools as any[];
     const names = toolsPassed.map(t => t.function.name);
-    expect(names).toEqual(expect.arrayContaining(['web_search', 'calculator', 'mcp_b']));
+    expect(names).toEqual(
+      expect.arrayContaining(['web_search', 'calculator', 'mcp_b']),
+    );
     expect(names).not.toContain('mcp_a');
   });
 
   it('keeps built-in tools only when the router names nothing usable (lines 643-645)', async () => {
-    mockGetToolExtensions.mockReturnValue(extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']));
+    mockGetToolExtensions.mockReturnValue(
+      extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']),
+    );
     mockSelectRelevantTools.mockResolvedValue([]);
 
     const ctx = createContext({
@@ -456,13 +597,16 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
     });
     await runToolLoop(ctx);
 
-    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!.tools as any[];
+    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!
+      .tools as any[];
     const names = toolsPassed.map(t => t.function.name);
     expect(names).toEqual(['web_search', 'calculator']);
   });
 
   it('falls back to all tools when the router throws (lines 649-651)', async () => {
-    mockGetToolExtensions.mockReturnValue(extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']));
+    mockGetToolExtensions.mockReturnValue(
+      extWithSchemas(['mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']),
+    );
     mockSelectRelevantTools.mockRejectedValue(new Error('router boom'));
 
     const ctx = createContext({
@@ -471,9 +615,19 @@ describe('runToolLoop — selectEffectiveSchemas tool routing (LiteRT)', () => {
     });
     await runToolLoop(ctx);
 
-    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!.tools as any[];
+    const toolsPassed = mockedLiteRT.prepareConversation.mock.calls[0][2]!
+      .tools as any[];
     const names = toolsPassed.map(t => t.function.name);
-    expect(names).toEqual(expect.arrayContaining(['web_search', 'calculator', 'mcp_a', 'mcp_b', 'mcp_c', 'mcp_d']));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'web_search',
+        'calculator',
+        'mcp_a',
+        'mcp_b',
+        'mcp_c',
+        'mcp_d',
+      ]),
+    );
   });
 
   it('does not route when total tools are at or below the threshold', async () => {

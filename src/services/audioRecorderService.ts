@@ -6,9 +6,108 @@ import logger from '../utils/logger';
 /** Supported formats for llama.rn audio input */
 type AudioInputFormat = 'wav' | 'mp3';
 
+/** How loud the microphone is right now, 0 upwards. RMS of one buffer of PCM samples. */
+type AudioLevelListener = (rms: number) => void;
+
 class AudioRecorderService {
   private recorder: AudioRecorder | null = null;
   private isRecording = false;
+  private readonly levelListeners = new Set<AudioLevelListener>();
+
+  /**
+   * Listen to how loud the microphone is, while something is recording.
+   *
+   * End-of-speech has to be decided from the AUDIO. The transcript is a bad silence signal: each
+   * realtime slice re-decodes the whole buffer, so the text keeps shifting while the room is quiet
+   * and "the transcript settled" never becomes true.
+   *
+   * Returns an unsubscribe. Samples are reduced to one number here and never leave this service.
+   */
+  /**
+   * Whether the platform is subtracting our own output from the microphone.
+   *
+   * The recorder answers this because it is what configures capture on each platform - iOS through the
+   * record session's mode, Android through Oboe's input preset. Callers that decide whether the mic
+   * may stay open while the assistant speaks ask HERE rather than hardcoding a belief about the
+   * platform, which is how a reverted session mode would otherwise become an assistant that
+   * interrupts itself with its own voice.
+   *
+   * Android: Oboe opens the input with the VoiceCommunication preset, which maps to
+   * VOICE_COMMUNICATION - a capture source the platform must back with an echo canceller. Patched into
+   * react-native-audio-api, whose default preset (VoiceRecognition) deliberately disables AEC.
+   */
+  isEchoCancelled(): boolean {
+    // FALSE on both platforms, deliberately, and the reason is not a missing setting.
+    //
+    // An AVAudioSession MODE is only a hint. Real cancellation needs the voice-processing I/O unit to
+    // drive INPUT and OUTPUT together, so it has a reference signal for what the speaker is playing.
+    // Our TTS plays through an ordinary AudioContext, which that unit never sees - so on device the
+    // mic recorded the assistant, speech detection fired on the assistant's own voice, and the
+    // assistant cut itself off mid-sentence.
+    //
+    // Android is the same story from the other end: Oboe's VoiceCommunication preset asks the platform
+    // for a cancelling capture source, but our playback does not go out through that path either.
+    //
+    // Kept as a question with a single owner rather than deleted: when playback and capture share a
+    // voice-processing engine, this returns true and hands-free can listen through the assistant with
+    // no other change. Until then it waits for the assistant to finish, which is honest and works.
+    return false;
+  }
+
+  onAudioLevel(listener: AudioLevelListener): () => void {
+    this.levelListeners.add(listener);
+    if (this.recorder && this.isRecording) this.attachLevelCallback(this.recorder);
+    return () => {
+      this.levelListeners.delete(listener);
+      if (this.levelListeners.size === 0) {
+        (this.recorder as unknown as { clearOnAudioReady?: () => void })?.clearOnAudioReady?.();
+      }
+    };
+  }
+
+  private attachLevelCallback(rec: AudioRecorder): void {
+    const withCallback = rec as unknown as {
+      onAudioReady?: (
+        options: { sampleRate: number; bufferLength: number; channelCount: number },
+        callback: (event: { buffer?: { getChannelData?: (i: number) => Float32Array }; numFrames?: number }) => void,
+      ) => void;
+    };
+    if (typeof withCallback.onAudioReady !== 'function') {
+      // The whole endpoint depends on these buffers. If the method is not there, say so once rather
+      // than leave a turn that silently never ends.
+      logger.log('[VAD] onAudioReady is NOT available on this recorder - no levels will arrive');
+      return;
+    }
+    logger.log('[VAD] attaching level callback');
+    let seen = 0;
+    try {
+      withCallback.onAudioReady(
+        { sampleRate: 16000, bufferLength: 1600, channelCount: 1 },
+        event => {
+          const channel = event?.buffer?.getChannelData?.(0);
+          const frames = event?.numFrames ?? channel?.length ?? 0;
+          if (seen === 0) {
+            logger.log(`[VAD] first buffer frames=${frames} hasChannel=${!!channel}`);
+          }
+          seen += 1;
+          if (!channel || frames <= 0) return;
+          let sum = 0;
+          for (let i = 0; i < frames; i += 1) sum += channel[i] * channel[i];
+          const rms = Math.sqrt(sum / frames);
+          for (const listener of this.levelListeners) {
+            try {
+              listener(rms);
+            } catch {
+              // One bad listener must never take the recording down with it.
+            }
+          }
+        },
+      );
+    } catch (error) {
+      // No buffer callback on this platform build: callers keep their own timeout.
+      logger.log(`[VAD] onAudioReady threw: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   supportsDirectAudioInput(): boolean {
     return true;
@@ -70,6 +169,8 @@ class AudioRecorderService {
     });
     this.recorder = rec;
     this.isRecording = true;
+    // Before start, so the opening buffers are not missed.
+    if (this.levelListeners.size > 0) this.attachLevelCallback(rec);
     const startResult: any = rec.start();
     if (startResult && startResult.status && startResult.status !== 'success') {
       this.isRecording = false;

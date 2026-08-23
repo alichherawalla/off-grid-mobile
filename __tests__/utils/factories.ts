@@ -54,11 +54,14 @@ export interface MessageFactoryOptions {
   generationMeta?: GenerationMeta;
   toolCallId?: string;
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
+  toolArtifacts?: Message['toolArtifacts'];
   toolName?: string;
   reasoningContent?: string;
 }
 
-export const createMessage = (options: MessageFactoryOptions = {}): Message => ({
+export const createMessage = (
+  options: MessageFactoryOptions = {},
+): Message => ({
   id: options.id ?? generateId('msg'),
   role: options.role ?? 'user',
   content: options.content ?? 'Test message content',
@@ -71,21 +74,31 @@ export const createMessage = (options: MessageFactoryOptions = {}): Message => (
   generationMeta: options.generationMeta,
   toolCallId: options.toolCallId,
   toolCalls: options.toolCalls,
+  toolArtifacts: options.toolArtifacts,
   toolName: options.toolName,
   reasoningContent: options.reasoningContent,
 });
 
-export const createUserMessage = (content: string, options: Omit<MessageFactoryOptions, 'role' | 'content'> = {}): Message =>
-  createMessage({ ...options, role: 'user', content });
+export const createUserMessage = (
+  content: string,
+  options: Omit<MessageFactoryOptions, 'role' | 'content'> = {},
+): Message => createMessage({ ...options, role: 'user', content });
 
-export const createAssistantMessage = (content: string, options: Omit<MessageFactoryOptions, 'role' | 'content'> = {}): Message =>
-  createMessage({ ...options, role: 'assistant', content });
+export const createAssistantMessage = (
+  content: string,
+  options: Omit<MessageFactoryOptions, 'role' | 'content'> = {},
+): Message => createMessage({ ...options, role: 'assistant', content });
 
-export const createSystemMessage = (content: string, options: Omit<MessageFactoryOptions, 'role' | 'content'> = {}): Message =>
-  createMessage({ ...options, role: 'system', content });
+export const createSystemMessage = (
+  content: string,
+  options: Omit<MessageFactoryOptions, 'role' | 'content'> = {},
+): Message => createMessage({ ...options, role: 'system', content });
 
-export const createToolResultMessage = (toolName: string, content: string, options: Omit<MessageFactoryOptions, 'role' | 'content' | 'toolName'> = {}): Message =>
-  createMessage({ ...options, role: 'tool', content, toolName });
+export const createToolResultMessage = (
+  toolName: string,
+  content: string,
+  options: Omit<MessageFactoryOptions, 'role' | 'content' | 'toolName'> = {},
+): Message => createMessage({ ...options, role: 'tool', content, toolName });
 
 // ============================================================================
 // Conversation Factory
@@ -101,7 +114,9 @@ export interface ConversationFactoryOptions {
   projectId?: string;
 }
 
-export const createConversation = (options: ConversationFactoryOptions = {}): Conversation => ({
+export const createConversation = (
+  options: ConversationFactoryOptions = {},
+): Conversation => ({
   id: options.id ?? generateId('conv'),
   title: options.title ?? 'Test Conversation',
   modelId: options.modelId ?? 'test-model-id',
@@ -113,15 +128,17 @@ export const createConversation = (options: ConversationFactoryOptions = {}): Co
 
 export const createConversationWithMessages = (
   messageCount: number,
-  options: ConversationFactoryOptions = {}
+  options: ConversationFactoryOptions = {},
 ): Conversation => {
   const messages: Message[] = [];
   for (let i = 0; i < messageCount; i++) {
     const role = i % 2 === 0 ? 'user' : 'assistant';
-    messages.push(createMessage({
-      role,
-      content: `${role === 'user' ? 'User' : 'Assistant'} message ${i + 1}`,
-    }));
+    messages.push(
+      createMessage({
+        role,
+        content: `${role === 'user' ? 'User' : 'Assistant'} message ${i + 1}`,
+      }),
+    );
   }
   return createConversation({ ...options, messages });
 };
@@ -149,26 +166,31 @@ export interface DownloadedModelFactoryOptions {
   liteRTAudio?: boolean;
 }
 
-export const createDownloadedModel = (options: DownloadedModelFactoryOptions = {}): DownloadedModel => ({
-  id: options.id ?? generateId('model'),
-  name: options.name ?? 'Test Model',
-  author: options.author ?? 'test-author',
-  filePath: options.filePath ?? '/mock/models/test-model.gguf',
-  fileName: options.fileName ?? 'test-model.gguf',
-  fileSize: options.fileSize ?? 4 * 1024 * 1024 * 1024, // 4GB
-  quantization: options.quantization ?? 'Q4_K_M',
-  downloadedAt: options.downloadedAt ?? new Date().toISOString(),
-  credibility: options.credibility,
-  engine: options.engine ?? 'llama',
-  liteRTVision: options.liteRTVision,
-  liteRTAudio: options.liteRTAudio,
-  isVisionModel: options.isVisionModel,
-  mmProjPath: options.mmProjPath,
-  mmProjFileName: options.mmProjFileName,
-  mmProjFileSize: options.mmProjFileSize,
-} as DownloadedModel);
+export const createDownloadedModel = (
+  options: DownloadedModelFactoryOptions = {},
+): DownloadedModel =>
+  ({
+    id: options.id ?? generateId('model'),
+    name: options.name ?? 'Test Model',
+    author: options.author ?? 'test-author',
+    filePath: options.filePath ?? '/mock/models/test-model.gguf',
+    fileName: options.fileName ?? 'test-model.gguf',
+    fileSize: options.fileSize ?? 4 * 1024 * 1024 * 1024, // 4GB
+    quantization: options.quantization ?? 'Q4_K_M',
+    downloadedAt: options.downloadedAt ?? new Date().toISOString(),
+    credibility: options.credibility,
+    engine: options.engine ?? 'llama',
+    liteRTVision: options.liteRTVision,
+    liteRTAudio: options.liteRTAudio,
+    isVisionModel: options.isVisionModel,
+    mmProjPath: options.mmProjPath,
+    mmProjFileName: options.mmProjFileName,
+    mmProjFileSize: options.mmProjFileSize,
+  } as DownloadedModel);
 
-export const createVisionModel = (options: DownloadedModelFactoryOptions = {}): DownloadedModel =>
+export const createVisionModel = (
+  options: DownloadedModelFactoryOptions = {},
+): DownloadedModel =>
   createDownloadedModel({
     ...options,
     name: options.name ?? 'Test Vision Model',
@@ -189,11 +211,15 @@ export interface ModelFileFactoryOptions {
   downloadUrl?: string;
 }
 
-export const createModelFile = (options: ModelFileFactoryOptions = {}): ModelFile => ({
+export const createModelFile = (
+  options: ModelFileFactoryOptions = {},
+): ModelFile => ({
   name: options.name ?? 'model-q4_k_m.gguf',
   size: options.size ?? 4 * 1024 * 1024 * 1024,
   quantization: options.quantization ?? 'Q4_K_M',
-  downloadUrl: options.downloadUrl ?? 'https://huggingface.co/test/model/resolve/main/model-q4_k_m.gguf',
+  downloadUrl:
+    options.downloadUrl ??
+    'https://huggingface.co/test/model/resolve/main/model-q4_k_m.gguf',
 });
 
 export interface ModelInfoFactoryOptions {
@@ -209,7 +235,9 @@ export interface ModelInfoFactoryOptions {
   credibility?: ModelCredibility;
 }
 
-export const createModelInfo = (options: ModelInfoFactoryOptions = {}): ModelInfo => ({
+export const createModelInfo = (
+  options: ModelInfoFactoryOptions = {},
+): ModelInfo => ({
   id: options.id ?? generateId('model-info'),
   name: options.name ?? 'Test Model Info',
   author: options.author ?? 'test-author',
@@ -236,7 +264,9 @@ export interface DeviceInfoFactoryOptions {
   isEmulator?: boolean;
 }
 
-export const createDeviceInfo = (options: DeviceInfoFactoryOptions = {}): DeviceInfo => ({
+export const createDeviceInfo = (
+  options: DeviceInfoFactoryOptions = {},
+): DeviceInfo => ({
   totalMemory: options.totalMemory ?? 8 * 1024 * 1024 * 1024, // 8GB
   usedMemory: options.usedMemory ?? 4 * 1024 * 1024 * 1024, // 4GB
   availableMemory: options.availableMemory ?? 4 * 1024 * 1024 * 1024, // 4GB
@@ -271,10 +301,15 @@ export interface ModelRecommendationFactoryOptions {
   warning?: string;
 }
 
-export const createModelRecommendation = (options: ModelRecommendationFactoryOptions = {}): ModelRecommendation => ({
+export const createModelRecommendation = (
+  options: ModelRecommendationFactoryOptions = {},
+): ModelRecommendation => ({
   maxParameters: options.maxParameters ?? 7000000000, // 7B
   recommendedQuantization: options.recommendedQuantization ?? 'Q4_K_M',
-  recommendedModels: options.recommendedModels ?? ['llama-3.2-3b', 'phi-3-mini'],
+  recommendedModels: options.recommendedModels ?? [
+    'llama-3.2-3b',
+    'phi-3-mini',
+  ],
   warning: options.warning,
 });
 
@@ -294,7 +329,9 @@ export interface ONNXImageModelFactoryOptions {
   attentionVariant?: 'split_einsum' | 'original';
 }
 
-export const createONNXImageModel = (options: ONNXImageModelFactoryOptions = {}): ONNXImageModel => ({
+export const createONNXImageModel = (
+  options: ONNXImageModelFactoryOptions = {},
+): ONNXImageModel => ({
   id: options.id ?? generateId('img-model'),
   name: options.name ?? 'Test Image Model',
   description: options.description ?? 'A test image generation model',
@@ -324,7 +361,9 @@ export interface GeneratedImageFactoryOptions {
   conversationId?: string;
 }
 
-export const createGeneratedImage = (options: GeneratedImageFactoryOptions = {}): GeneratedImage => ({
+export const createGeneratedImage = (
+  options: GeneratedImageFactoryOptions = {},
+): GeneratedImage => ({
   id: options.id ?? generateId('gen-img'),
   prompt: options.prompt ?? 'A beautiful sunset over mountains',
   negativePrompt: options.negativePrompt,
@@ -356,7 +395,9 @@ export interface MediaAttachmentFactoryOptions {
   audioDurationSeconds?: number;
 }
 
-export const createMediaAttachment = (options: MediaAttachmentFactoryOptions = {}): MediaAttachment => ({
+export const createMediaAttachment = (
+  options: MediaAttachmentFactoryOptions = {},
+): MediaAttachment => ({
   id: options.id ?? generateId('attach'),
   type: options.type ?? 'image',
   uri: options.uri ?? 'file:///mock/attachment.jpg',
@@ -368,10 +409,13 @@ export const createMediaAttachment = (options: MediaAttachmentFactoryOptions = {
   fileSize: options.fileSize,
 });
 
-export const createImageAttachment = (options: Omit<MediaAttachmentFactoryOptions, 'type'> = {}): MediaAttachment =>
-  createMediaAttachment({ ...options, type: 'image' });
+export const createImageAttachment = (
+  options: Omit<MediaAttachmentFactoryOptions, 'type'> = {},
+): MediaAttachment => createMediaAttachment({ ...options, type: 'image' });
 
-export const createDocumentAttachment = (options: Omit<MediaAttachmentFactoryOptions, 'type'> = {}): MediaAttachment =>
+export const createDocumentAttachment = (
+  options: Omit<MediaAttachmentFactoryOptions, 'type'> = {},
+): MediaAttachment =>
   createMediaAttachment({
     ...options,
     type: 'document',
@@ -381,7 +425,9 @@ export const createDocumentAttachment = (options: Omit<MediaAttachmentFactoryOpt
     fileSize: options.fileSize ?? 1024 * 1024, // 1MB
   });
 
-export const createAudioAttachment = (options: Omit<MediaAttachmentFactoryOptions, 'type'> = {}): MediaAttachment => ({
+export const createAudioAttachment = (
+  options: Omit<MediaAttachmentFactoryOptions, 'type'> = {},
+): MediaAttachment => ({
   id: options.id ?? generateId('attach'),
   type: 'audio',
   uri: options.uri ?? 'file:///mock/voice.wav',
@@ -410,7 +456,9 @@ export interface GenerationMetaFactoryOptions {
   resolution?: string;
 }
 
-export const createGenerationMeta = (options: GenerationMetaFactoryOptions = {}): GenerationMeta => ({
+export const createGenerationMeta = (
+  options: GenerationMetaFactoryOptions = {},
+): GenerationMeta => ({
   gpu: options.gpu ?? false,
   gpuBackend: options.gpuBackend ?? 'CPU',
   gpuLayers: options.gpuLayers ?? 0,
@@ -442,16 +490,20 @@ export interface ProjectFactoryOptions {
 // Model File with MmProj Factory
 // ============================================================================
 
-export const createModelFileWithMmProj = (options: ModelFileFactoryOptions & {
-  mmProjName?: string;
-  mmProjSize?: number;
-  mmProjDownloadUrl?: string;
-} = {}): ModelFile => ({
+export const createModelFileWithMmProj = (
+  options: ModelFileFactoryOptions & {
+    mmProjName?: string;
+    mmProjSize?: number;
+    mmProjDownloadUrl?: string;
+  } = {},
+): ModelFile => ({
   ...createModelFile(options),
   mmProjFile: {
     name: options.mmProjName ?? 'mmproj-model-f16.gguf',
     size: options.mmProjSize ?? 500 * 1024 * 1024,
-    downloadUrl: options.mmProjDownloadUrl ?? 'https://huggingface.co/test/model/resolve/main/mmproj-model-f16.gguf',
+    downloadUrl:
+      options.mmProjDownloadUrl ??
+      'https://huggingface.co/test/model/resolve/main/mmproj-model-f16.gguf',
   },
 });
 
@@ -459,11 +511,14 @@ export const createModelFileWithMmProj = (options: ModelFileFactoryOptions & {
 // Project Factory
 // ============================================================================
 
-export const createProject = (options: ProjectFactoryOptions = {}): Project => ({
+export const createProject = (
+  options: ProjectFactoryOptions = {},
+): Project => ({
   id: options.id ?? generateId('project'),
   name: options.name ?? 'Test Project',
   description: options.description ?? 'A test project for testing',
-  systemPrompt: options.systemPrompt ?? 'You are a helpful assistant for this project.',
+  systemPrompt:
+    options.systemPrompt ?? 'You are a helpful assistant for this project.',
   icon: options.icon ?? '📁',
   createdAt: options.createdAt ?? new Date().toISOString(),
   updatedAt: options.updatedAt ?? new Date().toISOString(),
@@ -473,7 +528,9 @@ export const createProject = (options: ProjectFactoryOptions = {}): Project => (
 // Image Download Factories
 // ============================================================================
 
-export const makeImageDownloadDeps = (overrides: Partial<ImageDownloadDeps> = {}): ImageDownloadDeps => ({
+export const makeImageDownloadDeps = (
+  overrides: Partial<ImageDownloadDeps> = {},
+): ImageDownloadDeps => ({
   addDownloadedImageModel: jest.fn(),
   activeImageModelId: null,
   setActiveImageModelId: jest.fn(),

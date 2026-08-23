@@ -14,6 +14,7 @@
 
 import { renderHook, act } from '@testing-library/react-native';
 import { useDownloadManager } from '../../../../src/screens/DownloadManagerScreen/useDownloadManager';
+import { visionRepairMessage } from '../../../../src/services/modelManager/visionRepairMessage';
 
 // ── mocks ─────────────────────────────────────────────────────────────
 const mockUseAppStore = jest.fn();
@@ -22,6 +23,7 @@ const mockDownloadStoreGetState = jest.fn();
 
 const mockModelManager = {
   getDownloadedModels: jest.fn(),
+  repairVision: jest.fn(),
   repairMmProj: jest.fn(),
   getModelFiles: jest.fn(),
 };
@@ -113,6 +115,7 @@ beforeEach(() => {
   downloads = {};
   mockModelManager.getDownloadedModels.mockResolvedValue([]);
   mockModelManager.repairMmProj.mockResolvedValue(undefined);
+  mockModelManager.repairVision.mockResolvedValue({ kind: 'unsupported' });
   mockBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
   configureStores();
 });
@@ -224,47 +227,68 @@ describe('handleDeleteItem', () => {
 });
 
 // ── handleRepairVision (still owned by the hook) ──────────────────────
+//
+// The hook no longer decides anything about a repair: the service resolves where the projector can
+// come from and returns an OUTCOME, and one shared rule (visionRepairMessage) turns that outcome
+// into words. So these assert the two things the hook is still responsible for — asking the service
+// about a model it actually holds, and saying exactly what the shared rule says. The wording itself
+// is read from that rule, so the Download Manager and the chat card cannot drift apart.
 describe('handleRepairVision', () => {
-  it('returns early when modelId has no slash', () => {
+  const REPAIR_ITEM = { modelId: 'org/repo/m.gguf', fileName: 'm.gguf' } as any;
+
+  function withRepairableModel() {
+    appState.downloadedModels = [{ id: 'org/repo/m.gguf', fileName: 'm.gguf', engine: 'llama' }];
+  }
+
+  async function repair(result: { current: { handleRepairVision: (i: any) => void } }) {
+    await act(async () => {
+      result.current.handleRepairVision(REPAIR_ITEM);
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    });
+  }
+
+  it('does nothing for a model this device does not hold', () => {
     const { result } = renderHook(() => useDownloadManager());
-    act(() => { result.current.handleRepairVision({ modelId: 'noslash' } as any); });
+    act(() => { result.current.handleRepairVision({ modelId: 'not/here' } as any); });
+    expect(mockModelManager.repairVision).not.toHaveBeenCalled();
     expect(mockSetRepairingVision).not.toHaveBeenCalled();
   });
 
-  it('alerts when no separate vision file is published', async () => {
-    mockHuggingFaceService.getModelFiles.mockResolvedValue([{ name: 'm.gguf' }]);
+  it.each([
+    ['repaired', { kind: 'repaired', repoId: 'org/repo' }],
+    ['linked', { kind: 'linked' }],
+    ['ambiguous', { kind: 'ambiguous', candidates: ['a/b', 'c/d'] }],
+    ['noProjectorPublished', { kind: 'noProjectorPublished', repoId: 'org/repo' }],
+    ['unknown', { kind: 'unknown' }],
+    ['unsupported', { kind: 'unsupported' }],
+  ])('says exactly what the shared message rule says for %s', async (_kind, outcome) => {
+    withRepairableModel();
+    mockModelManager.repairVision.mockResolvedValue(outcome);
     const { result } = renderHook(() => useDownloadManager());
-    await act(async () => {
-      result.current.handleRepairVision({ modelId: 'org/repo/m.gguf', fileName: 'm.gguf' } as any);
-      await Promise.resolve(); await Promise.resolve();
-    });
-    expect(mockSetRepairingVision).toHaveBeenCalledWith('org/repo/m.gguf', true);
-    expect(shownAlertTitles).toContain('No Vision File Available');
-    expect(mockSetRepairingVision).toHaveBeenCalledWith('org/repo/m.gguf', false);
+    await repair(result);
+
+    const [expectedTitle] = visionRepairMessage(outcome as any, REPAIR_ITEM.fileName);
+    expect(shownAlertTitles).toContain(expectedTitle);
+    expect(mockSetRepairingVision).toHaveBeenCalledWith(REPAIR_ITEM.modelId, true);
+    expect(mockSetRepairingVision).toHaveBeenCalledWith(REPAIR_ITEM.modelId, false);
   });
 
-  it('repairs and refreshes when a vision file exists', async () => {
-    mockHuggingFaceService.getModelFiles.mockResolvedValue([{ name: 'm.gguf', mmProjFile: { name: 'mm.gguf' } }]);
+  it('republishes the model list so the repaired model reloads', async () => {
+    withRepairableModel();
+    mockModelManager.repairVision.mockResolvedValue({ kind: 'repaired', repoId: 'org/repo' });
     mockModelManager.getDownloadedModels.mockResolvedValue([{ id: 'x' }]);
     const { result } = renderHook(() => useDownloadManager());
-    await act(async () => {
-      result.current.handleRepairVision({ modelId: 'org/repo/m.gguf', fileName: 'm.gguf' } as any);
-      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    });
-    expect(mockModelManager.repairMmProj).toHaveBeenCalledWith('org/repo', { name: 'm.gguf', mmProjFile: { name: 'mm.gguf' } }, {});
+    await repair(result);
     expect(setDownloadedModels).toHaveBeenCalledWith([{ id: 'x' }]);
-    expect(shownAlertTitles).toContain('Vision Repaired');
   });
 
-  it('shows Repair Failed when getModelFiles rejects', async () => {
-    mockHuggingFaceService.getModelFiles.mockRejectedValue(new Error('hf down'));
+  it('shows Repair Failed when the service itself throws', async () => {
+    withRepairableModel();
+    mockModelManager.repairVision.mockRejectedValue(new Error('hf down'));
     const { result } = renderHook(() => useDownloadManager());
-    await act(async () => {
-      result.current.handleRepairVision({ modelId: 'org/repo/m.gguf', fileName: 'm.gguf' } as any);
-      await Promise.resolve(); await Promise.resolve();
-    });
+    await repair(result);
     expect(shownAlertTitles).toContain('Repair Failed');
-    expect(mockSetRepairingVision).toHaveBeenCalledWith('org/repo/m.gguf', false);
+    expect(mockSetRepairingVision).toHaveBeenCalledWith(REPAIR_ITEM.modelId, false);
   });
 });
 

@@ -8,10 +8,15 @@ import { textOverheadMultiplier } from '../../services/activeModelService/types'
 import { useAppStore } from '../../stores';
 import { ModelRow } from '../ModelRow';
 import { createAllStyles } from './styles';
+import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 export interface TextTabProps {
   downloadedModels: DownloadedModel[];
-  remoteModels: Array<{ serverId: string; serverName: string; models: RemoteModel[] }>;
+  remoteModels: Array<{
+    serverId: string;
+    serverName: string;
+    models: RemoteModel[];
+  }>;
   currentModelPath: string | null;
   /** The SELECTED model's path (may differ from loaded under deferred loading). */
   selectedModelPath?: string | null;
@@ -27,7 +32,18 @@ export interface TextTabProps {
 }
 
 export const TextTab: React.FC<TextTabProps> = ({
-  downloadedModels, remoteModels, currentModelPath, selectedModelPath = null, currentRemoteModelId, isAnyLoading, loadingModelId = null, onSelectModel, onUnloadModel, onSelectRemoteModel, onAddServer, onBrowseModels,
+  downloadedModels,
+  remoteModels,
+  currentModelPath,
+  selectedModelPath = null,
+  currentRemoteModelId,
+  isAnyLoading,
+  loadingModelId = null,
+  onSelectModel,
+  onUnloadModel,
+  onSelectRemoteModel,
+  onAddServer,
+  onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
@@ -35,7 +51,9 @@ export const TextTab: React.FC<TextTabProps> = ({
   // activeModelService uses to register the resident's sizeMB, so this label and the residency
   // chip on the manager sheet agree for the identical loaded model (they diverged: fixed 1.5×
   // here vs 2.2× on a GPU/NPU backend there — device 2026-07-14).
-  const ramMultiplier = textOverheadMultiplier(useAppStore(s => s.settings?.inferenceBackend));
+  const ramMultiplier = textOverheadMultiplier(
+    useAppStore(s => s.settings?.inferenceBackend),
+  );
   // "Loaded" drives the Currently-Loaded + Unload section (only meaningful once a model
   // is actually in memory). "Active" also counts the selected-but-not-yet-loaded model
   // so the switcher reads "Switch Model" and highlights the active choice under deferred
@@ -43,7 +61,9 @@ export const TextTab: React.FC<TextTabProps> = ({
   const hasLoaded = currentModelPath !== null || currentRemoteModelId !== null;
   const activeLocalPath = currentModelPath ?? selectedModelPath;
   const hasActive = activeLocalPath !== null || currentRemoteModelId !== null;
-  const activeLocalModel = downloadedModels.find(m => m.filePath === currentModelPath);
+  const activeLocalModel = downloadedModels.find(
+    m => m.filePath === currentModelPath,
+  );
 
   // Find active remote model info
   const activeRemoteModelInfo = useMemo(() => {
@@ -65,16 +85,36 @@ export const TextTab: React.FC<TextTabProps> = ({
           </View>
           <View style={styles.loadedModelItem} testID="currently-loaded-model">
             <View style={styles.loadedModelInfo}>
-              <Text style={styles.loadedModelName} numberOfLines={1} testID="currently-loaded-model-name">
-                {activeLocalModel?.name || activeRemoteModelInfo?.model?.name || 'Unknown'}
+              <Text
+                style={styles.loadedModelName}
+                numberOfLines={1}
+                testID="currently-loaded-model-name"
+              >
+                {activeLocalModel?.name ||
+                  activeRemoteModelInfo?.model?.name ||
+                  'Unknown'}
               </Text>
-              <Text style={styles.loadedModelMeta} testID="currently-loaded-model-ram">
+              <Text
+                style={styles.loadedModelMeta}
+                testID="currently-loaded-model-ram"
+              >
                 {activeLocalModel
-                  ? `${activeLocalModel.quantization} • ${hardwareService.formatModelSize(activeLocalModel)} • ${hardwareService.formatModelRam(activeLocalModel, ramMultiplier)} RAM`
+                  ? `${
+                      activeLocalModel.quantization
+                    } • ${hardwareService.formatModelSize(
+                      activeLocalModel,
+                    )} • ${hardwareService.formatModelRam(
+                      activeLocalModel,
+                      ramMultiplier,
+                    )} RAM`
                   : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
-            <TouchableOpacity style={styles.unloadButton} onPress={onUnloadModel} disabled={isAnyLoading}>
+            <TouchableOpacity
+              style={styles.unloadButton}
+              onPress={onUnloadModel}
+              disabled={isAnyLoading}
+            >
               <Icon name="power" size={16} color={colors.error} />
               <Text style={styles.unloadButtonText}>Unload</Text>
             </TouchableOpacity>
@@ -82,23 +122,51 @@ export const TextTab: React.FC<TextTabProps> = ({
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>{hasActive ? 'Switch Model' : 'Available Models'}</Text>
+      <Text style={styles.sectionTitle}>
+        {hasActive ? 'Switch Model' : 'Available Models'}
+      </Text>
 
       {/* Empty state when no models at all */}
       {downloadedModels.length === 0 && remoteModels.length === 0 && (
         <View style={styles.emptyState}>
           <Icon name="package" size={40} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>No Text Models</Text>
-          <Text style={styles.emptyText}>Download models from the Models tab</Text>
+          <Text style={styles.emptyText}>
+            Download models from the Models tab
+          </Text>
           <View style={localStyles.emptyActions}>
-            <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.border }]} onPress={onAddServer} disabled={isAnyLoading}>
+            <TouchableOpacity
+              style={[localStyles.actionButton, { borderColor: colors.border }]}
+              onPress={onAddServer}
+              disabled={isAnyLoading}
+            >
               <Icon name="wifi" size={14} color={colors.textSecondary} />
-              <Text style={[localStyles.actionButtonText, { color: colors.textSecondary }]}>Add Remote Server</Text>
+              <Text
+                style={[
+                  localStyles.actionButtonText,
+                  { color: colors.textSecondary },
+                ]}
+              >
+                Add Remote Server
+              </Text>
             </TouchableOpacity>
             {onBrowseModels && (
-              <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.primary }]} onPress={onBrowseModels}>
+              <TouchableOpacity
+                style={[
+                  localStyles.actionButton,
+                  { borderColor: colors.primary },
+                ]}
+                onPress={onBrowseModels}
+              >
                 <Icon name="download" size={14} color={colors.primary} />
-                <Text style={[localStyles.actionButtonText, { color: colors.primary }]}>Browse Models</Text>
+                <Text
+                  style={[
+                    localStyles.actionButtonText,
+                    { color: colors.primary },
+                  ]}
+                >
+                  Browse Models
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -112,19 +180,24 @@ export const TextTab: React.FC<TextTabProps> = ({
             <Icon name="hard-drive" size={14} color={colors.textMuted} />
             <Text style={styles.sectionSubTitle}>Local Models</Text>
           </View>
-          {downloadedModels.map((model) => {
+          {downloadedModels.map(model => {
             const isLoaded = currentModelPath === model.filePath;
             // The selected-but-not-loaded model is highlighted as active, but stays
             // tappable so tapping it actually loads it (load-on-tap).
             // Don't highlight a deferred-local selection while a remote model is
             // current — otherwise both rows render active after a local→remote switch.
-            const isSelected = currentRemoteModelId === null && !currentModelPath && selectedModelPath === model.filePath;
+            const isSelected =
+              currentRemoteModelId === null &&
+              !currentModelPath &&
+              selectedModelPath === model.filePath;
             // While a load is in flight, the highlight + spinner + (suppressed) checkmark all follow the
             // row being loaded — not the model that's still resident. So tapping B moves the selection to
             // B immediately, instead of leaving A highlighted until the load finishes (device 2026-07-14).
             const isLoadingThis = loadingModelId === model.id;
             const loadInProgress = loadingModelId != null;
-            const isActive = loadInProgress ? isLoadingThis : (isLoaded || isSelected);
+            const isActive = loadInProgress
+              ? isLoadingThis
+              : isLoaded || isSelected;
             return (
               <ModelRow
                 key={model.id}
@@ -132,7 +205,10 @@ export const TextTab: React.FC<TextTabProps> = ({
                 name={model.name}
                 size={hardwareService.formatModelSize(model)}
                 quant={model.quantization}
-                isVision={model.engine === 'llama' && model.isVisionModel}
+                isVision={
+                  model.engine === 'llama' &&
+                  predictGgufCapabilities(model).vision
+                }
                 isActive={isActive}
                 isLoaded={isLoaded && !loadInProgress}
                 loading={isLoadingThis}
@@ -151,17 +227,26 @@ export const TextTab: React.FC<TextTabProps> = ({
             <Icon name="wifi" size={14} color={colors.textMuted} />
             <Text style={styles.sectionSubTitle}>{serverName}</Text>
           </View>
-          {models.map((model) => {
+          {models.map(model => {
             const isCurrent = currentRemoteModelId === model.id;
             return (
               <TouchableOpacity
                 key={model.id}
-                style={[styles.modelItem, isCurrent && styles.modelItemSelectedRemote]}
+                style={[
+                  styles.modelItem,
+                  isCurrent && styles.modelItemSelectedRemote,
+                ]}
                 onPress={() => onSelectRemoteModel(model, serverId)}
                 disabled={isAnyLoading || isCurrent}
               >
                 <View style={styles.modelInfo}>
-                  <Text style={[styles.modelName, isCurrent && styles.modelNameSelectedRemote]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.modelName,
+                      isCurrent && styles.modelNameSelectedRemote,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {model.name}
                   </Text>
                   <View style={styles.modelMeta}>

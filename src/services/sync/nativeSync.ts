@@ -107,6 +107,8 @@ export interface NativeSync {
   peerLink(deviceId: string): PeerLink;
   /** Report a fact about a peer. The host never decides what it means. */
   notePeerLink(deviceId: string, event: PeerLinkEvent): void;
+  /** Reconsider visible peers after Keygen supplies a fresh personal-mesh roster. */
+  noteRosterChanged(): void;
 }
 
 /** Construct (but don't start) the mobile Sync stack for a given local device. */
@@ -382,6 +384,7 @@ export function createNativeSync(
     isPaired: deviceId => engine.isPaired(deviceId),
     peerLink: deviceId => orchestrator.peerLink(deviceId),
     notePeerLink: (deviceId, event) => orchestrator.notePeerLink(deviceId, event),
+    noteRosterChanged: () => orchestrator.noteRosterChanged(),
   };
 }
 

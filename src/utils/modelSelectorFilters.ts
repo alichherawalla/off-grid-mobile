@@ -14,6 +14,18 @@ export function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean 
   return model.id.startsWith('recovered_');
 }
 
+function isWhisperTextModel(model: DownloadedModel): boolean {
+  return (
+    model.id.startsWith('whisper-') ||
+    (model.fileName?.startsWith('ggml-') === true &&
+      model.fileName.endsWith('.bin'))
+  );
+}
+
+export function isExcludedTextModel(model: DownloadedModel): boolean {
+  return isSuspiciousRecoveredTextModel(model) || isWhisperTextModel(model);
+}
+
 /**
  * SDXL (apple/coreml-stable-diffusion-xl-base-ios) is unsupported on iOS: its Core ML runtime
  * footprint is ~7 GB of DIRTY (un-pageable) memory, which jetsams even a 12 GB iPhone 17 Pro Max

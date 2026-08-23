@@ -1,5 +1,12 @@
 import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Animated,
+  StyleSheet,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../../components/AppSheet';
 import { Button, ModelRow } from '../../../components';
@@ -11,6 +18,7 @@ import { getMmProjFileSize } from '../../../utils/modelHelpers';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../../types';
 import { ModelPickerType, LoadingState } from '../hooks/useHomeScreen';
 import { useRemoteServerStore } from '../../../stores';
+import { predictGgufCapabilities } from '../../../utils/ggufCapabilities';
 
 type Props = {
   pickerType: ModelPickerType;
@@ -39,29 +47,62 @@ type Props = {
 
 type ImageTabColors = ReturnType<typeof useTheme>['colors'];
 type ImageTabStyles = ReturnType<typeof createStyles>;
-type ImageTabProps = Pick<Props, 'downloadedImageModels' | 'activeImageModelId' | 'memoryInfo' | 'loadingState' | 'onUnloadImageModel' | 'onSelectImageModel' | 'onBrowseModels'> & { colors: ImageTabColors; styles: ImageTabStyles };
+type ImageTabProps = Pick<
+  Props,
+  | 'downloadedImageModels'
+  | 'activeImageModelId'
+  | 'memoryInfo'
+  | 'loadingState'
+  | 'onUnloadImageModel'
+  | 'onSelectImageModel'
+  | 'onBrowseModels'
+> & { colors: ImageTabColors; styles: ImageTabStyles };
 
-const ImageTabContent: React.FC<ImageTabProps> = ({ downloadedImageModels, activeImageModelId, memoryInfo, loadingState, onUnloadImageModel, onSelectImageModel, onBrowseModels, colors, styles }) => {
+const ImageTabContent: React.FC<ImageTabProps> = ({
+  downloadedImageModels,
+  activeImageModelId,
+  memoryInfo,
+  loadingState,
+  onUnloadImageModel,
+  onSelectImageModel,
+  onBrowseModels,
+  colors,
+  styles,
+}) => {
   if (downloadedImageModels.length === 0) {
     return (
       <View style={styles.emptyPicker}>
         <Text style={styles.emptyPickerText}>No image models available</Text>
-        <Button title="Browse Models" variant="outline" size="small" onPress={() => onBrowseModels('image')} />
+        <Button
+          title="Browse Models"
+          variant="outline"
+          size="small"
+          onPress={() => onBrowseModels('image')}
+        />
       </View>
     );
   }
   return (
     <>
       {activeImageModelId && (
-        <TouchableOpacity style={[styles.unloadButton, localStyles.unloadButtonMargin]} onPress={onUnloadImageModel} disabled={loadingState.isLoading}>
+        <TouchableOpacity
+          style={[styles.unloadButton, localStyles.unloadButtonMargin]}
+          onPress={onUnloadImageModel}
+          disabled={loadingState.isLoading}
+        >
           <Icon name="power" size={16} color={colors.error} />
           <Text style={styles.unloadButtonText}>Unload current model</Text>
         </TouchableOpacity>
       )}
-      {downloadedImageModels.map((model) => {
+      {downloadedImageModels.map(model => {
         const estimatedMemoryGB = (model.size * 1.8) / (1024 * 1024 * 1024);
         // Owned verdict (DR3 fix): file vs the device-tier budget of TOTAL RAM — never instantaneous free RAM.
-        const memoryFits = memoryInfo ? !fileExceedsBudget(model.size, memoryInfo.memoryTotal / (1024 * 1024 * 1024)) : true;
+        const memoryFits = memoryInfo
+          ? !fileExceedsBudget(
+              model.size,
+              memoryInfo.memoryTotal / (1024 * 1024 * 1024),
+            )
+          : true;
         return (
           <ModelRow
             key={model.id}
@@ -69,7 +110,9 @@ const ImageTabContent: React.FC<ImageTabProps> = ({ downloadedImageModels, activ
             name={model.name}
             size={hardwareService.formatBytes(model.size)}
             quant={model.style || 'Image'}
-            ramHint={`~${estimatedMemoryGB.toFixed(1)} GB RAM${memoryFits ? '' : ' (may not fit)'}`}
+            ramHint={`~${estimatedMemoryGB.toFixed(1)} GB RAM${
+              memoryFits ? '' : ' (may not fit)'
+            }`}
             isActive={activeImageModelId === model.id}
             isLoaded={activeImageModelId === model.id}
             variant="image"
@@ -110,20 +153,26 @@ export const ModelPickerSheet: React.FC<Props> = ({
   const styles = useThemedStyles(createStyles);
   const pulseAnim = React.useRef(new Animated.Value(0)).current;
 
-  const servers = useRemoteServerStore((s) => s.servers);
-  const activeServerId = useRemoteServerStore((s) => s.activeServerId);
+  const servers = useRemoteServerStore(s => s.servers);
+  const activeServerId = useRemoteServerStore(s => s.activeServerId);
   const remoteModelGroups = useMemo(() => {
-    const groups: Record<string, { serverId: string; serverName: string; models: RemoteModel[] }> = {};
+    const groups: Record<
+      string,
+      { serverId: string; serverName: string; models: RemoteModel[] }
+    > = {};
     for (const model of remoteTextModels) {
       if (!groups[model.serverId]) {
-        const server = servers.find((s) => s.id === model.serverId);
-        groups[model.serverId] = { serverId: model.serverId, serverName: server?.name || 'Remote Server', models: [] };
+        const server = servers.find(s => s.id === model.serverId);
+        groups[model.serverId] = {
+          serverId: model.serverId,
+          serverName: server?.name || 'Remote Server',
+          models: [],
+        };
       }
       groups[model.serverId].models.push(model);
     }
     return Object.values(groups);
   }, [remoteTextModels, servers]);
-
 
   const highlightBorderColor = pulseAnim.interpolate({
     inputRange: [0, 1],
@@ -137,25 +186,51 @@ export const ModelPickerSheet: React.FC<Props> = ({
       title={pickerType === 'text' ? 'Text Models' : 'Image Models'}
       snapPoints={['70%']}
     >
-      <ScrollView style={styles.modalScroll} contentContainerStyle={localStyles.scrollContent}>
+      <ScrollView
+        style={styles.modalScroll}
+        contentContainerStyle={localStyles.scrollContent}
+      >
         {pickerType === 'text' && (
           <>
             {downloadedModels.length === 0 && remoteTextModels.length === 0 ? (
               <View style={styles.emptyPicker}>
-                <Text style={styles.emptyPickerText}>No text models available</Text>
+                <Text style={styles.emptyPickerText}>
+                  No text models available
+                </Text>
                 <View style={localStyles.emptyActions}>
-                  <Button title="Add Remote Server" variant="outline" size="small" onPress={() => { onClose(); onAddServer?.(); }} />
-                  <Button title="Browse Models" variant="outline" size="small" onPress={() => onBrowseModels('text')} />
+                  <Button
+                    title="Add Remote Server"
+                    variant="outline"
+                    size="small"
+                    onPress={() => {
+                      onClose();
+                      onAddServer?.();
+                    }}
+                  />
+                  <Button
+                    title="Browse Models"
+                    variant="outline"
+                    size="small"
+                    onPress={() => onBrowseModels('text')}
+                  />
                 </View>
               </View>
             ) : (
               <>
                 <View style={localStyles.actionRow}>
-                  {(activeModelId || activeRemoteTextModelId) ? (
+                  {activeModelId || activeRemoteTextModelId ? (
                     <TouchableOpacity
                       testID="unload-text-model-button"
-                      style={[styles.unloadButton, localStyles.actionRowButton, localStyles.iconOnlyButton]}
-                      onPress={activeRemoteTextModelId ? onUnloadRemoteTextModel : onUnloadTextModel}
+                      style={[
+                        styles.unloadButton,
+                        localStyles.actionRowButton,
+                        localStyles.iconOnlyButton,
+                      ]}
+                      onPress={
+                        activeRemoteTextModelId
+                          ? onUnloadRemoteTextModel
+                          : onUnloadTextModel
+                      }
                       disabled={loadingState.isLoading}
                     >
                       <Icon name="power" size={16} color={colors.error} />
@@ -165,23 +240,42 @@ export const ModelPickerSheet: React.FC<Props> = ({
                   )}
                   <TouchableOpacity
                     testID="add-server-button"
-                    style={[styles.unloadButton, localStyles.actionRowButton, localStyles.addServerButton]}
-                    onPress={() => { onClose(); onAddServer?.(); }}
+                    style={[
+                      styles.unloadButton,
+                      localStyles.actionRowButton,
+                      localStyles.addServerButton,
+                    ]}
+                    onPress={() => {
+                      onClose();
+                      onAddServer?.();
+                    }}
                   >
                     <Icon name="plus" size={16} color={colors.primary} />
-                    <Text style={[styles.unloadButtonText, { color: colors.primary }]}>Add Remote Server</Text>
+                    <Text
+                      style={[
+                        styles.unloadButtonText,
+                        { color: colors.primary },
+                      ]}
+                    >
+                      Add Remote Server
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
                 {downloadedModels.length > 0 && (
                   <>
                     <Text style={styles.sectionLabel}>Local Models</Text>
-                    {downloadedModels.map((model) => {
-                      const totalSize = model.fileSize + getMmProjFileSize(model);
-                      const estimatedMemoryGB = (totalSize * 1.5) / (1024 * 1024 * 1024);
+                    {downloadedModels.map(model => {
+                      const totalSize =
+                        model.fileSize + getMmProjFileSize(model);
+                      const estimatedMemoryGB =
+                        (totalSize * 1.5) / (1024 * 1024 * 1024);
                       // Owned verdict (DR3 fix): file vs the device-tier budget of TOTAL RAM — never instantaneous free RAM.
                       const memoryFits = memoryInfo
-                        ? !fileExceedsBudget(totalSize, memoryInfo.memoryTotal / (1024 * 1024 * 1024))
+                        ? !fileExceedsBudget(
+                            totalSize,
+                            memoryInfo.memoryTotal / (1024 * 1024 * 1024),
+                          )
                         : true;
                       const isHighlighted = false;
                       const modelItem = (
@@ -190,8 +284,13 @@ export const ModelPickerSheet: React.FC<Props> = ({
                           name={model.name}
                           size={hardwareService.formatModelSize(model)}
                           quant={model.quantization}
-                          isVision={model.engine === 'llama' && model.isVisionModel}
-                          ramHint={`~${estimatedMemoryGB.toFixed(1)} GB RAM${memoryFits ? '' : ' (may not fit)'}`}
+                          isVision={
+                            model.engine === 'llama' &&
+                            predictGgufCapabilities(model).vision
+                          }
+                          ramHint={`~${estimatedMemoryGB.toFixed(1)} GB RAM${
+                            memoryFits ? '' : ' (may not fit)'
+                          }`}
                           isActive={activeModelId === model.id}
                           isLoaded={activeModelId === model.id}
                           onPress={() => onSelectTextModel(model)}
@@ -200,9 +299,20 @@ export const ModelPickerSheet: React.FC<Props> = ({
                       );
                       if (isHighlighted) {
                         return (
-                          <Animated.View key={model.id} style={[localStyles.highlightBorder, { borderColor: highlightBorderColor }]}>
+                          <Animated.View
+                            key={model.id}
+                            style={[
+                              localStyles.highlightBorder,
+                              { borderColor: highlightBorderColor },
+                            ]}
+                          >
                             {modelItem}
-                            <Text style={[localStyles.highlightHint, { color: colors.textSecondary }]}>
+                            <Text
+                              style={[
+                                localStyles.highlightHint,
+                                { color: colors.textSecondary },
+                              ]}
+                            >
                               Tap this model to load it for chatting
                             </Text>
                           </Animated.View>
@@ -219,26 +329,41 @@ export const ModelPickerSheet: React.FC<Props> = ({
                       <Icon name="wifi" size={14} color={colors.textMuted} />
                       <Text style={styles.sectionLabel}>{serverName}</Text>
                     </View>
-                    {models.map((model) => (
+                    {models.map(model => (
                       <TouchableOpacity
                         key={`${model.serverId}-${model.id}`}
                         testID="remote-model-item"
-                        style={[styles.pickerItem, activeRemoteTextModelId === model.id && styles.pickerItemActive]}
+                        style={[
+                          styles.pickerItem,
+                          activeRemoteTextModelId === model.id &&
+                            styles.pickerItemActive,
+                        ]}
                         onPress={() => onSelectRemoteTextModel(model)}
                         disabled={loadingState.isLoading}
                       >
                         <View style={styles.pickerItemInfo}>
                           <Text style={styles.pickerItemName}>
                             {model.name}{' '}
-                            <Icon name="cloud" size={14} color={colors.primary} />
+                            <Icon
+                              name="cloud"
+                              size={14}
+                              color={colors.primary}
+                            />
                           </Text>
                           <Text style={styles.pickerItemMeta}>
-                            {[model.capabilities.supportsVision && 'Vision', model.capabilities.supportsToolCalling && 'Tools', model.capabilities.supportsThinking && 'Thinking'].filter(Boolean).join(' · ')}
+                            {[
+                              model.capabilities.supportsVision && 'Vision',
+                              model.capabilities.supportsToolCalling && 'Tools',
+                              model.capabilities.supportsThinking && 'Thinking',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </Text>
                         </View>
-                        {activeRemoteTextModelId === model.id && activeServerId === model.serverId && (
-                          <Icon name="check" size={18} color={colors.text} />
-                        )}
+                        {activeRemoteTextModelId === model.id &&
+                          activeServerId === model.serverId && (
+                            <Icon name="check" size={18} color={colors.text} />
+                          )}
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -263,7 +388,10 @@ export const ModelPickerSheet: React.FC<Props> = ({
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.browseMoreButton} onPress={() => onBrowseModels(pickerType ?? 'text')}>
+      <TouchableOpacity
+        style={styles.browseMoreButton}
+        onPress={() => onBrowseModels(pickerType ?? 'text')}
+      >
         <Text style={styles.browseMoreText}>Browse more models</Text>
         <Icon name="arrow-right" size={16} color={colors.textMuted} />
       </TouchableOpacity>
@@ -275,7 +403,12 @@ const TRANSPARENT = 'transparent' as const;
 
 const localStyles = StyleSheet.create({
   highlightBorder: { borderWidth: 2, borderRadius: 10 },
-  highlightHint: { fontSize: 11, fontStyle: 'italic', paddingHorizontal: 12, paddingBottom: 4 },
+  highlightHint: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
   actionRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   actionRowButton: { flex: 1 },
   iconOnlyButton: { flex: 1 },
@@ -283,5 +416,11 @@ const localStyles = StyleSheet.create({
   unloadButtonMargin: { marginBottom: 12 },
   emptyActions: { flexDirection: 'row' as const, gap: 10 },
   scrollContent: { paddingBottom: 16 },
-  serverHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 8 },
+  serverHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    marginBottom: 8,
+  },
 });

@@ -177,20 +177,21 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     }
   }, []);
 
-  const startRecording = useCallback(async () => {
-    logger.log('[Whisper] startRecording called');
-    logger.log('[Whisper] Model loaded:', whisperService.isModelLoaded());
-    logger.log('[Whisper] Current isRecording state:', isRecording);
+  /**
+   * A start is IN FLIGHT. Synchronous, and set before the first await.
+   *
+   * `isRecording` is React state read from a closure, so a second ask in the same tick still sees
+   * `false`; `whisperService.isTranscribing` is only set after an await for permissions. Two asks fit
+   * inside that window, both clear the old guard, and the native `transcribeRealtime` is entered twice -
+   * which is the "State: -100" collision. A plain ref closes the window because it needs no render.
+   *
+   * Distinct from `startNonce`, which answers "was this start superseded" AFTER the await. This answers
+   * "is one already running" BEFORE it.
+   */
+  const startInFlight = useRef(false);
 
-    // Already recording → absorb the redundant press. Previously this stopped and
-    // then re-started, entering the native transcribeRealtime a SECOND time while the
-    // first session was still tearing down → the "State: -100" collision (B12). A
-    // double-tap must be ONE clean recording, so ignore the extra start.
-    if (isRecording || whisperService.isCurrentlyTranscribing()) {
-      logger.log('[Whisper] Already recording — ignoring redundant start (no second session)');
-      return;
-    }
-
+  /** The start itself, once it is known to be the only one running. */
+  const beginRecording = useCallback(async () => {
     // Capture this start's intent BEFORE the async model-load gap. If stop/cancel bumps the nonce while
     // we await, this start has been superseded → abort, or we'd activate a ghost recording no stop reaches.
     const currentNonce = ++startNonce.current;
@@ -274,7 +275,36 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
         Vibration.vibrate([0, 50, 50, 50]);
       }
     }
-  }, [ensureModelReady, isRecording, stopRecording, finalizeTranscription]);
+  }, [ensureModelReady, stopRecording, finalizeTranscription]);
+
+  const startRecording = useCallback(async () => {
+    logger.log('[Whisper] startRecording called');
+    logger.log('[Whisper] Model loaded:', whisperService.isModelLoaded());
+    logger.log('[Whisper] Current isRecording state:', isRecording);
+
+    // Already recording → absorb the redundant press. Previously this stopped and
+    // then re-started, entering the native transcribeRealtime a SECOND time while the
+    // first session was still tearing down → the "State: -100" collision (B12). A
+    // double-tap must be ONE clean recording, so ignore the extra start.
+    if (
+      startInFlight.current ||
+      isRecording ||
+      whisperService.isCurrentlyTranscribing()
+    ) {
+      logger.log('[Whisper] Already recording — ignoring redundant start (no second session)');
+      return;
+    }
+    startInFlight.current = true;
+    try {
+      await beginRecording();
+    } finally {
+      // However it ended - recording, superseded, refused, thrown - it is no longer in flight. On the
+      // success path the state guards above have taken over by now; leaving this set would make a
+      // recorder that failed to start refuse every later attempt.
+      startInFlight.current = false;
+    }
+  }, [isRecording, beginRecording]);
+
 
   return {
     isRecording,

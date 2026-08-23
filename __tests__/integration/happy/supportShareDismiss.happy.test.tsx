@@ -49,7 +49,7 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     // GESTURE → TRIGGER: the 2nd text generation. The REAL checkSharePrompt increments the count to 2,
     // shouldShowSharePrompt(2) is true, and (since not engaged) emits the prompt after the real delay.
     await h.send('second prompt', { text: 'reply two' });
-    await h.rtl.waitFor(() => { expect(h.view!.getByText(SHEET_TITLE)).toBeTruthy(); }, { timeout: 4000 });
+    await h.rtl.waitFor(() => { expect(h.view!.getByText(SHEET_TITLE)).toBeTruthy(); }, { timeout: 15000 });
     expect(h.view!.getByText('Share on X')).toBeTruthy();
 
     // GESTURE: tap "Share on X" — the REAL handleEngage sets hasEngagedSharePrompt, opens the X intent
@@ -57,7 +57,11 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     h.rtl.fireEvent.press(h.view!.getByText('Share on X'));
 
     // ASSERT (1): the sheet is dismissed after the share. Its title is gone from the rendered tree.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(SHEET_TITLE)).toBeNull(); }, { timeout: 4000 });
+    //
+    // 15s, not 4s: this passes locally every time and failed on a GitHub runner where this ONE test
+    // took 9.6s. The assertion is unchanged - the wait just stops racing the hardware. It only surfaced
+    // now because CI never reached jest before; the typecheck gate died first on an unbuilt package.
+    await h.rtl.waitFor(() => { expect(h.view!.queryByText(SHEET_TITLE)).toBeNull(); }, { timeout: 15000 });
     // The X compose intent was actually handed to the OS (return-from-X boundary).
     await h.rtl.waitFor(() => { expect(openURL).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/x\.com\/intent\/post/)); });
 
@@ -69,6 +73,32 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     await h.settle(1700); // past the delay again — give any (erroneous) re-emit time to render the sheet
 
     // ASSERT (2): the sheet does NOT re-appear (no re-nag) — because the user already engaged.
+    expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+  }, 60000);
+
+  it("llama.cpp: Don't show again dismisses the sheet and keeps it hidden in a new session", async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.render();
+
+    await h.send('first opt-out prompt', { text: 'reply one' });
+    expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+
+    await h.send('second opt-out prompt', { text: 'reply two' });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByText("Don't show again")).toBeTruthy();
+    }, { timeout: 15000 });
+
+    h.rtl.fireEvent.press(h.view!.getByText("Don't show again"));
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+    }, { timeout: 15000 });
+
+    // A relaunch resets the in-memory session guard. The persisted user choice is the only reason
+    // a later generation stays quiet, which is the exact behavior this action promises.
+    const { resetSharePromptSession } = require('../../../src/utils/sharePrompt');
+    resetSharePromptSession();
+    await h.send('new session prompt', { text: 'reply three' });
+    await h.settle(1700);
     expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
   }, 60000);
 });

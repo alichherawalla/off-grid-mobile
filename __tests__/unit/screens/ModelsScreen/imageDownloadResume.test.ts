@@ -124,7 +124,15 @@ describe('resumeImageDownload', () => {
 
     mockGetImageModelsDirectory.mockReturnValue(imageModelsDir);
     mockedRNFS.exists.mockImplementation(async (path: string) => existingPaths.has(path));
-    mockedRNFS.readDir.mockImplementation(async (path: string) => dirEntries[path] ?? []);
+    mockedRNFS.readDir.mockImplementation(async (path: string) => {
+      if (dirEntries[path]) return dirEntries[path];
+      return [...existingPaths]
+        .filter(candidate => candidate.substring(0, candidate.lastIndexOf('/')) === path)
+        .map(candidate => ({
+          ...makeFileItem(candidate),
+          size: statSizes[candidate] ?? 1,
+        }));
+    });
     mockedRNFS.stat.mockImplementation(async (path: string) => ({ size: statSizes[path] ?? 0 } as any));
     mockedRNFS.read.mockImplementation(async (path: string) => headers[path] ?? '');
     mockedRNFS.mkdir.mockImplementation(async (path: string) => {

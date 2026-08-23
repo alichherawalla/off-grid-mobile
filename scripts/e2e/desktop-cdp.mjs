@@ -16,6 +16,7 @@
  */
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { selectMainOffGridPage } from './desktop-target.mjs';
 
 const run = promisify(execFile);
 
@@ -83,7 +84,7 @@ export const connectDesktop = async ({ relaunch = false } = {}) => {
   const tunnel = await openTunnel();
 
   const targets = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
-  const page = targets.find((t) => t.type === 'page' && /Off Grid/i.test(t.title ?? ''));
+  const page = selectMainOffGridPage(targets);
   if (!page) throw new Error(`no Off Grid page target. Saw: ${targets.map((t) => t.title).join(' | ')}`);
 
   const socket = new WebSocket(page.webSocketDebuggerUrl);

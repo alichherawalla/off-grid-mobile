@@ -47,7 +47,7 @@ describe('ChatMessage', () => {
   describe('basic rendering', () => {
     it('renders user message', () => {
       const { getByText } = render(
-        <ChatMessage message={createUserMessage('Hello from user')} />
+        <ChatMessage message={createUserMessage('Hello from user')} />,
       );
 
       expect(getByText('Hello from user')).toBeTruthy();
@@ -55,7 +55,9 @@ describe('ChatMessage', () => {
 
     it('renders assistant message', () => {
       const { getByText } = render(
-        <ChatMessage message={createAssistantMessage('Hello from assistant')} />
+        <ChatMessage
+          message={createAssistantMessage('Hello from assistant')}
+        />,
       );
 
       expect(getByText('Hello from assistant')).toBeTruthy();
@@ -63,7 +65,7 @@ describe('ChatMessage', () => {
 
     it('renders system message', () => {
       const { getByText } = render(
-        <ChatMessage message={createSystemMessage('System notification')} />
+        <ChatMessage message={createSystemMessage('System notification')} />,
       );
 
       expect(getByText('System notification')).toBeTruthy();
@@ -76,7 +78,9 @@ describe('ChatMessage', () => {
         isSystemInfo: true,
       });
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByTestId('system-info-message')).toBeTruthy();
       expect(getByText('Model loaded successfully')).toBeTruthy();
@@ -84,10 +88,13 @@ describe('ChatMessage', () => {
 
     it('renders empty content gracefully', () => {
       const message = createMessage({ content: '' });
-      const { queryByText, getByTestId } = render(<ChatMessage message={message} />);
+      const { queryByText, getByTestId } = render(
+        <ChatMessage message={message} />,
+      );
 
       // Should not crash and should render container
-      const containerId = message.role === 'user' ? 'user-message' : 'assistant-message';
+      const containerId =
+        message.role === 'user' ? 'user-message' : 'assistant-message';
       expect(getByTestId(containerId)).toBeTruthy();
       // Should not show "undefined" or "null" as text
       expect(queryByText('undefined')).toBeNull();
@@ -118,6 +125,57 @@ describe('ChatMessage', () => {
 
       expect(getByTestId('assistant-message')).toBeTruthy();
     });
+
+    it('renders synced tool results below the assistant bubble', () => {
+      const message = createMessage({
+        role: 'assistant',
+        content: 'Here is what I found.',
+        toolArtifacts: [
+          { name: 'web_search', result: 'A result from the web.' },
+        ],
+      });
+      const view = render(<ChatMessage message={message} />);
+      const tree = JSON.stringify(view.toJSON());
+
+      expect(tree.indexOf('message-bubble')).toBeLessThan(
+        tree.indexOf('tool-message'),
+      );
+    });
+
+    it('renders a running synced tool below the partial assistant bubble', () => {
+      const message = createMessage({
+        role: 'assistant',
+        content: 'I will make that image.',
+        isStreaming: true,
+        toolArtifacts: [
+          { name: 'generate_image', result: '', status: 'running' },
+        ],
+      });
+      const view = render(<ChatMessage message={message} isStreaming />);
+      const tree = JSON.stringify(view.toJSON());
+
+      expect(view.getByText('Using generate_image...')).toBeTruthy();
+      expect(tree.indexOf('message-bubble')).toBeLessThan(
+        tree.indexOf('tool-message'),
+      );
+    });
+
+    it('keeps synced tool rows below active thinking', () => {
+      const message = createMessage({
+        role: 'assistant',
+        content: '',
+        reasoningContent: 'I am deciding which source to use next.',
+        isStreaming: true,
+        toolArtifacts: [{ name: 'web_search', result: 'Search complete.' }],
+      });
+      const view = render(<ChatMessage message={message} isStreaming />);
+      const tree = JSON.stringify(view.toJSON());
+
+      expect(view.getAllByText('Thinking...').length).toBeGreaterThan(0);
+      expect(tree.indexOf('message-bubble')).toBeLessThan(
+        tree.indexOf('tool-message'),
+      );
+    });
   });
 
   // ============================================================================
@@ -128,7 +186,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Generating...');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       expect(getByTestId('streaming-cursor')).toBeTruthy();
@@ -138,7 +196,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Complete response');
 
       const { queryByTestId } = render(
-        <ChatMessage message={message} isStreaming={false} />
+        <ChatMessage message={message} isStreaming={false} />,
       );
 
       expect(queryByTestId('streaming-cursor')).toBeNull();
@@ -148,7 +206,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Partial cont');
 
       const { getByText } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       expect(getByText(/Partial cont/)).toBeTruthy();
@@ -158,7 +216,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       expect(getByTestId('streaming-cursor')).toBeTruthy();
@@ -171,10 +229,12 @@ describe('ChatMessage', () => {
   describe('thinking blocks', () => {
     it('renders thinking block from <think> tags', () => {
       const message = createAssistantMessage(
-        '<think>Let me analyze this problem step by step...</think>The answer is 42.'
+        '<think>Let me analyze this problem step by step...</think>The answer is 42.',
       );
 
-      const { getByText, getByTestId } = render(<ChatMessage message={message} />);
+      const { getByText, getByTestId } = render(
+        <ChatMessage message={message} />,
+      );
 
       // Main content should be visible
       expect(getByText(/The answer is 42/)).toBeTruthy();
@@ -184,10 +244,12 @@ describe('ChatMessage', () => {
 
     it('shows Thought process header when thinking is complete', () => {
       const message = createAssistantMessage(
-        '<think>Internal reasoning here</think>Final answer.'
+        '<think>Internal reasoning here</think>Final answer.',
       );
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByTestId('thinking-block-title')).toBeTruthy();
       expect(getByText('Thought process')).toBeTruthy();
@@ -195,10 +257,12 @@ describe('ChatMessage', () => {
 
     it('expands thinking block when toggle is pressed', () => {
       const message = createAssistantMessage(
-        '<think>Step 1: Check input\nStep 2: Process</think>Done!'
+        '<think>Step 1: Check input\nStep 2: Process</think>Done!',
       );
 
-      const { getByTestId, queryByTestId } = render(<ChatMessage message={message} />);
+      const { getByTestId, queryByTestId } = render(
+        <ChatMessage message={message} />,
+      );
 
       // Initially collapsed
       expect(queryByTestId('thinking-block-content')).toBeNull();
@@ -211,12 +275,10 @@ describe('ChatMessage', () => {
     });
 
     it('shows Thinking... header when thinking is incomplete', () => {
-      const message = createAssistantMessage(
-        '<think>Thinking in progress...'
-      );
+      const message = createAssistantMessage('<think>Thinking in progress...');
 
       const { getByTestId, getAllByText } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       // Thinking block exists and shows "Thinking..." in the title
@@ -233,27 +295,33 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       expect(getByTestId('thinking-indicator')).toBeTruthy();
     });
 
     it('handles unclosed think tag gracefully', () => {
-      const message = createAssistantMessage('<think>Still thinking about this...');
+      const message = createAssistantMessage(
+        '<think>Still thinking about this...',
+      );
 
       // Should not crash
       const { getByTestId } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       expect(getByTestId('thinking-block')).toBeTruthy();
     });
 
     it('handles empty think tags', () => {
-      const message = createAssistantMessage('<think></think>Here is the answer.');
+      const message = createAssistantMessage(
+        '<think></think>Here is the answer.',
+      );
 
-      const { getByText, queryByTestId: _queryByTestId } = render(<ChatMessage message={message} />);
+      const { getByText, queryByTestId: _queryByTestId } = render(
+        <ChatMessage message={message} />,
+      );
 
       // Should show the response
       expect(getByText(/Here is the answer/)).toBeTruthy();
@@ -262,7 +330,7 @@ describe('ChatMessage', () => {
 
     it('handles multiple think tags by using first one', () => {
       const message = createAssistantMessage(
-        '<think>First thought</think>Response<think>Second thought</think>'
+        '<think>First thought</think>Response<think>Second thought</think>',
       );
 
       const { getByText } = render(<ChatMessage message={message} />);
@@ -298,7 +366,9 @@ describe('ChatMessage', () => {
       ];
       const message = createUserMessage('Multiple images', { attachments });
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByText('Multiple images')).toBeTruthy();
       expect(getByTestId('message-image-0')).toBeTruthy();
@@ -314,7 +384,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Image', { attachments: [attachment] });
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onImagePress={onImagePress} />
+        <ChatMessage message={message} onImagePress={onImagePress} />,
       );
 
       fireEvent.press(getByTestId('message-attachment-0'));
@@ -333,7 +403,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText, queryByTestId } = render(
-        <ChatMessage message={message} />
+        <ChatMessage message={message} />,
       );
 
       expect(getByTestId('message-attachments')).toBeTruthy();
@@ -355,7 +425,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} />
+        <ChatMessage message={message} />,
       );
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
@@ -396,7 +466,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText, queryByText } = render(
-        <ChatMessage message={message} />
+        <ChatMessage message={message} />,
       );
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
@@ -424,13 +494,21 @@ describe('ChatMessage', () => {
     });
 
     it('renders multiple document attachments', () => {
-      const doc1 = createDocumentAttachment({ fileName: 'file1.txt', fileSize: 100 });
-      const doc2 = createDocumentAttachment({ fileName: 'file2.csv', fileSize: 2048 });
+      const doc1 = createDocumentAttachment({
+        fileName: 'file1.txt',
+        fileSize: 100,
+      });
+      const doc2 = createDocumentAttachment({
+        fileName: 'file2.csv',
+        fileSize: 2048,
+      });
       const message = createUserMessage('Two docs', {
         attachments: [doc1, doc2],
       });
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByTestId('document-badge-0')).toBeTruthy();
       expect(getByTestId('document-badge-1')).toBeTruthy();
@@ -447,28 +525,40 @@ describe('ChatMessage', () => {
     });
 
     it('formats KB file sizes', () => {
-      const doc = createDocumentAttachment({ fileName: 'b.txt', fileSize: 1024 });
+      const doc = createDocumentAttachment({
+        fileName: 'b.txt',
+        fileSize: 1024,
+      });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('1KB')).toBeTruthy();
     });
 
     it('formats MB file sizes', () => {
-      const doc = createDocumentAttachment({ fileName: 'c.txt', fileSize: 1024 * 1024 });
+      const doc = createDocumentAttachment({
+        fileName: 'c.txt',
+        fileSize: 1024 * 1024,
+      });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('1.0MB')).toBeTruthy();
     });
 
     it('formats sub-KB file sizes as bytes', () => {
-      const doc = createDocumentAttachment({ fileName: 'd.txt', fileSize: 500 });
+      const doc = createDocumentAttachment({
+        fileName: 'd.txt',
+        fileSize: 500,
+      });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('500B')).toBeTruthy();
     });
 
     it('formats fractional MB correctly', () => {
-      const doc = createDocumentAttachment({ fileName: 'e.txt', fileSize: 2.5 * 1024 * 1024 });
+      const doc = createDocumentAttachment({
+        fileName: 'e.txt',
+        fileSize: 2.5 * 1024 * 1024,
+      });
       const msg = createUserMessage('', { attachments: [doc] });
       const { getByText } = render(<ChatMessage message={msg} />);
       expect(getByText('2.5MB')).toBeTruthy();
@@ -484,7 +574,9 @@ describe('ChatMessage', () => {
         attachments: [attachment],
       });
 
-      const { getByText, getByTestId } = render(<ChatMessage message={message} />);
+      const { getByText, getByTestId } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByText(/Here is your image/)).toBeTruthy();
       expect(getByTestId('generated-image')).toBeTruthy();
@@ -499,7 +591,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Long press me');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />
+        <ChatMessage message={message} showActions={true} />,
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -513,7 +605,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('No actions');
 
       const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} showActions={false} />
+        <ChatMessage message={message} showActions={false} />,
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -526,7 +618,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Streaming...');
 
       const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} showActions={true} isStreaming={true} />
+        <ChatMessage message={message} showActions={true} isStreaming={true} />,
       );
 
       fireEvent(getByTestId('assistant-message'), 'longPress');
@@ -539,7 +631,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Copy this text');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onCopy={onCopy} showActions={true} />
+        <ChatMessage message={message} onCopy={onCopy} showActions={true} />,
       );
 
       // Open menu
@@ -557,7 +649,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Retry this');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onRetry={onRetry} showActions={true} />
+        <ChatMessage message={message} onRetry={onRetry} showActions={true} />,
       );
 
       // Open menu
@@ -574,7 +666,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Edit me');
 
       const { getByTestId } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open menu
@@ -589,7 +681,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Cannot edit me');
 
       const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open menu
@@ -609,7 +701,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />
+        />,
       );
 
       // Open menu
@@ -628,7 +720,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={false}
           showActions={true}
-        />
+        />,
       );
 
       // Open menu
@@ -647,7 +739,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />
+        />,
       );
 
       // Open menu and generate
@@ -661,7 +753,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />
+        <ChatMessage message={message} showActions={true} />,
       );
 
       // Open menu
@@ -690,7 +782,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByTestId('generation-meta')).toBeTruthy();
@@ -708,7 +800,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText(/Metal.*32L/)).toBeTruthy();
@@ -724,7 +816,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('CPU')).toBeTruthy();
@@ -740,7 +832,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('22.3 tok/s')).toBeTruthy();
@@ -755,7 +847,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText(/TTFT.*0\.45s/)).toBeTruthy();
@@ -770,7 +862,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('Phi-3-mini-Q4_K_M')).toBeTruthy();
@@ -787,7 +879,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('20 steps')).toBeTruthy();
@@ -805,7 +897,7 @@ describe('ChatMessage', () => {
       });
 
       const { queryByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={false} />
+        <ChatMessage message={message} showGenerationDetails={false} />,
       );
 
       expect(queryByTestId('generation-meta')).toBeNull();
@@ -815,7 +907,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('No metadata');
 
       const { getByText, queryByTestId } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       // Should not crash, just show message without metadata
@@ -854,7 +946,9 @@ describe('ChatMessage', () => {
     });
 
     it('handles code blocks', () => {
-      const message = createAssistantMessage('```javascript\nconst x = 1;\n```');
+      const message = createAssistantMessage(
+        '```javascript\nconst x = 1;\n```',
+      );
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -888,10 +982,12 @@ describe('ChatMessage', () => {
   describe('custom thinking label', () => {
     it('renders custom label from __LABEL:...__ marker', () => {
       const message = createAssistantMessage(
-        '<think>__LABEL:Analysis__\nStep 1: Analyzing input data\nStep 2: Processing</think>The result is 42.'
+        '<think>__LABEL:Analysis__\nStep 1: Analyzing input data\nStep 2: Processing</think>The result is 42.',
       );
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByTestId('thinking-block')).toBeTruthy();
       expect(getByText('Analysis')).toBeTruthy();
@@ -911,7 +1007,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText(/2m 5s/)).toBeTruthy();
@@ -922,7 +1018,7 @@ describe('ChatMessage', () => {
     it('uses parsedContent.response for assistant messages', () => {
       const onGenerateImage = jest.fn();
       const message = createAssistantMessage(
-        '<think>Internal reasoning</think>A beautiful mountain landscape'
+        '<think>Internal reasoning</think>A beautiful mountain landscape',
       );
 
       const { getByTestId } = render(
@@ -931,7 +1027,7 @@ describe('ChatMessage', () => {
           onGenerateImage={onGenerateImage}
           canGenerateImage={true}
           showActions={true}
-        />
+        />,
       );
 
       // Open menu
@@ -941,7 +1037,9 @@ describe('ChatMessage', () => {
       fireEvent.press(getByTestId('action-generate-image'));
 
       // Should use the response part (not the thinking block)
-      expect(onGenerateImage).toHaveBeenCalledWith('A beautiful mountain landscape');
+      expect(onGenerateImage).toHaveBeenCalledWith(
+        'A beautiful mountain landscape',
+      );
     });
   });
 
@@ -958,7 +1056,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('150 tokens')).toBeTruthy();
@@ -975,7 +1073,7 @@ describe('ChatMessage', () => {
       });
 
       const { queryByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(queryByText(/\d+ tokens/)).toBeNull();
@@ -992,7 +1090,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open action menu
@@ -1020,7 +1118,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText, getByPlaceholderText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open action menu and press edit
@@ -1054,7 +1152,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open action menu and press edit
@@ -1080,7 +1178,7 @@ describe('ChatMessage', () => {
       const message = createUserMessage('Original text');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />
+        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
       );
 
       // Open action menu and press edit
@@ -1125,7 +1223,7 @@ describe('ChatMessage', () => {
           uri: 'file:///path/to/report.pdf',
           mimeType: 'application/pdf',
           grantPermissions: 'read',
-        })
+        }),
       );
     });
 
@@ -1148,7 +1246,7 @@ describe('ChatMessage', () => {
         expect.objectContaining({
           uri: 'file:///already/prefixed.txt',
           mimeType: 'text/plain',
-        })
+        }),
       );
     });
 
@@ -1171,7 +1269,7 @@ describe('ChatMessage', () => {
         expect.objectContaining({
           uri: 'file://relative/path/to/data.json',
           mimeType: 'application/json',
-        })
+        }),
       );
     });
 
@@ -1214,7 +1312,7 @@ describe('ChatMessage', () => {
       expect(viewDocument).toHaveBeenCalledWith(
         expect.objectContaining({
           mimeType: 'application/octet-stream',
-        })
+        }),
       );
     });
 
@@ -1234,7 +1332,9 @@ describe('ChatMessage', () => {
       const { getByTestId } = render(<ChatMessage message={message} />);
 
       // Should not throw
-      expect(() => fireEvent.press(getByTestId('document-badge-0'))).not.toThrow();
+      expect(() =>
+        fireEvent.press(getByTestId('document-badge-0')),
+      ).not.toThrow();
     });
 
     it('maps known extensions correctly (md, csv, py, js, ts, html, xml)', () => {
@@ -1260,11 +1360,13 @@ describe('ChatMessage', () => {
           attachments: [attachment],
         });
 
-        const { getByTestId, unmount } = render(<ChatMessage message={message} />);
+        const { getByTestId, unmount } = render(
+          <ChatMessage message={message} />,
+        );
         fireEvent.press(getByTestId('document-badge-0'));
 
         expect(viewDocument).toHaveBeenCalledWith(
-          expect.objectContaining({ mimeType: mime })
+          expect.objectContaining({ mimeType: mime }),
         );
         unmount();
       }
@@ -1279,7 +1381,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test message');
 
       const { getByText, getByTestId } = render(
-        <ChatMessage message={message} showActions={true} />
+        <ChatMessage message={message} showActions={true} />,
       );
 
       // Press the ••• button
@@ -1337,7 +1439,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Animated message');
 
       const { getByText } = render(
-        <ChatMessage message={message} animateEntry={true} />
+        <ChatMessage message={message} animateEntry={true} />,
       );
 
       expect(getByText('Animated message')).toBeTruthy();
@@ -1353,9 +1455,7 @@ describe('ChatMessage', () => {
         generationTimeMs: 750,
       });
 
-      const { getByText } = render(
-        <ChatMessage message={message} />
-      );
+      const { getByText } = render(<ChatMessage message={message} />);
 
       expect(getByText('750ms')).toBeTruthy();
     });
@@ -1369,7 +1469,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Test message');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} showActions={true} />
+        <ChatMessage message={message} showActions={true} />,
       );
 
       // Open action menu
@@ -1394,7 +1494,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('Copy me');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} onCopy={onCopy} showActions={true} />
+        <ChatMessage message={message} onCopy={onCopy} showActions={true} />,
       );
 
       // Open menu and copy
@@ -1416,10 +1516,12 @@ describe('ChatMessage', () => {
   describe('thinking block Enhanced label', () => {
     it('shows E icon for Enhanced thinking label', () => {
       const message = createAssistantMessage(
-        '<think>__LABEL:Enhanced Reasoning__\nDeep analysis here</think>The enhanced answer.'
+        '<think>__LABEL:Enhanced Reasoning__\nDeep analysis here</think>The enhanced answer.',
       );
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       expect(getByTestId('thinking-block')).toBeTruthy();
       expect(getByText('Enhanced Reasoning')).toBeTruthy();
@@ -1441,7 +1543,7 @@ describe('ChatMessage', () => {
       });
 
       const { getByText } = render(
-        <ChatMessage message={message} showGenerationDetails={true} />
+        <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
       expect(getByText('GPU')).toBeTruthy();
@@ -1469,7 +1571,9 @@ describe('ChatMessage', () => {
     });
 
     it('renders inline code in finalized assistant messages', () => {
-      const message = createAssistantMessage('Use `console.log()` for debugging');
+      const message = createAssistantMessage(
+        'Use `console.log()` for debugging',
+      );
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1478,7 +1582,7 @@ describe('ChatMessage', () => {
 
     it('renders code blocks in finalized assistant messages', () => {
       const message = createAssistantMessage(
-        '```\nfunction hello() {\n  return "world";\n}\n```'
+        '```\nfunction hello() {\n  return "world";\n}\n```',
       );
 
       const { getByText } = render(<ChatMessage message={message} />);
@@ -1496,7 +1600,9 @@ describe('ChatMessage', () => {
     });
 
     it('renders lists in finalized assistant messages', () => {
-      const message = createAssistantMessage('- Item one\n- Item two\n- Item three');
+      const message = createAssistantMessage(
+        '- Item one\n- Item two\n- Item three',
+      );
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1509,7 +1615,7 @@ describe('ChatMessage', () => {
       const message = createAssistantMessage('This is **bold** and *italic*');
 
       const { getByTestId, getByText } = render(
-        <ChatMessage message={message} isStreaming={true} />
+        <ChatMessage message={message} isStreaming={true} />,
       );
 
       // During streaming, markdown is still rendered
@@ -1530,10 +1636,12 @@ describe('ChatMessage', () => {
 
     it('renders markdown in thinking block content when expanded', () => {
       const message = createAssistantMessage(
-        '<think>Step 1: Check the `input` value\nStep 2: **Process** it</think>Done!'
+        '<think>Step 1: Check the `input` value\nStep 2: **Process** it</think>Done!',
       );
 
-      const { getByTestId, getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
       // Expand thinking block
       fireEvent.press(getByTestId('thinking-block-toggle'));
@@ -1544,7 +1652,9 @@ describe('ChatMessage', () => {
     });
 
     it('renders blockquotes in finalized assistant messages', () => {
-      const message = createAssistantMessage('> This is a quote\n\nAfter the quote');
+      const message = createAssistantMessage(
+        '> This is a quote\n\nAfter the quote',
+      );
 
       const { getByText } = render(<ChatMessage message={message} />);
 
@@ -1560,7 +1670,7 @@ describe('ChatMessage', () => {
     it('shows truncated preview when thinking text is > 80 chars and collapsed', () => {
       const longThinking = 'A'.repeat(100);
       const message = createAssistantMessage(
-        `<think>${longThinking}</think>Response here.`
+        `<think>${longThinking}</think>Response here.`,
       );
 
       const { getByText } = render(<ChatMessage message={message} />);
@@ -1572,7 +1682,7 @@ describe('ChatMessage', () => {
     it('shows full preview when thinking text is <= 80 chars', () => {
       const shortThinking = 'B'.repeat(50);
       const message = createAssistantMessage(
-        `<think>${shortThinking}</think>Response.`
+        `<think>${shortThinking}</think>Response.`,
       );
 
       const { getByText } = render(<ChatMessage message={message} />);

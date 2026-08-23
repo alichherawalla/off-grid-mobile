@@ -58,6 +58,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
+import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
@@ -187,7 +188,14 @@ describe('Pro mobile model transfer journey', () => {
       createSink: async (_deviceId, request) => {
         const received = Buffer.alloc(request.payload.fileSize);
         return {
-          prepare: async () => 0,
+          prepare: async () => {
+            if (returnedModel) {
+              throw new Error(
+                'Gemma Mobile is already installed on the receiving device',
+              );
+            }
+            return 0;
+          },
           write: async (offset: number, data: Uint8Array) => {
             Buffer.from(data).copy(received, offset);
           },
@@ -222,7 +230,9 @@ describe('Pro mobile model transfer journey', () => {
     // The device card marks the Sync screen having arrived. Previously this waited for the word
     // "Discoverable", which was only ever standing in for "the screen is here" - the card no longer
     // prints it when the device is simply discoverable, because the switch beneath it already does.
-    await waitFor(() => expect(ui!.getByTestId('sync-this-device')).toBeTruthy());
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-this-device')).toBeTruthy(),
+    );
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -286,7 +296,7 @@ describe('Pro mobile model transfer journey', () => {
     });
 
     fireEvent.press(ui.getByTestId('sync-open-activity'));
-    const arrival = await waitFor(() => ui!.getByText(fileName));
+    const arrival = await waitFor(() => ui!.getByText('Gemma Mobile'));
     // Scoped to the row. "Received" is also a direction filter on this screen, so an unscoped query
     // matches the filter chip as readily as the row and would pass even if the row said Sent.
     expect(within(activityRow(arrival)).getByText(/Received/)).toBeTruthy();
@@ -348,6 +358,7 @@ describe('Pro mobile model transfer journey', () => {
     expect(
       within(activityRow(refusal)).getByText(/Could not receive/),
     ).toBeTruthy();
+    expect(ui.queryByLabelText('Retry Invalid model')).toBeNull();
     await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(1);
     await expect(
       modelTransferFsBoundary.exists(
@@ -367,6 +378,10 @@ describe('Pro mobile model transfer journey', () => {
         ui!.getByTestId(`transfer-model-google/gemma-mobile/${fileName}`),
       ).toBeTruthy(),
     );
+    expect(ui.getByTestId('model-transfer-type-filter')).toBeTruthy();
+    fireEvent.press(
+      ui.getByTestId(`transfer-model-google/gemma-mobile/${fileName}`),
+    );
     fireEvent.press(ui.getByTestId('send-selected-model'));
 
     await waitFor(
@@ -378,6 +393,15 @@ describe('Pro mobile model transfer journey', () => {
     );
     expect(returnedFileName).toBe(fileName);
     expect(returnedModel).toEqual(payload);
+
+    fireEvent.press(ui.getByTestId('send-selected-model'));
+    await waitFor(() =>
+      expect(
+        ui!.getByText(
+          `Gemma Mobile is already installed on ${remoteDevice.name}. Open Models on ${remoteDevice.name} to use or remove it.`,
+        ),
+      ).toBeTruthy(),
+    );
     // Not asserted: the sheet's "Sent <file>" progress line. The completion state replaces it, so
     // matching it means catching a moment that has already passed - and the outcome is covered twice
     // over, by the sentence the user reads and by the peer holding the exact bytes.
@@ -446,5 +470,77 @@ describe('Pro mobile model transfer journey', () => {
     expect(ui.queryByTestId(`transfer-model-${liteRT.id}`)).toBeNull();
     // Its size is the whole package, not just the primary file.
     expect(ui.getByText(/4\.5 GB|4\.49 GB/)).toBeTruthy();
+  });
+
+  it('reopens on the model owned by the active transfer, not the first model', async () => {
+    const first = createDownloadedModel({
+      id: 'unsloth/qwen/first-Q4_K_M.gguf',
+      name: 'First quant',
+      fileName: 'first-Q4_K_M.gguf',
+    });
+    const moving = createDownloadedModel({
+      id: 'unsloth/qwen/moving-Q4_0.gguf',
+      name: 'Moving quant',
+      fileName: 'moving-Q4_0.gguf',
+    });
+    const modelsDir = `${modelTransferFsBoundary.DocumentDirectoryPath}/models`;
+    await modelTransferFsBoundary.module.mkdir(modelsDir);
+    for (const model of [first, moving]) {
+      await modelTransferFsBoundary.module.writeFile(
+        `${modelsDir}/${model.fileName}`,
+        'GGUF payload',
+      );
+    }
+    await AsyncStorage.setItem(
+      '@local_llm/downloaded_models',
+      JSON.stringify(
+        [first, moving].map(model => ({
+          ...model,
+          filePath: `${modelsDir}/${model.fileName}`,
+        })),
+      ),
+    );
+    const target: DeviceInfo = {
+      id: 'paired-mac',
+      name: 'Mac',
+      platform: 'macos',
+      version: '1.0.0',
+      host: '192.168.1.10',
+      port: 51000,
+    };
+    let active: ReturnType<typeof modelTransferJobs.start> | undefined;
+    try {
+      ui = render(
+        <NavigationContainer>
+          <ModelTransferSheet target={target} onClose={() => {}} />
+        </NavigationContainer>,
+      );
+
+      await waitFor(() =>
+        expect(ui!.getByTestId(`transfer-model-${first.id}`)).toBeTruthy(),
+      );
+      active = modelTransferJobs.start({
+        direction: 'send',
+        peerDeviceId: target.id,
+        peerPlatform: target.platform,
+        modelId: moving.id,
+        modelName: moving.name,
+        fileCount: 1,
+        bytesTotal: moving.fileSize,
+      });
+
+      await waitFor(() =>
+        expect(
+          ui!.getByTestId(`transfer-model-${moving.id}`).props
+            .accessibilityState.selected,
+        ).toBe(true),
+      );
+      expect(
+        ui.getByTestId(`transfer-model-${first.id}`).props.accessibilityState
+          .selected,
+      ).toBe(false);
+    } finally {
+      if (active) modelTransferJobs.dismiss(active.id);
+    }
   });
 });

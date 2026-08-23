@@ -21,7 +21,10 @@ let mockTtsState: any;
 jest.mock('../../../pro/audio/ttsStore', () => ({
   useTTSStore: { getState: jest.fn(() => mockTtsState) },
 }));
+// Spread the REAL module: replacing it wholesale left `useAppStore` undefined, and the voice session
+// reads it to know which turn mode is selected - which took this whole file down at import time.
 jest.mock('@offgrid/core/stores', () => ({
+  ...jest.requireActual('@offgrid/core/stores'),
   useChatStore: { getState: jest.fn(() => ({ conversations: mockConversations, updateMessageAudio: mockUpdateMessageAudio })) },
 }));
 

@@ -3,7 +3,7 @@ import { useAppStore, useRemoteServerStore } from '../stores';
 import { activeModelService } from '../services/activeModelService';
 import { DownloadedModel, RemoteModel } from '../types';
 
-type ActiveTextModelResult = {
+export type ActiveTextModelResult = {
   /** The resolved active model (remote preferred over local) */
   model: DownloadedModel | RemoteModel | null;
   /** The model ID suitable for creating conversations */

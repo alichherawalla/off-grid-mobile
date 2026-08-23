@@ -92,6 +92,14 @@ export const ProjectsScreen: React.FC = () => {
           trigger={focusTrigger}
           style={styles.projectItem}
           onPress={() => handleProjectPress(item)}
+          testID={`project-row-${item.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={item.name}
+          accessibilityHint={
+            item.description
+              ? `${chatCount} chats. ${item.description}`
+              : `${chatCount} chats`
+          }
         >
           <View style={styles.projectIcon}>
             <Text style={styles.projectIconText}>
@@ -119,7 +127,7 @@ export const ProjectsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="projects-screen">
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
           <Button
@@ -128,6 +136,7 @@ export const ProjectsScreen: React.FC = () => {
             size="small"
             onPress={handleNewProject}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
+            testID="new-project-button"
           />
       </View>
 
@@ -151,7 +160,7 @@ export const ProjectsScreen: React.FC = () => {
             </Text>
           </AnimatedEntry>
           <AnimatedEntry index={3} staggerMs={60} trigger={focusTrigger}>
-            <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject}>
+            <TouchableOpacity style={styles.emptyButton} onPress={handleNewProject} testID="new-project-empty-button">
               <Icon name="plus" size={14} color={colors.primary} />
               <Text style={styles.emptyButtonText}>Create Project</Text>
             </TouchableOpacity>

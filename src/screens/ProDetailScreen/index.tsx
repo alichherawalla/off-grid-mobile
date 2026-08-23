@@ -13,7 +13,12 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
-import { SPACING, TYPOGRAPHY, OFF_GRID_DESKTOP_URL } from '../../constants';
+import {
+  SPACING,
+  TYPOGRAPHY,
+  OFF_GRID_DESKTOP_BENEFIT,
+  OFF_GRID_DESKTOP_URL,
+} from '../../constants';
 import { selectHasProAccess } from '../../stores/proAccessSlice';
 import { useAppStore } from '../../stores';
 import { PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
@@ -47,8 +52,8 @@ const PILLARS = [
   },
   {
     icon: 'refresh-cw',
-    title: 'One mind across devices',
-    desc: 'Your laptop knows your work, your phone knows your life. They sync over your own network, never a cloud relay.',
+    title: 'Live sync across your devices',
+    desc: 'Your chats, projects, files, models, and copied text stay current over your own network, never a cloud relay.',
   },
   {
     icon: 'check-circle',
@@ -172,7 +177,7 @@ export const ProDetailScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Pricing — flat themed surface, flips at the July 1 cutover. */}
+            {/* Pricing — flat themed surface. */}
             <View style={styles.pricingBanner}>
               <View style={styles.pricingLabelRow}>
                 <Icon name="zap" size={13} color={colors.primary} />
@@ -196,10 +201,6 @@ export const ProDetailScreen: React.FC = () => {
                   </View>
                 </View>
               ))}
-              <Text style={styles.julyNote}>
-                We are building this through July. The full layer lands over the
-                month, added as it ships.
-              </Text>
             </View>
 
             {/* CTAs — shared Button (outline). Buy is primary, verify is secondary. */}
@@ -240,10 +241,7 @@ export const ProDetailScreen: React.FC = () => {
           </View>
           <View style={styles.desktopText}>
             <Text style={styles.desktopTitle}>Get Off Grid AI Desktop</Text>
-            <Text style={styles.desktopDesc}>
-              Free for your Mac. Run your models there and use them from this
-              phone over your own network.
-            </Text>
+            <Text style={styles.desktopDesc}>{OFF_GRID_DESKTOP_BENEFIT}</Text>
           </View>
           <Icon name="external-link" size={16} color={colors.textMuted} />
         </TouchableOpacity>
@@ -412,13 +410,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     lineHeight: 18,
   },
-  julyNote: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.textMuted,
-    lineHeight: 18,
-    marginTop: SPACING.md,
-  },
-
   // CTAs (Button supplies its own colours/border; these are layout-only).
   ctaButton: {
     marginHorizontal: SPACING.xl,

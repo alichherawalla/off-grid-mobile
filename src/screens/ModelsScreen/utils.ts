@@ -4,6 +4,7 @@ import { ModelInfo, ImageModelRecommendation, SoCInfo } from '../../types';
 import { ImageModelDescriptor, ModelTypeFilter } from './types';
 import { imageBackendLabel } from '../../utils/imageBackend';
 import { looksLikeVisionModel } from '../../utils/visionModel';
+import { sizeToBytes } from '../../utils/fileSize';
 
 // Re-export the canonical byte formatter so existing importers keep working while
 // there is only ONE implementation (see src/utils/formatBytes.ts).
@@ -22,7 +23,7 @@ export async function getDirectorySize(dirPath: string): Promise<number> {
     if (item.isDirectory()) {
       total += await getDirectorySize(item.path);
     } else {
-      const s = typeof item.size === 'string' ? Number.parseInt(item.size, 10) : (item.size || 0);
+      const s = sizeToBytes(item.size);
       total += s;
     }
   }

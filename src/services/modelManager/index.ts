@@ -27,7 +27,6 @@ import {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
   mmProjLocalName,
-  performMmProjRepairDownload,
 } from './download';
 import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
 import { restoreInProgressDownloads } from './restore';
@@ -43,11 +42,10 @@ import {
   importLocalModel as scanImportLocalModel,
   type ImportLocalModelOpts,
 } from './importLocalModel';
-import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 import { resolveStoredPath, determineCredibility } from './storage';
-
-;
-;
+import * as visionRepair from './visionRepairService';
+import type { RepairOpts, VisionRepairContext } from './visionRepairService';
+import { resolveOwnedDocumentPath } from '../../utils/resolveDocumentPath';
 
 class ModelManager {
   private readonly modelsDir: string;
@@ -72,50 +70,23 @@ class ModelManager {
       exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`)]);
   }
 
+  /**
+   * What the projector lifecycle needs from the registry. Every re-entrant call routes back through
+   * this object's own methods, so the manager stays the single owner of the model list.
+   */
+  private visionContext(): VisionRepairContext {
+    return {
+      modelsDir: this.modelsDir,
+      initialize: () => this.initialize(),
+      getDownloadedModels: () => this.getDownloadedModels(),
+      saveModelWithMmproj: (id, path) => this.saveModelWithMmproj(id, path),
+      linkOrphanMmProj: () => this.linkOrphanMmProj(),
+      repairMmProj: (target, opts) => this.repairMmProj(target.modelId, target.file, opts),
+    };
+  }
+
   async linkOrphanMmProj(): Promise<void> {
-    const models = await this.getDownloadedModels();
-    let dirFiles: RNFS.ReadDirResItemT[] = [];
-    try {
-      dirFiles = await RNFS.readDir(this.modelsDir);
-    } catch {
-      return;
-    }
-    const mmProjFiles = dirFiles.filter(f => f.isFile() && this.isMMProjFile(f.name));
-    if (mmProjFiles.length === 0) return;
-
-    const toSave: typeof models = [];
-    for (const m of models) {
-      if (m.engine !== 'llama') continue;
-      // Strict match (shared rule): the projector must belong to THIS model by name+variant. This is the
-      // SAME rule the loader uses, so link-time and load-time can no longer disagree (the E2B↔E4B split).
-      const chosenName = pickMmProjForModel(m.fileName, mmProjFiles.map(f => f.name));
-      const match = chosenName ? mmProjFiles.find(f => f.name === chosenName) : undefined;
-
-      if (m.mmProjPath) {
-        // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
-        const belongs = mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
-        const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
-        if (!fileExists || !belongs) {
-          logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
-          // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
-          // still recognized as a vision model that NEEDS REPAIR (needsVisionRepair → true → the wrench and
-          // the "download the vision file" prompt appear). Wiping the vision flag made it look like a plain
-          // text model, hiding the repair path entirely (device 2026-07-14).
-          toSave.push({ ...m, mmProjPath: undefined, mmProjFileSize: undefined, isVisionModel: true });
-        }
-        // If link is valid, leave it alone
-      } else if (match) {
-        logger.log(`[linkOrphanMmProj] ${m.id} — linking ${match.path}`);
-        await this.saveModelWithMmproj(m.id, match.path);
-      }
-    }
-
-    if (toSave.length > 0) {
-      const current = await this.getDownloadedModels();
-      const updated = current.map(m => toSave.find(s => s.id === m.id) ?? m);
-      await saveModelsList(updated);
-      useAppStore.getState().setDownloadedModels(updated);
-    }
+    return visionRepair.linkOrphanMmProj(this.visionContext());
   }
 
   async getDownloadedModels(): Promise<DownloadedModel[]> {
@@ -131,22 +102,26 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-    if (!model.filePath.startsWith(this.modelsDir)) {
+    const modelPath = resolveOwnedDocumentPath(model.filePath, this.modelsDir);
+    if (!modelPath) {
       throw new Error('Invalid model path: outside app directory');
     }
     const llamaModel = model.engine === 'llama' ? model : null;
-    if (llamaModel?.mmProjPath && !llamaModel.mmProjPath.startsWith(this.modelsDir)) {
+    const mmProjPath = llamaModel?.mmProjPath
+      ? resolveOwnedDocumentPath(llamaModel.mmProjPath, this.modelsDir)
+      : null;
+    if (llamaModel?.mmProjPath && !mmProjPath) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-    await RNFS.unlink(model.filePath);
+    await RNFS.unlink(modelPath);
 
     // Only delete mmproj if no other models reference it
-    if (llamaModel?.mmProjPath) {
+    if (llamaModel?.mmProjPath && mmProjPath) {
       const otherModelsUsingMmproj = models.some(
         m => m.engine === 'llama' && m.id !== modelId && m.mmProjPath === llamaModel.mmProjPath,
       );
       if (!otherModelsUsingMmproj) {
-        await RNFS.unlink(llamaModel.mmProjPath).catch(() => {});
+        await RNFS.unlink(mmProjPath).catch(() => {});
       }
     }
 
@@ -318,60 +293,28 @@ class ModelManager {
   stopBackgroundDownloadPolling(): void {
     if (this.isBackgroundDownloadSupported()) backgroundDownloadService.stopProgressPolling();
   }
-  async repairMmProj(
-    modelId: string,
-    file: ModelFile,
-    opts?: { onProgress?: DownloadProgressCallback; onDownloadIdReady?: (id: string) => void },
-  ): Promise<void> {
-    if (!file.mmProjFile) throw new Error('Model file has no associated mmproj');
-    await this.initialize();
-    // download.ts owns background-download orchestration: it starts the sidecar,
-    // drives the SAME download-store rows the normal download writes (so the existing
-    // determinate progress bar lights up during the ~900MB fetch — BUG OD2), moves the
-    // file, and tears the transient row down. We just persist the resolved path.
-    const resolvedPath = await performMmProjRepairDownload({
-      modelId, file, modelsDir: this.modelsDir, ...opts,
-    });
-    await this.saveModelWithMmproj(`${modelId}/${file.name}`, resolvedPath);
+  /** @see visionRepairService.repairVision - the one rule every surface repairs a model through. */
+  async repairVision(
+    model: DownloadedModel,
+    opts?: RepairOpts,
+  ): Promise<visionRepair.VisionRepairOutcome> {
+    return visionRepair.repairVision(this.visionContext(), model, opts);
   }
 
-  /**
-   * Heal the DURABLE vision flag on a record from the authoritative catalog (the repo ships an mmproj).
-   * The old link cleanup wiped isVisionModel on some records, so the Download Manager — which has no catalog —
-   * showed them as plain text. Persisting the truth here makes the record the SINGLE source both surfaces
-   * read. No-op if already set (so it's safe to call on render/focus). Returns true if it changed anything.
-   */
+  async repairMmProj(modelId: string, file: ModelFile, opts?: RepairOpts): Promise<void> {
+    return visionRepair.repairMmProj(this.visionContext(), { modelId, file }, opts);
+  }
+
   async markVisionModel(modelId: string): Promise<boolean> {
-    const models = await this.getDownloadedModels();
-    const target = models.find(m => m.id === modelId);
-    if (!target || target.engine !== 'llama' || target.isVisionModel) return false;
-    const updated = models.map(m => (m.id === modelId ? { ...m, isVisionModel: true } : m));
-    await saveModelsList(updated);
-    useAppStore.getState().setDownloadedModels(updated);
-    return true;
+    return visionRepair.markVisionModel(this.visionContext(), modelId);
   }
 
   async saveModelWithMmproj(modelId: string, mmProjPath: string): Promise<void> {
-    const mmProjFileName = mmProjPath.split('/').pop() || mmProjPath;
-    const stat = await RNFS.stat(mmProjPath);
-    const mmProjFileSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
-
-    const models = await this.getDownloadedModels();
-    const updated = models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true } : m
-    );
-    await saveModelsList(updated);
-    // Also update the in-memory Zustand store so UI reflects the change immediately.
-    useAppStore.getState().setDownloadedModels(updated);
+    return visionRepair.saveModelWithMmproj(this.visionContext(), modelId, mmProjPath);
   }
 
   async clearMmProjLink(modelId: string): Promise<void> {
-    const models = await this.getDownloadedModels();
-    const updated = models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false } : m
-    );
-    await saveModelsList(updated);
-    useAppStore.getState().setDownloadedModels(updated);
+    return visionRepair.clearMmProjLink(this.visionContext(), modelId);
   }
 
   async cleanupMMProjEntries(): Promise<number> {
@@ -470,4 +413,3 @@ class ModelManager {
 }
 
 export const modelManager = new ModelManager();
-;

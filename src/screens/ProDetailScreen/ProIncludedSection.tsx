@@ -30,8 +30,8 @@ const ROWS: IncludedRow[] = [
   {
     screen: 'Sync',
     icon: 'refresh-cw',
-    title: 'One mind across your devices',
-    description: 'Your chats, projects and files land on every device you own.',
+    title: 'Live sync across your devices',
+    description: 'Your chats, projects, files, models and copied text stay current.',
   },
   {
     screen: 'Clipboard',

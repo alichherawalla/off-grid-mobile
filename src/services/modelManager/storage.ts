@@ -1,11 +1,15 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ONNXImageModel } from '../../types';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../types';
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
 import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
+import { statFile } from '../../utils/fileStat';
+import { parseHuggingFaceUrl } from '../../utils/modelOrigin';
 import { collapseDuplicateFileRows, collapseDuplicateImageRows } from './collapseDuplicateFileRows';
 import { reconcilePrimaryPaths, resolveStoredPath } from './reconcileStoredPaths';
+import { useAppStore } from '../../stores';
+import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 // Re-exported because this module was the published home of these helpers before they were extracted
 // into the one place both registries share.
@@ -51,6 +55,22 @@ export function determineCredibility(author: string): ModelCredibility {
 
 export async function saveModelsList(models: DownloadedModel[]): Promise<void> {
   await AsyncStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(models));
+}
+
+/**
+ * Change the model registry: persist the list AND publish it, in that order.
+ *
+ * Every writer needs both halves - a list saved but not published leaves the screens reading a
+ * model that no longer exists until something forces a refetch, which is how a repaired model kept
+ * showing "no vision file" until the app restarted. Four call sites each wrote the pair by hand;
+ * this is the one that cannot forget the second line.
+ *
+ * `saveModelsList` stays for the read path only, where a self-heal rewrite must NOT publish (it is
+ * running inside the very load the store is waiting on).
+ */
+export async function commitModelsList(models: DownloadedModel[]): Promise<void> {
+  await saveModelsList(models);
+  useAppStore.getState().setDownloadedModels(models);
 }
 
 export async function saveImageModelsList(models: ONNXImageModel[]): Promise<void> {
@@ -182,39 +202,81 @@ export interface BuildModelOpts {
   mmProjPath?: string;
   /** Kept even when mmProjPath is absent (download failed) so needsVisionRepair can detect the gap */
   expectedMmProjFileName?: string;
+  /** Provenance the caller already knows (a device transfer carries the sender's). Wins over the URL. */
+  origin?: ModelOrigin;
+}
+
+/**
+ * The projector's size on disk, falling back to the size the catalog advertised.
+ *
+ * The file wins when it is there: a resumed or repaired sidecar can differ from the metadata, and
+ * the storage figures the user reads come from this number.
+ */
+async function resolveMmProjFileSize(
+  mmProjPath: string | undefined,
+  mmProjFile: ModelFile['mmProjFile'],
+): Promise<number | undefined> {
+  if (!mmProjPath) return undefined;
+  try {
+    return (await statFile(mmProjPath))?.size ?? mmProjFile?.size;
+  } catch {
+    // Keep the fallback size from metadata.
+    return mmProjFile?.size;
+  }
+}
+
+/**
+ * mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
+ * This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
+ *   model.mmProjFileName is set  →  model was supposed to have vision
+ *   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
+ */
+function resolveMmProjFileName(
+  mmProjPath: string | undefined,
+  mmProjFile: ModelFile['mmProjFile'],
+  expectedMmProjFileName: string | undefined,
+): string | undefined {
+  if (mmProjPath) return mmProjFile?.name ?? mmProjPath.split('/').pop();
+  return expectedMmProjFileName ?? mmProjFile?.name;
+}
+
+/**
+ * Registry wins for curated LiteRT artifacts: the display name comes from a single source of truth
+ * keyed by fileName. Falls back to the file's own name for locally-imported .litertlm files, then to
+ * the modelId basename for everything else.
+ */
+function resolveDisplayName(
+  modelId: string,
+  file: ModelFile,
+  curatedDisplayName: string | undefined,
+): string {
+  if (curatedDisplayName) return curatedDisplayName;
+  if (isLiteRTFileName(file.name)) return file.name.replace(/\.litertlm$/i, '');
+  return modelId.split('/').pop() || modelId;
 }
 
 export async function buildDownloadedModel(opts: BuildModelOpts): Promise<DownloadedModel> {
   const { modelId, file, resolvedLocalPath, mmProjPath, expectedMmProjFileName } = opts;
-  const stat = await RNFS.stat(resolvedLocalPath);
+  // Through the safe reader. `RNFS.stat` here ABORTED the app three seconds after every launch: the
+  // startup scan calls this for each stored model, an absolute container path goes stale on reinstall,
+  // and iOS raises an uncatchable NSInvalidArgumentException for a path whose type it cannot resolve.
+  // A missing file is now a size of 0 - the model reads as present-but-empty, which the caller already
+  // handles - instead of taking the process down. See utils/fileStat.
+  const stat = await statFile(resolvedLocalPath);
   const author = modelId.split('/')[0] || 'Unknown';
-  const isLiteRT = file.name.toLowerCase().endsWith('.litertlm');
+  const isLiteRT = isLiteRTFileName(file.name);
   const mmProjFile = file.mmProjFile;
-  let mmProjFileSize = mmProjPath ? mmProjFile?.size : undefined;
-  if (mmProjPath) {
-    try {
-      const mmStat = await RNFS.stat(mmProjPath);
-      mmProjFileSize = typeof mmStat.size === 'string' ? Number.parseInt(mmStat.size, 10) : mmStat.size;
-    } catch {
-      // Keep fallback size from metadata.
-    }
-  }
+  const mmProjFileSize = await resolveMmProjFileSize(mmProjPath, mmProjFile);
+  const mmProjFileName = resolveMmProjFileName(mmProjPath, mmProjFile, expectedMmProjFileName);
 
-  // mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
-  // This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
-  //   model.mmProjFileName is set  →  model was supposed to have vision
-  //   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
-  const mmProjFileName = mmProjPath
-    ? (mmProjFile?.name ?? mmProjPath.split('/').pop())
-    : (expectedMmProjFileName ?? mmProjFile?.name);
-
-  // Registry wins for curated LiteRT artifacts: display name and capability bits
-  // come from a single source of truth keyed by fileName. Falls back to the
-  // file's metadata for locally-imported .litertlm files, then to modelId basename
-  // for everything else.
   const curatedLiteRT = isLiteRT ? getCuratedLiteRTEntry(file.name) : undefined;
-  const derivedName = curatedLiteRT?.displayName
-    ?? (isLiteRT ? file.name.replace(/\.litertlm$/i, '') : (modelId.split('/').pop() || modelId));
+  const derivedName = resolveDisplayName(modelId, file, curatedLiteRT?.displayName);
+
+  // Provenance, taken from the URL we actually fetched. This is the ONE moment it is known for
+  // certain; everything downstream (vision repair) reads it instead of guessing from the id.
+  // `opts.origin` wins when a caller already knows better - a device transfer passes on the
+  // origin the sending device recorded, which the receiver cannot derive from the bytes alone.
+  const origin = opts.origin ?? parseHuggingFaceUrl(file.downloadUrl) ?? undefined;
 
   const commonFields = {
     id: `${modelId}/${file.name}`,
@@ -222,10 +284,11 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     author,
     filePath: resolvedLocalPath,
     fileName: file.name,
-    fileSize: typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size,
+    fileSize: stat?.size ?? 0,
     quantization: file.quantization,
     downloadedAt: new Date().toISOString(),
     credibility: determineCredibility(author),
+    ...(origin ? { origin } : {}),
   };
 
   if (isLiteRT) {

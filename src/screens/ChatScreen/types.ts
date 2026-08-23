@@ -1,15 +1,103 @@
-import type { ChatStreamPreviewRow } from '@offgrid/sync';
+import {
+  chatStreamPhaseIsStatus,
+  chatStreamPhaseLabel,
+  chatStreamPreviewHasMessageBody,
+  isSupportingChatContext,
+  splitInlineReasoning,
+  type ChatStreamPreviewRow,
+} from '@offgrid/sync';
 import { Message } from '../../types';
 import { visibleMessages } from '../../utils/visibleMessages';
-export type ChatMessageItem = {
-  id: string;
-  role: 'assistant';
-  content: string;
-  reasoningContent?: string;
-  timestamp: number;
-  isThinking?: boolean;
-  isStreaming?: boolean;
+export type ChatMessageItem = Message & {
+  statusText?: string;
+  suppressMessageBubble?: boolean;
+  /** Display-only context rendered inside the following generated-image bubble. */
+  supportingContext?: Message;
 };
+
+const groupedImageCache = new WeakMap<
+  Message,
+  { supportingContext: Message; item: ChatMessageItem }
+>();
+
+function isSupportingContextMessage(message: Message): boolean {
+  if (message.role !== 'assistant' || message.attachments?.length) return false;
+  const inline = splitInlineReasoning(message.content);
+  return isSupportingChatContext({
+    answer: inline.answer,
+    reasoning: message.reasoningContent || inline.reasoning,
+    reasoningLabel: inline.reasoningLabel,
+  });
+}
+
+function hasImageAttachment(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    Boolean(
+      message.attachments?.some(attachment => attachment.type === 'image'),
+    )
+  );
+}
+
+function isGeneratedImageResult(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    /^Generated image for:/i.test(message.content.trim())
+  );
+}
+
+function withPendingGeneratedImage(message: Message): Message {
+  if (hasImageAttachment(message)) return message;
+  return {
+    ...message,
+    attachments: [
+      {
+        id: `pending-image:${message.uuid ?? message.id}`,
+        type: 'image',
+        uri: '',
+        pending: true,
+        fileName: 'Image arriving',
+      },
+    ],
+  };
+}
+
+/**
+ * Keep durable chat records unchanged, but present an image turn as one assistant result.
+ *
+ * Image generation writes the enhanced prompt first and the image result second. When those records
+ * are adjacent, the final image owns the prompt, image, caption, metadata, and actions on screen.
+ * An unfinished or cancelled prompt stays visible as its own supporting-context row.
+ */
+function groupSupportingContextWithImage(
+  messages: readonly (Message | ChatMessageItem)[],
+): (Message | ChatMessageItem)[] {
+  const grouped: (Message | ChatMessageItem)[] = [];
+  for (const message of messages) {
+    const supportingContext = grouped.at(-1);
+    if (
+      (hasImageAttachment(message) || isGeneratedImageResult(message)) &&
+      supportingContext &&
+      isSupportingContextMessage(supportingContext)
+    ) {
+      grouped.pop();
+      const cached = groupedImageCache.get(message);
+      if (cached?.supportingContext === supportingContext) {
+        grouped.push(cached.item);
+        continue;
+      }
+      const item: ChatMessageItem = {
+        ...withPendingGeneratedImage(message),
+        supportingContext,
+      };
+      groupedImageCache.set(message, { supportingContext, item });
+      grouped.push(item);
+      continue;
+    }
+    grouped.push(message);
+  }
+  return grouped;
+}
 
 /**
  * A reply generating on another device, mirrored into this conversation while it happens.
@@ -46,18 +134,75 @@ function withRemotePreviews(
   remotePreviews: readonly RemoteStreamItem[] | undefined,
 ): (Message | ChatMessageItem)[] {
   if (!remotePreviews || remotePreviews.length === 0) return base;
+  const durableMessageIds = new Set<string>();
+  for (const message of base) {
+    durableMessageIds.add(message.id);
+    if (message.uuid) durableMessageIds.add(message.uuid);
+  }
   return [
     ...base,
-    ...remotePreviews.map(preview => ({
-      // The id comes from the shared projection, so it is stable across frames.
-      id: preview.id,
-      role: 'assistant' as const,
-      content: preview.content,
-      reasoningContent: preview.reasoning || undefined,
-      timestamp: Date.now(),
-      isStreaming: true,
-    })),
+    ...remotePreviews
+      .filter(
+        preview =>
+          !durableMessageIds.has(preview.messageId) &&
+          !base.some(message => sameRemoteAnswer(message, preview)),
+      )
+      .map(remotePreviewMessage),
   ];
+}
+
+function sameRemoteAnswer(
+  message: Message | ChatMessageItem,
+  preview: RemoteStreamItem,
+): boolean {
+  if (
+    message.role !== 'assistant' ||
+    message.provenance?.originDeviceId !== preview.deviceId ||
+    !chatStreamPreviewHasMessageBody(preview)
+  ) {
+    return false;
+  }
+  return (
+    message.content.trim() === preview.content.trim() &&
+    (message.reasoningContent ?? '').trim() === (preview.reasoning ?? '').trim()
+  );
+}
+
+function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
+  const phaseLabel = chatStreamPhaseLabel(preview.phase, preview.progress);
+  const hasMessageBody = chatStreamPreviewHasMessageBody(preview);
+  // One rule, asked three times, instead of three hand-kept lists of phase names. A status phase
+  // renders BESIDE whatever arrived, so it only becomes the whole row when nothing else has.
+  const isStatusPhase = chatStreamPhaseIsStatus(preview.phase);
+  const previewOwnedTools = preview.tools ?? [];
+  const isStatusOnly =
+    preview.phase === 'waiting' ||
+    (isStatusPhase && !hasMessageBody && !preview.reasoning) ||
+    (preview.phase === 'thinking' && !preview.reasoning && !preview.content);
+  return {
+    // The id comes from the shared projection, so it is stable across frames.
+    id: preview.id,
+    role: 'assistant',
+    content: isStatusOnly ? phaseLabel ?? '' : preview.content,
+    reasoningContent: preview.reasoning || undefined,
+    timestamp: Date.now(),
+    isThinking: isStatusOnly,
+    isStreaming: true,
+    suppressMessageBubble: isStatusPhase && !hasMessageBody,
+    // The preview owns every tool while the turn is live. Its stable message id lets the durable
+    // assistant record replace the whole preview atomically when it arrives, so calls appear as
+    // they start without leaving a duplicate after final message sync.
+    ...(previewOwnedTools.length
+      ? {
+          toolArtifacts: previewOwnedTools.map(tool => ({
+            name: tool.name,
+            result: tool.result ?? '',
+            status: tool.status,
+          })),
+        }
+      : {}),
+    ...(isStatusPhase && phaseLabel ? { statusText: phaseLabel } : {}),
+  };
 }
 
 let _lastDisplayBranch = '';
@@ -66,10 +211,12 @@ export function getDisplayMessages(
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   return withRemotePreviews(
-    localDisplayMessages(
-      // The same rule the list rows use, so the thread and its preview never disagree.
-      [...visibleMessages(allMessages, streaming.localDeviceId)],
-      streaming,
+    groupSupportingContextWithImage(
+      localDisplayMessages(
+        // The same rule the list rows use, so the thread and its preview never disagree.
+        [...visibleMessages(allMessages, streaming.localDeviceId)],
+        streaming,
+      ),
     ),
     streaming.remotePreviews,
   );
@@ -79,13 +226,30 @@ function localDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
-  const { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation } = streaming;
+  const {
+    isThinking,
+    streamingMessage,
+    streamingReasoningContent,
+    isStreamingForThisConversation,
+  } = streaming;
   // Model still loading for the in-progress reply: show it in the bubble so the
   // wait is explained ("Loading <model>…") instead of bare dots.
-  if (streaming.isModelLoading && streaming.isGeneratingForThisConversation && !streamingMessage) {
+  if (
+    streaming.isModelLoading &&
+    streaming.isGeneratingForThisConversation &&
+    !streamingMessage
+  ) {
     return [
       ...allMessages,
-      { id: 'thinking', role: 'assistant' as const, content: streaming.loadingModelName ? `Loading ${streaming.loadingModelName}...` : 'Loading model...', timestamp: Date.now(), isThinking: true },
+      {
+        id: 'thinking',
+        role: 'assistant' as const,
+        content: streaming.loadingModelName
+          ? `Loading ${streaming.loadingModelName}...`
+          : 'Loading model...',
+        timestamp: Date.now(),
+        isThinking: true,
+      },
     ];
   }
   if (isThinking && isStreamingForThisConversation) {
@@ -94,16 +258,32 @@ function localDisplayMessages(
     }
     return [
       ...allMessages,
-      { id: 'thinking', role: 'assistant' as const, content: '', timestamp: Date.now(), isThinking: true },
+      {
+        id: 'thinking',
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+        isThinking: true,
+      },
     ];
   }
-  if ((streamingMessage || streamingReasoningContent) && isStreamingForThisConversation) {
+  if (
+    (streamingMessage || streamingReasoningContent) &&
+    isStreamingForThisConversation
+  ) {
     if (_lastDisplayBranch !== 'streaming') {
       _lastDisplayBranch = 'streaming';
     }
     return [
       ...allMessages,
-      { id: 'streaming', role: 'assistant' as const, content: streamingMessage, reasoningContent: streamingReasoningContent || undefined, timestamp: Date.now(), isStreaming: true },
+      {
+        id: 'streaming',
+        role: 'assistant' as const,
+        content: streamingMessage,
+        reasoningContent: streamingReasoningContent || undefined,
+        timestamp: Date.now(),
+        isStreaming: true,
+      },
     ];
   }
   if (_lastDisplayBranch !== 'done') {
@@ -125,7 +305,10 @@ export function getPlaceholderText({
   supportsVision,
   imageOnly,
 }: PlaceholderTextOptions): string {
-  if (!hasModel) return isModelLoading ? 'Loading model...' : 'Load a model to use chat';
+  if (!hasModel)
+    return isModelLoading ? 'Loading model...' : 'Load a model to use chat';
   if (imageOnly) return 'Describe an image...';
-  return supportsVision ? 'Type a message or add an image...' : 'Type a message...';
+  return supportsVision
+    ? 'Type a message or add an image...'
+    : 'Type a message...';
 }

@@ -40,7 +40,10 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
       snapPoints={['45%']}
       title="Select Project"
     >
-      <ScrollView style={styles.projectList}>
+      <ScrollView
+        style={styles.projectList}
+        contentContainerStyle={styles.projectListContent}
+      >
         {/* Default option */}
         <TouchableOpacity
           style={[
@@ -95,7 +98,16 @@ export const ProjectSelectorSheet: React.FC<ProjectSelectorSheetProps> = ({
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   projectList: {
-    padding: 16,
+    // Deliberately unpadded. Padding on a ScrollView's `style` pads the VIEWPORT, not the content,
+    // so the last project sat flush against the bottom edge of the phone with nothing below it and
+    // its subtitle clipped by the frame. Inner spacing belongs to the content container.
+    flexGrow: 0,
+  },
+  projectListContent: {
+    padding: SPACING.lg,
+    // Room past the last row for the home indicator, so the final project is fully readable when
+    // the list is scrolled to the end.
+    paddingBottom: SPACING.xxl,
   },
   projectOption: {
     flexDirection: 'row' as const,

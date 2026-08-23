@@ -160,7 +160,11 @@ class HardwareService {
     const used = await DeviceInfo.getUsedMemory();
     return {
       used,
-      available: total - used,
+      // ONE owner for "how much can we still allocate". Was `total - used`: device-wide free RAM,
+      // which on a 12GB iPhone read ~10.9GB while the process ceiling was ~6.3GB. The model-load gate
+      // reads this figure, so an oversized model was approved and iOS killed the app. Android has no
+      // per-process cap, which is why only iOS died. computeAvailableBytes already gets this right.
+      available: await this.computeAvailableBytes(total, used),
       total,
     };
   }

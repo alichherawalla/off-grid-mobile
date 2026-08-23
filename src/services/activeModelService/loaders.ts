@@ -15,7 +15,12 @@ import { hardwareService } from '../hardware';
 import { modelResidencyManager } from '../modelResidency';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
-import { isMMProjFile, mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
+import {
+  canKeepMmProjLink,
+  isMMProjFile,
+  pickMmProjForModel,
+} from '../mmproj';
+import { sizeToBytes } from '../../utils/fileSize';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
@@ -37,7 +42,7 @@ export async function resolveMmProjPath(
   if (model.mmProjPath && (await RNFS.exists(model.mmProjPath))) {
     const persistedName = model.mmProjPath.substring(model.mmProjPath.lastIndexOf('/') + 1);
     const modelName = model.filePath.substring(model.filePath.lastIndexOf('/') + 1);
-    if (mmProjBelongsToModel(modelName, persistedName)) {
+    if (canKeepMmProjLink(modelName, persistedName)) {
       return model.mmProjPath;
     }
     logger.warn(`[LLM] persisted mmproj "${persistedName}" does not belong to model "${modelName}" — rescanning`);
@@ -58,10 +63,7 @@ export async function resolveMmProjPath(
         ...m,
         mmProjPath: mmProjFile.path,
         mmProjFileName: mmProjFile.name,
-        mmProjFileSize:
-          typeof mmProjFile.size === 'string'
-            ? Number.parseInt(mmProjFile.size, 10)
-            : mmProjFile.size,
+        mmProjFileSize: sizeToBytes(mmProjFile.size),
         isVisionModel: true,
       };
     });

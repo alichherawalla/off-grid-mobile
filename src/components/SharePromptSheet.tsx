@@ -7,6 +7,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { GITHUB_URL, shareOnX } from '../utils/sharePrompt';
 import { useAppStore } from '../stores/appStore';
+import { Button } from './Button';
 
 interface SharePromptSheetProps {
   visible: boolean;
@@ -21,6 +22,11 @@ export const SharePromptSheet: React.FC<SharePromptSheetProps> = ({ visible, onC
     setEngaged(true);
     if (typeof action === 'string') Linking.openURL(action);
     else action();
+    onClose();
+  };
+
+  const handleNeverShow = () => {
+    setEngaged(true);
     onClose();
   };
 
@@ -41,9 +47,26 @@ export const SharePromptSheet: React.FC<SharePromptSheetProps> = ({ visible, onC
           <Text style={styles.buttonText}>Share on X</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.dismissButton} onPress={onClose}>
-          <Text style={styles.dismissText}>Maybe later</Text>
-        </TouchableOpacity>
+        <View style={styles.dismissActions}>
+          <Button
+            title="Maybe later"
+            variant="ghost"
+            size="small"
+            onPress={onClose}
+            style={styles.dismissButton}
+            textStyle={styles.dismissText}
+            testID="share-prompt-maybe-later"
+          />
+          <Button
+            title="Don't show again"
+            variant="ghost"
+            size="small"
+            onPress={handleNeverShow}
+            style={styles.dismissButton}
+            textStyle={styles.dismissText}
+            testID="share-prompt-never-show"
+          />
+        </View>
       </View>
     </AppSheet>
   );
@@ -79,9 +102,15 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.body,
     color: colors.primary,
   },
-  dismissButton: {
+  dismissActions: {
+    flexDirection: 'row' as const,
+    gap: SPACING.sm,
+    width: '100%' as const,
     marginTop: SPACING.sm,
-    paddingVertical: SPACING.sm,
+  },
+  dismissButton: {
+    flex: 1,
+    minHeight: 44,
   },
   dismissText: {
     ...TYPOGRAPHY.bodySmall,

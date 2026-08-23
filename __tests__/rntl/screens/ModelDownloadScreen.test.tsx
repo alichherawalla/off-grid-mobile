@@ -309,7 +309,9 @@ describe('ModelDownloadScreen', () => {
 
     expect(result.getByText('Your Device')).toBeTruthy();
     expect(result.getByText('Test Device')).toBeTruthy();
-    expect(result.getByText('Available Memory')).toBeTruthy();
+    // Total, not available: during onboarding an "available" number moves with whatever else the
+    // phone is doing, so the same device reads differently minute to minute.
+    expect(result.getByText('Total Memory')).toBeTruthy();
   });
 
   it('renders the NetworkSection', async () => {

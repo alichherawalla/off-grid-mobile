@@ -98,3 +98,11 @@ test('ignores attribute values that contain brackets', () => {
   assert.equal(node.label, 'Sent [2] files');
   assert.deepEqual(node.rect, { x: 10, y: 20, width: 20, height: 40 });
 });
+
+test('decodes XML entities before a semantic label is matched', () => {
+  const dump = '<hierarchy><node class="X" content-desc="Date &amp; Time, OFF" bounds="[0,0][100,50]" /></hierarchy>';
+
+  const [node] = parseUiAutomatorXml(dump).children;
+
+  assert.equal(node.label, 'Date & Time, OFF');
+});

@@ -211,6 +211,30 @@ describe('ChatMessage — Tool message rendering', () => {
       expect(getByText(/Using calculator/)).toBeTruthy();
     });
 
+    it('gives every call its own row, so a turn is a list and not one dense block', () => {
+      // Four or five calls in a turn used to arrive crammed into a SINGLE container at 2px apart,
+      // centred and inset inside the reply column, while each finished result stood alone and
+      // left-aligned 16px from its neighbour. Two rhythms and two left edges in one transcript,
+      // which read as tool calls nested inside one another.
+      const message = makeMessage({
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          { id: 'tc-1', name: 'web_search', arguments: '{"query":"first"}' },
+          { id: 'tc-2', name: 'calculator', arguments: '{"expression":"2+2"}' },
+          { id: 'tc-3', name: 'read_url', arguments: '{"url":"https://x.test"}' },
+        ],
+      });
+
+      const { getAllByTestId } = render(<ChatMessage message={message} />);
+
+      const rows = getAllByTestId('tool-call-row');
+      expect(rows).toHaveLength(3);
+      // One row, one style: whatever spacing a call gets, every other call gets the same.
+      const spacing = rows.map(row => JSON.stringify(row.props.style));
+      expect(new Set(spacing).size).toBe(1);
+    });
+
     it('shows raw arguments when JSON parse fails', () => {
       const message = makeMessage({
         role: 'assistant',

@@ -77,6 +77,7 @@ fastlane/*.p8
 
 # testing
 /coverage
+/.artifacts
 
 # Yarn
 .yarn
@@ -94,3 +95,6 @@ docs/DEVICE_SESSION_COMMENTARY.md
 
 # Device wire-capture logs (raw, large, session-specific — kept locally, not versioned)
 docs/wire-captures/
+
+# Scratch renders derived from scripts/e2e/fixtures (regenerable, not versioned)
+/tmp/

@@ -4,7 +4,12 @@ import Icon from 'react-native-vector-icons/Feather';
 import { Button } from '../Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
-import { TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../../constants';
+import {
+  TYPOGRAPHY,
+  SPACING,
+  OFF_GRID_DESKTOP_BENEFIT,
+  OFF_GRID_DESKTOP_URL,
+} from '../../constants';
 import { withUtm } from '../../utils/utm';
 
 interface VoiceModelsUpsellProps {
@@ -40,7 +45,7 @@ export const VoiceModelsUpsell: React.FC<VoiceModelsUpsellProps> = ({ onGetPro }
         accessibilityLabel="Get Off Grid AI Desktop"
       >
         <Icon name="monitor" size={14} color={colors.textMuted} />
-        <Text style={styles.desktopLinkText}>Off Grid AI Desktop is free for Mac. Get it.</Text>
+        <Text style={styles.desktopLinkText}>{OFF_GRID_DESKTOP_BENEFIT}</Text>
       </TouchableOpacity>
     </View>
   );

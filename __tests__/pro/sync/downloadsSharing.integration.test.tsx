@@ -100,7 +100,7 @@ describe('Android downloads sharing', () => {
     await sharedFileSyncService.downloads.foreground();
     const ui = mountSharingScreen();
 
-    fireEvent.press(ui.getByTestId('sync-ambient-accordion'));
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
     await waitFor(() => expect(ui.getByText('Downloads')).toBeTruthy());
 
     // No picker exists for this folder on Android, so the button must not promise one.
@@ -114,7 +114,7 @@ describe('Android downloads sharing', () => {
     await sharedFileSyncService.downloads.foreground();
     const ui = mountSharingScreen();
 
-    fireEvent.press(ui.getByTestId('sync-ambient-accordion'));
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
     await waitFor(() => expect(ui.getByText('Downloads')).toBeTruthy());
 
     // Media access is already held, so watching starts without another permission prompt.
@@ -148,7 +148,7 @@ describe('Android downloads sharing', () => {
     await sharedFileSyncService.downloads.foreground();
     const ui = mountSharingScreen();
 
-    fireEvent.press(ui.getByTestId('sync-ambient-accordion'));
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
     await waitFor(() => expect(ui.getByText('Downloads')).toBeTruthy());
     expect(ui.getByText('Choose folder')).toBeTruthy();
     expect(ui.queryByText('Allow media access')).toBeNull();

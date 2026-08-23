@@ -64,9 +64,10 @@ describe('DocumentPreviewScreen', () => {
     });
 
     it('shows loading indicator initially', () => {
-      const { UNSAFE_getByType } = render(<DocumentPreviewScreen />);
-      const { ActivityIndicator } = require('react-native');
-      expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+      const { getByLabelText } = render(<DocumentPreviewScreen />);
+      // The one loader in this app announces itself as "Working". Asserted by what a user
+      // perceives rather than by component type, so replacing the loader again cannot break this.
+      expect(getByLabelText('Working')).toBeTruthy();
     });
   });
 

@@ -6,7 +6,11 @@ import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
-import { SWEET_SPOT_SIZE } from '../../utils/imageGenAdvice';
+import {
+  defaultImageSteps,
+  MAX_IMAGE_STEPS,
+  SWEET_SPOT_SIZE,
+} from '../../utils/imageGenAdvice';
 import { createStyles } from './styles';
 
 // ─── Advanced Sub-Components ─────────────────────────────────────────────────
@@ -201,8 +205,8 @@ export const ImageGenerationSection: React.FC = () => {
         testID="image-steps"
         label="Image Steps"
         description="More steps = better quality but slower (4-8 fast, 20-50 high quality)"
-        value={settings?.imageSteps || 8}
-        min={4} max={50} step={1}
+        value={settings?.imageSteps || defaultImageSteps(Platform.OS)}
+        min={4} max={MAX_IMAGE_STEPS} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
 

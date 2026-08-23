@@ -1,15 +1,21 @@
 import RNFS from 'react-native-fs';
 import { validateModelFile, checkMemoryForModel, safeCompletion } from '../../../src/services/llmSafetyChecks';
+import { defaultNativeFileSystemBoundary } from '../../harness/nativeFileSystem';
+
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
 describe('validateModelFile', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    defaultNativeFileSystemBoundary.reset();
   });
 
   it('returns invalid when file is too small', async () => {
-    mockedRNFS.stat.mockResolvedValue({ size: 100 } as any);
+    defaultNativeFileSystemBoundary.seedFile('/models/tiny.gguf', 100);
 
     const result = await validateModelFile('/models/tiny.gguf');
     expect(result.valid).toBe(false);
@@ -17,16 +23,18 @@ describe('validateModelFile', () => {
   });
 
   it('returns valid for a proper GGUF file', async () => {
-    mockedRNFS.stat.mockResolvedValue({ size: 1_000_000 } as any);
-    mockedRNFS.read.mockResolvedValue('GGUF');
+    defaultNativeFileSystemBoundary.seedFile('/models/test.gguf', 1_000_000);
 
     const result = await validateModelFile('/models/test.gguf');
     expect(result).toEqual({ valid: true });
   });
 
   it('returns invalid when header is not GGUF', async () => {
-    mockedRNFS.stat.mockResolvedValue({ size: 1_000_000 } as any);
-    mockedRNFS.read.mockResolvedValue('NOPE');
+    defaultNativeFileSystemBoundary.seedTextFile(
+      '/models/test.bin',
+      'NOPE',
+      1_000_000,
+    );
 
     const result = await validateModelFile('/models/test.bin');
     expect(result.valid).toBe(false);
@@ -34,24 +42,25 @@ describe('validateModelFile', () => {
   });
 
   it('returns valid when RNFS.read() throws (iOS bridging workaround)', async () => {
-    mockedRNFS.stat.mockResolvedValue({ size: 1_000_000 } as any);
+    defaultNativeFileSystemBoundary.seedFile('/models/test.gguf', 1_000_000);
     mockedRNFS.read.mockRejectedValueOnce(new Error('NSInteger bridge error'));
 
     const result = await validateModelFile('/models/test.gguf');
     expect(result).toEqual({ valid: true });
   });
 
-  it('returns invalid when stat throws', async () => {
-    mockedRNFS.stat.mockRejectedValue(new Error('file not found'));
-
+  it('returns invalid when the safe directory lookup cannot find the file', async () => {
     const result = await validateModelFile('/models/missing.gguf');
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('Failed to validate');
+    expect(result.reason).toContain('not found');
   });
 
   it('handles string file size from stat', async () => {
-    mockedRNFS.stat.mockResolvedValue({ size: '5000000' } as any);
-    mockedRNFS.read.mockResolvedValue('GGUF');
+    defaultNativeFileSystemBoundary.seedFile('/models/test.gguf', 5_000_000);
+    defaultNativeFileSystemBoundary.setReportedFileSize(
+      '/models/test.gguf',
+      '5000000',
+    );
 
     const result = await validateModelFile('/models/test.gguf');
     expect(result).toEqual({ valid: true });

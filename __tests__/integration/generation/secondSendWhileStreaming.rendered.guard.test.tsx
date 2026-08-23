@@ -36,6 +36,10 @@ describe('tapping send again mid-stream', () => {
     });
     expect(h.boundary.llama!.calls.completion.length).toBe(1);
 
+    // The first completion has already consumed its script. Give the queued turn its own native
+    // answer; a real model does not replay the previous completion for the next user message.
+    h.boundary.llama!.scriptCompletion({ text: 'The queued reply.' });
+
     // The impatient second tap, through the real send button.
     await h.tapSend('and another thing');
     await h.settle(300);

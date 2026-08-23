@@ -23,6 +23,7 @@ import { promisify } from 'node:util';
 import { AdbClient } from '../android/adb-client.mjs';
 import { WdaClient } from '../ios/wda-client.mjs';
 import { ANDROID_PACKAGE, IOS_BUNDLE_ID } from './device.mjs';
+import { selectMainOffGridPage } from './desktop-target.mjs';
 import {
   CANCEL,
   CONFIRM_DESTRUCTIVE,
@@ -101,6 +102,29 @@ const rnSurface = (client, platform) => {
   return {
     platform,
     family: 'rn',
+    /** Low-level UI verbs shared by feature journeys. Feature rules stay in their own adapter. */
+    ui: {
+      source: () => client.source(),
+      labels: () => client.labels(),
+      findByLabel: (label) => client.findByLabel(label),
+      tapLabel: (label) => client.tapLabel(label),
+      tapWhenReady: (label, options) => client.tapWhenReady(label, options),
+      waitForLabel: (label, options) => client.waitForLabel(label, options),
+      waitForGone: (label, options) => client.waitForGone(label, options),
+      scrollToLabel: (label, options) => client.scrollToLabel(label, options),
+      scrollAndTap: (label, options) => client.scrollAndTap(label, options),
+      type: (value) => client.type(value),
+      replaceTestId: client.replaceTestId ? (testId, value) => client.replaceTestId(testId, value) : undefined,
+      back: () => client.back(),
+      hideKeyboard: client.hideKeyboard ? () => client.hideKeyboard() : undefined,
+      keyboardTop: client.keyboardTop ? () => client.keyboardTop() : undefined,
+      // Raw geometry. Needed where a system UI exposes nothing to address: the iOS photo picker
+      // publishes only PXG* layout groups and one concatenated label, so its first cell can only be
+      // reached by position.
+      tap: client.tap ? (x, y) => client.tap(x, y) : undefined,
+      windowSize: client.windowSize ? () => client.windowSize() : undefined,
+      waitFor: (check, options) => client.waitFor(() => check(), options),
+    },
 
     /**
      * Reach the Devices screen from wherever the app happens to be. Idempotent on purpose.
@@ -402,13 +426,37 @@ const rnSurface = (client, platform) => {
 const electronSurface = async (spec) => {
   const { host, port = 9222, platform } = spec;
 
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-  const page = targets.find((t) => t.type === 'page' && /Off Grid/i.test(t.title ?? ''));
+  // Try every place this desktop might be, and use the first that answers WITH an Off Grid page.
+  //
+  // This used to fetch 127.0.0.1 while reporting failure against `host`, so a run could name a box
+  // it had never contacted - the same "live app read as a dead one" this rig exists to prevent. A
+  // box that has moved, or whose tunnel is open on one address and not the other, now just works.
+  const candidates = spec.candidates?.length ? spec.candidates : [{ host, port }];
+  const tried = [];
+  let page;
+  let found;
+  for (const candidate of candidates) {
+    const at = `${candidate.host}:${candidate.port ?? port}`;
+    tried.push(at);
+    try {
+      const targets = await (await fetch(`http://${at}/json`)).json();
+      const hit = selectMainOffGridPage(targets);
+      if (hit) {
+        page = hit;
+        found = at;
+        break;
+      }
+    } catch {
+      // Nothing there. Try the next address rather than failing the whole run on the first miss.
+    }
+  }
   if (!page) {
     throw new Error(
-      `no Off Grid page on ${host}:${port}. Start the app with --remote-debugging-port=${port}.`,
+      `no Off Grid page for ${platform} at any of ${tried.join(', ')}. ` +
+        `Start the app with --remote-debugging-port=${port}.`,
     );
   }
+  if (found && !found.startsWith('127.0.0.1')) console.log(`AT    ${platform.padEnd(8)}${found}`);
 
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
@@ -422,14 +470,34 @@ const electronSurface = async (spec) => {
     const waiting = pending.get(message.id);
     if (!waiting) return;
     pending.delete(message.id);
+    clearTimeout(waiting.timer);
     if (message.error) waiting.reject(new Error(message.error.message));
     else waiting.resolve(message.result);
   });
+  const rejectPending = (reason) => {
+    for (const waiting of pending.values()) {
+      clearTimeout(waiting.timer);
+      waiting.reject(reason);
+    }
+    pending.clear();
+  };
+  socket.addEventListener('close', () => rejectPending(new Error('the debugging socket closed')));
+  socket.addEventListener('error', () => rejectPending(new Error('the debugging socket failed')));
   const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
       const id = (nextId += 1);
-      pending.set(id, { resolve, reject });
-      socket.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method} did not answer within 10000ms`));
+      }, 10_000);
+      pending.set(id, { resolve, reject, timer });
+      try {
+        socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        pending.delete(id);
+        reject(error);
+      }
     });
 
   const evaluate = async (expression) => {
@@ -477,6 +545,13 @@ const electronSurface = async (spec) => {
     family: 'electron',
     /** Escape hatch for diagnosing a surface, and for capabilities not yet in the vocabulary. */
     evaluate,
+    /** Low-level UI verbs shared by feature journeys. Feature rules stay in their own adapter. */
+    ui: {
+      evaluate,
+      text: () => evaluate('return document.body.innerText;'),
+      click,
+      waitFor: (check, options) => waitUntil(check, options),
+    },
 
     async openDevices() {
       if (/PAIRING CODE/i.test((await this.text()) ?? '')) return;
@@ -785,7 +860,7 @@ export async function connectSurface(spec) {
     // wrong when something only wants to LOOK: it killed a model transfer that was mid-flight,
     // because the observer relaunched the app it was observing. Passive attaches to whatever is
     // already on screen and touches nothing.
-    else if (passive) await client.session();
+    else if (passive) await client.attach();
     else await client.session(IOS_BUNDLE_ID);
     return rnSurface(client, 'ios');
   }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { APP_CONFIG } from '../constants';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project } from '../types';
@@ -34,8 +35,9 @@ const DEFAULT_PROJECTS: Project[] = [
     id: 'default-assistant',
     name: 'General Assistant',
     description: 'A helpful, concise AI assistant for everyday tasks',
-    systemPrompt:
-      "You are a helpful AI assistant running locally on the user's device. Be concise and helpful. Focus on providing accurate information and solving the user's problems efficiently.",
+    // The same one owner the app settings use. A third copy of the default persona is a third answer to
+    // "who is this assistant", and it is the one a synced `systemPrompt` would carry to every peer.
+    systemPrompt: APP_CONFIG.defaultSystemPrompt,
     icon: '#6366F1', // Indigo
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

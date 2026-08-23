@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
+import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
 import { fileExceedsBudget } from '../../services/memoryBudget';
@@ -233,7 +234,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         </Text>
       )}
       {isLoadingFiles ? (
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>
+        <View style={styles.loadingContainer}><LoadingDots color={colors.primary} size={8} /></View>
       ) : (
         <FlatList
           data={modelFiles
@@ -407,7 +408,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <LoadingDots color={colors.primary} size={8} />
           <Text style={styles.loadingText}>Loading models...</Text>
         </View>
       ) : (

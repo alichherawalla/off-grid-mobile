@@ -1,23 +1,8 @@
 import { Platform } from 'react-native';
 
-/**
- * How much of THIS device a model may use.
- *
- * One question - what will fit here - answered from the device's own memory and nothing else. It
- * lived among the llama.rn context helpers, which made a pure sizing rule look like an engine
- * detail and put every caller of `BYTES_PER_GB` through a module that loads the native binding.
- *
- * Pure by design: no engine, no context, no I/O. That is what makes the caps testable at all.
- */
+/** Pure hardware sizing rules used by the native GPU adapters. */
 
-/** Max safe context length based on device RAM to prevent OOM on low-RAM devices. */
 export const BYTES_PER_GB = 1024 * 1024 * 1024;
-export function getMaxContextForDevice(totalMemoryBytes: number): number {
-  const gb = totalMemoryBytes / BYTES_PER_GB;
-  if (gb <= 6) return 2048;
-  if (gb <= 8) return 4096;
-  return 8192;
-}
 // Android Adreno GPU caps (≤4GB/≤6GB→0, ≤8GB→12, >8GB→24).
 const ANDROID_GPU_LAYER_CAPS: { maxGB: number; layers: number }[] = [{ maxGB: 4, layers: 0 }, { maxGB: 6, layers: 0 }, { maxGB: 8, layers: 12 }];
 const ANDROID_GPU_LAYERS_FALLBACK = 24;

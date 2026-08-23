@@ -270,9 +270,9 @@ describe('reconcileFinishedImageDownloads', () => {
       .mockResolvedValueOnce(true); // isValidZip: zip exists
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('coreml_Zipped', '/img/coreml_Zipped')])
+      .mockResolvedValueOnce([file('archive.zip', '/img/archive.zip', 1024)])
       .mockResolvedValueOnce([file('w', '/img/coreml_Zipped/w', 999)]); // getDirSize
     (mockedRNFS.readFile as jest.Mock).mockResolvedValueOnce('archive.zip');
-    (mockedRNFS.stat as jest.Mock).mockResolvedValueOnce({ size: 1024 });
     (mockedRNFS.read as jest.Mock).mockResolvedValueOnce('PK');
     const out = await reconcileFinishedImageDownloads(opts);
     expect(unzip).toHaveBeenCalledWith('/img/archive.zip', '/img/coreml_Zipped');

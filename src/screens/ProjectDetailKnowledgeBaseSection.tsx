@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  ActivityIndicator,
   ScrollView,
   Platform,
 } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import {
   pick,
@@ -175,16 +175,23 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
   };
 
   return (
-    <View style={styles.sectionContent}>
+    <View style={styles.sectionContent} testID="project-knowledge-base-section">
       <TouchableOpacity
         style={styles.sectionHeader}
         onPress={onNavigateToKb}
         activeOpacity={0.7}
+        testID="project-knowledge-base-open"
       >
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>Knowledge Base</Text>
           {kbDocs.length > 0 && (
-            <Text style={styles.sectionCount}>{kbDocs.length}</Text>
+            <Text
+              style={styles.sectionCount}
+              accessibilityLabel={`Knowledge Base has ${kbDocs.length} documents`}
+              testID="project-knowledge-base-count"
+            >
+              {kbDocs.length}
+            </Text>
           )}
         </View>
         <View style={styles.sectionActions}>
@@ -219,7 +226,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
 
       {indexingFile && (
         <View style={styles.kbIndexing}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <LoadingDots color={colors.primary} />
           <Text style={styles.kbIndexingText} numberOfLines={1}>
             Indexing {indexingFile}...
           </Text>
@@ -239,6 +246,8 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
               style={styles.kbDocRow}
               onPress={() => onDocumentPress(doc)}
               activeOpacity={0.7}
+              accessibilityLabel={`Knowledge document ${doc.name}`}
+              testID={`kb-document-row-${doc.sync_id}`}
             >
               <View style={styles.kbDocInfo}>
                 <Text style={styles.kbDocName} numberOfLines={1}>
@@ -250,7 +259,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
                 value={doc.enabled === 1}
                 onValueChange={val => handleToggleDocument(doc.id, val)}
                 testID={`kb-document-toggle-${doc.sync_id}`}
-                accessibilityLabel={`Use ${doc.name}`}
+                accessibilityLabel={`Use ${doc.name}, ${doc.enabled === 1 ? 'ON' : 'OFF'}`}
                 trackColor={{ false: colors.border, true: colors.primary }}
               />
               <TouchableOpacity

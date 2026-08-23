@@ -37,6 +37,7 @@ jest.mock('../../../src/components/AppSheet', () => ({
 // Mock action fns defined outside factory for access in tests
 const mockUpdateSettings = jest.fn();
 const mockSetActiveImageModelId = jest.fn();
+const mockResetSettings = jest.fn();
 
 let mockStoreValues: any = {};
 
@@ -105,6 +106,7 @@ describe('GenerationSettingsModal', () => {
     mockStoreValues = {
       settings: { ...defaultSettings },
       updateSettings: mockUpdateSettings,
+      resetSettings: mockResetSettings,
       downloadedModels: [],
       downloadedImageModels: [],
       activeImageModelId: null,
@@ -214,6 +216,22 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('Max Tokens')).toBeTruthy();
   });
 
+  it('lets context reach the model 262K limit and caps max tokens at the context', () => {
+    mockStoreValues.modelMaxContext = 262144;
+    const { getByText, getByTestId } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    fireEvent.press(getByText('TEXT GENERATION'));
+
+    // Output cannot exceed the context that has to hold it, so this surface stops the max-tokens
+    // slider at the chosen context while context itself may reach the model's trained ceiling.
+    expect(getByTestId('setting-maxTokens-slider').props.maximumValue).toBe(
+      mockStoreValues.settings.contextLength,
+    );
+    expect(getByTestId('setting-contextLength-slider').props.maximumValue).toBe(262144);
+  });
+
   it('shows performance settings inside TEXT GENERATION section', () => {
     const { getByText, getByTestId, queryByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
@@ -228,27 +246,27 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('CPU Threads')).toBeTruthy();
   });
 
-  it('calls updateSettings when Reset to Defaults is pressed', () => {
+  it('calls the shared reset action when Reset to Defaults is pressed', () => {
     const { getByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     fireEvent.press(getByText('Reset to Defaults'));
 
-    expect(mockUpdateSettings).toHaveBeenCalledWith({
-      temperature: 0.7,
-      maxTokens: 1024,
-      topP: 0.9,
-      repeatPenalty: 1.1,
-      contextLength: 4096,
-      nThreads: 0,
-      nBatch: 512,
-      // Reset now also restores the image params (Q12).
-      imageWidth: 256,
-      imageHeight: 256,
-      imageGuidanceScale: 7.5,
-      imageSteps: 8,
-    });
+    expect(mockResetSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the shared STT model setting in chat settings', () => {
+    const { getByText, getByTestId, queryByText } = render(
+      <GenerationSettingsModal {...defaultProps} />,
+    );
+
+    expect(queryByText('Transcription model')).toBeNull();
+    fireEvent.press(getByTestId('modal-transcription-accordion'));
+
+    expect(getByText('Transcription model')).toBeTruthy();
+    expect(getByText('No model selected. Tap to choose.')).toBeTruthy();
+    expect(getByTestId('modal-stt-open-picker')).toBeTruthy();
   });
 
   it('calls updateSettings when image gen mode Auto/Manual is pressed', () => {

@@ -12,6 +12,8 @@ import { backgroundDownloadService } from '../../../src/services/backgroundDownl
 import { huggingFaceService } from '../../../src/services/huggingface';
 import { buildDownloadedModel } from '../../../src/services/modelManager/storage';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
+import { textProvider } from '../../../src/services/modelDownloadService/providers/textProvider';
+import { useAppStore } from '../../../src/stores';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -258,6 +260,74 @@ describe('ModelManager', () => {
 
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/m1.gguf');
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/mmproj.gguf');
+    });
+
+    it('deletes an iOS model stored with the private var container spelling', async () => {
+      const storedModels = [
+        {
+          id: 'model-ios-private',
+          name: 'iOS Model',
+          filePath:
+            '/private/var/mobile/Containers/Data/Application/OLD/Documents/models/qwen.gguf',
+          fileSize: 100,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await modelManager.deleteModel('model-ios-private');
+
+      expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/qwen.gguf');
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
+    });
+
+    it('keeps the registry when the model bytes cannot be deleted', async () => {
+      const storedModels = [
+        {
+          id: 'model-delete-fails',
+          name: 'Model That Stays',
+          filePath: '/mock/documents/models/stays.gguf',
+          fileSize: 100,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
+
+      await expect(modelManager.deleteModel('model-delete-fails')).rejects.toThrow(
+        'disk refused deletion',
+      );
+
+      expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
+    });
+
+    it('keeps the visible model when provider deletion fails', async () => {
+      const storedModel = {
+        id: 'model-provider-delete-fails',
+        name: 'Visible Model',
+        filePath: '/mock/documents/models/visible.gguf',
+        fileName: 'visible.gguf',
+        fileSize: 100,
+        author: 'test',
+        quantization: 'Q4_K_M',
+        downloadedAt: '2026-08-21T00:00:00.000Z',
+        credibility: {
+          source: 'community' as const,
+          isOfficial: false,
+          isVerifiedQuantizer: false,
+        },
+        engine: 'llama' as const,
+      };
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify([storedModel]));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
+      useAppStore.setState({ downloadedModels: [storedModel] });
+
+      await expect(
+        textProvider.remove('text:model-provider-delete-fails'),
+      ).rejects.toThrow('disk refused deletion');
+
+      expect(useAppStore.getState().downloadedModels).toEqual([storedModel]);
     });
 
     it('throws when model not found', async () => {
@@ -1343,7 +1413,9 @@ describe('ModelManager', () => {
       ];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 300000000 } as any);
+      mockedRNFS.readDir.mockResolvedValue([
+        { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
+      ] as any);
 
       await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
@@ -1362,7 +1434,9 @@ describe('ModelManager', () => {
       ];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 300000000 } as any);
+      mockedRNFS.readDir.mockResolvedValue([
+        { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
+      ] as any);
 
       await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
@@ -2676,11 +2750,13 @@ describe('ModelManager', () => {
           { name: 'sd_v15_coreml', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml`, size: 0, isFile: () => false, isDirectory: () => true },
         ] as any)
         .mockResolvedValueOnce([
+          { name: 'sd_v15_coreml.zip', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml.zip`, size: 400000000, isFile: () => true, isDirectory: () => false },
+        ] as any)
+        .mockResolvedValueOnce([
           { name: 'model.mlpackage', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml/model.mlpackage`, size: 500000000, isFile: () => true, isDirectory: () => false },
         ] as any);
 
       mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_coreml.zip');
-      mockedRNFS.stat = jest.fn().mockResolvedValue({ size: 400000000, isFile: () => true } as any);
       mockedRNFS.read = jest.fn().mockResolvedValue('PK\x03\x04');
       mockedRNFS.writeFile = jest.fn().mockResolvedValue(undefined as any);
       (mockedUnzip as jest.Mock).mockResolvedValueOnce(undefined);

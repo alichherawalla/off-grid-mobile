@@ -34,6 +34,25 @@ const endpoint = (value, defaultPort) => {
 };
 
 /**
+ * WHERE each desktop might be, in the order worth trying.
+ *
+ * A box moves, or its tunnel is open on one address and not the other, and the run then reports a
+ * live app as a dead one - which is the exact failure this file was written to stop. So a desktop is
+ * a LIST of places rather than one, and whichever answers is the one used.
+ *
+ * A --mac/--win flag or E2E_MAC/E2E_WIN still wins outright: naming an address means you want that
+ * address, and silently trying somewhere else would be worse than failing.
+ */
+const MAC_HOSTS = ['127.0.0.1', '192.168.1.25', '192.168.1.64'];
+const WIN_HOSTS = ['127.0.0.1', '192.168.1.94', '192.168.1.26'];
+
+const candidatesFor = (flagName, envValue, hosts, defaultPort) => {
+  const explicit = flag(flagName, envValue);
+  if (explicit) return [endpoint(explicit, defaultPort)];
+  return hosts.map((host) => ({ host, port: defaultPort }));
+};
+
+/**
  * The mesh, as addressed from THIS machine.
  *
  * Kinds are the same four words the surface layer speaks, so a flow that names a device never has to
@@ -50,12 +69,14 @@ export const MESH = {
   }),
   macos: () => ({
     kind: 'macos',
-    ...endpoint(flag('mac', process.env.E2E_MAC ?? '192.168.1.64:9222'), 9222),
+    ...endpoint(flag('mac', process.env.E2E_MAC ?? '127.0.0.1:9222'), 9222),
+    candidates: candidatesFor('mac', process.env.E2E_MAC, MAC_HOSTS, 9222),
     offline: OFFLINE.macos,
   }),
   windows: () => ({
     kind: 'windows',
-    ...endpoint(flag('win', process.env.E2E_WIN ?? '192.168.1.94:9224'), 9224),
+    ...endpoint(flag('win', process.env.E2E_WIN ?? '127.0.0.1:9224'), 9224),
+    candidates: candidatesFor('win', process.env.E2E_WIN, WIN_HOSTS, 9224),
     offline: OFFLINE.windows,
   }),
 };

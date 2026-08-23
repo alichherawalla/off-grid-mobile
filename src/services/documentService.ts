@@ -5,6 +5,7 @@
 
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
+import { statFile } from '../utils/fileStat';
 import { MediaAttachment } from '../types';
 import { pdfExtractor } from './pdfExtractor';
 import { useAppStore } from '../stores/appStore';
@@ -250,9 +251,15 @@ class DocumentService {
         throw new Error(`File not found: ${name}`);
       }
 
-      const stat = await RNFS.stat(resolvedPath);
-      console.log(`[DocumentService] File size: ${stat.size} bytes`);
-      if (stat.size > MAX_FILE_SIZE) {
+      const facts = await statFile(resolvedPath);
+      if (!facts) {
+        throw new Error(
+          'Could not determine file size. Please try selecting the file again.',
+        );
+      }
+      const fileSize = facts.size;
+      console.log(`[DocumentService] File size: ${fileSize} bytes`);
+      if (fileSize > MAX_FILE_SIZE) {
         throw new Error(
           `File is too large. Maximum size is ${
             MAX_FILE_SIZE / (1024 * 1024)
@@ -281,7 +288,7 @@ class DocumentService {
         uri,
         fileName: name,
         textContent,
-        fileSize: stat.size,
+        fileSize,
       };
     } catch (error: any) {
       throw error;

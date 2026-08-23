@@ -12,6 +12,7 @@
  * See docs/plans/best-backend-per-device.md and the HTP/OpenCL research.
  */
 import { ModelInfo, ModelFile, InferenceBackend, INFERENCE_BACKENDS } from '../types';
+import { isLiteRTFileName } from './modelHelpers';
 
 /** GGUF quantizations the NPU (HTP) / GPU (OpenCL) backends actually accelerate. */
 const ACCELERABLE_QUANTS = ['Q4_0', 'Q8_0'] as const;
@@ -25,7 +26,7 @@ export function isAccelerableQuant(quant: string | undefined | null): boolean {
 
 /** A LiteRT model file runs on the GPU regardless of GGUF quant. */
 function isLiteRTFile(file: ModelFile): boolean {
-  return file.name.toLowerCase().endsWith('.litertlm') || file.quantization?.toLowerCase() === 'litert';
+  return isLiteRTFileName(file.name) || file.quantization?.toLowerCase() === 'litert';
 }
 
 /**

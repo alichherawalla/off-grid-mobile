@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  FlatList,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
@@ -20,6 +21,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import type {
   NativeClipboardBoundary,
   NativeClipboardChange,
+  PendingNativeClipboardText,
 } from '../../../src/services/sync/nativeClipboard';
 import {
   MobileClipboardSyncService,
@@ -81,7 +83,36 @@ jest.mock('react-native-zeroconf', () => {
 class ClipboardBoundary implements NativeClipboardBoundary {
   enabled = false;
   readonly writes: string[] = [];
+  readonly acknowledged: string[] = [];
+  ambientCapture = true;
+  pending: PendingNativeClipboardText[] = [];
   private listener: ((change: NativeClipboardChange) => void) | null = null;
+  private pendingListener: (() => void) | null = null;
+
+  ambientExternalCaptureAvailable(): boolean {
+    return this.ambientCapture;
+  }
+
+  async pendingLocalText(): Promise<PendingNativeClipboardText[]> {
+    return [...this.pending];
+  }
+
+  async acknowledgePendingLocalText(ids: string[]): Promise<void> {
+    this.acknowledged.push(...ids);
+    this.pending = this.pending.filter(item => !ids.includes(item.id));
+  }
+
+  onPendingLocalTextAvailable(listener: () => void): () => void {
+    this.pendingListener = listener;
+    return () => {
+      this.pendingListener = null;
+    };
+  }
+
+  processText(item: PendingNativeClipboardText): void {
+    this.pending.push(item);
+    this.pendingListener?.();
+  }
 
   observe(listener: (change: NativeClipboardChange) => void): () => void {
     this.enabled = true;
@@ -123,6 +154,14 @@ describe('mobile clipboard Sync journey', () => {
 
   beforeEach(async () => {
     mesh.reset();
+    NativeModules.SyncClipboardModule = {
+      setEnabled: jest.fn(),
+      writeText: jest.fn(),
+      readPendingProcessText: jest.fn().mockResolvedValue([]),
+      acknowledgePendingProcessText: jest.fn().mockResolvedValue(undefined),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
     await clipboardSyncService.stop();
     await AsyncStorage.clear();
     await clipboardSyncService.clearHistory();
@@ -273,7 +312,36 @@ describe('mobile clipboard Sync journey', () => {
       ]),
     );
 
-    clock += 1_000;
+    clock += 500;
+    nativeClipboard.processText({
+      id: 'android-process-text-1',
+      text: 'selected in another Android app',
+      ts: clock,
+    });
+    await waitFor(() =>
+      expect(nativeClipboard.acknowledged).toContain('android-process-text-1'),
+    );
+    expect(contentReceivedByDesktop()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'selected in another Android app',
+          provenance: {
+            originDeviceId: mobileDevice.id,
+            originDeviceName: mobileDevice.name,
+          },
+        }),
+      ]),
+    );
+    expect(service.historySnapshot()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'selected in another Android app',
+          isLocal: true,
+        }),
+      ]),
+    );
+
+    clock += 500;
     const inbound = { t: 'text', text: 'copied on Mac', ts: clock };
     expect(
       desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound),
@@ -311,9 +379,9 @@ describe('mobile clipboard Sync journey', () => {
         ]),
       ),
     );
-    expect(service.historySnapshot()).toHaveLength(3);
+    expect(service.historySnapshot()).toHaveLength(4);
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(contentReceivedByDesktop()).toHaveLength(1);
+    expect(contentReceivedByDesktop()).toHaveLength(2);
 
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound);
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, {
@@ -514,6 +582,25 @@ describe('mobile clipboard Sync journey', () => {
 
     fireEvent.press(ui.getByTestId('open-clipboard-history'));
     await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
+    const clipboardPageToggle = ui.getByTestId('clipboard-page-sync-toggle');
+    expect(clipboardPageToggle.props.value).toBe(true);
+    fireEvent(clipboardPageToggle, 'valueChange', false);
+    await waitFor(() =>
+      expect(ui!.getByTestId('clipboard-page-sync-toggle').props.value).toBe(
+        false,
+      ),
+    );
+    expect(nativeClipboardEnabled).toBe(false);
+    fireEvent(clipboardPageToggle, 'valueChange', true);
+    await waitFor(() =>
+      expect(ui!.getByTestId('clipboard-page-sync-toggle').props.value).toBe(
+        true,
+      ),
+    );
+    expect(nativeClipboardEnabled).toBe(true);
+    const clipboardList = ui.UNSAFE_getByType(FlatList);
+    expect(clipboardList.props.initialNumToRender).toBe(8);
+    expect(clipboardList.props.windowSize).toBe(7);
     expect(ui.getAllByText('This phone')).toHaveLength(1);
     expect(ui.getByText('copied on Mac')).toBeTruthy();
     expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();
@@ -540,6 +627,46 @@ describe('mobile clipboard Sync journey', () => {
     fireEvent.press(sheetAction(ui, 'Clear clipboard history?', 'Clear'));
     await waitFor(() =>
       expect(ui!.getByTestId('clipboard-empty')).toBeTruthy(),
+    );
+  });
+
+  it('shows the supported Android selection action without a permission remedy', async () => {
+    NativeModules.SyncClipboardModule = {
+      setEnabled: jest.fn(),
+      writeText: jest.fn(),
+      readPendingProcessText: jest.fn().mockResolvedValue([]),
+      acknowledgePendingProcessText: jest.fn().mockResolvedValue(undefined),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
+    jest.spyOn(NativeEventEmitter.prototype, 'addListener').mockReturnValue({
+      remove: () => undefined,
+    } as unknown as EmitterSubscription);
+    jest
+      .spyOn(clipboardSyncService, 'ambientExternalCaptureAvailable')
+      .mockReturnValue(false);
+    clipboardSyncService.setEntitlementActive(true);
+
+    ui = render(
+      <NavigationContainer>
+        <>
+          <SyncSharingSettingsScreen />
+          <ClipboardScreen />
+        </>
+      </NavigationContainer>,
+    );
+
+    expect(
+      ui.getAllByText('Select text, then choose Copy to Off Grid AI.'),
+    ).toBeTruthy();
+    fireEvent(ui.getByTestId('sync-clipboard-toggle'), 'valueChange', true);
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-clipboard-toggle').props.value).toBe(true),
+    );
+    expect(ui.queryByText('Clipboard access')).toBeNull();
+    expect(ui.queryByText(/Accessibility/i)).toBeNull();
+    expect(ui.getByTestId('clipboard-android-copy-hint')).toHaveTextContent(
+      'Select text, then choose Copy to Off Grid AI.',
     );
   });
 });

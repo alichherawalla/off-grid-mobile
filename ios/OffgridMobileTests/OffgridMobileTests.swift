@@ -1,5 +1,6 @@
 import XCTest
 import PDFKit
+import Darwin
 
 @testable import OffgridMobile
 
@@ -18,6 +19,82 @@ private func makeTempDirectory() -> URL {
     .appendingPathComponent(UUID().uuidString, isDirectory: true)
   try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
   return url
+}
+
+final class BlobReceiveWindowTests: XCTestCase {
+  func testBodyWaitsForOneCompleteAuthenticatedFrame() {
+    let productionFrame = 4 * 1_048_576 + BlobFrameCipher.tagBytes
+    let window = BlobReceiveWindow.body(sealedBytesRemaining: productionFrame)
+
+    XCTAssertEqual(window.minimum, productionFrame)
+    XCTAssertEqual(window.maximum, productionFrame)
+  }
+
+  func testBodyRequestsOnlyTheRemainderAfterHeadersCarryPayloadBytes() {
+    let remainder = 3 * 1_048_576 + BlobFrameCipher.tagBytes
+    let window = BlobReceiveWindow.body(sealedBytesRemaining: remainder)
+
+    XCTAssertEqual(window.minimum, remainder)
+    XCTAssertEqual(window.maximum, remainder)
+  }
+
+  func testHeaderCanReturnAsSoonAsOneByteArrives() {
+    XCTAssertEqual(BlobReceiveWindow.header.minimum, 1)
+    XCTAssertEqual(BlobReceiveWindow.header.maximum, 1 << 16)
+  }
+}
+
+final class StreamingFileHasherTests: XCTestCase {
+  func testProducesTheStandardSHA512DigestAcrossManyChunks() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    try Data("abc".utf8).write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    XCTAssertEqual(
+      try StreamingFileHasher.sha512Hex(at: url, chunkSize: 1),
+      "ddaf35a193617abacc417349ae204131" +
+        "12e6fa4e89a97ea20a9eeee64b55d39a" +
+        "2192992a274fc1a836ba3c23a3feebbd" +
+        "454d4423643ce80e2a9ac94fa54ca49f"
+    )
+  }
+
+  func testLargeFileHashKeepsAConstantMemoryFootprint() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    FileManager.default.createFile(atPath: url.path, contents: nil)
+    let writer = try FileHandle(forWritingTo: url)
+    let block = Data(repeating: 0xa5, count: 1_048_576)
+    for _ in 0..<96 { try writer.write(contentsOf: block) }
+    try writer.close()
+
+    let baseline = residentFootprintBytes()
+    var peak = baseline
+    _ = try StreamingFileHasher.sha512Hex(at: url) {
+      peak = max(peak, self.residentFootprintBytes())
+    }
+
+    XCTAssertLessThan(
+      peak - baseline,
+      32 * 1_048_576,
+      "streaming a 96 MiB file must not retain its consumed chunks"
+    )
+  }
+
+  private func residentFootprintBytes() -> UInt64 {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+    let status = withUnsafeMutablePointer(to: &info) { pointer in
+      pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return status == KERN_SUCCESS ? info.phys_footprint : 0
+  }
 }
 
 // MARK: - Sync Screenshot Tests
@@ -934,6 +1011,11 @@ final class SyncClipboardObserverTests: XCTestCase {
       observedTimestamp ?? 0,
       earliestReasonableUnixMilliseconds,
       "Clipboard events must use Unix milliseconds like the shared clipboard protocol"
+    )
+    XCTAssertEqual(
+      observedTimestamp?.rounded(.down),
+      observedTimestamp,
+      "Clipboard protocol timestamps must be whole milliseconds"
     )
   }
 

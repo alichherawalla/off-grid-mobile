@@ -56,7 +56,7 @@ final class SyncClipboardObserver: NSObject {
     guard enabled, pasteboard.changeCount != lastChangeCount else { return }
     lastChangeCount = pasteboard.changeCount
     guard let text = pasteboard.string else { return }
-    let timestamp = now() * 1_000
+    let timestamp = (now() * 1_000).rounded(.down)
     guard timestamp.isFinite, timestamp >= 0 else { return }
     onText(text, timestamp)
   }

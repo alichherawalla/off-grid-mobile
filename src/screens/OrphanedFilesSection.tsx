@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../components';
 import {
@@ -130,7 +131,7 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
             disabled={isScanning}
           >
             {isScanning ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <LoadingDots color={colors.primary} />
             ) : (
               <Icon name="refresh-cw" size={16} color={colors.primary} />
             )}
@@ -163,7 +164,7 @@ export const OrphanedFilesSection: React.FC<Props> = ({ onStorageChange }) => {
                   disabled={isDeleting === file.path}
                 >
                   {isDeleting === file.path ? (
-                    <ActivityIndicator size="small" color={colors.error} />
+                    <LoadingDots color={colors.error} />
                   ) : (
                     <Icon name="trash-2" size={18} color={colors.error} />
                   )}

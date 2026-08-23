@@ -1,5 +1,8 @@
 import React from 'react';
+import { StyleSheet, View } from 'react-native';
 import { ChatMessage } from '../../components';
+import { ThinkingIndicator } from '../../components/ThinkingIndicator';
+import { SPACING } from '../../constants';
 import { prepareMessageForSpeech } from '../../utils/messageContent';
 import { Message } from '../../types';
 import { useUiModeStore } from '../../stores';
@@ -22,7 +25,7 @@ type MessageRendererProps = {
   onImagePress: (uri: string) => void;
 };
 
-const MessageRendererInner: React.FC<MessageRendererProps> = (props) => {
+const MessageRendererInner: React.FC<MessageRendererProps> = props => {
   const {
     item,
     index,
@@ -39,19 +42,24 @@ const MessageRendererInner: React.FC<MessageRendererProps> = (props) => {
     onImagePress,
   } = props;
 
-  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
+  const interfaceMode = useUiModeStore(s => s.interfaceMode);
   const msg = item as Message;
-  const animateEntry = animateLastN > 0 && index >= displayMessagesLength - animateLastN;
-  const isStreamingThis = item.id === 'streaming';
+  const animateEntry =
+    animateLastN > 0 && index >= displayMessagesLength - animateLastN;
+  const isStreamingThis = item.id === 'streaming' || item.isStreaming === true;
+  const statusText = (item as ChatMessageItem).statusText;
+  const suppressMessageBubble = (item as ChatMessageItem).suppressMessageBubble;
+  const supportingContext = (item as ChatMessageItem).supportingContext;
 
   // Audio mode: the pro audio feature owns the whole message presentation
   // (user/assistant bubbles, thinking, streaming). Free builds never reach
   // this branch (interfaceMode stays 'chat').
   const AudioMessage = getSlot(SLOTS.messageAudioMode);
   if (interfaceMode === 'audio' && AudioMessage) {
-    return (
+    const audioMessage = (
       <AudioMessage
         msg={msg}
+        supportingContext={supportingContext}
         isStreamingThis={isStreamingThis}
         shouldAnimate={animateEntry}
         showGenerationDetails={showGenerationDetails}
@@ -62,20 +70,35 @@ const MessageRendererInner: React.FC<MessageRendererProps> = (props) => {
         onImagePress={onImagePress}
       />
     );
+    return statusText ? (
+      <View>
+        {!suppressMessageBubble && audioMessage}
+        <View style={styles.remoteStatus}>
+          <ThinkingIndicator text={statusText} />
+        </View>
+      </View>
+    ) : (
+      audioMessage
+    );
   }
 
   // Chat Mode: the speak button (pro slot) lives in the meta row.
   const Speak = getSlot(SLOTS.messageSpeakButton);
-  const isPlainAssistant = msg.role === 'assistant' && !msg.isSystemInfo && !msg.toolCalls?.length;
+  const isPlainAssistant =
+    msg.role === 'assistant' && !msg.isSystemInfo && !msg.toolCalls?.length;
   // No speaker on an in-progress reply (streaming, or the thinking/loading dots).
   const ttsMeta =
-    isPlainAssistant && !isStreamingThis && !(msg as Message).isThinking && Speak
-      ? <Speak text={prepareMessageForSpeech(msg.content)} messageId={msg.id} />
-      : undefined;
+    isPlainAssistant &&
+    !isStreamingThis &&
+    !(msg as Message).isThinking &&
+    Speak ? (
+      <Speak text={prepareMessageForSpeech(msg.content)} messageId={msg.id} />
+    ) : undefined;
 
-  return (
+  const message = (
     <ChatMessage
       message={msg}
+      supportingContext={supportingContext}
       isStreaming={isStreamingThis}
       onCopy={onCopy}
       onRetry={onRetry}
@@ -88,7 +111,24 @@ const MessageRendererInner: React.FC<MessageRendererProps> = (props) => {
       metaExtra={ttsMeta}
     />
   );
+  return statusText ? (
+    <View>
+      {!suppressMessageBubble && message}
+      <View style={styles.remoteStatus}>
+        <ThinkingIndicator text={statusText} />
+      </View>
+    </View>
+  ) : (
+    message
+  );
 };
+
+const styles = StyleSheet.create({
+  remoteStatus: {
+    marginLeft: SPACING.xl,
+    marginTop: SPACING.xs,
+  },
+});
 
 /**
  * Memoized so a ChatScreen re-render (a streaming token, a focus after returning from
@@ -104,15 +144,23 @@ const MessageRendererInner: React.FC<MessageRendererProps> = (props) => {
  * and a conversation switch replaces every message object (item ref changes → re-render
  * with fresh handlers). Comparing them would defeat the memo entirely.
  */
-export function messageRendererPropsEqual(prev: MessageRendererProps, next: MessageRendererProps): boolean {
-  return prev.item === next.item
-    && prev.index === next.index
-    && prev.displayMessagesLength === next.displayMessagesLength
-    && prev.animateLastN === next.animateLastN
-    && prev.imageModelLoaded === next.imageModelLoaded
-    && prev.isStreaming === next.isStreaming
-    && prev.isGeneratingImage === next.isGeneratingImage
-    && prev.showGenerationDetails === next.showGenerationDetails;
+export function messageRendererPropsEqual(
+  prev: MessageRendererProps,
+  next: MessageRendererProps,
+): boolean {
+  return (
+    prev.item === next.item &&
+    prev.index === next.index &&
+    prev.displayMessagesLength === next.displayMessagesLength &&
+    prev.animateLastN === next.animateLastN &&
+    prev.imageModelLoaded === next.imageModelLoaded &&
+    prev.isStreaming === next.isStreaming &&
+    prev.isGeneratingImage === next.isGeneratingImage &&
+    prev.showGenerationDetails === next.showGenerationDetails
+  );
 }
 
-export const MessageRenderer = React.memo(MessageRendererInner, messageRendererPropsEqual);
+export const MessageRenderer = React.memo(
+  MessageRendererInner,
+  messageRendererPropsEqual,
+);

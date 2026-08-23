@@ -21,7 +21,12 @@
  * does not exhaustively assert.
  */
 
-import RNFS from 'react-native-fs';
+import { defaultNativeFileSystemBoundary } from '../harness/nativeFileSystem';
+
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
 
 jest.mock('../../src/services/pdfExtractor', () => ({
   pdfExtractor: { isAvailable: jest.fn(() => false), extractText: jest.fn() },
@@ -29,21 +34,18 @@ jest.mock('../../src/services/pdfExtractor', () => ({
 
 import { documentService } from '../../src/services/documentService';
 
-const rnfs = RNFS as jest.Mocked<typeof RNFS>;
-
-/** Make RNFS behave as if `content` is a readable file of `size` bytes. */
-function stubReadableFile(content: string, size = content.length): void {
-  rnfs.exists.mockResolvedValue(true);
-  rnfs.stat.mockResolvedValue({ size, isFile: () => true } as any);
-  rnfs.readFile.mockResolvedValue(content);
-  rnfs.copyFile.mockResolvedValue(undefined as any);
-  rnfs.mkdir.mockResolvedValue(undefined as any);
-  rnfs.unlink.mockResolvedValue(undefined as any);
+/** Put one readable file on the fake device, with independent stored bytes and reported metadata. */
+function seedReadableFile(
+  path: string,
+  content: string,
+  size = content.length,
+): void {
+  defaultNativeFileSystemBoundary.seedTextFile(path, content, size);
 }
 
 describe('Batch3 · document attach validation (real documentService)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    defaultNativeFileSystemBoundary.reset();
   });
 
   // ── #14/#15/#2 + csv/code: the full supported accept-set ───────────────────
@@ -62,7 +64,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
 
     it.each(acceptedNames)('processDocumentFromPath() builds a document attachment for %s', async (name) => {
-      stubReadableFile('sample body', 11);
+      seedReadableFile(`/docs/${name}`, 'sample body', 11);
       const att = await documentService.processDocumentFromPath(`/docs/${name}`, name);
       expect(att).not.toBeNull();
       expect(att!.type).toBe('document');
@@ -84,7 +86,6 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
 
     it('processDocumentFromPath() throws an "Unsupported file type" error for .docx (no chip is added)', async () => {
-      stubReadableFile('ignored');
       await expect(
         documentService.processDocumentFromPath('/docs/report.docx', 'report.docx'),
       ).rejects.toThrow(/Unsupported file type/);
@@ -94,14 +95,14 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // ── #13: oversized (>5MB) file rejected with a visible error ────────────────
   describe('oversized files are rejected (#13)', () => {
     it('rejects a file at 5MB + 1 byte with a "too large" error', async () => {
-      stubReadableFile('x', 5 * 1024 * 1024 + 1);
+      seedReadableFile('/docs/huge.txt', 'x', 5 * 1024 * 1024 + 1);
       await expect(
         documentService.processDocumentFromPath('/docs/huge.txt', 'huge.txt'),
       ).rejects.toThrow(/too large/i);
     });
 
     it('accepts a file exactly at the 5MB boundary', async () => {
-      stubReadableFile('ok', 5 * 1024 * 1024);
+      seedReadableFile('/docs/limit.txt', 'ok', 5 * 1024 * 1024);
       const att = await documentService.processDocumentFromPath('/docs/limit.txt', 'limit.txt');
       expect(att).not.toBeNull();
     });
@@ -121,7 +122,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // assertion is skipped and the actual (buggy) behavior is pinned below.
   describe('URL-encoded filename display decode (#17)', () => {
     it.skip('BUG-FOUND: display fileName should be decoded (my%20notes.txt -> "my notes.txt")', async () => {
-      stubReadableFile('body');
+      seedReadableFile('/docs/my%20notes.txt', 'body');
       const att = await documentService.processDocumentFromPath(
         '/docs/my%20notes.txt',
         'my%20notes.txt',
@@ -131,7 +132,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     });
 
     it.skip('pins ACTUAL behavior: the display fileName is returned un-decoded (documents the bug) — SKIP: do not enshrine the bug as passing; see the desired-behavior skip above', async () => {
-      stubReadableFile('body');
+      seedReadableFile('/docs/my%20notes.txt', 'body');
       const att = await documentService.processDocumentFromPath(
         '/docs/my%20notes.txt',
         'my%20notes.txt',
@@ -143,9 +144,12 @@ describe('Batch3 · document attach validation (real documentService)', () => {
     it('resolves the file even when the PATH is URL-encoded (path decode works)', async () => {
       // The path decode DOES happen (resolveContentUri), so a file whose path
       // carries %20 still reads without error — the attach itself succeeds.
-      stubReadableFile('decoded path body');
+      seedReadableFile(
+        '/mock/documents/my notes.txt',
+        'decoded path body',
+      );
       const att = await documentService.processDocumentFromPath(
-        '/docs/my%20notes.txt',
+        '/mock/documents/my%20notes.txt',
         'my%20notes.txt',
       );
       expect(att).not.toBeNull();
@@ -156,14 +160,14 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // ── #34/#35: multiple document attachments queue as distinct attachments ────
   describe('multiple document attachments queue (#34, #35)', () => {
     it('produces two distinct attachments with unique ids for two files', async () => {
-      stubReadableFile('py body');
+      seedReadableFile('/docs/a.py', 'py body');
       const first = await documentService.processDocumentFromPath('/docs/a.py', 'a.py');
 
       // Advance the clock so the second attachment gets a different id (id is Date.now()).
       const nowSpy = jest.spyOn(Date, 'now');
       const base = Date.now();
       nowSpy.mockReturnValue(base + 5);
-      rnfs.readFile.mockResolvedValue('ts body');
+      seedReadableFile('/docs/b.ts', 'ts body');
       const second = await documentService.processDocumentFromPath('/docs/b.ts', 'b.ts');
       nowSpy.mockRestore();
 

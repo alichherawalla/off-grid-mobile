@@ -159,15 +159,18 @@ describe('MessageAudioMode', () => {
     expect(queryByTestId(`audio-bubble-${msg.id}`)).toBeNull();
   });
 
-  it('renders a full ChatMessage for an assistant message with tool calls', () => {
-    const msg = createAssistantMessage('used a tool', {
+  it('speaks the narration and shows the tool cards, with no prose as text', () => {
+    const msg = createAssistantMessage('let me check the sources', {
       toolCalls: [{ id: 't1', name: 'search', arguments: '{}' }],
     });
     const { getByTestId, queryByTestId } = renderMode(msg);
-    // Tool-call messages render the real ChatMessage (proper tool-call UI),
-    // NOT an audio-only bubble.
+    // What the assistant DID is shown - you cannot listen to a tool call.
     expect(getByTestId('tool-call-message')).toBeTruthy();
-    expect(queryByTestId(`audio-bubble-${msg.id}`)).toBeNull();
+    // What the assistant SAID is a voice note, so a tool-using turn is heard as a train of
+    // thought rather than read.
+    expect(getByTestId(`audio-bubble-${msg.id}`)).toBeTruthy();
+    // And never both: printing the narration as well turned a spoken turn into a wall of text.
+    expect(queryByTestId('tool-call-pre-text')).toBeNull();
   });
 
   it('renders a full ChatMessage AND an audio bubble for an assistant image message', () => {

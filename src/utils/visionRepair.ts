@@ -1,4 +1,5 @@
 import { ModelFile } from '../types';
+import { predictGgufCapabilities } from './ggufCapabilities';
 
 interface VisionRepairCandidate {
   isVisionModel?: boolean;
@@ -11,8 +12,13 @@ interface VisionRepairCandidate {
 function looksLikeVisionByName(model: VisionRepairCandidate): boolean {
   const name = (model.name ?? '').toLowerCase();
   const file = (model.fileName ?? '').toLowerCase();
-  return name.includes('vl') || name.includes('vision') || name.includes('smolvlm') ||
-    file.includes('vl') || file.includes('vision');
+  return (
+    name.includes('vl') ||
+    name.includes('vision') ||
+    name.includes('smolvlm') ||
+    file.includes('vl') ||
+    file.includes('vision')
+  );
 }
 
 /**
@@ -27,7 +33,10 @@ export function needsVisionRepair(
   catalogFile?: ModelFile,
 ): boolean {
   if (!model) return false;
-  if (model.mmProjPath) return false;
+  // "Can it see right now" has ONE owner - the same predictor deriveEngineCapabilities falls back
+  // to, which reads the projector rather than the name. Re-testing mmProjPath here would be a
+  // second copy of that rule, and the two would eventually disagree about the same model.
+  if (predictGgufCapabilities(model).vision) return false;
 
   // Primary signal: mmProjFileName metadata indicates this model should have vision
   const hasVisionMetadata = !!model.mmProjFileName;

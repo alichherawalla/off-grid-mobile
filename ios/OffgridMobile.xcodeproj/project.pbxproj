@@ -35,6 +35,8 @@
 		105E03B12F48000100C11A02 /* BlobChannelUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E03B22F48000100C11A02 /* BlobChannelUploader.swift */; };
 		105E04B12F48000100C11A02 /* BlobChannelModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E04B22F48000100C11A02 /* BlobChannelModule.swift */; };
 		105E05B12F48000100C11A02 /* BlobChannelModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 105E05B22F48000100C11A02 /* BlobChannelModule.m */; };
+		116F00012F49000100C11A00 /* StreamingHashModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 116F00032F49000100C11A00 /* StreamingHashModule.m */; };
+		116F00022F49000100C11A00 /* StreamingHashModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116F00042F49000100C11A00 /* StreamingHashModule.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		553E18B7CCC207C0885499E4 /* libPods-OffgridMobileTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D1B1541769AADA563D6CC44E /* libPods-OffgridMobileTests.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
@@ -82,6 +84,8 @@
 		105E03B22F48000100C11A02 /* BlobChannelUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobChannelUploader.swift; sourceTree = "<group>"; };
 		105E04B22F48000100C11A02 /* BlobChannelModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobChannelModule.swift; sourceTree = "<group>"; };
 		105E05B22F48000100C11A02 /* BlobChannelModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BlobChannelModule.m; sourceTree = "<group>"; };
+		116F00032F49000100C11A00 /* StreamingHashModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = StreamingHashModule.m; sourceTree = "<group>"; };
+		116F00042F49000100C11A00 /* StreamingHashModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingHashModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* OffgridMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OffgridMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OffgridMobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OffgridMobile/Info.plist; sourceTree = "<group>"; };
@@ -142,6 +146,8 @@
 				105E03B22F48000100C11A02 /* BlobChannelUploader.swift */,
 				105E04B22F48000100C11A02 /* BlobChannelModule.swift */,
 				105E05B22F48000100C11A02 /* BlobChannelModule.m */,
+				116F00032F49000100C11A00 /* StreamingHashModule.m */,
+				116F00042F49000100C11A00 /* StreamingHashModule.swift */,
 				0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */,
 				0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */,
 				0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */,
@@ -444,6 +450,8 @@
 				105E03B12F48000100C11A02 /* BlobChannelUploader.swift in Sources */,
 				105E04B12F48000100C11A02 /* BlobChannelModule.swift in Sources */,
 				105E05B12F48000100C11A02 /* BlobChannelModule.m in Sources */,
+				116F00012F49000100C11A00 /* StreamingHashModule.m in Sources */,
+				116F00022F49000100C11A00 /* StreamingHashModule.swift in Sources */,
 				0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */,
 				0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */,
 				0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */,
@@ -479,7 +487,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OffgridMobile/OffgridMobile.entitlements;
-				CURRENT_PROJECT_VERSION = 1786458677;
+				CURRENT_PROJECT_VERSION = 1787309345;
 				DEVELOPMENT_TEAM = 84V6KCAC49;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = OffgridMobile/Info.plist;
@@ -490,7 +498,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.104;
+				MARKETING_VERSION = 0.0.107;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -512,7 +520,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = OffgridMobile/OffgridMobile.entitlements;
-				CURRENT_PROJECT_VERSION = 1786458677;
+				CURRENT_PROJECT_VERSION = 1787309345;
 				DEVELOPMENT_TEAM = 84V6KCAC49;
 				INFOPLIST_FILE = OffgridMobile/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Off Grid AI";
@@ -522,7 +530,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.0.104;
+				MARKETING_VERSION = 0.0.107;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

@@ -1,6 +1,6 @@
 {
   "name": "offgrid-mobile",
-  "version": "0.0.104",
+  "version": "0.0.107",
   "private": true,
   "scripts": {
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
@@ -16,7 +16,7 @@
     "test:e2e:ios-sync-adapter": "node --test scripts/physical-sync/__tests__/iosKnowledgeSyncDeviceAdapter.test.mjs",
     "sync:ios-adapter": "node --experimental-strip-types --no-warnings scripts/physical-sync/iosKnowledgeSyncAdapter.mjs",
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest",
-    "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
+    "test:ios": "bash scripts/test-ios.sh",
     "postinstall": "patch-package",
     "depcruise": "depcruise src --config .dependency-cruiser.js",
     "knip": "knip",
@@ -26,13 +26,16 @@
     "e2e:build:ios": "E2E_COVERAGE=1 npx react-native run-ios --device",
     "e2e:build:android": "E2E_COVERAGE=1 npx react-native run-android --mode=debug --appId ai.offgridmobile.dev",
     "test:device-parser": "node --test scripts/android/__tests__/adbClient.test.mjs",
-    "e2e:mesh": "node --test __tests__/device/meshPairing.e2e.mjs"
+    "e2e:mesh": "node --test __tests__/device/meshPairing.e2e.mjs",
+    "e2e:image-sync": "node scripts/e2e/generated-image-sync.mjs",
+    "e2e:thinking-sync": "node scripts/e2e/attended-thinking-sync.mjs"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.38.1",
     "@kesha-antonov/react-native-background-downloader": "^4.5.6",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@offgrid/rag": "file:../shared/packages/rag",
+    "@offgrid/speech": "file:../shared/packages/speech",
     "@offgrid/sync": "file:../shared/packages/sync",
     "@op-engineering/op-sqlite": "^15.2.5",
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -49,7 +52,7 @@
     "buffer": "^6.0.3",
     "js-sha256": "^0.11.0",
     "js-sha512": "^0.9.0",
-    "llama.rn": "^0.12.9",
+    "llama.rn": "0.13.0-rc.0",
     "node-html-parser": "^7.1.0",
     "patch-package": "^8.0.1",
     "react": "19.2.0",

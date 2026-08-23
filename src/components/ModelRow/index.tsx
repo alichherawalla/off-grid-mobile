@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createModelRowStyles } from './styles';
@@ -74,7 +75,7 @@ export const ModelRow: React.FC<ModelRowProps> = ({
         {!!ramHint && <Text style={styles.ramHint}>{ramHint}</Text>}
       </View>
       {loading ? (
-        <ActivityIndicator testID="model-row-loading" size="small" color={isImage ? colors.info : colors.primary} />
+        <LoadingDots color={isImage ? colors.info : colors.primary} testID="model-row-loading" />
       ) : isLoaded ? (
         <View style={[styles.checkmark, isImage ? styles.checkmarkImage : styles.checkmarkText]}>
           <Icon name="check" size={16} color={colors.background} />

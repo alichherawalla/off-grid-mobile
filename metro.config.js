@@ -14,6 +14,9 @@ const proExists = fs.existsSync(path.resolve(proPackagePath, 'package.json'));
 // dep and breaks libraries with malformed exports maps). The package ships prebuilt CJS in dist/.
 const syncPackagePath = path.resolve(__dirname, '../shared/packages/sync');
 const ragPackagePath = path.resolve(__dirname, '../shared/packages/rag');
+// @offgrid/speech: voice-turn decisions (when a spoken turn begins and ends) shared with desktop.
+// Out-of-root like sync, so Metro must watch it and be pointed at its built entry.
+const speechPackagePath = path.resolve(__dirname, '../shared/packages/speech');
 const sharedNodeModulesPath = path.resolve(__dirname, '../shared/node_modules');
 const syncRuntimeModules = {
   '@noble/hashes/hkdf': path.resolve(sharedNodeModulesPath, '@noble/hashes/hkdf.js'),
@@ -24,7 +27,7 @@ const syncRuntimeModules = {
 const config = {
   // pro/ is a submodule inside the project root, so Metro already watches it by default. The sync
   // package is out-of-root, so Metro must be told to watch it (for its dist) — nothing else needed.
-  watchFolders: [syncPackagePath, ragPackagePath, sharedNodeModulesPath],
+  watchFolders: [syncPackagePath, ragPackagePath, speechPackagePath, sharedNodeModulesPath],
   resolver: {
     // When resolving modules from outside the project root (i.e. @offgrid/pro),
     // Metro falls back here so @babel/runtime and all other peer deps are found.
@@ -44,6 +47,7 @@ const config = {
       // resolving the external package directory can fail in an already-running dev server
       // after the file dependency is added, even though Node can resolve the package.
       '@offgrid/rag': path.resolve(ragPackagePath, 'dist/index.js'),
+      '@offgrid/speech': path.resolve(speechPackagePath, 'dist/index.cjs'),
       // Points to the real pro package when present on disk (store builds),
       // falls back to a null stub so free builds bundle cleanly.
       '@offgrid/pro': proExists ? proPackagePath : proStubPath,

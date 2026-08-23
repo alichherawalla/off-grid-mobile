@@ -14,9 +14,15 @@
 import { setupChatScreen } from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,
-  useFocusEffect: () => {}, useIsFocused: () => true,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
 }));
 
 describe('T038 (rendered) — thinking + tool-result + answer all render in a reason→tool→answer turn', () => {
@@ -25,8 +31,12 @@ describe('T038 (rendered) — thinking + tool-result + answer all render in a re
     h.enableToolViaUI('calculator'); // real Tools-screen switch
     h.render();
     // Precondition via a REAL gesture (not updateSettings): open the composer quick-settings and flip Thinking on.
-    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')));
-    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-thinking-toggle')));
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')),
+    );
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => h.view!.getByTestId('quick-thinking-toggle')),
+    );
 
     // The litert model reasons, calls the calculator (128*256), then answers (the device 128*256 prompt).
     await h.send('reason about it then compute 128*256', {
@@ -37,15 +47,121 @@ describe('T038 (rendered) — thinking + tool-result + answer all render in a re
 
     // The user sees all three: the thinking block renders — tap it (real gesture) to expand and read the
     // reasoning it captured.
-    const toggle = await h.rtl.waitFor(() => h.view!.getByTestId('thinking-block-toggle'), { timeout: 4000 });
+    const toggle = await h.rtl.waitFor(
+      () => h.view!.getByTestId('thinking-block-toggle'),
+      { timeout: 4000 },
+    );
     h.rtl.fireEvent.press(toggle);
     // The expanded thinking block shows the reasoning as rendered text.
-    await h.rtl.waitFor(() => {
-      expect(h.rtl.within(h.view!.getByTestId('thinking-block-content')).queryByText(/multiply 128 by 256/)).not.toBeNull();
-    }, { timeout: 4000 });
+    await h.rtl.waitFor(
+      () => {
+        expect(
+          h.rtl
+            .within(h.view!.getByTestId('thinking-block-content'))
+            .queryByText(/multiply 128 by 256/),
+        ).not.toBeNull();
+      },
+      { timeout: 4000 },
+    );
     // ...the tool-result bubble (the calculator actually ran)...
-    expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();
+    expect(
+      h.view!.queryByTestId('tool-result-label-calculator'),
+    ).not.toBeNull();
     // ...and the final answer.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The answer is 32768\./)).not.toBeNull(); });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/The answer is 32768\./)).not.toBeNull();
+    });
+  });
+
+  it('shows only the current reasoning segment after a completed tool round', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.enableToolViaUI('calculator');
+    h.render();
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')),
+    );
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => h.view!.getByTestId('quick-thinking-toggle')),
+    );
+
+    h.boundary.llama!.scriptCompletions([
+      {
+        reasoning: 'First segment: I should use the calculator.',
+        text: '',
+        toolCalls: [
+          { name: 'calculator', arguments: { expression: '128*256' } },
+        ],
+      },
+      {
+        reasoning: 'Second segment: I should explain the result.',
+        text: 'The answer is 32768.',
+        holdBeforeStream: true,
+      },
+    ]);
+
+    await h.tapSend('reason about it then compute 128*256');
+    await h.rtl.waitFor(
+      () => {
+        expect(h.boundary.llama!.calls.completion).toHaveLength(2);
+      },
+      { timeout: 4000 },
+    );
+
+    // The first segment is now a completed Thought process. The active reply is waiting for the next
+    // model round and must not repeat that consumed segment as a second live Thinking block.
+    await h.rtl.waitFor(
+      () => {
+        expect(h.view!.queryAllByTestId('thinking-block-toggle')).toHaveLength(
+          1,
+        );
+      },
+      { timeout: 4000 },
+    );
+
+    h.boundary.llama!.releaseStream();
+    await h.rtl.waitFor(
+      () => {
+        expect(h.view!.queryByText(/The answer is 32768\./)).not.toBeNull();
+      },
+      { timeout: 4000 },
+    );
+    const {
+      generationService,
+    } = require('../../../src/services/generationService');
+    await h.rtl.waitFor(
+      () => {
+        expect(generationService.getState().isGenerating).toBe(false);
+      },
+      { timeout: 4000 },
+    );
+
+    const completedThinkingBlocks = h.view!.getAllByTestId('thinking-block');
+    expect(completedThinkingBlocks).toHaveLength(2);
+
+    h.rtl.fireEvent.press(
+      h.rtl
+        .within(completedThinkingBlocks[0])
+        .getByTestId('thinking-block-toggle'),
+    );
+    expect(
+      h.rtl
+        .within(completedThinkingBlocks[0])
+        .getByTestId('thinking-block-content'),
+    ).toHaveTextContent('First segment: I should use the calculator.');
+
+    h.rtl.fireEvent.press(
+      h.rtl
+        .within(completedThinkingBlocks[1])
+        .getByTestId('thinking-block-toggle'),
+    );
+    const finalThinking = h.rtl
+      .within(completedThinkingBlocks[1])
+      .getByTestId('thinking-block-content');
+    expect(finalThinking).toHaveTextContent(
+      'Second segment: I should explain the result.',
+    );
+    expect(finalThinking).not.toHaveTextContent(
+      'First segment: I should use the calculator.',
+    );
   });
 });

@@ -4,7 +4,10 @@ import type { DeviceInfo } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
-import { useSyncStore } from '../../../pro/sync/syncStore';
+import {
+  selectSyncControlCenter,
+  useSyncStore,
+} from '../../../pro/sync/syncStore';
 import { useAppStore } from '../../../src/stores/appStore';
 import {
   getDiscoveryBoundaries,
@@ -190,7 +193,11 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'reconnected device',
     );
-    expect(useSyncStore.getState().discovered).toHaveLength(0);
+    expect(
+      useSyncStore
+        .getState()
+        .discovered.some(device => device.id === remoteDevice.id),
+    ).toBe(true);
 
     await remote.engine.stop();
   });
@@ -288,6 +295,17 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'one-sided trust repair state',
     );
+    const repairProjection = selectSyncControlCenter(useSyncStore.getState());
+    expect(repairProjection.paired.map(device => device.id)).toContain(
+      remoteDevice.id,
+    );
+    expect(repairProjection.saved.map(device => device.id)).not.toContain(
+      remoteDevice.id,
+    );
+    expect(
+      repairProjection.sections.find(section => section.id === 'available')
+        ?.devices.map(device => device.id),
+    ).toContain(remoteDevice.id);
 
     // Repairing asks for the code again, and the code has a shape the parser enforces - a phrase like
     // 'blue-otter-42' never reaches the other device at all.

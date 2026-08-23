@@ -1,0 +1,14 @@
+{
+  "projectNamePrefix": "Off Grid AI",
+  "description": "Known Off Grid AI source material for attended tool E2E tests.",
+  "systemPrompt": "Answer questions about Off Grid AI from this project's Knowledge Base. Use every source that the user requests before you give the final answer.",
+  "textAttachment": {
+    "title": "Off Grid AI overview",
+    "file": "off-grid-ai-overview.txt"
+  },
+  "fileAttachments": [
+    "mobile.pdf",
+    "intelligence.pdf",
+    "desktop.pdf"
+  ]
+}

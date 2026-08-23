@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -24,6 +24,8 @@ export const GalleryGridItem: React.FC<GalleryGridItemProps> = ({
   onLongPress,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const [loaded, setLoaded] = useState(false);
+  const imageState = loaded ? 'loaded' : 'loading';
 
   return (
     <AnimatedEntry index={index} staggerMs={40} maxItems={15}>
@@ -32,10 +34,14 @@ export const GalleryGridItem: React.FC<GalleryGridItemProps> = ({
         onPress={onPress}
         onLongPress={onLongPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`Generated image ${imageState}: ${item.prompt}`}
+        testID={`gallery-image-${item.id}`}
       >
         <Image
           source={{ uri: `file://${item.imagePath}` }}
           style={styles.gridImage}
+          onLoad={() => setLoaded(true)}
         />
         {isSelectMode && (
           <View style={[styles.selectionOverlay, isSelected && styles.selectionOverlaySelected]}>

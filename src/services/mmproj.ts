@@ -113,3 +113,8 @@ export function pickMmProjForDownload(
   // (B, negative) Every candidate names a DIFFERENT model+variant → wrong architecture, refuse.
   return undefined;
 }
+
+/** True when an existing projector link is still valid for this model, including a generic repo projector. */
+export function canKeepMmProjLink(modelFileName: string, mmProjFileName: string): boolean {
+  return pickMmProjForDownload(modelFileName, [mmProjFileName]) === mmProjFileName;
+}

@@ -11,6 +11,7 @@ import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
 import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
+import { ejectAllModelsForUser } from '../../../services/userModelEjection';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
 import type { HomeScreenNavigationProp, ModelPickerType, LoadingState } from './types';
@@ -194,8 +195,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350))
       );
       try {
-        // Single owning side-effect — same path the Chat screen dispatches.
-        const { count } = await activeModelService.ejectAll();
+        // Single owning side-effect — same cancellation + unload path as Chat.
+        const { count } = await ejectAllModelsForUser();
         if (count > 0) {
           setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
         }

@@ -13,6 +13,19 @@ import { toggleNativeLog, addNativeLogListener } from 'llama.rn';
 import logger from '../utils/logger';
 
 const RING_SIZE = 40;
+
+/**
+ * Lines llama.cpp emits once PER TENSOR while loading a model - hundreds to thousands of them.
+ *
+ * They must not reach our logger, because logger.log appends to the on-device log file: thousands of
+ * file writes on the JS thread, in the middle of the load they describe. On device that starved the
+ * load itself - the app looked frozen (112% CPU, no ANR) and the text model then failed with
+ * "loading timed out after 120s".
+ *
+ * They are still kept in the ring buffer, which is the point of this passthrough: a load failure can
+ * attach the real reason. The ring is memory and costs nothing; the file is what hurt.
+ */
+const PER_TENSOR_NOISE = /create_tensor|loading tensor|done_getting_tensors|load_tensors:/;
 const recent: string[] = [];
 let started = false;
 
@@ -23,10 +36,16 @@ export function ensureNativeLogCapture(): void {
   try {
     toggleNativeLog(true);
     addNativeLogListener((level: string, text: string) => {
-      const line = `${(level || 'info').trim()}: ${(text || '').trim()}`;
-      logger.log(`[LLM-NATIVE] ${line}`);
+      const severity = (level || 'info').trim();
+      const line = `${severity}: ${(text || '').trim()}`;
+      // Ring ALWAYS: this is what makes a load failure explain itself.
       recent.push(line);
       if (recent.length > RING_SIZE) recent.shift();
+      // File only when it is worth a write. Anything not per-tensor still goes through, so
+      // architecture errors, missing tensors and wrong sizes are as visible as they ever were.
+      if (severity === 'error' || severity === 'warn' || !PER_TENSOR_NOISE.test(line)) {
+        logger.log(`[LLM-NATIVE] ${line}`);
+      }
     });
   } catch (e) {
     logger.warn('[LLM-NATIVE] could not enable native log passthrough', e);

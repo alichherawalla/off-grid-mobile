@@ -385,9 +385,9 @@ describe('a model arriving on this device', () => {
       const again = receive(TEXT_MANIFEST, 0, TEXT_BYTES);
 
       // The one thing worth refusing outright, and the reason travels back to the sending device to be shown
-      // there. "already has this model" is something a person can act on; a path or a code is not.
+      // there. Name the model and the destination state; "this" leaves both facts ambiguous.
       await expect(again.sink.prepare()).rejects.toThrow(
-        'this device already has this model',
+        'Mobile Text is already installed on the receiving device',
       );
     });
 
@@ -438,6 +438,36 @@ describe('a model arriving on this device', () => {
       await stream(projector.sink, VISION_PROJECTOR);
       await expect(projector.sink.finalize()).resolves.toBe(true);
       expect(projector.installed()).toBe(true);
+    });
+
+    it('repairs a deleted registry row when all package files remain', async () => {
+      const destination = modelManager.getModelsDirectory();
+      const projectorHere = 'mobile-vision-mmproj-F16.gguf';
+      await write(
+        `${destination}/${VISION_MANIFEST.files[0].name}`,
+        VISION_PRIMARY,
+      );
+      await write(`${destination}/${projectorHere}`, VISION_PROJECTOR);
+      await expect(modelManager.getDownloadedModels()).resolves.toEqual([]);
+
+      for (const [index, bytes] of [
+        VISION_PRIMARY,
+        VISION_PROJECTOR,
+      ].entries()) {
+        const receiver = receive(VISION_MANIFEST, index, bytes);
+        await expect(receiver.sink.prepare()).resolves.toBe(0);
+        await stream(receiver.sink, bytes);
+        await expect(receiver.sink.finalize()).resolves.toBe(true);
+      }
+
+      await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+        expect.objectContaining({
+          name: 'Mobile Vision',
+          fileName: VISION_MANIFEST.files[0].name,
+          mmProjFileName: projectorHere,
+          isVisionModel: true,
+        }),
+      ]);
     });
   });
 

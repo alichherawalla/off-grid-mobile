@@ -2,8 +2,14 @@ package ai.offgridmobile.clipboard
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -16,15 +22,29 @@ internal class SyncClipboardObserver(
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private var enabled = false
+    private var lastPublishedText: String? = null
+    private var lastPublishedAt = Long.MIN_VALUE
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!enabled) return@OnPrimaryClipChangedListener
+        val at = now()
+        // Android 10+ returns null when another app owns focus. External selections enter through
+        // ProcessTextActivity instead; never guess at text Android did not provide.
         val clip = clipboardManager.primaryClip ?: return@OnPrimaryClipChangedListener
         if (clip.description.label?.toString() == SYNC_CLIP_LABEL) {
             return@OnPrimaryClipChangedListener
         }
         val item = clip.getItemAt(0)
         val text = item.coerceToText(context)?.toString() ?: return@OnPrimaryClipChangedListener
-        onText(text, now().toDouble())
+        publishOnce(text, at)
+    }
+
+    private fun publishOnce(text: String, at: Long) {
+        if (!enabled) return
+        val duplicate = text == lastPublishedText && at - lastPublishedAt in 0..COPY_COALESCE_MS
+        if (duplicate) return
+        lastPublishedText = text
+        lastPublishedAt = at
+        onText(text, at.toDouble())
     }
 
     fun setEnabled(next: Boolean) {
@@ -34,6 +54,8 @@ internal class SyncClipboardObserver(
             clipboardManager.addPrimaryClipChangedListener(listener)
         } else {
             clipboardManager.removePrimaryClipChangedListener(listener)
+            lastPublishedText = null
+            lastPublishedAt = Long.MIN_VALUE
         }
     }
 
@@ -43,19 +65,44 @@ internal class SyncClipboardObserver(
 
     private companion object {
         const val SYNC_CLIP_LABEL = "Off Grid Sync"
+        const val COPY_COALESCE_MS = 1_000L
     }
 }
 
 class SyncClipboardModule(
     private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
+    private val handoffStore = ProcessTextHandoffStore(reactContext)
     private val observer = SyncClipboardObserver(
         reactContext,
         reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager,
         ::emitText,
     )
+    private val pendingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ProcessTextActivity.ACTION_HANDOFF_AVAILABLE) {
+                emitPendingProcessText()
+            }
+        }
+    }
+
+    init {
+        val filter = IntentFilter(ProcessTextActivity.ACTION_HANDOFF_AVAILABLE)
+        ContextCompat.registerReceiver(
+            reactContext,
+            pendingReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
 
     override fun getName(): String = "SyncClipboardModule"
+
+    override fun invalidate() {
+        observer.setEnabled(false)
+        runCatching { reactContext.unregisterReceiver(pendingReceiver) }
+        super.invalidate()
+    }
 
     @ReactMethod
     fun setEnabled(enabled: Boolean) {
@@ -65,6 +112,32 @@ class SyncClipboardModule(
     @ReactMethod
     fun writeText(text: String) {
         observer.writeText(text)
+    }
+
+    @ReactMethod
+    fun readPendingProcessText(promise: Promise) {
+        val result = Arguments.createArray()
+        handoffStore.pending().forEach { item ->
+            result.pushMap(
+                Arguments.createMap().apply {
+                    putString("id", item.id)
+                    putString("text", item.text)
+                    putDouble("ts", item.timestamp.toDouble())
+                },
+            )
+        }
+        promise.resolve(result)
+    }
+
+    @ReactMethod
+    fun acknowledgePendingProcessText(ids: ReadableArray, promise: Promise) {
+        val acknowledged = buildSet {
+            for (index in 0 until ids.size()) {
+                ids.getString(index)?.let(::add)
+            }
+        }
+        handoffStore.acknowledge(acknowledged)
+        promise.resolve(null)
     }
 
     @ReactMethod
@@ -85,5 +158,11 @@ class SyncClipboardModule(
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("SyncClipboardChanged", payload)
+    }
+
+    private fun emitPendingProcessText() {
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("SyncProcessTextAvailable", null)
     }
 }

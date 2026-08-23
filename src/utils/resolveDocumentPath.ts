@@ -24,3 +24,25 @@ export function resolveDocumentPath(stored: string): string {
   const base = RNFS.DocumentDirectoryPath.replace(/\/+$/, '');
   return `${base}/${relative}`;
 }
+
+/**
+ * Resolve a stored Documents path and prove that it remains inside one app-owned directory.
+ *
+ * iOS can report the same container through `/private/var/...` while RNFS reports `/var/...`.
+ * Comparing those raw strings rejects a valid model path and leaves the model bytes on disk.
+ * Rebasing first gives both spellings one identity. Rejecting traversal segments keeps this safe
+ * for destructive operations such as model deletion.
+ */
+export function resolveOwnedDocumentPath(stored: string, ownedRoot: string): string | null {
+  const resolved = resolveDocumentPath(stored);
+  const root = ownedRoot.replace(/\/+$/, '');
+  const prefix = `${root}/`;
+  if (!resolved.startsWith(prefix)) return null;
+
+  const relative = resolved.slice(prefix.length);
+  const segments = relative.split('/');
+  if (!relative || segments.some(segment => !segment || segment === '.' || segment === '..')) {
+    return null;
+  }
+  return resolved;
+}

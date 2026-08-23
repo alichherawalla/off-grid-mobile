@@ -55,6 +55,30 @@ export interface ModelFile {
 
 export type ModelEngine = 'llama' | 'litert';
 
+/**
+ * Where a model's files actually came from, recorded at the moment we fetched them.
+ *
+ * The `id` on a model record is a DISPLAY key (`repo/file`). It was doing double duty as a remote
+ * address - vision repair rebuilt a Hugging Face repo id by splitting it at its last slash - which
+ * works only for models whose id happens to be a repo path. A model that arrived by device
+ * transfer, or was imported from local storage, produced a repo id Hugging Face has never heard of,
+ * and HF answers an unknown repo with 401, so the user was shown a raw auth error for a file that
+ * was simply never from HF.
+ *
+ * Provenance is a fact we are told at download time. Record it then; never re-derive it later.
+ */
+export interface ModelOrigin {
+  /** Hugging Face repo id, e.g. "ggml-org/SmolVLM-500M-Instruct-GGUF". */
+  repoId: string;
+  /**
+   * The commit the files came from. A projector fetched from `main` months after the weights can be
+   * a different build than the weights it must match, so repair pins the same revision.
+   */
+  revision: string;
+  /** Path of the primary file inside the repo. */
+  path: string;
+}
+
 interface DownloadedModelBase {
   id: string;
   name: string;
@@ -65,6 +89,8 @@ interface DownloadedModelBase {
   quantization: string;
   downloadedAt: string;
   credibility?: ModelCredibility;
+  /** Absent for local imports (no upstream) and for records written before this field existed. */
+  origin?: ModelOrigin;
 }
 
 export interface LlamaDownloadedModel extends DownloadedModelBase {
@@ -175,6 +201,16 @@ export interface MediaAttachment {
   fileSize?: number; // documents: file size in bytes
   audioFormat?: 'wav' | 'mp3'; // audio attachments: format for model input
   audioDurationSeconds?: number; // audio attachments: recorded duration in seconds
+  /**
+   * The peer has NAMED this file and its bytes have not arrived.
+   *
+   * A synced file is announced before it is sent, and until now the bubble showed nothing at all in
+   * that gap - so a generated image on its way from another device was indistinguishable from one
+   * that was never coming. Everything needed to draw it is already in the announcement: the name,
+   * the size, the type and the dimensions. Only `uri` is empty, which is why it must not be read
+   * while this is true.
+   */
+  pending?: boolean;
 }
 
 // Generation metadata - details about how a message was generated
@@ -335,6 +371,15 @@ export interface ONNXImageModel {
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
+
+/**
+ * How a voice turn begins and ends. Re-exported from @offgrid/speech, which OWNS it - desktop renders
+ * the same modes, so a second definition here is how the two would drift.
+ *
+ * Voice mode only. Chat dictation is someone typing with their voice - they pause to think, and the
+ * recorder must wait for them - so it always behaves as 'tap' regardless of this.
+ */
+export type { VoiceTurnMode } from '@offgrid/speech';
 export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 export const INFERENCE_BACKENDS = {

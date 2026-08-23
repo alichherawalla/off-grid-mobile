@@ -333,6 +333,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
                 {title}
               </Text>
               <TouchableOpacity
+                testID="app-sheet-close"
                 onPress={onHeaderClosePress || dismiss}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >

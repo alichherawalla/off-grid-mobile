@@ -116,6 +116,7 @@ export interface DiscoveryBoundary {
   scanCount: number;
   stopCount: number;
   resolve(device: DeviceInfo): void;
+  lose(deviceId: string): void;
 }
 
 let boundaries: DiscoveryBoundary[] = [];
@@ -175,6 +176,11 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
         port: device.port,
         name: `OffGrid-${device.id}`,
       });
+    }
+
+    lose(deviceId: string): void {
+      if (!this.nativeListenersActive) return;
+      this.handlers.get('remove')?.(`OffGrid-${deviceId}._offgrid._tcp.local.`);
     }
   };
 }
