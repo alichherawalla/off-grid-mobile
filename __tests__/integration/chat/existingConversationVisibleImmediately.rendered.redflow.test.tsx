@@ -28,11 +28,26 @@ describe('opening an existing Mobile chat', () => {
     require('../../harness/chatHarness').routeHolder.params = {
       conversationId,
     };
-    const reopened = h.render();
+    // Hold layout work until after the assertion. This proves that stored content
+    // is visible on the first render and does not depend on a deferred frame.
+    const deferredFrames: Array<(time: number) => void> = [];
+    const originalRequestAnimationFrame = (globalThis as any).requestAnimationFrame;
+    (globalThis as any).requestAnimationFrame = (callback: (time: number) => void) => {
+      deferredFrames.push(callback);
+      return deferredFrames.length;
+    };
 
-    await h.rtl.waitFor(() => {
-      expect(reopened.getByText('The stored reply is ready.')).toBeVisible();
-    });
-    expect(reopened.getByTestId('chat-message-list')).toBeVisible();
+    try {
+      const reopened = h.render();
+      await h.rtl.waitFor(() => {
+        expect(reopened.getByText('The stored reply is ready.')).toBeVisible();
+      });
+      expect(reopened.getByTestId('chat-message-list')).toBeVisible();
+    } finally {
+      (globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
+      await h.rtl.act(async () => {
+        deferredFrames.forEach(callback => callback(Date.now()));
+      });
+    }
   });
 });
