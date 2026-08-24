@@ -27,7 +27,15 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   backButton: { padding: SPACING.xs },
   headerLeft: { flex: 1, marginRight: 12 },
   headerTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 2 },
-  headerSubtitleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, overflow: 'hidden' as const },
+  headerSubtitleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    overflow: 'hidden' as const,
+    // Keep the header's measured height unchanged while giving the title and
+    // controls one full spacing step of visual separation.
+    transform: [{ translateY: SPACING.xs }],
+  },
   headerSubtitleDivider: { ...TYPOGRAPHY.meta, color: colors.textMuted, flexShrink: 0 },
   // The project name yields, the model control does not. These two shared one row with the shrink
   // rule the wrong way round - the project refused to give ground while the model was allowed to -
@@ -40,7 +48,6 @@ const createHeaderStyles = (colors: ThemeColors) => ({
   modelSelector: { flexDirection: 'row' as const, alignItems: 'center' as const, flexShrink: 0, overflow: 'hidden' as const },
   remoteIcon: { marginRight: 4 },
   modelSelectorArrow: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginLeft: SPACING.xs },
-  modeToggleWrap: { marginLeft: 'auto' as const },
   headerImageBadge: {
     width: 18,
     height: 18,
@@ -54,7 +61,7 @@ const createHeaderStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    gap: 4,
+    gap: SPACING.xs,
   },
   iconButton: {
     width: 30,
