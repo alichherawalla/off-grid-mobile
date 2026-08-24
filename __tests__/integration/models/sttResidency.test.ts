@@ -24,11 +24,19 @@ import { hardwareService } from '../../../src/services/hardware';
 // Native boundary: the whisper native model. A dumb stub that just flips a flag
 // so the REAL residency bookkeeping and the REAL store logic run on top of it.
 let mockWhisperNativeLoaded = false;
+let mockWhisperModelPath: string | null = null;
 jest.mock('../../../src/services/whisperService', () => ({
   whisperService: {
     getModelPath: (id: string) => `/models/ggml-${id}.bin`,
-    loadModel: jest.fn(async () => { mockWhisperNativeLoaded = true; }),
-    unloadModel: jest.fn(async () => { mockWhisperNativeLoaded = false; }),
+    getLoadedModelPath: () => mockWhisperModelPath,
+    loadModel: jest.fn(async (path: string) => {
+      mockWhisperNativeLoaded = true;
+      mockWhisperModelPath = path;
+    }),
+    unloadModel: jest.fn(async () => {
+      mockWhisperNativeLoaded = false;
+      mockWhisperModelPath = null;
+    }),
     isModelLoaded: () => mockWhisperNativeLoaded,
     isModelDownloaded: jest.fn(async () => true),
     deleteModel: jest.fn(async () => {}),
@@ -57,6 +65,7 @@ describe('STT residency — single-model invariant', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockWhisperNativeLoaded = false;
+    mockWhisperModelPath = null;
     modelResidencyManager._reset();
     useWhisperStore.setState({ downloadedModelId: 'base', isModelLoaded: false, isModelLoading: false, error: null });
 

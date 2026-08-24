@@ -344,8 +344,8 @@ describe('VoiceRecordButton', () => {
       expect(toJSON()).toBeTruthy();
     });
 
-    it('shows mic icon in loading state when asSendButton', () => {
-      const { toJSON } = render(
+    it('shows loading progress in loading state when asSendButton', () => {
+      const { getByLabelText, getByTestId } = render(
         <VoiceRecordButton
           {...defaultProps}
           asSendButton={true}
@@ -353,9 +353,8 @@ describe('VoiceRecordButton', () => {
         />
       );
 
-      const treeStr = JSON.stringify(toJSON());
-      // asSendButton + loading shows mic icon
-      expect(treeStr).toContain('mic');
+      expect(getByTestId('voice-loading')).toBeTruthy();
+      expect(getByLabelText('Working')).toBeTruthy();
     });
 
     it('shows transcribing state without text when asSendButton and transcribing', () => {
@@ -372,8 +371,8 @@ describe('VoiceRecordButton', () => {
       expect(toJSON()).toBeTruthy();
     });
 
-    it('shows mic icon in transcribing state when asSendButton', () => {
-      const { toJSON } = render(
+    it('shows loading progress in transcribing state when asSendButton', () => {
+      const { getByLabelText } = render(
         <VoiceRecordButton
           {...defaultProps}
           asSendButton={true}
@@ -381,9 +380,7 @@ describe('VoiceRecordButton', () => {
         />
       );
 
-      const treeStr = JSON.stringify(toJSON());
-      // asSendButton + transcribing shows mic icon
-      expect(treeStr).toContain('mic');
+      expect(getByLabelText('Working')).toBeTruthy();
     });
   });
 
