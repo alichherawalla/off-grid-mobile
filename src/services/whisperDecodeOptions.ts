@@ -17,17 +17,16 @@ const LANGUAGE_PROMPTS: Readonly<Record<string, string>> = {
  * small beam search and a language prompt so short, code-switched utterances
  * are less likely to be decoded as similar-sounding English words.
  */
-export function whisperDecodeOptions(language: string): WhisperDecodeOptions {
-  const normalizedLanguage = language || 'en';
-  const isSelectedNonEnglish = normalizedLanguage !== 'auto' && normalizedLanguage !== 'en';
+export function whisperDecodeOptions(language = 'en'): WhisperDecodeOptions {
+  const isSelectedNonEnglish = language !== 'auto' && language !== 'en';
 
   return {
-    language: normalizedLanguage,
+    language,
     translate: false,
     temperature: 0,
     ...(isSelectedNonEnglish ? { beamSize: 5 } : {}),
-    ...(LANGUAGE_PROMPTS[normalizedLanguage]
-      ? { prompt: LANGUAGE_PROMPTS[normalizedLanguage] }
+    ...(LANGUAGE_PROMPTS[language]
+      ? { prompt: LANGUAGE_PROMPTS[language] }
       : {}),
   };
 }
