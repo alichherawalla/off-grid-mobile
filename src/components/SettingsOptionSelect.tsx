@@ -6,7 +6,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 
-export interface SettingsOption {
+interface SettingsOption {
   value: string;
   label: string;
 }
