@@ -62,7 +62,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
   // mountedRef only flips a flag; it never told the native session to stop.
   useEffect(() => () => {
     if (whisperService.isCurrentlyTranscribing()) {
-      whisperService.forceReset();
+      void whisperService.forceReset();
     }
   }, []);
 
@@ -143,7 +143,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       // Check if cancelled or unmounted during the wait
       if (isCancelled.current || !mountedRef.current) {
         logger.log('[Whisper] Cancelled/unmounted during trailing capture');
-        whisperService.forceReset();
+        await whisperService.forceReset();
         return;
       }
 
@@ -154,7 +154,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     } catch (err) {
       logger.error('[Whisper] Stop error:', err);
       // Force reset on error
-      whisperService.forceReset();
+      await whisperService.forceReset();
       // On error, also clear transcribing state (only if still mounted)
       if (mountedRef.current) {
         setIsTranscribing(false);
@@ -265,7 +265,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     } catch (err) {
       logger.error('[Whisper] Recording error:', err);
       // Force reset whisper service state
-      whisperService.forceReset();
+      await whisperService.forceReset();
       if (mountedRef.current) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to start recording';
         setError(errorMsg);

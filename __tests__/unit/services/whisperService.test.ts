@@ -850,48 +850,65 @@ describe('WhisperService', () => {
   // forceReset
   // ========================================================================
   describe('forceReset', () => {
-    it('resets transcription state', () => {
+    it('resets transcription state', async () => {
       (whisperService as any).isTranscribing = true;
       (whisperService as any).stopFn = jest.fn();
 
-      whisperService.forceReset();
+      await whisperService.forceReset();
 
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
-    it('calls native stopFn when context exists (prevents SIGSEGV)', () => {
+    it('calls native stopFn when context exists (prevents SIGSEGV)', async () => {
       const mockStopFn = jest.fn();
       (whisperService as any).isTranscribing = true;
       (whisperService as any).stopFn = mockStopFn;
       (whisperService as any).context = { release: jest.fn() };
 
-      whisperService.forceReset();
+      await whisperService.forceReset();
 
       expect(mockStopFn).toHaveBeenCalled();
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
-    it('does not call stopFn when context is null (prevents SIGSEGV on freed context)', () => {
+    it('does not call stopFn when context is null (prevents SIGSEGV on freed context)', async () => {
       const mockStopFn = jest.fn();
       (whisperService as any).isTranscribing = true;
       (whisperService as any).stopFn = mockStopFn;
       (whisperService as any).context = null;
 
-      whisperService.forceReset();
+      await whisperService.forceReset();
 
       expect(mockStopFn).not.toHaveBeenCalled();
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
-    it('handles stopFn error gracefully during forceReset', () => {
+    it('handles stopFn error gracefully during forceReset', async () => {
       (whisperService as any).isTranscribing = true;
       (whisperService as any).stopFn = () => { throw new Error('stop error'); };
       (whisperService as any).context = { release: jest.fn() };
 
       // Should not throw
-      whisperService.forceReset();
+      await whisperService.forceReset();
 
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
+    });
+
+    it('does not finish until the native realtime job has stopped', async () => {
+      let finishNativeStop: (() => void) | undefined;
+      const nativeStop = new Promise<void>(resolve => { finishNativeStop = resolve; });
+      (whisperService as any).isTranscribing = true;
+      (whisperService as any).stopFn = jest.fn(() => nativeStop);
+      (whisperService as any).context = { release: jest.fn() };
+
+      let resetFinished = false;
+      const reset = whisperService.forceReset().then(() => { resetFinished = true; });
+      await Promise.resolve();
+
+      expect(resetFinished).toBe(false);
+      finishNativeStop?.();
+      await reset;
+      expect(resetFinished).toBe(true);
     });
   });
 

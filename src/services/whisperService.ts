@@ -28,7 +28,7 @@ class WhisperService {
   private context: WhisperContext | null = null;
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
-  private stopFn: (() => void) | null = null;
+  private stopFn: (() => Promise<void>) | null = null;
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
@@ -351,7 +351,7 @@ class WhisperService {
       });
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
-      this.stopFn = stop;
+      this.stopFn = async () => { await stop(); };
 
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {
@@ -416,7 +416,7 @@ class WhisperService {
         // Guard: only call stop if context still exists
         // Calling stop on a freed context causes SIGSEGV
         if (this.context) {
-          fn();
+          await fn();
         } else {
           logger.log('[WhisperService] Context already released, skipping stopFn call');
         }
@@ -436,19 +436,22 @@ class WhisperService {
   }
 
   /** Force reset state — also calls native stop to prevent SIGSEGV from orphaned jobs. */
-  forceReset(): void {
+  async forceReset(): Promise<void> {
     logger.log('[WhisperService] Force resetting state');
     // Atomic grab-and-clear to match stopTranscription's pattern and prevent double-stop
     const fn = this.stopFn;
     this.stopFn = null;
-    if (fn && this.context) {
-      try { fn(); } catch (e) { logger.error('[WhisperService] Error calling stopFn during forceReset:', e); }
-    }
+    const nativeStop = fn && this.context
+      ? Promise.resolve().then(fn).catch(e => logger.error('[WhisperService] Error calling stopFn during forceReset:', e))
+      : Promise.resolve();
+    // Expose the actual native teardown to callers that must not release or reuse
+    // the context while whisper.rn still owns the realtime job.
+    this.transcriptionFullyStopped = nativeStop;
     // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
     // realtime session must not leave the file recorder capturing (B11-class leak).
     if (audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording();
     this.isTranscribing = false;
-    this.transcriptionFullyStopped = Promise.resolve();
+    await nativeStop;
   }
 
   isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
