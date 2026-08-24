@@ -271,6 +271,14 @@ describe('httpClient', () => {
       expect(isPrivateNetworkEndpoint('http://169.254.0.1:11434')).toBe(true);
     });
 
+    it('accepts only the Tailscale CGNAT range as private', () => {
+      expect(isPrivateNetworkEndpoint('http://100.64.0.0:7878')).toBe(true);
+      expect(isPrivateNetworkEndpoint('http://100.116.255.25:7878')).toBe(true);
+      expect(isPrivateNetworkEndpoint('http://100.127.255.255:7878')).toBe(true);
+      expect(isPrivateNetworkEndpoint('http://100.63.255.255:7878')).toBe(false);
+      expect(isPrivateNetworkEndpoint('http://100.128.0.0:7878')).toBe(false);
+    });
+
     it('should detect .local (mDNS) as private', () => {
       expect(isPrivateNetworkEndpoint('http://myserver.local:11434')).toBe(true);
     });

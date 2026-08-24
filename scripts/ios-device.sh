@@ -167,6 +167,24 @@ else
 fi
 
 APP="build/device/Build/Products/Debug-iphoneos/OffgridMobile.app"
+
+# A physical iPhone cannot use the Mac's localhost. The React Native build phase
+# writes the first Wi-Fi address it finds to ip.txt, but some networks isolate
+# clients even when both devices are on the same subnet. Prefer an explicit host;
+# otherwise use this Mac's Tailscale address when Metro is reachable there. The
+# app keeps the embedded bundle as its fallback when Metro is not running.
+METRO_HOST="${IOS_METRO_HOST:-}"
+if [ -z "$METRO_HOST" ] && command -v tailscale >/dev/null 2>&1; then
+  TAILSCALE_HOST="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+  if [ -n "$TAILSCALE_HOST" ] && [ "$(curl -fsS --max-time 2 "http://$TAILSCALE_HOST:8081/status" 2>/dev/null || true)" = "packager-status:running" ]; then
+    METRO_HOST="$TAILSCALE_HOST"
+  fi
+fi
+if [ -n "$METRO_HOST" ]; then
+  printf '%s\n' "$METRO_HOST" > "$APP/ip.txt"
+  echo "Debug Metro host: $METRO_HOST:8081"
+fi
+
 echo "Installing $APP ..."
 xcrun devicectl device install app --device "$DEVICE_ID" "$APP"
 

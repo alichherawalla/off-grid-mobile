@@ -2,6 +2,8 @@
  * HTTP Client Utilities - image conversion, network validation, endpoint testing
  */
 
+import { isTailscaleIPv4 } from '../utils/network';
+
 function mimeTypeFromExtension(ext: string | undefined): string {
   if (ext === 'png') return 'image/png';
   if (ext === 'gif') return 'image/gif';
@@ -59,8 +61,8 @@ export async function imageToBase64DataUrl(uri: string): Promise<string> {
 }
 
 /**
- * Validate that an endpoint is on a private network
- * Returns true for private IPs, false for public internet addresses
+ * Validate that an endpoint is on a private network or a private Tailscale tailnet.
+ * Returns true for private endpoints, false for public internet addresses.
  */
 export function isPrivateNetworkEndpoint(endpoint: string): boolean {
   try {
@@ -79,7 +81,10 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // Private IP ranges
     // 10.0.0.0 - 10.255.255.255
-    if (hostname.startsWith('10.') || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+    if (
+      hostname.startsWith('10.') ||
+      /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    ) {
       return true;
     }
 
@@ -99,6 +104,11 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
 
     // 169.254.0.0 - 169.254.255.255 (link-local)
     if (hostname.startsWith('169.254.')) {
+      return true;
+    }
+
+    // 100.64.0.0 - 100.127.255.255 (Tailscale CGNAT tailnet addresses)
+    if (isTailscaleIPv4(hostname)) {
       return true;
     }
 
@@ -193,7 +203,10 @@ async function checkOllamaEndpoint(
     const origin = new URL(url).origin;
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const response = await fetch(`${origin}/api/tags`, { signal: controller.signal, headers });
+    const response = await fetch(`${origin}/api/tags`, {
+      signal: controller.signal,
+      headers,
+    });
     clearTimeout(timeoutId);
     if (response.ok) return { type: 'ollama' };
   } catch {
@@ -212,7 +225,10 @@ async function checkLmStudioEndpoint(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
+    const response = await fetch(`${url}/v1/models`, {
+      signal: controller.signal,
+      headers,
+    });
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
@@ -245,7 +261,10 @@ export async function detectServerType(
     try {
       const headers: Record<string, string> = {};
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-      const response = await fetch(`${url}/v1/models`, { signal: controller.signal, headers });
+      const response = await fetch(`${url}/v1/models`, {
+        signal: controller.signal,
+        headers,
+      });
       clearTimeout(timeoutId);
 
       if (response.ok) {

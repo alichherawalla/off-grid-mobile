@@ -10,7 +10,8 @@
          NOTE: Android network_security_config.xml has no IP-range wildcard support — <domain> only
          matches exact hostnames or IPs, not CIDR ranges. The base-config is therefore the only
          practical mechanism to allow HTTP to user-configured LAN servers with arbitrary IPs
-         (192.168.x.x, 10.x.x.x, 172.16-31.x.x). All outbound connections to the public internet
+         (192.168.x.x, 10.x.x.x, 172.16-31.x.x) and Tailscale (100.64.0.0/10).
+         All outbound connections to the public internet
          remain HTTPS-only because those servers redirect HTTP → HTTPS; this config only permits
          plain HTTP but does not downgrade secure connections. -->
     <base-config cleartextTrafficPermitted="true">
