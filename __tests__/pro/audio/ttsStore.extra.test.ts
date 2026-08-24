@@ -103,6 +103,7 @@ const baseSettings = {
   engineId: 'mock-tts',
   voiceByEngine: {} as Record<string, string>,
   modelDownloaded: {} as Record<string, boolean>,
+  voiceAssetsDownloaded: {} as Record<string, string[]>,
 };
 
 describe('ttsStore — extra branch coverage', () => {
@@ -360,6 +361,7 @@ describe('ttsStore — extra branch coverage', () => {
 
       expect(mockCurrentEngine.downloadAssets).toHaveBeenCalledTimes(1);
       expect(getState().settings.modelDownloaded?.['mock-tts']).toBe(true);
+      expect(getState().settings.voiceAssetsDownloaded?.['mock-tts']).toEqual(['default']);
       expect(getState().error).toBeNull();
     });
 
@@ -513,10 +515,11 @@ describe('ttsStore persist migration (onRehydrateStorage)', () => {
     expect(() => opts.onRehydrateStorage()(undefined)).not.toThrow();
   });
 
-  it('backfills voiceByEngine and modelDownloaded when missing', () => {
+  it('backfills voice and download records when missing', () => {
     const s = runMigration({ engineId: 'kokoro' });
     expect(s.voiceByEngine).toEqual({});
     expect(s.modelDownloaded).toEqual({});
+    expect(s.voiceAssetsDownloaded).toEqual({});
   });
 
   it('migrates flat kokoroVoiceId and voiceId into voiceByEngine', () => {

@@ -92,6 +92,7 @@ const resetState = () => {
     pendingVoiceId: null,
     failedVoiceId: null,
     voiceSwitchProgress: 0,
+    voiceSwitchNeedsDownload: false,
     audioCacheSizeMB: 0,
     settings: {
       interfaceMode: 'chat',
@@ -99,6 +100,8 @@ const resetState = () => {
       speed: 1.0,
       engineId: 'mock-tts',
       voiceByEngine: {},
+      modelDownloaded: {},
+      voiceAssetsDownloaded: {},
     },
   });
 };
@@ -182,8 +185,20 @@ describe('ttsStore', () => {
       expect(mockEngine.setVoice).toHaveBeenCalledWith('next');
       expect(getState().activeVoiceId).toBe('next');
       expect(getState().settings.voiceByEngine['mock-tts']).toBe('next');
+      expect(getState().settings.voiceAssetsDownloaded?.['mock-tts']).toContain('next');
       expect(getState().pendingVoiceId).toBeNull();
       expect(getState().isSwitchingVoice).toBe(false);
+    });
+
+    it('distinguishes a first download from preparing a completed voice', async () => {
+      const firstSwitch = getState().setVoice('next');
+      expect(getState().voiceSwitchNeedsDownload).toBe(true);
+      await firstSwitch;
+
+      useTTSStore.setState({ activeVoiceId: 'default' });
+      const cachedSwitch = getState().setVoice('next');
+      expect(getState().voiceSwitchNeedsDownload).toBe(false);
+      await cachedSwitch;
     });
 
     it('does NOT hang when the engine voice fetch never settles — times out and recovers', async () => {

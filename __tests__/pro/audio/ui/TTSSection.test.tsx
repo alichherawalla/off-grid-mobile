@@ -227,6 +227,27 @@ describe('TTSSection', () => {
       expect(getByText('Gentle')).toBeTruthy();
     });
 
+    it('prepares a voice from cache when that voice completed before', async () => {
+      let finishSwitch!: () => void;
+      mockSetVoice.mockReturnValueOnce(new Promise<void>((resolve) => { finishSwitch = resolve; }));
+      setStore({
+        settings: {
+          ...useTTSStore.getState().settings,
+          voiceAssetsDownloaded: { kokoro: ['bf_emma'] },
+        },
+      });
+      const { getByText, getByTestId, queryByText } = render(<TTSSection />);
+
+      fireEvent.press(getByTestId('chat-tts-language'));
+      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
+
+      expect(getByText('Preparing English (UK) voice')).toBeTruthy();
+      expect(queryByText(/Downloading English \(UK\) voice/)).toBeNull();
+
+      await act(async () => { finishSwitch(); await Promise.resolve(); });
+      await waitFor(() => expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy());
+    });
+
     it('shows a failed language download and retries it', async () => {
       mockSetVoice
         .mockRejectedValueOnce(new Error('network down'))
