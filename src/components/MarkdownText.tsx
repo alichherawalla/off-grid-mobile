@@ -1,10 +1,14 @@
 import React, { useCallback, useMemo } from 'react';
 import { Linking, Text } from 'react-native';
-import Markdown from '@ronradtke/react-native-markdown-display';
-import { preprocessChatMarkdown } from '@offgrid/sync';
+import Markdown, {
+  MarkdownIt,
+} from '@ronradtke/react-native-markdown-display';
+import { preprocessChatMarkdown, safeChatExternalUrl } from '@offgrid/sync';
 import { useTheme } from '../theme';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../constants';
+
+const chatMarkdownParser = MarkdownIt({ typographer: true, linkify: true });
 
 /**
  * Escape asterisks used as multiplication operators (digit*digit) so
@@ -86,7 +90,8 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   );
 
   const handleLinkPress = useCallback((url: string) => {
-    Linking.openURL(url);
+    const safeUrl = safeChatExternalUrl(url);
+    if (safeUrl) void Linking.openURL(safeUrl);
     return false;
   }, []);
 
@@ -99,6 +104,7 @@ export function MarkdownText({ children, dimmed }: MarkdownTextProps) {
   return (
     <Markdown
       style={markdownStyles}
+      markdownit={chatMarkdownParser}
       onLinkPress={handleLinkPress}
       rules={rules}
     >

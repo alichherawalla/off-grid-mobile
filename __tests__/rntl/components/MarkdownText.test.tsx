@@ -10,7 +10,8 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import { MarkdownText, preprocessMarkdown } from '../../../src/components/MarkdownText';
 
 describe('MarkdownText', () => {
@@ -111,6 +112,30 @@ describe('MarkdownText', () => {
       '[Link](https://example.com/very/long/path/that/might/overflow/the/container/width/in/a/chat/bubble)';
     const { toJSON } = render(<MarkdownText>{longUrl}</MarkdownText>);
     expect(toJSON()).toBeTruthy();
+  });
+
+  it('opens a Markdown link and refuses an unsafe destination', () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const rendered = render(
+      <MarkdownText>{'[Docs](https://example.com/docs) [Unsafe](javascript:alert(1))'}</MarkdownText>,
+    );
+
+    fireEvent.press(rendered.getByText('Docs'));
+    expect(openURL).toHaveBeenCalledTimes(1);
+    expect(openURL).toHaveBeenCalledWith('https://example.com/docs');
+    expect(rendered.getAllByRole('link')).toHaveLength(1);
+    openURL.mockRestore();
+  });
+
+  it('turns a plain web address into a safe clickable link', () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const rendered = render(
+      <MarkdownText>{'Main page: https://github.com/off-grid-ai'}</MarkdownText>,
+    );
+
+    fireEvent.press(rendered.getByRole('link'));
+    expect(openURL).toHaveBeenCalledWith('https://github.com/off-grid-ai');
+    openURL.mockRestore();
   });
 });
 
