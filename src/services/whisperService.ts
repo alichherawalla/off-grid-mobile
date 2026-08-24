@@ -1,15 +1,17 @@
-import { initWhisper, WhisperContext, RealtimeTranscribeEvent } from 'whisper.rn';
+import {
+  initWhisper,
+  WhisperContext,
+  RealtimeTranscribeEvent,
+} from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
-import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
-import { backgroundDownloadService } from './backgroundDownloadService';
-import { useDownloadStore } from '../stores/downloadStore';
-import { makeModelKey } from '../utils/modelKey';
-import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
+import { cleanTranscription } from './whisperModels';
 import * as whisperModelFiles from './whisperModelFiles';
 import { whisperDecodeOptions } from './whisperDecodeOptions';
+import { RealtimeStartBarrier } from './realtimeStartBarrier';
+import { WhisperModelDownloads } from './whisperModelDownloads';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
 // to keep this file within the max-lines budget). Behavior-neutral: every existing
@@ -29,142 +31,45 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => Promise<void>) | null = null;
+  private readonly realtimeStart = new RealtimeStartBarrier();
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
-  private activeDownloadId: string | null = null;
-  // The model id the in-flight download belongs to. Paired with activeDownloadId so
-  // deleteModel only cancels the download when it is THIS model's — deleting an
-  // unrelated (already-downloaded) model must never abort a different in-flight one.
-  private activeDownloadModelId: string | null = null;
+  private readonly modelDownloads = new WhisperModelDownloads();
 
-  getModelsDir(): string { return whisperModelFiles.getModelsDir(); }
-  async ensureModelsDirExists(): Promise<void> { return whisperModelFiles.ensureModelsDirExists(); }
-  getModelPath(modelId: string): string { return whisperModelFiles.getModelPath(modelId); }
-  async isModelDownloaded(modelId: string): Promise<boolean> { return whisperModelFiles.isModelDownloaded(modelId); }
+  getModelsDir(): string {
+    return whisperModelFiles.getModelsDir();
+  }
+  async ensureModelsDirExists(): Promise<void> {
+    return whisperModelFiles.ensureModelsDirExists();
+  }
+  getModelPath(modelId: string): string {
+    return whisperModelFiles.getModelPath(modelId);
+  }
+  async isModelDownloaded(modelId: string): Promise<boolean> {
+    return whisperModelFiles.isModelDownloaded(modelId);
+  }
 
-  async downloadModel(modelId: string, onProgress?: (progress: number) => void): Promise<string> {
-    const model = WHISPER_MODELS.find(m => m.id === modelId);
-    if (!model) throw new Error(`Unknown model: ${modelId}`);
-    await this.ensureModelsDirExists();
-    const destPath = this.getModelPath(modelId);
-    if (await RNFS.exists(destPath)) return destPath;
-    logger.log(`[Whisper] Downloading ${model.name} via background download service...`);
-    const fileName = `ggml-${modelId}.bin`;
-    // WHISPER_MODELS sizes are in MB; seed totalBytes so progress renders before
-    // the first byte arrives. The native layer refines this from the server's
-    // Content-Length once the download starts.
-    const totalBytes = model.size * 1024 * 1024;
-    const modelKey = makeModelKey(`whisper-${modelId}`, fileName);
-    // Publish a QUEUED row to the CANONICAL store IMMEDIATELY, before the (possibly
-    // slot-limited) native start — the same pattern text/image use (startModelDownload).
-    // Previously the store entry was only added AFTER a concurrency slot opened, so a
-    // queued STT download had no canonical entry and the Transcription tab fell back to
-    // the whisper store's progress=0 and rendered "0%" instead of "Queued". Every card
-    // now reads this one store, so queued looks identical across Text/Image/STT.
-    const QUEUED_PLACEHOLDER_ID = `queued:${modelKey}`;
-    useDownloadStore.getState().add({
-      modelKey,
-      downloadId: QUEUED_PLACEHOLDER_ID,
-      modelId: `whisper-${modelId}`,
-      fileName,
-      quantization: '',
-      modelType: 'stt',
-      status: 'pending',
-      bytesDownloaded: 0,
-      totalBytes,
-      combinedTotalBytes: totalBytes,
-      progress: 0,
-      createdAt: Date.now(),
-    });
-    const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
-      params: {
-        url: model.url,
-        fileName,
-        modelId: `whisper-${modelId}`,
-        // Pass modelKey so the background queue's double-tap coalesce keys by the SAME
-        // id as the canonical store entry (queued:<modelKey> → real), not the modelId
-        // fallback — keeps queued dedup/cancel consistent across both layers.
-        modelKey,
-        // Tag as speech-to-text so the Download Manager files an in-progress
-        // download under Voice. Without it the entry defaulted to 'text' and
-        // STT models showed up under Text (and never under the Voice filter).
-        modelType: 'stt',
-        totalBytes,
-        // Skip the Android worker's strict final-size check. `totalBytes` above
-        // is a rounded-MB approximation (e.g. base.en 142 MB = 148,897,792 B vs
-        // the real 147,964,211 B) — the discrepancy is largest for smaller
-        // models. The worker compares the downloaded size to the expected total
-        // within 0.1%, and since whisper.cpp ships no SHA to verify against, a
-        // fully-downloaded file was deleted as FILE_CORRUPTED. The URL is pinned
-        // to ggerganov/whisper.cpp; integrity is covered by HTTPS + the host
-        // allowlist (matches how curated offgrid/* models opt out).
-        metadataJson: JSON.stringify({ skipSizeValidation: true }),
-      },
-      destPath,
-      onProgress: onProgress
-        ? (bytesDownloaded, total) => {
-            onProgress(total > 0 ? bytesDownloaded / total : 0);
-          }
-        : undefined,
-      silent: true,
-    });
-    try {
-      try {
-        this.activeDownloadId = await downloadIdPromise;
-        this.activeDownloadModelId = modelId;
-        // A slot opened and the native download started: reconcile the queued
-        // placeholder row to the REAL downloadId so progress events (routed by id)
-        // land on it. Progress is then driven by the global onAnyProgress listener
-        // in useDownloadListeners.
-        useDownloadStore.getState().retryEntry(modelKey, this.activeDownloadId);
-        await promise;
-      } catch (error) {
-        if ((error as { cancelled?: boolean })?.cancelled) {
-          logger.log(`[Whisper] Download cancelled: ${modelId}`);
-        } else {
-          logger.error('[Whisper] Download failed:', error);
-        }
-        // Remove any partial file (a user cancel already deletes it natively; this
-        // also covers the error case). Rethrow so the store clears its progress.
-        await RNFS.unlink(destPath).catch(() => {});
-        throw error;
-      } finally {
-        this.activeDownloadId = null;
-        this.activeDownloadModelId = null;
-      }
-      try {
-        await this.validateModelFile(destPath);
-      } catch (validationError) {
-        await RNFS.unlink(destPath).catch(err => logger.error('[Whisper] Failed to delete invalid model file:', err));
-        throw new Error(`Downloaded model file is invalid: ${validationError instanceof Error ? validationError.message : 'unknown error'}`);
-      }
-    } finally {
-      // Completed STT models are listed from disk by useVoiceDownloadItems, so
-      // the in-flight store entry must be dropped on success AND failure: leaving
-      // it would show a stale/duplicate active row and block a re-download (add()
-      // refuses when an entry already exists for this modelKey).
-      useDownloadStore.getState().remove(modelKey);
-    }
-    logger.log(`[Whisper] Downloaded to ${destPath}`);
-    return destPath;
+  async downloadModel(
+    modelId: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<string> {
+    return this.modelDownloads.downloadModel(modelId, onProgress);
   }
   /** List every downloaded ggml whisper model on disk (for the Download Manager). */
-  async listDownloadedModels(): Promise<Array<{ modelId: string; fileName: string; sizeBytes: number; filePath: string }>> {
-    return whisperModelFiles.listDownloadedModels();
+  async listDownloadedModels(): Promise<
+    Array<{
+      modelId: string;
+      fileName: string;
+      sizeBytes: number;
+      filePath: string;
+    }>
+  > {
+    return this.modelDownloads.listDownloadedModels();
   }
 
   async deleteModel(modelId: string): Promise<void> {
-    // Only cancel the in-flight download if it belongs to THIS model. Deleting an
-    // already-downloaded model must not abort an unrelated download that happens to
-    // be running (previously it cancelled the single activeDownloadId regardless).
-    if (this.activeDownloadId !== null && this.activeDownloadModelId === modelId) {
-      await backgroundDownloadService.cancelDownload(this.activeDownloadId).catch(() => {});
-      this.activeDownloadId = null;
-      this.activeDownloadModelId = null;
-    }
-    const path = this.getModelPath(modelId);
-    if (await RNFS.exists(path)) await RNFS.unlink(path);
+    return this.modelDownloads.deleteModel(modelId);
   }
 
   /**
@@ -178,10 +83,13 @@ class WhisperService {
   }
 
   async loadModel(modelPath: string): Promise<void> {
-    if (this.context && this.currentModelPath !== modelPath) await this.unloadModel();
+    if (this.context && this.currentModelPath !== modelPath)
+      await this.unloadModel();
     if (this.context && this.currentModelPath === modelPath) return;
     if (this.isReleasingContext) {
-      logger.log('[WhisperService] Waiting for context release to finish before loading');
+      logger.log(
+        '[WhisperService] Waiting for context release to finish before loading',
+      );
       await this.contextReleasePromise;
     }
 
@@ -206,20 +114,38 @@ class WhisperService {
     if (!this.context) return;
     // Stop active transcription to prevent SIGSEGV on freed context
     if (this.isTranscribing || this.stopFn) {
-      logger.log('[WhisperService] Stopping active transcription before unloading model');
+      logger.log(
+        '[WhisperService] Stopping active transcription before unloading model',
+      );
       await this.stopTranscription();
       await this.transcriptionFullyStopped;
     }
-    if (this.isReleasingContext) { logger.log('[WhisperService] Context release already in progress, skipping'); return; }
+    if (this.isReleasingContext) {
+      logger.log(
+        '[WhisperService] Context release already in progress, skipping',
+      );
+      return;
+    }
     this.isReleasingContext = true;
     this.contextReleasePromise = (async () => {
-      try { await this.context!.release(); } catch (error) { logger.error('[WhisperService] Error releasing context:', error); }
-      finally { this.context = null; this.currentModelPath = null; this.isReleasingContext = false; }
-    })()
+      try {
+        await this.context!.release();
+      } catch (error) {
+        logger.error('[WhisperService] Error releasing context:', error);
+      } finally {
+        this.context = null;
+        this.currentModelPath = null;
+        this.isReleasingContext = false;
+      }
+    })();
     await this.contextReleasePromise;
   }
-  isModelLoaded(): boolean { return this.context !== null; }
-  getLoadedModelPath(): string | null { return this.currentModelPath; }
+  isModelLoaded(): boolean {
+    return this.context !== null;
+  }
+  getLoadedModelPath(): string | null {
+    return this.currentModelPath;
+  }
 
   async requestPermissions(): Promise<boolean> {
     if (Platform.OS === 'android') {
@@ -228,10 +154,11 @@ class WhisperService {
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Microphone Permission',
-            message: 'This app needs access to your microphone for voice input.',
+            message:
+              'This app needs access to your microphone for voice input.',
             buttonPositive: 'OK',
             buttonNegative: 'Cancel',
-          }
+          },
         );
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       } catch (error) {
@@ -257,7 +184,7 @@ class WhisperService {
     options?: {
       language?: string;
       maxLen?: number;
-    }
+    },
   ): Promise<void> {
     const language = options?.language || 'en';
     logger.log(`[WhisperService] start (context=${!!this.context})`);
@@ -269,20 +196,15 @@ class WhisperService {
 
     // If already transcribing, force stop before starting new
     if (this.isTranscribing || this.stopFn) {
-      logger.log('[WhisperService] Stopping previous transcription before starting new one');
+      logger.log(
+        '[WhisperService] Stopping previous transcription before starting new one',
+      );
       await this.stopTranscription();
       // Small delay to ensure cleanup
       await new Promise<void>(resolve => setTimeout(resolve, 100));
     }
 
-    logger.log('[WhisperService] Requesting permissions...');
-    const hasPermission = await this.requestPermissions();
-    logger.log('[WhisperService] Permission granted:', hasPermission);
-
-    if (!hasPermission) {
-      throw new Error('Microphone permission denied');
-    }
-
+    this.realtimeStart.begin();
     this.isTranscribing = true;
 
     // Create a promise that resolves when the native side fully finishes
@@ -291,43 +213,66 @@ class WhisperService {
       resolveTranscriptionStopped = resolve;
     });
 
-    // B26/B28 ROOT: realtime capture yields NO audio on device (spoke, blank input). The reliable
-    // pipeline is record→file→transcribeFile (the voice-mode path, T079). So we record the SAME
-    // utterance to a file alongside the realtime stream, and on the stream's FINAL event, when it
-    // produced no usable transcript, we transcribe the recorded FILE and deliver THAT as the
-    // authoritative result — one uniform "voice in → transcribed text out" pipeline for every mode.
-    // Best-effort: if the recorder can't start (permission/hardware), realtime alone still runs.
     let recordedFile = false;
     try {
-      await audioRecorderService.startRecording();
-      recordedFile = true;
-    } catch (recErr) {
-      logger.error('[WhisperService] Fallback recorder failed to start (realtime only):', recErr);
-    }
+      logger.log('[WhisperService] Requesting permissions...');
+      const hasPermission = await this.requestPermissions();
+      logger.log('[WhisperService] Permission granted:', hasPermission);
 
-    // Resolve the authoritative transcript for the finished utterance: prefer the realtime result;
-    // when it's empty (B26), transcribe the recorded file. Pure decision, one place.
-    const resolveFinalText = async (realtimeText: string): Promise<string> => {
-      if (cleanTranscription(realtimeText)) return realtimeText;
-      if (!recordedFile) return realtimeText;
-      try {
-        const { path } = await audioRecorderService.stopRecording();
-        const fileText = await this.transcribeFile(path, { language });
-        logger.log(`[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(0, 50)}"`);
-        return fileText;
-      } catch (fileErr) {
-        logger.error('[WhisperService] File-transcribe fallback failed:', fileErr);
-        return realtimeText;
+      if (!hasPermission) {
+        throw new Error('Microphone permission denied');
       }
-    };
 
-    try {
+      // B26/B28 ROOT: realtime capture yields NO audio on device (spoke, blank input). The reliable
+      // pipeline is record→file→transcribeFile (the voice-mode path, T079). So we record the SAME
+      // utterance to a file alongside the realtime stream, and on the stream's FINAL event, when it
+      // produced no usable transcript, we transcribe the recorded FILE and deliver THAT as the
+      // authoritative result — one uniform "voice in → transcribed text out" pipeline for every mode.
+      // Best-effort: if the recorder can't start (permission/hardware), realtime alone still runs.
+      try {
+        await audioRecorderService.startRecording();
+        recordedFile = true;
+      } catch (recErr) {
+        logger.error(
+          '[WhisperService] Fallback recorder failed to start (realtime only):',
+          recErr,
+        );
+      }
+
+      // Always close the parallel file recorder. Prefer a usable realtime result;
+      // when it is empty (B26), transcribe the captured file instead.
+      const resolveFinalText = async (
+        realtimeText: string,
+      ): Promise<string> => {
+        if (!recordedFile) return realtimeText;
+        try {
+          const { path } = await audioRecorderService.stopRecording();
+          if (cleanTranscription(realtimeText)) return realtimeText;
+          const fileText = await this.transcribeFile(path, { language });
+          logger.log(
+            `[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(
+              0,
+              50,
+            )}"`,
+          );
+          return fileText;
+        } catch (fileErr) {
+          logger.error(
+            '[WhisperService] File-transcribe fallback failed:',
+            fileErr,
+          );
+          return realtimeText;
+        }
+      };
+
       // Guard: context could have been released during the async permission check
       if (!this.context) {
         this.isTranscribing = false;
         if (recordedFile) audioRecorderService.cancelRecording();
         resolveTranscriptionStopped();
-        throw new Error('Whisper context was released before transcription could start');
+        throw new Error(
+          'Whisper context was released before transcription could start',
+        );
       }
 
       logger.log('[WhisperService] Calling transcribeRealtime...');
@@ -351,8 +296,9 @@ class WhisperService {
       });
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
-      this.stopFn = async () => { await stop(); };
-
+      this.stopFn = async () => {
+        await stop();
+      };
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {
           isCapturing: evt.isCapturing,
@@ -376,11 +322,10 @@ class WhisperService {
           return;
         }
 
-
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
         logger.log('[WhisperService] Recording finished');
-        void resolveFinalText(data?.result || '').then((finalText) => {
+        void resolveFinalText(data?.result || '').then(finalText => {
           onResult({
             text: finalText,
             isCapturing: false,
@@ -393,7 +338,11 @@ class WhisperService {
           resolveTranscriptionStopped();
         });
       });
+      // The native stop handle and its event subscriber now exist. A stop that
+      // arrived during startup can continue and close this exact session.
+      this.realtimeStart.settle();
     } catch (error) {
+      this.realtimeStart.settle();
       if (recordedFile) audioRecorderService.cancelRecording();
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.isTranscribing = false;
@@ -406,6 +355,10 @@ class WhisperService {
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
     try {
+      if (!this.stopFn) {
+        logger.log('[WhisperService] Stop is waiting for realtime startup');
+        await this.realtimeStart.wait();
+      }
       // Grab and clear stopFn atomically to prevent double-stop race conditions.
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
       // both see stopFn as non-null and call it twice, causing SIGSEGV in
@@ -418,7 +371,9 @@ class WhisperService {
         if (this.context) {
           await fn();
         } else {
-          logger.log('[WhisperService] Context already released, skipping stopFn call');
+          logger.log(
+            '[WhisperService] Context already released, skipping stopFn call',
+          );
         }
       }
     } catch (error) {
@@ -438,27 +393,42 @@ class WhisperService {
   /** Force reset state — also calls native stop to prevent SIGSEGV from orphaned jobs. */
   async forceReset(): Promise<void> {
     logger.log('[WhisperService] Force resetting state');
+    await this.realtimeStart.wait();
     // Atomic grab-and-clear to match stopTranscription's pattern and prevent double-stop
     const fn = this.stopFn;
     this.stopFn = null;
     const activeTranscriptionStopped = this.transcriptionFullyStopped;
-    const nativeStop = fn && this.context
-      ? Promise.resolve().then(fn).catch(e => logger.error('[WhisperService] Error calling stopFn during forceReset:', e))
-      : Promise.resolve();
+    const nativeStop =
+      fn && this.context
+        ? Promise.resolve()
+            .then(fn)
+            .catch(e =>
+              logger.error(
+                '[WhisperService] Error calling stopFn during forceReset:',
+                e,
+              ),
+            )
+        : Promise.resolve();
     // Keep both parts of realtime teardown behind one barrier. Native stop can emit
     // the final event, whose empty-result fallback still transcribes the recorded
     // file. Do not release or reuse the Whisper context until both have finished.
-    this.transcriptionFullyStopped = fn && this.context
-      ? Promise.all([nativeStop, activeTranscriptionStopped]).then(() => undefined)
-      : nativeStop;
+    this.transcriptionFullyStopped =
+      fn && this.context
+        ? Promise.all([nativeStop, activeTranscriptionStopped]).then(
+            () => undefined,
+          )
+        : nativeStop;
     // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
     // realtime session must not leave the file recorder capturing (B11-class leak).
-    if (audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording();
+    if (audioRecorderService.isCurrentlyRecording())
+      audioRecorderService.cancelRecording();
     this.isTranscribing = false;
     await this.transcriptionFullyStopped;
   }
 
-  isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
+  isCurrentlyTranscribing(): boolean {
+    return this.isTranscribing;
+  }
 
   // Transcribe a single audio file
   async transcribeFile(
@@ -466,14 +436,18 @@ class WhisperService {
     options?: {
       language?: string;
       onProgress?: (progress: number) => void;
-    }
+    },
   ): Promise<string> {
     if (!this.context) {
       throw new Error('No Whisper model loaded');
     }
 
     const language = options?.language || 'en';
-    logger.log(`[WhisperService] Transcribing file with language=${language} model=${this.currentModelPath ?? 'unknown'}`);
+    logger.log(
+      `[WhisperService] Transcribing file with language=${language} model=${
+        this.currentModelPath ?? 'unknown'
+      }`,
+    );
     const { promise } = this.context.transcribe(filePath, {
       ...whisperDecodeOptions(language),
       onProgress: options?.onProgress,

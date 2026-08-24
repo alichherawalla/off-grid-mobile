@@ -17,14 +17,17 @@ import type { WhisperLoadResult } from '../../stores/whisperStore';
  *     user's generation model (that would strand them with nothing loaded).
  */
 export interface WhisperReadinessDeps {
-  isLoaded: () => boolean;
+  /** True only when the model selected for this turn is the resident context. */
+  isSelectedModelLoaded?: () => boolean;
+  /** Compatibility for callers that do not yet track resident model identity. */
+  isLoaded?: () => boolean;
   hasDownloadedModel: () => boolean;
   loadWhisper: () => Promise<WhisperLoadResult>;
   freeGenerationModels: () => Promise<void>;
 }
 
 export async function ensureWhisperForTranscription(deps: WhisperReadinessDeps): Promise<boolean> {
-  if (deps.isLoaded()) return true;
+  if (deps.isSelectedModelLoaded?.() ?? deps.isLoaded?.() ?? false) return true;
   if (!deps.hasDownloadedModel()) return false;
 
   const first = await deps.loadWhisper();

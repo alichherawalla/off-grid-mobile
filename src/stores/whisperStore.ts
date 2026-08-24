@@ -91,8 +91,12 @@ export const useWhisperStore = create<WhisperState>()(
             setProgress(set, modelId, progress);
           });
 
+          const downloadedPath = whisperService.getModelPath(modelId);
           set((s) => ({
             downloadedModelId: modelId,
+            // Download selects the model but does not load it. If a different
+            // context is resident, do not project that old context as ready.
+            isModelLoaded: whisperService.getLoadedModelPath() === downloadedPath,
             presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
           }));
 
@@ -125,7 +129,8 @@ export const useWhisperStore = create<WhisperState>()(
 
         // Prevent multiple simultaneous load attempts
         if (isModelLoading) {
-          return get().isModelLoaded ? 'loaded' : 'error';
+          const selectedPath = whisperService.getModelPath(downloadedModelId);
+          return whisperService.getLoadedModelPath() === selectedPath ? 'loaded' : 'error';
         }
 
         set({ isModelLoading: true, error: null });
@@ -158,10 +163,13 @@ export const useWhisperStore = create<WhisperState>()(
             );
             return true;
           });
-          set({ isModelLoaded: loaded, isModelLoading: false, error: null });
+          const selectedModelIsLoaded = loaded &&
+            get().downloadedModelId === downloadedModelId &&
+            whisperService.getLoadedModelPath() === modelPath;
+          set({ isModelLoaded: selectedModelIsLoaded, isModelLoading: false, error: null });
           // loaded=false means the single-model rule blocked it (not a failure) —
           // report 'blocked' so a caller can free the resident model and retry.
-          return loaded ? 'loaded' : 'blocked';
+          return selectedModelIsLoaded ? 'loaded' : (loaded ? 'error' : 'blocked');
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state
@@ -209,8 +217,13 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       selectModel: async (modelId: string) => {
-        if (get().downloadedModelId === modelId && get().isModelLoaded) return;
-        set({ downloadedModelId: modelId, error: null });
+        const modelPath = whisperService.getModelPath(modelId);
+        const selectedModelIsLoaded = whisperService.getLoadedModelPath() === modelPath;
+        if (get().downloadedModelId === modelId && selectedModelIsLoaded) {
+          set({ isModelLoaded: true, error: null });
+          return;
+        }
+        set({ downloadedModelId: modelId, isModelLoaded: selectedModelIsLoaded, error: null });
         await get().loadModel();
       },
 

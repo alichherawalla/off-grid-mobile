@@ -11,7 +11,7 @@ const makeDeps = (over: Partial<Parameters<typeof ensureWhisperForTranscription>
   const freeGenerationModels = jest.fn(async () => {});
   const loadWhisper = jest.fn(async () => 'loaded' as const);
   const deps = {
-    isLoaded: () => false,
+    isSelectedModelLoaded: () => false,
     hasDownloadedModel: () => true,
     loadWhisper,
     freeGenerationModels,
@@ -22,7 +22,7 @@ const makeDeps = (over: Partial<Parameters<typeof ensureWhisperForTranscription>
 
 describe('ensureWhisperForTranscription', () => {
   it('returns true immediately when whisper is already loaded (no load, no eviction)', async () => {
-    const { deps, freeGenerationModels, loadWhisper } = makeDeps({ isLoaded: () => true });
+    const { deps, freeGenerationModels, loadWhisper } = makeDeps({ isSelectedModelLoaded: () => true });
     await expect(ensureWhisperForTranscription(deps)).resolves.toBe(true);
     expect(loadWhisper).not.toHaveBeenCalled();
     expect(freeGenerationModels).not.toHaveBeenCalled();
