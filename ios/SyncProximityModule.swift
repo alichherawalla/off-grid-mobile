@@ -5,6 +5,45 @@ import React
 private let proximityServiceType = "offgrid-sync"
 private let proximityConnectTimeout: TimeInterval = 12
 
+/// Owns the advertiser's active state independently from browsing and sessions.
+/// The closures keep MultipeerConnectivity at the native boundary while making
+/// stop, restart, and advertiser replacement deterministic in native tests.
+final class ProximityAdvertisingController {
+  private var startPeer: (() -> Void)?
+  private var stopPeer: (() -> Void)?
+  private(set) var isAdvertising = false
+
+  func install(start: @escaping () -> Void, stop: @escaping () -> Void) {
+    let shouldRestart = isAdvertising
+    if shouldRestart { stopPeer?() }
+    startPeer = start
+    stopPeer = stop
+    if shouldRestart { startPeer?() }
+  }
+
+  @discardableResult
+  func start() -> Bool {
+    guard let startPeer else { return false }
+    if !isAdvertising {
+      startPeer()
+      isAdvertising = true
+    }
+    return true
+  }
+
+  func stop() {
+    guard isAdvertising else { return }
+    stopPeer?()
+    isAdvertising = false
+  }
+
+  func clear() {
+    stop()
+    startPeer = nil
+    stopPeer = nil
+  }
+}
+
 private struct ProximityDevice {
   let id: String
   let name: String
@@ -93,6 +132,7 @@ final class SyncProximityModule: RCTEventEmitter {
   private var localDevice: ProximityDevice?
   private var localPeer: MCPeerID?
   private var advertiser: MCNearbyServiceAdvertiser?
+  private let advertising = ProximityAdvertisingController()
   private var browser: MCNearbyServiceBrowser?
   private var peersByDeviceId: [String: MCPeerID] = [:]
   private var devicesByPeerName: [String: ProximityDevice] = [:]
@@ -145,7 +185,10 @@ final class SyncProximityModule: RCTEventEmitter {
       self.browser = browser
       advertiser.delegate = self
       browser.delegate = self
-      advertiser.startAdvertisingPeer()
+      advertising.install(
+        start: { advertiser.startAdvertisingPeer() },
+        stop: { advertiser.stopAdvertisingPeer() }
+      )
       browser.startBrowsingForPeers()
       resolve(nil)
     }
@@ -201,6 +244,35 @@ final class SyncProximityModule: RCTEventEmitter {
   }
 
   @objc
+  func startAdvertising(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    stateQueue.async { [weak self] in
+      guard let self, advertising.start() else {
+        reject(
+          "proximity_not_started",
+          "Sync proximity is not running.",
+          nil
+        )
+        return
+      }
+      resolve(nil)
+    }
+  }
+
+  @objc
+  func stopAdvertising(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter _: @escaping RCTPromiseRejectBlock
+  ) {
+    stateQueue.async { [weak self] in
+      self?.advertising.stop()
+      resolve(nil)
+    }
+  }
+
+  @objc
   func updateDevice(
     _ device: [String: Any],
     resolver resolve: @escaping RCTPromiseResolveBlock,
@@ -219,7 +291,6 @@ final class SyncProximityModule: RCTEventEmitter {
         )
         return
       }
-      advertiser?.stopAdvertisingPeer()
       advertiser?.delegate = nil
       let replacement = MCNearbyServiceAdvertiser(
         peer: peer,
@@ -229,7 +300,10 @@ final class SyncProximityModule: RCTEventEmitter {
       localDevice = parsed
       advertiser = replacement
       replacement.delegate = self
-      replacement.startAdvertisingPeer()
+      advertising.install(
+        start: { replacement.startAdvertisingPeer() },
+        stop: { replacement.stopAdvertisingPeer() }
+      )
       resolve(nil)
     }
   }
@@ -363,7 +437,7 @@ final class SyncProximityModule: RCTEventEmitter {
   }
 
   private func stopInternal(notifyConnections: Bool) {
-    advertiser?.stopAdvertisingPeer()
+    advertising.clear()
     browser?.stopBrowsingForPeers()
     advertiser?.delegate = nil
     browser?.delegate = nil

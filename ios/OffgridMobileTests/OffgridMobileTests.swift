@@ -44,6 +44,55 @@ final class BlobReceiveWindowTests: XCTestCase {
   }
 }
 
+final class ProximityAdvertisingControllerTests: XCTestCase {
+  func testStopAndRestartReachTheNativeAdvertiserWithoutRestartingTheSession() {
+    let controller = ProximityAdvertisingController()
+    var starts = 0
+    var stops = 0
+    controller.install(
+      start: { starts += 1 },
+      stop: { stops += 1 }
+    )
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(starts, 0)
+
+    XCTAssertTrue(controller.start())
+    controller.stop()
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(starts, 1)
+    XCTAssertEqual(stops, 1)
+
+    XCTAssertTrue(controller.start())
+    XCTAssertTrue(controller.isAdvertising)
+    XCTAssertEqual(starts, 2)
+  }
+
+  func testReplacingTheAdvertiserPreservesWhetherItWasHidden() {
+    let controller = ProximityAdvertisingController()
+    var firstStarts = 0
+    var firstStops = 0
+    var replacementStarts = 0
+    controller.install(
+      start: { firstStarts += 1 },
+      stop: { firstStops += 1 }
+    )
+    XCTAssertTrue(controller.start())
+
+    controller.install(
+      start: { replacementStarts += 1 },
+      stop: {}
+    )
+    XCTAssertEqual(firstStops, 1)
+    XCTAssertEqual(replacementStarts, 1)
+
+    controller.stop()
+    controller.install(start: { replacementStarts += 1 }, stop: {})
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(replacementStarts, 1)
+    XCTAssertEqual(firstStarts, 1)
+  }
+}
+
 final class StreamingFileHasherTests: XCTestCase {
   func testProducesTheStandardSHA512DigestAcrossManyChunks() throws {
     let url = FileManager.default.temporaryDirectory
