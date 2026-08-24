@@ -6,12 +6,15 @@ import {
   getKokoroAssetSources,
   getKokoroTTSVoices,
 } from '../../../pro/audio/engine/tts/engines/kokoro/voices';
+import { models } from 'react-native-executorch';
 
 describe('Kokoro voice catalog', () => {
   it('uses shared voice names and language labels', () => {
     const voices = getKokoroTTSVoices();
 
-    expect(voices).toHaveLength(20);
+    const runtimeVoiceCount = Object.values(models.text_to_speech.kokoro)
+      .reduce((count, language) => count + Object.keys(language).length, 0);
+    expect(voices).toHaveLength(runtimeVoiceCount);
 
     expect(voices.find(voice => voice.id === 'af_heart')).toMatchObject({
       label: 'Heart',

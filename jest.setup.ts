@@ -289,6 +289,44 @@ jest.mock('react-native-executorch', () => ({
     stream: jest.fn(() => Promise.resolve()),
     streamStop: jest.fn(),
   })),
+  models: {
+    text_to_speech: {
+      kokoro: {
+        en_us: {
+          heart: () => mockKokoroConfig('af_heart', 'en-us'),
+          river: () => mockKokoroConfig('af_river', 'en-us'),
+          sarah: () => mockKokoroConfig('af_sarah', 'en-us'),
+          adam: () => mockKokoroConfig('am_adam', 'en-us'),
+          michael: () => mockKokoroConfig('am_michael', 'en-us'),
+          santa: () => mockKokoroConfig('am_santa', 'en-us'),
+        },
+        en_gb: {
+          emma: () => mockKokoroConfig('bf_emma', 'en-gb'),
+          daniel: () => mockKokoroConfig('bm_daniel', 'en-gb'),
+        },
+        fr: { siwis: () => mockKokoroConfig('ff_siwis', 'fr') },
+        es: {
+          dora: () => mockKokoroConfig('ef_dora', 'es'),
+          alex: () => mockKokoroConfig('em_alex', 'es'),
+        },
+        it: {
+          sara: () => mockKokoroConfig('if_sara', 'it'),
+          nicola: () => mockKokoroConfig('im_nicola', 'it'),
+        },
+        pt: {
+          dora: () => mockKokoroConfig('pf_dora', 'pt'),
+          santa: () => mockKokoroConfig('pm_santa', 'pt'),
+        },
+        hi: {
+          alpha: () => mockKokoroConfig('hf_alpha', 'hi'),
+          omega: () => mockKokoroConfig('hm_omega', 'hi'),
+          psi: () => mockKokoroConfig('hm_psi', 'hi'),
+        },
+        pl: { mateusz: () => mockKokoroConfig('pm_mateusz', 'pl') },
+        de: { anna: () => mockKokoroConfig('df_anna', 'de') },
+      },
+    },
+  },
   KOKORO_AMERICAN_ENGLISH_FEMALE_HEART: mockKokoroConfig('af_heart', 'en-us'),
   KOKORO_AMERICAN_ENGLISH_FEMALE_RIVER: mockKokoroConfig('af_river', 'en-us'),
   KOKORO_AMERICAN_ENGLISH_FEMALE_SARAH: mockKokoroConfig('af_sarah', 'en-us'),

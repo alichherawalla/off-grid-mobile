@@ -78,8 +78,8 @@ import { TTSSection } from '@offgrid/pro/audio/ui/TTSSection';
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
 
 const VOICES = [
-  { id: 'af_heart', label: 'Warm', metadata: { accent: 'US', gender: 'Female', persona: 'Friendly' } },
-  { id: 'bf_emma', label: 'Gentle', metadata: { accent: '', gender: '', persona: '' } },
+  { id: 'af_heart', label: 'Warm', metadata: { accent: 'English (US)', languageCode: 'en-US', gender: 'Female', persona: 'Friendly' } },
+  { id: 'bf_emma', label: 'Gentle', metadata: { accent: 'English (UK)', languageCode: 'en-GB', gender: '', persona: '' } },
 ] as any;
 
 // Snapshot the pristine store so every test starts from the real defaults and
@@ -189,7 +189,7 @@ describe('TTSSection', () => {
       const { getByText, getByTestId } = render(<TTSSection />);
       // Active voice (af_heart) shows the check glyph; its metadata joins accent + gender.
       expect(getByTestId('icon-check')).toBeTruthy();
-      expect(getByText('US · Female')).toBeTruthy();
+      expect(getByText('English (US) · Female')).toBeTruthy();
     });
 
     it('shows the language download until the requested voice is ready', async () => {
