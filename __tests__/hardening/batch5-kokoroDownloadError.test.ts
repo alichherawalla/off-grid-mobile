@@ -88,6 +88,29 @@ describe('KokoroEngine — download failure (offline / interrupted fetch)', () =
 });
 
 describe('KokoroEngine.setVoice — active voice + completeness + events', () => {
+  it('serializes a voice-pack fetch behind an active base-model download', async () => {
+    const engine = new KokoroEngine();
+    let finishBase!: () => void;
+    fetchResources
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishBase = resolve; }))
+      .mockResolvedValueOnce(undefined);
+
+    const baseDownload = engine.downloadAssets();
+    const voiceSwitch = engine.setVoice('hf_alpha');
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(fetchResources).toHaveBeenCalledTimes(1);
+
+    finishBase();
+    await baseDownload;
+    await voiceSwitch;
+
+    expect(fetchResources).toHaveBeenCalledTimes(2);
+    expect(engine.getActiveVoice()?.id).toBe('hf_alpha');
+    expect(engine.isFullyDownloaded()).toBe(true);
+  });
+
   it('updates the active voice and reflects it via getActiveVoice()', async () => {
     const engine = new KokoroEngine();
     // Default active voice is af_heart.
@@ -127,18 +150,15 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
     expect(fetchResources).not.toHaveBeenCalled();
   });
 
-  it('a failed voice-asset fetch is tolerated: active voice still switches, voiceChanged still emits', async () => {
-    // setVoice reflects the new voice immediately (the picker reads active voice) and the
-    // asset prefetch is best-effort — a fetch failure is logged, not thrown, so the picker
-    // never wedges. The store layer owns the switching-flag/spinner lifecycle.
+  it('a failed voice-asset fetch rejects and keeps the last usable voice active', async () => {
     const engine = new KokoroEngine();
     const onVoiceChanged = jest.fn();
     engine.on('voiceChanged', onVoiceChanged);
     fetchResources.mockRejectedValueOnce(new Error('voice fetch offline'));
 
-    await expect(engine.setVoice('am_santa')).resolves.toBeUndefined();
+    await expect(engine.setVoice('am_santa')).rejects.toThrow('voice fetch offline');
 
-    expect(engine.getActiveVoice()?.id).toBe('am_santa');
-    expect(onVoiceChanged).toHaveBeenCalledWith('am_santa');
+    expect(engine.getActiveVoice()?.id).toBe('af_heart');
+    expect(onVoiceChanged).not.toHaveBeenCalled();
   });
 });

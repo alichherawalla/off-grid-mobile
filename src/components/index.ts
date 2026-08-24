@@ -19,6 +19,8 @@ export { MtpAdviceCard } from './MtpAdviceCard';
 export { ThinkingIndicator } from './ThinkingIndicator';
 export { LoadingDots } from './LoadingDots';
 export { SelectDropdown } from './SelectDropdown';
+export { SettingsOptionSelect } from './SettingsOptionSelect';
+export type { SettingsOption } from './SettingsOptionSelect';
 export { VisionRepairAdviceCard } from './VisionRepairAdviceCard';
 ;
 ;

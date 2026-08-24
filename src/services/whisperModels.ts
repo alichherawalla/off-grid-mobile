@@ -41,6 +41,9 @@ export function cleanTranscription(raw: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   // Only markers / punctuation left → no real speech.
-  if (!/[a-z0-9]/i.test(stripped)) return '';
+  // Unicode letters/numbers are speech too. The old Latin-only check discarded
+  // valid Hindi, Japanese, Korean, Arabic, and other non-Latin transcripts as
+  // if they were silence.
+  if (!/[\p{L}\p{N}]/u.test(stripped)) return '';
   return stripped;
 }

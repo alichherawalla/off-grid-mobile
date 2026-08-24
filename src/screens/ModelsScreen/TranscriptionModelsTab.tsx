@@ -15,6 +15,7 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ModelCard } from '../../components';
+import { TranscriptionLanguageSelect } from '../../components/TranscriptionLanguageSelect';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
@@ -157,6 +158,8 @@ export const TranscriptionModelsTab: React.FC = () => {
           <Text style={styles.error}>{whisperError} (tap to dismiss)</Text>
         </TouchableOpacity>
       )}
+
+      <TranscriptionLanguageSelect testID="models-transcription-language" />
 
       <Text style={styles.sectionLabel}>English only</Text>
       {ENGLISH_MODELS.map((m, i) => renderWhisperCard(m, i))}

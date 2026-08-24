@@ -259,14 +259,19 @@ jest.mock('@react-native-community/slider', () => {
 // A voice carries its own assets (embedding + tagger + lexicon) in addition to
 // the two shared core .pte models — mirror that so completeness checks
 // (_activeVoiceSources) have a realistic full asset set to validate against.
-const mockVoiceConfig = {
-  id: 'mock_voice',
-  voiceSource: 'https://example.test/kokoro/voices/af_heart.bin',
-  extra: {
-    taggerSource: 'https://example.test/kokoro/tagger.pt',
-    lexiconSource: 'https://example.test/kokoro/lexicon.json',
+const mockKokoroConfig = (voice: string, language: string) => ({
+  model: {
+    durationPredictorSource: `https://example.test/kokoro/${language}/duration_predictor.pte`,
+    synthesizerSource: `https://example.test/kokoro/${language}/synthesizer.pte`,
   },
-};
+  voiceSource: `https://example.test/kokoro/voices/${voice}.bin`,
+  phonemizerConfig: {
+    lang: language,
+    taggerSource: `https://example.test/kokoro/${language}/tagger.pt`,
+    lexiconSource: `https://example.test/kokoro/${language}/lexicon.json`,
+    neuralModelSource: `https://example.test/kokoro/${language}/phonemizer.pte`,
+  },
+});
 jest.mock('react-native-executorch', () => ({
   // Faithful init leaf for the executorch native runtime (a genuine external native boundary):
   // initExecutorch registers the resource fetcher so the runtime is ready to load models through
@@ -284,19 +289,26 @@ jest.mock('react-native-executorch', () => ({
     stream: jest.fn(() => Promise.resolve()),
     streamStop: jest.fn(),
   })),
-  KOKORO_MEDIUM: {
-    modelName: 'kokoro-medium',
-    durationPredictorSource: 'https://example.test/kokoro/medium/duration_predictor.pte',
-    synthesizerSource: 'https://example.test/kokoro/medium/synthesizer.pte',
-  },
-  KOKORO_VOICE_AF_HEART: mockVoiceConfig,
-  KOKORO_VOICE_AF_RIVER: mockVoiceConfig,
-  KOKORO_VOICE_AF_SARAH: mockVoiceConfig,
-  KOKORO_VOICE_AM_ADAM: mockVoiceConfig,
-  KOKORO_VOICE_AM_MICHAEL: mockVoiceConfig,
-  KOKORO_VOICE_AM_SANTA: mockVoiceConfig,
-  KOKORO_VOICE_BF_EMMA: mockVoiceConfig,
-  KOKORO_VOICE_BM_DANIEL: mockVoiceConfig,
+  KOKORO_AMERICAN_ENGLISH_FEMALE_HEART: mockKokoroConfig('af_heart', 'en-us'),
+  KOKORO_AMERICAN_ENGLISH_FEMALE_RIVER: mockKokoroConfig('af_river', 'en-us'),
+  KOKORO_AMERICAN_ENGLISH_FEMALE_SARAH: mockKokoroConfig('af_sarah', 'en-us'),
+  KOKORO_AMERICAN_ENGLISH_MALE_ADAM: mockKokoroConfig('am_adam', 'en-us'),
+  KOKORO_AMERICAN_ENGLISH_MALE_MICHAEL: mockKokoroConfig('am_michael', 'en-us'),
+  KOKORO_AMERICAN_ENGLISH_MALE_SANTA: mockKokoroConfig('am_santa', 'en-us'),
+  KOKORO_BRITISH_ENGLISH_FEMALE_EMMA: mockKokoroConfig('bf_emma', 'en-gb'),
+  KOKORO_BRITISH_ENGLISH_MALE_DANIEL: mockKokoroConfig('bm_daniel', 'en-gb'),
+  KOKORO_FRENCH_FEMALE_SIWIS: mockKokoroConfig('ff_siwis', 'fr'),
+  KOKORO_SPANISH_FEMALE_DORA: mockKokoroConfig('ef_dora', 'es'),
+  KOKORO_SPANISH_MALE_ALEX: mockKokoroConfig('em_alex', 'es'),
+  KOKORO_ITALIAN_FEMALE_SARA: mockKokoroConfig('if_sara', 'it'),
+  KOKORO_ITALIAN_MALE_NICOLA: mockKokoroConfig('im_nicola', 'it'),
+  KOKORO_PORTUGUESE_FEMALE_DORA: mockKokoroConfig('pf_dora', 'pt'),
+  KOKORO_PORTUGUESE_MALE_SANTA: mockKokoroConfig('pm_santa', 'pt'),
+  KOKORO_HINDI_FEMALE_ALPHA: mockKokoroConfig('hf_alpha', 'hi'),
+  KOKORO_HINDI_MALE_OMEGA: mockKokoroConfig('hm_omega', 'hi'),
+  KOKORO_HINDI_MALE_PSI: mockKokoroConfig('hm_psi', 'hi'),
+  KOKORO_POLISH_MALE_MATEUSZ: mockKokoroConfig('pm_mateusz', 'pl'),
+  KOKORO_GERMAN_FEMALE_ANNA: mockKokoroConfig('df_anna', 'de'),
 }));
 
 // react-native-executorch-bare-resource-fetcher mock.

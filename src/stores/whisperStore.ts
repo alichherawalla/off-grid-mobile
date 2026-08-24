@@ -36,6 +36,8 @@ interface WhisperState {
   isModelLoading: boolean;
   isModelLoaded: boolean;
   error: string | null;
+  /** Language passed to every realtime and file transcription. */
+  transcriptionLanguage: string;
 
   // Actions
   downloadModel: (modelId: string) => Promise<void>;
@@ -49,6 +51,7 @@ interface WhisperState {
   /** Re-probe which models are present on disk. */
   refreshPresentModels: () => Promise<void>;
   clearError: () => void;
+  setTranscriptionLanguage: (language: string) => void;
 }
 
 type SetState = (partial: Partial<WhisperState> | ((s: WhisperState) => Partial<WhisperState>)) => void;
@@ -77,6 +80,7 @@ export const useWhisperStore = create<WhisperState>()(
       isModelLoading: false,
       isModelLoaded: false,
       error: null,
+      transcriptionLanguage: 'en',
 
       downloadModel: async (modelId: string) => {
         setProgress(set, modelId, 0);
@@ -242,12 +246,17 @@ export const useWhisperStore = create<WhisperState>()(
       clearError: () => {
         set({ error: null });
       },
+
+      setTranscriptionLanguage: (transcriptionLanguage: string) => {
+        set({ transcriptionLanguage });
+      },
     }),
     {
       name: 'local-llm-whisper-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         downloadedModelId: state.downloadedModelId,
+        transcriptionLanguage: state.transcriptionLanguage,
       }),
     }
   )

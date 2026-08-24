@@ -11,6 +11,7 @@ import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { WhisperPickerSheet } from '../models/WhisperPickerSheet';
+import { TranscriptionLanguageSelect } from '../TranscriptionLanguageSelect';
 import {
   NO_TRANSCRIPTION_MODEL_LABEL,
   useTranscriptionModelSetting,
@@ -177,6 +178,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
               <Icon name="chevron-right" size={18} color={colors.textMuted} />
             </TouchableOpacity>
+            <TranscriptionLanguageSelect testID="chat-transcription-language" />
             {/* Voice mode ends a turn on silence. Lives with STT because it is about listening. */}
             <VoiceTurnSettings />
           </View>

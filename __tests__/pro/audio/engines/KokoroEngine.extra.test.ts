@@ -223,17 +223,17 @@ describe('KokoroEngine.extra — uncovered branches', () => {
     expect(changed).toEqual(['bm_daniel']);
   });
 
-  it('setVoice still emits voiceChanged (and switches) when the asset fetch fails', async () => {
+  it('setVoice rejects and keeps the usable voice when the asset fetch fails', async () => {
     const engine = new KokoroEngine();
     fetchResources.mockRejectedValueOnce(new Error('net down'));
     const changed: string[] = [];
     engine.on('voiceChanged', (id) => changed.push(id));
 
-    await engine.setVoice('am_adam'); // must not reject; failure is warn-and-continue
+    await expect(engine.setVoice('am_adam')).rejects.toThrow('net down');
 
-    expect(engine.getActiveVoice()?.id).toBe('am_adam');
+    expect(engine.getActiveVoice()?.id).toBe('af_heart');
     expect(engine.isFullyDownloaded()).toBe(false); // no completion recorded on failure
-    expect(changed).toEqual(['am_adam']);
+    expect(changed).toEqual([]);
   });
 
   // ── speak retry / error / session ownership ───────────────────────────────

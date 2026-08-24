@@ -39,7 +39,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   onAudioAttachmentRef.current = onAudioAttachment;
   const onAutoSendRef = useRef(onAutoSend);
   onAutoSendRef.current = onAutoSend;
-  const { downloadedModelId } = useWhisperStore();
+  const { downloadedModelId, transcriptionLanguage } = useWhisperStore();
   const [isDirectRecording, setIsDirectRecording] = useState(false);
   const [isAudioModeRecording, setIsAudioModeRecording] = useState(false);
   /** Hands-free: the mic is open but nobody has spoken yet, so the turn has not begun. */
@@ -165,7 +165,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       setIsTranscribingFile(true);
       try {
         whisperReady = await ensureWhisper();
-        if (whisperReady) transcript = await whisperService.transcribeFile(path);
+        if (whisperReady) transcript = await whisperService.transcribeFile(path, { language: transcriptionLanguage });
       } catch (err) { logger.error(errLabel, err); }
       setIsTranscribingFile(false);
     }
@@ -243,7 +243,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       let transcript = '';
       try {
         whisperReady = await ensureWhisper();
-        if (whisperReady) transcript = await whisperService.transcribeFile(path);
+        if (whisperReady) transcript = await whisperService.transcribeFile(path, { language: transcriptionLanguage });
       } catch (transcribeErr) {
         logger.error('[Voice] File transcription error:', transcribeErr);
       }

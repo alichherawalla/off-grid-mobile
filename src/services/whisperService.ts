@@ -9,6 +9,7 @@ import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
 import * as whisperModelFiles from './whisperModelFiles';
+import { whisperDecodeOptions } from './whisperDecodeOptions';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
 // to keep this file within the max-lines budget). Behavior-neutral: every existing
@@ -258,6 +259,7 @@ class WhisperService {
       maxLen?: number;
     }
   ): Promise<void> {
+    const language = options?.language || 'en';
     logger.log(`[WhisperService] start (context=${!!this.context})`);
     logger.log('[WhisperService] isTranscribing:', this.isTranscribing);
 
@@ -310,7 +312,7 @@ class WhisperService {
       if (!recordedFile) return realtimeText;
       try {
         const { path } = await audioRecorderService.stopRecording();
-        const fileText = await this.transcribeFile(path);
+        const fileText = await this.transcribeFile(path, { language });
         logger.log(`[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(0, 50)}"`);
         return fileText;
       } catch (fileErr) {
@@ -331,7 +333,7 @@ class WhisperService {
       logger.log('[WhisperService] Calling transcribeRealtime...');
       // Use the transcribeRealtime API
       const { stop, subscribe } = await this.context.transcribeRealtime({
-        language: options?.language || 'en',
+        ...whisperDecodeOptions(language),
         maxLen: options?.maxLen || 0, // 0 = no limit
         realtimeAudioSec: 30, // Process in 30-second chunks
         realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
@@ -463,8 +465,10 @@ class WhisperService {
       throw new Error('No Whisper model loaded');
     }
 
+    const language = options?.language || 'en';
+    logger.log(`[WhisperService] Transcribing file with language=${language} model=${this.currentModelPath ?? 'unknown'}`);
     const { promise } = this.context.transcribe(filePath, {
-      language: options?.language || 'en',
+      ...whisperDecodeOptions(language),
       onProgress: options?.onProgress,
     });
 

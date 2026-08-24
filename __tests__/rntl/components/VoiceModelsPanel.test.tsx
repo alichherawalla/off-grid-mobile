@@ -60,9 +60,11 @@ const actions = {
   clearError: jest.fn(),
 };
 let mockStoreState: any;
-jest.mock('../../../pro/audio/ttsStore', () => ({ useTTSStore: () => mockStoreState }));
+jest.mock('../../../pro/audio/ttsStore', () => ({
+  useTTSStore: (selector?: (state: any) => unknown) =>
+    selector ? selector(mockStoreState) : mockStoreState,
+}));
 
-import { useFocusEffect } from '@react-navigation/native';
 import { VoiceModelsPanel } from '../../../pro/audio/ui/VoiceModelsPanel';
 
 const VOICES = [
@@ -95,12 +97,13 @@ describe('VoiceModelsPanel', () => {
     expect(getByText(/nothing is sent anywhere/)).toBeTruthy();
   });
 
-  it('lists voices when the model is downloaded and selects one on tap', async () => {
+  it('filters voices by language and selects the first voice when language changes', async () => {
     const { getByTestId } = await renderPanel();
     expect(getByTestId('voice-af_heart')).toBeTruthy();
-    expect(getByTestId('voice-bf_emma')).toBeTruthy();
+    expect(() => getByTestId('voice-bf_emma')).toThrow();
 
-    await act(async () => { fireEvent.press(getByTestId('voice-bf_emma')); });
+    fireEvent.press(getByTestId('models-tts-language'));
+    await act(async () => { fireEvent.press(getByTestId('models-tts-language-en-GB')); });
     expect(actions.setVoice).toHaveBeenCalledWith('bf_emma');
   });
 
@@ -147,12 +150,9 @@ describe('VoiceModelsPanel', () => {
     }
   });
 
-  it('backfills the persisted-downloaded flag from disk on focus', async () => {
-    let focusCb: (() => void) | undefined;
-    (useFocusEffect as jest.Mock).mockImplementation((cb: () => void) => { focusCb = cb; });
+  it('backfills the persisted-downloaded flag from disk when the panel opens', async () => {
+    actions.checkDownloadStatus.mockClear();
     await renderPanel();
-    actions.checkDownloadStatus.mockClear(); // drop the mount-effect call
-    await act(async () => { focusCb?.(); await Promise.resolve(); });
     expect(actions.checkDownloadStatus).toHaveBeenCalled();
   });
 });

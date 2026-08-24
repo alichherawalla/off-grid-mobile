@@ -42,6 +42,8 @@ jest.mock('../../../../pro/audio/engine', () => {
     stop: jest.fn(),
     getPhase: () => 'ready',
     getRequiredAssets: () => [{ id: 'a', sizeBytes: 82 * 1024 * 1024 }],
+    checkAssetStatus: jest.fn(async () => []),
+    getOverallDownloadProgress: () => 1,
     isFullyDownloaded: () => true,
     initialize: jest.fn(async () => {}),
     release: jest.fn(async () => {}),
@@ -122,6 +124,28 @@ describe('TTSSection', () => {
     });
   });
 
+  describe('when the voice model is downloaded but the engine is cold', () => {
+    it('shows the voice controls instead of the download empty state', () => {
+      setStore({
+        ...INITIAL,
+        isReady: false,
+        voices: VOICES,
+        activeVoiceId: 'af_heart',
+        settings: {
+          ...INITIAL.settings,
+          interfaceMode: 'chat',
+          modelDownloaded: { ...INITIAL.settings.modelDownloaded, kokoro: true },
+        },
+      });
+
+      const { getByText, getByTestId, queryByText } = render(<TTSSection />);
+
+      expect(queryByText(/No voice models downloaded/)).toBeNull();
+      expect(getByText('Interface Mode')).toBeTruthy();
+      expect(getByTestId('tts-speed-slider')).toBeTruthy();
+    });
+  });
+
   // ── Ready branch ─────────────────────────────────────────────────────────
   describe('when a voice model is ready', () => {
     beforeEach(() =>
@@ -141,7 +165,8 @@ describe('TTSSection', () => {
       expect(getByText('Chat')).toBeTruthy();
       expect(getByText('Audio')).toBeTruthy();
       expect(getByText('Warm')).toBeTruthy();
-      expect(getByText('Gentle')).toBeTruthy();
+      expect(queryByText('Gentle')).toBeNull();
+      expect(getByTestId('chat-tts-language')).toBeTruthy();
       expect(getByTestId('tts-speed-slider')).toBeTruthy();
     });
 
@@ -169,12 +194,14 @@ describe('TTSSection', () => {
     });
 
     it('tapping a voice dispatches setVoice → activeVoiceId changes in the REAL store', async () => {
-      const { getByText } = render(<TTSSection />);
+      const { getByText, getByTestId } = render(<TTSSection />);
       expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
-      await act(async () => { fireEvent.press(getByText('Gentle')); });
+      fireEvent.press(getByTestId('chat-tts-language'));
+      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
       // The real setVoice action updates activeVoiceId immediately (optimistic).
       expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma');
       expect(useTTSStore.getState().settings.voiceByEngine[useTTSStore.getState().settings.engineId]).toBe('bf_emma');
+      expect(getByText('Gentle')).toBeTruthy();
     });
 
     // ── Mode picker interaction (real store action) ────────────────────────

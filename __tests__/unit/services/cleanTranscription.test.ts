@@ -22,6 +22,7 @@ describe('cleanTranscription', () => {
   it('keeps real speech', () => {
     expect(cleanTranscription('hello world')).toBe('hello world');
     expect(cleanTranscription('  draw a horse  ')).toBe('draw a horse');
+    expect(cleanTranscription('नमस्ते, कैसे हो भाई')).toBe('नमस्ते, कैसे हो भाई');
   });
 
   it('strips a leading marker but keeps the speech after it', () => {

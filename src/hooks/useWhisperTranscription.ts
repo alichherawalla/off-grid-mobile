@@ -54,7 +54,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
   const transcribingStartTime = useRef<number | null>(null);
   const pendingResult = useRef<string | null>(null);
 
-  const { isModelLoaded, isModelLoading } = useWhisperStore();
+  const { isModelLoaded, isModelLoading, transcriptionLanguage } = useWhisperStore();
 
   // On unmount, stop any in-flight realtime session. Without this the mic kept
   // capturing after the user navigated away without releasing the button — the
@@ -261,7 +261,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
             transcribingStartTime.current = null;
           }
         }
-      });
+      }, { language: transcriptionLanguage });
     } catch (err) {
       logger.error('[Whisper] Recording error:', err);
       // Force reset whisper service state
@@ -275,7 +275,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
         Vibration.vibrate([0, 50, 50, 50]);
       }
     }
-  }, [ensureModelReady, stopRecording, finalizeTranscription]);
+  }, [ensureModelReady, stopRecording, finalizeTranscription, transcriptionLanguage]);
 
   const startRecording = useCallback(async () => {
     logger.log('[Whisper] startRecording called');

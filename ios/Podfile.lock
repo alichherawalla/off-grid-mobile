@@ -2040,7 +2040,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-executorch (0.8.1):
+  - react-native-executorch (0.9.3):
     - boost
     - DoubleConversion
     - fast_float
@@ -3881,7 +3881,7 @@ SPEC CHECKSUMS:
   react-native-background-downloader: b02d12c3961322ce1c85fa0f8b3e4adb5b652106
   react-native-document-picker: dc2d83366e47e89e7c51e8a41eab99c1d54e941c
   react-native-document-viewer: 8c6ed07e7e27352743fa98e8dd6d288ad925b884
-  react-native-executorch: 9a44ee2b18773cbe5ad2e6d7376eb76f347e2935
+  react-native-executorch: 863673cf458ceec5df61012fa30981ffa3ee8fc4
   react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-image-picker: 0314366753615115fa55c3cc937ac44cb7e75702
   react-native-keyboard-controller: 7534b5a39d1e8b2b79f86e8e998ed71c7154f69f

@@ -11,6 +11,7 @@ import RNFS from 'react-native-fs';
 import { whisperService, WHISPER_MODELS } from '../../../src/services/whisperService';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
 import { audioSessionManager } from '../../../src/services/audioSessionManager';
+import { audioRecorderService } from '../../../src/services/audioRecorderService';
 import { AudioManager } from 'react-native-audio-api';
 
 // The realtime permission path drives audioSessionManager, which calls these.
@@ -627,6 +628,8 @@ describe('WhisperService', () => {
       expect(mockContext.transcribeRealtime).toHaveBeenCalledWith(
         expect.objectContaining({
           language: 'fr',
+          translate: false,
+          beamSize: 5,
           maxLen: 100,
         })
       );
@@ -719,6 +722,50 @@ describe('WhisperService', () => {
         processTime: 100,
         recordingTime: 200,
       });
+    });
+
+    it('keeps the selected language when the realtime result falls back to the recorded file', async () => {
+      let subscribeFn: any;
+      const mockContext = {
+        id: 'ctx',
+        release: jest.fn(),
+        transcribeRealtime: jest.fn(() => Promise.resolve({
+          stop: jest.fn(),
+          subscribe: (fn: any) => { subscribeFn = fn; },
+        })),
+        transcribe: jest.fn(() => ({
+          stop: jest.fn(),
+          promise: Promise.resolve({ result: 'नमस्ते दुनिया' }),
+        })),
+      };
+      mockedInitWhisper.mockResolvedValueOnce(mockContext as any);
+      await whisperService.loadModel('/path/model.bin');
+      Object.defineProperty(Platform, 'OS', { get: () => 'ios' });
+      jest.spyOn(audioRecorderService, 'startRecording').mockResolvedValue();
+      jest.spyOn(audioRecorderService, 'stopRecording').mockResolvedValue({
+        path: '/recorded-hindi.wav',
+        durationSeconds: 1,
+      });
+
+      const resultCb = jest.fn();
+      await whisperService.startRealtimeTranscription(resultCb, { language: 'hi' });
+      subscribeFn({ isCapturing: false, data: { result: '' } });
+      await (whisperService as any).transcriptionFullyStopped;
+
+      expect(mockContext.transcribe).toHaveBeenCalledWith(
+        '/recorded-hindi.wav',
+        expect.objectContaining({
+          language: 'hi',
+          translate: false,
+          temperature: 0,
+          beamSize: 5,
+          prompt: expect.stringContaining('हिंदी'),
+        }),
+      );
+      expect(resultCb).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'नमस्ते दुनिया',
+        isCapturing: false,
+      }));
     });
   });
 
