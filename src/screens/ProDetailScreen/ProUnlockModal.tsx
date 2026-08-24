@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  Linking,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
-  TouchableWithoutFeedback,
-} from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import {
   projectPersonalMeshActivationFailure,
@@ -24,6 +13,7 @@ import {
   PRO_PAY_PAGE_URL,
 } from '../../services/proLicenseService';
 import { withUtm } from '../../utils/utm';
+import { AppSheet } from '../../components/AppSheet';
 
 type ErrorMsg = Pick<
   PersonalMeshActivationFailureProjection,
@@ -36,7 +26,7 @@ type Props = {
   onUnlocked: () => void;
 };
 
-// Activation modal: the user pastes the license key from their email and we
+// Activation sheet: the user pastes the license key from their email and we
 // activate it on this device. Paying is a separate path — "Get Pro" opens the
 // web pay page; the buyer is then emailed a key to paste here.
 export const ProUnlockModal: React.FC<Props> = ({
@@ -115,23 +105,24 @@ export const ProUnlockModal: React.FC<Props> = ({
     });
   };
 
-  if (success) {
-    return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={finishSuccess}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.card}>
+  const hasInput = licenseKey.trim().length > 0;
+
+  return (
+    <AppSheet
+      visible={visible}
+      onClose={success ? finishSuccess : close}
+      onHeaderClosePress={success ? finishSuccess : close}
+      enableDynamicSizing
+      title={success ? 'Pro activated' : 'Enter your license key'}
+      closeLabel={success ? 'Done' : 'Cancel'}
+    >
+      <View style={styles.content}>
+        {success ? (
+          <>
             <View style={styles.successIconWrap}>
               <Icon name="check" size={26} color={colors.primary} />
             </View>
-            <Text style={styles.successTitle}>Pro activated</Text>
-            <Text style={styles.successSub}>
-              You're all set. Pro is active on this device.
-            </Text>
+            <Text style={styles.successSub}>Pro is active on this device.</Text>
             <TouchableOpacity
               style={styles.successBtn}
               onPress={finishSuccess}
@@ -139,137 +130,80 @@ export const ProUnlockModal: React.FC<Props> = ({
             >
               <Text style={styles.primaryBtnText}>Got it</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
-  const hasInput = licenseKey.trim().length > 0;
-
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={close}
-    >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Tap the dimmed area to dismiss the keyboard */}
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.dismissArea} />
-        </TouchableWithoutFeedback>
-        <View style={styles.card}>
-          {/* Close X */}
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={close}
-            disabled={loading}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Icon name="x" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-
-          {/* Header */}
-          <Text style={styles.title}>Enter your license key</Text>
-          <Text style={styles.subtitle}>
-            Paste the license key from your email. It works on up to 5 devices.
-          </Text>
-
-          {/* License key input */}
-          <TextInput
-            style={styles.input}
-            placeholder="key/..."
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            value={licenseKey}
-            onChangeText={t => {
-              setLicenseKey(t);
-              clearError();
-            }}
-            editable={!loading}
-            testID="license-key-input"
-          />
-
-          {/* Inline error */}
-          {error ? (
-            <View style={styles.errorBlock}>
-              <Text style={styles.errorTitle}>{error.title}</Text>
-              <Text style={styles.errorText}>{error.description}</Text>
-            </View>
-          ) : null}
-
-          {/* Primary CTA */}
-          <TouchableOpacity
-            testID="unlock-cta"
-            style={[
-              styles.primaryBtn,
-              (loading || !hasInput) && styles.disabled,
-            ]}
-            onPress={handleActivate}
-            disabled={loading || !hasInput}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>
-              {loading ? 'Activating...' : 'Activate'}
+          </>
+        ) : (
+          <>
+            <Text style={styles.subtitle}>
+              Paste the license key from your email. It works on up to 5
+              devices.
             </Text>
-          </TouchableOpacity>
 
-          {/* Footer — not a member yet, go to the pay page */}
-          <TouchableOpacity
-            style={styles.toggleRow}
-            onPress={handleGetPro}
-            disabled={loading}
-          >
-            <Text style={styles.toggleText}>Not a member yet? Get Pro</Text>
-            <Icon name="external-link" size={13} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+            {/* License key input */}
+            <TextInput
+              style={styles.input}
+              placeholder="key/..."
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+              value={licenseKey}
+              onChangeText={t => {
+                setLicenseKey(t);
+                clearError();
+              }}
+              editable={!loading}
+              testID="license-key-input"
+            />
+
+            {/* Inline error */}
+            {error ? (
+              <View style={styles.errorBlock}>
+                <Text style={styles.errorTitle}>{error.title}</Text>
+                <Text style={styles.errorText}>{error.description}</Text>
+              </View>
+            ) : null}
+
+            {/* Primary CTA */}
+            <TouchableOpacity
+              testID="unlock-cta"
+              style={[
+                styles.primaryBtn,
+                (loading || !hasInput) && styles.disabled,
+              ]}
+              onPress={handleActivate}
+              disabled={loading || !hasInput}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.primaryBtnText}>
+                {loading ? 'Activating...' : 'Activate'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Footer — not a member yet, go to the pay page */}
+            <TouchableOpacity
+              style={styles.toggleRow}
+              onPress={handleGetPro}
+              disabled={loading}
+            >
+              <Text style={styles.toggleText}>Not a member yet? Get Pro</Text>
+              <Icon
+                name="external-link"
+                size={13}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </AppSheet>
   );
 };
 
-const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center' as const,
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  content: {
     paddingHorizontal: SPACING.xl,
-  },
-  dismissArea: {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.lg,
     paddingBottom: SPACING.xl,
-    ...shadows.small,
-  },
-
-  closeBtn: {
-    alignSelf: 'flex-end' as const,
-    padding: SPACING.sm,
-    marginBottom: SPACING.xs,
-  },
-
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    marginBottom: SPACING.xs,
   },
   subtitle: {
     ...TYPOGRAPHY.bodySmall,
@@ -352,12 +286,6 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     justifyContent: 'center' as const,
     alignSelf: 'center' as const,
     marginBottom: SPACING.lg,
-  },
-  successTitle: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-    textAlign: 'center' as const,
-    marginBottom: SPACING.sm,
   },
   successSub: {
     ...TYPOGRAPHY.body,
