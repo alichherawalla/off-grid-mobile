@@ -207,10 +207,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   {
     const { generationService } = require('../../src/services');
     (
-      globalThis as unknown as { __GEN_CLEANUP__?: () => void }
-    ).__GEN_CLEANUP__ = () => {
-      generationService.stopGeneration().catch(() => {});
-    };
+      globalThis as unknown as { __GEN_CLEANUP__?: () => Promise<void> }
+    ).__GEN_CLEANUP__ = () => generationService.stopGeneration();
   }
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
