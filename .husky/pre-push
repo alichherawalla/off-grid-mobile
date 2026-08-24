@@ -57,7 +57,10 @@ if [ -n "$PUSHED_JS" ]; then
   # Rendered RN journeys share native-boundary state and are memory-heavy. Parallel workers
   # starve one another and turn normal 10-second journeys into false multi-minute timeouts.
   # CI runs this same graph serially; keep the local merge gate deterministic too.
-  echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests --runInBand
+  # Some React Native boundary shims keep native-style handles alive after Jest has completed every
+  # assertion. The repository's full test command already force-closes those handles. Apply the same
+  # completion policy here so a fully passing related suite does not return a false non-zero status.
+  echo "$PUSHED_JS" | tr '\n' '\0' | xargs -0 npx jest --findRelatedTests --passWithNoTests --runInBand --forceExit
 
   echo "▶ Architecture gate (dependency-cruiser)..."
   npm run depcruise
