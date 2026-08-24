@@ -29,15 +29,14 @@ import {
 } from './nativeBoundary';
 import { createDownloadedModel } from '../utils/factories';
 
+// The serial coverage gate loads more than 600 suites into one process. Near the end of that run,
+// module setup and garbage collection can delay a real ChatScreen journey beyond Jest's 10-second
+// default even when the same journey finishes in under two seconds alone. Keep the user-visible RNTL
+// assertions strict; only the heavy harness's outer test budget gets this load-tolerant ceiling.
+jest.setTimeout(30_000);
+
 /** Shared route params the test's navigation mock reads (set by setupChatScreen). */
 export const routeHolder: { params: Record<string, unknown> } = { params: {} };
-
-/**
- * Outer budget for full ChatScreen journeys under the serial coverage gate.
- * Each user-visible assertion keeps its shorter RNTL timeout, so a broken flow
- * still fails quickly while module setup and garbage collection can finish.
- */
-export const HEAVY_CHAT_JOURNEY_TIMEOUT_MS = 30_000;
 
 export interface ChatHarnessOptions {
   engine: 'llama' | 'litert';

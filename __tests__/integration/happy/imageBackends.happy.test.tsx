@@ -9,10 +9,7 @@
  * on the generic faked device qnn CORRECTLY refuses ("NPU models require a Qualcomm Snapdragon processor"),
  * which is real behavior, not a test gap. Both are covered at the service/meta layer, not duplicated here.)
  */
-import {
-  HEAVY_CHAT_JOURNEY_TIMEOUT_MS,
-  setupChatScreen,
-} from '../../harness/chatHarness';
+import { setupChatScreen } from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -42,5 +39,5 @@ describe('happy — image generation shows the correct backend label (heavy entr
     await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); });
     // ...and the user sees the correct backend label in the message details.
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(new RegExp(cfg.expected.replace(/[()]/g, '\\$&')))).not.toBeNull(); });
-  }, HEAVY_CHAT_JOURNEY_TIMEOUT_MS);
+  });
 });
