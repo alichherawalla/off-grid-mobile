@@ -122,6 +122,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   useEffect(() => {
     let lanDiscoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelHydrationListener: (() => void) | null = null;
+    let cancelled = false;
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
       if (!hasInitializedNativeSync) {
@@ -134,33 +136,50 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         // already had a gateway → ON. Guard on the remote-server store being hydrated so we read the
         // real (persisted) server list, not the empty initial state. runLANDiscovery self-gates on
         // the resulting setting, so a slow hydration simply skips this launch (correct next launch).
-        const migrateAutoDiscover = (): void => {
+        const migrateAndScheduleDiscovery = (): void => {
+          if (cancelled) return;
           const next = resolveAutoDiscoverMigration(
             useAppStore.getState().settings.autoDiscoverRemoteModels,
             useRemoteServerStore.getState().servers.length > 0,
           );
           if (next !== undefined) useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: next });
+          // Delay LAN scan so the home screen is fully rendered and interactive first.
+          // Start this delay only after persisted remote settings are available, or the
+          // scan can read the empty initial store and skip a valid saved gateway.
+          lanDiscoveryTimer = setTimeout(() => {
+            lanDiscoveryTimer = null;
+            if (cancelled) {
+              lanDiscoveryState = 'idle';
+              return;
+            }
+            runLANDiscovery();
+            lanDiscoveryState = 'complete';
+          }, 3000);
         };
         // `.persist` is a zustand-middleware addition; guard it so this is safe under test mocks
         // that don't include it (treat "no persist API" as already-hydrated).
-        const persistApi = (useRemoteServerStore as { persist?: { hasHydrated?: () => boolean; onFinishHydration?: (cb: () => void) => void } }).persist;
-        if (!persistApi?.hasHydrated || persistApi.hasHydrated()) migrateAutoDiscover();
-        else persistApi.onFinishHydration?.(migrateAutoDiscover);
-        // Delay LAN scan so the home screen is fully rendered and interactive first
-        lanDiscoveryTimer = setTimeout(() => {
-          lanDiscoveryState = 'complete';
-          lanDiscoveryTimer = null;
-          runLANDiscovery();
-        }, 3000);
+        const persistApi = (useRemoteServerStore as {
+          persist?: {
+            hasHydrated?: () => boolean;
+            onFinishHydration?: (cb: () => void) => (() => void) | void;
+          };
+        }).persist;
+        if (!persistApi?.hasHydrated || persistApi.hasHydrated()) {
+          migrateAndScheduleDiscovery();
+        } else {
+          cancelHydrationListener = persistApi.onFinishHydration?.(migrateAndScheduleDiscovery) ?? null;
+        }
       }
     });
     isFirstMount.current = false;
     return () => {
+      cancelled = true;
       task.cancel();
+      cancelHydrationListener?.();
       if (lanDiscoveryTimer !== null) {
         clearTimeout(lanDiscoveryTimer);
-        lanDiscoveryState = 'idle';
       }
+      if (lanDiscoveryState === 'scheduled') lanDiscoveryState = 'idle';
     };
 
   }, []);
