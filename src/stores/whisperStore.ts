@@ -169,7 +169,8 @@ export const useWhisperStore = create<WhisperState>()(
           set({ isModelLoaded: selectedModelIsLoaded, isModelLoading: false, error: null });
           // loaded=false means the single-model rule blocked it (not a failure) —
           // report 'blocked' so a caller can free the resident model and retry.
-          return selectedModelIsLoaded ? 'loaded' : (loaded ? 'error' : 'blocked');
+          if (selectedModelIsLoaded) return 'loaded';
+          return loaded ? 'error' : 'blocked';
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state

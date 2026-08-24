@@ -6,6 +6,14 @@ import { LoadingDots } from '../LoadingDots';
 import { createStyles } from './styles';
 import type { VoiceRecordInteractionMode } from '../VoiceRecordButton';
 
+const processingLabel = (
+  processing: 'loading' | 'starting' | 'transcribing',
+): string => {
+  if (processing === 'loading') return 'Loading voice model...';
+  if (processing === 'starting') return 'Starting microphone...';
+  return 'Transcribing...';
+};
+
 /**
  * Voice interaction status shown INLINE in the composer while recording:
  * a recording dot on the left and "‹ Slide to cancel" centred. The mic sits to the right, outside
@@ -29,13 +37,7 @@ export const RecordingHint: React.FC<{
           testID={`${processing}-voice-loader`}
         />
         <View style={styles.slideToCancel}>
-          <Text style={styles.slideToCancelText}>
-            {processing === 'loading'
-              ? 'Loading voice model...'
-              : processing === 'starting'
-              ? 'Starting microphone...'
-              : 'Transcribing...'}
-          </Text>
+          <Text style={styles.slideToCancelText}>{processingLabel(processing)}</Text>
         </View>
       </View>
     );

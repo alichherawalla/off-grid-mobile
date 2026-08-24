@@ -116,15 +116,24 @@ export interface NativeSync {
   noteRosterChanged(): void;
 }
 
+const DEFAULT_SYNC_NETWORK = {
+  port: OFFGRID_SYNC_PORT,
+  browsing: true,
+} as const;
+
+function formatSilentJoinError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'unknown error';
+}
+
 /** Construct (but don't start) the mobile Sync stack for a given local device. */
 export function createNativeSync(
   localDevice: DeviceInfo,
   cbs: NativeSyncCallbacks,
-  network: { port: number; browsing: boolean } = {
-    port: OFFGRID_SYNC_PORT,
-    browsing: true,
-  },
+  network?: { port: number; browsing: boolean },
 ): NativeSync {
+  const networkConfig = network ?? DEFAULT_SYNC_NETWORK;
   const discoveredDeviceIds = new Set<string>();
   let proximity: IosProximityAdapter | null = null;
   if (Platform.OS === 'ios') {
@@ -187,7 +196,7 @@ export function createNativeSync(
     ...(cbs.discoverable === undefined
       ? {}
       : { discoverable: cbs.discoverable }),
-    browsing: network.browsing,
+    browsing: networkConfig.browsing,
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
     resolveEndpoint: cbs.resolveEndpoint,
     ...(cbs.hasCredential ? { hasCredential: cbs.hasCredential } : {}),
@@ -203,16 +212,13 @@ export function createNativeSync(
           // The outcome of that attempt, in words. Without it the log recorded an admission and then
           // nothing, for every one of 150 attempts between a phone and a laptop that never connected.
           onSilentJoinSettled: (device: DiscoveredDevice, error?: unknown) => {
+            const outcome = error === undefined ? 'succeeded' : 'failed';
+            const detail =
+              error === undefined ? '' : `: ${formatSilentJoinError(error)}`;
             logger.log(
-              `[SYNC] silent join ${
-                error === undefined ? 'succeeded' : 'failed'
-              } for ${device.name ?? device.id}${
-                error === undefined
-                  ? ''
-                  : `: ${
-                      error instanceof Error ? error.message : String(error)
-                    }`
-              }`,
+              `[SYNC] silent join ${outcome} for ${
+                device.name ?? device.id
+              }${detail}`,
             );
           },
         }
@@ -326,7 +332,7 @@ export function createNativeSync(
     async start() {
       publishHealth();
       try {
-        await engine.start(network.port);
+        await engine.start(networkConfig.port);
         localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
         await refreshLocalNetworkAddress();
         await orchestrator.start();
