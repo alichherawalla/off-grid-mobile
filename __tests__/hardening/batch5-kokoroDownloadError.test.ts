@@ -16,15 +16,34 @@
  * is exercised nowhere — the ttsStore setVoice tests mock engine.setVoice entirely.
  */
 import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
-import { KokoroEngine } from '../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
+import {
+  KokoroEngine,
+  type KokoroBridgeHandle,
+} from '../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
+import type { KokoroVoiceId } from '../../pro/audio/engine/tts/engines/kokoro/voices';
 
 const fetchResources = (BareResourceFetcher as any).fetch as jest.Mock;
-const listDownloadedFiles = BareResourceFetcher.listDownloadedFiles as jest.Mock;
+const listDownloadedFiles =
+  BareResourceFetcher.listDownloadedFiles as jest.Mock;
 
 beforeEach(() => {
   fetchResources?.mockReset().mockResolvedValue(undefined);
   listDownloadedFiles?.mockReset().mockResolvedValue([]);
 });
+
+function attachSelectedVoiceBridge(engine: KokoroEngine): void {
+  const bridge: KokoroBridgeHandle = {
+    speak: async () => undefined,
+    stop: () => undefined,
+    pause: () => undefined,
+    resume: () => undefined,
+    setSpeed: () => undefined,
+    setKeepAlive: () => undefined,
+  };
+  engine._setMountRequester(() => {
+    engine._setBridge(bridge, engine.getActiveVoice()!.id as KokoroVoiceId);
+  });
+}
 
 describe('KokoroEngine — download failure (offline / interrupted fetch)', () => {
   it('a REAL fetch rejection lands the engine in the error phase, records the message, and rethrows', async () => {
@@ -35,7 +54,9 @@ describe('KokoroEngine — download failure (offline / interrupted fetch)', () =
     const engine = new KokoroEngine();
     fetchResources.mockRejectedValueOnce(new Error('Network is unreachable'));
 
-    await expect(engine.downloadAssets()).rejects.toThrow(/network is unreachable/i);
+    await expect(engine.downloadAssets()).rejects.toThrow(
+      /network is unreachable/i,
+    );
 
     expect(engine.getPhase()).toBe('error');
     expect(engine.getLastDownloadError()).toMatch(/network is unreachable/i);
@@ -54,7 +75,11 @@ describe('KokoroEngine — download failure (offline / interrupted fetch)', () =
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'KOKORO_DOWNLOAD', recoverable: true, message: expect.stringMatching(/interrupted/i) }),
+      expect.objectContaining({
+        code: 'KOKORO_DOWNLOAD',
+        recoverable: true,
+        message: expect.stringMatching(/interrupted/i),
+      }),
     );
   });
 
@@ -90,9 +115,15 @@ describe('KokoroEngine — download failure (offline / interrupted fetch)', () =
 describe('KokoroEngine.setVoice — active voice + completeness + events', () => {
   it('serializes a voice-pack fetch behind an active base-model download', async () => {
     const engine = new KokoroEngine();
+    attachSelectedVoiceBridge(engine);
     let finishBase!: () => void;
     fetchResources
-      .mockImplementationOnce(() => new Promise<void>((resolve) => { finishBase = resolve; }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>(resolve => {
+            finishBase = resolve;
+          }),
+      )
       .mockResolvedValueOnce(undefined);
 
     const baseDownload = engine.downloadAssets();
@@ -113,6 +144,7 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
 
   it('updates the active voice and reflects it via getActiveVoice()', async () => {
     const engine = new KokoroEngine();
+    attachSelectedVoiceBridge(engine);
     // Default active voice is af_heart.
     expect(engine.getActiveVoice()?.id).toBe('af_heart');
 
@@ -124,6 +156,7 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
 
   it('emits voiceChanged with the new voice id', async () => {
     const engine = new KokoroEngine();
+    attachSelectedVoiceBridge(engine);
     const onVoiceChanged = jest.fn();
     engine.on('voiceChanged', onVoiceChanged);
     fetchResources.mockResolvedValueOnce(undefined);
@@ -135,6 +168,7 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
 
   it('records genuine completion once the new voice fetch resolves (reads downloaded)', async () => {
     const engine = new KokoroEngine();
+    attachSelectedVoiceBridge(engine);
     fetchResources.mockResolvedValueOnce(undefined);
 
     await engine.setVoice('am_michael');
@@ -145,7 +179,9 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
 
   it('rejects an unknown voice id without touching the active voice', async () => {
     const engine = new KokoroEngine();
-    await expect(engine.setVoice('not_a_real_voice')).rejects.toThrow(/unknown kokoro voice/i);
+    await expect(engine.setVoice('not_a_real_voice')).rejects.toThrow(
+      /unknown kokoro voice/i,
+    );
     expect(engine.getActiveVoice()?.id).toBe('af_heart'); // unchanged
     expect(fetchResources).not.toHaveBeenCalled();
   });
@@ -156,7 +192,9 @@ describe('KokoroEngine.setVoice — active voice + completeness + events', () =>
     engine.on('voiceChanged', onVoiceChanged);
     fetchResources.mockRejectedValueOnce(new Error('voice fetch offline'));
 
-    await expect(engine.setVoice('am_santa')).rejects.toThrow('voice fetch offline');
+    await expect(engine.setVoice('am_santa')).rejects.toThrow(
+      'voice fetch offline',
+    );
 
     expect(engine.getActiveVoice()?.id).toBe('af_heart');
     expect(onVoiceChanged).not.toHaveBeenCalled();

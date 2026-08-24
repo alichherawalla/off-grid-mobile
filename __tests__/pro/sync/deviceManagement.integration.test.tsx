@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TcpSocket from 'react-native-tcp-socket';
-import type { DeviceInfo } from '@offgrid/sync';
+import { OFFGRID_SYNC_PORT, type DeviceInfo } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
@@ -31,7 +31,11 @@ import { SyncHomeCard } from '../../../pro/ui/SyncHomeCard';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
+  getTcpDials,
   resetDiscoveryBoundaries,
+  resetTcpDials,
+  resetTcpPortRoutes,
+  routeTcpPort,
 } from '../../utils/nativeSyncBoundaries';
 import {
   pairingCodeOnScreen,
@@ -97,6 +101,7 @@ describe('Pro mobile saved-device management journey', () => {
     mesh.reset();
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
+    resetTcpPortRoutes();
     _clearScreensForTesting();
     _clearSlotsForTesting();
     _clearSectionsForTesting();
@@ -209,7 +214,9 @@ describe('Pro mobile saved-device management journey', () => {
     expect(within(connectedRow).getByText(/Connected · WiFi/)).toBeTruthy();
     expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
     fireEvent.press(ui.getByTestId('sync-rename-this-device'));
-    expect(await waitFor(() => ui!.getByText('Rename this device'))).toBeTruthy();
+    expect(
+      await waitFor(() => ui!.getByText('Rename this device')),
+    ).toBeTruthy();
     fireEvent.changeText(
       ui.getByTestId('sync-rename-this-device-input'),
       'Travel Phone',
@@ -418,6 +425,159 @@ describe('Pro mobile saved-device management journey', () => {
         persisted.tombstones as Record<string, { deviceId: string }>,
       ).map(tombstone => tombstone.deviceId),
     ).toEqual([remoteDevice.id]);
+  });
+
+  it('saves one private endpoint and reconnects only to that address after restart', async () => {
+    mesh.register({
+      id: 'desktop-private-peer',
+      name: 'Travel Desktop',
+      platform: 'macos',
+    });
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-private-peer',
+      name: 'Travel Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    const remotePersistence = new MembershipPersistenceBoundary();
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
+    );
+    await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
+
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    await remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+      await pairingCodeOnScreen(ui),
+    );
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Connected/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Offline/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId(`sync-manual-endpoint-${remoteDevice.id}`));
+    expect(
+      await waitFor(() => ui!.getByText('Connect by address')),
+    ).toBeTruthy();
+    expect(ui.getByText(/Only your devices can read it/)).toBeTruthy();
+    fireEvent.changeText(
+      ui.getByTestId('sync-manual-address-input'),
+      '100.100.20.30',
+    );
+    expect(ui.queryByTestId('sync-manual-port-input')).toBeNull();
+    routeTcpPort(OFFGRID_SYNC_PORT, remoteDevice.port);
+    const scansBeforeConnect = discovery.scanCount;
+    resetTcpDials();
+    fireEvent.press(ui.getByTestId('sync-manual-endpoint-connect'));
+
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Connected/,
+        ),
+      ).toBeTruthy(),
+    );
+    expect(getTcpDials()).toContainEqual({
+      host: '100.100.20.30',
+      port: OFFGRID_SYNC_PORT,
+    });
+    expect(discovery.scanCount).toBe(scansBeforeConnect);
+
+    await syncService.stop();
+    ui.unmount();
+    ui = undefined;
+    await syncService.start();
+    const restartedDiscovery = getDiscoveryBoundaries().at(-1);
+    if (!restartedDiscovery) throw new Error('Sync discovery did not restart');
+    expect(syncService.manualEndpoint(remoteDevice.id)).toEqual({
+      deviceId: remoteDevice.id,
+      host: '100.100.20.30',
+    });
+    resetTcpDials();
+    await syncService.reconnectDevice(remoteDevice.id);
+
+    expect(getTcpDials()).toContainEqual({
+      host: '100.100.20.30',
+      port: OFFGRID_SYNC_PORT,
+    });
+  });
+
+  it('stops nearby browsing and keeps the saved Sync port after restart', async () => {
+    await syncService.start();
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
+    );
+    await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
+
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!discovery) throw new Error('Sync discovery did not start');
+    const stopsBefore = discovery.stopCount;
+    fireEvent(ui.getByTestId('sync-toggle-browsing'), 'valueChange', false);
+    await waitFor(() => {
+      expect(discovery.stopCount).toBeGreaterThan(stopsBefore);
+      expect(ui!.getByTestId('sync-browsing-off')).toBeTruthy();
+    });
+
+    fireEvent.press(ui.getByTestId('sync-open-connection-settings'));
+    expect(await waitFor(() => ui!.getByTestId('sync-port-input'))).toBeTruthy();
+    fireEvent.changeText(ui.getByTestId('sync-port-input'), '40123');
+    fireEvent.press(ui.getByTestId('sync-port-save'));
+    await waitFor(() => {
+      expect(ui!.queryByTestId('sync-port-input')).toBeNull();
+      expect(useSyncStore.getState().syncPort).toBe(40123);
+    });
+
+    await syncService.stop();
+    ui.unmount();
+    ui = undefined;
+    await syncService.start();
+
+    expect(useSyncStore.getState().browsing).toBe(false);
+    expect(useSyncStore.getState().syncPort).toBe(40123);
   });
 
   it('shows Mobile-initiated cancel, code, and persistence failures before a clean retry', async () => {
