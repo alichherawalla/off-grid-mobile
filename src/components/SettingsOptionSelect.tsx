@@ -18,11 +18,12 @@ interface SettingsOptionSelectProps {
   onChange: (value: string) => void;
   description?: string;
   testID?: string;
+  disabled?: boolean;
 }
 
 /** One settings selector for chat settings and the Models screens. */
 export const SettingsOptionSelect: React.FC<SettingsOptionSelectProps> = ({
-  label, value, options, onChange, description, testID,
+  label, value, options, onChange, description, testID, disabled = false,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -36,7 +37,9 @@ export const SettingsOptionSelect: React.FC<SettingsOptionSelectProps> = ({
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={`${label}: ${selected?.label ?? value}`}
-        style={styles.trigger}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        style={[styles.trigger, disabled && styles.disabled]}
         onPress={() => setOpen(true)}
       >
         <Text style={styles.value}>{selected?.label ?? value}</Text>
@@ -79,6 +82,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
   value: { ...TYPOGRAPHY.body, color: colors.text, flex: 1 },
   description: { ...TYPOGRAPHY.meta, color: colors.textMuted },
+  disabled: { opacity: 0.6 },
   options: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
   option: {
     minHeight: 48, paddingHorizontal: SPACING.md, borderWidth: 1, borderColor: colors.border,

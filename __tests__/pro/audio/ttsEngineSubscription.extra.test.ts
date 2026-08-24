@@ -64,6 +64,8 @@ beforeEach(() => {
     playbackDuration: 0,
     currentAmplitude: 0,
     overallDownloadProgress: 0,
+    voiceSwitchProgress: 0,
+    isSwitchingVoice: false,
     activeVoiceId: null,
     playSessionId: 7,
     error: null,
@@ -81,6 +83,14 @@ describe('downloadProgress → store projection', () => {
     subscribeToEngine(engine as any, deps());
     engine.emit('downloadProgress');
     expect(state.overallDownloadProgress).toBe(0.42);
+  });
+
+  it('projects progress into the pending voice switch', () => {
+    state.isSwitchingVoice = true;
+    const engine = makeEngine(0.42);
+    subscribeToEngine(engine as any, deps());
+    engine.emit('downloadProgress');
+    expect(state.voiceSwitchProgress).toBe(0.42);
   });
 });
 
@@ -140,6 +150,15 @@ describe('voiceChanged → store projection', () => {
     const engine = makeEngine();
     subscribeToEngine(engine as any, deps());
     engine.emit('voiceChanged', 'af_heart');
+    expect(state.activeVoiceId).toBe('af_heart');
+  });
+
+  it('does not mark a voice active before its pending switch is ready', () => {
+    state.isSwitchingVoice = true;
+    state.activeVoiceId = 'af_heart';
+    const engine = makeEngine();
+    subscribeToEngine(engine as any, deps());
+    engine.emit('voiceChanged', 'bf_emma');
     expect(state.activeVoiceId).toBe('af_heart');
   });
 });

@@ -7,7 +7,7 @@
  * resumed ("play not clickable") — the tap reached nothing.
  */
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import { render, fireEvent, renderHook } from '@testing-library/react-native';
 
 // Render the icon as a Text carrying its Feather name, so tests can assert which glyph
@@ -22,7 +22,11 @@ import { PlayButton, usePlaybackState } from '../../../pro/audio/ui/AudioMessage
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 
 const colors = { primary: '#0f0' } as any;
-const styles = { playButton: {}, playButtonDisabled: {} } as any;
+const styles = {
+  playButton: {},
+  playButtonDisabled: {},
+  playButtonLoader: { paddingHorizontal: 4 },
+} as any;
 
 function renderButton(props: Partial<React.ComponentProps<typeof PlayButton>>) {
   const onPlayPause = jest.fn();
@@ -75,8 +79,11 @@ describe('PlayButton — touchability (always controllable when this is the acti
   });
 
   it('renders a spinner (non-touchable) while THIS is preparing but not yet playing/synth', () => {
-    const { UNSAFE_queryAllByType } = renderButton({ isThisLoading: true });
+    const { UNSAFE_queryAllByType, getByTestId } = renderButton({ isThisLoading: true });
     expect(UNSAFE_queryAllByType(TouchableOpacity)).toHaveLength(0);
+    expect(StyleSheet.flatten(getByTestId('voice-note-play-loader').props.style)).toEqual(
+      expect.objectContaining({ paddingHorizontal: 4 }),
+    );
   });
 
   it('is touchable in the normal idle state', () => {

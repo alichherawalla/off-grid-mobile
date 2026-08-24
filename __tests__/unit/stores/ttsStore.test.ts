@@ -88,6 +88,10 @@ const resetState = () => {
     overallDownloadProgress: 1,
     voices: [{ id: 'default', label: 'Default', metadata: {} }],
     activeVoiceId: 'default',
+    isSwitchingVoice: false,
+    pendingVoiceId: null,
+    failedVoiceId: null,
+    voiceSwitchProgress: 0,
     audioCacheSizeMB: 0,
     settings: {
       interfaceMode: 'chat',
@@ -164,10 +168,21 @@ describe('ttsStore', () => {
   });
 
   describe('setVoice (logged, timeout-guarded switch)', () => {
-    it('clears isSwitchingVoice after a successful switch', async () => {
-      mockEngine.setVoice.mockResolvedValueOnce(undefined);
-      await getState().setVoice('default');
-      expect(mockEngine.setVoice).toHaveBeenCalledWith('default');
+    it('keeps the current voice active until the requested voice is ready', async () => {
+      let finishSwitch!: () => void;
+      mockEngine.setVoice.mockReturnValueOnce(new Promise<void>((resolve) => { finishSwitch = resolve; }));
+      const switching = getState().setVoice('next');
+
+      expect(getState().activeVoiceId).toBe('default');
+      expect(getState().pendingVoiceId).toBe('next');
+      expect(getState().isSwitchingVoice).toBe(true);
+
+      finishSwitch();
+      await switching;
+      expect(mockEngine.setVoice).toHaveBeenCalledWith('next');
+      expect(getState().activeVoiceId).toBe('next');
+      expect(getState().settings.voiceByEngine['mock-tts']).toBe('next');
+      expect(getState().pendingVoiceId).toBeNull();
       expect(getState().isSwitchingVoice).toBe(false);
     });
 
@@ -178,6 +193,8 @@ describe('ttsStore', () => {
       // The spinner must clear and an error surfaces — never a permanent stuck state.
       expect(getState().isSwitchingVoice).toBe(false);
       expect(getState().error).toMatch(/timed out/i);
+      expect(getState().failedVoiceId).toBe('default');
+      expect(getState().pendingVoiceId).toBeNull();
       _setVoiceSwitchTimeoutForTest(45000);
     });
 
@@ -186,6 +203,7 @@ describe('ttsStore', () => {
       await getState().setVoice('default');
       expect(getState().isSwitchingVoice).toBe(false);
       expect(getState().error).toBe('fetch failed');
+      expect(getState().failedVoiceId).toBe('default');
     });
 
     it('deleteModels clears a stuck isSwitchingVoice (delete mid-switch must not lock the picker)', async () => {
@@ -226,9 +244,10 @@ describe('ttsStore', () => {
 
   describe('clearError', () => {
     it('clears the error field', () => {
-      useTTSStore.setState({ error: 'something went wrong' });
+      useTTSStore.setState({ error: 'something went wrong', failedVoiceId: 'next' });
       getState().clearError();
       expect(getState().error).toBeNull();
+      expect(getState().failedVoiceId).toBeNull();
     });
   });
 

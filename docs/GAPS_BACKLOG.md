@@ -12,6 +12,19 @@ Verdict legend:
 
 ---
 
+## Android voice session can lose playback or transcription - 2026-08-24
+
+**Verdict: instrument-and-revisit.**
+
+A Pixel 8a user reported that voice replies showed both transcripts but produced no sound. After the
+user stopped and restarted the app, playback worked, but microphone input no longer produced a
+transcript. The currently attached Android device creates and plays a full-volume `AudioTrack`, so
+the failure is not reproduced. Capture Pixel logs for the playback and recorder state machines before
+changing audio-focus or model-lifecycle behavior. Acceptance: repeated voice turns continue to play
+and transcribe before and after app restart, for the user's selected language.
+
+---
+
 ## Projects screen does not refresh after desktop project sync - 2026-08-20
 
 **Verdict: instrument-and-revisit.**

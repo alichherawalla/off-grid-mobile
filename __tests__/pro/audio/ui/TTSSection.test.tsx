@@ -14,7 +14,7 @@
  * The store under assertion is NEVER mocked.
  */
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 
 // Render each Feather icon as a Text carrying its name, so a test can assert
 // which glyph shows (check / check-circle / external-link) without reaching into
@@ -33,26 +33,25 @@ jest.mock('react-native-vector-icons/Feather', () => {
 // A minimal fake engine so the store's setVoice action proceeds (it bails when
 // there is no active engine). setVoice does the real optimistic state update
 // (activeVoiceId + voiceByEngine) before awaiting this boundary.
-jest.mock('../../../../pro/audio/engine', () => {
-  const engine = {
-    id: 'kokoro',
-    displayName: 'Kokoro TTS',
-    capabilities: { peakRamMB: 82 },
-    setVoice: jest.fn(async () => {}),
-    stop: jest.fn(),
-    getPhase: () => 'ready',
-    getRequiredAssets: () => [{ id: 'a', sizeBytes: 82 * 1024 * 1024 }],
-    checkAssetStatus: jest.fn(async () => []),
-    getOverallDownloadProgress: () => 1,
-    isFullyDownloaded: () => true,
-    initialize: jest.fn(async () => {}),
-    release: jest.fn(async () => {}),
-  };
-  return {
-    ttsRegistry: { getActiveEngine: () => engine, getRegisteredIds: () => ['kokoro'] },
-    OuteTTSEngine: class {},
-  };
-});
+const mockSetVoice = jest.fn(async () => {});
+const mockTTSEngine = {
+  id: 'kokoro',
+  displayName: 'Kokoro TTS',
+  capabilities: { peakRamMB: 82 },
+  setVoice: mockSetVoice,
+  stop: jest.fn(),
+  getPhase: () => 'ready',
+  getRequiredAssets: () => [{ id: 'a', sizeBytes: 82 * 1024 * 1024 }],
+  checkAssetStatus: jest.fn(async () => []),
+  getOverallDownloadProgress: () => 1,
+  isFullyDownloaded: () => true,
+  initialize: jest.fn(async () => {}),
+  release: jest.fn(async () => {}),
+};
+jest.mock('../../../../pro/audio/engine', () => ({
+  ttsRegistry: { getActiveEngine: () => mockTTSEngine, getRegisteredIds: () => ['kokoro'] },
+  OuteTTSEngine: class {},
+}));
 
 // The residency lock/hardware are native boundaries; the mode switch's
 // initializeEngine side-effect routes through them. Grant room so it proceeds
@@ -193,15 +192,56 @@ describe('TTSSection', () => {
       expect(getByText('US · Female')).toBeTruthy();
     });
 
-    it('tapping a voice dispatches setVoice → activeVoiceId changes in the REAL store', async () => {
-      const { getByText, getByTestId } = render(<TTSSection />);
+    it('shows the language download until the requested voice is ready', async () => {
+      let finishSwitch!: () => void;
+      const pendingSwitch = new Promise<void>((resolve) => { finishSwitch = resolve; });
+      mockSetVoice.mockReturnValueOnce(pendingSwitch);
+      const realSetVoice = useTTSStore.getState().setVoice;
+      const setVoiceFromUI = jest.fn(realSetVoice);
+      setStore({ setVoice: setVoiceFromUI });
+      const { getByText, getByTestId, queryByTestId } = render(<TTSSection />);
       expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
       fireEvent.press(getByTestId('chat-tts-language'));
       await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
-      // The real setVoice action updates activeVoiceId immediately (optimistic).
+
+      expect(setVoiceFromUI).toHaveBeenCalledWith('bf_emma');
+      expect(mockSetVoice).toHaveBeenCalledWith('bf_emma');
+      expect(mockSetVoice.mock.results[0]?.value).toBe(pendingSwitch);
+      expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
+      await waitFor(() => expect(useTTSStore.getState().pendingVoiceId).toBe('bf_emma'));
+      expect(getByTestId('chat-tts-language-download-status')).toBeTruthy();
+      expect(getByText(/Downloading English \(UK\) voice/)).toBeTruthy();
+      expect(queryByTestId('icon-check-circle')).toBeNull();
+
+      // A second selection cannot start while one voice is still being prepared.
+      fireEvent.press(getByTestId('chat-tts-language'));
+      expect(queryByTestId('chat-tts-language-en-US')).toBeNull();
+
+      act(() => { useTTSStore.setState({ voiceSwitchProgress: 0.42 }); });
+      expect(getByText('Downloading English (UK) voice - 42%')).toBeTruthy();
+
+      await act(async () => { finishSwitch(); await Promise.resolve(); });
+      await waitFor(() => expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy());
       expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma');
       expect(useTTSStore.getState().settings.voiceByEngine[useTTSStore.getState().settings.engineId]).toBe('bf_emma');
       expect(getByText('Gentle')).toBeTruthy();
+    });
+
+    it('shows a failed language download and retries it', async () => {
+      mockSetVoice
+        .mockRejectedValueOnce(new Error('network down'))
+        .mockResolvedValueOnce(undefined);
+      const { getByText, getByTestId } = render(<TTSSection />);
+
+      fireEvent.press(getByTestId('chat-tts-language'));
+      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
+      await waitFor(() => expect(getByTestId('chat-tts-language-download-error')).toBeTruthy());
+      expect(getByText('Could not download the English (UK) voice. Check your connection and retry.')).toBeTruthy();
+      expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
+
+      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-download-retry')); });
+      await waitFor(() => expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma'));
+      expect(mockSetVoice).toHaveBeenCalledTimes(2);
     });
 
     // ── Mode picker interaction (real store action) ────────────────────────
