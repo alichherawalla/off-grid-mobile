@@ -126,6 +126,7 @@
   },
   "op-sqlite": {},
   "overrides": {
-    "react": "19.2.0"
+    "react": "19.2.0",
+    "linkify-it": "^5.0.2"
   }
 }

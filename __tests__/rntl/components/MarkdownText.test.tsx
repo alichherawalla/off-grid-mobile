@@ -117,13 +117,14 @@ describe('MarkdownText', () => {
   it('opens a Markdown link and refuses an unsafe destination', () => {
     const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     const rendered = render(
-      <MarkdownText>{'[Docs](https://example.com/docs) [Unsafe](javascript:alert(1))'}</MarkdownText>,
+      <MarkdownText>{'[Docs](https://example.com/docs) [Unsafe](ftp://example.com/file)'}</MarkdownText>,
     );
 
     fireEvent.press(rendered.getByText('Docs'));
+    fireEvent.press(rendered.getByText('Unsafe'));
     expect(openURL).toHaveBeenCalledTimes(1);
     expect(openURL).toHaveBeenCalledWith('https://example.com/docs');
-    expect(rendered.getAllByRole('link')).toHaveLength(1);
+    expect(rendered.getAllByRole('link')).toHaveLength(2);
     openURL.mockRestore();
   });
 
