@@ -3,7 +3,7 @@ import { View, TextInput, TouchableOpacity, Animated, Platform, ActionSheetIOS }
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
-import { VoiceRecordButton } from '../VoiceRecordButton';
+import { VoiceRecordButton, type VoiceRecordInteractionMode } from '../VoiceRecordButton';
 import { RecordingHint } from './RecordingHint';
 import { ComposerIconsRow } from './ComposerIconsRow';
 import { triggerHaptic } from '../../utils/haptics';
@@ -64,6 +64,22 @@ const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
 // Attach + quick-settings only. The Chat/Voice mode toggle is no longer in this
 // (collapsing) row — it's rendered persistently above the input instead.
 const computePillIconsWidth = (): number => PILL_ICON_SIZE * 2;
+
+type VoiceProcessingState = 'loading' | 'starting' | 'transcribing' | undefined;
+
+/** Project the recorder lifecycle into one display state. */
+const deriveVoiceProcessingState = (input: {
+  isRecording: boolean;
+  isModelLoading: boolean;
+  isStartingRecording: boolean;
+  isTranscribing: boolean;
+}): VoiceProcessingState => {
+  if (input.isRecording) return undefined;
+  if (input.isModelLoading) return 'loading';
+  if (input.isStartingRecording) return 'starting';
+  if (input.isTranscribing) return 'transcribing';
+  return undefined;
+};
 
 /**
  * Alert shown when the user attaches an image to a model without vision support.
@@ -137,6 +153,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState('');
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
+  const [voiceInteractionMode, setVoiceInteractionMode] = useState<VoiceRecordInteractionMode>('idle');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const quickSettings = useKeyboardAwarePopover();
   const attachPicker = useKeyboardAwarePopover();
@@ -178,12 +195,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }),
   });
 
-  const { isRecording, isModelLoading, isTranscribing, partialResult, error, voiceAvailable, isAwaitingSpeech, startRecording, stopRecording, cancelRecording } = useVoiceInput({
+  const { isRecording, isModelLoading, isStartingRecording, isTranscribing, partialResult, error, voiceAvailable, isAwaitingSpeech, startRecording, stopRecording, cancelRecording } = useVoiceInput({
     conversationId,
+    interfaceMode,
     onTranscript: voiceHandlers.onTranscript,
     onAudioAttachment: voiceHandlers.onAudioAttachment,
     onAutoSend: voiceHandlers.onAutoSend,
   });
+  const voiceProcessingState = deriveVoiceProcessingState({
+    isRecording,
+    isModelLoading,
+    isStartingRecording,
+    isTranscribing,
+  });
+  const showVoiceStatus = isRecording || voiceInteractionMode !== 'idle' || voiceProcessingState !== undefined;
 
   const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();
   const thinkingEnabled = appSettings.thinkingEnabled;
@@ -349,6 +374,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       onStartRecording={startRecording}
       onStopRecording={stopRecording}
       onCancelRecording={cancelRecording}
+      onInteractionModeChange={setVoiceInteractionMode}
     />
   );
 
@@ -362,9 +388,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       />
       <View style={styles.mainRow}>
         <View style={styles.pill}>
-          {isRecording ? (
-            // Push-to-talk hint inline in the composer (WhatsApp pattern) — see RecordingHint.
-            <RecordingHint awaitingSpeech={isAwaitingSpeech} />
+          {showVoiceStatus ? (
+            <RecordingHint
+              awaitingSpeech={isAwaitingSpeech}
+              interactionMode={voiceInteractionMode}
+              processing={voiceProcessingState}
+            />
           ) : (
             <>
               <TextInput
@@ -436,4 +465,3 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     </View>
   );
 };
-

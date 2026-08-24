@@ -6,7 +6,8 @@ import {
   type VoiceSession,
   type VoiceSessionEvent,
 } from '@offgrid/speech';
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/appStore';
+import { useUiModeStore } from '../stores/uiModeStore';
 import logger from '../utils/logger';
 
 /**
@@ -30,6 +31,7 @@ const listeners = new Set<Listener>();
 
 /** Read at every transition, so changing the setting takes effect on the next event. */
 const handsFree = (): boolean =>
+  useUiModeStore.getState().interfaceMode === 'audio' &&
   (useAppStore.getState().settings.voiceTurnMode ?? 'silence') === 'handsfree';
 
 /**

@@ -35,6 +35,7 @@ describe('happy — audio-mode transcription auto-sends the spoken text', () => 
     const autoSendArgs: unknown[][] = [];
     const { result } = renderHook(() => useVoiceInput({
       conversationId: 'c1', onTranscript: () => {},
+      interfaceMode: 'audio',
       onAutoSend: (...a: unknown[]) => { autoSendArgs.push(a); },
       onAudioAttachment: () => {},
     }));

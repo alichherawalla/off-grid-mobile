@@ -48,6 +48,7 @@ describe('chat-mode STT is dictation-to-the-input-box on every engine (LiteRT to
     const transcriptArgs: string[] = [];
     const { result } = renderHook(() => useVoiceInput({
       conversationId: 'c1',
+      interfaceMode: 'chat',
       onTranscript: (t: string) => { transcriptArgs.push(t); },
       onAutoSend: (...a: unknown[]) => { autoSendArgs.push(a); },
       onAudioAttachment: (p: Record<string, unknown>) => { attachmentArgs.push(p); },
