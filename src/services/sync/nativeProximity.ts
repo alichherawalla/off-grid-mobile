@@ -25,6 +25,7 @@ const CONNECTION_CLOSED_EVENT = 'SyncProximityConnectionClosed';
 interface SyncProximityNativeModule {
   start(device: DeviceInfo): Promise<void>;
   rescan(): Promise<void>;
+  stopBrowsing(): Promise<void>;
   stop(): Promise<void>;
   updateDevice(device: DeviceInfo): Promise<void>;
   connect(deviceId: string): Promise<string>;
@@ -176,6 +177,19 @@ export class IosProximityAdapter implements TransportBridge {
 
   readonly discovery: DiscoveryService = {
     start: () => this.ensureStarted(),
+    startBrowsing: async () => {
+      await this.ensureStarted();
+      await this.native.rescan();
+      this.browseHealth = { state: 'ready', updatedAt: Date.now() };
+    },
+    stopBrowsing: async () => {
+      if (!this.started) return;
+      await this.native.stopBrowsing();
+      for (const deviceId of this.peers) this.lostListener?.(deviceId);
+      this.peers.clear();
+      this.discoveredDevices.clear();
+      this.browseHealth = { state: 'stopped', updatedAt: Date.now() };
+    },
     rescan: async () => {
       await this.ensureStarted();
       this.browseHealth = { state: 'starting', updatedAt: Date.now() };

@@ -6,21 +6,22 @@
 import { Platform } from 'react-native';
 import TcpSocket from 'react-native-tcp-socket';
 import Zeroconf from 'react-native-zeroconf';
-import type {
-  DeviceInfo,
-  DiscoveryScanSnapshot,
-  DiscoveredDevice,
-  PairingPersistence,
-  PairedDevice,
-  PairingAttemptSnapshot,
-  MembershipRevocationPersistence,
-  MembershipRevocationSnapshot,
-  Message,
-  DeviceCap,
-  SyncDiscoverabilityHealthInput,
-  SyncEngineOptions,
-  PeerLink,
-  PeerLinkEvent,
+import {
+  OFFGRID_SYNC_PORT,
+  type DeviceInfo,
+  type DiscoveryScanSnapshot,
+  type DiscoveredDevice,
+  type PairingPersistence,
+  type PairedDevice,
+  type PairingAttemptSnapshot,
+  type MembershipRevocationPersistence,
+  type MembershipRevocationSnapshot,
+  type Message,
+  type DeviceCap,
+  type SyncDiscoverabilityHealthInput,
+  type SyncEngineOptions,
+  type PeerLink,
+  type PeerLinkEvent,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
@@ -43,6 +44,8 @@ export interface NativeSyncCallbacks {
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
+  /** Resolve the preferred route for a stable device identity before every reconnect. */
+  resolveEndpoint?: (device: DeviceInfo) => DeviceInfo | Promise<DeviceInfo>;
   /** Whether storage HOLDS a credential. Never a judgement about whether to use it. */
   hasCredential?: (deviceId: string) => boolean;
   getMembershipId?: (deviceId: string) => string | undefined;
@@ -87,6 +90,8 @@ export interface NativeSync {
   /** Advertise this device, or stop. Returns the value actually in effect. */
   setDiscoverable(next: boolean): Promise<boolean>;
   isDiscoverable(): boolean;
+  setBrowsing(next: boolean): Promise<boolean>;
+  isBrowsing(): boolean;
   pair(device: DeviceInfo, passphrase: string): Promise<PairedDevice>;
   cancelPairing(deviceId: string): Promise<boolean>;
   listPairingAttempts(): PairingAttemptSnapshot[];
@@ -115,6 +120,10 @@ export interface NativeSync {
 export function createNativeSync(
   localDevice: DeviceInfo,
   cbs: NativeSyncCallbacks,
+  network: { port: number; browsing: boolean } = {
+    port: OFFGRID_SYNC_PORT,
+    browsing: true,
+  },
 ): NativeSync {
   const discoveredDeviceIds = new Set<string>();
   let proximity: IosProximityAdapter | null = null;
@@ -178,7 +187,9 @@ export function createNativeSync(
     ...(cbs.discoverable === undefined
       ? {}
       : { discoverable: cbs.discoverable }),
+    browsing: network.browsing,
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
+    resolveEndpoint: cbs.resolveEndpoint,
     ...(cbs.hasCredential ? { hasCredential: cbs.hasCredential } : {}),
     getMembershipId: cbs.getMembershipId,
     // The initiator half. Same resolver the engine answers with.
@@ -193,9 +204,15 @@ export function createNativeSync(
           // nothing, for every one of 150 attempts between a phone and a laptop that never connected.
           onSilentJoinSettled: (device: DiscoveredDevice, error?: unknown) => {
             logger.log(
-              `[SYNC] silent join ${error === undefined ? 'succeeded' : 'failed'} for ${
-                device.name ?? device.id
-              }${error === undefined ? '' : `: ${error instanceof Error ? error.message : String(error)}`}`,
+              `[SYNC] silent join ${
+                error === undefined ? 'succeeded' : 'failed'
+              } for ${device.name ?? device.id}${
+                error === undefined
+                  ? ''
+                  : `: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`
+              }`,
             );
           },
         }
@@ -309,7 +326,7 @@ export function createNativeSync(
     async start() {
       publishHealth();
       try {
-        await engine.start(0); // ephemeral port
+        await engine.start(network.port);
         localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
         await refreshLocalNetworkAddress();
         await orchestrator.start();
@@ -364,6 +381,12 @@ export function createNativeSync(
       return orchestrator.isDiscoverable();
     },
     isDiscoverable: () => orchestrator.isDiscoverable(),
+    async setBrowsing(next: boolean) {
+      await orchestrator.setBrowsing(next);
+      publishHealth();
+      return orchestrator.isBrowsing();
+    },
+    isBrowsing: () => orchestrator.isBrowsing(),
     pair: (device, passphrase) => engine.pair(device, passphrase),
     cancelPairing: deviceId => engine.cancelPairing(deviceId),
     listPairingAttempts: () => engine.listPairingAttempts(),
@@ -383,7 +406,8 @@ export function createNativeSync(
       engine.sendApp(deviceId, channel, data),
     isPaired: deviceId => engine.isPaired(deviceId),
     peerLink: deviceId => orchestrator.peerLink(deviceId),
-    notePeerLink: (deviceId, event) => orchestrator.notePeerLink(deviceId, event),
+    notePeerLink: (deviceId, event) =>
+      orchestrator.notePeerLink(deviceId, event),
     noteRosterChanged: () => orchestrator.noteRosterChanged(),
   };
 }

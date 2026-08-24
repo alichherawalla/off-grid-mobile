@@ -27,6 +27,8 @@ export interface BuildDiscoveryArgs {
     Partial<Pick<SyncEngine, 'retryMembershipRevocation'>>;
   localDevice: DeviceInfo;
   getSharedSecret: (deviceId: string) => string | undefined;
+  /** Resolve the preferred route for a stable device identity before every reconnect. */
+  resolveEndpoint?: (device: DeviceInfo) => DeviceInfo | Promise<DeviceInfo>;
   /** Whether storage HOLDS a credential, asked as a plain lookup. */
   hasCredential?: (deviceId: string) => boolean;
   getMembershipId?: (deviceId: string) => string | undefined;
@@ -42,6 +44,8 @@ export interface BuildDiscoveryArgs {
   admitSilently?: (device: DiscoveredDevice) => Promise<void>;
   /** Advertise on start. Absent means yes, so an existing install does not go hidden on upgrade. */
   discoverable?: boolean;
+  /** Browse on start. Absent means yes. */
+  browsing?: boolean;
 }
 
 export function buildDiscovery(
@@ -72,7 +76,9 @@ export function buildDiscovery(
     ...(args.discoverable === undefined
       ? {}
       : { discoverable: args.discoverable }),
+    ...(args.browsing === undefined ? {} : { browsing: args.browsing }),
     getSharedSecret: args.getSharedSecret,
+    resolveEndpoint: args.resolveEndpoint,
     hasCredential:
       args.hasCredential ??
       (deviceId => args.getSharedSecret(deviceId) !== undefined),

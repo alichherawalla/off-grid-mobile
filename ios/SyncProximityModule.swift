@@ -190,6 +190,17 @@ final class SyncProximityModule: RCTEventEmitter {
   }
 
   @objc
+  func stopBrowsing(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter _: @escaping RCTPromiseRejectBlock
+  ) {
+    stateQueue.async { [weak self] in
+      self?.browser?.stopBrowsingForPeers()
+      resolve(nil)
+    }
+  }
+
+  @objc
   func updateDevice(
     _ device: [String: Any],
     resolver resolve: @escaping RCTPromiseResolveBlock,
