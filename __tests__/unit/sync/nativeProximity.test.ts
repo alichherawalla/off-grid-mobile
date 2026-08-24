@@ -4,6 +4,7 @@ import type {
   DiscoveredDevice,
   SyncConnection,
 } from '@offgrid/sync';
+import { DiscoveryOrchestrator } from '@offgrid/sync';
 import {
   CONNECTION_CLOSED_EVENT,
   CONNECTION_OPENED_EVENT,
@@ -16,6 +17,8 @@ import {
   type ProximityNativeFake,
 } from '../../utils/proximityNativeBoundary';
 import { IosProximityAdapter } from '../../../src/services/sync/nativeProximity';
+import { buildSyncEngine } from '../../../src/services/sync/engine';
+import { createNativeTcpBoundary } from '../../utils/nativeSyncBoundaries';
 
 jest.mock('react-native', () => {
   const boundary = require('../../utils/proximityNativeBoundary');
@@ -74,6 +77,30 @@ describe('two phones talking with no network between them', () => {
 
   const bytes = (text: string) => new Uint8Array(Buffer.from(text, 'utf8'));
   const text = (data: Uint8Array) => Buffer.from(data).toString('utf8');
+  const startVisible = async (
+    adapter: IosProximityAdapter,
+    device: DeviceInfo,
+  ) => {
+    await adapter.discovery.start();
+    await adapter.discovery.advertise(device);
+  };
+  const orchestrate = (
+    adapter: IosProximityAdapter,
+    device: DeviceInfo,
+    discoverable: boolean,
+  ) => {
+    const { engine } = buildSyncEngine({
+      localDevice: device,
+      tcpModule: createNativeTcpBoundary(),
+    });
+    return new DiscoveryOrchestrator({
+      engine,
+      discovery: adapter.discovery,
+      localDevice: device,
+      discoverable,
+      getSharedSecret: () => undefined,
+    });
+  };
 
   beforeEach(() => {
     platform.OS = 'ios';
@@ -92,8 +119,8 @@ describe('two phones talking with no network between them', () => {
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
 
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
 
       expect(found).toHaveLength(1);
       expect(found[0]).toMatchObject({
@@ -108,8 +135,8 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('replays the phones it already found to a listener that arrives late', async () => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
 
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
@@ -122,7 +149,7 @@ describe('two phones talking with no network between them', () => {
     it('never offers the phone itself as a peer', async () => {
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
 
       nativeA.emit(PEER_FOUND_EVENT, { device: PHONE_A });
 
@@ -134,8 +161,8 @@ describe('two phones talking with no network between them', () => {
 
     it('reports a phone that walked out of range', async () => {
       const lost: string[] = [];
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       phoneA.discovery.onDeviceLost(deviceId => lost.push(deviceId));
       expect(phoneA.canConnect(PHONE_B)).toBe(true);
 
@@ -147,8 +174,8 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('counts the phones in range in the health it reports', async () => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
 
       expect(discoveryRoute()).toMatchObject({ id: 'proximity', peerCount: 1 });
 
@@ -177,7 +204,7 @@ describe('two phones talking with no network between them', () => {
     ])('ignores a peer announcement with %s', async (_label, payload) => {
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
 
       nativeA.emit(PEER_FOUND_EVENT, payload);
 
@@ -189,7 +216,7 @@ describe('two phones talking with no network between them', () => {
     it('accepts a peer that did not say which version it speaks', async () => {
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
 
       nativeA.emit(PEER_FOUND_EVENT, {
         device: { id: 'phone-b', name: 'The iPad', platform: 'ios' },
@@ -204,8 +231,8 @@ describe('two phones talking with no network between them', () => {
       ['no device id', {}],
       ['a device id that is not text', { deviceId: 7 }],
     ])('ignores a peer-lost event with %s', async (_label, payload) => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       const lost: string[] = [];
       phoneA.discovery.onDeviceLost(deviceId => lost.push(deviceId));
 
@@ -219,8 +246,8 @@ describe('two phones talking with no network between them', () => {
 
     it('finds the other phone again after it renames itself', async () => {
       const found: DiscoveredDevice[] = [];
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       phoneA.discovery.onDeviceFound(device => found.push(device));
       found.length = 0;
 
@@ -236,7 +263,8 @@ describe('two phones talking with no network between them', () => {
     const connected = async () => {
       const inbound: SyncConnection[] = [];
       await phoneB.listen(0, connection => inbound.push(connection));
-      await phoneA.discovery.start();
+      await phoneB.discovery.advertise(PHONE_B);
+      await startVisible(phoneA, PHONE_A);
       const outbound = await phoneA.connect('', 0, PHONE_B);
       return { outbound, inbound };
     };
@@ -292,7 +320,7 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('keeps frames that arrive before the connection object even exists', async () => {
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
       const inbound: SyncConnection[] = [];
 
       // Native reports data on a connection this side has not been told about yet - the open event and the
@@ -362,8 +390,8 @@ describe('two phones talking with no network between them', () => {
     it('reuses the session when both phones invite each other at once', async () => {
       const inbound: SyncConnection[] = [];
       await phoneA.listen(0, connection => inbound.push(connection));
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await phoneA.discovery.advertise(PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       nativeA.emit(CONNECTION_OPENED_EVENT, {
         connectionId: 'proximity-1',
         deviceId: 'phone-b',
@@ -402,7 +430,8 @@ describe('two phones talking with no network between them', () => {
     const connected = async () => {
       const inbound: SyncConnection[] = [];
       await phoneB.listen(0, connection => inbound.push(connection));
-      await phoneA.discovery.start();
+      await phoneB.discovery.advertise(PHONE_B);
+      await startVisible(phoneA, PHONE_A);
       const outbound = await phoneA.connect('', 0, PHONE_B);
       return { outbound, inbound };
     };
@@ -514,8 +543,8 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('refuses to reach a phone that is no longer nearby', async () => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       air.lose(nativeA, 'phone-b');
 
       await expect(phoneA.connect('', 0, PHONE_B)).rejects.toThrow(
@@ -524,7 +553,7 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('refuses when it is not told which phone to reach', async () => {
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
 
       // A LAN host and port mean nothing here, so a call without the device is a caller that thinks this is
       // TCP. Failing loudly beats dialling nothing.
@@ -534,8 +563,8 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('reports the native failure when the other phone refuses the connection', async () => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
       nativeA.connectFailure = new Error('Peer declined the invitation.');
 
       await expect(phoneA.connect('', 0, PHONE_B)).rejects.toThrow(
@@ -557,7 +586,7 @@ describe('two phones talking with no network between them', () => {
       });
     });
 
-    it('is ready once the phone is advertising', async () => {
+    it('starts browsing without advertising', async () => {
       const starting = phoneA.discovery.start();
       // Caught mid-flight: a screen that opened during this shows "starting", not a blank state.
       expect(phoneA.getTransportHealthSnapshot().listener.state).toBe(
@@ -566,10 +595,81 @@ describe('two phones talking with no network between them', () => {
 
       await starting;
 
+      expect(nativeA.calls).toEqual(['start']);
+      expect(nativeA.advertising).toBe(false);
+      expect(discoveryRoute()).toMatchObject({
+        browse: { state: 'ready' },
+        advertise: { state: 'stopped' },
+      });
       expect(phoneA.getTransportHealthSnapshot()).toMatchObject({
         listener: { state: 'ready' },
         routes: [{ id: 'proximity', state: 'ready' }],
       });
+    });
+
+    it('honours persisted Hidden through the real startup orchestrator', async () => {
+      const startup = orchestrate(phoneA, PHONE_A, false);
+
+      await startup.start();
+
+      expect(startup.isDiscoverable()).toBe(false);
+      expect(nativeA.calls).toEqual(['start']);
+      expect(nativeA.advertising).toBe(false);
+      expect(discoveryRoute()).toMatchObject({
+        browse: { state: 'ready' },
+        advertise: { state: 'stopped' },
+      });
+    });
+
+    it('keeps orchestrator truth visible when native cannot stop, then retries', async () => {
+      const startup = orchestrate(phoneA, PHONE_A, true);
+      await startup.start();
+      nativeA.stopAdvertisingFailure = new Error(
+        'Multipeer refused to stop advertising.',
+      );
+
+      await expect(startup.setDiscoverable(false)).rejects.toThrow(
+        'Multipeer refused to stop advertising.',
+      );
+
+      expect(startup.isDiscoverable()).toBe(true);
+      expect(nativeA.advertising).toBe(true);
+      expect(discoveryRoute().advertise.state).toBe('failed');
+
+      nativeA.stopAdvertisingFailure = undefined;
+      await startup.setDiscoverable(false);
+
+      expect(startup.isDiscoverable()).toBe(false);
+      expect(nativeA.advertising).toBe(false);
+      expect(discoveryRoute().advertise.state).toBe('stopped');
+    });
+
+    it('reports an advertising failure and retries without restarting browsing', async () => {
+      await phoneA.discovery.start();
+      nativeA.startAdvertisingFailure = new Error(
+        'Advertising needs local network permission.',
+      );
+
+      await expect(phoneA.discovery.advertise(PHONE_A)).rejects.toThrow(
+        'Advertising needs local network permission.',
+      );
+
+      expect(nativeA.advertising).toBe(false);
+      expect(discoveryRoute().browse.state).toBe('ready');
+      expect(discoveryRoute().advertise).toMatchObject({
+        state: 'failed',
+        error: 'Advertising needs local network permission.',
+      });
+
+      nativeA.startAdvertisingFailure = undefined;
+      await phoneA.discovery.advertise(PHONE_A);
+
+      expect(nativeA.advertising).toBe(true);
+      expect(discoveryRoute().advertise.state).toBe('ready');
+      expect(
+        nativeA.calls.filter(call => call === 'startAdvertising'),
+      ).toHaveLength(2);
+      expect(nativeA.calls.filter(call => call === 'start')).toHaveLength(1);
     });
 
     it('says why when the phone cannot advertise at all', async () => {
@@ -605,7 +705,7 @@ describe('two phones talking with no network between them', () => {
       await expect(phoneA.discovery.start()).rejects.toThrow();
       nativeA.startFailure = undefined;
 
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
 
       // The retry has to actually reach native again - a failed attempt left cached is a phone that never
       // recovers without a relaunch.
@@ -626,7 +726,7 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('reports a rescan that failed without claiming the phone went down with it', async () => {
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
       nativeA.rescanFailure = new Error('Browsing failed to restart.');
 
       await expect(phoneA.discovery.rescan()).rejects.toThrow(
@@ -652,7 +752,7 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('finds the phones again on a rescan', async () => {
-      await phoneB.discovery.start();
+      await startVisible(phoneB, PHONE_B);
       const found: DiscoveredDevice[] = [];
       phoneA.discovery.onDeviceFound(device => found.push(device));
       await phoneA.discovery.start();
@@ -679,7 +779,8 @@ describe('two phones talking with no network between them', () => {
     it('closes the connections it was holding and reports itself stopped', async () => {
       const inbound: SyncConnection[] = [];
       await phoneB.listen(0, connection => inbound.push(connection));
-      await phoneA.discovery.start();
+      await phoneB.discovery.advertise(PHONE_B);
+      await startVisible(phoneA, PHONE_A);
       const outbound = await phoneA.connect('', 0, PHONE_B);
       let closed = false;
       outbound.onClose(() => {
@@ -700,8 +801,8 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('forgets the phones it had found', async () => {
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
 
       await phoneA.stop();
 
@@ -755,27 +856,117 @@ describe('two phones talking with no network between them', () => {
     });
 
     it('can be switched back on afterwards', async () => {
-      await phoneA.discovery.start();
+      await startVisible(phoneA, PHONE_A);
       await phoneA.stop();
 
-      await phoneA.discovery.start();
-      await phoneB.discovery.start();
+      await startVisible(phoneA, PHONE_A);
+      await startVisible(phoneB, PHONE_B);
 
       // A user toggling Nearby off and on is not a relaunch. It has to find the room again.
       expect(phoneA.canConnect(PHONE_B)).toBe(true);
       expect(phoneA.getTransportHealthSnapshot().listener.state).toBe('ready');
     });
 
-    it('leaves stopping advertising to the whole shutdown', async () => {
-      await phoneA.discovery.start();
+    it('stops advertising without stopping nearby browsing or connections', async () => {
+      await startVisible(phoneA, PHONE_A);
 
       await expect(phoneA.discovery.stopAdvertising()).resolves.toBeUndefined();
 
-      // Multipeer has no separate advertise session, so this is deliberately a no-op rather than a
-      // teardown - calling it must not make the phone unfindable.
+      expect(nativeA.advertising).toBe(false);
+      expect(nativeA.calls).toContain('stopAdvertising');
       expect(phoneA.getTransportHealthSnapshot().listener.state).toBe('ready');
-      await expect(phoneA.discovery.stop()).resolves.toBeUndefined();
-      expect(nativeA.calls).not.toContain('stop');
+      expect(discoveryRoute().advertise.state).toBe('stopped');
+    });
+
+    it('keeps the real advertising state on a native failure and retries cleanly', async () => {
+      await startVisible(phoneA, PHONE_A);
+      nativeA.stopAdvertisingFailure = new Error(
+        'Multipeer refused to stop advertising.',
+      );
+
+      await expect(phoneA.discovery.stopAdvertising()).rejects.toThrow(
+        'Multipeer refused to stop advertising.',
+      );
+
+      expect(nativeA.advertising).toBe(true);
+      expect(discoveryRoute().advertise).toMatchObject({
+        state: 'failed',
+        error: 'Multipeer refused to stop advertising.',
+      });
+
+      nativeA.stopAdvertisingFailure = undefined;
+      await phoneA.discovery.stopAdvertising();
+
+      expect(nativeA.advertising).toBe(false);
+      expect(discoveryRoute().advertise.state).toBe('stopped');
+      expect(
+        nativeA.calls.filter(call => call === 'stopAdvertising'),
+      ).toHaveLength(2);
+    });
+
+    it('starts advertising again without restarting the whole nearby session', async () => {
+      await startVisible(phoneA, PHONE_A);
+      await phoneA.discovery.stopAdvertising();
+
+      await phoneA.discovery.advertise(PHONE_A);
+
+      expect(nativeA.advertising).toBe(true);
+      expect(nativeA.calls.filter(call => call === 'start')).toHaveLength(1);
+      expect(nativeA.calls).toContain('startAdvertising');
+      expect(discoveryRoute().advertise.state).toBe('ready');
+    });
+
+    it('honours a hide request that arrives while native advertising starts', async () => {
+      let releaseAdvertising: () => void = () => {};
+      let markAdvertisingStarted: () => void = () => {};
+      nativeA.startAdvertisingBarrier = new Promise<void>(resolve => {
+        releaseAdvertising = resolve;
+      });
+      const advertisingStarted = new Promise<void>(resolve => {
+        markAdvertisingStarted = resolve;
+      });
+      nativeA.onStartAdvertising = markAdvertisingStarted;
+
+      const show = phoneA.discovery.advertise(PHONE_A);
+      await advertisingStarted;
+      const hide = phoneA.discovery.stopAdvertising();
+      releaseAdvertising();
+
+      await Promise.all([show, hide]);
+
+      expect(nativeA.advertising).toBe(false);
+      expect(nativeA.calls).toEqual([
+        'start',
+        'startAdvertising',
+        'stopAdvertising',
+      ]);
+      expect(discoveryRoute().advertise.state).toBe('stopped');
+    });
+
+    it('honours a full shutdown requested before queued advertising starts', async () => {
+      let releaseAdvertising: () => void = () => {};
+      let markAdvertisingStarted: () => void = () => {};
+      nativeA.startAdvertisingBarrier = new Promise<void>(resolve => {
+        releaseAdvertising = resolve;
+      });
+      const advertisingStarted = new Promise<void>(resolve => {
+        markAdvertisingStarted = resolve;
+      });
+      nativeA.onStartAdvertising = markAdvertisingStarted;
+
+      const show = phoneA.discovery.advertise(PHONE_A);
+      const shutdown = phoneA.stop();
+      await advertisingStarted;
+      releaseAdvertising();
+
+      await Promise.all([show, shutdown]);
+
+      expect(nativeA.started).toBe(false);
+      expect(nativeA.advertising).toBe(false);
+      expect(nativeA.calls).toEqual(['start', 'startAdvertising', 'stop']);
+      expect(phoneA.getTransportHealthSnapshot().listener.state).toBe(
+        'stopped',
+      );
     });
   });
 

@@ -38,10 +38,15 @@ export { FakeNativeEventEmitter as ProximityEventEmitter } from './nativeEventBu
 export class ProximityNativeFake extends NativeEventBus {
   /** Set by a test to make the native layer refuse, the way a device with Bluetooth off does. */
   startFailure: Error | undefined;
+  startAdvertisingFailure: Error | undefined;
+  startAdvertisingBarrier: Promise<void> | undefined;
+  onStartAdvertising: (() => void) | undefined;
+  stopAdvertisingFailure: Error | undefined;
   rescanFailure: Error | undefined;
   connectFailure: Error | undefined;
   readonly calls: string[] = [];
   started = false;
+  advertising = false;
   device: Device;
 
   constructor(private readonly air: ProximityAir, device: Device) {
@@ -54,7 +59,24 @@ export class ProximityNativeFake extends NativeEventBus {
     if (this.startFailure) throw this.startFailure;
     this.device = device;
     this.started = true;
+    this.advertising = false;
     this.air.announce(this);
+  }
+
+  async startAdvertising(): Promise<void> {
+    this.calls.push('startAdvertising');
+    this.onStartAdvertising?.();
+    if (this.startAdvertisingFailure) throw this.startAdvertisingFailure;
+    await this.startAdvertisingBarrier;
+    this.advertising = true;
+    this.air.announce(this);
+  }
+
+  async stopAdvertising(): Promise<void> {
+    this.calls.push('stopAdvertising');
+    if (this.stopAdvertisingFailure) throw this.stopAdvertisingFailure;
+    this.advertising = false;
+    this.air.withdraw(this);
   }
 
   async rescan(): Promise<void> {
@@ -66,6 +88,7 @@ export class ProximityNativeFake extends NativeEventBus {
   async stop(): Promise<void> {
     this.calls.push('stop');
     this.started = false;
+    this.advertising = false;
     this.air.withdraw(this);
   }
 
@@ -121,8 +144,12 @@ export class ProximityAir {
     for (const peer of this.devices) {
       if (peer === source || !peer.started) continue;
       // Both directions, the way browsing and advertising each surface the other side.
-      peer.emit(PEER_FOUND_EVENT, { device: source.device });
-      source.emit(PEER_FOUND_EVENT, { device: peer.device });
+      if (source.advertising) {
+        peer.emit(PEER_FOUND_EVENT, { device: source.device });
+      }
+      if (peer.advertising) {
+        source.emit(PEER_FOUND_EVENT, { device: peer.device });
+      }
     }
   }
 

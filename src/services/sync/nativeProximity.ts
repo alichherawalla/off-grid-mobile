@@ -26,6 +26,8 @@ interface SyncProximityNativeModule {
   start(device: DeviceInfo): Promise<void>;
   rescan(): Promise<void>;
   stopBrowsing(): Promise<void>;
+  startAdvertising(): Promise<void>;
+  stopAdvertising(): Promise<void>;
   stop(): Promise<void>;
   updateDevice(device: DeviceInfo): Promise<void>;
   connect(deviceId: string): Promise<string>;
@@ -166,8 +168,12 @@ export class IosProximityAdapter implements TransportBridge {
   private readonly pendingData = new Map<string, Uint8Array[]>();
   private started = false;
   private startTask: Promise<void> | null = null;
+  private advertisingTask: Promise<void> = Promise.resolve();
+  private advertisingOperations = 0;
   private runtimeHealth: SyncHealthFact = { state: 'idle' };
   private browseHealth: SyncHealthFact = { state: 'idle' };
+  private advertiseHealth: SyncHealthFact = { state: 'idle' };
+  private advertising = false;
   private inboundConnection: ((connection: SyncConnection) => void) | null =
     null;
   private foundListener: ((device: DiscoveredDevice) => void) | null = null;
@@ -206,8 +212,51 @@ export class IosProximityAdapter implements TransportBridge {
         throw error;
       }
     },
-    advertise: () => this.ensureStarted(),
-    stopAdvertising: () => Promise.resolve(),
+    advertise: () =>
+      this.queueAdvertising(async () => {
+        await this.ensureStarted();
+        if (this.advertising) {
+          this.advertiseHealth = { state: 'ready', updatedAt: Date.now() };
+          return;
+        }
+        this.advertiseHealth = { state: 'starting', updatedAt: Date.now() };
+        try {
+          await this.native.startAdvertising();
+          this.advertising = true;
+          this.advertiseHealth = { state: 'ready', updatedAt: Date.now() };
+        } catch (cause) {
+          const error =
+            cause instanceof Error ? cause : new Error(String(cause));
+          this.advertiseHealth = {
+            state: 'failed',
+            error: error.message,
+            updatedAt: Date.now(),
+          };
+          throw error;
+        }
+      }),
+    stopAdvertising: () =>
+      this.queueAdvertising(async () => {
+        await this.startTask?.catch(() => undefined);
+        if (!this.started || !this.advertising) {
+          this.advertiseHealth = { state: 'stopped', updatedAt: Date.now() };
+          return;
+        }
+        try {
+          await this.native.stopAdvertising();
+          this.advertising = false;
+          this.advertiseHealth = { state: 'stopped', updatedAt: Date.now() };
+        } catch (cause) {
+          const error =
+            cause instanceof Error ? cause : new Error(String(cause));
+          this.advertiseHealth = {
+            state: 'failed',
+            error: error.message,
+            updatedAt: Date.now(),
+          };
+          throw error;
+        }
+      }),
     onDeviceFound: listener => {
       this.foundListener = listener;
       for (const device of this.discoveredDevices.values()) listener(device);
@@ -247,13 +296,17 @@ export class IosProximityAdapter implements TransportBridge {
   }
 
   async stop(): Promise<void> {
-    if (!this.started && !this.startTask) return;
+    if (!this.started && !this.startTask && this.advertisingOperations === 0)
+      return;
     await this.startTask?.catch(() => undefined);
+    await this.advertisingTask.catch(() => undefined);
     await this.native.stop();
     this.started = false;
     this.startTask = null;
     this.runtimeHealth = { state: 'stopped', updatedAt: Date.now() };
     this.browseHealth = { state: 'stopped', updatedAt: Date.now() };
+    this.advertiseHealth = { state: 'stopped', updatedAt: Date.now() };
+    this.advertising = false;
     this.peers.clear();
     this.discoveredDevices.clear();
     for (const connection of this.connections.values()) {
@@ -291,6 +344,11 @@ export class IosProximityAdapter implements TransportBridge {
         const ready = { state: 'ready' as const, updatedAt: Date.now() };
         this.runtimeHealth = ready;
         this.browseHealth = ready;
+        this.advertiseHealth = {
+          state: 'stopped',
+          updatedAt: Date.now(),
+        };
+        this.advertising = false;
       })
       .catch(error => {
         const failure = {
@@ -300,6 +358,8 @@ export class IosProximityAdapter implements TransportBridge {
         };
         this.runtimeHealth = failure;
         this.browseHealth = failure;
+        this.advertiseHealth = failure;
+        this.advertising = false;
         for (const subscription of this.subscriptions.splice(0)) {
           subscription.remove();
         }
@@ -311,13 +371,26 @@ export class IosProximityAdapter implements TransportBridge {
     return this.startTask;
   }
 
+  /** Keep the last advertising request authoritative when taps overlap native work. */
+  private queueAdvertising(operation: () => Promise<void>): Promise<void> {
+    this.advertisingOperations += 1;
+    const task = this.advertisingTask
+      .catch(() => undefined)
+      .then(operation)
+      .finally(() => {
+        this.advertisingOperations -= 1;
+      });
+    this.advertisingTask = task;
+    return task;
+  }
+
   private discoveryHealthSnapshot(): SyncDiscoveryHealthSnapshot {
     return {
       routes: [
         {
           id: 'proximity',
           browse: { ...this.browseHealth },
-          advertise: { ...this.runtimeHealth },
+          advertise: { ...this.advertiseHealth },
           peerCount: this.peers.size,
         },
       ],
