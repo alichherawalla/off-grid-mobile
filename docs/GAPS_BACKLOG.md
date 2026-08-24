@@ -1215,3 +1215,23 @@ these fixes are verified against faked native leaves. Three flows to run on a ph
 **Do not make `useVoiceSessionDriver` level-triggered again.** `voiceSession.dispatch` notifies on a
 phase change so the hero can show "Recording you now"; with a level-triggered driver that same
 notification opens a second recording mid-turn. The two belong together and each says so in a comment.
+
+---
+
+## Personal Mesh visibility needs the final physical lifecycle pass
+
+**Status:** automation-backed; manual device verification is open. Filed 2026-08-24.
+
+The Shared, React Native, Pro control, and Swift tests prove that browsing and advertising are
+separate. They also prove that Hidden is applied before startup, a failed advertising stop keeps the
+last true runtime and stored state, overlapping show and hide requests finish in order, and a retry
+can complete the stop.
+
+The remaining boundary is a real iPhone and Mac. Use the exact release builds and complete rows
+43-48 in `docs/PERSONAL_MESH_TEST_MATRIX.csv`. Confirm that Hidden survives a cold start, that each
+visibility control leaves the other function active, that an existing encrypted session stays active,
+and that a second device sees the correct advertisement. Also confirm one private IP or machine-name
+route and one non-default Sync port on every device.
+
+Close this gap only with the device names, OS versions, exact build commits, and the completed matrix
+rows. Simulator and injected-failure results do not close the physical radio boundary.

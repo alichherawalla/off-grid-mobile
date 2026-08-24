@@ -50,7 +50,7 @@ Pro is an optional, additive tier. It gives the assistant a voice that talks bac
 - **Voice mode** - the free app transcribes your speech; Pro adds on-device Kokoro text-to-speech, so it talks back and you run the whole thing hands-free. The voice runs in your phone's RAM.
 - **Custom personas** - give each assistant its own system prompt, voice, and persistent memory, so it stays in character across conversations.
 - **Draft, then approve** - connect Calendar, email, and MCP servers like Linear, Notion, and GitHub. It drafts the reply or files the ticket and waits. Nothing sends without your tap.
-- **Sync, landing through July** - your phone and your Mac merge into one picture over your own network, never a relay. Your license includes it the day it ships.
+- **Personal Mesh sync** - your phone and your Mac share chats, files, and settings over your own network. There is no relay. See the [Personal Mesh guide](docs/PERSONAL_MESH.md).
 
 **[→ Get Pro access](https://offgridmobileai.co/pay/)** - $69 once and it is yours forever (the price climbs as more people join, never down), or $49/year.
 
@@ -95,7 +95,7 @@ Most "local LLM" apps give you a text chatbot and call it a day. Off Grid AI is 
 
 **Vision AI** — Point your camera at anything and ask questions. SmolVLM, Qwen3-VL, Gemma 3n — analyze documents, describe scenes, read receipts. ~7s on flagship devices.
 
-**Voice Input** — On-device Whisper speech-to-text. Hold to record, auto-transcribe. No audio ever leaves your phone.
+**Voice Input** - On-device Whisper speech-to-text. Tap the microphone to start and stop, or use Auto and Hands-free modes. No audio ever leaves your phone.
 
 **Document Analysis** — Attach PDFs, code files, CSVs, and more to your conversations. Native PDF text extraction on both platforms.
 
