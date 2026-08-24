@@ -6,7 +6,10 @@
  * only native leaves faked. Covers llama.cpp and LiteRT (regenerate is engine-agnostic; metal = llama-iOS,
  * proven by the first-message parity test).
  */
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  HEAVY_CHAT_JOURNEY_TIMEOUT_MS,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -25,7 +28,7 @@ describe('happy — resend/regenerate (heavy entry point)', () => {
 
     await h.regenerateLast({ text: 'Octopuses have three hearts.' }, via);
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Octopuses have three hearts\./)).not.toBeNull(); });
-  });
+  }, HEAVY_CHAT_JOURNEY_TIMEOUT_MS);
 
   it.each(['longpress', 'dots'] as const)('LiteRT: Retry (menu via %s) produces a fresh answer', async (via) => {
     const h = await setupChatScreen({ engine: 'litert' });
@@ -35,5 +38,5 @@ describe('happy — resend/regenerate (heavy entry point)', () => {
 
     await h.regenerateLast({ content: 'Octopuses have three hearts.' }, via);
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Octopuses have three hearts\./)).not.toBeNull(); });
-  });
+  }, HEAVY_CHAT_JOURNEY_TIMEOUT_MS);
 });

@@ -32,6 +32,13 @@ import { createDownloadedModel } from '../utils/factories';
 /** Shared route params the test's navigation mock reads (set by setupChatScreen). */
 export const routeHolder: { params: Record<string, unknown> } = { params: {} };
 
+/**
+ * Outer budget for full ChatScreen journeys under the serial coverage gate.
+ * Each user-visible assertion keeps its shorter RNTL timeout, so a broken flow
+ * still fails quickly while module setup and garbage collection can finish.
+ */
+export const HEAVY_CHAT_JOURNEY_TIMEOUT_MS = 30_000;
+
 export interface ChatHarnessOptions {
   engine: 'llama' | 'litert';
   /** 'ios' surfaces the Metal accelerator path for llama; default 'android'. */
