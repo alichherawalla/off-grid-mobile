@@ -15,6 +15,10 @@ import { Linking } from 'react-native';
 import { MarkdownText, preprocessMarkdown } from '../../../src/components/MarkdownText';
 
 describe('MarkdownText', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('renders plain text', () => {
     const { getByText } = render(<MarkdownText>Hello world</MarkdownText>);
     expect(getByText(/Hello world/)).toBeTruthy();
@@ -125,7 +129,6 @@ describe('MarkdownText', () => {
     expect(openURL).toHaveBeenCalledTimes(1);
     expect(openURL).toHaveBeenCalledWith('https://example.com/docs');
     expect(rendered.getAllByRole('link')).toHaveLength(2);
-    openURL.mockRestore();
   });
 
   it('turns a plain web address into a safe clickable link', () => {
@@ -136,7 +139,6 @@ describe('MarkdownText', () => {
 
     fireEvent.press(rendered.getByRole('link'));
     expect(openURL).toHaveBeenCalledWith('https://github.com/off-grid-ai');
-    openURL.mockRestore();
   });
 });
 

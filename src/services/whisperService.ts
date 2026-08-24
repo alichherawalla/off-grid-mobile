@@ -441,17 +441,21 @@ class WhisperService {
     // Atomic grab-and-clear to match stopTranscription's pattern and prevent double-stop
     const fn = this.stopFn;
     this.stopFn = null;
+    const activeTranscriptionStopped = this.transcriptionFullyStopped;
     const nativeStop = fn && this.context
       ? Promise.resolve().then(fn).catch(e => logger.error('[WhisperService] Error calling stopFn during forceReset:', e))
       : Promise.resolve();
-    // Expose the actual native teardown to callers that must not release or reuse
-    // the context while whisper.rn still owns the realtime job.
-    this.transcriptionFullyStopped = nativeStop;
+    // Keep both parts of realtime teardown behind one barrier. Native stop can emit
+    // the final event, whose empty-result fallback still transcribes the recorded
+    // file. Do not release or reuse the Whisper context until both have finished.
+    this.transcriptionFullyStopped = fn && this.context
+      ? Promise.all([nativeStop, activeTranscriptionStopped]).then(() => undefined)
+      : nativeStop;
     // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
     // realtime session must not leave the file recorder capturing (B11-class leak).
     if (audioRecorderService.isCurrentlyRecording()) audioRecorderService.cancelRecording();
     this.isTranscribing = false;
-    await nativeStop;
+    await this.transcriptionFullyStopped;
   }
 
   isCurrentlyTranscribing(): boolean { return this.isTranscribing; }
