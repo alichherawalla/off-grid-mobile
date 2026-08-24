@@ -77,5 +77,13 @@ describe('realtime hold-to-talk dictation recovers when whisper load is blocked 
     await h.rtl.waitFor(() => {
       expect(view.getByTestId('chat-input').props.value ?? '').toContain('take a note');
     }, { timeout: 4000 });
+
+    // End the native recording session before Jest tears down the React Native module graph.
+    // The screen cleanup is intentionally fire-and-forget in production, but this integration
+    // journey must wait for the boundary cleanup so no native promise crosses test environments.
+    const { whisperService } = require('../../../src/services/whisperService');
+    await h.rtl.act(async () => {
+      await whisperService.forceReset();
+    });
   });
 });
