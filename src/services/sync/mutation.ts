@@ -1,5 +1,6 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
+  ACTION_APPROVAL_ENTITY,
   KNOWLEDGE_DOCUMENT_ENTITY,
   SHARED_FILE_ENTITY,
   createKnowledgeDocumentStateFields,
@@ -20,6 +21,7 @@ export const CORE_SYNC_ENTITIES = {
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
+  actionApproval: ACTION_APPROVAL_ENTITY,
 } as const;
 
 export type CoreSyncEntity =

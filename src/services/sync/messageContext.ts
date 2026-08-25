@@ -38,9 +38,11 @@ export function serializeMessageContext(
     | 'generationTimeMs'
     | 'generationMeta'
     | 'isSystemInfo'
+    | 'actionApproval'
   >,
 ): string | null {
   return serializeSyncedMessageContext({
+    actionApproval: message.actionApproval,
     reasoning: message.reasoningContent,
     // "Model loaded: …" is the app talking, not the model. Only the device that wrote it knows
     // that, so it travels: without it the peer sees a plain assistant turn and draws a bubble,
