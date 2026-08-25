@@ -44,6 +44,27 @@ final class BlobReceiveWindowTests: XCTestCase {
   }
 }
 
+final class BlobChannelUploaderDeadlineTests: XCTestCase {
+  func testAReachedNetworkSignalContinues() {
+    let signal = DispatchSemaphore(value: 1)
+
+    XCTAssertNoThrow(
+      try BlobChannelUploader.waitForSignal(
+        signal, timeout: .milliseconds(0), message: "should not time out"))
+  }
+
+  func testAnUnreachedNetworkSignalFailsInsteadOfPretendingToContinue() {
+    let signal = DispatchSemaphore(value: 0)
+
+    XCTAssertThrowsError(
+      try BlobChannelUploader.waitForSignal(
+        signal, timeout: .milliseconds(0), message: "the endpoint did not become reachable")
+    ) { error in
+      XCTAssertEqual(error.localizedDescription, "the endpoint did not become reachable")
+    }
+  }
+}
+
 final class ProximityAdvertisingControllerTests: XCTestCase {
   func testStopAndRestartReachTheNativeAdvertiserWithoutRestartingTheSession() {
     let controller = ProximityAdvertisingController()

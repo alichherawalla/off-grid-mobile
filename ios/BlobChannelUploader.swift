@@ -80,8 +80,15 @@ final class BlobChannelUploader {
       }
     }
     connection.start(queue: queue)
-    _ = ready.wait(timeout: .now() + 15)
+    try waitForSignal(
+      ready,
+      timeout: .seconds(15),
+      message: "the endpoint did not become reachable"
+    )
     if let problem { throw problem }
+    guard connection.state == .ready else {
+      throw failure("the endpoint did not become ready")
+    }
     live.hold(request.requestId, connection)
     defer {
       _ = live.take(request.requestId)
@@ -145,7 +152,11 @@ final class BlobChannelUploader {
         problem = error
         done.signal()
       })
-    _ = done.wait(timeout: .now() + 60)
+    try waitForSignal(
+      done,
+      timeout: .seconds(60),
+      message: "the endpoint stopped accepting the payload"
+    )
     if let problem { throw problem }
   }
 
@@ -156,11 +167,31 @@ final class BlobChannelUploader {
       answer = String(data: data ?? Data(), encoding: .utf8) ?? ""
       done.signal()
     }
-    _ = done.wait(timeout: .now() + 60)
+    try waitForSignal(
+      done,
+      timeout: .seconds(60),
+      message: "the endpoint did not confirm the payload"
+    )
     guard answer.hasPrefix("HTTP/1.1 200") else {
       throw NSError(
         domain: "ai.offgridmobile.blob", code: 1,
         userInfo: [NSLocalizedDescriptionKey: "the endpoint answered \(answer.prefix(32))"])
+    }
+  }
+
+  /// A network deadline is a failure, not a successful empty response.
+  ///
+  /// `DispatchSemaphore.wait` reports a timeout as a return value. Ignoring that value made an
+  /// unreachable endpoint look ready, so a transfer stayed at zero bytes until its manager deadline.
+  /// Throwing here lets the shared transfer manager use its slower fallback route while the peer is
+  /// still connected.
+  static func waitForSignal(
+    _ semaphore: DispatchSemaphore,
+    timeout: DispatchTimeInterval,
+    message: String
+  ) throws {
+    guard semaphore.wait(timeout: .now() + timeout) == .success else {
+      throw failure(message)
     }
   }
 }
