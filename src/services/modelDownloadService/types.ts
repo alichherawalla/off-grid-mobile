@@ -58,6 +58,8 @@ export interface ModelDownload {
   /** Total expected bytes (0 only when `capabilities.determinateProgress` is false). */
   sizeBytes: number;
   bytesDownloaded: number;
+  /** Live measured rate when the provider exposes byte events. */
+  bytesPerSecond?: number;
   /** 0..1. Fraction-only backends (Kokoro) set bytesDownloaded from progress*sizeBytes. */
   progress: number;
   status: ModelDownloadStatus;

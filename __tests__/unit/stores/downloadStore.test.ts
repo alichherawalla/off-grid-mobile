@@ -172,6 +172,21 @@ describe('updateProgress', () => {
     useDownloadStore.getState().updateProgress('dl-1', 1000, 1000); // (1000+400)/1000 = 1.4 → clamp
     expect(useDownloadStore.getState().downloads['author/model/model.gguf'].progress).toBe(1);
   });
+
+  it('measures one live rate in the canonical store for every view', () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
+    useDownloadStore.getState().add(makeEntry());
+
+    useDownloadStore.getState().updateProgress('dl-1', 100, 1000);
+    expect(useDownloadStore.getState().downloads['author/model/model.gguf'].bytesPerSecond).toBeUndefined();
+    useDownloadStore.getState().updateProgress('dl-1', 600, 1000);
+
+    const entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
+    expect(entry.bytesPerSecond).toBe(500);
+    expect(entry.rateSample).toEqual({ currentBytes: 600, sampledAtMs: 2_000 });
+    now.mockRestore();
+  });
 });
 
 describe('updateMmProjProgress', () => {
@@ -219,6 +234,25 @@ describe('setStatus', () => {
     const before = useDownloadStore.getState().downloads;
     useDownloadStore.getState().setStatus('unknown', 'failed');
     expect(useDownloadStore.getState().downloads).toBe(before);
+  });
+
+  it('keeps the aggregate rate while the sidecar still transfers', () => {
+    useDownloadStore.getState().add(makeEntry({
+      status: 'running',
+      mmProjDownloadId: 'dl-mm',
+      mmProjStatus: 'running',
+      bytesPerSecond: 512,
+      rateSample: { currentBytes: 500, sampledAtMs: 1_000 },
+    }));
+
+    useDownloadStore.getState().setCompleted('dl-1');
+    let entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
+    expect(entry.bytesPerSecond).toBe(512);
+
+    useDownloadStore.getState().setMmProjCompleted('dl-mm', 500);
+    entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
+    expect(entry.bytesPerSecond).toBeUndefined();
+    expect(entry.rateSample).toBeUndefined();
   });
 });
 

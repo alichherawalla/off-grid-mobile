@@ -37,6 +37,7 @@
     "@offgrid/rag": "file:../shared/packages/rag",
     "@offgrid/speech": "file:../shared/packages/speech",
     "@offgrid/sync": "file:../shared/packages/sync",
+    "@offgrid/ui": "file:../shared/packages/ui",
     "@op-engineering/op-sqlite": "^15.2.5",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/slider": "^5.1.2",

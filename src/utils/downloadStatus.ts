@@ -6,6 +6,7 @@
  * so existing `from '../stores/downloadStore'` importers keep working.
  */
 import { ModelKey } from './modelKey';
+import type { ProgressRateSample } from '@offgrid/ui';
 
 export type DownloadStatus =
   | 'pending'
@@ -31,6 +32,10 @@ export interface DownloadEntry {
   totalBytes: number
   combinedTotalBytes: number
   progress: number
+  /** Last valid byte observation. The canonical store owns rate sampling, not each view. */
+  rateSample?: ProgressRateSample
+  /** Live byte rate measured between canonical progress events. */
+  bytesPerSecond?: number
   mmProjDownloadId?: string
   mmProjBytesDownloaded?: number
   mmProjStatus?: DownloadStatus
