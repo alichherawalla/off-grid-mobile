@@ -22,6 +22,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.render();
     await h.send('what is the capital of France', { text: 'The capital of France is Paris.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The capital of France is Paris\./)).not.toBeNull(); });
+    expect(h.boundary.llama!.calls.clearCache).toContain(true);
   });
 
   it('LiteRT: typing + send renders the reply', async () => {
@@ -39,5 +40,58 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.render();
     await h.send('what is the capital of France', { text: 'The capital of France is Paris.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The capital of France is Paris\./)).not.toBeNull(); });
+    expect(h.boundary.llama!.calls.clearCache).toContain(true);
+  });
+
+  it('new chat starts the selected model load and shows the real loading state', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
+    h.boundary.llama!.scriptMultimodalHold();
+    h.render();
+
+    await h.rtl.waitFor(() => {
+      expect(h.boundary.llama!.multimodalHoldActive()).toBe(true);
+      expect(h.view!.queryByText(/Loading Test Model/)).not.toBeNull();
+    });
+
+    h.boundary.llama!.releaseMultimodalHold();
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+    }, { timeout: 5000 });
+  });
+
+  it('new chat keeps a remote model choice while discovery metadata refreshes', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
+    const { useRemoteServerStore } = require('../../../src/stores');
+    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+
+    const remoteStore = useRemoteServerStore.getState();
+    const serverId = remoteStore.addServer({
+      name: 'Off Grid Desktop',
+      endpoint: 'http://192.168.5.219:7878',
+      providerType: 'openai-compatible',
+    });
+    remoteStore.setDiscoveredModels(serverId, [{
+      id: 'gemma-4-e4b',
+      name: 'Gemma 4 E4B',
+      capabilities: {
+        supportsVision: false,
+        supportsToolCalling: true,
+        supportsThinking: false,
+        acceptsThinkingKwarg: false,
+      },
+    }]);
+    await setActiveRemoteTextModelImpl(serverId, 'gemma-4-e4b');
+
+    // Device-shaped race: provider selection is complete, but the background
+    // discovery refresh temporarily has no metadata for the chosen model.
+    useRemoteServerStore.getState().clearDiscoveredModels(serverId);
+    h.render();
+
+    await h.rtl.waitFor(() => {
+      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
+      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('gemma-4-e4b');
+    });
+    expect(h.boundary.llama!.multimodalHoldActive()).toBe(false);
+    expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
   });
 });

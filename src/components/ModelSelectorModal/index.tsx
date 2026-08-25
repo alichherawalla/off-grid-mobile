@@ -13,7 +13,7 @@ import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
 import { loadingTextRowId } from './rowState';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../types';
-import { activeModelService, llmService, remoteServerManager } from '../../services';
+import { activeModelService, remoteServerManager } from '../../services';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import { CustomAlert, AlertState, initialAlertState, showAlert } from '../CustomAlert';
 import { createAllStyles } from './styles';
@@ -159,10 +159,9 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // Handle selecting a remote text model
   const handleSelectRemoteTextModel = async (model: RemoteModel, serverId: string) => {
     try {
-      // Unload any active local model first — only one active model at a time
-      if (llmService.isModelLoaded()) {
-        await activeModelService.unloadTextModel();
-      }
+      // Always go through the owner. It also waits for an in-flight local load,
+      // which is not yet visible as a loaded native model.
+      await activeModelService.unloadTextModel();
       await remoteServerManager.setActiveRemoteTextModel(serverId, model.id);
       onSelectionComplete?.();
     } catch (error) {

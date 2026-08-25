@@ -106,6 +106,17 @@ export async function stopAllTextEngines(): Promise<void> {
 }
 
 /**
+ * Give the active local engine an awaited conversation boundary before generation.
+ * LiteRT already keys and rebuilds its native Conversation in prepareConversation();
+ * llama implements this optional seam to clear its shared KV/recurrent state.
+ */
+export async function prepareActiveConversation(conversationId: string): Promise<void> {
+  const engine = getActiveEngineService();
+  await (engine as { prepareConversationBoundary?: (id: string) => Promise<void> } | null)
+    ?.prepareConversationBoundary?.(conversationId);
+}
+
+/**
  * Invalidate the active engine's cached conversation state before a history rewind (regenerate/
  * edit). LiteRT keeps a native per-conversation KV cache that must be reset; llama has none.
  * Dispatched via the registry so callers don't branch on engine === 'litert'.

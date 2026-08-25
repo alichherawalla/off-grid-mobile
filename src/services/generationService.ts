@@ -82,16 +82,10 @@ class GenerationService {
     const hasProvider = activeServerId ? providerRegistry.hasProvider(activeServerId) : false;
     const localLoaded = llmService.isModelLoaded();
     logger.log(`[REMOTE-SM] isUsingRemoteProvider? activeServerId=${activeServerId ?? 'none'} hasProvider=${hasProvider} localLoaded=${localLoaded}`);
-    if (!activeServerId) return false;
-    // Provider must be registered (not just persisted from a previous session)
-    if (!hasProvider) return false;
-    // If a local model is loaded, prefer it over the remote server.
-    // Log a warning so this is diagnosable if a user selects remote but gets local responses.
-    if (localLoaded) {
-      logger.warn('[GenerationService] Local model is loaded — preferring local over active remote server:', activeServerId);
-      return false;
-    }
-    return true;
+    // The explicit remote selection is authoritative. A local resident can still
+    // exist briefly while an earlier load drains; it must never steal this turn.
+    // A persisted server without its registered provider is not ready yet.
+    return !!activeServerId && hasProvider;
   }
 
   private flushTokenBuffer(): void {

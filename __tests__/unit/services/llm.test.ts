@@ -65,6 +65,7 @@ describe('LLMService', () => {
     // Reset singleton state
     (llmService as any).context = null;
     (llmService as any).currentModelPath = null;
+    (llmService as any).nativeConversationId = null;
     (llmService as any).isGenerating = false;
     (llmService as any).multimodalSupport = null;
     (llmService as any).multimodalInitialized = false;
@@ -847,6 +848,21 @@ describe('LLMService', () => {
 
     it('is safe without context', async () => {
       await llmService.clearKVCache(); // Should not throw
+    });
+
+    it('fully clears once when the native context moves to another chat', async () => {
+      mockedRNFS.exists.mockResolvedValue(true);
+      const ctx = createMockLlamaContext();
+      mockedInitLlama.mockResolvedValue(ctx as any);
+      await llmService.loadModel('/models/test.gguf');
+
+      await llmService.prepareConversationBoundary('chat-a');
+      await llmService.prepareConversationBoundary('chat-a');
+      await llmService.prepareConversationBoundary('chat-b');
+
+      expect(ctx.clearCache).toHaveBeenCalledTimes(2);
+      expect(ctx.clearCache).toHaveBeenNthCalledWith(1, true);
+      expect(ctx.clearCache).toHaveBeenNthCalledWith(2, true);
     });
   });
 

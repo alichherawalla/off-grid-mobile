@@ -2,7 +2,7 @@
 // the GenerationService instance as `svc: any` and mutates its internal state.
 import { llmService } from './llm';
 import { liteRTService } from './litert';
-import { getActiveEngineService } from './engines';
+import { getActiveEngineService, prepareActiveConversation } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import type { Message, GenerationMeta } from '../types';
 import { buildLiteRTHistory } from './generationToolLoop';
@@ -258,6 +258,13 @@ export async function prepareGenerationImpl(
     svc.resetState();
     useChatStore.getState().clearStreamingMessage();
     throw new Error(readinessError);
+  }
+
+  // Navigation effects are not a generation barrier: on a new chat, Send can win
+  // that race. Clear/switch native conversation state here, after readiness and
+  // before any prompt or tool-routing completion reaches the local engine.
+  if (!svc.isUsingRemoteProvider()) {
+    await prepareActiveConversation(conversationId);
   }
 
   svc.tokenBuffer = '';

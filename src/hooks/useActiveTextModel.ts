@@ -35,14 +35,16 @@ export function useActiveTextModel(): ActiveTextModelResult {
       const remoteModel = (discoveredModels[activeServerId] || []).find(
         (m) => m.id === activeRemoteTextModelId,
       );
-      if (remoteModel) {
-        return {
-          model: remoteModel,
-          modelId: remoteModel.id,
-          modelName: remoteModel.name,
-          isRemote: true,
-        };
-      }
+      // The persisted server + model IDs are the selection. Discovery metadata is
+      // refreshed independently and can be empty for one render while a provider
+      // is already ready. Keep that remote choice authoritative during the gap;
+      // falling through here loads the last local model into a new chat.
+      return {
+        model: remoteModel ?? null,
+        modelId: activeRemoteTextModelId,
+        modelName: remoteModel?.name ?? activeRemoteTextModelId,
+        isRemote: true,
+      };
     }
     // Fall back to local. Resolved by the owning service, not by an id comparison here.
     const localModel = activeModelService.resolveSelectedTextModel();

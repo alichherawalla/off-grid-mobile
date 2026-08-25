@@ -365,14 +365,14 @@ export interface LlamaFake {
   multimodalHoldActive(): boolean;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
-  calls: { completion: unknown[][] };
+  calls: { completion: unknown[][]; clearCache: boolean[] };
 }
 
 function makeLlamaFake(
   onRelease?: () => void,
   chatTemplate?: string,
 ): LlamaFake {
-  const calls: LlamaFake['calls'] = { completion: [] };
+  const calls: LlamaFake['calls'] = { completion: [], clearCache: [] };
   type PreparedCompletion = Omit<LlamaCompletionScript, 'text'> & {
     text: string;
   };
@@ -535,6 +535,9 @@ function makeLlamaFake(
       const f = releaseFn;
       releaseFn = null;
       f?.(); // release a held mid-stream pause so the abort lands
+    }),
+    clearCache: jest.fn(async (clearData: boolean = false) => {
+      calls.clearCache.push(clearData);
     }),
     // Releasing the native context frees its memory — but the OS reclaims it SHORTLY AFTER release()
     // returns (device-faithful), not synchronously. Defer the free so the reclaim barrier captures the

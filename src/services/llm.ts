@@ -33,6 +33,7 @@ const resolveGpuBackend = (enabled: boolean, devices: string[]): string =>
 class LLMService {
   private context: LlamaContext | null = null;
   private currentModelPath: string | null = null;
+  private nativeConversationId: string | null = null; // owns native KV/recurrent state
   private isGenerating: boolean = false;
   private activeCompletionPromise: Promise<void> | null = null;
   private multimodalSupport: MultimodalSupport | null = null;
@@ -121,6 +122,7 @@ class LLMService {
     const thinkingSupported = supportsNativeThinking(context);
     this.context = context;
     this.currentModelPath = modelPath;
+    this.nativeConversationId = null;
     if (actualLength !== this.currentSettings.contextLength) this.currentSettings.contextLength = actualLength;
     this.multimodalInitialized = multimodal.initialized;
     this.multimodalSupport = multimodal.support;
@@ -152,7 +154,7 @@ class LLMService {
         // GPU — the truthful layer count for the meta; nGpuLayers is the raw settings request.
         await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers: attemptedGpuLayers, requestedGpuLayers: nGpuLayers, modelPath, mmProjPath });
       } catch (error: any) {
-        this.context = null; this.currentModelPath = null; this.multimodalSupport = null;
+        this.context = null; this.currentModelPath = null; this.nativeConversationId = null; this.multimodalSupport = null;
         this.toolCallingSupported = false; this.thinkingSupported = false;
         Object.assign(this, { gpuEnabled: false, gpuReason: '', activeGpuLayers: 0, gpuDevices: [], requestedGpuLayers: 0, gpuAttemptFailed: false });
         throw new Error(error?.message || 'Unknown error loading model');
@@ -266,7 +268,7 @@ class LLMService {
     // reload with ~2GB free ground to 0 tok/s then died). Wait (bounded) for the process footprint to drop.
     await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
     useAppStore.getState().setModelMaxContext(null);
-    Object.assign(this, { context: null, currentModelPath: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false });
+    Object.assign(this, { context: null, currentModelPath: null, nativeConversationId: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false });
   }
   async unloadModel(): Promise<void> {
     const mutex = this.acquireContextMutex();
@@ -395,14 +397,18 @@ class LLMService {
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-
   /** Ephemeral, tools-free routing pass for two-pass tool selection (not user-facing). */
   async generateToolSelection(systemPrompt: string, userText: string): Promise<string> {
     const messages: Message[] = [
       { id: 'tool-select-sys', role: 'system', content: systemPrompt, timestamp: 0 },
       { id: 'tool-select-user', role: 'user', content: userText, timestamp: 0 },
     ];
-    return this.generateWithMaxTokens(messages, 64);
+    try {
+      return await this.generateWithMaxTokens(messages, 64);
+    } finally {
+      // The router is not part of the chat. Remove its prompt and recurrent state.
+      await this.clearKVCache(true);
+    }
   }
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
@@ -423,6 +429,15 @@ class LLMService {
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
     try { await (this.context as any).clearCache(clearData); } catch (e) { logger.log('[LLM] Clear cache error:', e); }
+  }
+  /** Awaited generation boundary: a new chat never inherits native KV/recurrent state. */
+  async prepareConversationBoundary(conversationId: string): Promise<void> {
+    if (this.nativeConversationId === conversationId) return;
+    if (!this.context) throw new Error('No model loaded');
+    if (this.isGenerating) throw new Error('Model is still finishing the previous reply');
+    await (this.context as any).clearCache(true);
+    this.nativeConversationId = conversationId;
+    logger.log(`[LLM] Native context reset for conversation ${conversationId}`);
   }
   getEstimatedMemoryUsage() {
     const contextMemoryMB = this.context ? (this.currentSettings.contextLength || 2048) * 0.5 : 0;

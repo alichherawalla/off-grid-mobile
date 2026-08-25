@@ -84,8 +84,11 @@ export async function setActiveRemoteTextModelImpl(
   const store = useRemoteServerStore.getState();
   logger.log('[RemoteServerManager] setActiveRemoteTextModel called:', { serverId, modelId });
 
-  store.setActiveServerId(serverId);
+  // Publish the remote model intent first. New-chat local preparation directly
+  // guards on this ID, so it cannot start the prior local model between the two
+  // store writes while the provider selection is being established.
   store.setActiveRemoteTextModelId(modelId);
+  store.setActiveServerId(serverId);
 
   let provider = providerRegistry.getProvider(serverId);
   if (!provider) {
@@ -202,4 +205,3 @@ export async function initializeProvidersImpl(
     }
   }
 }
-

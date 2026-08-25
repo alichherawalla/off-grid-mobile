@@ -13,7 +13,6 @@ import {
   generationService,
   imageGenerationService,
   ImageGenerationState,
-  llmService,
   QueuedMessage,
 } from '../../services';
 import { generationSession } from '../../services/generationSession';
@@ -154,16 +153,9 @@ export function useChatConversationLifecycle({
     ) {
       generationSession.end('conversation-switch');
     }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      if (!cancelled && llmService.isModelLoaded()) {
-        llmService.clearKVCache(false).catch(() => {});
-      }
-    }, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
+    // Native conversation isolation is awaited by generationService immediately
+    // before a local turn starts. A navigation timer here raced the first Send and
+    // could clear too late (context leak) or during prefill (no-op).
   }, [activeConversationId]);
 }
 
