@@ -39,21 +39,22 @@ interface WhisperCardProps {
   downloading: boolean;
   queued: boolean;
   downloadProgress: number;
+  downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   onDownload: (id: string) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
-  model, index, downloadedModelId, presentModelIds, downloading, queued, downloadProgress, onDownload, onSelect, onDelete,
+  model, index, downloadedModelId, presentModelIds, downloading, queued, downloadProgress, downloadBytes, onDownload, onSelect, onDelete,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
   // WHISPER_MODELS sizes are in MB. Surface bytes so the STT card matches the
   // Text/Image cards ("X MB / Y MB"); for a queued model this reads "0 B / 142 MB".
   const totalBytes = model.size * 1024 * 1024;
-  const downloadBytes = (downloading || queued)
-    ? { downloaded: Math.round(downloadProgress * totalBytes), total: totalBytes }
+  const visibleDownloadBytes = (downloading || queued)
+    ? (downloadBytes ?? { downloaded: Math.round(downloadProgress * totalBytes), total: totalBytes })
     : undefined;
   return (
     <ModelCard
@@ -64,7 +65,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
       isDownloading={downloading}
       isQueued={queued}
       downloadProgress={downloadProgress}
-      downloadBytes={downloadBytes}
+      downloadBytes={visibleDownloadBytes}
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
       onPress={downloading ? undefined : (present ? (active ? undefined : () => onSelect(model.id)) : () => onDownload(model.id))}
@@ -139,6 +140,11 @@ export const TranscriptionModelsTab: React.FC = () => {
         downloading={state?.downloading ?? false}
         queued={state?.queued ?? false}
         downloadProgress={state?.progress ?? 0}
+        downloadBytes={state?.totalBytes ? {
+          downloaded: state.currentBytes ?? 0,
+          total: state.totalBytes,
+          bytesPerSecond: state.bytesPerSecond,
+        } : undefined}
         onDownload={handleDownload}
         onSelect={handleSelect}
         onDelete={handleDelete}

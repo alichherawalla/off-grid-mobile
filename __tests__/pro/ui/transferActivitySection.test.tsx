@@ -305,6 +305,31 @@ describePro('the Activity list', () => {
     expect(ui.getByText(/25%/)).toBeTruthy();
     expect(ui.getByText(/MB \/ /)).toBeTruthy();
     expect(ui.queryByText(/MB\/s/)).toBeNull();
+    expect(ui.getByText(/Rate unavailable/)).toBeTruthy();
+  });
+
+  it('shows the live rate for an ordinary file transfer', () => {
+    if (!guard()) return;
+    const acts = handlers();
+    const ui = render(
+      <TransferActivitySection
+        projection={project(acts, {
+          transfers: [{
+            requestId: 'rate-live',
+            deviceId: THE_MAC,
+            fileName: 'Archive.zip',
+            direction: 'receive',
+            status: 'transferring',
+            bytesTransferred: 4 * 1024 * 1024,
+            totalBytes: 8 * 1024 * 1024,
+            bytesPerSecond: 1.5 * 1024 * 1024,
+          }] as never,
+        })}
+        onOpen={jest.fn()}
+      />,
+    );
+
+    expect(ui.getByText('4 MB / 8 MB · 1.5 MB/s')).toBeTruthy();
   });
 
   it('shows one model job instead of one raw row for every file in a vision package', async () => {

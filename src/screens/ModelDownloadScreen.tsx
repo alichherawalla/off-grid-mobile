@@ -45,7 +45,7 @@ interface RecommendedCardProps {
   model: typeof RECOMMENDED_MODELS[number];
   recFile: ModelFile;
   index: number;
-  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number } } | null | undefined;
+  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   isTrending: boolean;
@@ -79,7 +79,7 @@ interface LiteRTCardProps {
   file: ModelFile;
   index: number;
   curatedEntry: CuratedLiteRTEntry | undefined;
-  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number } } | null | undefined;
+  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null | undefined;
   downloaded: DownloadedModel | undefined;
   totalRamGB: number;
   onDownload: () => void;
@@ -121,15 +121,15 @@ const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry,
  *  `bytes` feeds the shared card's "X MB / Y MB" line so onboarding matches the
  *  Text/Image/STT tabs (same ModelCard, same props) instead of showing % only. */
 export function downloadProgressFor(
-  entry: { status: string; progress: number; bytesDownloaded?: number; totalBytes?: number; combinedTotalBytes?: number; mmProjBytesDownloaded?: number } | undefined,
-): { progress: number; queued: boolean; bytes?: { downloaded: number; total: number } } | null {
+  entry: { status: string; progress: number; bytesDownloaded?: number; totalBytes?: number; combinedTotalBytes?: number; mmProjBytesDownloaded?: number; bytesPerSecond?: number } | undefined,
+): { progress: number; queued: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null {
   if (!entry || !isActiveStatus(entry.status as any)) return null;
   const total = entry.combinedTotalBytes ?? entry.totalBytes ?? 0;
   const downloaded = (entry.bytesDownloaded ?? 0) + (entry.mmProjBytesDownloaded ?? 0);
   return {
     progress: entry.progress,
     queued: entry.status === 'pending',
-    bytes: total > 0 ? { downloaded, total } : undefined,
+    bytes: total > 0 ? { downloaded, total, bytesPerSecond: entry.bytesPerSecond } : undefined,
   };
 }
 

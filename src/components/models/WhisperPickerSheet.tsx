@@ -10,6 +10,7 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import { WHISPER_MODELS } from '../../services/whisperService';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
+import { presentProgress } from '../../utils/progressPresentation';
 
 type Props = {
   visible: boolean;
@@ -51,6 +52,13 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
           // while it is busy — several models can download at once, each with its own percentage.
           const dl = stateFor(m.id);
           const busy = dl?.active ?? false;
+          const progress = dl ? presentProgress({
+            progress: dl.progress,
+            bytesDownloaded: dl.currentBytes,
+            totalBytes: dl.totalBytes,
+            bytesPerSecond: dl.bytesPerSecond,
+            status: dl.queued ? 'pending' : 'running',
+          }) : undefined;
           return (
             <AnimatedPressable
               key={m.id}
@@ -64,11 +72,15 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
                   {m.name}{m.lang === 'multi' ? ' · 99 langs' : ' · EN'}
                 </Text>
                 <Text style={styles.desc} numberOfLines={1}>{m.description}</Text>
-                <Text style={styles.meta}>{m.size} MB</Text>
+                <Text style={styles.meta} numberOfLines={1}>
+                  {dl?.downloading
+                    ? progress?.detailText
+                    : `${m.size} MB`}
+                </Text>
               </View>
               {(() => {
                 if (dl?.queued) return <Icon name="clock" size={16} color={colors.textMuted} testID="whisper-row-queued" />;
-                if (dl?.downloading) return <Text style={styles.percent} testID="whisper-row-progress">{Math.round(dl.progress * 100)}%</Text>;
+                if (dl?.downloading) return <Text style={styles.percent} testID="whisper-row-progress">{progress?.percentageText ?? 'In progress'}</Text>;
                 // selectModel sets downloadedModelId optimistically, so the active row IS the one loading —
                 // show a spinner on it while it loads (not a premature checkmark), matching text/image.
                 if (active && isModelLoading) return <LoadingDots color={colors.primary} testID="model-row-loading" />;

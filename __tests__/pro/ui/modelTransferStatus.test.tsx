@@ -161,7 +161,7 @@ describePro('the model transfer card', () => {
     expect(ui.queryByText('25%')).not.toBeNull();
   });
 
-  it('shows 0% rather than dividing by a total nobody has sent yet', () => {
+  it('shows indeterminate progress rather than dividing by a total nobody has sent yet', () => {
     // A queued transfer has no total until the offer is answered. NaN% is what an unguarded division renders.
     const ui = render(
       <ModelTransferStatus
@@ -173,7 +173,8 @@ describePro('the model transfer card', () => {
       />,
     );
 
-    expect(ui.queryByText('0%')).not.toBeNull();
+    expect(ui.queryByText('In progress')).not.toBeNull();
+    expect(ui.queryByText('Rate unavailable')).not.toBeNull();
     expect(ui.queryByText('NaN%')).toBeNull();
   });
 

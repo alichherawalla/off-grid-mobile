@@ -546,8 +546,31 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    // Progress bar is shown but no status text for running downloads
-    expect(getByText('256 B / 1 KB')).toBeTruthy();
+    expect(getByText('25% · 256 B / 1 KB · Rate unavailable')).toBeTruthy();
+  });
+
+  it('shows the measured rate for an active download', () => {
+    mockDownloadStoreDownloads = {
+      'author/model-id/active-model.gguf': {
+        modelKey: 'author/model-id/active-model.gguf',
+        downloadId: 'dl-rate',
+        modelId: 'author/model-id',
+        fileName: 'active-model.gguf',
+        quantization: 'Q4_K_M',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 512 * 1024,
+        totalBytes: 1024 * 1024,
+        combinedTotalBytes: 1024 * 1024,
+        bytesPerSecond: 128 * 1024,
+        progress: 0.5,
+        createdAt: Date.now(),
+        lastProgressAt: Date.now(),
+      },
+    };
+
+    const { getByText } = render(<DownloadManagerScreen />);
+    expect(getByText('50% · 512 KB / 1 MB · 128.0 KB/s')).toBeTruthy();
   });
 
   it('does not show storage section when no completed models', () => {

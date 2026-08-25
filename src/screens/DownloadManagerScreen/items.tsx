@@ -11,6 +11,7 @@ import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors'
 import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
 import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
+import { presentProgress } from '../../utils/progressPresentation';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ export type DownloadItem = {
   fileSize: number;
   bytesDownloaded: number;
   progress: number;
+  bytesPerSecond?: number;
   status: string;
   downloadedAt?: string;
   filePath?: string;
@@ -80,6 +82,14 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
       : item.status === 'retrying' || item.status === 'waiting_for_network'
         ? colors.warning
         : colors.primary;
+  const presented = presentProgress({
+    progress: item.progress,
+    bytesDownloaded: item.bytesDownloaded,
+    totalBytes: item.fileSize,
+    bytesPerSecond: item.bytesPerSecond,
+    status: item.status,
+  });
+  const percentage = presented.progress.percentage ?? 0;
 
   // Icon per status is owned by downloadStatusIcon() so this row and ModelCard match
   // (queued -> clock, previously text-only here).
@@ -111,10 +121,10 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
       </View>
       <View style={styles.progressContainer}>
         <View style={styles.progressBarBackground}>
-          <View style={[styles.progressBarFill, { width: `${Math.round(item.progress * 100)}%` as const, backgroundColor: progressColor }]} />
+          <View style={[styles.progressBarFill, { width: `${percentage}%` as const, backgroundColor: progressColor }]} />
         </View>
-        <Text style={styles.progressText}>
-          {formatBytes(item.bytesDownloaded)} / {formatBytes(item.fileSize)}
+        <Text style={styles.progressText} testID="download-progress-detail">
+          {[presented.percentageText, presented.detailText].filter(Boolean).join(' · ')}
         </Text>
       </View>
       <View style={styles.downloadMeta}>
@@ -199,6 +209,13 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
   // ~900MB mmproj re-download, instead of a bare indeterminate spinner (OD2).
   const repairEntry = useDownloadStore(s => s.downloads[item.modelId]);
   const showRepairProgress = isRepairingVision && !!repairEntry;
+  const repairProgress = repairEntry ? presentProgress({
+    progress: repairEntry.progress,
+    bytesDownloaded: repairEntry.bytesDownloaded,
+    totalBytes: repairEntry.totalBytes,
+    bytesPerSecond: repairEntry.bytesPerSecond,
+    status: repairEntry.status,
+  }) : undefined;
 
   return (
     <Card style={styles.downloadCard}>
@@ -237,7 +254,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
             <View style={[styles.progressBarFill, { width: `${Math.round(repairEntry.progress * 100)}%` as const, backgroundColor: colors.primary }]} />
           </View>
           <Text style={styles.progressText}>
-            {formatBytes(repairEntry.bytesDownloaded)} / {formatBytes(repairEntry.totalBytes)}
+            {[repairProgress?.percentageText, repairProgress?.detailText].filter(Boolean).join(' · ')}
           </Text>
         </View>
       )}

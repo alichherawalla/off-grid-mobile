@@ -218,7 +218,16 @@ describe('TTSSection', () => {
       expect(queryByTestId('chat-tts-language-en-US')).toBeNull();
 
       act(() => { useTTSStore.setState({ voiceSwitchProgress: 0.42 }); });
-      expect(getByText('Downloading English (UK) voice - 42%')).toBeTruthy();
+      expect(getByText('Downloading English (UK) voice - 42% · Rate unavailable')).toBeTruthy();
+
+      act(() => {
+        useTTSStore.setState({
+          downloadCurrentBytes: 21 * 1024 * 1024,
+          downloadTotalBytes: 50 * 1024 * 1024,
+          downloadBytesPerSecond: 2 * 1024 * 1024,
+        });
+      });
+      expect(getByText('Downloading English (UK) voice - 42% · 21 MB / 50 MB · 2.0 MB/s')).toBeTruthy();
 
       await act(async () => { finishSwitch(); await Promise.resolve(); });
       await waitFor(() => expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy());

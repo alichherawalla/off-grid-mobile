@@ -50,7 +50,8 @@ async function loadItems(): Promise<DownloadItem[]> {
         items.push({
           type: 'active', modelType: 'tts', modelId: engineId, fileName: d.name,
           author: 'Voice', quantization: '', fileSize: d.sizeBytes,
-          bytesDownloaded: d.bytesDownloaded, progress: d.progress, status: 'downloading', name: d.name,
+          bytesDownloaded: d.bytesDownloaded, bytesPerSecond: d.bytesPerSecond,
+          progress: d.progress, status: 'downloading', name: d.name,
         });
       } else if (d.status === 'error') {
         // A failed Kokoro fetch. Surface it as a failed active item so the

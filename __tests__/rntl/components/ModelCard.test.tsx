@@ -77,8 +77,24 @@ describe('ModelCard', () => {
         />
       );
       // Both the size caption and the percent render (full-width bar + left/right row).
-      expect(getByText('2.0 GB / 4.0 GB')).toBeTruthy();
+      expect(getByText('2.0 GB / 4.0 GB · Rate unavailable')).toBeTruthy();
       expect(getByText('50%')).toBeTruthy();
+    });
+
+    it('shows the canonical live rate while downloading', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloading
+          downloadProgress={0.5}
+          downloadBytes={{
+            downloaded: 2 * 1024 * 1024 * 1024,
+            total: 4 * 1024 * 1024 * 1024,
+            bytesPerSecond: 2.5 * 1024 * 1024,
+          }}
+        />
+      );
+      expect(getByText('2.0 GB / 4.0 GB · 2.5 MB/s')).toBeTruthy();
     });
 
     it('shows bytes alongside the Queued label (queued reads "0 B / size")', () => {
@@ -318,7 +334,7 @@ describe('ModelCard', () => {
           downloadCount={2}
         />
       );
-      expect(getByText('1.5 GB / 10.0 GB · 2 downloads')).toBeTruthy();
+      expect(getByText('1.5 GB / 10.0 GB · Rate unavailable · 2 downloads')).toBeTruthy();
     });
 
     it('omits the "N downloads" note for a single download', () => {
@@ -332,7 +348,7 @@ describe('ModelCard', () => {
           downloadCount={1}
         />
       );
-      expect(getByText('2.0 GB / 4.0 GB')).toBeTruthy();
+      expect(getByText('2.0 GB / 4.0 GB · Rate unavailable')).toBeTruthy();
       expect(queryByText(/downloads/)).toBeNull();
     });
 
@@ -1045,14 +1061,16 @@ describe('ModelCard', () => {
       expect(getByText('50%')).toBeTruthy();
     });
 
-    it('shows 0% when totalBytes is 0 (unknown size)', () => {
-      const { getByText } = render(
+    it('does not invent a percentage when the failed download size is unknown', () => {
+      const { getByText, queryByText } = render(
         <ModelCard
           model={baseModel}
           failedState={{ ...baseFailedState, bytesDownloaded: 0, totalBytes: 0 }}
         />,
       );
-      expect(getByText('0%')).toBeTruthy();
+      expect(getByText('Stopped')).toBeTruthy();
+      expect(queryByText(/NaN/)).toBeNull();
+      expect(queryByText('0%')).toBeNull();
     });
 
     it('hides ModelCardActions when failedState is set', () => {

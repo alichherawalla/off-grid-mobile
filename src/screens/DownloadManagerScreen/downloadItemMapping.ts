@@ -100,6 +100,7 @@ export function entryToActiveItem(entry: DownloadEntry): DownloadItem {
     fileSize: entry.combinedTotalBytes || entry.totalBytes,
     bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
     progress: entry.progress,
+    bytesPerSecond: entry.bytesPerSecond,
     status: entry.status,
     reason: entry.errorMessage,
     reasonCode: entry.errorCode as

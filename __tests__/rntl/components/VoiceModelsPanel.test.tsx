@@ -134,8 +134,21 @@ describe('VoiceModelsPanel', () => {
   it('shows live progress while the service reports downloading', async () => {
     mockDownloads = [ttsDl('downloading', 0.4)];
     mockStoreState.isReady = false;
-    const { getByText } = await renderPanel();
+    const { getByText, queryByText } = await renderPanel();
     expect(getByText('40%')).toBeTruthy();
+    expect(getByText('Rate unavailable')).toBeTruthy();
+    expect(queryByText(/NaN/)).toBeNull();
+  });
+
+  it('shows bytes and rate when the engine reports them', async () => {
+    mockDownloads = [ttsDl('downloading', 0.5)];
+    mockStoreState.isReady = false;
+    mockStoreState.downloadCurrentBytes = 25 * 1024 * 1024;
+    mockStoreState.downloadTotalBytes = 50 * 1024 * 1024;
+    mockStoreState.downloadBytesPerSecond = 2 * 1024 * 1024;
+    const { getByText } = await renderPanel();
+    expect(getByText('50%')).toBeTruthy();
+    expect(getByText('25 MB / 50 MB · 2.0 MB/s')).toBeTruthy();
   });
 
   it('shows progress (not the idle CTA) for queued and paused too — the shared in-progress predicate', async () => {

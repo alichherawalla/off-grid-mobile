@@ -25,6 +25,9 @@ interface SttDownloadEntry {
   downloading: boolean;
   /** Waiting for a concurrency slot (show a clock, not 0%). */
   queued: boolean;
+  currentBytes?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
 }
 
 /** Whisper download-store ids are prefixed `whisper-`; the model ids the UI uses are bare. */
@@ -50,11 +53,19 @@ function deriveSttDownloadState(
       active: isActiveStatus(e.status),
       downloading: isDownloadingStatus(e.status),
       queued: isQueuedStatus(e.status),
+      currentBytes: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
+      totalBytes: e.combinedTotalBytes || e.totalBytes || undefined,
+      bytesPerSecond: e.bytesPerSecond,
     };
   }
   for (const [id, p] of Object.entries(downloadProgressById)) {
     if (id in byId) continue; // canonical entry wins
-    byId[id] = { progress: p, active: true, downloading: p > 0, queued: p === 0 };
+    byId[id] = {
+      progress: p,
+      active: true,
+      downloading: p > 0,
+      queued: p === 0,
+    };
   }
   const anyDownloading = Object.values(byId).some((s) => s.active);
   return { byId, anyDownloading };

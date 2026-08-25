@@ -92,6 +92,27 @@ describe('downloadProgress → store projection', () => {
     engine.emit('downloadProgress');
     expect(state.voiceSwitchProgress).toBe(0.42);
   });
+
+  it('measures one aggregate byte rate for every voice download view', () => {
+    const now = jest.spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(2_000);
+    const engine = makeEngine(0.5);
+    subscribeToEngine(engine as any, deps());
+
+    engine.emit('downloadProgress', {
+      assetId: 'voice', progress: 0.25, bytesWritten: 250, totalBytes: 1_000,
+    });
+    expect(state.downloadBytesPerSecond).toBeUndefined();
+
+    engine.emit('downloadProgress', {
+      assetId: 'voice', progress: 0.5, bytesWritten: 500, totalBytes: 1_000,
+    });
+    expect(state.downloadCurrentBytes).toBe(500);
+    expect(state.downloadTotalBytes).toBe(1_000);
+    expect(state.downloadBytesPerSecond).toBe(250);
+    now.mockRestore();
+  });
 });
 
 describe('amplitudeChange → store projection', () => {

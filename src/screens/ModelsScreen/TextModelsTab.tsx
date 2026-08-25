@@ -130,6 +130,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         progress: entry.progress,
         bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
         totalBytes: entry.combinedTotalBytes,
+        bytesPerSecond: entry.bytesPerSecond,
         status: entry.status,
       }
       : undefined;
@@ -173,7 +174,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
         isDownloading={!!s.progress && !s.hasFailed && !isQueuedStatus(s.progress.status)}
         isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
         downloadProgress={s.progress?.progress}
-        downloadBytes={s.progress && !s.hasFailed ? { downloaded: s.progress.bytesDownloaded, total: s.progress.totalBytes } : undefined}
+        downloadBytes={s.progress && !s.hasFailed ? {
+          downloaded: s.progress.bytesDownloaded,
+          total: s.progress.totalBytes,
+          bytesPerSecond: s.progress.bytesPerSecond,
+        } : undefined}
         isRepairingVision={s.repairingVision}
         isCompatible={!fileExceedsBudget(item.size, ramGB)} testID={`file-card-${index}`}
         onDownload={onDownload}

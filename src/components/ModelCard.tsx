@@ -16,6 +16,7 @@ import {
 } from './ModelCardContent';
 import { QUEUED_ICON } from '../utils/downloadStatusIcon';
 import { formatBytes } from '../utils/formatBytes';
+import { presentProgress } from '../utils/progressPresentation';
 
 interface ModelCardProps {
   model: {
@@ -39,7 +40,7 @@ interface ModelCardProps {
    *  0% progress bar, so the user gets clear feedback the tap registered. */
   isQueued?: boolean;
   downloadProgress?: number;
-  downloadBytes?: { downloaded: number; total: number };
+  downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
   downloadCount?: number;
   isActive?: boolean;
@@ -87,23 +88,34 @@ function resolveCredibility(
 
 const DownloadProgressSection: React.FC<{
   progress: number;
-  bytes?: { downloaded: number; total: number };
+  bytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   queued?: boolean;
   /** Number of concurrent downloads behind this card (>1 → show "N downloads"). */
   count?: number;
 }> = ({ progress, bytes, queued, count }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
-  const bytesLabel = bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : '';
+  const presented = presentProgress({
+    progress,
+    bytesDownloaded: bytes?.downloaded,
+    totalBytes: bytes?.total,
+    bytesPerSecond: bytes?.bytesPerSecond,
+    status: queued ? 'pending' : 'running',
+  });
+  const percentage = presented.progress.percentage ?? 0;
   // Cumulative download → note how many files are running so the total reads clearly.
   const countLabel = count && count > 1 ? `${count} downloads` : '';
-  const caption = [bytesLabel, countLabel].filter(Boolean).join(' · ');
+  const caption = [
+    presented.bytesText,
+    queued ? undefined : presented.rateText,
+    countLabel,
+  ].filter(Boolean).join(' · ');
   return (
   <View style={styles.progressSection}>
     {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
         (0 progress) so it reads as "not started yet". */}
     <View style={styles.progressBar}>
-      <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
+      <View style={[styles.progressFill, { width: `${queued ? 0 : percentage}%` }]} />
     </View>
     {/* Caption row under the bar: bytes (+ "N downloads") on the LEFT, status on the
         RIGHT. "Queued" while waiting for a slot, otherwise the percent. */}
@@ -115,7 +127,7 @@ const DownloadProgressSection: React.FC<{
           <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
         </View>
       ) : (
-        <Text style={styles.progressText}>{`${Math.round(progress * 100)}%`}</Text>
+        <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
       )}
     </View>
   </View>
@@ -131,14 +143,19 @@ const FailedSection: React.FC<{
 }> = ({ errorMessage, bytesDownloaded, totalBytes, onRetry, onRemove }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
-  const progress = totalBytes > 0 ? bytesDownloaded / totalBytes : 0;
+  const presented = presentProgress({
+    bytesDownloaded,
+    totalBytes,
+    status: 'failed',
+  });
+  const progress = presented.progress.percentage ?? 0;
   return (
     <View style={styles.failedSection}>
       <View style={styles.progressContainer}>
         <View style={styles.progressBar}>
-          <View style={[styles.failedProgressFill, { width: `${progress * 100}%` }]} />
+          <View style={[styles.failedProgressFill, { width: `${progress}%` }]} />
         </View>
-        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+        <Text style={styles.progressText}>{presented.percentageText ?? 'Stopped'}</Text>
       </View>
       {totalBytes > 0 && (
         <Text style={styles.progressBytesText}>{formatBytes(bytesDownloaded)} / {formatBytes(totalBytes)}</Text>
@@ -309,4 +326,3 @@ function formatNumber(num: number): string {
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
 }
-
