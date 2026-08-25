@@ -3459,6 +3459,12 @@ PODS:
     - SSZipArchive (~> 2.5.5)
   - SocketRocket (0.7.1)
   - SSZipArchive (2.5.5)
+  - VisionCamera (4.7.3):
+    - VisionCamera/Core (= 4.7.3)
+    - VisionCamera/React (= 4.7.3)
+  - VisionCamera/Core (4.7.3)
+  - VisionCamera/React (4.7.3):
+    - React-Core
   - whisper-rn (0.5.5):
     - boost
     - DoubleConversion
@@ -3599,6 +3605,7 @@ DEPENDENCIES:
   - RNWorklets (from `../node_modules/react-native-worklets`)
   - RNZipArchive (from `../node_modules/react-native-zip-archive`)
   - SocketRocket (~> 0.7.1)
+  - VisionCamera (from `../node_modules/react-native-vision-camera`)
   - whisper-rn (from `../node_modules/whisper.rn`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -3823,6 +3830,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-worklets"
   RNZipArchive:
     :path: "../node_modules/react-native-zip-archive"
+  VisionCamera:
+    :path: "../node_modules/react-native-vision-camera"
   whisper-rn:
     :path: "../node_modules/whisper.rn"
   Yoga:
@@ -3940,9 +3949,10 @@ SPEC CHECKSUMS:
   RNZipArchive: f2806ba80e24cf1984d6a7cb361d8a07d734997d
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
+  VisionCamera: 7187b3dac1ff3071234ead959ce311875748e14f
   whisper-rn: 7566faf9b7d78e39ab9fc634cb90fdee81177793
   Yoga: 5456bb010373068fc92221140921b09d126b116e
 
 PODFILE CHECKSUM: f66f810a788ead15881075527443239e49b50db1
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0
