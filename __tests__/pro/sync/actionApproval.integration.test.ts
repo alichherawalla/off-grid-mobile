@@ -1,5 +1,10 @@
 import { useActionApprovalStore } from '../../../pro/mcp/actionApprovalStore';
 import { projectNotificationCenter } from '../../../pro/sync/notificationCenter';
+import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
+import { ComputerApprovalCard } from '../../../pro/ui/ComputerApprovalCard';
+import { useChatStore } from '../../../src/stores/chatStore';
+import React from 'react';
+import { act, render } from '@testing-library/react-native';
 
 const pending = {
   version: 1 as const,
@@ -14,13 +19,42 @@ const pending = {
   updatedAt: 10,
 };
 
-describe('durable Action approval projection', () => {
-  beforeEach(() => useActionApprovalStore.setState({ pending: [] }));
+const origin = {
+  originDeviceId: 'desktop-origin',
+  originDeviceName: 'Off Grid AI Desktop',
+};
 
-  it('keeps one request per Action and removes it after the origin publishes the outcome', () => {
-    const store = useActionApprovalStore.getState();
-    store.applySynced(pending, 'desktop-origin');
-    store.applySynced({ ...pending, title: 'Generate the final proposal deck' }, 'desktop-origin');
+describe('durable Action approval projection', () => {
+  beforeEach(() => {
+    useChatStore.getState().clearAllConversations();
+    useActionApprovalStore
+      .getState()
+      .applySynced(
+        { ...pending, status: 'executed', updatedAt: 1 },
+        'desktop-origin',
+      );
+  });
+
+  it('keeps one request in its exact synced chat with no separate notification or badge', () => {
+    const materializer = new MobileStateMaterializer();
+    materializer.put(
+      'conversation',
+      pending.executionChatId,
+      {
+        title: pending.title,
+        created_at: new Date(10).toISOString(),
+        updated_at: new Date(10).toISOString(),
+        project_id: null,
+      },
+      origin,
+    );
+    materializer.put('action_approval', pending.actionId, pending, origin);
+    materializer.put(
+      'action_approval',
+      pending.actionId,
+      { ...pending, title: 'Generate the final proposal deck' },
+      origin,
+    );
 
     expect(useActionApprovalStore.getState().pending).toEqual([
       expect.objectContaining({
@@ -30,28 +64,40 @@ describe('durable Action approval projection', () => {
         synced: expect.objectContaining({ executionChatId: 'chat-action-1' }),
       }),
     ]);
-    const notifications = projectNotificationCenter(
-      [],
-      'all',
-      useActionApprovalStore.getState().pending,
-    );
-    expect(notifications.badgeCount).toBe(1);
-    expect(notifications.items).toContainEqual(
-      expect.objectContaining({
-        id: 'action-approval:action-1',
-        type: 'action-approval',
-      }),
+    const notifications = projectNotificationCenter([], 'all');
+    expect(notifications.badgeCount).toBe(0);
+    expect(notifications.items).not.toContainEqual(
+      expect.objectContaining({ type: 'action-approval' }),
     );
 
-    store.applySynced(
-      {
-        ...pending,
-        status: 'executed',
-        result: 'Deck created',
-        updatedAt: 30,
-      },
-      'desktop-origin',
+    act(() => useChatStore.getState().setActiveConversation('another-chat'));
+    const card = render(React.createElement(ComputerApprovalCard));
+    expect(card.queryByTestId('computer-approval-card')).toBeNull();
+
+    act(() =>
+      useChatStore.getState().setActiveConversation(pending.executionChatId),
+    );
+    expect(card.getByTestId('computer-approval-card')).toBeTruthy();
+    expect(card.getByText('Generate the final proposal deck')).toBeTruthy();
+    expect(card.getByText('/private/source')).toBeTruthy();
+    expect(card.getByText('Approve')).toBeTruthy();
+    expect(card.getByText('Decline')).toBeTruthy();
+    expect(card.queryByText('Open chat')).toBeNull();
+
+    act(() =>
+      materializer.put(
+        'action_approval',
+        pending.actionId,
+        {
+          ...pending,
+          status: 'executed',
+          result: 'Deck created',
+          updatedAt: 30,
+        },
+        origin,
+      ),
     );
     expect(useActionApprovalStore.getState().pending).toEqual([]);
+    expect(card.queryByTestId('computer-approval-card')).toBeNull();
   });
 });
