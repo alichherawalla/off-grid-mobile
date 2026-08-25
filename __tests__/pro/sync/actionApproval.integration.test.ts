@@ -1,4 +1,4 @@
-import { useComputerApprovalStore } from '../../../pro/mcp/computerApprovalStore';
+import { useActionApprovalStore } from '../../../pro/mcp/actionApprovalStore';
 import { projectNotificationCenter } from '../../../pro/sync/notificationCenter';
 
 const pending = {
@@ -15,14 +15,14 @@ const pending = {
 };
 
 describe('durable Action approval projection', () => {
-  beforeEach(() => useComputerApprovalStore.setState({ pending: [] }));
+  beforeEach(() => useActionApprovalStore.setState({ pending: [] }));
 
   it('keeps one request per Action and removes it after the origin publishes the outcome', () => {
-    const store = useComputerApprovalStore.getState();
+    const store = useActionApprovalStore.getState();
     store.applySynced(pending, 'desktop-origin');
     store.applySynced({ ...pending, title: 'Generate the final proposal deck' }, 'desktop-origin');
 
-    expect(useComputerApprovalStore.getState().pending).toEqual([
+    expect(useActionApprovalStore.getState().pending).toEqual([
       expect.objectContaining({
         actionId: 'action-1',
         title: 'Generate the final proposal deck',
@@ -33,7 +33,7 @@ describe('durable Action approval projection', () => {
     const notifications = projectNotificationCenter(
       [],
       'all',
-      useComputerApprovalStore.getState().pending,
+      useActionApprovalStore.getState().pending,
     );
     expect(notifications.badgeCount).toBe(1);
     expect(notifications.items).toContainEqual(
@@ -52,6 +52,6 @@ describe('durable Action approval projection', () => {
       },
       'desktop-origin',
     );
-    expect(useComputerApprovalStore.getState().pending).toEqual([]);
+    expect(useActionApprovalStore.getState().pending).toEqual([]);
   });
 });
