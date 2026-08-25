@@ -1,36 +1,15 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert } from '../../../components';
-import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
 import { useAppStore } from '../../../stores/appStore';
 import { shouldAutoDiscoverRemoteModels } from '../../../utils/remoteAutoDiscovery';
 import type { HomeScreenNavigationProp } from './types';
-import type { RemoteServer } from '../../../types';
 import logger from '../../../utils/logger';
-
-const getPort = (endpoint: string): string | null => {
-  try { return new URL(endpoint).port; } catch { return null; }
-};
 
 interface LANDiscoveryParams {
   navigation: HomeScreenNavigationProp;
   setAlertState: (state: any) => void;
-}
-
-async function updateMovedServer(
-  samePortServer: RemoteServer,
-  d: { endpoint: string; name: string },
-  store: ReturnType<typeof useRemoteServerStore.getState>,
-): Promise<void> {
-  logger.log('[HomeScreen] Server moved to new IP, updating:', samePortServer.name, '->', d.endpoint);
-  await remoteServerManager.updateServer(samePortServer.id, { endpoint: d.endpoint, name: d.name });
-  try { await store.discoverModels(samePortServer.id); } catch { /* offline */ }
-  if (store.activeServerId === samePortServer.id && store.activeRemoteTextModelId) {
-    try {
-      await remoteServerManager.setActiveRemoteTextModel(samePortServer.id, store.activeRemoteTextModelId);
-    } catch { /* user can re-select */ }
-  }
 }
 
 export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParams) {
@@ -77,37 +56,10 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
       return;
     }
     logger.log('[HomeScreen] LAN auto-discovery enabled — scanning');
-    let discovered: Awaited<ReturnType<typeof discoverLANServers>>;
-    try {
-      discovered = await discoverLANServers();
-    } catch (error) {
-      logger.warn('[HomeScreen] LAN discovery skipped:', (error as Error).message);
-      return;
-    }
-    if (discovered.length === 0) return;
-
-    const store = useRemoteServerStore.getState();
-    const existingServers = store.servers;
-    const existingEndpoints = new Set(existingServers.map(s => s.endpoint.replace(/\/$/, '')));
-
-    const newServersToAdd: typeof discovered = [];
-
-    for (const d of discovered) {
-      if (existingEndpoints.has(d.endpoint.replace(/\/$/, ''))) continue;
-
-      const dPort = getPort(d.endpoint);
-      const samePortServer = dPort
-        ? existingServers.find(s => getPort(s.endpoint) === dPort)
-        : null;
-
-      if (samePortServer) {
-        await updateMovedServer(samePortServer, d, store);
-      } else {
-        newServersToAdd.push(d);
-      }
-    }
-
-    await addNewServersAndNotify(newServersToAdd);
+    // remoteServerManager owns the scan + moved-server reconciliation (one source of truth); the
+    // hook only surfaces the genuinely-new servers it finds.
+    const { found } = await remoteServerManager.scanAndReconcile();
+    await addNewServersAndNotify(found);
   }, [addNewServersAndNotify]);
 
   return { runLANDiscovery };

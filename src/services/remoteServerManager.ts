@@ -9,8 +9,11 @@
 
 import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { useAppStore } from '../stores/appStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
+import { discoverLANServers, DiscoveredServer } from './networkDiscovery';
+import { shouldAutoDiscoverRemoteModels } from '../utils/remoteAutoDiscovery';
 import logger from '../utils/logger';
 import {
   storeApiKeyImpl,
@@ -21,6 +24,18 @@ import {
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
 } from './remoteServerManagerUtils';
+
+/** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
+const trimSlash = (url: string): string => {
+  let s = url.toLowerCase();
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  return s;
+};
+
+/** Extract the port from an endpoint, or null if it cannot be parsed. */
+const portOf = (endpoint: string): string | null => {
+  try { return new URL(endpoint).port; } catch { return null; }
+};
 
 class RemoteServerManager {
   /**
@@ -190,6 +205,88 @@ class RemoteServerManager {
    */
   async initializeProviders(): Promise<void> {
     return initializeProvidersImpl(() => this.getServers());
+  }
+
+  /**
+   * Scan the LAN and reconcile the result against saved servers. For each discovered endpoint that
+   * matches a saved server on the same port but a new IP, update it in place and re-select the active
+   * model. Returns the genuinely-new servers (not remaps) so a caller can surface them, plus the ids
+   * of servers that moved. Does NOT gate on settings — the caller decides whether a scan is allowed.
+   * This is the single owner of the "server moved to a new IP" reconciliation; UI callers delegate here.
+   */
+  async scanAndReconcile(): Promise<{ moved: string[]; found: DiscoveredServer[] }> {
+    let discovered: DiscoveredServer[];
+    try {
+      discovered = await discoverLANServers();
+    } catch (error) {
+      logger.warn('[RemoteServerManager] LAN scan failed:', (error as Error).message);
+      return { moved: [], found: [] };
+    }
+    if (discovered.length === 0) return { moved: [], found: [] };
+
+    const store = useRemoteServerStore.getState();
+    const existingServers = store.servers;
+    const existingEndpoints = new Set(existingServers.map((s) => trimSlash(s.endpoint)));
+    const moved: string[] = [];
+    const found: DiscoveredServer[] = [];
+
+    for (const d of discovered) {
+      if (existingEndpoints.has(trimSlash(d.endpoint))) continue;
+
+      const dPort = portOf(d.endpoint);
+      const samePortServer = dPort
+        ? existingServers.find((s) => portOf(s.endpoint) === dPort)
+        : null;
+
+      if (samePortServer) {
+        await this.applyMovedServer(samePortServer, d.endpoint, d.name);
+        moved.push(samePortServer.id);
+      } else {
+        found.push(d);
+      }
+    }
+
+    return { moved, found };
+  }
+
+  /** Update a saved server that has moved to a new endpoint, and re-select it if it was active. */
+  private async applyMovedServer(server: RemoteServer, endpoint: string, name: string): Promise<void> {
+    logger.log('[RemoteServerManager] Server moved to new IP, updating:', server.name, '->', endpoint);
+    await this.updateServer(server.id, { endpoint, name });
+    try { await this.discoverModels(server.id); } catch { /* offline — models repopulate on next reach */ }
+    const store = useRemoteServerStore.getState();
+    if (store.activeServerId === server.id && store.activeRemoteTextModelId) {
+      try {
+        await this.setActiveRemoteTextModel(server.id, store.activeRemoteTextModelId);
+      } catch { /* user can re-select from the picker */ }
+    }
+  }
+
+  /**
+   * Recover the active remote connection after a network change. Cheap-first: if there is an active
+   * server and it is still reachable at its known endpoint, do nothing. Only when it is unreachable
+   * (or the user has enabled auto-discovery) do we scan the LAN to find where it moved and reconnect.
+   * This keeps LAN scanning off unless the user is actually relying on a remote server, and makes the
+   * "connected" state honest again after the peer's IP changes.
+   */
+  async recoverActiveConnection(): Promise<void> {
+    const activeId = useRemoteServerStore.getState().activeServerId;
+
+    if (activeId) {
+      const result = await this.testConnection(activeId).catch(() => ({ success: false }));
+      if (result.success) {
+        logger.log('[RemoteServerManager] Active server still reachable; no rescan needed');
+        return;
+      }
+      logger.log('[RemoteServerManager] Active server unreachable; rescanning to recover');
+    }
+
+    const allowScan =
+      shouldAutoDiscoverRemoteModels(useAppStore.getState().settings) || !!activeId;
+    if (!allowScan) return;
+
+    const { moved, found } = await this.scanAndReconcile();
+    logger.log(`[RemoteServerManager] Recovery scan complete: ${moved.length} moved, ${found.length} new`);
   }
 
   /**
