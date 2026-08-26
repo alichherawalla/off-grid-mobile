@@ -537,7 +537,7 @@ describe('remoteServerDiscovery integration', () => {
   // =========================================================================
 
   describe('gateway kind filtering', () => {
-    it('keeps only chat/vision models and drops image, speech, and transcription', async () => {
+    it('keeps chat/vision as text and image as image; drops speech and transcription', async () => {
       addServer({ id: 'srv-gw', endpoint: 'http://192.168.1.44:7878' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
@@ -562,8 +562,10 @@ describe('remoteServerDiscovery integration', () => {
       const models = await useRemoteServerStore.getState().discoverModels('srv-gw');
 
       const ids = models.map((m) => m.id).sort((a, b) => a.localeCompare(b));
-      expect(ids).toEqual(['gemma-3', 'qwen3-vl']);
-      expect(models.some((m) => m.id === 'sdxl')).toBe(false);
+      expect(ids).toEqual(['gemma-3', 'qwen3-vl', 'sdxl']);
+      // Image models ride the same discovery, tagged so the pickers split on modality.
+      expect(models.find((m) => m.id === 'sdxl')?.modality).toBe('image');
+      expect(models.find((m) => m.id === 'gemma-3')?.modality).toBe('text');
       expect(models.some((m) => m.id === 'kokoro')).toBe(false);
       expect(models.some((m) => m.id === 'whisper-base')).toBe(false);
     });

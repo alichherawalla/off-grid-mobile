@@ -415,7 +415,8 @@ describe('useHomeScreen', () => {
         discoveredModels: { 'server-1': [remoteImgModel] },
         activeRemoteTextModelId: null,
         activeRemoteImageModelId: 'img-remote-1',
-        activeServerId: 'server-1',
+        activeRemoteImageServerId: 'server-1',
+        activeServerId: null,
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       expect(result.current.activeImageModel).toEqual(remoteImgModel);
