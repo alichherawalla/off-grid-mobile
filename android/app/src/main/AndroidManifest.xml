@@ -44,6 +44,8 @@
          the app is backgrounded / the screen is off (WorkManager foreground worker). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Personal Mesh keeps a live local-network connection to paired devices. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <!-- Android 13+ needs this to SHOW the ongoing download notification (requested at runtime). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -132,7 +134,7 @@
           android:name="ai.offgridmobile.sync.MeshResidencyService"
           android:enabled="true"
           android:exported="false"
-          android:foregroundServiceType="dataSync" />
+          android:foregroundServiceType="connectedDevice" />
 
     </application>
 </manifest>

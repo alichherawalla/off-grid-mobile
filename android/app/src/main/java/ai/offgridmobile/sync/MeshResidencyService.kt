@@ -15,9 +15,9 @@ import androidx.core.app.NotificationCompat
  * Keeps the Personal Mesh reachable while Off Grid is not in the foreground.
  *
  * Without this, Android suspends the process and mDNS discovery, the TCP listener and any in-flight
- * transfer stop, while the other device still shows this one as connected. A dataSync foreground
- * service is the only way to hold those sockets open, and it comes with a notification the user can
- * see - which is the honest trade: background reachability is visible, never silent.
+ * transfer stop, while the other device still shows this one as connected. Android classifies this
+ * live local-device connection as connectedDevice work. That type is not subject to dataSync's
+ * six-hour budget. The ongoing notification keeps background reachability visible, never silent.
  */
 class MeshResidencyService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
@@ -35,7 +35,7 @@ class MeshResidencyService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                FOREGROUND_SERVICE_TYPE,
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -45,6 +45,8 @@ class MeshResidencyService : Service() {
     companion object {
         const val CHANNEL_ID = "offgrid-personal-mesh"
         const val NOTIFICATION_ID = 4711
+        const val FOREGROUND_SERVICE_TYPE =
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
 
         /**
          * Ensure the channel exists before the first foreground start.
