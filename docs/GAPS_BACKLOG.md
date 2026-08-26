@@ -12,6 +12,22 @@ Verdict legend:
 
 ---
 
+## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
+
+**Verdict: instrument-and-revisit.**
+
+The Pro-expiry teardown stops audio, removes the voice download provider, and releases the TTS
+engine. However, a Kokoro asset fetch that is already active continues inside the
+`react-native-executorch` fetcher because that external API has no abort or cancel operation.
+`pro/audio/ttsDownloadProvider.ts` records this boundary as `cancel: false`; expiry can prevent new
+paid work, but it cannot stop the active native download or its remaining disk writes.
+
+Revisit when the native fetcher exposes cancellation, or put voice-model transfer behind an app-owned
+cancellable downloader. The acceptance case is that exact Pro expiry aborts an active voice-model
+network request and no download progress or file write occurs after access closes.
+
+---
+
 ## Android voice session can lose playback or transcription - 2026-08-24
 
 **Verdict: instrument-and-revisit.**

@@ -163,6 +163,7 @@ describe('two devices agreeing about a shared licence', () => {
       key: FULL_LICENCE_KEY,
       entitlementId: fullLicenceId,
       expiry: null,
+      tier: null,
       verifiedAt: 1_700_000_000_000,
     });
   }
@@ -212,6 +213,7 @@ describe('two devices agreeing about a shared licence', () => {
       key: LICENCE_KEY,
       entitlementId: licenceId,
       expiry: null,
+      tier: null,
       verifiedAt: 1_700_000_000_000,
     });
   }

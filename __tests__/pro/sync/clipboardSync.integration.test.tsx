@@ -203,6 +203,53 @@ describe('mobile clipboard Sync journey', () => {
     jest.restoreAllMocks();
   });
 
+  it('rejects remote clipboard text as soon as the entitlement closes', async () => {
+    const nativeClipboard = new ClipboardBoundary();
+    let receiveRemote:
+      | ((deviceId: string, channel: string, data: unknown) => void)
+      | undefined;
+    const service = new MobileClipboardSyncService({
+      nativeClipboard,
+      preferences: new ClipboardPreferences(),
+      localDevice: async () => device('this-phone', 'ios'),
+      transport: {
+        sendApp: () => true,
+        connectedDeviceIds: () => ['paired-mac'],
+        thisDeviceName: () => 'This phone',
+        deviceName: () => 'Paired Mac',
+        onAppMessage: listener => {
+          receiveRemote = listener;
+          return () => {
+            receiveRemote = undefined;
+          };
+        },
+      },
+      now: () => BASE_TIME,
+    });
+    service.setEntitlementActive(true);
+    await service.setEnabled(true);
+    receiveRemote?.('paired-mac', CLIPBOARD_CHANNEL, {
+      t: 'text',
+      text: 'arrived before expiry',
+      ts: BASE_TIME,
+    });
+    await waitFor(() =>
+      expect(nativeClipboard.writes).toEqual(['arrived before expiry']),
+    );
+
+    service.setEntitlementActive(false);
+    receiveRemote?.('paired-mac', CLIPBOARD_CHANNEL, {
+      t: 'text',
+      text: 'arrived after expiry',
+      ts: BASE_TIME + 1,
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(nativeClipboard.writes).toEqual(['arrived before expiry']);
+    expect(service.enabled()).toBe(false);
+    await service.stop();
+  });
+
   it('syncs opted-in native clipboard text once over the encrypted app channel', async () => {
     const tcpModule = createNativeTcpBoundary() as RnTcpModule;
     const mobileDevice = device('mobile-clipboard', 'ios');
