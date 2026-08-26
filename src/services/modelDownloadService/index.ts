@@ -58,7 +58,7 @@ class ModelDownloadService {
     this.providerUnsubs.get(provider.modelType)?.();
     // Re-registering: forget this type's last-seen statuses so the next list logs
     // its downloads as 'new' rather than churning gone/new against stale ids.
-    for (const id of [...this.lastStatus.keys()]) {
+    for (const id of this.lastStatus.keys()) {
       if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
     }
     this.providers.set(provider.modelType, provider);
@@ -71,7 +71,7 @@ class ModelDownloadService {
       this.providerUnsubs.get(provider.modelType)?.();
       this.providerUnsubs.delete(provider.modelType);
       this.providers.delete(provider.modelType);
-      for (const id of [...this.lastStatus.keys()]) {
+      for (const id of this.lastStatus.keys()) {
         if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
       }
       logger.log(`[DL-SM] provider unregistered type=${provider.modelType}`);
@@ -158,7 +158,7 @@ class ModelDownloadService {
       }
     }
     // Forget downloads that disappeared (removed) so a re-add logs as 'new' again.
-    for (const id of [...this.lastStatus.keys()]) {
+    for (const id of this.lastStatus.keys()) {
       if (!seen.has(id)) {
         logger.log(`[DL-SM] ${id} ${this.lastStatus.get(id)} → gone (removed)`);
         this.lastStatus.delete(id);

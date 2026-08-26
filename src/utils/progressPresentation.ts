@@ -34,6 +34,16 @@ export function formatByteRate(bytesPerSecond: number | undefined): string {
   return `${Math.round(bytesPerSecond)} B/s`;
 }
 
+function formatByteProgress(progress: ProgressPresentation): string | undefined {
+  if (progress.totalBytes !== undefined) {
+    return `${formatBytes(progress.currentBytes)} / ${formatBytes(progress.totalBytes)}`;
+  }
+  if (progress.currentBytes > 0) {
+    return formatBytes(progress.currentBytes);
+  }
+  return undefined;
+}
+
 /**
  * Thin Mobile rendering adapter over the shared finite progress contract.
  *
@@ -47,12 +57,7 @@ export function presentProgress(input: ProgressLike): MobileProgressPresentation
     progress.percentage === undefined
       ? undefined
       : `${Math.round(progress.percentage)}%`;
-  const bytesText =
-    progress.totalBytes !== undefined
-      ? `${formatBytes(progress.currentBytes)} / ${formatBytes(progress.totalBytes)}`
-      : progress.currentBytes > 0
-        ? formatBytes(progress.currentBytes)
-        : undefined;
+  const bytesText = formatByteProgress(progress);
   const rateText = formatByteRate(progress.bytesPerSecond);
   return {
     progress,
