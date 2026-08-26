@@ -130,14 +130,12 @@ jobs:
           # against dependencies nobody committed. The drift it papered over was real (five packages committed to
           # shared without regenerating its lock) and is fixed at the source; if it recurs, this should stop.
           npm --prefix ../shared ci
-          # Both packages this app consumes, because npm resolves each file: dep to its dist/ (jest
-          # reads src/, but tsc and metro read dist/). rag was never built at all before.
+          # Build every shared package this app consumes, because npm resolves each file: dependency
+          # to its dist/ (Jest reads src/, but TypeScript and Metro read dist/).
           npm --prefix ../shared/packages/sync run build
           npm --prefix ../shared/packages/rag run build
-          # speech too. It is a file: dep like the other two and six src files import it, but it was
-          # never built here - so every gate failed on "Cannot find module '@offgrid/speech'" (1966
-          # errors in one run) long before it reached anything real.
           npm --prefix ../shared/packages/speech run build
+          npm --prefix ../shared/packages/ui run build
 
       - name: Install dependencies
         id: install
