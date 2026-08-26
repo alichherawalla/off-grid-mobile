@@ -53,6 +53,30 @@ export { computePendingSettings } from './pendingSettings';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
+type RemoteImageModelSlice = ReturnType<
+  typeof useRemoteServerStore.getState
+>;
+
+const selectActiveRemoteImageModel = (
+  state: RemoteImageModelSlice,
+): { id: string; name: string } | null =>
+  state.activeRemoteImageModelId && state.activeRemoteImageServerId
+    ? (state.discoveredModels[state.activeRemoteImageServerId] || []).find(
+        m => m.id === state.activeRemoteImageModelId,
+      ) ?? null
+    : null;
+
+/** One answer to "is an image engine selected": the remote desktop model counts
+ *  exactly like a local one - the same store selection the generation service
+ *  routes on, so the chat router and the engine can never disagree. */
+function composeActiveImageModel(
+  local: { id: string; name: string } | undefined,
+  remote: { id: string; name: string } | null,
+): { id: string; name: string; isRemote?: true } | undefined {
+  if (local) return local;
+  return remote ? { id: remote.id, name: remote.name, isRemote: true } : undefined;
+}
+
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<ChatScreenRouteProp>();
@@ -189,8 +213,10 @@ export const useChatScreen = () => {
   const activeProject = effectiveProjectId
     ? getProject(effectiveProjectId)
     : null;
-  const activeImageModel = downloadedImageModels.find(
-    m => m.id === activeImageModelId,
+  const activeRemoteImageModel = useRemoteServerStore(selectActiveRemoteImageModel);
+  const activeImageModel = composeActiveImageModel(
+    downloadedImageModels.find(m => m.id === activeImageModelId),
+    activeRemoteImageModel,
   );
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
