@@ -19,6 +19,18 @@ import { render, screen } from '@testing-library/react-native';
 
 jest.mock('react-native-executorch', () => ({
   initExecutorch: jest.fn(),
+  models: {
+    text_to_speech: {
+      kokoro: {
+        en_us: {
+          heart: () => ({
+            voiceSource: 'https://example.test/af_heart.bin',
+            phonemizerConfig: { lang: 'en-us' },
+          }),
+        },
+      },
+    },
+  },
   useTextToSpeech: jest.fn(() => ({
     isReady: true,
     downloadProgress: 1,

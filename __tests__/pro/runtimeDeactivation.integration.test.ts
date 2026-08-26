@@ -1,33 +1,11 @@
-const mockListeners = new Set<
-  (state: { active: boolean }, previous: { active: boolean }) => void
->();
-let mockAccessState = { active: true };
 const mockClipboardEntitlement = jest.fn();
+const mockEmailCalendarEntitlement = jest.fn();
 const mockDisconnectServer = jest.fn();
 const mockAudioCleanup = jest.fn();
 const mockGrantCleanup = jest.fn();
 const mockReconcileCleanup = jest.fn();
+let mockLicenseInfoListener: ((info: { isPro: boolean }) => void) | undefined;
 
-function mockSetAccess(active: boolean): void {
-  const previous = mockAccessState;
-  mockAccessState = { active };
-  for (const listener of mockListeners) listener(mockAccessState, previous);
-}
-
-jest.mock('@offgrid/core/stores/appStore', () => ({
-  useAppStore: {
-    getState: () => mockAccessState,
-    subscribe: (
-      listener: (state: { active: boolean }, previous: { active: boolean }) => void,
-    ) => {
-      mockListeners.add(listener);
-      return () => mockListeners.delete(listener);
-    },
-  },
-}));
-jest.mock('@offgrid/core/stores/proAccessSlice', () => ({
-  selectHasProAccess: (state: { active: boolean }) => state.active,
-}));
 jest.mock('@offgrid/core/bootstrap/slotRegistry', () => ({
   SLOTS: {
     appRoot: 'app.root',
@@ -52,6 +30,7 @@ jest.mock('../../pro/mcp/McpToolExtension', () => ({
 }));
 jest.mock('../../pro/tools/EmailCalendarExtension', () => ({
   EmailCalendarExtension: { id: 'email-calendar' },
+  setEmailCalendarEntitlementActive: mockEmailCalendarEntitlement,
 }));
 jest.mock('../../pro/audio', () => ({
   activateAudio: (options: {
@@ -59,10 +38,18 @@ jest.mock('../../pro/audio', () => ({
     registerSlot: (name: string, component: () => null) => void;
     registerHook: (name: string, hook: () => void) => void;
   }) => {
-    options.registerScreen({ name: 'AudioSettings', component: () => null });
-    options.registerSlot('audio.slot', () => null);
-    options.registerHook('audio.hook', () => undefined);
-    return mockAudioCleanup;
+    const disposeScreen = options.registerScreen({
+      name: 'AudioSettings',
+      component: () => null,
+    });
+    const disposeSlot = options.registerSlot('audio.slot', () => null);
+    const disposeHook = options.registerHook('audio.hook', () => undefined);
+    return () => {
+      disposeHook();
+      disposeSlot();
+      disposeScreen();
+      mockAudioCleanup();
+    };
   },
 }));
 
@@ -146,6 +133,10 @@ jest.mock('../../pro/sync/entitlementActivation', () => ({
 }));
 jest.mock('../../pro/licensing/proLicenseProvider', () => ({
   proLicenseProvider: {},
+  onProLicenseInfoChanged: jest.fn((listener: (info: { isPro: boolean }) => void) => {
+    mockLicenseInfoListener = listener;
+    return jest.fn();
+  }),
 }));
 
 describe('the paid mobile runtime after live entitlement loss', () => {
@@ -184,13 +175,16 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     };
     const pro = require('../../pro') as typeof import('../../pro');
 
+    pro.configureProEntitlementProvider(jest.fn());
     pro.activate(options as Parameters<typeof pro.activate>[0]);
     expect(mockClipboardEntitlement).toHaveBeenLastCalledWith(true);
+    expect(mockEmailCalendarEntitlement).toHaveBeenLastCalledWith(true);
 
-    mockSetAccess(false);
+    mockLicenseInfoListener?.({ isPro: false });
     for (let index = 0; index < 20; index += 1) await Promise.resolve();
 
     expect(mockClipboardEntitlement).toHaveBeenLastCalledWith(false);
+    expect(mockEmailCalendarEntitlement).toHaveBeenLastCalledWith(false);
     expect(toolDisposers).toHaveLength(2);
     expect(toolDisposers.every(dispose => dispose.mock.calls.length === 1)).toBe(true);
     expect(disposeByScreen.get('McpServers')).toHaveBeenCalledTimes(1);
