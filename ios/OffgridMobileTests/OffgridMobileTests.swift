@@ -46,11 +46,12 @@ final class BlobReceiveWindowTests: XCTestCase {
 
 final class BlobChannelUploaderDeadlineTests: XCTestCase {
   func testAReachedNetworkSignalContinues() {
-    let signal = DispatchSemaphore(value: 1)
+    let signal = DispatchSemaphore(value: 0)
+    signal.signal()
 
     XCTAssertNoThrow(
       try BlobChannelUploader.waitForSignal(
-        signal, timeout: .milliseconds(0), message: "should not time out"))
+        signal, timeout: .milliseconds(1), message: "should not time out"))
   }
 
   func testAnUnreachedNetworkSignalFailsInsteadOfPretendingToContinue() {
