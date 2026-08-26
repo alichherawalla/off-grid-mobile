@@ -34,9 +34,9 @@ jest.mock('../../pro/tools/EmailCalendarExtension', () => ({
 }));
 jest.mock('../../pro/audio', () => ({
   activateAudio: (options: {
-    registerScreen: (screen: { name: string; component: () => null }) => void;
-    registerSlot: (name: string, component: () => null) => void;
-    registerHook: (name: string, hook: () => void) => void;
+    registerScreen: (screen: { name: string; component: () => null }) => () => void;
+    registerSlot: (name: string, component: () => null) => () => void;
+    registerHook: (name: string, hook: () => void) => () => void;
   }) => {
     const disposeScreen = options.registerScreen({
       name: 'AudioSettings',
@@ -145,7 +145,6 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     const disposeBySlot = new Map<string, jest.Mock>();
     const disposeByHook = new Map<string, jest.Mock>();
     const toolDisposers: jest.Mock[] = [];
-    const settingsDisposers: jest.Mock[] = [];
     const options = {
       registerToolExtension: jest.fn(() => {
         const dispose = jest.fn();
@@ -157,11 +156,7 @@ describe('the paid mobile runtime after live entitlement loss', () => {
         disposeByScreen.set(screen.name, dispose);
         return dispose;
       }),
-      registerSettingsSection: jest.fn(() => {
-        const dispose = jest.fn();
-        settingsDisposers.push(dispose);
-        return dispose;
-      }),
+      registerSettingsSection: jest.fn(() => jest.fn()),
       registerSlot: jest.fn((name: string) => {
         const dispose = jest.fn();
         disposeBySlot.set(name, dispose);
