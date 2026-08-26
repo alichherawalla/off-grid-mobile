@@ -16,7 +16,7 @@ import logger from '../utils/logger';
  * nothing - polling resumes and still finds the image.
  */
 
-export interface RemoteImageRequest {
+interface RemoteImageRequest {
   /** Server base endpoint, e.g. http://192.168.1.50:7878 */
   endpoint: string;
   /** Optional bearer (the per-device token when the server is a paired Mac). */
@@ -32,7 +32,7 @@ export interface RemoteImageRequest {
   height: number;
 }
 
-export interface RemoteImageProgress {
+interface RemoteImageProgress {
   stage?: string;
   step?: number;
   total?: number;
