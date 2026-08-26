@@ -1,18 +1,20 @@
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
+import { remoteImageGeneratorService } from './remoteImageGenerator';
+import {
+  resolveRemoteImageEngine,
+  runRemoteGenerationAndSave,
+} from './imageGenerationRemote';
+import { ensureImageModelLoaded } from './imageGenerationLocalLoad';
 import { activeModelService } from './activeModelService';
 import { useAppStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
-import {
-  SWEET_SPOT_SIZE,
-  DEFAULT_IMAGE_GUIDANCE,
-  defaultImageSteps,
-} from '../utils/imageGenAdvice';
 import { Platform } from 'react-native';
 import {
   generationProgressStatus,
   imagePhaseTransitionLog,
+  resolveGenerationNumbers,
 } from './imageGenerationHelpers';
 import { enhanceImagePrompt } from './imagePromptEnhancement';
 import {
@@ -27,7 +29,6 @@ import {
   ImageGenerationState,
   ImageGenerationListener,
   GenerateImageParams,
-  ActiveImageModel,
   RunGenerationOptions,
 } from './imageGenerationTypes';
 
@@ -190,48 +191,6 @@ class ImageGenerationService {
     );
   }
 
-  private async _ensureImageModelLoaded(
-    activeImageModelId: string | null,
-    activeImageModel: ActiveImageModel,
-    opts: { desiredThreads: number; override?: boolean },
-  ): Promise<boolean> {
-    const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
-    const loadedPath = await onnxImageGeneratorService.getLoadedModelPath();
-    const loadedThreads = onnxImageGeneratorService.getLoadedThreads();
-    const needsThreadReload =
-      loadedThreads == null || loadedThreads !== opts.desiredThreads;
-    if (
-      isImageModelLoaded &&
-      loadedPath === activeImageModel.modelPath &&
-      !needsThreadReload
-    )
-      return true;
-    if (!activeImageModelId) {
-      this._fail('No image model selected');
-      return false;
-    }
-    try {
-      this.updateState({
-        phase: 'loading',
-        status: `Loading ${activeImageModel.name}...`,
-      });
-      await activeModelService.loadImageModel(
-        activeImageModelId,
-        undefined,
-        opts.override ? { override: true } : undefined,
-      );
-      return true;
-    } catch (error: any) {
-      // Pass the TYPED error as `cause` — an OverridableMemoryError here is what lets
-      // the failure card offer "Load Anyway". Stringifying it (as before) hid it.
-      this._fail(
-        `Failed to load image model: ${error?.message || 'Unknown error'}`,
-        { cause: error },
-      );
-      return false;
-    }
-  }
-
   private async _runGenerationAndSave(
     opts: RunGenerationOptions,
   ): Promise<GeneratedImage | null> {
@@ -371,27 +330,14 @@ class ImageGenerationService {
     const activeImageModel = downloadedImageModels.find(
       m => m.id === activeImageModelId,
     );
-    if (!activeImageModel) return this._fail('No image model selected');
+    // A remote image model (the desktop gateway) is an engine like the local one.
+    const remote = resolveRemoteImageEngine();
+    if (!activeImageModel && !remote) return this._fail('No image model selected');
 
     const messageId = params.conversationId ? generateId() : null;
 
-    const steps =
-      params.steps || settings.imageSteps || defaultImageSteps(Platform.OS);
-    const guidanceScale =
-      params.guidanceScale ||
-      settings.imageGuidanceScale ||
-      DEFAULT_IMAGE_GUIDANCE;
-    // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
-    // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
-    // this guards the persisted-value + programmatic paths so the user never sees garbage.
-    const imageWidth = Math.max(
-      SWEET_SPOT_SIZE,
-      settings.imageWidth || SWEET_SPOT_SIZE,
-    );
-    const imageHeight = Math.max(
-      SWEET_SPOT_SIZE,
-      settings.imageHeight || SWEET_SPOT_SIZE,
-    );
+    const { steps, guidanceScale, imageWidth, imageHeight } =
+      resolveGenerationNumbers(params, settings, Platform.OS);
 
     this.updateState({
       phase: settings.enhanceImagePrompts ? 'enhancing' : 'loading',
@@ -436,10 +382,43 @@ class ImageGenerationService {
       result: null,
     });
 
-    const loaded = await this._ensureImageModelLoaded(
-      activeImageModelId,
-      activeImageModel,
-      { desiredThreads: settings.imageThreads ?? 4, override: opts?.override },
+    if (remote) {
+      return runRemoteGenerationAndSave(
+        {
+          updateState: partial => this.updateState(partial),
+          resetState: () => this.resetState(),
+          fail: message => {
+            this._fail(message);
+          },
+          isCancelRequested: () => this.cancelRequested,
+        },
+        {
+          params,
+          enhancedPrompt,
+          remote,
+          messageId: this.state.messageId,
+          steps,
+          guidanceScale,
+          imageWidth,
+          imageHeight,
+        },
+      );
+    }
+
+    if (!activeImageModel) return this._fail('No image model selected');
+    const loaded = await ensureImageModelLoaded(
+      {
+        updateState: partial => this.updateState(partial),
+        fail: (message, failOpts) => {
+          this._fail(message, failOpts);
+        },
+      },
+      {
+        activeImageModelId,
+        activeImageModel,
+        desiredThreads: settings.imageThreads ?? 4,
+        override: opts?.override,
+      },
     );
     if (!loaded) return null;
     if (this.cancelRequested) {
@@ -472,6 +451,8 @@ class ImageGenerationService {
       error: null,
     });
     try {
+      // Both engines: the local native pipeline and any in-flight remote poll.
+      await remoteImageGeneratorService.cancelGeneration();
       await onnxImageGeneratorService.cancelGeneration();
     } catch {
       /* Ignore */
