@@ -15,6 +15,7 @@ import { ToolsScreen } from '../../../src/screens/ToolsScreen';
 import { AVAILABLE_TOOLS } from '../../../src/services/tools/registry';
 import { registerScreen, _clearScreensForTesting } from '../../../src/navigation/screenRegistry';
 import { PRO_TOOLS_SCREEN } from '../../../src/hooks/useIsProActive';
+import { useAppStore } from '../../../src/stores/appStore';
 
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
@@ -69,6 +70,12 @@ describe('ToolsScreen', () => {
     jest.clearAllMocks();
     _clearScreensForTesting();
     mockEnabledTools = ['web_search', 'calculator'];
+    useAppStore.setState({
+      hasRegisteredPro: false,
+      hasSavedProCredential: false,
+      isProActive: false,
+      proDeviceAdmission: 'unknown',
+    });
   });
   afterEach(() => {
     _clearScreensForTesting();
@@ -95,6 +102,12 @@ describe('ToolsScreen', () => {
   });
 
   it('routes a pro user straight to the Pro Tools screen', () => {
+    useAppStore.setState({
+      hasRegisteredPro: true,
+      hasSavedProCredential: true,
+      isProActive: true,
+      proDeviceAdmission: 'active',
+    });
     registerScreen({ name: PRO_TOOLS_SCREEN, component: () => null });
     const { getByTestId } = render(<ToolsScreen />);
     fireEvent.press(getByTestId('tools-pro-tools'));

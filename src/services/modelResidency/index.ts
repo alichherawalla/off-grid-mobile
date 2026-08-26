@@ -275,6 +275,11 @@ class ModelResidencyManager {
     this.residents.set(spec.key, { ...spec, lastUsedAt: now, unload });
   }
 
+  /** Forget a capability-owned resident after that capability has released its native engine. */
+  unregister(key: string): void {
+    this.residents.delete(key);
+  }
+
   /**
    * Make `spec` resident, evicting others to fit the budget. `load` runs only
    * if the model isn't already resident; `unload` is stored for future eviction.

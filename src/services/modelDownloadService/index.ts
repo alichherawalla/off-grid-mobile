@@ -54,7 +54,7 @@ class ModelDownloadService {
   private selfRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Register a domain's provider. Re-registering replaces (and re-subscribes). */
-  register(provider: DownloadProvider): void {
+  register(provider: DownloadProvider): () => void {
     this.providerUnsubs.get(provider.modelType)?.();
     // Re-registering: forget this type's last-seen statuses so the next list logs
     // its downloads as 'new' rather than churning gone/new against stale ids.
@@ -66,6 +66,17 @@ class ModelDownloadService {
     this.providerUnsubs.set(provider.modelType, unsub);
     logger.log(`[DL-SM] provider registered type=${provider.modelType}`);
     this.onProviderChange(); // capture/log this provider's initial state
+    return () => {
+      if (this.providers.get(provider.modelType) !== provider) return;
+      this.providerUnsubs.get(provider.modelType)?.();
+      this.providerUnsubs.delete(provider.modelType);
+      this.providers.delete(provider.modelType);
+      for (const id of [...this.lastStatus.keys()]) {
+        if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
+      }
+      logger.log(`[DL-SM] provider unregistered type=${provider.modelType}`);
+      this.onProviderChange();
+    };
   }
 
   /**
@@ -135,10 +146,13 @@ class ModelDownloadService {
       seen.add(d.id);
       const prev = this.lastStatus.get(d.id);
       if (prev !== d.status) {
+        const errorSuffix = d.error ? ` error="${d.error}"` : '';
         logger.log(
-          `[DL-SM] ${d.id} ${prev ?? 'new'} → ${d.status}` +
-          ` bytes=${d.bytesDownloaded}/${d.sizeBytes} progress=${(d.progress * 100).toFixed(0)}%` +
-          `${d.error ? ` error="${d.error}"` : ''}`,
+          `[DL-SM] ${d.id} ${prev ?? 'new'} → ${d.status} bytes=${
+            d.bytesDownloaded
+          }/${d.sizeBytes} progress=${(d.progress * 100).toFixed(
+            0,
+          )}%${errorSuffix}`,
         );
         this.lastStatus.set(d.id, d.status);
       }
