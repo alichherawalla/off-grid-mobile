@@ -1562,11 +1562,12 @@ describe('generationService', () => {
   });
 
   // ============================================================================
-  // isUsingRemoteProvider — prefers local model when loaded
+  // isUsingRemoteProvider — explicit remote selection is authoritative
   // ============================================================================
-  describe('isUsingRemoteProvider — local model wins when loaded', () => {
+  describe('isUsingRemoteProvider — selected remote model wins', () => {
     const mockRemoteProvider4 = {
       id: 'remote-srv',
+      capabilities: { supportsThinking: true },
       isReady: jest.fn().mockResolvedValue(true),
       generate: jest.fn(),
       stopGeneration: jest.fn().mockResolvedValue(undefined),
@@ -1581,7 +1582,7 @@ describe('generationService', () => {
       });
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => true);
       mockedProviderRegistry.getProvider.mockReturnValue(mockRemoteProvider4 as any);
-      // Local model IS loaded — service should prefer local
+      // A resident local model must not replace the explicit remote selection.
       mockedLlmService.isModelLoaded.mockReturnValue(true);
     });
 
@@ -1590,7 +1591,7 @@ describe('generationService', () => {
       (mockedProviderRegistry as any).hasProvider = jest.fn(() => false);
     });
 
-    it('uses local LLM when local model is loaded even if remote server is configured', async () => {
+    it('uses the selected remote model even when a local model is resident', async () => {
       const convId = setupWithConversation();
       mockedLlmService.generateResponse.mockImplementation(async (_msgs, { onStream: cb }: any = {}) => {
         cb?.({ content: 'hello' });
@@ -1601,9 +1602,8 @@ describe('generationService', () => {
         createMessage({ role: 'user', content: 'Hi' }),
       ]);
 
-      // Local generateResponse should have been called, not remote provider
-      expect(mockedLlmService.generateResponse).toHaveBeenCalled();
-      expect(mockRemoteProvider4.generate).not.toHaveBeenCalled();
+      expect(mockRemoteProvider4.generate).toHaveBeenCalled();
+      expect(mockedLlmService.generateResponse).not.toHaveBeenCalled();
     });
   });
 
