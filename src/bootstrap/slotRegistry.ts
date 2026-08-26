@@ -26,10 +26,15 @@ function emitChange(): void {
 export function registerSlot(
   name: string,
   component: ComponentType<any>,
-): void {
-  if (slots[name] === component) return; // no-op re-register (dev Fast Refresh)
+): () => void {
+  if (slots[name] === component) return () => undefined; // no-op re-register (dev Fast Refresh)
   slots[name] = component;
   emitChange();
+  return () => {
+    if (slots[name] !== component) return;
+    delete slots[name];
+    emitChange();
+  };
 }
 
 export function getSlot(name: string): ComponentType<any> | undefined {

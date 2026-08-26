@@ -12,8 +12,11 @@ type HookFn = (...args: any[]) => any;
 
 const hooks: Record<string, HookFn> = {};
 
-export function registerHook(name: string, fn: HookFn): void {
+export function registerHook(name: string, fn: HookFn): () => void {
   hooks[name] = fn;
+  return () => {
+    if (hooks[name] === fn) delete hooks[name];
+  };
 }
 
 /** Call a hook if registered; returns its result, or undefined when absent. */

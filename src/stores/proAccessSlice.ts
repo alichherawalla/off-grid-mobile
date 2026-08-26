@@ -10,6 +10,9 @@ export interface ProAccessSlice {
   /** Paid features are available through a credential or Debug developer access. */
   isProActive: boolean;
   setProActive: (value: boolean) => void;
+  /** A saved timed credential reached its local deadline and must show the purchase route. */
+  hasExpiredProCredential: boolean;
+  setHasExpiredProCredential: (value: boolean) => void;
   /**
    * What the authoritative licensed-device roster last said about THIS device, in three states.
    *
@@ -46,6 +49,8 @@ export function createProAccessSlice(set: SetProAccessState): ProAccessSlice {
     setHasSavedProCredential: value => set({ hasSavedProCredential: value }),
     isProActive: false,
     setProActive: value => set({ isProActive: value }),
+    hasExpiredProCredential: false,
+    setHasExpiredProCredential: value => set({ hasExpiredProCredential: value }),
     proDeviceAdmission: 'unknown',
     setProDeviceAdmission: value => set({ proDeviceAdmission: value }),
     setProDeviceActive: value =>
@@ -70,8 +75,9 @@ export function createProAccessSlice(set: SetProAccessState): ProAccessSlice {
  */
 export function selectHasProAccess(state: ProAccessSlice): boolean {
   return hasProAccess({
-    hasCredential:
-      state.hasSavedProCredential || state.hasRegisteredPro || state.isProActive,
+    // A saved key is not proof of current access. The provider projects only a
+    // locally unexpired credential into hasRegisteredPro/isProActive.
+    hasCredential: state.hasRegisteredPro || state.isProActive,
     admission: state.proDeviceAdmission,
   });
 }

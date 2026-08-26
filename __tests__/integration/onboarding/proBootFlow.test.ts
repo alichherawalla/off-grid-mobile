@@ -134,6 +134,30 @@ describe('opening the app as a Pro user, and as a free one', () => {
     expect(storeState().isProActive).toBe(false);
   });
 
+  it('does not boot Pro from an expired saved credential', async () => {
+    vault.set(
+      'off-grid-pro-license',
+      JSON.stringify({
+        isPro: true,
+        key: LICENCE_KEY,
+        licenseId: licenceId,
+        expiry: new Date(Date.now() - 1).toISOString(),
+        verifiedAt: Date.now() - 10_000,
+      }),
+    );
+
+    const active = await launch();
+
+    expect(active).toBe(false);
+    expect(activate).not.toHaveBeenCalled();
+    expect(storeState()).toMatchObject({
+      isProActive: false,
+      hasRegisteredPro: false,
+      hasSavedProCredential: true,
+      hasExpiredProCredential: true,
+    });
+  });
+
   it('switches the licensed half on for a phone that already holds one', async () => {
     // A Pro phone holds a seat on the licence as well as a key in its keychain. Without the seat the
     // launch-time check correctly withdraws Pro - a key that no longer has a device registered against

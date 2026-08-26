@@ -11,6 +11,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
+import {
+  appNavigationRef,
+  useProExpiryRedirect,
+} from './src/navigation/useProExpiryRedirect';
 import { useTheme } from './src/theme';
 import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
@@ -35,7 +39,6 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 LogBox.ignoreAllLogs(); // Suppress all logs
 
 let stopStartupProbe: (() => void) | null = null;
-
 // Dev-only: mirror logger output into the in-app Debug Logs viewer. The whole block
 // is behind __DEV__, so release builds keep main's no-op logger (zero logging cost).
 if (__DEV__) {
@@ -85,6 +88,7 @@ function App() {
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
   // it live — no restart needed.
   const AppRoot = useSlot(SLOTS.appRoot);
+  const applyPendingProRedirect = useProExpiryRedirect();
   const [isInitializing, setIsInitializing] = useState(true);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
@@ -365,6 +369,8 @@ function App() {
         <SystemBars style={isDark ? 'light' : 'dark'} />
         {AppRoot ? <AppRoot /> : null}
         <NavigationContainer
+          ref={appNavigationRef}
+          onReady={applyPendingProRedirect}
           theme={{
             dark: isDark,
             colors: {
