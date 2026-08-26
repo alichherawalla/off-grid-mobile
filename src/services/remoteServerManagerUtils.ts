@@ -136,25 +136,11 @@ export async function setActiveRemoteImageModelImpl(
   modelId: string,
 ): Promise<void> {
   const store = useRemoteServerStore.getState();
-  store.setActiveServerId(serverId);
-  store.setActiveRemoteImageModelId(modelId);
-
-  let provider = providerRegistry.getProvider(serverId);
-  if (!provider) {
-    const server = store.getServerById(serverId);
-    if (server) {
-      logger.log('[RemoteServerManager] Creating provider for server:', serverId);
-      await createProviderForServerImpl(server);
-      provider = providerRegistry.getProvider(serverId);
-    }
-  }
-
-  if (provider) {
-    await provider.loadModel(modelId);
-  } else {
-    logger.warn('[RemoteServerManager] Could not create provider for server:', serverId);
-  }
-
+  // Only the image selection changes. Never touch activeServerId (that would
+  // re-route TEXT generation to this server) and never provider.loadModel (the
+  // chat provider is shared - loading here overwrote the text model id). The
+  // diffusion engine reads the server record itself at generation time.
+  store.setActiveRemoteImageModel(serverId, modelId);
   logger.log('[RemoteServerManager] Active remote image model set:', serverId, modelId);
 }
 

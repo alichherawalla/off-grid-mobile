@@ -40,6 +40,9 @@ export interface RemoteModel {
   serverId: string;
   /** Model capabilities */
   capabilities: RemoteModelCapabilities;
+  /** What the model generates. Absent = 'text' (the historical default, so
+   *  persisted records from before image support keep working). */
+  modality?: 'text' | 'image';
   /** Model details from provider */
   details?: Record<string, unknown>;
   /** When this model info was last refreshed */

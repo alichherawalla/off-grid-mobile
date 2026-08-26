@@ -173,7 +173,7 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
     store.setActiveServerId(null);
     store.setActiveRemoteTextModelId(null);
-    store.setActiveRemoteImageModelId(null);
+    store.setActiveRemoteImageModel(null, null);
     providerRegistry.setActiveProvider('local');
     logger.log('[RemoteServerManager] Cleared active remote model');
   }

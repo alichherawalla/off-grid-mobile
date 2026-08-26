@@ -254,7 +254,7 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
+        setActiveRemoteImageModel: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
         getModelById: jest.fn().mockReturnValue(null),
       });
@@ -272,7 +272,7 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
+        setActiveRemoteImageModel: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
       });
 
@@ -298,15 +298,20 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
+        setActiveRemoteImageModel: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
       });
 
       await remoteServerManager.setActiveRemoteImageModel('server-123', 'llava');
 
-      expect(useRemoteServerStore.getState().setActiveServerId).toHaveBeenCalledWith('server-123');
-      expect(useRemoteServerStore.getState().setActiveRemoteImageModelId).toHaveBeenCalledWith('llava');
-      expect(mockLoadModel).toHaveBeenCalledWith('llava');
+      // Image selection must not re-route text: no shared activeServerId write, and
+      // no loadModel on the shared chat provider (that overwrote the text model id).
+      expect(useRemoteServerStore.getState().setActiveServerId).not.toHaveBeenCalled();
+      expect(useRemoteServerStore.getState().setActiveRemoteImageModel).toHaveBeenCalledWith(
+        'server-123',
+        'llava',
+      );
+      expect(mockLoadModel).not.toHaveBeenCalled();
     });
   });
 
@@ -316,7 +321,7 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
+        setActiveRemoteImageModel: jest.fn(),
         getServerById: jest.fn().mockReturnValue(null),
       });
 
@@ -324,7 +329,7 @@ describe('remoteServerManager', () => {
 
       expect(useRemoteServerStore.getState().setActiveServerId).toHaveBeenCalledWith(null);
       expect(useRemoteServerStore.getState().setActiveRemoteTextModelId).toHaveBeenCalledWith(null);
-      expect(useRemoteServerStore.getState().setActiveRemoteImageModelId).toHaveBeenCalledWith(null);
+      expect(useRemoteServerStore.getState().setActiveRemoteImageModel).toHaveBeenCalledWith(null, null);
       expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('local');
     });
   });
@@ -684,7 +689,7 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
+        setActiveRemoteImageModel: jest.fn(),
         getServerById: jest.fn().mockReturnValue(mockServer),
         getModelById: jest.fn().mockReturnValue(null),
       });
@@ -697,52 +702,30 @@ describe('remoteServerManager', () => {
     });
   });
 
-  describe('setActiveRemoteImageModel - provider creation', () => {
-    it('should create provider when it does not exist', async () => {
-      const mockLoadModel = jest.fn().mockResolvedValue(undefined);
-      const mockProvider = {
-        loadModel: mockLoadModel,
-        unloadModel: jest.fn(),
-        isModelLoaded: jest.fn().mockReturnValue(true),
-        isReady: jest.fn().mockResolvedValue(true),
-      };
-      const mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
-
-      (providerRegistry.getProvider as jest.Mock)
-        .mockReturnValueOnce(null)
-        .mockReturnValueOnce(mockProvider);
-      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(undefined);
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        setActiveServerId: jest.fn(),
-        setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
-        getServerById: jest.fn().mockReturnValue(mockServer),
-      });
-      (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
-
-      await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
-
-      expect(providerRegistry.registerProvider).toHaveBeenCalled();
-      expect(mockLoadModel).toHaveBeenCalledWith('llava');
-    });
-
-    it('should warn when provider cannot be created', async () => {
-      const _mockServer = { id: 'server-1', name: 'Test', endpoint: 'http://localhost:11434' };
-      const _mockLogger = { warn: jest.fn() };
-      jest.spyOn(console, 'warn').mockImplementation(() => {});
-
+  describe('setActiveRemoteImageModel - no provider involvement', () => {
+    // Image selection is store-only: the chat provider is shared with the text
+    // model, so creating or loading it here overwrote the text model id (the
+    // clobber bug). The diffusion engine reads the server record at generation
+    // time instead.
+    it('never creates or loads the shared chat provider', async () => {
       (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      const setActiveRemoteImageModel = jest.fn();
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         setActiveServerId: jest.fn(),
         setActiveRemoteTextModelId: jest.fn(),
-        setActiveRemoteImageModelId: jest.fn(),
-        getServerById: jest.fn().mockReturnValue(null), // No server found
+        setActiveRemoteImageModel,
+        getServerById: jest.fn().mockReturnValue({
+          id: 'server-1',
+          name: 'Test',
+          endpoint: 'http://localhost:11434',
+        }),
       });
 
       await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
 
-      // No provider created because server not found
+      expect(setActiveRemoteImageModel).toHaveBeenCalledWith('server-1', 'llava');
       expect(providerRegistry.registerProvider).not.toHaveBeenCalled();
+      expect(providerRegistry.getProvider).not.toHaveBeenCalled();
     });
   });
 });

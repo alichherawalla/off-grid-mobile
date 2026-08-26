@@ -41,7 +41,7 @@ const nothingActive = (): void => {
   app.setActiveImageModelId(null);
   const remote = useRemoteServerStore.getState();
   remote.setActiveRemoteTextModelId(null);
-  remote.setActiveRemoteImageModelId(null);
+  remote.setActiveRemoteImageModel(null, null);
 };
 
 beforeEach(() => {
@@ -63,7 +63,7 @@ describe('useEjectAllModels', () => {
     ],
     [
       'a remote image model',
-      (): void => useRemoteServerStore.getState().setActiveRemoteImageModelId('r2'),
+      (): void => useRemoteServerStore.getState().setActiveRemoteImageModel('srv-1', 'r2'),
     ],
   ])('offers the eject when the only thing loaded is %s', (_what, load) => {
     // Each of the four enables it independently. An `||` chain that dropped one would silently strand the user

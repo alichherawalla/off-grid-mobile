@@ -38,8 +38,12 @@ interface RemoteServerState {
 
   /** Active remote text model ID (when using remote for text generation) */
   activeRemoteTextModelId: string | null;
-  /** Active remote image/vision model ID (when using remote for vision) */
+  /** Active remote image-generation model ID (offloads image gen to that server) */
   activeRemoteImageModelId: string | null;
+  /** The server the active remote image model lives on. Its own field - the image
+   *  model must not ride the shared activeServerId, or picking an image model on
+   *  one server would silently re-route text generation on another. */
+  activeRemoteImageServerId: string | null;
 
   // Server CRUD
   addServer: (server: Omit<RemoteServer, 'id' | 'createdAt'>) => string;
@@ -52,7 +56,8 @@ interface RemoteServerState {
 
   // Active remote model selection
   setActiveRemoteTextModelId: (id: string | null) => void;
-  setActiveRemoteImageModelId: (id: string | null) => void;
+  /** Set (or clear, with nulls) the remote image model + the server it lives on. */
+  setActiveRemoteImageModel: (serverId: string | null, modelId: string | null) => void;
   getActiveRemoteTextModel: () => RemoteModel | null;
   getActiveRemoteImageModel: () => RemoteModel | null;
 
@@ -85,6 +90,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       discoveringServerId: null,
       activeRemoteTextModelId: null,
       activeRemoteImageModelId: null,
+      activeRemoteImageServerId: null,
 
       // Server CRUD
       addServer: (serverData) => {
@@ -118,6 +124,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             activeServerId: null,
             activeRemoteTextModelId: null,
             activeRemoteImageModelId: null,
+      activeRemoteImageServerId: null,
           });
         }
         set((prev) => ({
@@ -149,9 +156,15 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         logger.log('[RemoteServer] Active remote text model set to:', id || 'none');
       },
 
-      setActiveRemoteImageModelId: (id) => {
-        set({ activeRemoteImageModelId: id });
-        logger.log('[RemoteServer] Active remote image model set to:', id || 'none');
+      setActiveRemoteImageModel: (serverId, modelId) => {
+        set({
+          activeRemoteImageServerId: modelId ? serverId : null,
+          activeRemoteImageModelId: modelId,
+        });
+        logger.log(
+          '[RemoteServer] Active remote image model set to:',
+          modelId ? `${serverId ?? 'unknown-server'}/${modelId}` : 'none',
+        );
       },
 
       getActiveRemoteTextModel: () => {
@@ -162,9 +175,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       getActiveRemoteImageModel: () => {
-        const { activeRemoteImageModelId, activeServerId, discoveredModels } = get();
-        if (!activeRemoteImageModelId || !activeServerId) return null;
-        const models = discoveredModels[activeServerId] || [];
+        const { activeRemoteImageModelId, activeRemoteImageServerId, discoveredModels } = get();
+        if (!activeRemoteImageModelId || !activeRemoteImageServerId) return null;
+        const models = discoveredModels[activeRemoteImageServerId] || [];
         return models.find((m) => m.id === activeRemoteImageModelId) || null;
       },
 
@@ -305,6 +318,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           serverHealth: {},
           activeRemoteTextModelId: null,
           activeRemoteImageModelId: null,
+      activeRemoteImageServerId: null,
         });
       },
     }),
@@ -316,6 +330,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         activeServerId: state.activeServerId,
         activeRemoteTextModelId: state.activeRemoteTextModelId,
         activeRemoteImageModelId: state.activeRemoteImageModelId,
+        activeRemoteImageServerId: state.activeRemoteImageServerId,
         discoveredModels: state.discoveredModels,
         // Don't persist health status - it should be refreshed
       }),

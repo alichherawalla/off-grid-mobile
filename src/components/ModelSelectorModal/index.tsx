@@ -75,7 +75,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     serverHealth,
     activeRemoteTextModelId,
     activeRemoteImageModelId,
-    setActiveRemoteImageModelId,
+    setActiveRemoteImageModel,
   } = useRemoteServerStore();
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
@@ -108,20 +108,39 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     if (visible) setActiveTab(initialTab);
   }, [visible, initialTab]);
 
-  // Group remote models by server for TextTab — exclude servers known to be offline
-  const remoteTextModels = useMemo(() => {
+  // Group remote models by server — exclude servers known to be offline. One pass,
+  // split by the modality the discovery layer tagged (the single owner of that rule).
+  const remoteModelGroups = useMemo(() => {
     return servers
       .filter(server => serverHealth[server.id]?.isHealthy !== false)
-      .map(server => ({
-        serverId: server.id,
-        serverName: server.name,
-        models: discoveredModels[server.id] || [],
-      })).filter(group => group.models.length > 0);
+      .map(server => {
+        const models = discoveredModels[server.id] || [];
+        return {
+          serverId: server.id,
+          serverName: server.name,
+          text: models.filter(model => model.modality !== 'image'),
+          image: models.filter(model => model.modality === 'image'),
+        };
+      });
   }, [servers, discoveredModels, serverHealth]);
 
-  // Remote image generation models — Ollama/LM Studio don't serve image gen models.
-  // Vision-language models (supportsVision) are text models and belong in the text tab.
-  const remoteVisionModels = useMemo(() => [], []);
+  const remoteTextModels = useMemo(
+    () =>
+      remoteModelGroups
+        .map(({ serverId, serverName, text }) => ({ serverId, serverName, models: text }))
+        .filter(group => group.models.length > 0),
+    [remoteModelGroups],
+  );
+
+  // Remote image-generation models (the desktop gateway tags them kind:'image');
+  // generation offloads to that server, the phone receives the file.
+  const remoteVisionModels = useMemo(
+    () =>
+      remoteModelGroups
+        .map(({ serverId, serverName, image }) => ({ serverId, serverName, models: image }))
+        .filter(group => group.models.length > 0),
+    [remoteModelGroups],
+  );
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
@@ -134,7 +153,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
         onAttemptStart: () => { setIsLoadingImage(true); setLoadingImageModelId(model.id); },
         onAttemptEnd: () => { setIsLoadingImage(false); setLoadingImageModelId(null); },
         onSuccess: () => {
-          setActiveRemoteImageModelId(null); // clear remote selection when selecting local
+          setActiveRemoteImageModel(null, null); // clear remote selection when selecting local
           onSelectImageModel?.(model);
           onSelectionComplete?.();
         },
@@ -147,7 +166,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     setIsLoadingImage(true);
     try {
       await activeModelService.unloadImageModel();
-      setActiveRemoteImageModelId(null);
+      setActiveRemoteImageModel(null, null);
       onUnloadImageModel?.();
     } catch (error) {
       logger.error('Failed to unload image model:', error);
@@ -171,9 +190,14 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     }
   };
 
-  // Handle selecting a remote vision model
+  // Handle selecting a remote image model. Mirrors the remote-text flow: free the
+  // local image model first - generation now runs on the server, so keeping local
+  // diffusion weights resident only costs RAM.
   const handleSelectRemoteVisionModel = async (model: RemoteModel, serverId: string) => {
     try {
+      if (activeImageModelId) {
+        await activeModelService.unloadImageModel();
+      }
       await remoteServerManager.setActiveRemoteImageModel(serverId, model.id);
       onSelectionComplete?.();
     } catch (error) {
