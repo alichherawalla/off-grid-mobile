@@ -3459,6 +3459,12 @@ PODS:
     - SSZipArchive (~> 2.5.5)
   - SocketRocket (0.7.1)
   - SSZipArchive (2.5.5)
+  - VisionCamera (4.7.3):
+    - VisionCamera/Core (= 4.7.3)
+    - VisionCamera/React (= 4.7.3)
+  - VisionCamera/Core (4.7.3)
+  - VisionCamera/React (4.7.3):
+    - React-Core
   - whisper-rn (0.5.5):
     - boost
     - DoubleConversion
@@ -3599,6 +3605,7 @@ DEPENDENCIES:
   - RNWorklets (from `../node_modules/react-native-worklets`)
   - RNZipArchive (from `../node_modules/react-native-zip-archive`)
   - SocketRocket (~> 0.7.1)
+  - VisionCamera (from `../node_modules/react-native-vision-camera`)
   - whisper-rn (from `../node_modules/whisper.rn`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -3823,6 +3830,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-worklets"
   RNZipArchive:
     :path: "../node_modules/react-native-zip-archive"
+  VisionCamera:
+    :path: "../node_modules/react-native-vision-camera"
   whisper-rn:
     :path: "../node_modules/whisper.rn"
   Yoga:
@@ -3881,7 +3890,7 @@ SPEC CHECKSUMS:
   react-native-background-downloader: b02d12c3961322ce1c85fa0f8b3e4adb5b652106
   react-native-document-picker: dc2d83366e47e89e7c51e8a41eab99c1d54e941c
   react-native-document-viewer: 8c6ed07e7e27352743fa98e8dd6d288ad925b884
-  react-native-executorch: 9a44ee2b18773cbe5ad2e6d7376eb76f347e2935
+  react-native-executorch: 9b76d1e297ae1ea4c3c93d58c6ecec693423206a
   react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-image-picker: 0314366753615115fa55c3cc937ac44cb7e75702
   react-native-keyboard-controller: 7534b5a39d1e8b2b79f86e8e998ed71c7154f69f
@@ -3940,9 +3949,10 @@ SPEC CHECKSUMS:
   RNZipArchive: f2806ba80e24cf1984d6a7cb361d8a07d734997d
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SSZipArchive: c69881e8ac5521f0e622291387add5f60f30f3c4
+  VisionCamera: 7187b3dac1ff3071234ead959ce311875748e14f
   whisper-rn: 7566faf9b7d78e39ab9fc634cb90fdee81177793
   Yoga: 5456bb010373068fc92221140921b09d126b116e
 
 PODFILE CHECKSUM: f66f810a788ead15881075527443239e49b50db1
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.17.0

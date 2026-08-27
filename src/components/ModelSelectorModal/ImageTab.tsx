@@ -163,8 +163,8 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                     <Text style={styles.remoteBadge}>Remote</Text>
                     <Text style={styles.metaSeparator}>•</Text>
                     <View style={styles.visionBadge}>
-                      <Icon name="eye" size={10} color={colors.info} />
-                      <Text style={styles.visionBadgeText}>Vision</Text>
+                      <Icon name="image" size={10} color={colors.info} />
+                      <Text style={styles.visionBadgeText}>Image</Text>
                     </View>
                   </View>
                 </View>

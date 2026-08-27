@@ -410,7 +410,7 @@ describe('remoteServerStore', () => {
   describe('activeRemoteImageModelId', () => {
     it('should set active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.getState().setActiveRemoteImageModel('server-1', 'vision-model-456');
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-model-456');
@@ -418,13 +418,13 @@ describe('remoteServerStore', () => {
 
     it('should clear active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.getState().setActiveRemoteImageModel('server-1', 'vision-model-456');
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('vision-model-456');
 
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteImageModelId(null);
+        useRemoteServerStore.getState().setActiveRemoteImageModel(null, null);
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBeNull();
@@ -496,7 +496,7 @@ describe('remoteServerStore', () => {
           { id: 'llava', name: 'LLaVA', serverId, capabilities: { supportsVision: true, supportsToolCalling: false, supportsThinking: false }, lastUpdated: new Date().toISOString() },
         ]);
         useRemoteServerStore.getState().setActiveServerId(serverId);
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('llava');
+        useRemoteServerStore.getState().setActiveRemoteImageModel(serverId, 'llava');
       });
 
       const model = useRemoteServerStore.getState().getActiveRemoteImageModel();
@@ -522,7 +522,7 @@ describe('remoteServerStore', () => {
           providerType: 'openai-compatible',
         });
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-1');
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-1');
+        useRemoteServerStore.getState().setActiveRemoteImageModel('srv-1', 'vision-1');
       });
 
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('model-1');

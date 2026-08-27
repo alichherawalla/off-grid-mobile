@@ -10,6 +10,7 @@ import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { reportModelFailure } from './modelFailureHandler';
 import { checkProPromptForImage } from './proPrompt';
 import type { ImageGenerationState } from './imageGenerationTypes';
+import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE, defaultImageSteps } from '../utils/imageGenAdvice';
 
 export function imagePhaseTransitionLog(
   previous: ImageGenerationState['phase'],
@@ -203,5 +204,28 @@ export function buildImageGenMeta(
     steps: opts.steps,
     guidanceScale: opts.guidanceScale,
     resolution: `${opts.result.width}x${opts.result.height}`,
+  };
+}
+
+/** Resolve the effective generation numbers from the request + persisted settings.
+ *  Width/height floor to 256: SD-class models render garbage (incoherent, not
+ *  "smaller") below it, so a stale sub-256 setting must never reach a pipeline -
+ *  local or remote. One owner for both engines. */
+export function resolveGenerationNumbers(
+  params: { steps?: number; guidanceScale?: number },
+  settings: {
+    imageSteps?: number;
+    imageGuidanceScale?: number;
+    imageWidth?: number;
+    imageHeight?: number;
+  },
+  platform: string,
+): { steps: number; guidanceScale: number; imageWidth: number; imageHeight: number } {
+  return {
+    steps: params.steps || settings.imageSteps || defaultImageSteps(platform),
+    guidanceScale:
+      params.guidanceScale || settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE,
+    imageWidth: Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE),
+    imageHeight: Math.max(SWEET_SPOT_SIZE, settings.imageHeight || SWEET_SPOT_SIZE),
   };
 }

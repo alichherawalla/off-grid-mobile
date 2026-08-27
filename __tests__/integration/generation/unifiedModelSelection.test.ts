@@ -198,8 +198,12 @@ describe('Unified Model Selection', () => {
       await remoteServerManager.setActiveRemoteImageModel(serverId, 'llava');
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('llava');
-      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
-      expect(mockLoadModel).toHaveBeenCalledWith('llava');
+      // The image selection carries its OWN server field and never re-routes text:
+      // the shared activeServerId stays untouched, and the shared chat provider is
+      // never loaded (doing so overwrote the text model id - the clobber bug).
+      expect(useRemoteServerStore.getState().activeRemoteImageServerId).toBe(serverId);
+      expect(useRemoteServerStore.getState().activeServerId).not.toBe(serverId);
+      expect(mockLoadModel).not.toHaveBeenCalled();
     });
   });
 

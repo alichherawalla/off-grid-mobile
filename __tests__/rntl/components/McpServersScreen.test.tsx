@@ -45,7 +45,7 @@ jest.mock('@react-navigation/native', () => {
 jest.mock('../../../src/services/tools/extensions', () => ({ getToolExtensions: () => [] }));
 
 const mockAppState = { settings: { enabledTools: [] as string[] }, updateSettings: jest.fn(), activeModelId: undefined, downloadedModels: [] as any[] };
-const mockRemoteState = { activeRemoteTextModelId: 'remote-1' };
+const mockRemoteState = { activeRemoteTextModelId: 'remote-1', servers: [] as any[] };
 jest.mock('../../../src/stores', () => ({
   useAppStore: (selector?: any) => (selector ? selector(mockAppState) : mockAppState),
   useRemoteServerStore: (selector?: any) => (selector ? selector(mockRemoteState) : mockRemoteState),
@@ -54,6 +54,10 @@ jest.mock('../../../src/stores', () => ({
 jest.mock('../../../pro/mcp/mcpService', () => ({
   connectServer: jest.fn(), disconnectServer: jest.fn(), signOutServer: jest.fn(),
 }));
+
+// The paired-desktops tools section pulls in the sync store + grant service (→ syncService,
+// which does not load under jest). This suite is about the MCP server cards, so stub it out.
+jest.mock('../../../pro/ui/CompanionToolsSection', () => ({ CompanionToolsSection: () => null }));
 
 type ScreenModule = typeof import('../../../pro/ui/McpServersScreen');
 type StoreModule = typeof import('../../../pro/mcp/mcpStore');

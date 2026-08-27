@@ -78,7 +78,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     discoveredModels: remoteDiscoveredModels,
     activeRemoteTextModelId,
     activeRemoteImageModelId,
-    activeServerId,
+    activeRemoteImageServerId,
   } = useRemoteServerStore();
 
   const {
@@ -235,8 +235,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const handleDeleteConversation = (conversation: Conversation) =>
     deleteConversationWithAlert(conversation, setAlertState, deleteConversation);
 
-  const activeRemoteImageModel = activeRemoteImageModelId && activeServerId
-    ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
+  const activeRemoteImageModel = activeRemoteImageModelId && activeRemoteImageServerId
+    ? (remoteDiscoveredModels[activeRemoteImageServerId] || []).find((m) => m.id === activeRemoteImageModelId)
     : null;
 
   const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
@@ -244,14 +244,14 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   // the ones just used, and disagrees with the Chats list and desktop.
   const recentConversations = mostRecentConversations(conversations, 4);
 
-  // Get all remote text models — includes vision-language models since they do text generation too
-  const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
+  // All discovered remote models, split by the modality tagged at discovery.
+  // Vision-language models are text (they generate text); modality:'image' means
+  // the server generates images (the desktop gateway tags these via kind).
+  const allRemoteModels: RemoteModel[] = remoteServers.flatMap(server =>
     remoteDiscoveredModels[server.id] || []
   );
-
-  // Remote image generation models — Ollama/LM Studio don't serve image gen models,
-  // so this is intentionally empty. Vision-language models belong in remoteTextModels.
-  const remoteImageModels: RemoteModel[] = [];
+  const remoteTextModels: RemoteModel[] = allRemoteModels.filter(m => m.modality !== 'image');
+  const remoteImageModels: RemoteModel[] = allRemoteModels.filter(m => m.modality === 'image');
 
   return {
     pickerType,

@@ -34,6 +34,21 @@ function isTextModel(model: { id?: string; name?: string; kind?: unknown }): boo
   return isGenerativeModel(model.id ?? model.name ?? '');
 }
 
+/**
+ * The single owner of "what does this remote model generate". 'image' only when the
+ * gateway says so via kind - name heuristics never promote a model to image, so
+ * Ollama/LM Studio entries (no kind) stay text. null = not servable from the picker
+ * (speech/transcription/embedding).
+ */
+function remoteModelModality(model: {
+  id?: string;
+  name?: string;
+  kind?: unknown;
+}): 'text' | 'image' | null {
+  if (model.kind === 'image') return 'image';
+  return isTextModel(model) ? 'text' : null;
+}
+
 const MODEL_FILE_EXT = /\.(gguf|bin|safetensors|task|litertlm|pte)$/i;
 
 /**
@@ -170,16 +185,26 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
 
       // OpenAI format: { object: "list", data: [{ id, object, owned_by, ... }] }
       if (data?.object === 'list' && Array.isArray(data.data)) {
-        const generativeModels = data.data.filter((model: { id: string; kind?: unknown }) => isTextModel(model));
+        const servable = data.data
+          .map((model: { id: string; kind?: unknown }) => ({
+            model,
+            modality: remoteModelModality(model),
+          }))
+          .filter((entry: { modality: 'text' | 'image' | null }) => entry.modality !== null);
+        // Capability probing is a chat-endpoint conversation - meaningless for a
+        // diffusion model, so image entries skip it (empty caps, modality tells all).
         const modelInfos = await Promise.all(
-          generativeModels.map((model: { id: string }) =>
-            fetchModelCapabilities(url, model.id, nameDetect)
+          servable.map(({ model, modality }: { model: { id: string }; modality: string }) =>
+            modality === 'image'
+              ? Promise.resolve({} as Awaited<ReturnType<typeof fetchModelCapabilities>>)
+              : fetchModelCapabilities(url, model.id, nameDetect)
           )
         );
-        return generativeModels.map((model: { id: string; kind?: unknown; owned_by?: string; max_context_length?: number }, i: number) => ({
+        return servable.map(({ model, modality }: { model: { id: string; kind?: unknown }; modality: 'text' | 'image' }, i: number) => ({
           id: model.id,
           name: displayModelName(model.id),
           serverId: server.id,
+          modality,
           capabilities: {
             // The gateway declares each model's kind authoritatively; trust kind:'vision'
             // for vision support. The name/probe-based fallback (modelInfos) can't detect a
