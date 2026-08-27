@@ -1,4 +1,5 @@
 import { initLlama, LlamaContext } from 'llama.rn';
+import { REASONING_BUDGET_AUTO, thinkingBudgetPayload } from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
@@ -290,7 +291,7 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     return false;
   }
 }
-export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek' } {
+export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false, reasoningBudget?: number): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek'; thinking_budget_tokens?: number } {
   if (!enableThinking) return { enable_thinking: false, reasoning_format: 'none' };
   // Native-first (parse-once at the runtime boundary): Gemma 4 uses its own
   // <|channel>thought\n...<channel|> format, not DeepSeek's <think> tags. reasoning_format:'auto'
@@ -300,7 +301,10 @@ export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4:
   // and resolveToolCalls only fall back to our hand-parser when the native fields are empty, so
   // native wins when it works and the hand-parser is a pure fallback. (Non-Gemma reasoning models
   // keep the known-good 'deepseek' path.)
-  return { enable_thinking: true, reasoning_format: isGemma4 ? 'auto' : 'deepseek' };
+  // The thinking-budget rule (and the llama.rn wire fragment) is the shared @offgrid/models
+  // contract - desktop applies the same rule as reasoning_budget_tokens on llama-server. At the
+  // budget the engine closes the thinking block and the answer still streams.
+  return { enable_thinking: true, reasoning_format: isGemma4 ? 'auto' : 'deepseek', ...thinkingBudgetPayload(true, reasoningBudget ?? REASONING_BUDGET_AUTO) };
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   if (!nextValue) return undefined;

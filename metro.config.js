@@ -14,6 +14,9 @@ const proExists = fs.existsSync(path.resolve(proPackagePath, 'package.json'));
 // dep and breaks libraries with malformed exports maps). The package ships prebuilt CJS in dist/.
 const syncPackagePath = path.resolve(__dirname, '../shared/packages/sync');
 const ragPackagePath = path.resolve(__dirname, '../shared/packages/rag');
+// @offgrid/models: cross-platform model contracts (catalog, reasoning-budget rule) shared
+// with desktop. Out-of-root like rag, prebuilt CJS in dist/.
+const modelsPackagePath = path.resolve(__dirname, '../shared/packages/models');
 const uiPackagePath = path.resolve(__dirname, '../shared/packages/ui');
 // @offgrid/speech: voice-turn decisions (when a spoken turn begins and ends) shared with desktop.
 // Out-of-root like sync, so Metro must watch it and be pointed at its built entry.
@@ -31,6 +34,7 @@ const config = {
   watchFolders: [
     syncPackagePath,
     ragPackagePath,
+    modelsPackagePath,
     speechPackagePath,
     uiPackagePath,
     sharedNodeModulesPath,
@@ -54,6 +58,7 @@ const config = {
       // resolving the external package directory can fail in an already-running dev server
       // after the file dependency is added, even though Node can resolve the package.
       '@offgrid/rag': path.resolve(ragPackagePath, 'dist/index.js'),
+      '@offgrid/models': path.resolve(modelsPackagePath, 'dist/index.js'),
       '@offgrid/speech': path.resolve(speechPackagePath, 'dist/index.cjs'),
       '@offgrid/ui': path.resolve(uiPackagePath, 'dist/index.js'),
       // Points to the real pro package when present on disk (store builds),

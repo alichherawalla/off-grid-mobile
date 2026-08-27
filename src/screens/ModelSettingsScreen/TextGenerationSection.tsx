@@ -12,6 +12,7 @@ import {
   ModelLoadingModeSelector,
   ShowGenerationDetailsToggle,
   SpeculativeDecodingToggle,
+  ThinkingBudgetSelector,
 } from '../../components/settings/textGenAdvancedSections';
 import { useTextGenerationSettings } from '../../hooks/useTextGenerationSettings';
 import { useThemedStyles } from '../../theme';
@@ -43,6 +44,7 @@ export const TextGenerationSection: React.FC = () => {
             testID="llama-context-length"
             {...llama.contextLength}
           />
+          <ThinkingBudgetSelector />
         </>
       )}
 

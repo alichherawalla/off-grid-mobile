@@ -169,7 +169,7 @@ export async function generateWithToolsImpl(
       ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
       tools: options.tools,
       tool_choice: 'auto',
-      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model),
+      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model, settings.reasoningBudget),
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));

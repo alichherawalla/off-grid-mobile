@@ -8,6 +8,7 @@ import {
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
   DEFAULT_SPEAKER_DRAIN_MS,
 } from '@offgrid/speech';
+import { REASONING_BUDGET_AUTO } from '@offgrid/models';
 import { APP_CONFIG } from '../constants';
 import {
   VoiceTurnMode,
@@ -99,6 +100,11 @@ export type AppSettings = {
   voiceSpeakerDrainMs: number;
   enabledTools: string[];
   thinkingEnabled: boolean;
+  /** Cap on the tokens the model may spend thinking per reply. REASONING_BUDGET_AUTO (0) sends no
+   *  cap so the model reasons for as long as it wants. Applies only while Thinking is on; the
+   *  answer still streams after the cap closes the thinking block. Optional so installs persisted
+   *  before this setting read as auto. */
+  reasoningBudget?: number;
   inferenceBackend: InferenceBackend;
   /** True once the user has explicitly picked an inference backend in Settings.
    *  While false, the boot-time backendSync may upgrade the default to the GPU
@@ -257,6 +263,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   voiceSpeakerDrainMs: DEFAULT_SPEAKER_DRAIN_MS,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: false,
+  reasoningBudget: REASONING_BUDGET_AUTO,
   liteRTBackend: 'gpu',
   liteRTTemperature: 0.7,
   liteRTTopP: 0.9,
