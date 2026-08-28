@@ -57,8 +57,6 @@ export async function rateOnStore(): Promise<void> {
   await Linking.openURL(canOpenPlayApp ? PLAY_MARKET_URL : PLAY_WEB_URL);
 }
 
-export { APP_STORE_REVIEW_URL, PLAY_MARKET_URL, PLAY_WEB_URL };
-
 export { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL };
 
 type ShareVariant = 'text' | 'image';
