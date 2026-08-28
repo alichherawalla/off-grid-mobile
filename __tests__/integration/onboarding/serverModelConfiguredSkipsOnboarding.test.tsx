@@ -6,15 +6,14 @@
  * model are already configured ('hit continue, it skipped onboarding — good UX')." This locks that happy
  * path as a regression guard.
  *
- * Product-correct outcome (OGAM user's view): while on the ModelDownload onboarding step (the "remaining
- * onboarding"), if the user connects to a network server that has a model, tapping "Continue" on the
- * "Connected!" sheet drops them into the main app (the tab bar / Home) and does NOT leave them on — or
- * bounce them back to — the ModelDownload onboarding step.
+ * Product-correct outcome (OGAM user's view): Auto Setup is the default onboarding step. A user who
+ * chooses "Configure it yourself" reaches Advanced Setup. If the user connects to a network server
+ * that has a model, tapping "Continue" on the "Connected!" sheet drops them into the main app.
  *
  * Entry point + gestures (real, arrive-via-UI):
  *  - Mount the REAL AppNavigator inside a REAL NavigationContainer. With onboarding already completed but
- *    NO downloaded on-device model, the initial route is 'ModelDownload' — i.e. the remaining onboarding
- *    step the user still sees.
+ *    NO downloaded on-device model, the initial route is Auto Setup.
+ *  - Tap "Configure it yourself" to reach Advanced Setup.
  *  - Add a server the real way: tap "Add manually", type a name + endpoint into the real modal, tap "Test
  *    Connection" (the real probe runs over the faked /v1/models), then tap the modal's "Add manually" save.
  *  - Back on the onboarding screen the real health check marks the server reachable and renders its
@@ -71,8 +70,11 @@ function installFetch(reachable: boolean) {
   });
 }
 
-/** Arrive-via-UI on the ModelDownload onboarding step, then add + connect a server through the real modal. */
+/** Enter Advanced Setup from Auto Setup, then add and connect a server through the real modal. */
 async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
+  fireEvent.press(await waitFor(() => ui.getByTestId('auto-setup-advanced'), { timeout: 4000 }));
+  await waitFor(() => { expect(ui.queryByTestId('model-download-screen')).not.toBeNull(); }, { timeout: 4000 });
+
   // Real gesture: open the Add Server modal from the onboarding screen.
   // The onboarding screen's own button, which is not the Remote Servers screen's one.
   fireEvent.press(await waitFor(() => ui.getByText('Add Server')));
@@ -101,12 +103,12 @@ describe('T095 — server + model configured → tap Continue → routes into th
     // Fresh remote-server slate so the added server is the only row.
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
     // Onboarding slides already done + NO on-device model downloaded → the initial route is the remaining
-    // onboarding step, 'ModelDownload' (per AppNavigator's initial-route logic). This is BOOT state, not a
+    // onboarding step, Auto Setup (per AppNavigator's initial-route logic). This is BOOT state, not a
     // fabrication of the tested outcome — the outcome (skipping to Main) is produced by the gestures below.
     useAppStore.setState({ hasCompletedOnboarding: true, downloadedModels: [], deviceInfo: createDeviceInfo() });
   });
 
-  it('lands on the main app (Home) and the ModelDownload onboarding step is gone after Continue', async () => {
+  it('moves from Auto Setup through Advanced Setup and lands on Home after a server connects', async () => {
     installFetch(true); // a reachable server with a model exists on the network
     const ui = render(
       <NavigationContainer>
@@ -114,8 +116,9 @@ describe('T095 — server + model configured → tap Continue → routes into th
       </NavigationContainer>,
     );
 
-    // Pre-condition: we ARE on the remaining onboarding step and NOT yet in the app.
-    await waitFor(() => { expect(ui.queryByTestId('model-download-screen')).not.toBeNull(); }, { timeout: 4000 });
+    // Auto Setup is the default. Advanced Setup is not shown until the user asks for it.
+    await waitFor(() => { expect(ui.queryByTestId('auto-setup-screen')).not.toBeNull(); }, { timeout: 4000 });
+    expect(ui.queryByTestId('model-download-screen')).toBeNull();
     expect(ui.queryByTestId('home-tab')).toBeNull();
 
     await addAndConnectServerViaUI(ui);
