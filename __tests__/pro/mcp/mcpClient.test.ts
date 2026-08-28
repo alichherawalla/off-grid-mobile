@@ -90,7 +90,11 @@ class FakeXhr {
   }
 }
 
-function queueJson(status: number, body: unknown, headers: Record<string, string> = {}) {
+function queueJson(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
   responseQueue.push({
     kind: 'load',
     status,
@@ -135,7 +139,10 @@ describe('McpClient.initialize', () => {
     const first = JSON.parse(recorded[0].body);
     expect(first.method).toBe('initialize');
     expect(first.params.protocolVersion).toBe('2024-11-05');
-    expect(first.params.clientInfo).toEqual({ name: 'offgrid', version: '1.0' });
+    expect(first.params.clientInfo).toEqual({
+      name: 'offgrid',
+      version: '1.0',
+    });
     const second = JSON.parse(recorded[1].body);
     expect(second.method).toBe('notifications/initialized');
     // ids are monotonically increasing per client instance
@@ -202,6 +209,39 @@ describe('McpClient.callTool', () => {
     expect(sent.params).toEqual({ name: 'echo', arguments: { q: 1 } });
   });
 
+  it('sends namespaced task origin metadata with a companion tool call', async () => {
+    queueJson(200, {
+      jsonrpc: '2.0',
+      id: 1,
+      result: { content: [{ type: 'text', text: 'started' }] },
+    });
+
+    await makeClient().callTool(
+      'web_use',
+      { task: 'Find a flight' },
+      {
+        'ai.offgrid/taskOrigin': {
+          conversationId: 'chat-mobile-1',
+          deviceId: 'phone-1',
+          deviceName: 'Ali phone',
+        },
+      },
+    );
+
+    const sent = JSON.parse(recorded[0].body);
+    expect(sent.params).toEqual({
+      name: 'web_use',
+      arguments: { task: 'Find a flight' },
+      _meta: {
+        'ai.offgrid/taskOrigin': {
+          conversationId: 'chat-mobile-1',
+          deviceId: 'phone-1',
+          deviceName: 'Ali phone',
+        },
+      },
+    });
+  });
+
   it('appends a note for non-text blocks alongside text', async () => {
     queueJson(200, {
       jsonrpc: '2.0',
@@ -216,7 +256,9 @@ describe('McpClient.callTool', () => {
     });
 
     const out = await makeClient().callTool('t', {});
-    expect(out).toBe('caption\n[2 non-text result(s) not shown: image, resource]');
+    expect(out).toBe(
+      'caption\n[2 non-text result(s) not shown: image, resource]',
+    );
   });
 
   it('returns only the note when there is no text block', async () => {
@@ -252,7 +294,10 @@ describe('McpClient.callTool', () => {
     queueJson(200, {
       jsonrpc: '2.0',
       id: 1,
-      result: { isError: true, content: [{ type: 'text', text: 'rate limited' }] },
+      result: {
+        isError: true,
+        content: [{ type: 'text', text: 'rate limited' }],
+      },
     });
     await expect(makeClient().callTool('t', {})).rejects.toThrow(
       /reported an error: rate limited/,
@@ -260,7 +305,11 @@ describe('McpClient.callTool', () => {
   });
 
   it('throws with "no detail" when isError is set but no text present', async () => {
-    queueJson(200, { jsonrpc: '2.0', id: 1, result: { isError: true, content: [] } });
+    queueJson(200, {
+      jsonrpc: '2.0',
+      id: 1,
+      result: { isError: true, content: [] },
+    });
     await expect(makeClient().callTool('t', {})).rejects.toThrow(
       /reported an error: no detail/,
     );
@@ -288,7 +337,9 @@ describe('rpc error mapping', () => {
 
   it('throws HTTP <status> for a >=400 non-401 response', async () => {
     queueJson(503, { jsonrpc: '2.0' });
-    await expect(makeClient().listTools()).rejects.toThrow('MCP tools/list: HTTP 503');
+    await expect(makeClient().listTools()).rejects.toThrow(
+      'MCP tools/list: HTTP 503',
+    );
   });
 
   it('rejects with a network error when xhr.onerror fires', async () => {
@@ -348,7 +399,9 @@ describe('401 / auth retry', () => {
 
   it('throws 401 immediately when there is no onUnauthorized handler', async () => {
     queueJson(401, {});
-    await expect(makeClient().listTools()).rejects.toThrow('unauthorized (401)');
+    await expect(makeClient().listTools()).rejects.toThrow(
+      'unauthorized (401)',
+    );
     expect(recorded).toHaveLength(1);
   });
 });
@@ -398,7 +451,10 @@ describe('auth headers', () => {
       name: 'Authorization',
       value: `Bearer token-${++call}`,
     }));
-    await makeClient({ getAuthHeader, onUnauthorized: async () => true }).listTools();
+    await makeClient({
+      getAuthHeader,
+      onUnauthorized: async () => true,
+    }).listTools();
 
     expect(recorded[0].requestHeaders.Authorization).toBe('Bearer token-1');
     expect(recorded[1].requestHeaders.Authorization).toBe('Bearer token-2');
@@ -407,7 +463,11 @@ describe('auth headers', () => {
 
 describe('session id + transport headers', () => {
   it('captures mcp-session-id from a response and sends it on subsequent requests', async () => {
-    queueJson(200, { jsonrpc: '2.0', id: 1, result: {} }, { 'mcp-session-id': 'sess-42' });
+    queueJson(
+      200,
+      { jsonrpc: '2.0', id: 1, result: {} },
+      { 'mcp-session-id': 'sess-42' },
+    );
     queueJson(200, { jsonrpc: '2.0', id: 2, result: {} });
 
     const client = makeClient();
@@ -428,7 +488,9 @@ describe('session id + transport headers', () => {
 
 describe('SSE (text/event-stream) parsing', () => {
   it('parses the first JSON data line out of an SSE body', async () => {
-    const tools = [{ name: 't', description: 'd', inputSchema: { type: 'object' } }];
+    const tools = [
+      { name: 't', description: 'd', inputSchema: { type: 'object' } },
+    ];
     const sse = `event: message\ndata: ${JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
@@ -447,7 +509,11 @@ describe('SSE (text/event-stream) parsing', () => {
   it('skips [DONE] and blank data lines, returning the real payload', async () => {
     const sse =
       `data: [DONE]\n\n` +
-      `data: ${JSON.stringify({ jsonrpc: '2.0', id: 1, result: { tools: [] } })}\n\n`;
+      `data: ${JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        result: { tools: [] },
+      })}\n\n`;
     responseQueue.push({
       kind: 'load',
       status: 200,
@@ -485,14 +551,22 @@ describe('malformed JSON body', () => {
 describe('integration: full initialize -> listTools -> callTool session', () => {
   it('carries the session id across all three calls and returns tool output', async () => {
     // initialize
-    queueJson(200, { jsonrpc: '2.0', id: 1, result: {} }, { 'mcp-session-id': 'S1' });
+    queueJson(
+      200,
+      { jsonrpc: '2.0', id: 1, result: {} },
+      { 'mcp-session-id': 'S1' },
+    );
     // notifications/initialized
     queueJson(200, { jsonrpc: '2.0', id: 2, result: {} });
     // tools/list
     queueJson(200, {
       jsonrpc: '2.0',
       id: 3,
-      result: { tools: [{ name: 'greet', description: 'x', inputSchema: { type: 'object' } }] },
+      result: {
+        tools: [
+          { name: 'greet', description: 'x', inputSchema: { type: 'object' } },
+        ],
+      },
     });
     // tools/call
     queueJson(200, {

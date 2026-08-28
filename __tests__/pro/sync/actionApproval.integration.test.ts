@@ -10,6 +10,7 @@ const pending = {
   version: 1 as const,
   actionId: 'action-1',
   executionChatId: 'chat-action-1',
+  taskKind: 'computer_use' as const,
   title: 'Generate the proposal deck',
   detail: 'Use the selected source folder.',
   args: { sourceFolder: '/private/source' },
@@ -99,5 +100,60 @@ describe('durable Action approval projection', () => {
     );
     expect(useActionApprovalStore.getState().pending).toEqual([]);
     expect(card.queryByTestId('computer-approval-card')).toBeNull();
+  });
+
+  it('uses the canonical task kind for a Web Use approval', () => {
+    const materializer = new MobileStateMaterializer();
+    materializer.put(
+      'conversation',
+      pending.executionChatId,
+      {
+        title: 'Find a flight',
+        created_at: new Date(10).toISOString(),
+        updated_at: new Date(10).toISOString(),
+        project_id: null,
+      },
+      origin,
+    );
+    materializer.put(
+      'action_approval',
+      pending.actionId,
+      {
+        ...pending,
+        taskKind: 'web_use',
+        title: 'Find a flight',
+      },
+      origin,
+    );
+    act(() =>
+      useChatStore.getState().setActiveConversation(pending.executionChatId),
+    );
+
+    const card = render(React.createElement(ComputerApprovalCard));
+    expect(card.getByText('WEB USE')).toBeTruthy();
+    expect(card.getByText('Approve')).toBeTruthy();
+    expect(card.getByText('Decline')).toBeTruthy();
+  });
+
+  it('does not present a non-task Action approval as Web Use or Computer Use', () => {
+    const materializer = new MobileStateMaterializer();
+    materializer.put(
+      'action_approval',
+      pending.actionId,
+      {
+        ...pending,
+        taskKind: undefined,
+        title: 'Publish the report',
+      },
+      origin,
+    );
+    act(() =>
+      useChatStore.getState().setActiveConversation(pending.executionChatId),
+    );
+
+    const card = render(React.createElement(ComputerApprovalCard));
+    expect(card.queryByTestId('computer-approval-card')).toBeNull();
+    expect(card.queryByText('COMPUTER USE')).toBeNull();
+    expect(card.queryByText('WEB USE')).toBeNull();
   });
 });

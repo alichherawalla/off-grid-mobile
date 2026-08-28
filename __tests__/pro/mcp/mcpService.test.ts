@@ -21,7 +21,11 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 const mockClientCtor = jest.fn();
 const mockClientBehaviorByUrl: Record<
   string,
-  { initialize?: () => Promise<void>; listTools?: () => Promise<any[]>; callTool?: () => Promise<string> }
+  {
+    initialize?: () => Promise<void>;
+    listTools?: () => Promise<any[]>;
+    callTool?: () => Promise<string>;
+  }
 > = {};
 jest.mock('../../../pro/mcp/mcpClient', () => {
   class FakeMcpClient {
@@ -85,7 +89,11 @@ import type { McpServerConfig, McpTool } from '@offgrid/pro/mcp/types';
 // module) — required so the service's `err instanceof NeedsAuthorizationError` matches.
 const { NeedsAuthorizationError } = require('../../../pro/mcp/oauth');
 
-const tool = (name: string, description = 'a tool', extra: Partial<McpTool> = {}): McpTool => ({
+const tool = (
+  name: string,
+  description = 'a tool',
+  extra: Partial<McpTool> = {},
+): McpTool => ({
   name,
   description,
   inputSchema: { type: 'object' },
@@ -107,13 +115,15 @@ function resetStores() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  for (const k of Object.keys(mockClientBehaviorByUrl)) delete mockClientBehaviorByUrl[k];
+  for (const k of Object.keys(mockClientBehaviorByUrl))
+    delete mockClientBehaviorByUrl[k];
   resetStores();
 });
 
 describe('parseMcpToolCallsFromText', () => {
   it('extracts a single well-formed call and strips its tag from the text', () => {
-    const text = 'before <mcp_tool_call>{"name":"search","arguments":{"q":"x"}}</mcp_tool_call> after';
+    const text =
+      'before <mcp_tool_call>{"name":"search","arguments":{"q":"x"}}</mcp_tool_call> after';
     const { calls, cleanedText } = parseMcpToolCallsFromText(text);
     expect(calls).toHaveLength(1);
     expect(calls[0].name).toBe('search');
@@ -176,7 +186,9 @@ describe('getMcpToolsPrompt', () => {
       toolOwners: { search: 'srv1' },
       serverTools: { srv1: [tool('search', 'find things')] },
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: 'remote-x' } as any);
+    useRemoteServerStore.setState({
+      activeRemoteTextModelId: 'remote-x',
+    } as any);
     const prompt = getMcpToolsPrompt(['search']);
     expect(prompt).toContain('mcp_tool_call');
     expect(prompt).toContain('- search: find things');
@@ -200,7 +212,9 @@ describe('getMcpToolsPrompt', () => {
       toolOwners: { search: 'srv1' },
       serverTools: { srv1: [tool('search', long)] },
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: 'remote-x' } as any);
+    useRemoteServerStore.setState({
+      activeRemoteTextModelId: 'remote-x',
+    } as any);
     const prompt = getMcpToolsPrompt(['search']);
     expect(prompt).toContain('y'.repeat(400));
   });
@@ -210,7 +224,9 @@ describe('getMcpToolsPrompt', () => {
       toolOwners: { owned: 'srv1' },
       serverTools: { srv1: [tool('owned')] },
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: 'remote-x' } as any);
+    useRemoteServerStore.setState({
+      activeRemoteTextModelId: 'remote-x',
+    } as any);
     const prompt = getMcpToolsPrompt(['owned', 'orphan']);
     expect(prompt).toContain('- owned:');
     expect(prompt).not.toContain('orphan');
@@ -230,7 +246,9 @@ describe('getServerToolCount', () => {
 
 describe('connectServer', () => {
   it('throws when the server id is unknown (real store lookup)', async () => {
-    await expect(connectServer('nope')).rejects.toThrow('Server nope not found');
+    await expect(connectServer('nope')).rejects.toThrow(
+      'Server nope not found',
+    );
   });
 
   it('connects a no-auth server: real store gets connected state + tools + owners', async () => {
@@ -238,7 +256,9 @@ describe('connectServer', () => {
     useMcpStore.setState({ servers: [srv] });
     // Arm the client at this URL to return one tool.
     const tools = [tool('search')];
-    mockClientBehaviorByUrl['https://s1'] = { listTools: () => Promise.resolve(tools) };
+    mockClientBehaviorByUrl['https://s1'] = {
+      listTools: () => Promise.resolve(tools),
+    };
 
     await connectServer('srv1');
 
@@ -280,14 +300,24 @@ describe('connectServer', () => {
     expect(useMcpStore.getState().connectionStates.bad).toBe('error');
     // Failed connect must NOT register a live client, so its tool can't be executed.
     useMcpStore.setState({ toolOwners: { badtool: 'bad' } });
-    await expect(executeMcpTool('badtool', {})).rejects.toThrow('is not connected');
+    await expect(executeMcpTool('badtool', {})).rejects.toThrow(
+      'is not connected',
+    );
   });
 
   describe('oauth flow', () => {
-    const oauthMeta = { authorizationEndpoint: 'https://o/auth', tokenEndpoint: 'https://o/tok' } as any;
+    const oauthMeta = {
+      authorizationEndpoint: 'https://o/auth',
+      tokenEndpoint: 'https://o/tok',
+    } as any;
 
     it('runs interactive authorize when there is no cached metadata, stores it, and connects', async () => {
-      const srv: McpServerConfig = { id: 'o1', name: 'O', url: 'https://o', authMode: 'oauth' };
+      const srv: McpServerConfig = {
+        id: 'o1',
+        name: 'O',
+        url: 'https://o',
+        authMode: 'oauth',
+      };
       useMcpStore.setState({ servers: [srv] });
       mockAuthorizeServer.mockResolvedValue(oauthMeta);
       mockEnsureAccessToken.mockResolvedValue('tok-123');
@@ -295,7 +325,9 @@ describe('connectServer', () => {
       await connectServer('o1', true);
 
       const st = useMcpStore.getState();
-      expect(mockAuthorizeServer).toHaveBeenCalledWith('o1', 'https://o', { manualClient: undefined });
+      expect(mockAuthorizeServer).toHaveBeenCalledWith('o1', 'https://o', {
+        manualClient: undefined,
+      });
       // Metadata got persisted onto the server config by the real store.
       expect(st.servers[0].oauth).toEqual(oauthMeta);
       expect(st.connectionStates.o1).toBe('connected');
@@ -308,10 +340,17 @@ describe('connectServer', () => {
     });
 
     it('does NOT pop a browser on a silent connect with no cached metadata (throws NeedsAuthorization -> error)', async () => {
-      const srv: McpServerConfig = { id: 'o2', name: 'O', url: 'https://o', authMode: 'oauth' };
+      const srv: McpServerConfig = {
+        id: 'o2',
+        name: 'O',
+        url: 'https://o',
+        authMode: 'oauth',
+      };
       useMcpStore.setState({ servers: [srv] });
 
-      await expect(connectServer('o2', false)).rejects.toBeInstanceOf(NeedsAuthorizationError);
+      await expect(connectServer('o2', false)).rejects.toBeInstanceOf(
+        NeedsAuthorizationError,
+      );
       expect(mockAuthorizeServer).not.toHaveBeenCalled();
       expect(useMcpStore.getState().connectionStates.o2).toBe('error');
     });
@@ -335,7 +374,10 @@ describe('connectServer', () => {
 
       expect(mockAuthorizeServer).toHaveBeenCalledTimes(1);
       expect(useMcpStore.getState().connectionStates.o3).toBe('connected');
-      expect(useMcpStore.getState().servers[0].oauth).toEqual({ ...oauthMeta, reAuthed: true });
+      expect(useMcpStore.getState().servers[0].oauth).toEqual({
+        ...oauthMeta,
+        reAuthed: true,
+      });
     });
 
     it('does NOT re-consent on a silent connect when the cached token is dead (rethrows)', async () => {
@@ -347,9 +389,13 @@ describe('connectServer', () => {
         oauth: oauthMeta,
       };
       useMcpStore.setState({ servers: [srv] });
-      mockEnsureAccessToken.mockRejectedValue(new NeedsAuthorizationError('o4'));
+      mockEnsureAccessToken.mockRejectedValue(
+        new NeedsAuthorizationError('o4'),
+      );
 
-      await expect(connectServer('o4', false)).rejects.toBeInstanceOf(NeedsAuthorizationError);
+      await expect(connectServer('o4', false)).rejects.toBeInstanceOf(
+        NeedsAuthorizationError,
+      );
       expect(mockAuthorizeServer).not.toHaveBeenCalled();
       expect(useMcpStore.getState().connectionStates.o4).toBe('error');
     });
@@ -437,7 +483,9 @@ describe('reconnectSavedServers', () => {
 
 describe('executeMcpTool', () => {
   it('throws when no server owns the tool', async () => {
-    await expect(executeMcpTool('unknown', {})).rejects.toThrow('No server owns tool "unknown"');
+    await expect(executeMcpTool('unknown', {})).rejects.toThrow(
+      'No server owns tool "unknown"',
+    );
   });
 
   it('throws when the owning server has no live client', async () => {
@@ -457,13 +505,61 @@ describe('executeMcpTool', () => {
     _registerClientDirect('srvL', fake as any);
     useMcpStore.setState({ toolOwners: { search: 'srvL' } });
 
-    const res = await executeMcpTool('search', { q: 'hi' });
+    const res = await executeMcpTool(
+      'search',
+      { q: 'hi' },
+      { conversationId: 'private-chat', deviceId: 'phone-1' },
+    );
+    // An arbitrary MCP server must not receive private chat or device identity.
     expect(fake.callTool).toHaveBeenCalledWith('search', { q: 'hi' });
     expect(res.content).toBe('tool output');
     expect(typeof res.durationMs).toBe('number');
     expect(res.durationMs).toBeGreaterThanOrEqual(0);
 
     disconnectServer('srvL'); // clean up the live client
+  });
+
+  it('binds a paired Desktop action to the originating Mobile chat', async () => {
+    const fake = {
+      initialize: jest.fn(),
+      listTools: jest.fn(),
+      callTool: jest.fn().mockResolvedValue('task started'),
+    };
+    _registerClientDirect('desktop-tools', fake as any);
+    useMcpStore.setState({
+      servers: [
+        {
+          id: 'desktop-tools',
+          name: 'Office Mac',
+          url: 'http://office-mac/mcp',
+          grantedByDeviceId: 'desktop-1',
+        },
+      ],
+      toolOwners: { web_use: 'desktop-tools' },
+    });
+
+    await executeMcpTool(
+      'web_use',
+      { task: 'Find a flight' },
+      {
+        conversationId: 'chat-mobile-1',
+        deviceId: 'phone-1',
+        deviceName: 'Ali phone',
+      },
+    );
+
+    expect(fake.callTool).toHaveBeenCalledWith(
+      'web_use',
+      { task: 'Find a flight' },
+      {
+        'ai.offgrid/taskOrigin': {
+          conversationId: 'chat-mobile-1',
+          deviceId: 'phone-1',
+          deviceName: 'Ali phone',
+        },
+      },
+    );
+    disconnectServer('desktop-tools');
   });
 
   it('propagates an error thrown by the client callTool', async () => {
@@ -481,7 +577,11 @@ describe('executeMcpTool', () => {
 
 describe('disconnectServer', () => {
   it('drops the live client and clears connection + tool data in the real store', async () => {
-    const fake = { initialize: jest.fn(), listTools: jest.fn(), callTool: jest.fn() };
+    const fake = {
+      initialize: jest.fn(),
+      listTools: jest.fn(),
+      callTool: jest.fn(),
+    };
     _registerClientDirect('srvD', fake as any);
     useMcpStore.setState({
       toolOwners: { t: 'srvD' },
@@ -503,10 +603,22 @@ describe('disconnectServer', () => {
 
 describe('signOutServer', () => {
   it('revokes tokens, drops the client, and clears cached oauth metadata', async () => {
-    const fake = { initialize: jest.fn(), listTools: jest.fn(), callTool: jest.fn() };
+    const fake = {
+      initialize: jest.fn(),
+      listTools: jest.fn(),
+      callTool: jest.fn(),
+    };
     _registerClientDirect('srvS', fake as any);
     useMcpStore.setState({
-      servers: [{ id: 'srvS', name: 'S', url: 'https://s', authMode: 'oauth', oauth: { a: 1 } as any }],
+      servers: [
+        {
+          id: 'srvS',
+          name: 'S',
+          url: 'https://s',
+          authMode: 'oauth',
+          oauth: { a: 1 } as any,
+        },
+      ],
       toolOwners: { t: 'srvS' },
     });
     mockRevokeLocalTokens.mockResolvedValue(undefined);
@@ -519,10 +631,22 @@ describe('signOutServer', () => {
   });
 
   it('still clears metadata + client when token revoke rejects (swallowed catch)', async () => {
-    const fake = { initialize: jest.fn(), listTools: jest.fn(), callTool: jest.fn() };
+    const fake = {
+      initialize: jest.fn(),
+      listTools: jest.fn(),
+      callTool: jest.fn(),
+    };
     _registerClientDirect('srvS2', fake as any);
     useMcpStore.setState({
-      servers: [{ id: 'srvS2', name: 'S', url: 'https://s', authMode: 'oauth', oauth: { a: 1 } as any }],
+      servers: [
+        {
+          id: 'srvS2',
+          name: 'S',
+          url: 'https://s',
+          authMode: 'oauth',
+          oauth: { a: 1 } as any,
+        },
+      ],
     });
     mockRevokeLocalTokens.mockRejectedValue(new Error('revoke failed'));
 

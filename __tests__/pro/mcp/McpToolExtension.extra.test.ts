@@ -31,6 +31,7 @@ import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
 import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/pro/mcp/schemaTrim';
 import type { McpTool } from '@offgrid/pro/mcp/types';
+import { useSyncStore } from '@offgrid/pro/sync/syncStore';
 
 // A compact tool (under the small-model budget) — passes through trimming untouched.
 const compactTool: McpTool = {
@@ -48,7 +49,11 @@ const compactTool: McpTool = {
 function makeLargeTool(): McpTool {
   const bigDesc = 'x'.repeat(40);
   const props: Record<string, any> = {
-    required_key: { type: 'string', description: 'must stay', enum: ['a', 'b'] },
+    required_key: {
+      type: 'string',
+      description: 'must stay',
+      enum: ['a', 'b'],
+    },
   };
   // Many fat optional props so the serialized size blows past the budget.
   for (let i = 0; i < 12; i++) {
@@ -160,14 +165,20 @@ describe('getOpenAISchemas', () => {
   });
 
   it('falls back to an empty-object schema when a tool has no inputSchema', () => {
-    const noSchema = { name: 'bare', description: 'no schema' } as unknown as McpTool;
+    const noSchema = {
+      name: 'bare',
+      description: 'no schema',
+    } as unknown as McpTool;
     useMcpStore.setState({
       serverTools: { s1: [noSchema] },
       toolOwners: { bare: 's1' },
       enabledTools: ['bare'],
     });
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
-    expect(schemas[0].function.parameters).toEqual({ type: 'object', properties: {} });
+    expect(schemas[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+    });
   });
 });
 
@@ -222,7 +233,9 @@ describe('parseToolCalls / stripFromVisibleText', () => {
   });
 
   it('leaves text without tags unchanged (trimmed)', () => {
-    expect(McpToolExtension.stripFromVisibleText('  hello world  ')).toBe('hello world');
+    expect(McpToolExtension.stripFromVisibleText('  hello world  ')).toBe(
+      'hello world',
+    );
   });
 });
 
@@ -240,16 +253,67 @@ describe('canHandle', () => {
 
 describe('execute', () => {
   it('returns content + toolCallId on success and never sets error', async () => {
-    mockExecuteMcpTool.mockResolvedValue({ content: 'the result', durationMs: 42 });
-    const r = await McpToolExtension.execute({ id: 'c1', name: 'notion_search', arguments: { query: 'x' } });
-    expect(r).toMatchObject({ toolCallId: 'c1', name: 'notion_search', content: 'the result', durationMs: 42 });
+    mockExecuteMcpTool.mockResolvedValue({
+      content: 'the result',
+      durationMs: 42,
+    });
+    const r = await McpToolExtension.execute({
+      id: 'c1',
+      name: 'notion_search',
+      arguments: { query: 'x' },
+    });
+    expect(r).toMatchObject({
+      toolCallId: 'c1',
+      name: 'notion_search',
+      content: 'the result',
+      durationMs: 42,
+    });
     expect(r.error).toBeUndefined();
-    expect(mockExecuteMcpTool).toHaveBeenCalledWith('notion_search', { query: 'x' });
+    expect(mockExecuteMcpTool).toHaveBeenCalledWith('notion_search', {
+      query: 'x',
+    });
+  });
+
+  it('passes the originating chat and device with a companion action', async () => {
+    useSyncStore.setState({
+      thisDevice: {
+        id: 'phone-1',
+        name: 'Ali phone',
+        platform: 'ios',
+        version: '1',
+        host: '',
+        port: 0,
+      },
+    });
+    mockExecuteMcpTool.mockResolvedValue({ content: 'started', durationMs: 9 });
+
+    await McpToolExtension.execute({
+      id: 'task-1',
+      name: 'web_use',
+      arguments: { task: 'Find a flight' },
+      context: { conversationId: 'chat-mobile-1' },
+    });
+
+    expect(mockExecuteMcpTool).toHaveBeenCalledWith(
+      'web_use',
+      { task: 'Find a flight' },
+      {
+        conversationId: 'chat-mobile-1',
+        deviceId: 'phone-1',
+        deviceName: 'Ali phone',
+      },
+    );
   });
 
   it('returns a typed error result (does NOT throw) when the call rejects with an Error', async () => {
-    mockExecuteMcpTool.mockRejectedValue(new Error('Server "notion" is not connected'));
-    const r = await McpToolExtension.execute({ id: 'c2', name: 'notion_search', arguments: {} });
+    mockExecuteMcpTool.mockRejectedValue(
+      new Error('Server "notion" is not connected'),
+    );
+    const r = await McpToolExtension.execute({
+      id: 'c2',
+      name: 'notion_search',
+      arguments: {},
+    });
     expect(r.toolCallId).toBe('c2');
     expect(r.content).toBe('');
     expect(r.error).toContain('not connected');
@@ -258,7 +322,11 @@ describe('execute', () => {
 
   it('uses the fallback message when the rejection is not an Error instance', async () => {
     mockExecuteMcpTool.mockRejectedValue('boom-string');
-    const r = await McpToolExtension.execute({ id: 'c3', name: 'notion_search', arguments: {} });
+    const r = await McpToolExtension.execute({
+      id: 'c3',
+      name: 'notion_search',
+      arguments: {},
+    });
     expect(r.error).toBe('MCP tool execution failed');
     expect(r.content).toBe('');
   });
