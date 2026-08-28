@@ -94,4 +94,6 @@ export const SLOTS = {
    *  pending computer-use approval forwarded from a paired desktop, answered here.
    *  Renders nothing (and takes no space) when there is nothing pending. */
   chatOverlay: 'chat.overlay',
+  /** Small Pro-owned Voice availability indicator on the core Auto Setup plan. */
+  autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
 } as const;

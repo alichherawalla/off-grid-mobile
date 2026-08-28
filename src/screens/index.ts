@@ -1,5 +1,6 @@
 export { OnboardingScreen } from './OnboardingScreen';
-export { ModelDownloadScreen } from './ModelDownloadScreen';
+export { AdvancedSetupScreen } from './ModelDownloadScreen';
+export { AutoSetupScreen } from './AutoSetupScreen';
 export { HomeScreen } from './HomeScreen';
 export { ModelsScreen } from './ModelsScreen';
 export { ChatScreen } from './ChatScreen';

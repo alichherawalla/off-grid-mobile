@@ -39,7 +39,7 @@ import {
 import { makeModelKey } from '../utils/modelKey';
 import logger from '../utils/logger';
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'ModelDownload'> };
+type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdvancedSetup'> };
 
 interface RecommendedCardProps {
   model: typeof RECOMMENDED_MODELS[number];
@@ -133,7 +133,7 @@ export function downloadProgressFor(
   };
 }
 
-export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
+export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [recommendedModels, setRecommendedModels] = useState<typeof RECOMMENDED_MODELS>([]);
   const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
@@ -351,7 +351,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
       <View testID="model-download-screen" style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Set Up Your AI</Text>
+            <Text style={styles.title}>Advanced Setup</Text>
             <Text style={styles.subtitle}>
               Connect to a model server on your network, or download one to run directly on your device.
             </Text>
@@ -445,6 +445,9 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
     </SafeAreaView>
   );
 };
+
+/** @deprecated Test-only source compatibility. The route is AdvancedSetup. */
+export const ModelDownloadScreen = AdvancedSetupScreen;
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: { flex: 1, backgroundColor: colors.background },

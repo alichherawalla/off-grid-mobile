@@ -15,7 +15,8 @@ import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
   OnboardingScreen,
-  ModelDownloadScreen,
+  AutoSetupScreen,
+  AdvancedSetupScreen,
   HomeScreen,
   ModelsScreen,
   ChatScreen,
@@ -194,7 +195,7 @@ export const AppNavigator: React.FC = () => {
   // Determine initial route
   let initialRoute: keyof RootStackParamList = 'Onboarding';
   if (hasCompletedOnboarding) {
-    initialRoute = downloadedModels.length > 0 ? 'Main' : 'ModelDownload';
+    initialRoute = downloadedModels.length > 0 ? 'Main' : 'AutoSetup';
   }
 
   return (
@@ -210,7 +211,8 @@ export const AppNavigator: React.FC = () => {
         }}
       >
         <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
-        <RootStack.Screen name="ModelDownload" component={ModelDownloadScreen} />
+        <RootStack.Screen name="AutoSetup" component={AutoSetupScreen} />
+        <RootStack.Screen name="AdvancedSetup" component={AdvancedSetupScreen} />
         <RootStack.Screen name="Main" component={MainTabs} />
         <RootStack.Screen name="Chat" component={ChatScreen} />
         <RootStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
