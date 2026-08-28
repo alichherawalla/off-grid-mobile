@@ -12,6 +12,7 @@ jest.mock('@offgrid/core/bootstrap/slotRegistry', () => ({
     homeSyncCard: 'home.syncCard',
     homeNotificationsButton: 'home.notificationsButton',
     chatOverlay: 'chat.overlay',
+    autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
   },
 }));
 jest.mock('@offgrid/core/bootstrap/hookRegistry', () => ({
@@ -34,7 +35,10 @@ jest.mock('../../pro/tools/EmailCalendarExtension', () => ({
 }));
 jest.mock('../../pro/audio', () => ({
   activateAudio: (options: {
-    registerScreen: (screen: { name: string; component: () => null }) => () => void;
+    registerScreen: (screen: {
+      name: string;
+      component: () => null;
+    }) => () => void;
     registerSlot: (name: string, component: () => null) => () => void;
     registerHook: (name: string, hook: () => void) => () => void;
   }) => {
@@ -55,6 +59,7 @@ jest.mock('../../pro/audio', () => ({
 
 for (const modulePath of [
   '../../pro/ui/ComputerApprovalCard',
+  '../../pro/ui/AutoSetupVoiceIndicator',
   '../../pro/ui/McpServersScreen',
   '../../pro/ui/McpToolsScreen',
   '../../pro/ui/McpGuideScreen',
@@ -133,10 +138,12 @@ jest.mock('../../pro/sync/entitlementActivation', () => ({
 }));
 jest.mock('../../pro/licensing/proLicenseProvider', () => ({
   proLicenseProvider: {},
-  onProLicenseInfoChanged: jest.fn((listener: (info: { isPro: boolean }) => void) => {
-    mockLicenseInfoListener = listener;
-    return jest.fn();
-  }),
+  onProLicenseInfoChanged: jest.fn(
+    (listener: (info: { isPro: boolean }) => void) => {
+      mockLicenseInfoListener = listener;
+      return jest.fn();
+    },
+  ),
 }));
 
 describe('the paid mobile runtime after live entitlement loss', () => {
@@ -171,7 +178,15 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     const pro = require('../../pro') as typeof import('../../pro');
 
     pro.configureProEntitlementProvider(jest.fn());
+    expect(options.registerSlot).not.toHaveBeenCalledWith(
+      'autoSetup.voiceIndicator',
+      expect.anything(),
+    );
     pro.activate(options as Parameters<typeof pro.activate>[0]);
+    expect(options.registerSlot).toHaveBeenCalledWith(
+      'autoSetup.voiceIndicator',
+      expect.any(Function),
+    );
     expect(mockClipboardEntitlement).toHaveBeenLastCalledWith(true);
     expect(mockEmailCalendarEntitlement).toHaveBeenLastCalledWith(true);
 
@@ -181,12 +196,17 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     expect(mockClipboardEntitlement).toHaveBeenLastCalledWith(false);
     expect(mockEmailCalendarEntitlement).toHaveBeenLastCalledWith(false);
     expect(toolDisposers).toHaveLength(2);
-    expect(toolDisposers.every(dispose => dispose.mock.calls.length === 1)).toBe(true);
+    expect(
+      toolDisposers.every(dispose => dispose.mock.calls.length === 1),
+    ).toBe(true);
     expect(disposeByScreen.get('McpServers')).toHaveBeenCalledTimes(1);
     expect(disposeByScreen.get('McpTools')).toHaveBeenCalledTimes(1);
     expect(disposeByScreen.get('McpGuide')).toHaveBeenCalledTimes(1);
     expect(disposeByScreen.get('AudioSettings')).toHaveBeenCalledTimes(1);
     expect(disposeBySlot.get('app.root')).toHaveBeenCalledTimes(1);
+    expect(disposeBySlot.get('autoSetup.voiceIndicator')).toHaveBeenCalledTimes(
+      1,
+    );
     expect(disposeBySlot.get('audio.slot')).toHaveBeenCalledTimes(1);
     expect(disposeByHook.get('audio.hook')).toHaveBeenCalledTimes(1);
     expect(mockAudioCleanup).toHaveBeenCalledTimes(1);
