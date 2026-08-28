@@ -1264,3 +1264,26 @@ route and one non-default Sync port on every device.
 
 Close this gap only with the device names, OS versions, exact build commits, and the completed matrix
 rows. Simulator and injected-failure results do not close the physical radio boundary.
+
+---
+
+## Remote task controls need acknowledged, bounded Mobile state
+
+**Status:** code resolved 2026-08-28; physical iOS and Android verification pending.
+
+Commits `ddd59dc0` and `cba88680` keep Mobile as a subscriber to the Desktop-owned task state:
+
+- Task controls stay pending only until a matching authoritative `controlId` and control kind arrive.
+- Applied results clear the request. Rejected results show the Desktop reason. A 15-second wait shows
+  that Desktop did not confirm; it does not change task state.
+- Unrelated task updates cannot settle a control.
+- Mobile does not render or decide Web Use or Computer Use approvals. Chat tasks start directly, and
+  non-task ActionApproval behavior remains separate.
+- One router serves both task tools. It selects a stable eligible Desktop when no target is given,
+  resolves an exact case-insensitive device name or alias from `execution_device`, and never falls back
+  when a named Desktop is offline or disabled.
+
+Local evidence: Mobile and Mobile Pro typecheck and ESLint pass; seven focused suites pass 71/71,
+covering both task kinds, applied, rejected, unrelated, and timed-out controls, two-Desktop default and
+named routing, disabled/offline rejection, chat rendering, and non-task approval preservation. Keep
+this entry open only for the final narrow and wide physical-device checks on iOS and Android.
