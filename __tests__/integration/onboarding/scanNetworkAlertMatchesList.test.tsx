@@ -53,7 +53,7 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
+import { AdvancedSetupScreen } from '../../../src/screens/ModelDownloadScreen';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetStores } from '../../utils/testHelpers';
 
@@ -119,7 +119,7 @@ describe('Scan Network — alert matches the rendered list (device state-mismatc
     // and the follow-up auto-check marks it reachable a moment later.
     installFetch({ serverReachable: true, flakyWarmup: true });
 
-    const ui = render(<ModelDownloadScreen navigation={navigation} />);
+    const ui = render(<AdvancedSetupScreen navigation={navigation} />);
 
     // Wait for the "Analyzing your device..." init to finish and the network section to render. With an
     // empty store the mount auto-check settles immediately, so "Scan Network" is pressable.
@@ -145,7 +145,7 @@ describe('Scan Network — alert matches the rendered list (device state-mismatc
     // No persisted server and nothing reachable on the LAN → the honest empty case.
     installFetch({ serverReachable: false });
 
-    const ui = render(<ModelDownloadScreen navigation={navigation} />);
+    const ui = render(<AdvancedSetupScreen navigation={navigation} />);
     await waitFor(() => { expect(ui.queryByText('Network Models')).not.toBeNull(); }, { timeout: 5000 });
 
     fireEvent.press(ui.getByText('Scan Network'));

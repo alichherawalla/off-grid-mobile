@@ -32,7 +32,7 @@ export interface AutoSetupCompatibleCatalog {
 }
 
 const PLAN_COPY: Record<AutoSetupTier, Pick<AutoSetupPlan, 'title' | 'summary'>> = {
-  lean: { title: 'Lean', summary: 'Small downloads and fast local replies.' },
+  lean: { title: 'Lean', summary: 'Small downloads with lower memory use.' },
   balanced: { title: 'Balanced', summary: 'The best balance for this device.' },
   extreme: { title: 'Extreme', summary: 'The largest safe models for this device.' },
 };

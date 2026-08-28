@@ -225,7 +225,7 @@ jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
 
 import { Platform } from 'react-native';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
-import { ModelDownloadScreen } from '../../../src/screens/ModelDownloadScreen';
+import { AdvancedSetupScreen } from '../../../src/screens/ModelDownloadScreen';
 import { LITERT_PARENT_ID } from '../../../src/services/curatedLiteRTRegistry';
 
 const MOCK_FILE = {
@@ -277,14 +277,14 @@ describe('ModelDownloadScreen', () => {
   // ===========================================================================
   it('renders the loading state initially', () => {
     const { getByText } = render(
-      <ModelDownloadScreen navigation={mockNavigation} />,
+      <AdvancedSetupScreen navigation={mockNavigation} />,
     );
     expect(getByText(/Analyzing your device/)).toBeTruthy();
   });
 
   it('renders with testID for loading state', () => {
     const { getByTestId } = render(
-      <ModelDownloadScreen navigation={mockNavigation} />,
+      <AdvancedSetupScreen navigation={mockNavigation} />,
     );
     expect(getByTestId('model-download-loading')).toBeTruthy();
   });
@@ -295,7 +295,7 @@ describe('ModelDownloadScreen', () => {
   it('renders the loaded state with "Set Up Your AI" title', async () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByTestId('model-download-screen')).toBeTruthy();
@@ -304,7 +304,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('renders device info card after loading', async () => {
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByText('Your Device')).toBeTruthy();
@@ -315,7 +315,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('renders the NetworkSection', async () => {
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByTestId('network-section')).toBeTruthy();
@@ -323,7 +323,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('renders "Download to Your Device" section title', async () => {
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByText('Download to Your Device')).toBeTruthy();
@@ -333,7 +333,7 @@ describe('ModelDownloadScreen', () => {
   // Skip button
   // ===========================================================================
   it('skip button navigates to Main', async () => {
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const skipButton = result.getByTestId('model-download-skip');
@@ -347,7 +347,7 @@ describe('ModelDownloadScreen', () => {
   it('renders recommended models based on device RAM', async () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByTestId('recommended-model-0')).toBeTruthy();
@@ -356,7 +356,7 @@ describe('ModelDownloadScreen', () => {
   it('shows warning card when no compatible models', async () => {
     mockHardwareService.getTotalMemoryGB.mockReturnValue(1);
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByText('Limited Compatibility')).toBeTruthy();
@@ -366,7 +366,7 @@ describe('ModelDownloadScreen', () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 1 });
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
 
     const downloadBtn = await result.findByTestId('recommended-model-0-download');
     await act(async () => {
@@ -381,7 +381,7 @@ describe('ModelDownloadScreen', () => {
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
     mockDownloadModelBackground.mockResolvedValue({ downloadId: 123 });
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const downloadBtn = await result.findByTestId('recommended-model-0-download', {}, { timeout: 5000 });
@@ -405,7 +405,7 @@ describe('ModelDownloadScreen', () => {
     mockModelManager.watchDownload.mockImplementation((_id: number, onComplete: any) => {
       capturedOnComplete = onComplete;
     });
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
     const downloadBtn = result.getByTestId('recommended-model-0-download');
     await act(async () => { fireEvent.press(downloadBtn); });
@@ -434,7 +434,7 @@ describe('ModelDownloadScreen', () => {
       capturedOnError = onError;
     });
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const downloadBtn = result.getByTestId('recommended-model-0-download');
@@ -454,7 +454,7 @@ describe('ModelDownloadScreen', () => {
 
     mockDownloadModelBackground.mockRejectedValue(new Error('Unexpected error'));
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const downloadBtn = result.getByTestId('recommended-model-0-download');
@@ -468,7 +468,7 @@ describe('ModelDownloadScreen', () => {
   it('init error shows error alert', async () => {
     mockHardwareService.getDeviceInfo.mockRejectedValueOnce(new Error('Hardware error'));
 
-    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    render(<AdvancedSetupScreen navigation={mockNavigation} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -494,7 +494,7 @@ describe('ModelDownloadScreen', () => {
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
-    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     await act(async () => {
@@ -511,7 +511,7 @@ describe('ModelDownloadScreen', () => {
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
-    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     await act(async () => {
@@ -526,7 +526,7 @@ describe('ModelDownloadScreen', () => {
     const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
     mockRsm.testConnection.mockResolvedValueOnce({ success: false, error: 'Timeout' });
 
-    render(<ModelDownloadScreen navigation={mockNavigation} />);
+    render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     await act(async () => {
@@ -544,7 +544,7 @@ describe('ModelDownloadScreen', () => {
     const { discoverLANServers } = jest.requireMock('../../../src/services/networkDiscovery');
     discoverLANServers.mockRejectedValueOnce(new Error('wifi off'));
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const scanBtn = result.getByTestId('scan-network-btn');
@@ -563,7 +563,7 @@ describe('ModelDownloadScreen', () => {
     mockRemoteServerState.testConnection.mockResolvedValue({ success: false });
     mockRemoteServerState.servers = [];
 
-    const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+    const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     const scanBtn = result.getByTestId('scan-network-btn');
@@ -591,7 +591,7 @@ describe('ModelDownloadScreen', () => {
 
     it('renders curated LiteRT cards on Android', async () => {
       Platform.OS = 'android';
-      const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+      const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
       expect(result.getByTestId('litert-model-0')).toBeTruthy();
@@ -600,7 +600,7 @@ describe('ModelDownloadScreen', () => {
 
     it('does NOT render LiteRT cards on iOS', async () => {
       Platform.OS = 'ios';
-      const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+      const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
       expect(result.queryByTestId('litert-model-0')).toBeNull();
@@ -617,7 +617,7 @@ describe('ModelDownloadScreen', () => {
     it('downloading a LiteRT model uses the curated parent id', async () => {
       Platform.OS = 'android';
       mockDownloadModelBackground.mockResolvedValue({ downloadId: 7 });
-      const result = render(<ModelDownloadScreen navigation={mockNavigation} />);
+      const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
       await act(async () => { fireEvent.press(result.getByTestId('litert-model-0-download')); });

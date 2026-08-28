@@ -10,11 +10,8 @@ import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
 import { matchesSdVersionFilter } from './utils';
-import {
-  ImageDownloadDeps,
-  handleDownloadImageModel as downloadImageModel,
-  cancelSyntheticImageDownload,
-} from './imageDownloadActions';
+import { cancelSyntheticImageDownload } from './imageDownloadActions';
+import { startImageModelDownload as downloadImageModel, type ImageDownloadDeps } from '../../services/imageModelDownloadOwner';
 import { resumeImageDownload } from './imageDownloadResume';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {

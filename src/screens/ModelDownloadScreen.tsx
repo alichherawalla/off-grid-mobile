@@ -446,8 +446,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
-/** @deprecated Test-only source compatibility. The route is AdvancedSetup. */
-export const ModelDownloadScreen = AdvancedSetupScreen;
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: { flex: 1, backgroundColor: colors.background },

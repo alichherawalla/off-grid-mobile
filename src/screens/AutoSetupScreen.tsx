@@ -9,7 +9,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import type { RootStackParamList } from '../navigation/types';
 import { loadAutoSetupCompatibleCatalog } from '../services/autoSetupCatalog';
 import { selectAutoSetupPlans, type AutoSetupPlan, type AutoSetupTier } from '../services/autoSetupPlan';
-import { startAutoSetupPlan } from '../services/autoSetupService';
+import { completeAutoSetupPlan, startAutoSetupPlan } from '../services/autoSetupService';
 import { useModelDownloads } from '../services/modelDownloadService/useModelDownloads';
 import { uniformDownloadId } from '../services/modelDownloadService/uniformId';
 import { useTheme, useThemedStyles } from '../theme';
@@ -50,6 +50,8 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
     ? selected.items.map(item => downloads.find(download => download.id === idForItem(item))).filter(Boolean)
     : [], [downloads, selected]);
   const failed = planDownloads.find(download => download?.status === 'error');
+  const isComplete = selected != null && selected.items.every(item =>
+    downloads.some(download => download.id === idForItem(item) && download.status === 'completed'));
   const progress = planDownloads.length === 0 ? 0
     : planDownloads.reduce((sum, download) => sum + (download?.progress ?? 0), 0) / selected.items.length;
 
@@ -57,7 +59,8 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
     if (!selected) return;
     setStarting(true);
     setError(null);
-    try { await startAutoSetupPlan(selected); }
+    const completedIds = new Set(downloads.filter(download => download.status === 'completed').map(download => download.id));
+    try { await startAutoSetupPlan(selected, completedIds); }
     catch { setError('One or more downloads could not start. Try again.'); }
     finally { setStarting(false); }
   };
@@ -88,7 +91,9 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
           {selected.items.map(item => <View key={`${item.kind}:${item.id}`} style={styles.item}><Text style={styles.itemKind}>{item.kind === 'text' ? 'TEXT + VISION' : item.kind === 'image' ? 'IMAGE' : 'SPEECH INPUT'}</Text><Text style={styles.itemName}>{item.name}</Text><Text style={styles.itemSize}>{formatBytes(item.sizeBytes)}</Text></View>)}
           {(starting || planDownloads.length > 0) && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, progress * 100)}%` }]} /></View>}
           {failed && <Text style={styles.error}>{failed.error ?? 'A download failed.'}</Text>}
-          <Button title={failed ? 'Retry Downloads' : `Download ${formatBytes(selected.totalBytes)}`} onPress={start} loading={starting} testID="auto-setup-download" />
+          {isComplete
+            ? <Button title="Continue" onPress={() => { completeAutoSetupPlan(selected); navigation.replace('Main'); }} testID="auto-setup-continue" />
+            : <Button title={failed ? 'Retry Downloads' : `Download ${formatBytes(selected.totalBytes)}`} onPress={start} loading={starting} testID="auto-setup-download" />}
         </Card> : <Card style={styles.errorCard}><Text style={styles.error}>No complete model set is safe for this device.</Text></Card>}
 
         <Button title="Configure it yourself" variant="ghost" onPress={() => navigation.navigate('AdvancedSetup')} testID="auto-setup-advanced" />
@@ -108,7 +113,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   content: { padding: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.lg },
   center: { flex: 1, alignItems: 'center' as const, justifyContent: 'center' as const, gap: SPACING.md, padding: SPACING.xl },
   eyebrow: { ...TYPOGRAPHY.label, color: colors.primary },
-  title: { ...TYPOGRAPHY.h1, color: colors.text },
+  title: { ...TYPOGRAPHY.h2, color: colors.text },
   secondary: { ...TYPOGRAPHY.body, color: colors.textSecondary },
   planGrid: { gap: SPACING.md },
   planGridWide: { flexDirection: 'row' as const },
