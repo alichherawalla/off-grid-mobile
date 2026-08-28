@@ -23,6 +23,12 @@ const idForItem = (item: AutoSetupPlan['items'][number]) => {
   return uniformDownloadId('stt', item.id);
 };
 
+const labelForItem = (item: AutoSetupPlan['items'][number]) => {
+  if (item.kind === 'text') return 'TEXT + VISION';
+  if (item.kind === 'image') return 'IMAGE';
+  return 'SPEECH INPUT';
+};
+
 export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [plans, setPlans] = useState<AutoSetupPlan[]>([]);
   const [selectedTier, setSelectedTier] = useState<AutoSetupTier>('balanced');
@@ -81,14 +87,22 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
             <Card key={plan.tier} onPress={() => setSelectedTier(plan.tier)} style={{ ...styles.planCard, ...(width >= 700 ? styles.planCardWide : {}), ...(selected?.tier === plan.tier ? styles.selectedCard : {}) }} testID={`auto-setup-plan-${plan.tier}`}>
               <Text style={styles.planTitle}>{plan.title}</Text>
               <Text style={styles.secondary}>{plan.summary}</Text>
+              <View style={styles.includes}>
+                <Text style={styles.includesLabel}>INCLUDES</Text>
+                {plan.items.map(item => (
+                  <View key={`${plan.tier}:${item.kind}:${item.id}`} style={styles.planItem}>
+                    <Text style={styles.itemKind}>{labelForItem(item)}</Text>
+                    <Text style={styles.planItemName} numberOfLines={1}>{item.name}</Text>
+                  </View>
+                ))}
+              </View>
               <Text style={styles.total}>{formatBytes(plan.totalBytes)} download</Text>
             </Card>
           ))}
         </View>
 
         {selected ? <Card style={styles.details} testID="auto-setup-selected-plan">
-          <View style={styles.detailHeader}><Text style={styles.planTitle}>{selected.title} includes</Text>{VoiceIndicator ? <VoiceIndicator /> : null}</View>
-          {selected.items.map(item => <View key={`${item.kind}:${item.id}`} style={styles.item}><Text style={styles.itemKind}>{item.kind === 'text' ? 'TEXT + VISION' : item.kind === 'image' ? 'IMAGE' : 'SPEECH INPUT'}</Text><Text style={styles.itemName}>{item.name}</Text><Text style={styles.itemSize}>{formatBytes(item.sizeBytes)}</Text></View>)}
+          <View style={styles.detailHeader}><View><Text style={styles.includesLabel}>SELECTED SETUP</Text><Text style={styles.planTitle}>{selected.title}</Text></View>{VoiceIndicator ? <VoiceIndicator /> : null}</View>
           {(starting || planDownloads.length > 0) && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, progress * 100)}%` }]} /></View>}
           {failed && <Text style={styles.error}>{failed.error ?? 'A download failed.'}</Text>}
           {isComplete
@@ -121,13 +135,14 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   planCardWide: { flex: 1 },
   selectedCard: { borderColor: colors.primary },
   planTitle: { ...TYPOGRAPHY.h2, color: colors.text },
+  includes: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: SPACING.md, gap: SPACING.sm },
+  includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
+  planItem: { gap: SPACING.xs },
+  planItemName: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
   total: { ...TYPOGRAPHY.meta, color: colors.primary },
   details: { gap: SPACING.md },
   detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
-  item: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: SPACING.md },
   itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
-  itemName: { ...TYPOGRAPHY.body, color: colors.text, marginTop: SPACING.xs },
-  itemSize: { ...TYPOGRAPHY.meta, color: colors.textSecondary, marginTop: SPACING.xs },
   progressTrack: { height: SPACING.xs, backgroundColor: colors.surfaceLight, overflow: 'hidden' as const },
   progressFill: { height: SPACING.xs, backgroundColor: colors.primary },
   errorCard: { gap: SPACING.md, borderWidth: 1, borderColor: colors.error },
