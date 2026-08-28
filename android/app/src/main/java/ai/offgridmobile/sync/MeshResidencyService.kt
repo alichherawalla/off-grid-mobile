@@ -1,5 +1,6 @@
 package ai.offgridmobile.sync
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -23,10 +24,23 @@ class MeshResidencyService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundCompat()
-        // Restart if the OS kills us for memory, so the mesh comes back without the user
-        // reopening the app. No redelivered intent is needed - residency carries no payload.
-        return START_STICKY
+        try {
+            startForegroundCompat()
+        } catch (error: RuntimeException) {
+            val startWasDenied =
+                error is SecurityException ||
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        error is ForegroundServiceStartNotAllowedException)
+            if (!startWasDenied) throw error
+
+            // Promotion can be denied after startForegroundService() has already returned. Stop
+            // this service now so Android does not later kill the process for a late promotion.
+            stopImmediately()
+        }
+
+        // The React Native mesh engine owns the sockets. A service-only restart would show a false
+        // reachability notification and can also occur when Android does not permit a new FGS.
+        return START_NOT_STICKY
     }
 
     /** Android gives a timed foreground service only a few seconds to stop after this callback. */

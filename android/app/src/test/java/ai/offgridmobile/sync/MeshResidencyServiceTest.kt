@@ -2,6 +2,7 @@ package ai.offgridmobile.sync
 
 import android.Manifest
 import android.app.Application
+import android.app.Service
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
@@ -67,5 +68,18 @@ class MeshResidencyServiceTest {
         assertTrue(shadow.isForegroundStopped)
         assertTrue(shadow.notificationShouldRemoved)
         assertTrue(shadow.isStoppedBySelf)
+    }
+
+    @Test
+    fun serviceDoesNotRestartWithoutItsMeshOwner() {
+        val service =
+            org.robolectric.Robolectric
+                .buildService(MeshResidencyService::class.java)
+                .create()
+                .get()
+
+        val restartMode = service.onStartCommand(null, 0, 18)
+
+        assertEquals(Service.START_NOT_STICKY, restartMode)
     }
 }
