@@ -144,7 +144,10 @@ describe('tool extension loop integration', () => {
 
       expect(executorMock).toHaveBeenCalledTimes(1);
       expect(executorMock).toHaveBeenCalledWith(
-        expect.objectContaining({ name: MCP_TOOL_NAME }),
+        expect.objectContaining({
+          name: MCP_TOOL_NAME,
+          context: { conversationId: ctx.conversationId },
+        }),
       );
 
       const { executeToolCall } = require('../../../src/services/tools');

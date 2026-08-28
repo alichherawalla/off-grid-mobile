@@ -19,7 +19,11 @@ export interface ToolCall {
   id?: string;
   name: string;
   arguments: Record<string, any>;
-  context?: { projectId?: string };
+  context?: {
+    /** Portable chat identity. Remote action tools bind approval and progress to this chat. */
+    conversationId?: string;
+    projectId?: string;
+  };
 }
 
 /** How a tool call resolved. The loop sets this for EVERY call so the model and UI
