@@ -71,7 +71,7 @@ jest.mock('../../../../src/screens/ModelsScreen/utils', () => ({
   matchesSdVersionFilter: (...a: any[]) => mockMatchesSdVersionFilter(...a),
 }));
 
-jest.mock('../../../../src/screens/ModelsScreen/imageDownloadActions', () => ({
+jest.mock('../../../../src/services/imageDownloadActions', () => ({
   handleDownloadImageModel: jest.fn(),
   cancelSyntheticImageDownload: (...a: any[]) => mockCancelSynthetic(...a),
 }));

@@ -1,4 +1,4 @@
-import { getQnnWarningMessage, showQnnWarningAlert } from '../../../../src/screens/ModelsScreen/imageDownloadQnn';
+import { getQnnWarningMessage, showQnnWarningAlert } from '../../../../src/services/imageDownloadQnn';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
 import { makeImageDownloadDeps } from '../../../utils/factories';
 

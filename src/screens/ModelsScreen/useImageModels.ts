@@ -10,7 +10,7 @@ import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
 import { matchesSdVersionFilter } from './utils';
-import { cancelSyntheticImageDownload } from './imageDownloadActions';
+import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { startImageModelDownload as downloadImageModel, type ImageDownloadDeps } from '../../services/imageModelDownloadOwner';
 import { resumeImageDownload } from './imageDownloadResume';
 

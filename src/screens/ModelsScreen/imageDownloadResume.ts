@@ -5,7 +5,7 @@ import { modelManager, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
-import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
+import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from '../../services/imageDownloadActions';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import { makeImageModelKey } from '../../utils/modelKey';

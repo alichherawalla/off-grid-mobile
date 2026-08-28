@@ -1,5 +1,5 @@
 import type { ModelFile } from '../types';
-import type { ImageModelDescriptor } from '../screens/ModelsScreen/types';
+import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 export type AutoSetupTier = 'lean' | 'balanced' | 'extreme';
 export type AutoSetupModelKind = 'text' | 'image' | 'stt';

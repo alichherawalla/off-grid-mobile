@@ -1,6 +1,6 @@
 import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
 import { fileExceedsBudget } from './memoryBudget';
-import { fetchModelFiles } from '../screens/ModelDownloadHelpers';
+import { fetchModelFiles } from './modelCatalogFiles';
 import { hardwareService } from './hardware';
 import { WHISPER_MODELS } from './whisperModels';
 import type { AutoSetupCompatibleCatalog } from './autoSetupPlan';

@@ -5,7 +5,7 @@
  * Use these factories to create consistent test data across all test files.
  */
 
-import type { ImageDownloadDeps } from '../../src/screens/ModelsScreen/imageDownloadActions';
+import type { ImageDownloadDeps } from '../../src/services/imageDownloadActions';
 import {
   Message,
   Conversation,

@@ -2,7 +2,7 @@ import { startModelDownload } from './startModelDownload';
 import { startImageModelDownload } from './imageModelDownloadOwner';
 import { useAppStore } from '../stores';
 import { useWhisperStore } from '../stores/whisperStore';
-import { initialAlertState } from '../components/CustomAlert';
+import { uniformDownloadId } from './modelDownloadService/uniformId';
 import type { AutoSetupPlan } from './autoSetupPlan';
 
 /** The only Auto Setup side-effect owner. Existing domain download owners keep all download state. */
@@ -10,15 +10,15 @@ export async function startAutoSetupPlan(plan: AutoSetupPlan, completedIds: Read
   const [text, image, stt] = plan.items;
   const app = useAppStore.getState();
   const starts: Promise<unknown>[] = [];
-  if (!completedIds.has(`text:${text.id}`)) starts.push(startModelDownload(text.payload.modelId, text.payload.file));
-  if (!completedIds.has(`image:${image.id}`)) starts.push(startImageModelDownload(image.payload, {
+  if (!completedIds.has(uniformDownloadId('text', text.id))) starts.push(startModelDownload(text.payload.modelId, text.payload.file));
+  if (!completedIds.has(uniformDownloadId('image', image.id))) starts.push(startImageModelDownload(image.payload, {
       addDownloadedImageModel: app.addDownloadedImageModel,
       activeImageModelId: app.activeImageModelId,
       setActiveImageModelId: app.setActiveImageModelId,
-      setAlertState: () => initialAlertState,
+      setAlertState: () => undefined,
       triedImageGen: app.onboardingChecklist.triedImageGen,
     }));
-  if (!completedIds.has(`stt:${stt.id}`)) starts.push(useWhisperStore.getState().downloadModel(stt.payload.modelId));
+  if (!completedIds.has(uniformDownloadId('stt', stt.id))) starts.push(useWhisperStore.getState().downloadModel(stt.payload.modelId));
   await Promise.all(starts);
 }
 

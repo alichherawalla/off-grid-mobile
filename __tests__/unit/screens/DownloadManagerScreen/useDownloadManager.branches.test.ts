@@ -65,7 +65,7 @@ jest.mock('../../../../src/services/modelDownloadService', () => ({
 jest.mock('../../../../src/services/modelDownloadService/providers/imageProvider', () => ({
   setImageDownloadOps: (...a: any[]) => mockSetImageDownloadOps(...a),
 }));
-jest.mock('../../../../src/screens/ModelsScreen/imageDownloadActions', () => ({
+jest.mock('../../../../src/services/imageDownloadActions', () => ({
   cancelSyntheticImageDownload: jest.fn(),
 }));
 jest.mock('../../../../src/screens/DownloadManagerScreen/retryHandlers', () => ({

@@ -2,23 +2,23 @@
  *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
-import { showAlert } from '../../components/CustomAlert';
-import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
-import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../utils/coreMLModelUtils';
-import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
-import { ONNXImageModel } from '../../types';
-import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
-import { makeImageModelKey } from '../../utils/modelKey';
-import { ImageModelDescriptor, ImageDownloadDeps } from './types';
+import { showAlert } from '../components/CustomAlert';
+import { modelManager, hardwareService, backgroundDownloadService } from '../services';
+import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
+import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
+import { ONNXImageModel } from '../types';
+import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
+import { makeImageModelKey } from '../utils/modelKey';
+import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTypes';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
-import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
-import logger from '../../utils/logger';
+import { ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
+import logger from '../utils/logger';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
 // here). Re-exported for existing importers.
-export type { ImageDownloadDeps };
+export type { ImageDownloadDeps } from './imageModelDownloadTypes';
 
 interface ImageMetadata {
   imageDownloadType: 'zip' | 'multifile';
@@ -492,4 +492,3 @@ export async function handleDownloadImageModel(
   }
   await proceedWithDownload(modelInfo, deps);
 }
-

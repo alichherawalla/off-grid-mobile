@@ -22,7 +22,7 @@ import {
   queuedToActiveItem,
 } from './downloadItemMapping';
 import logger from '../../utils/logger';
-import { cancelSyntheticImageDownload } from '../ModelsScreen/imageDownloadActions';
+import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { retryImageDownload } from './retryHandlers';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';

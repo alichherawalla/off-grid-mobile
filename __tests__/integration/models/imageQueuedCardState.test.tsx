@@ -66,7 +66,7 @@ jest.mock('../../../src/services', () => ({
 // REAL store, REAL key helper, REAL card, REAL download action.
 import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../../src/stores/downloadStore';
 import { makeImageModelKey } from '../../../src/utils/modelKey';
-import { proceedWithDownload } from '../../../src/screens/ModelsScreen/imageDownloadActions';
+import { proceedWithDownload } from '../../../src/services/imageDownloadActions';
 import { ImageModelCardItem } from '../../../src/screens/ModelsScreen/ImageModelsTab';
 import { makeImageDownloadDeps } from '../../utils/factories';
 

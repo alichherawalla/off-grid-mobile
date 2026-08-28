@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { fetchAvailableCoreMLModels } from './coreMLModelBrowser';
 import { fetchAvailableModels, guessStyle } from './huggingFaceModelBrowser';
 import { hardwareService } from './hardware';
-import type { ImageModelDescriptor } from '../screens/ModelsScreen/types';
+import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 interface AutoSetupImageCatalogProvider {
   load(): Promise<ImageModelDescriptor[]>;

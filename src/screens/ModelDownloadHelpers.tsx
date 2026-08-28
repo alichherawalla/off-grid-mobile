@@ -9,32 +9,13 @@ import { LoadingDots } from '../components/LoadingDots';
 import { Card } from '../components';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS, OFF_GRID_DESKTOP_URL } from '../constants';
-import { huggingFaceService } from '../services';
-import { ModelFile, RemoteModel, RemoteServer } from '../types';
-import logger from '../utils/logger';
+import { RemoteModel, RemoteServer } from '../types';
+export { fetchModelFiles } from '../services/modelCatalogFiles';
 import { withUtm } from '../utils/utm';
 
 // ---------------------------------------------------------------------------
 // Model file fetching
 // ---------------------------------------------------------------------------
-
-export async function fetchModelFiles(
-  models: { id: string }[],
-): Promise<Record<string, ModelFile[]>> {
-  const filesMap: Record<string, ModelFile[]> = {};
-  await Promise.all(
-    models.map(async (model) => {
-      try {
-        const files = await huggingFaceService.getModelFiles(model.id);
-        const q4km = files.find(f => f.quantization.toUpperCase() === 'Q4_K_M');
-        if (q4km) filesMap[model.id] = [q4km];
-      } catch (error) {
-        logger.error(`Error fetching files for ${model.id}:`, error);
-      }
-    }),
-  );
-  return filesMap;
-}
 
 // ---------------------------------------------------------------------------
 // Discovered-server card

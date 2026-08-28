@@ -1,7 +1,7 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { backgroundDownloadService, modelManager } from '../../../../src/services';
-import { registerAndNotify } from '../../../../src/screens/ModelsScreen/imageDownloadActions';
+import { registerAndNotify } from '../../../../src/services/imageDownloadActions';
 import { resumeImageDownload } from '../../../../src/screens/ModelsScreen/imageDownloadResume';
 
 jest.mock('react-native-fs', () => ({
@@ -44,7 +44,7 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
   },
 }));
 
-jest.mock('../../../../src/screens/ModelsScreen/imageDownloadActions', () => ({
+jest.mock('../../../../src/services/imageDownloadActions', () => ({
   registerAndNotify: jest.fn(),
 }));
 

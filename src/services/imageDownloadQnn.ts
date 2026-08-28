@@ -1,5 +1,5 @@
-import { hideAlert, showAlert } from '../../components/CustomAlert';
-import { ImageModelDescriptor, ImageDownloadDeps } from './types';
+import { hideAlert, showAlert } from '../components/CustomAlert';
+import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTypes';
 
 export function getQnnWarningMessage(
   modelInfo: ImageModelDescriptor,
@@ -41,7 +41,7 @@ export function showQnnWarningAlert(
         text: 'Download Anyway',
         style: 'destructive',
         onPress: () => {
-          deps.setAlertState(hideAlert());
+    deps.setAlertState(hideAlert());
           onDownloadAnyway();
         },
       },

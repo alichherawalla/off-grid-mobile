@@ -78,6 +78,18 @@ const mockGetModelFiles = jest.fn<Promise<any[]>, any[]>(() => Promise.resolve([
 const mockDownloadModel = jest.fn();
 const mockDownloadModelBackground = jest.fn();
 
+jest.mock('../../../src/services/modelCatalogFiles', () => ({
+  fetchModelFiles: async (models: { id: string }[]) => {
+    const result: Record<string, any[]> = {};
+    for (const model of models) {
+      const files = await mockGetModelFiles(model.id);
+      const file = files.find((candidate: any) => candidate.quantization.toUpperCase() === 'Q4_K_M');
+      if (file) result[model.id] = [file];
+    }
+    return result;
+  },
+}));
+
 jest.mock('../../../src/services', () => ({
   hardwareService: {
     getDeviceInfo: jest.fn(() => Promise.resolve({ deviceModel: 'Test Device', availableMemory: 8000000000 })),
@@ -292,14 +304,14 @@ describe('ModelDownloadScreen', () => {
   // ===========================================================================
   // Loaded state
   // ===========================================================================
-  it('renders the loaded state with "Set Up Your AI" title', async () => {
+  it('renders the loaded Advanced Setup state', async () => {
     mockGetModelFiles.mockResolvedValue([MOCK_FILE]);
 
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
     expect(result.getByTestId('model-download-screen')).toBeTruthy();
-    expect(result.getByText('Set Up Your AI')).toBeTruthy();
+    expect(result.getByText('Advanced Setup')).toBeTruthy();
     expect(result.getByText(/Connect to a model server/)).toBeTruthy();
   });
 

@@ -1,42 +1,12 @@
 import { CompositeNavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { ModelSource, ONNXImageModel } from '../../types';
+import { ModelSource } from '../../types';
 import { RootStackParamList, MainTabParamList } from '../../navigation/types';
-import type { AlertState } from '../../utils/alertState';
-
-/** Injected deps for the standalone image-download handlers. Lives here (not in
- *  imageDownloadActions) so imageDownloadQnn can import it without importing imageDownloadActions,
- *  which imports imageDownloadQnn back (a cycle). imageDownloadActions re-exports it. */
-export interface ImageDownloadDeps {
-  addDownloadedImageModel: (m: ONNXImageModel) => void;
-  activeImageModelId: string | null;
-  setActiveImageModelId: (id: string) => void;
-  setAlertState: (s: AlertState) => void;
-  /** When false, skip auto-load and leave the model for the user to load by hand. */
-  triedImageGen: boolean;
-}
+export type { ImageDownloadDeps, ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
+import type { ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
 
 export type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
-
-export interface ImageModelDescriptor {
-  id: string;
-  name: string;
-  description: string;
-  downloadUrl: string;
-  size: number;
-  style: string;
-  backend: 'mnn' | 'qnn' | 'coreml';
-  variant?: string;
-  huggingFaceRepo?: string;
-  huggingFaceFiles?: { path: string; size: number }[];
-  /** Multi-file download manifest (Core ML full-precision models) */
-  coremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
-  /** HuggingFace repo slug (e.g. 'apple/coreml-stable-diffusion-2-1-base-palettized') */
-  repo?: string;
-  /** Core ML attention variant: 'original' uses CPU/GPU (lower peak memory) */
-  attentionVariant?: 'split_einsum' | 'original';
-}
 
 export type CredibilityFilter = 'all' | ModelSource;
 export type ModelTypeFilter = 'all' | 'text' | 'vision' | 'code' | 'image-gen';

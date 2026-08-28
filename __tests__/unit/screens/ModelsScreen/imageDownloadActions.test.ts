@@ -8,7 +8,7 @@ import {
   handleDownloadImageModel,
   registerAndNotify,
   cancelSyntheticImageDownload,
-} from '../../../../src/screens/ModelsScreen/imageDownloadActions';
+} from '../../../../src/services/imageDownloadActions';
 import { ImageModelDescriptor } from '../../../../src/screens/ModelsScreen/types';
 import { makeImageDownloadDeps } from '../../../utils/factories';
 
@@ -347,8 +347,8 @@ describe('imageDownloadActions', () => {
 
   it('cancelSyntheticImageDownload does nothing when no runtime exists', async () => {
     const { cancelSyntheticImageDownload: cancel } = jest.requireActual(
-      '../../../../src/screens/ModelsScreen/imageDownloadActions',
-    ) as typeof import('../../../../src/screens/ModelsScreen/imageDownloadActions');
+      '../../../../src/services/imageDownloadActions',
+    ) as typeof import('../../../../src/services/imageDownloadActions');
     await expect(cancel('non-existent-model')).resolves.toBeUndefined();
   });
 
