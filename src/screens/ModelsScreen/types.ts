@@ -4,7 +4,6 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { ModelSource } from '../../types';
 import { RootStackParamList, MainTabParamList } from '../../navigation/types';
 export type { ImageDownloadDeps, ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
-import type { ImageModelDescriptor } from '../../services/imageModelDownloadTypes';
 
 export type BackendFilter = 'all' | 'mnn' | 'qnn' | 'coreml';
 
