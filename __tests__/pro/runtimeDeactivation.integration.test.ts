@@ -58,7 +58,6 @@ jest.mock('../../pro/audio', () => ({
 }));
 
 for (const modulePath of [
-  '../../pro/ui/ComputerApprovalCard',
   '../../pro/ui/AutoSetupVoiceIndicator',
   '../../pro/ui/McpServersScreen',
   '../../pro/ui/McpToolsScreen',

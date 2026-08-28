@@ -4,6 +4,7 @@ import { TASK_RUN_ENTITY } from '@offgrid/sync';
 import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
 import { projectNotificationCenter } from '../../../pro/sync/notificationCenter';
+import { useTaskRunStore } from '../../../pro/tasks/taskRunStore';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 
@@ -113,6 +114,8 @@ describe('synced Web Use and Computer Use task in chat', () => {
     expect(screen.getByText('Pause')).toBeTruthy();
     expect(screen.getByText('Stop')).toBeTruthy();
     expect(screen.getByText('Take Over')).toBeTruthy();
+    expect(screen.queryByText('Approve')).toBeNull();
+    expect(screen.queryByText('Decline')).toBeNull();
 
     act(() => useSyncStore.getState().setConnectedDeviceIds([]));
     expect(
@@ -125,6 +128,10 @@ describe('synced Web Use and Computer Use task in chat', () => {
     await waitFor(() =>
       expect(screen.getByText('Pause requested')).toBeTruthy(),
     );
+    const request =
+      useTaskRunStore.getState().requestedControlByTaskId[
+        runningComputerTask.taskId
+      ];
 
     act(() =>
       materializer.put(
@@ -135,6 +142,12 @@ describe('synced Web Use and Computer Use task in chat', () => {
           status: 'paused',
           phase: 'paused',
           updatedAt: 30,
+          latestControlResult: {
+            controlId: request!.controlId,
+            kind: 'pause',
+            outcome: 'applied',
+            respondedAt: 30,
+          },
         },
         origin,
       ),

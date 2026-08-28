@@ -275,6 +275,44 @@ describe('execute', () => {
   });
 
   it('passes the originating chat and device with a companion action', async () => {
+    useMcpStore.setState({
+      servers: [
+        {
+          id: 'desktop-tools',
+          name: 'Office Mac',
+          url: 'http://office-mac/mcp',
+          grantedByDeviceId: 'desktop-1',
+        },
+        {
+          id: 'studio-tools',
+          name: 'Studio Mac',
+          url: 'http://studio-mac/mcp',
+          grantedByDeviceId: 'desktop-2',
+        },
+      ],
+      connectionStates: {
+        'desktop-tools': 'connected',
+        'studio-tools': 'connected',
+      },
+      serverTools: {
+        'desktop-tools': [
+          {
+            name: 'web_use',
+            description: 'Run a web task',
+            inputSchema: { type: 'object' },
+          },
+        ],
+        'studio-tools': [
+          {
+            name: 'web_use',
+            description: 'Run a web task',
+            inputSchema: { type: 'object' },
+          },
+        ],
+      },
+      enabledTools: ['web_use'],
+      toolOwners: { web_use: 'desktop-tools' },
+    });
     useSyncStore.setState({
       thisDevice: {
         id: 'phone-1',
@@ -284,23 +322,54 @@ describe('execute', () => {
         host: '',
         port: 0,
       },
+      knownDevices: [
+        {
+          id: 'desktop-1',
+          name: 'Office Mac',
+          platform: 'macos',
+          version: '1',
+          host: 'office-mac',
+          port: 1,
+          status: 'connected',
+          pairedAt: 1,
+          lastSeenAt: 1,
+        },
+        {
+          id: 'desktop-2',
+          name: 'Studio Alias',
+          platform: 'macos',
+          version: '1',
+          host: 'studio-mac',
+          port: 1,
+          status: 'connected',
+          pairedAt: 1,
+          lastSeenAt: 1,
+        },
+      ],
+      connectedDeviceIds: ['desktop-1', 'desktop-2'],
     });
     mockExecuteMcpTool.mockResolvedValue({ content: 'started', durationMs: 9 });
 
     await McpToolExtension.execute({
       id: 'task-1',
       name: 'web_use',
-      arguments: { task: 'Find a flight' },
+      arguments: {
+        task: 'Find a flight',
+        execution_device: 'studio alias',
+      },
       context: { conversationId: 'chat-mobile-1' },
     });
 
     expect(mockExecuteMcpTool).toHaveBeenCalledWith(
       'web_use',
-      { task: 'Find a flight' },
+      { task: 'Find a flight', execution_device: 'studio alias' },
       {
-        conversationId: 'chat-mobile-1',
-        deviceId: 'phone-1',
-        deviceName: 'Ali phone',
+        origin: {
+          conversationId: 'chat-mobile-1',
+          deviceId: 'phone-1',
+          deviceName: 'Ali phone',
+        },
+        ownerId: 'studio-tools',
       },
     );
   });
