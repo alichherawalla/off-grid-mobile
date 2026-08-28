@@ -29,8 +29,12 @@ jest.mock('@react-navigation/native', () => ({
 
 const SHEET_TITLE = 'Support Open-Source AI';
 
-describe('happy — support-share sheet dismisses after Share on X and does not re-nag (T096)', () => {
-  it('llama.cpp: 2nd generation shows the sheet; sharing to X dismisses it; the 10th does not re-nag', async () => {
+// Either store's label is correct - which one renders depends on the platform the suite runs as,
+// and the point of this test is the dismiss-and-do-not-re-nag behaviour, not the platform split.
+const RATE_LABEL = /^Rate on (the App Store|Google Play)$/;
+
+describe('happy — support-share sheet dismisses after rating and does not re-nag (T096)', () => {
+  it('llama.cpp: 2nd generation shows the sheet; rating dismisses it; the 10th does not re-nag', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     h.render();
 
@@ -50,11 +54,11 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     // shouldShowSharePrompt(2) is true, and (since not engaged) emits the prompt after the real delay.
     await h.send('second prompt', { text: 'reply two' });
     await h.rtl.waitFor(() => { expect(h.view!.getByText(SHEET_TITLE)).toBeTruthy(); }, { timeout: 15000 });
-    expect(h.view!.getByText('Share on X')).toBeTruthy();
+    expect(h.view!.getByText(RATE_LABEL)).toBeTruthy();
 
-    // GESTURE: tap "Share on X" — the REAL handleEngage sets hasEngagedSharePrompt, opens the X intent
-    // (the faked device leaf), and closes the sheet.
-    h.rtl.fireEvent.press(h.view!.getByText('Share on X'));
+    // GESTURE: tap the rate button — the REAL handleEngage sets hasEngagedSharePrompt, opens the
+    // store review page (the faked device leaf), and closes the sheet.
+    h.rtl.fireEvent.press(h.view!.getByText(RATE_LABEL));
 
     // ASSERT (1): the sheet is dismissed after the share. Its title is gone from the rendered tree.
     //
@@ -62,8 +66,14 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     // took 9.6s. The assertion is unchanged - the wait just stops racing the hardware. It only surfaced
     // now because CI never reached jest before; the typecheck gate died first on an unbuilt package.
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(SHEET_TITLE)).toBeNull(); }, { timeout: 15000 });
-    // The X compose intent was actually handed to the OS (return-from-X boundary).
-    await h.rtl.waitFor(() => { expect(openURL).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/x\.com\/intent\/post/)); });
+    // The store review page was actually handed to the OS (return-from-store boundary). Which store
+    // depends on the platform the test runs as, so accept either - the point is that the OS was asked
+    // to open a REVIEW destination, not that we hardcode one platform's URL into a shared test.
+    await h.rtl.waitFor(() => {
+      expect(openURL).toHaveBeenCalledWith(
+        expect.stringMatching(/^(https:\/\/apps\.apple\.com\/app\/id|market:\/\/details|https:\/\/play\.google\.com\/store)/),
+      );
+    });
 
     // "RETURN TO APP" + keep using it: drive generations up to the every-10th re-trigger count (10). If the
     // re-nag guard were broken, checkSharePrompt(10) would emit the prompt again and the sheet would reappear.

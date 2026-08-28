@@ -108,6 +108,22 @@ The emotional arc for all content: **Recognition -> Return -> Freedom**. Name wh
 > Run `node scripts/mirror-doctrine.mjs` in `shared/` after changing the canonical copy.
 > `--check` fails the build when a mirror drifts, so these cannot silently disagree.
 
+## Debugging — reason from first principles
+
+**Ask what the thing IS, before you ask what is happening to it.** Name what the code should be in
+one sentence ("a side panel is fixed to the right edge, full height"), read what it actually says,
+and fix the gap. Almost every hard-looking bug here dissolves at that step.
+
+The failure mode is reaching for the environment instead: measuring window geometry, blaming an OS
+setting, inspecting global CSS, theorising about the platform. Those are ways of not reading the
+component. A real example: a gap between a side panel and the window edge got attributed to a macOS
+tiled-window margin. The actual cause was in the component's own class list — it declared two
+competing heights (`h-dvh` on top of `top-0 bottom-0`) inside a clipping wrapper. The fix was to say
+the simple thing directly.
+
+So, before any tooling: if the answer requires unusual measurement to explain, the implementation is
+probably wrong, and it is complicated where it should be plain. Simplify it and the symptom goes.
+
 ## Debugging — start with the source of truth
 
 **Most bugs here are source-of-truth bugs, and the fix is almost always to collapse two sources into

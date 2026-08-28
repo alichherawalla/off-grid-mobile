@@ -1,4 +1,4 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { withUtm } from './utm';
 
 // Star button (Settings + share sheet) points at the mobile repo specifically.
@@ -24,10 +24,40 @@ Open source: ${ORG_GITHUB_URL}`;
 // twitter.com/intent/tweet just 302-redirects to it), so we point straight at it.
 const X_INTENT_URL = `https://x.com/intent/post?text=${encodeURIComponent(SHARE_TEXT)}`;
 
+// Ratings live where the store ranks us, and each store only counts its own.
+// iOS: the numeric App Store id, with action=write-review so the review sheet is
+// already open on arrival rather than the listing.
+// Android: market:// opens the Play app directly; the https form is the fallback
+// for a device with no Play app (or a simulator), where market:// has no handler.
+const APP_STORE_REVIEW_URL =
+  'https://apps.apple.com/app/id6759299882?action=write-review';
+const PLAY_PACKAGE = 'ai.offgridmobile';
+const PLAY_MARKET_URL = `market://details?id=${PLAY_PACKAGE}`;
+const PLAY_WEB_URL = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
+
 /** Open a pre-filled X (Twitter) compose screen, ready to post. */
 export async function shareOnX(): Promise<void> {
   await Linking.openURL(X_INTENT_URL);
 }
+
+/**
+ * Open this platform's store review page - App Store on iOS, Play Store on Android.
+ *
+ * A rating only counts on the store the user installed from, so the destination follows the
+ * platform rather than being one shared link.
+ */
+export async function rateOnStore(): Promise<void> {
+  if (Platform.OS === 'ios') {
+    await Linking.openURL(APP_STORE_REVIEW_URL);
+    return;
+  }
+  // canOpenURL rather than assuming: a device without the Play app (or an emulator image with no
+  // Play services) has no market:// handler, and openURL would simply reject.
+  const canOpenPlayApp = await Linking.canOpenURL(PLAY_MARKET_URL).catch(() => false);
+  await Linking.openURL(canOpenPlayApp ? PLAY_MARKET_URL : PLAY_WEB_URL);
+}
+
+export { APP_STORE_REVIEW_URL, PLAY_MARKET_URL, PLAY_WEB_URL };
 
 export { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL };
 

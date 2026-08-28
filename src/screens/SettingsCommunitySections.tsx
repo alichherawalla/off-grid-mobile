@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, Platform, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AnimatedEntry } from '../components/AnimatedEntry';
@@ -7,7 +7,7 @@ import {
   FOLLOW_X_URL,
   GITHUB_URL,
   SLACK_INVITE_URL,
-  shareOnX,
+  rateOnStore,
 } from '../utils/sharePrompt';
 import type { ThemeColors } from '../theme';
 import type { createStyles } from './SettingsScreen.styles';
@@ -114,15 +114,17 @@ export const SettingsCommunitySections: React.FC<
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.navItem, styles.navItemLast]}
-          onPress={() => shareOnX()}
+          onPress={() => rateOnStore()}
         >
           <View style={styles.navItemIcon}>
-            <Icon name="share-2" size={16} color={colors.textSecondary} />
+            <Icon name="star" size={16} color={colors.textSecondary} />
           </View>
           <View style={styles.navItemContent}>
-            <Text style={styles.navItemTitle}>Share on X</Text>
+            <Text style={styles.navItemTitle}>
+              {Platform.OS === 'ios' ? 'Rate on the App Store' : 'Rate on Google Play'}
+            </Text>
             <Text style={styles.navItemDesc}>
-              Tell others about Off Grid AI
+              A rating helps other people find Off Grid AI
             </Text>
           </View>
           <Icon name="external-link" size={14} color={colors.textMuted} />
