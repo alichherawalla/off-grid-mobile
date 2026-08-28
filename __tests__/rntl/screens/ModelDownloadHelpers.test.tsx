@@ -18,9 +18,15 @@ jest.mock('../../../src/components', () => ({
   },
 }));
 
-jest.mock('../../../src/services', () => ({
+// Hugging Face is the remote boundary. ModelDownloadHelpers now reaches it through
+// modelCatalogFiles, so both import paths must resolve to the same controlled adapter.
+jest.mock('../../../src/services/huggingface', () => ({
   huggingFaceService: { getModelFiles: jest.fn() },
 }));
+
+jest.mock('../../../src/services', () =>
+  jest.requireMock('../../../src/services/huggingface'),
+);
 
 jest.mock('../../../src/utils/logger', () => ({
   __esModule: true,
