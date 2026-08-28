@@ -12,6 +12,9 @@ const makeCandidate = (kind: 'text' | 'image' | 'stt', tier: string, size: numbe
   kind,
   sizeBytes: size,
   fitScore: tier === 'balanced' ? 0 : tier === 'lean' ? 1 : 2,
+  parameterCountB: kind === 'text'
+    ? tier === 'lean' ? 2 : tier === 'balanced' ? 4 : 9
+    : undefined,
   payload: kind === 'text'
     ? { modelId: 'repo', file: { name: `${tier}.gguf`, size, quantization: 'Q4_K_M', downloadUrl: 'https://boundary.test/text' } }
     : kind === 'image'

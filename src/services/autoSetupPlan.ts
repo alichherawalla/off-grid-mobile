@@ -10,6 +10,7 @@ export interface AutoSetupCandidate<T = unknown> {
   kind: AutoSetupModelKind;
   sizeBytes: number;
   fitScore: number;
+  parameterCountB?: number;
   payload: T;
 }
 
@@ -37,6 +38,12 @@ const PLAN_COPY: Record<AutoSetupTier, Pick<AutoSetupPlan, 'title' | 'summary'>>
   extreme: { title: 'Extreme', summary: 'The largest safe models for this device.' },
 };
 
+export const AUTO_SETUP_TEXT_TARGET_BILLIONS: Record<AutoSetupTier, number> = {
+  lean: 2,
+  balanced: 4,
+  extreme: 9,
+};
+
 function choose<T>(tier: AutoSetupTier, candidates: AutoSetupCandidate<T>[]): AutoSetupCandidate<T> | null {
   if (candidates.length === 0) return null;
   if (tier === 'balanced') return [...candidates].sort((a, b) => a.fitScore - b.fitScore)[0];
@@ -44,12 +51,25 @@ function choose<T>(tier: AutoSetupTier, candidates: AutoSetupCandidate<T>[]): Au
   return tier === 'lean' ? bySize[0] : bySize[bySize.length - 1];
 }
 
+function chooseText(
+  tier: AutoSetupTier,
+  candidates: AutoSetupCompatibleCatalog['text'],
+): AutoSetupCompatibleCatalog['text'][number] | null {
+  if (candidates.length === 0) return null;
+  const target = AUTO_SETUP_TEXT_TARGET_BILLIONS[tier];
+  return [...candidates].sort((a, b) => {
+    const aDistance = Math.abs((a.parameterCountB ?? 0) - target);
+    const bDistance = Math.abs((b.parameterCountB ?? 0) - target);
+    return aDistance - bDistance || a.fitScore - b.fitScore || a.sizeBytes - b.sizeBytes;
+  })[0];
+}
+
 /** Pure plan selector. Its input contains only candidates admitted by existing compatibility owners. */
 export function selectAutoSetupPlan(
   tier: AutoSetupTier,
   catalog: AutoSetupCompatibleCatalog,
 ): AutoSetupPlan | null {
-  const text = choose(tier, catalog.text);
+  const text = chooseText(tier, catalog.text);
   const image = choose(tier, catalog.image);
   const stt = choose(tier, catalog.stt);
   if (!text || !image || !stt) return null;

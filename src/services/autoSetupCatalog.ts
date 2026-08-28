@@ -8,23 +8,35 @@ import { autoSetupImageCatalogProvider } from './autoSetupImageCatalogProvider';
 
 const MB = 1024 * 1024;
 
+type CompatibleTextModel = ReturnType<typeof recommendedModelsForDevice>[number];
+
+export function buildAutoSetupTextCandidates(
+  models: CompatibleTextModel[],
+  files: Record<string, import('../types').ModelFile[]>,
+  ramGB: number,
+): AutoSetupCompatibleCatalog['text'] {
+  return models.filter(model => model.type === 'vision').flatMap(model => {
+    const file = files[model.id]?.[0];
+    const sizeBytes = file ? file.size + (file.mmProjFile?.size ?? 0) : 0;
+    if (!file || fileExceedsBudget(sizeBytes, ramGB)) return [];
+    return [{
+      id: `${model.id}/${file.name}`,
+      name: model.name,
+      kind: 'text' as const,
+      sizeBytes,
+      fitScore: ramFitScore(model.minRam, ramGB),
+      parameterCountB: model.params,
+      payload: { modelId: model.id, file },
+    }];
+  });
+}
+
 /** Resolve the live catalogs, then admit candidates through the existing device-fit owners. */
 export async function loadAutoSetupCompatibleCatalog(): Promise<AutoSetupCompatibleCatalog> {
   const ramGB = hardwareService.getTotalMemoryGB();
   const textModels = recommendedModelsForDevice(ramGB).filter(model => model.type === 'vision');
   const files = await fetchModelFiles(textModels);
-  const text = textModels.flatMap(model => {
-    const file = files[model.id]?.[0];
-    if (!file || fileExceedsBudget(file.size, ramGB)) return [];
-    return [{
-      id: `${model.id}/${file.name}`,
-      name: model.name,
-      kind: 'text' as const,
-      sizeBytes: file.size + (file.mmProjFile?.size ?? 0),
-      fitScore: ramFitScore(model.minRam, ramGB),
-      payload: { modelId: model.id, file },
-    }];
-  });
+  const text = buildAutoSetupTextCandidates(textModels, files, ramGB);
 
   const imageRecommendation = await hardwareService.getImageModelRecommendation();
   const imageModels = await autoSetupImageCatalogProvider.load();

@@ -51,7 +51,7 @@ export const RECOMMENDED_MODELS = [
     params: 2,
     description: 'Hybrid thinking + chat, 262K context',
     minRam: 4,
-    type: 'text' as const,
+    type: 'vision' as const,
     org: 'Qwen',
   },
   {
@@ -60,7 +60,7 @@ export const RECOMMENDED_MODELS = [
     params: 9,
     description: 'Best Qwen 3.5 quality, thinking mode, 262K context',
     minRam: 8,
-    type: 'text' as const,
+    type: 'vision' as const,
     org: 'Qwen',
   },
   // --- Others ---
