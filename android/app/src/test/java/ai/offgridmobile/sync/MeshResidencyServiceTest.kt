@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -48,5 +49,23 @@ class MeshResidencyServiceTest {
         assertTrue(
             requestedPermissions.contains(Manifest.permission.CHANGE_WIFI_MULTICAST_STATE),
         )
+    }
+
+    @Test
+    @Config(sdk = [34], application = Application::class)
+    fun timeoutStopsResidencyImmediately() {
+        val service =
+            org.robolectric.Robolectric
+                .buildService(MeshResidencyService::class.java)
+                .create()
+                .get()
+
+        service.onStartCommand(null, 0, 17)
+        service.onTimeout(17, MeshResidencyService.FOREGROUND_SERVICE_TYPE)
+
+        val shadow = shadowOf(service)
+        assertTrue(shadow.isForegroundStopped)
+        assertTrue(shadow.notificationShouldRemoved)
+        assertTrue(shadow.isStoppedBySelf)
     }
 }

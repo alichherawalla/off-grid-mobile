@@ -29,6 +29,16 @@ class MeshResidencyService : Service() {
         return START_STICKY
     }
 
+    /** Android gives a timed foreground service only a few seconds to stop after this callback. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        stopImmediately()
+    }
+
+    private fun stopImmediately() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     private fun startForegroundCompat() {
         val notification = buildNotification(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
