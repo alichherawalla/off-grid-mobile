@@ -131,6 +131,90 @@
       }
     }
   },
+  "unsloth/Qwen3.5-2B-GGUF": {
+    "exists": true,
+    "ggufFiles": [
+      "Qwen3.5-2B-BF16.gguf",
+      "Qwen3.5-2B-IQ4_NL.gguf",
+      "Qwen3.5-2B-IQ4_XS.gguf",
+      "Qwen3.5-2B-Q3_K_M.gguf",
+      "Qwen3.5-2B-Q3_K_S.gguf",
+      "Qwen3.5-2B-Q4_0.gguf",
+      "Qwen3.5-2B-Q4_1.gguf",
+      "Qwen3.5-2B-Q4_K_M.gguf",
+      "Qwen3.5-2B-Q4_K_S.gguf",
+      "Qwen3.5-2B-Q5_K_M.gguf",
+      "Qwen3.5-2B-Q5_K_S.gguf",
+      "Qwen3.5-2B-Q6_K.gguf",
+      "Qwen3.5-2B-Q8_0.gguf",
+      "Qwen3.5-2B-UD-IQ2_M.gguf",
+      "Qwen3.5-2B-UD-IQ2_XXS.gguf",
+      "Qwen3.5-2B-UD-IQ3_XXS.gguf",
+      "Qwen3.5-2B-UD-Q2_K_XL.gguf",
+      "Qwen3.5-2B-UD-Q3_K_XL.gguf",
+      "Qwen3.5-2B-UD-Q4_K_XL.gguf",
+      "Qwen3.5-2B-UD-Q5_K_XL.gguf",
+      "Qwen3.5-2B-UD-Q6_K_XL.gguf",
+      "Qwen3.5-2B-UD-Q8_K_XL.gguf",
+      "mmproj-BF16.gguf",
+      "mmproj-F16.gguf",
+      "mmproj-F32.gguf"
+    ],
+    "probe": {
+      "model": {
+        "name": "Qwen3.5-2B-BF16.gguf",
+        "status": 206,
+        "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "mmproj-F16.gguf",
+        "status": 206,
+        "magic": "GGUF"
+      }
+    }
+  },
+  "unsloth/Qwen3.5-9B-GGUF": {
+    "exists": true,
+    "ggufFiles": [
+      "Qwen3.5-9B-BF16.gguf",
+      "Qwen3.5-9B-IQ4_NL.gguf",
+      "Qwen3.5-9B-IQ4_XS.gguf",
+      "Qwen3.5-9B-Q3_K_M.gguf",
+      "Qwen3.5-9B-Q3_K_S.gguf",
+      "Qwen3.5-9B-Q4_0.gguf",
+      "Qwen3.5-9B-Q4_1.gguf",
+      "Qwen3.5-9B-Q4_K_M.gguf",
+      "Qwen3.5-9B-Q4_K_S.gguf",
+      "Qwen3.5-9B-Q5_K_M.gguf",
+      "Qwen3.5-9B-Q5_K_S.gguf",
+      "Qwen3.5-9B-Q6_K.gguf",
+      "Qwen3.5-9B-Q8_0.gguf",
+      "Qwen3.5-9B-UD-IQ2_M.gguf",
+      "Qwen3.5-9B-UD-IQ2_XXS.gguf",
+      "Qwen3.5-9B-UD-IQ3_XXS.gguf",
+      "Qwen3.5-9B-UD-Q2_K_XL.gguf",
+      "Qwen3.5-9B-UD-Q3_K_XL.gguf",
+      "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+      "Qwen3.5-9B-UD-Q5_K_XL.gguf",
+      "Qwen3.5-9B-UD-Q6_K_XL.gguf",
+      "Qwen3.5-9B-UD-Q8_K_XL.gguf",
+      "mmproj-BF16.gguf",
+      "mmproj-F16.gguf",
+      "mmproj-F32.gguf"
+    ],
+    "probe": {
+      "model": {
+        "name": "Qwen3.5-9B-BF16.gguf",
+        "status": 206,
+        "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "mmproj-F16.gguf",
+        "status": 206,
+        "magic": "GGUF"
+      }
+    }
+  },
   "ggml-org/SmolVLM2-500M-Video-Instruct-GGUF": {
     "exists": true,
     "ggufFiles": [
@@ -386,6 +470,11 @@
         "name": "gemma-3-4b-it-f16.gguf",
         "status": 206,
         "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "mmproj-model-f16.gguf",
+        "status": 206,
+        "magic": "GGUF"
       }
     }
   },
@@ -447,6 +536,11 @@
         "name": "Mistral-Small-3.1-24B-Instruct-2503-UD-IQ2_M.gguf",
         "status": 206,
         "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "mmproj-Mistral-Small-3.1-24B-Instruct-2503-Q8_0.gguf",
+        "status": 206,
+        "magic": "GGUF"
       }
     }
   },
@@ -483,6 +577,11 @@
         "name": "ggml-model-f16.gguf",
         "status": 206,
         "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "mmproj-model-f16.gguf",
+        "status": 206,
+        "magic": "GGUF"
       }
     }
   },
@@ -495,6 +594,11 @@
     "probe": {
       "model": {
         "name": "moondream2-text-model-f16.gguf",
+        "status": 206,
+        "magic": "GGUF"
+      },
+      "mmproj": {
+        "name": "moondream2-mmproj-f16.gguf",
         "status": 206,
         "magic": "GGUF"
       }
