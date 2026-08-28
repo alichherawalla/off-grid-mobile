@@ -170,6 +170,12 @@ function removeSyncedTask(run: SyncedTaskRun): void {
   }
 }
 
+function measureTaskSessionFrame(screen: ReturnType<typeof render>): void {
+  fireEvent(screen.getByTestId('task-session-frame'), 'layout', {
+    nativeEvent: { layout: { width: 300 } },
+  });
+}
+
 describe('Release 107 task session playback', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -207,7 +213,7 @@ describe('Release 107 task session playback', () => {
         screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
       );
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
-      expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
       expect(screen.getByText('Opened the target')).toBeTruthy();
       expect(screen.queryByTestId('task-control-stop')).toBeNull();
       expect(screen.queryByText('The task screen is syncing.')).toBeNull();
@@ -218,28 +224,21 @@ describe('Release 107 task session playback', () => {
         { nativeEvent: { layout: { width: 300 } } },
       );
       expect(screen.getByLabelText('Saved task screen 1 of 2')).toBeTruthy();
-      fireEvent(
-        screen.getByTestId('task-live-frame'),
-        'layout',
-        { nativeEvent: { layout: { width: 300 } } },
-      );
-      expect(
-        screen.getByLabelText('Latest saved task screen from Studio Mac'),
-      ).toBeTruthy();
+      expect(screen.queryByTestId('task-live-frame')).toBeNull();
 
       fireEvent(
         screen.getByTestId('task-session-scrubber'),
         'valueChange',
         1,
       );
-      expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+      expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
       expect(screen.getByText('Selected Continue')).toBeTruthy();
       expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
 
       fireEvent.press(screen.getByTestId('task-session-toggle'));
       expect(screen.getByText('Pause')).toBeTruthy();
       act(() => jest.advanceTimersByTime(1_000));
-      expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+      expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
       expect(screen.getByText('Play')).toBeTruthy();
 
       fireEvent.press(
@@ -258,9 +257,12 @@ describe('Release 107 task session playback', () => {
       fireEvent.press(
         screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
       );
-      expect(screen.getByTestId('task-live-frame')).toBeTruthy();
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
-      expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+      expect(screen.getByText('LIVE VIEW')).toBeTruthy();
+      expect(screen.getByTestId('task-session-frame')).toBeTruthy();
+      measureTaskSessionFrame(screen);
+      expect(screen.getByLabelText('Live view from Studio Mac')).toBeTruthy();
+      expect(screen.queryByTestId('task-live-frame')).toBeNull();
       expect(screen.getByTestId('task-control-stop')).toBeTruthy();
     },
   );
@@ -275,14 +277,10 @@ describe('Release 107 task session playback', () => {
         screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
       );
       expect(screen.queryByText('The task screen is syncing.')).toBeNull();
-      fireEvent(
-        screen.getByTestId('task-live-frame'),
-        'layout',
-        { nativeEvent: { layout: { width: 300 } } },
-      );
-      expect(
-        screen.getByLabelText('Latest saved task screen from Studio Mac'),
-      ).toBeTruthy();
+      expect(screen.getByTestId('task-session-frame')).toBeTruthy();
+      measureTaskSessionFrame(screen);
+      expect(screen.getByLabelText('Live view from Studio Mac')).toBeTruthy();
+      expect(screen.queryByTestId('task-live-frame')).toBeNull();
     },
   );
 
@@ -334,14 +332,10 @@ describe('Release 107 task session playback', () => {
     });
     expect(screen.queryByText('The task screen is syncing.')).toBeNull();
     expect(screen.getByTestId('task-session-playback')).toBeTruthy();
-    fireEvent(
-      screen.getByTestId('task-live-frame'),
-      'layout',
-      { nativeEvent: { layout: { width: 300 } } },
-    );
-    expect(
-      screen.getByLabelText('Latest saved task screen from Studio Mac'),
-    ).toBeTruthy();
+    expect(screen.getByTestId('task-session-frame')).toBeTruthy();
+    measureTaskSessionFrame(screen);
+    expect(screen.getByLabelText('Live view from Studio Mac')).toBeTruthy();
+    expect(screen.queryByTestId('task-live-frame')).toBeNull();
   });
 
   it('shows an active task inside its synced live-tool accordion', () => {
@@ -370,7 +364,10 @@ describe('Release 107 task session playback', () => {
     expect(screen.queryByTestId('task-chat-card')).toBeNull();
     expect(screen.getByText('Using Web Use...')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
-    expect(screen.getByTestId('task-live-frame')).toBeTruthy();
+    expect(screen.getByTestId('task-session-frame')).toBeTruthy();
+    measureTaskSessionFrame(screen);
+    expect(screen.getByLabelText('Live view from Studio Mac')).toBeTruthy();
+    expect(screen.queryByTestId('task-live-frame')).toBeNull();
     expect(screen.getByTestId('task-control-stop')).toBeTruthy();
   });
 });
