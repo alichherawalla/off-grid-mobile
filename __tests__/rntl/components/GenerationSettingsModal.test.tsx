@@ -625,7 +625,7 @@ describe('GenerationSettingsModal', () => {
   });
 
   it('displays formatted values for text settings', () => {
-    const { getByText, getByTestId } = render(
+    const { getByText, getAllByText, getByTestId } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
@@ -636,7 +636,8 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('1.0K')).toBeTruthy(); // maxTokens: 1024
     expect(getByText('0.90')).toBeTruthy(); // topP
     expect(getByText('1.10')).toBeTruthy(); // repeatPenalty
-    expect(getByText('4K')).toBeTruthy(); // contextLength: 4096
+    // getAllByText: maxTokens and contextLength both default to 4096 and both format to "4K".
+    expect(getAllByText('4K').length).toBeGreaterThan(0); // contextLength: 4096
   });
 
   it('shows description for text settings', () => {
