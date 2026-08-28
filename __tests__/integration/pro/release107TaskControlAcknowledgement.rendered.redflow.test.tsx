@@ -72,7 +72,15 @@ function renderTask(run: SyncedTaskRun): ReturnType<typeof render> {
     run as unknown as Record<string, unknown>,
     origin,
   );
-  return render(<TaskChatCard />);
+  return render(
+    <TaskChatCard
+      message={{
+        toolName: run.kind,
+        toolCallId: `call-${run.taskId}`,
+        content: `Task started. Task reference: ${run.taskId}.`,
+      }}
+    />,
+  );
 }
 
 describe('Release 107 rendered task-control acknowledgement', () => {

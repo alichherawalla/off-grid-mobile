@@ -11,6 +11,13 @@ import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializ
 import { isRequiredSyncEntity } from '../../../pro/sync/actionApprovalSync';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
+import {
+  SLOTS,
+  _clearSlotsForTesting,
+  registerSlot,
+} from '../../../src/bootstrap/slotRegistry';
+import { ChatMessage } from '../../../src/components/ChatMessage';
+import { useAccordionStore } from '../../../src/stores/accordionStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 
 jest.mock('react-native-tcp-socket', () => {
@@ -39,6 +46,9 @@ const origin = {
   originDeviceName: 'Studio Mac',
 };
 const FRAME_PAYLOAD = '/9j/2Q==';
+
+const taskToolName = (kind: SyncedTaskRun['kind']): string =>
+  kind === 'computer_use' ? 'computer_task' : kind;
 
 function taskRun(
   kind: SyncedTaskRun['kind'],
@@ -135,7 +145,19 @@ function renderSyncedTask(run: SyncedTaskRun): ReturnType<typeof render> {
     run as unknown as Record<string, unknown>,
     origin,
   );
-  return render(<TaskChatCard />);
+  return render(
+    <ChatMessage
+      message={{
+        id: `result-${run.taskId}`,
+        role: 'tool',
+        timestamp: run.updatedAt,
+        toolName: taskToolName(run.kind),
+        toolCallId: `call-${run.taskId}`,
+        content: `Raw task plan must stay hidden. Task reference: ${run.taskId}.`,
+      }}
+      showActions={false}
+    />,
+  );
 }
 
 function removeSyncedTask(run: SyncedTaskRun): void {
@@ -151,6 +173,8 @@ function removeSyncedTask(run: SyncedTaskRun): void {
 describe('Release 107 task session playback', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    registerSlot(SLOTS.taskToolDetail, TaskChatCard);
+    useAccordionStore.setState({ expanded: {} });
     useChatStore.getState().clearAllConversations();
     useSyncStore.getState().setConnectedDeviceIds([origin.originDeviceId]);
   });
@@ -161,6 +185,7 @@ describe('Release 107 task session playback', () => {
         removeSyncedTask(taskRun(kind, status));
       }
     }
+    _clearSlotsForTesting();
     jest.useRealTimers();
   });
 
@@ -176,10 +201,16 @@ describe('Release 107 task session playback', () => {
     (kind, status) => {
       const screen = renderSyncedTask(taskRun(kind, status));
 
+      expect(screen.queryByTestId('task-chat-card')).toBeNull();
+      expect(screen.queryByText('Raw task plan must stay hidden.')).toBeNull();
+      fireEvent.press(
+        screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
+      );
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
       expect(screen.getByText('Step 1 of 2')).toBeTruthy();
       expect(screen.getByText('Opened the target')).toBeTruthy();
       expect(screen.queryByTestId('task-control-stop')).toBeNull();
+      expect(screen.queryByText('The task screen is syncing.')).toBeNull();
 
       fireEvent(
         screen.getByTestId('task-session-frame'),
@@ -187,6 +218,14 @@ describe('Release 107 task session playback', () => {
         { nativeEvent: { layout: { width: 300 } } },
       );
       expect(screen.getByLabelText('Saved task screen 1 of 2')).toBeTruthy();
+      fireEvent(
+        screen.getByTestId('task-live-frame'),
+        'layout',
+        { nativeEvent: { layout: { width: 300 } } },
+      );
+      expect(
+        screen.getByLabelText('Latest saved task screen from Studio Mac'),
+      ).toBeTruthy();
 
       fireEvent(
         screen.getByTestId('task-session-scrubber'),
@@ -202,6 +241,11 @@ describe('Release 107 task session playback', () => {
       act(() => jest.advanceTimersByTime(1_000));
       expect(screen.getByText('Step 2 of 2')).toBeTruthy();
       expect(screen.getByText('Play')).toBeTruthy();
+
+      fireEvent.press(
+        screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
+      );
+      expect(screen.queryByTestId('task-session-playback')).toBeNull();
     },
   );
 
@@ -210,10 +254,123 @@ describe('Release 107 task session playback', () => {
     kind => {
       const screen = renderSyncedTask(taskRun(kind, 'running'));
 
+      expect(screen.queryByTestId('task-live-frame')).toBeNull();
+      fireEvent.press(
+        screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
+      );
       expect(screen.getByTestId('task-live-frame')).toBeTruthy();
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
       expect(screen.getByText('Step 1 of 2')).toBeTruthy();
       expect(screen.getByTestId('task-control-stop')).toBeTruthy();
     },
   );
+
+  it.each(['web_use', 'computer_use'] as const)(
+    'uses saved %s evidence while an active live frame is unavailable',
+    kind => {
+      const { frame: _liveFrame, ...run } = taskRun(kind, 'running');
+      const screen = renderSyncedTask(run);
+
+      fireEvent.press(
+        screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
+      );
+      expect(screen.queryByText('The task screen is syncing.')).toBeNull();
+      fireEvent(
+        screen.getByTestId('task-live-frame'),
+        'layout',
+        { nativeEvent: { layout: { width: 300 } } },
+      );
+      expect(
+        screen.getByLabelText('Latest saved task screen from Studio Mac'),
+      ).toBeTruthy();
+    },
+  );
+
+  it('replaces the sync placeholder as soon as saved evidence materializes', () => {
+    const { frame: _liveFrame, ...run } = taskRun('web_use', 'running');
+    materializer.put(
+      'conversation',
+      run.conversationId,
+      {
+        title: run.title,
+        created_at: new Date(run.startedAt).toISOString(),
+        updated_at: new Date(run.updatedAt).toISOString(),
+        project_id: null,
+      },
+      origin,
+    );
+    useChatStore.getState().setActiveConversation(run.conversationId);
+    materializer.put(
+      TASK_RUN_ENTITY,
+      run.taskId,
+      run as unknown as Record<string, unknown>,
+      origin,
+    );
+    const screen = render(
+      <ChatMessage
+        message={{
+          id: `result-${run.taskId}`,
+          role: 'tool',
+          timestamp: run.updatedAt,
+          toolName: 'web_use',
+          toolCallId: `call-${run.taskId}`,
+          content: `Task started. Task reference: ${run.taskId}.`,
+        }}
+        showActions={false}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
+    expect(screen.getByText('The task screen is syncing.')).toBeTruthy();
+
+    const step = visualStep(run, 1);
+    act(() => {
+      materializer.put(
+        TASK_VISUAL_STEP_ENTITY,
+        step.visualStepId,
+        step as unknown as Record<string, unknown>,
+        origin,
+      );
+    });
+    expect(screen.queryByText('The task screen is syncing.')).toBeNull();
+    expect(screen.getByTestId('task-session-playback')).toBeTruthy();
+    fireEvent(
+      screen.getByTestId('task-live-frame'),
+      'layout',
+      { nativeEvent: { layout: { width: 300 } } },
+    );
+    expect(
+      screen.getByLabelText('Latest saved task screen from Studio Mac'),
+    ).toBeTruthy();
+  });
+
+  it('shows an active task inside its synced live-tool accordion', () => {
+    const run = taskRun('web_use', 'running');
+    renderSyncedTask(run).unmount();
+    const screen = render(
+      <ChatMessage
+        message={{
+          id: `preview-${run.taskId}`,
+          role: 'assistant',
+          timestamp: run.updatedAt,
+          content: '',
+          toolArtifacts: [
+            {
+              id: `call-${run.taskId}`,
+              name: 'web_use',
+              result: '',
+              status: 'running',
+            },
+          ],
+        }}
+        showActions={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('task-chat-card')).toBeNull();
+    expect(screen.getByText('Using Web Use...')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
+    expect(screen.getByTestId('task-live-frame')).toBeTruthy();
+    expect(screen.getByTestId('task-control-stop')).toBeTruthy();
+  });
 });

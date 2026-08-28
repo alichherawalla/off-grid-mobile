@@ -91,19 +91,27 @@ describe('synced Web Use and Computer Use task in chat', () => {
     putConversation(materializer);
   });
 
-  it('shows the live Computer Use screen, cursor, progress, and working controls in its chat', async () => {
+  it('shows the live Computer Use screen, cursor, and working controls in its chat', async () => {
     materializer.put(
       TASK_RUN_ENTITY,
       runningComputerTask.taskId,
       runningComputerTask,
       origin,
     );
-    const screen = render(<TaskChatCard />);
+    const screen = render(
+      <TaskChatCard
+        message={{
+          toolName: 'computer_task',
+          toolCallId: 'computer-call-1',
+          content: `Task started. Task reference: ${runningComputerTask.taskId}.`,
+        }}
+      />,
+    );
 
     expect(screen.getByText('COMPUTER USE')).toBeTruthy();
     expect(screen.getByText(runningComputerTask.title)).toBeTruthy();
     expect(screen.getByText('Typing the message')).toBeTruthy();
-    expect(screen.getByText('Opened Slack')).toBeTruthy();
+    expect(screen.queryByText('Opened Slack')).toBeNull();
     act(() =>
       fireEvent(screen.getByTestId('task-live-frame'), 'layout', {
         nativeEvent: { layout: { width: 300, height: 200, x: 0, y: 0 } },
@@ -181,7 +189,15 @@ describe('synced Web Use and Computer Use task in chat', () => {
       origin,
     );
 
-    const screen = render(<TaskChatCard />);
+    const screen = render(
+      <TaskChatCard
+        message={{
+          toolName: 'web_use',
+          toolCallId: 'web-call-1',
+          content: 'Task failed. Task reference: task-web-1.',
+        }}
+      />,
+    );
     expect(screen.getByText('WEB USE')).toBeTruthy();
     expect(screen.getByText('Find a flight to Pune')).toBeTruthy();
     expect(screen.getByText('No booking was made.')).toBeTruthy();

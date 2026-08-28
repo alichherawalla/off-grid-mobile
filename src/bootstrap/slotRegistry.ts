@@ -78,6 +78,9 @@ export const SLOTS = {
   messageAudioMode: 'message.audioMode',
   /** Per-message meta-row control (the TTS speak/play button) in chat mode. */
   messageSpeakButton: 'message.speakButton',
+  /** Expanded content for a Pro task tool-result row. Core keeps the compact row and Pro owns the
+   *  authoritative live, replay, and control detail. */
+  taskToolDetail: 'message.taskToolDetail',
   /** Extra row in the chat-input quick-settings popover (voice mode toggle). */
   quickSettingsAudioRow: 'quickSettings.audioRow',
   /** One-tap Chat↔Audio interface toggle in the chat-input pill icon row.
