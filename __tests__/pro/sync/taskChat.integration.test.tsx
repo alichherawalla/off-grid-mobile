@@ -1,6 +1,10 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { TASK_RUN_ENTITY } from '@offgrid/sync';
+import {
+  TASK_RUN_ENTITY,
+  TASK_VISUAL_STEP_ENTITY,
+  taskVisualStepId,
+} from '@offgrid/sync';
 import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
 import { projectNotificationCenter } from '../../../pro/sync/notificationCenter';
@@ -79,6 +83,14 @@ describe('synced Web Use and Computer Use task in chat', () => {
     useChatStore.getState().clearAllConversations();
     materializer.remove(TASK_RUN_ENTITY, runningComputerTask.taskId);
     materializer.remove(TASK_RUN_ENTITY, 'task-web-1');
+    materializer.remove(
+      TASK_VISUAL_STEP_ENTITY,
+      taskVisualStepId('task-web-1', 1),
+    );
+    materializer.remove(
+      TASK_VISUAL_STEP_ENTITY,
+      taskVisualStepId('task-web-1', 2),
+    );
     useSyncStore.getState().setThisDevice({
       id: 'phone-1',
       name: 'Ali phone',
@@ -113,15 +125,18 @@ describe('synced Web Use and Computer Use task in chat', () => {
     expect(screen.getByText('Typing the message')).toBeTruthy();
     expect(screen.queryByText('Opened Slack')).toBeNull();
     act(() =>
-      fireEvent(screen.getByTestId('task-live-frame'), 'layout', {
+      fireEvent(screen.getByTestId('task-session-frame'), 'layout', {
         nativeEvent: { layout: { width: 300, height: 200, x: 0, y: 0 } },
       }),
     );
     expect(screen.getByLabelText('Live view from Office Mac')).toBeTruthy();
-    expect(screen.getByTestId('task-live-cursor')).toBeTruthy();
+    expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
+    expect(screen.getByText('LIVE VIEW')).toBeTruthy();
+    expect(screen.queryByTestId('task-live-frame')).toBeNull();
+    expect(screen.getAllByTestId('task-session-frame')).toHaveLength(1);
     expect(screen.getByText('Pause')).toBeTruthy();
     expect(screen.getByText('Stop')).toBeTruthy();
-    expect(screen.getByText('Take Over')).toBeTruthy();
+    expect(screen.queryByText('Take Over')).toBeNull();
     expect(screen.queryByText('Approve')).toBeNull();
     expect(screen.queryByText('Decline')).toBeNull();
 
@@ -188,6 +203,28 @@ describe('synced Web Use and Computer Use task in chat', () => {
       },
       origin,
     );
+    for (const sequence of [1, 2]) {
+      const visualStepId = taskVisualStepId('task-web-1', sequence);
+      materializer.put(
+        TASK_VISUAL_STEP_ENTITY,
+        visualStepId,
+        {
+          version: 1,
+          visualStepId,
+          taskId: 'task-web-1',
+          conversationId: runningComputerTask.conversationId,
+          sequence,
+          executionDevice: runningComputerTask.executionDevice,
+          actionLabel: sequence === 1 ? 'Opened search' : 'Checked results',
+          frame: {
+            ...runningComputerTask.frame,
+            sequence,
+            capturedAt: sequence * 1_000,
+          },
+        },
+        origin,
+      );
+    }
 
     const screen = render(
       <TaskChatCard
@@ -209,6 +246,12 @@ describe('synced Web Use and Computer Use task in chat', () => {
     ).toBeTruthy();
     expect(screen.queryByText('Stop')).toBeNull();
     expect(screen.queryByText('Take Over')).toBeNull();
+    expect(screen.getByText('SESSION REPLAY')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Play')).toBeTruthy();
+    expect(screen.getByTestId('task-session-scrubber')).toBeTruthy();
+    expect(screen.getAllByTestId('task-session-frame')).toHaveLength(1);
+    expect(screen.queryByTestId('task-live-frame')).toBeNull();
     const notifications = projectNotificationCenter([], 'all');
     expect(notifications.badgeCount).toBe(0);
     expect(notifications.items).not.toContainEqual(

@@ -7,6 +7,7 @@ import TcpSocket from 'react-native-tcp-socket';
 import {
   OpLog,
   StateSync,
+  TASK_RUN_ENTITY,
   type DeviceInfo,
   type Materializer,
 } from '@offgrid/sync';
@@ -31,7 +32,11 @@ import {
   type SyncMutation,
 } from '../../../src/services/sync/mutation';
 import { syncService } from '../../../pro/sync/syncService';
-import { stateSyncService } from '../../../pro/sync/stateSyncService';
+import {
+  STATE_CHANNEL,
+  stateSyncService,
+} from '../../../pro/sync/stateSyncService';
+import { useTaskRunStore } from '../../../pro/tasks/taskRunStore';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
@@ -482,6 +487,7 @@ describe('Pro mobile state sync journey', () => {
     ui = undefined;
     await stateSyncService.stop();
     await stateSyncService.start();
+    await stateSyncService.whenReady();
     // The log is collapsed at startup, so it comes back SMALLER, not identical - superseded ops are
     // dropped and only the winner for each record is kept. What has to survive is the state itself,
     // which the temperature below is read for. A log that came back empty, or bigger, would be wrong.
@@ -503,6 +509,141 @@ describe('Pro mobile state sync journey', () => {
     );
     expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
       winningTemperature.value,
+    );
+  });
+
+  it('reconnects before slow owners finish and rejects forged task state', async () => {
+    let releaseSlowStartup: (() => void) | undefined;
+    const slowStartup = new Promise<void>(resolve => {
+      releaseSlowStartup = resolve;
+    });
+    await stateSyncService.start(slowStartup);
+    await syncService.start();
+    expect(syncService.isRunning()).toBe(true);
+
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-task-owner',
+      name: 'Office Mac',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    let opIndex = 0;
+    const remoteLog = new OpLog({
+      deviceId: remoteDevice.id,
+      deviceName: remoteDevice.name,
+      materializer: new RemoteRecords(),
+      uuid: () => `owner-op-${++opIndex}`,
+      now: () => Date.now(),
+    });
+    const task = {
+      version: 1 as const,
+      taskId: 'task-during-slow-startup',
+      conversationId: 'chat-during-slow-startup',
+      kind: 'computer_use' as const,
+      executionDevice: {
+        id: remoteDevice.id,
+        name: remoteDevice.name,
+      },
+      title: 'Open the report',
+      status: 'running' as const,
+      progress: [],
+      startedAt: 1,
+      updatedAt: 1,
+    };
+    remoteLog.record(TASK_RUN_ENTITY, task.taskId, 'put', task);
+    let remoteState: StateSync;
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.joiner({
+        name: remoteDevice.name,
+        platform: remoteDevice.platform,
+      }),
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      onPaired: device => remoteState.onConnect(device.id),
+      onAppMessage: (deviceId, channel, data) => {
+        if (channel === STATE_CHANNEL) remoteState.onMessage(deviceId, data);
+      },
+    });
+    remoteState = new StateSync({
+      oplog: remoteLog,
+      send: (deviceId, message) => {
+        remote!.engine.sendApp(deviceId, STATE_CHANNEL, message);
+      },
+    });
+    await remote.engine.start(0);
+
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    const pairingCode = useSyncStore.getState().pairingCode.code;
+    if (!mobile || !discovery?.publishedPort || !pairingCode) {
+      throw new Error(
+        'Mobile Sync did not become available during slow startup',
+      );
+    }
+    await remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+      pairingCode,
+    );
+    await waitFor(() =>
+      expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
+    );
+    expect(useTaskRunStore.getState().runs[task.taskId]).toBeUndefined();
+
+    releaseSlowStartup?.();
+    await stateSyncService.whenReady();
+    await waitFor(() =>
+      expect(useTaskRunStore.getState().runs[task.taskId]).toMatchObject({
+        title: task.title,
+        executionDevice: task.executionDevice,
+      }),
+    );
+
+    const ownerUpdate = remoteLog.record(TASK_RUN_ENTITY, task.taskId, 'put', {
+      ...task,
+      updatedAt: 2,
+      currentAction: 'Read the report',
+    });
+    remote.engine.sendApp(mobile.id, STATE_CHANNEL, {
+      t: 'ops',
+      ops: [
+        {
+          opId: 'forged-put',
+          entity: TASK_RUN_ENTITY,
+          entityId: 'forged-task',
+          kind: 'put',
+          fields: { ...task, taskId: 'forged-task' },
+          lamport: 100,
+          deviceId: 'forged-device',
+          ts: 100,
+          provenance: {
+            originDeviceId: remoteDevice.id,
+            originDeviceName: remoteDevice.name,
+          },
+        },
+        {
+          opId: 'forged-delete',
+          entity: TASK_RUN_ENTITY,
+          entityId: task.taskId,
+          kind: 'delete',
+          lamport: 101,
+          deviceId: 'forged-device',
+          ts: 101,
+          provenance: {
+            originDeviceId: 'forged-device',
+            originDeviceName: 'Forged device',
+          },
+        },
+        ownerUpdate,
+      ],
+    });
+    await waitFor(() =>
+      expect(useTaskRunStore.getState().runs[task.taskId]?.updatedAt).toBe(2),
+    );
+    expect(useTaskRunStore.getState().runs['forged-task']).toBeUndefined();
+    expect(useTaskRunStore.getState().runs[task.taskId]?.title).toBe(
+      task.title,
     );
   });
 });
