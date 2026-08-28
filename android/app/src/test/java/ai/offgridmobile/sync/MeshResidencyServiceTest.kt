@@ -9,7 +9,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +21,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class MeshResidencyServiceTest {
+    @After
+    fun releaseResidency() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        MeshResidencyService.stop(context)
+    }
+
     @Test
     fun personalMeshUsesConnectedDeviceForegroundServiceContract() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -55,6 +63,8 @@ class MeshResidencyServiceTest {
     @Test
     @Config(sdk = [34], application = Application::class)
     fun timeoutStopsResidencyImmediately() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        MeshResidencyService.start(context)
         val service =
             org.robolectric.Robolectric
                 .buildService(MeshResidencyService::class.java)
@@ -68,6 +78,9 @@ class MeshResidencyServiceTest {
         assertTrue(shadow.isForegroundStopped)
         assertTrue(shadow.notificationShouldRemoved)
         assertTrue(shadow.isStoppedBySelf)
+
+        MeshResidencyService.start(context)
+        assertNotNull(shadowOf(context as Application).nextStartedService)
     }
 
     @Test

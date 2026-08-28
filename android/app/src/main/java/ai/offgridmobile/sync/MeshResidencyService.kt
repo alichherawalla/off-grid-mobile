@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Keeps the Personal Mesh reachable while Off Grid is not in the foreground.
@@ -49,8 +50,14 @@ class MeshResidencyService : Service() {
     }
 
     private fun stopImmediately() {
+        residencyRequested.set(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    override fun onDestroy() {
+        residencyRequested.set(false)
+        super.onDestroy()
     }
 
     private fun startForegroundCompat() {
@@ -71,6 +78,7 @@ class MeshResidencyService : Service() {
         const val NOTIFICATION_ID = 4711
         const val FOREGROUND_SERVICE_TYPE =
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        private val residencyRequested = AtomicBoolean(false)
 
         /**
          * Ensure the channel exists before the first foreground start.
@@ -105,16 +113,23 @@ class MeshResidencyService : Service() {
                 .build()
 
         fun start(context: Context) {
+            if (!residencyRequested.compareAndSet(false, true)) return
             ensureChannel(context)
             val intent = Intent(context, MeshResidencyService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (error: RuntimeException) {
+                residencyRequested.set(false)
+                throw error
             }
         }
 
         fun stop(context: Context) {
+            residencyRequested.set(false)
             context.stopService(Intent(context, MeshResidencyService::class.java))
         }
     }
