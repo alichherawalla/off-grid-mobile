@@ -48,15 +48,15 @@ describe('Auto Setup rendered release journey', () => {
     const ui = render(<AutoSetupScreen navigation={navigation} />);
     await waitFor(() => expect(ui.getByTestId('auto-setup-plan-balanced')).toBeTruthy());
 
-    expect(ui.getAllByText('INCLUDES')).toHaveLength(3);
-    expect(ui.getByText('lean text')).toBeTruthy();
+    expect(ui.getAllByText('INCLUDES')).toHaveLength(1);
     expect(ui.getByText('balanced text')).toBeTruthy();
-    expect(ui.getByText('extreme text')).toBeTruthy();
-    expect(ui.queryByText('Balanced includes')).toBeNull();
+    expect(ui.queryByText('lean text')).toBeNull();
+    expect(ui.queryByText('extreme text')).toBeNull();
 
     fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
-    expect(ui.getByText('SELECTED SETUP')).toBeTruthy();
-    expect(ui.getAllByText('Extreme')).toHaveLength(2);
+    expect(ui.getAllByText('INCLUDES')).toHaveLength(1);
+    expect(ui.getByText('extreme text')).toBeTruthy();
+    expect(ui.queryByText('balanced text')).toBeNull();
     fireEvent.press(ui.getByTestId('auto-setup-download'));
     await waitFor(() => expect(mockStartPlan).toHaveBeenCalledWith(expect.objectContaining({ tier: 'extreme' }), new Set()));
 

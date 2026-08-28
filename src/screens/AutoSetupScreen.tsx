@@ -85,30 +85,31 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
         <View style={[styles.planGrid, width >= 700 && styles.planGridWide]}>
           {plans.map(plan => (
             <Card key={plan.tier} onPress={() => setSelectedTier(plan.tier)} style={{ ...styles.planCard, ...(width >= 700 ? styles.planCardWide : {}), ...(selected?.tier === plan.tier ? styles.selectedCard : {}) }} testID={`auto-setup-plan-${plan.tier}`}>
-              <Text style={styles.planTitle}>{plan.title}</Text>
+              <View style={styles.detailHeader}><Text style={styles.planTitle}>{plan.title}</Text>{selected?.tier === plan.tier && VoiceIndicator ? <VoiceIndicator /> : null}</View>
               <Text style={styles.secondary}>{plan.summary}</Text>
-              <View style={styles.includes}>
-                <Text style={styles.includesLabel}>INCLUDES</Text>
-                {plan.items.map(item => (
-                  <View key={`${plan.tier}:${item.kind}:${item.id}`} style={styles.planItem}>
-                    <Text style={styles.itemKind}>{labelForItem(item)}</Text>
-                    <Text style={styles.planItemName} numberOfLines={1}>{item.name}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.total}>{formatBytes(plan.totalBytes)} download</Text>
+              {selected?.tier === plan.tier && (
+                <View style={styles.expandedPlan} testID="auto-setup-selected-plan">
+                  <Text style={styles.includesLabel}>INCLUDES</Text>
+                  {plan.items.map(item => (
+                    <View key={`${plan.tier}:${item.kind}:${item.id}`} style={styles.planItem}>
+                      <Text style={styles.itemKind}>{labelForItem(item)}</Text>
+                      <Text style={styles.planItemName}>{item.name}</Text>
+                      <Text style={styles.itemSize}>{formatBytes(item.sizeBytes)}</Text>
+                    </View>
+                  ))}
+                  <Text style={styles.total}>{formatBytes(plan.totalBytes)} download</Text>
+                  {(starting || planDownloads.length > 0) && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, progress * 100)}%` }]} /></View>}
+                  {failed && <Text style={styles.error}>{failed.error ?? 'A download failed.'}</Text>}
+                  {isComplete
+                    ? <Button title="Continue" onPress={() => { completeAutoSetupPlan(plan); navigation.replace('Main'); }} testID="auto-setup-continue" />
+                    : <Button title={failed ? 'Retry Downloads' : `Download ${formatBytes(plan.totalBytes)}`} onPress={start} loading={starting} testID="auto-setup-download" />}
+                </View>
+              )}
             </Card>
           ))}
         </View>
 
-        {selected ? <Card style={styles.details} testID="auto-setup-selected-plan">
-          <View style={styles.detailHeader}><View><Text style={styles.includesLabel}>SELECTED SETUP</Text><Text style={styles.planTitle}>{selected.title}</Text></View>{VoiceIndicator ? <VoiceIndicator /> : null}</View>
-          {(starting || planDownloads.length > 0) && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, progress * 100)}%` }]} /></View>}
-          {failed && <Text style={styles.error}>{failed.error ?? 'A download failed.'}</Text>}
-          {isComplete
-            ? <Button title="Continue" onPress={() => { completeAutoSetupPlan(selected); navigation.replace('Main'); }} testID="auto-setup-continue" />
-            : <Button title={failed ? 'Retry Downloads' : `Download ${formatBytes(selected.totalBytes)}`} onPress={start} loading={starting} testID="auto-setup-download" />}
-        </Card> : <Card style={styles.errorCard}><Text style={styles.error}>No complete model set is safe for this device.</Text></Card>}
+        {!selected && <Card style={styles.errorCard}><Text style={styles.error}>No complete model set is safe for this device.</Text></Card>}
 
         <Button title="Configure it yourself" variant="ghost" onPress={() => navigation.navigate('AdvancedSetup')} testID="auto-setup-advanced" />
         <Button title="Skip for Now" variant="ghost" onPress={() => navigation.replace('Main')} testID="auto-setup-skip" />
@@ -135,12 +136,12 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   planCardWide: { flex: 1 },
   selectedCard: { borderColor: colors.primary },
   planTitle: { ...TYPOGRAPHY.h2, color: colors.text },
-  includes: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: SPACING.md, gap: SPACING.sm },
+  expandedPlan: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: SPACING.md, gap: SPACING.md },
   includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
   planItem: { gap: SPACING.xs },
-  planItemName: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
+  planItemName: { ...TYPOGRAPHY.body, color: colors.text },
+  itemSize: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
   total: { ...TYPOGRAPHY.meta, color: colors.primary },
-  details: { gap: SPACING.md },
   detailHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
   itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
   progressTrack: { height: SPACING.xs, backgroundColor: colors.surfaceLight, overflow: 'hidden' as const },
