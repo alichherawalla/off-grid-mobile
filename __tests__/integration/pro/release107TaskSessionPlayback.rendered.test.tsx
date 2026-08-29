@@ -8,7 +8,7 @@ import {
   type SyncedTaskVisualStep,
 } from '@offgrid/sync';
 import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
-import { isRequiredSyncEntity } from '../../../pro/sync/actionApprovalSync';
+import { isRequiredSyncEntity } from '../../../pro/sync/requiredSyncEntity';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import {

@@ -42,7 +42,7 @@ function twoDesktopInput(task: CompanionTaskTool) {
 }
 
 describe('Release 107 companion task router', () => {
-  it.each(['web_use', 'computer_use'] as const)(
+  it.each(['web_use', 'computer_task'] as const)(
     'uses one stable eligible default for %s across two Desktops',
     task => {
       expect(routeCompanionTask(twoDesktopInput(task))).toEqual({
@@ -53,7 +53,7 @@ describe('Release 107 companion task router', () => {
     },
   );
 
-  it.each(['web_use', 'computer_use'] as const)(
+  it.each(['web_use', 'computer_task'] as const)(
     'matches an explicit %s Desktop name or alias without case sensitivity',
     task => {
       expect(
@@ -95,7 +95,7 @@ describe('Release 107 companion task router', () => {
   });
 
   it('does not fall back when the named Desktop has the task tool disabled', () => {
-    const input = twoDesktopInput('computer_use');
+    const input = twoDesktopInput('computer_task');
     expect(
       routeCompanionTask({
         ...input,
@@ -105,7 +105,7 @@ describe('Release 107 companion task router', () => {
     ).toEqual({
       ok: false,
       error:
-        'Studio Mac is not available for computer_use. Connect it and enable this task tool, then try again.',
+        'Studio Mac is not available for computer_task. Connect it and enable this task tool, then try again.',
     });
   });
 });

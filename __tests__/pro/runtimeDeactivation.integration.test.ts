@@ -11,7 +11,6 @@ jest.mock('@offgrid/core/bootstrap/slotRegistry', () => ({
     appRoot: 'app.root',
     homeSyncCard: 'home.syncCard',
     homeNotificationsButton: 'home.notificationsButton',
-    chatOverlay: 'chat.overlay',
     taskToolDetail: 'message.taskToolDetail',
     autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
   },
@@ -186,10 +185,6 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     expect(options.registerSlot).toHaveBeenCalledWith(
       'message.taskToolDetail',
       expect.any(Function),
-    );
-    expect(options.registerSlot).not.toHaveBeenCalledWith(
-      'chat.overlay',
-      expect.anything(),
     );
     expect(options.registerSlot).toHaveBeenCalledWith(
       'autoSetup.voiceIndicator',

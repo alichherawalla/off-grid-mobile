@@ -368,6 +368,7 @@ describe('execute', () => {
           conversationId: 'chat-mobile-1',
           deviceId: 'phone-1',
           deviceName: 'Ali phone',
+          executionDeviceId: 'desktop-2',
         },
         ownerId: 'studio-tools',
       },

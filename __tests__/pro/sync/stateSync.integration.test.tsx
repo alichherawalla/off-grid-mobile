@@ -8,6 +8,8 @@ import {
   OpLog,
   StateSync,
   TASK_RUN_ENTITY,
+  TASK_VISUAL_STEP_ENTITY,
+  taskVisualStepId,
   type DeviceInfo,
   type Materializer,
 } from '@offgrid/sync';
@@ -553,6 +555,30 @@ describe('Pro mobile state sync journey', () => {
       updatedAt: 1,
     };
     remoteLog.record(TASK_RUN_ENTITY, task.taskId, 'put', task);
+    const visualStep = {
+      version: 1 as const,
+      visualStepId: taskVisualStepId(task.taskId, 1),
+      taskId: task.taskId,
+      conversationId: task.conversationId,
+      sequence: 1,
+      executionDevice: task.executionDevice,
+      phase: 'observing',
+      actionLabel: 'Open the report',
+      frame: {
+        sequence: 1,
+        mimeType: 'image/jpeg' as const,
+        payloadBase64: 'c2NyZWVu',
+        width: 100,
+        height: 50,
+        capturedAt: 1,
+      },
+    };
+    remoteLog.record(
+      TASK_VISUAL_STEP_ENTITY,
+      visualStep.visualStepId,
+      'put',
+      visualStep,
+    );
     let remoteState: StateSync;
     remote = buildSyncEngine({
       pairingEntitlement: mesh.joiner({
@@ -589,16 +615,20 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
     );
-    expect(useTaskRunStore.getState().runs[task.taskId]).toBeUndefined();
-
-    releaseSlowStartup?.();
-    await stateSyncService.whenReady();
     await waitFor(() =>
       expect(useTaskRunStore.getState().runs[task.taskId]).toMatchObject({
         title: task.title,
         executionDevice: task.executionDevice,
       }),
     );
+    await waitFor(() =>
+      expect(
+        useTaskRunStore.getState().visualSteps[visualStep.visualStepId],
+      ).toMatchObject({ actionLabel: visualStep.actionLabel }),
+    );
+
+    releaseSlowStartup?.();
+    await stateSyncService.whenReady();
 
     const ownerUpdate = remoteLog.record(TASK_RUN_ENTITY, task.taskId, 'put', {
       ...task,
@@ -645,5 +675,6 @@ describe('Pro mobile state sync journey', () => {
     expect(useTaskRunStore.getState().runs[task.taskId]?.title).toBe(
       task.title,
     );
+
   });
 });
