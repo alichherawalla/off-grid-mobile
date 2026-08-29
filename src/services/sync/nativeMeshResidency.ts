@@ -12,7 +12,7 @@ import { NativeModules } from 'react-native';
  * satisfy this one contract and report what they can actually do, so the UI renders honest copy from
  * the capability instead of each screen guessing.
  */
-export interface MeshResidencyCapabilities {
+interface MeshResidencyCapabilities {
   /** True when the mesh keeps running indefinitely after the app leaves the foreground. */
   survivesBackground: boolean;
   /**
@@ -26,7 +26,7 @@ export interface MeshResidencyCapabilities {
   showsOngoingIndicator: boolean;
 }
 
-export type MeshResidencyDegradedReason =
+type MeshResidencyDegradedReason =
   | 'unavailable'
   | 'finite_grace'
   | 'promotion_denied'

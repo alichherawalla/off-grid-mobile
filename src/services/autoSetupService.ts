@@ -33,7 +33,7 @@ const productionDownloadBoundaries: AutoSetupDownloadBoundaries = {
   subscribe: listener => modelDownloadService.subscribe(listener),
 };
 
-export type AutoSetupItemPhase =
+type AutoSetupItemPhase =
   | 'waiting'
   | 'starting'
   | 'downloading'
@@ -41,14 +41,14 @@ export type AutoSetupItemPhase =
   | 'failed'
   | 'cancelled';
 
-export interface AutoSetupItemOutcome {
+interface AutoSetupItemOutcome {
   id: string;
   phase: AutoSetupItemPhase;
   progress: number;
   error?: string;
 }
 
-export interface AutoSetupSnapshot {
+interface AutoSetupSnapshot {
   phase: 'loading_catalog' | 'ready' | 'downloading' | 'completed' | 'failed';
   plans: AutoSetupPlan[];
   selectedTier: AutoSetupTier;
