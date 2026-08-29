@@ -1,6 +1,5 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
-  ACTION_APPROVAL_ENTITY,
   KNOWLEDGE_DOCUMENT_ENTITY,
   SHARED_FILE_ENTITY,
   TASK_CONTROL_ENTITY,
@@ -23,7 +22,6 @@ export const CORE_SYNC_ENTITIES = {
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
-  actionApproval: ACTION_APPROVAL_ENTITY,
   taskRun: TASK_RUN_ENTITY,
   taskControl: TASK_CONTROL_ENTITY,
 } as const;

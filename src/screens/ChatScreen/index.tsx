@@ -216,12 +216,6 @@ export const ChatScreen: React.FC = () => {
           setShowProjectSelector={chat.setShowProjectSelector}
           isRemote={chat.activeModelInfo?.isRemote}
         />
-        {/* Pro-registered overlay pinned above the messages: a paired desktop's pending
-            computer-use approval, answered here. Self-hides when nothing is pending. */}
-        {(() => {
-          const ChatOverlay = getSlot(SLOTS.chatOverlay);
-          return ChatOverlay ? <ChatOverlay /> : null;
-        })()}
         <ModelsManagerSheet
           visible={modelsManagerOpen}
           onClose={() => setModelsManagerOpen(false)}

@@ -93,10 +93,6 @@ export const SLOTS = {
    *  download/management). The tab itself only appears when this is
    *  registered, so free builds show just Text/Image. */
   modelsScreenVoiceTab: 'modelsScreen.voiceTab',
-  /** Full-width overlay pinned above the chat messages (below the header) - e.g. a
-   *  pending computer-use approval forwarded from a paired desktop, answered here.
-   *  Renders nothing (and takes no space) when there is nothing pending. */
-  chatOverlay: 'chat.overlay',
   /** Small Pro-owned Voice availability indicator on the core Auto Setup plan. */
   autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
 } as const;
