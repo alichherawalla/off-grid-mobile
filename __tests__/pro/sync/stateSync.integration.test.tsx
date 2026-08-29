@@ -7,6 +7,7 @@ import TcpSocket from 'react-native-tcp-socket';
 import {
   OpLog,
   StateSync,
+  TASK_LAUNCH_ENTITY,
   TASK_RUN_ENTITY,
   TASK_VISUAL_STEP_ENTITY,
   taskVisualStepId,
@@ -541,6 +542,8 @@ describe('Pro mobile state sync journey', () => {
     });
     const task = {
       version: 1 as const,
+      launchId: 'launch-during-slow-startup',
+      requestingDeviceId: remoteDevice.id,
       taskId: 'task-during-slow-startup',
       conversationId: 'chat-during-slow-startup',
       kind: 'computer_use' as const,
@@ -554,6 +557,15 @@ describe('Pro mobile state sync journey', () => {
       startedAt: 1,
       updatedAt: 1,
     };
+    remoteLog.record(TASK_LAUNCH_ENTITY, task.launchId, 'put', {
+      version: 1,
+      launchId: task.launchId,
+      conversationId: task.conversationId,
+      kind: task.kind,
+      requestingDeviceId: task.requestingDeviceId,
+      executionDeviceId: task.executionDevice.id,
+      requestedAt: 1,
+    });
     remoteLog.record(TASK_RUN_ENTITY, task.taskId, 'put', task);
     const visualStep = {
       version: 1 as const,

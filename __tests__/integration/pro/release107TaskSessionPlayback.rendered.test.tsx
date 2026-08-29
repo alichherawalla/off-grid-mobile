@@ -57,6 +57,8 @@ function taskRun(
   const taskId = `release-107-session-${kind}-${status}`;
   return {
     version: 1,
+    launchId: `launch-${taskId}`,
+    requestingDeviceId: 'mobile-device',
     taskId,
     conversationId: `${taskId}-chat`,
     kind,
@@ -117,16 +119,6 @@ function visualStep(
 }
 
 function renderSyncedTask(run: SyncedTaskRun): ReturnType<typeof render> {
-  // Older immutable records can arrive before the current task projection.
-  for (const sequence of [2, 1]) {
-    const step = visualStep(run, sequence);
-    materializer.put(
-      TASK_VISUAL_STEP_ENTITY,
-      step.visualStepId,
-      step as unknown as Record<string, unknown>,
-      origin,
-    );
-  }
   materializer.put(
     'conversation',
     run.conversationId,
@@ -145,6 +137,16 @@ function renderSyncedTask(run: SyncedTaskRun): ReturnType<typeof render> {
     run as unknown as Record<string, unknown>,
     origin,
   );
+  // Admitted sync puts the authenticated run owner before its evidence.
+  for (const sequence of [2, 1]) {
+    const step = visualStep(run, sequence);
+    materializer.put(
+      TASK_VISUAL_STEP_ENTITY,
+      step.visualStepId,
+      step as unknown as Record<string, unknown>,
+      origin,
+    );
+  }
   return render(
     <ChatMessage
       message={{

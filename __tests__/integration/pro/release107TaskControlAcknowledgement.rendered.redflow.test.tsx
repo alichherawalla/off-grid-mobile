@@ -33,6 +33,8 @@ const origin = {
 function runningTask(kind: SyncedTaskRun['kind']): SyncedTaskRun {
   return {
     version: 1,
+    launchId: `launch-release-107-${kind}`,
+    requestingDeviceId: 'mobile-device',
     taskId: `release-107-${kind}`,
     conversationId: `release-107-chat-${kind}`,
     kind,

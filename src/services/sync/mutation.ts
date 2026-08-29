@@ -2,6 +2,7 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
   KNOWLEDGE_DOCUMENT_ENTITY,
   SHARED_FILE_ENTITY,
+  TASK_LAUNCH_ENTITY,
   TASK_CONTROL_ENTITY,
   TASK_RUN_ENTITY,
   createKnowledgeDocumentStateFields,
@@ -22,6 +23,7 @@ export const CORE_SYNC_ENTITIES = {
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
+  taskLaunch: TASK_LAUNCH_ENTITY,
   taskRun: TASK_RUN_ENTITY,
   taskControl: TASK_CONTROL_ENTITY,
 } as const;

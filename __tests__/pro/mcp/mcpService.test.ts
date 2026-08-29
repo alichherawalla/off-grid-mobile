@@ -508,7 +508,11 @@ describe('executeMcpTool', () => {
     const res = await executeMcpTool(
       'search',
       { q: 'hi' },
-      { conversationId: 'private-chat', deviceId: 'phone-1' },
+      {
+        launchId: 'launch-private-chat',
+        conversationId: 'private-chat',
+        deviceId: 'phone-1',
+      },
     );
     // An arbitrary MCP server must not receive private chat or device identity.
     expect(fake.callTool).toHaveBeenCalledWith('search', { q: 'hi' });
@@ -542,6 +546,7 @@ describe('executeMcpTool', () => {
       'web_use',
       { task: 'Find a flight' },
       {
+        launchId: 'launch-chat-mobile-1',
         conversationId: 'chat-mobile-1',
         deviceId: 'phone-1',
         deviceName: 'Ali phone',
@@ -553,6 +558,7 @@ describe('executeMcpTool', () => {
       { task: 'Find a flight' },
       {
         'ai.offgrid/taskOrigin': {
+          launchId: 'launch-chat-mobile-1',
           conversationId: 'chat-mobile-1',
           deviceId: 'phone-1',
           deviceName: 'Ali phone',

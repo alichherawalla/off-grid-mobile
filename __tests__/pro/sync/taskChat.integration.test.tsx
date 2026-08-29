@@ -33,6 +33,8 @@ const origin = {
 
 const runningComputerTask = {
   version: 1 as const,
+  launchId: 'launch-task-computer-1',
+  requestingDeviceId: 'phone-1',
   taskId: 'task-computer-1',
   conversationId: 'chat-mobile-1',
   kind: 'computer_use' as const,
