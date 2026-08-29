@@ -1,13 +1,9 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AutoSetupScreen } from '../../../src/screens/AutoSetupScreen';
+import { type AutoSetupCatalogBoundaries } from '../../../src/services/autoSetupCatalog';
 import {
-  loadAutoSetupCompatibleCatalog,
-  type AutoSetupCatalogBoundaries,
-} from '../../../src/services/autoSetupCatalog';
-import {
-  completeAutoSetupPlan,
-  startAutoSetupPlan,
+  createAutoSetupSession,
   type AutoSetupDownloadBoundaries,
 } from '../../../src/services/autoSetupService';
 import { modelDownloadService } from '../../../src/services/modelDownloadService';
@@ -39,6 +35,7 @@ const capabilities = {
 class NativeDownloadBoundary implements DownloadProvider {
   private downloads: ModelDownload[] = [];
   private readonly listeners = new Set<() => void>();
+  completeOnStart = true;
 
   constructor(readonly modelType: ModelDownloadType) {}
 
@@ -47,16 +44,18 @@ class NativeDownloadBoundary implements DownloadProvider {
   }
 
   start(id: string, name: string, sizeBytes: number): Promise<void> {
-    this.downloads = [{
-      id: uniformDownloadId(this.modelType, id),
-      modelType: this.modelType,
-      name,
-      sizeBytes,
-      bytesDownloaded: sizeBytes,
-      progress: 1,
-      status: 'completed',
-      capabilities,
-    }];
+    this.downloads = [
+      {
+        id: uniformDownloadId(this.modelType, id),
+        modelType: this.modelType,
+        name,
+        sizeBytes,
+        bytesDownloaded: this.completeOnStart ? sizeBytes : 0,
+        progress: this.completeOnStart ? 1 : 0,
+        status: this.completeOnStart ? 'completed' : 'downloading',
+        capabilities,
+      },
+    ];
     this.listeners.forEach(listener => listener());
     return Promise.resolve();
   }
@@ -66,7 +65,10 @@ class NativeDownloadBoundary implements DownloadProvider {
     return () => this.listeners.delete(listener);
   }
 
-  async cancel(): Promise<void> {}
+  async cancel(): Promise<void> {
+    this.downloads = [];
+    this.listeners.forEach(listener => listener());
+  }
   async retry(): Promise<void> {}
   async remove(): Promise<void> {
     this.downloads = [];
@@ -76,15 +78,23 @@ class NativeDownloadBoundary implements DownloadProvider {
 
 const catalogBoundaries: AutoSetupCatalogBoundaries = {
   totalMemoryGB: () => 12,
-  fetchTextFiles: async models => Object.fromEntries(models.map(model => {
-    const params = parameterCount(model.id);
-    return [model.id, [{
-      name: `${params}b.gguf`,
-      size: params * 100 * MB,
-      quantization: 'Q4_K_M',
-      downloadUrl: `https://models.test/${params}b.gguf`,
-    }]];
-  })),
+  fetchTextFiles: async models =>
+    Object.fromEntries(
+      models.map(model => {
+        const params = parameterCount(model.id);
+        return [
+          model.id,
+          [
+            {
+              name: `${params}b.gguf`,
+              size: params * 100 * MB,
+              quantization: 'Q4_K_M',
+              downloadUrl: `https://models.test/${params}b.gguf`,
+            },
+          ],
+        ];
+      }),
+    ),
   imageRecommendation: async () => ({
     compatibleBackends: ['coreml'],
     recommendedModels: ['balanced image'],
@@ -136,20 +146,24 @@ describe('Auto Setup release journey', () => {
       imageDownloads.start(model.id, model.name, model.size),
     startSpeech: async modelId =>
       speechDownloads.start(modelId, modelId, 1 * MB),
+    list: () => modelDownloadService.list(),
+    cancel: id => modelDownloadService.cancel(id),
+    subscribe: listener => modelDownloadService.subscribe(listener),
   };
 
-  const runtime = {
-    loadCatalog: () => loadAutoSetupCompatibleCatalog(catalogBoundaries),
-    startPlan: (
-      plan: Parameters<typeof startAutoSetupPlan>[0],
-      completed: ReadonlySet<string> = new Set(),
-    ) => startAutoSetupPlan(plan, completed, downloadBoundaries),
-    completePlan: completeAutoSetupPlan,
-  };
+  const sessionFactory = () =>
+    createAutoSetupSession({
+      catalog: catalogBoundaries,
+      downloads: downloadBoundaries,
+    });
 
   beforeEach(() => {
     jest.clearAllMocks();
+    useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
     useAppStore.setState({ activeModelId: null });
+    textDownloads.completeOnStart = true;
+    imageDownloads.completeOnStart = true;
+    speechDownloads.completeOnStart = true;
     unregister = [
       modelDownloadService.register(textDownloads),
       modelDownloadService.register(imageDownloads),
@@ -168,7 +182,10 @@ describe('Auto Setup release journey', () => {
 
   it('selects a device-fit plan, starts all model downloads, and activates it', async () => {
     const ui = render(
-      <AutoSetupScreen navigation={navigation} runtime={runtime} />,
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={sessionFactory}
+      />,
     );
     await waitFor(() =>
       expect(ui.getByTestId('auto-setup-plan-balanced')).toBeTruthy(),
@@ -179,13 +196,15 @@ describe('Auto Setup release journey', () => {
     fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
     expect(ui.getByText('Qwen 3.5 9B')).toBeTruthy();
     expect(ui.queryByText('Gemma 4 E4B')).toBeNull();
+    expect(useAppStore.getState().settings.modelLoadingMode).toBe('aggressive');
 
     fireEvent.press(ui.getByTestId('auto-setup-download'));
     await waitFor(() =>
       expect(ui.getByTestId('auto-setup-continue')).toBeTruthy(),
     );
-    expect((await modelDownloadService.list()).map(item => item.modelType))
-      .toEqual(expect.arrayContaining(['text', 'image', 'stt']));
+    expect(
+      (await modelDownloadService.list()).map(item => item.modelType),
+    ).toEqual(expect.arrayContaining(['text', 'image', 'stt']));
 
     fireEvent.press(ui.getByTestId('auto-setup-continue'));
     expect(useAppStore.getState().activeModelId).toContain(
@@ -196,12 +215,104 @@ describe('Auto Setup release journey', () => {
 
   it('keeps manual model and remote server setup in Advanced Setup', async () => {
     const ui = render(
-      <AutoSetupScreen navigation={navigation} runtime={runtime} />,
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={sessionFactory}
+      />,
     );
     await waitFor(() =>
       expect(ui.getByTestId('auto-setup-advanced')).toBeTruthy(),
     );
     fireEvent.press(ui.getByTestId('auto-setup-advanced'));
     expect(navigation.navigate).toHaveBeenCalledWith('AdvancedSetup');
+  });
+
+  it('shows the failed model and cancels the other downloads as one session', async () => {
+    textDownloads.completeOnStart = false;
+    speechDownloads.completeOnStart = false;
+    const failingDownloads: AutoSetupDownloadBoundaries = {
+      ...downloadBoundaries,
+      startImage: async () => {
+        throw new Error('Image model download could not start.');
+      },
+    };
+    const ui = render(
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={() =>
+          createAutoSetupSession({
+            catalog: catalogBoundaries,
+            downloads: failingDownloads,
+          })
+        }
+      />,
+    );
+    await waitFor(() =>
+      expect(ui.getByTestId('auto-setup-download')).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId('auto-setup-download'));
+
+    await waitFor(() =>
+      expect(
+        ui.getByText('Image model download could not start.'),
+      ).toBeTruthy(),
+    );
+    expect(ui.getByText(/FAILED/)).toBeTruthy();
+    await waitFor(async () => {
+      const active = (await modelDownloadService.list()).filter(
+        download => download.status === 'downloading',
+      );
+      expect(active).toEqual([]);
+    });
+  });
+
+  it('cancels active downloads when setup unmounts', async () => {
+    textDownloads.completeOnStart = false;
+    imageDownloads.completeOnStart = false;
+    speechDownloads.completeOnStart = false;
+    const ui = render(
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={sessionFactory}
+      />,
+    );
+    await waitFor(() =>
+      expect(ui.getByTestId('auto-setup-download')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByTestId('auto-setup-download'));
+    await waitFor(() =>
+      expect(ui.getAllByText(/STARTING|0%/).length).toBeGreaterThan(0),
+    );
+
+    ui.unmount();
+
+    await waitFor(async () => {
+      expect(await modelDownloadService.list()).toEqual([]);
+    });
+  });
+
+  it('ends a stalled catalog request at its deadline', async () => {
+    const stalledCatalog: AutoSetupCatalogBoundaries = {
+      ...catalogBoundaries,
+      fetchTextFiles: () => new Promise(() => undefined),
+    };
+    const ui = render(
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={() =>
+          createAutoSetupSession({
+            catalog: stalledCatalog,
+            downloads: downloadBoundaries,
+            catalogDeadlineMs: 5,
+          })
+        }
+      />,
+    );
+
+    expect(
+      await ui.findByText('The model catalog did not respond in time.'),
+    ).toBeTruthy();
+    ui.unmount();
   });
 });
