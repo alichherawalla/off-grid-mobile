@@ -26,6 +26,20 @@ jest.mock('@offgrid/pro/mcp/mcpService', () => {
   };
 });
 
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
+
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
+
 import { McpToolExtension } from '@offgrid/pro/mcp/McpToolExtension';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
@@ -366,6 +380,7 @@ describe('execute', () => {
       {
         origin: {
           conversationId: 'chat-mobile-1',
+          launchId: expect.any(String),
           deviceId: 'phone-1',
           deviceName: 'Ali phone',
           executionDeviceId: 'desktop-2',
