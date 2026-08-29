@@ -28,6 +28,7 @@ import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelResidency';
 import { reportModelFailure } from '../../services/modelFailureHandler';
+import { remoteToolCapabilityIssue } from '../../services/toolCapabilityPreflight';
 import { embeddingService } from '../../services/rag/embedding';
 import {
   useChatStore,
@@ -490,6 +491,10 @@ async function generateWithCompactionRetry(
   logger.log(
     `[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`,
   );
+  const capabilityIssue = remoteToolCapabilityIssue(
+    enabledTools.length + extCount,
+  );
+  if (capabilityIssue) throw new Error(capabilityIssue);
   const gen = (msgs: Message[]) =>
     enabledTools.length > 0 || extCount > 0
       ? generationService.generateWithTools(opts.id, msgs, {

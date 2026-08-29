@@ -97,20 +97,7 @@ describe('Batch 8 — remote server tool-calling capability gate (request builde
     expect(body.tool_choice).toBeUndefined();
   });
 
-  /**
-   * BUG-FOUND — the request builder does not consult the discovered
-   * `supportsToolCalling` capability. src/services/providers/openAICompatibleProvider.ts
-   * line ~102 gates only on `options.tools.length > 0`:
-   *
-   *   ...(options.tools && options.tools.length > 0 && { tools, tool_choice: 'auto' })
-   *
-   * So a server that advertised supportsToolCalling === false at discovery STILL
-   * receives the tools array. The fix is to also require
-   * `this.modelCapabilities.supportsToolCalling` before adding tools. This test is
-   * the exact fails-before / passes-after case for that fix. Skipped until src is
-   * fixed (per assignment: real src bug → do not edit src, mark BUG-FOUND + .skip).
-   */
-  it.skip('BUG-FOUND: omits tools + tool_choice when the server advertised supportsToolCalling=false', async () => {
+  it('omits tools + tool_choice when the server advertised supportsToolCalling=false', async () => {
     const body = await captureRequestBody({ supportsToolCalling: false, tools: TOOLS });
     expect(body.tools).toBeUndefined();
     expect(body.tool_choice).toBeUndefined();

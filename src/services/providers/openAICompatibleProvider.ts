@@ -99,7 +99,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // A client-side cap (default 1024) silently truncates reasoning models that
       // need a larger budget for <think> blocks (Qwen3, DeepSeek-R1, etc).
       ...(options.topP !== undefined && { top_p: options.topP }),
-      ...(options.tools && options.tools.length > 0 && { tools: options.tools, tool_choice: 'auto' }),
+      ...(this.modelCapabilities.supportsToolCalling && options.tools && options.tools.length > 0 && {
+        tools: options.tools,
+        tool_choice: 'auto',
+      }),
       // Control Qwen3 thinking per-request via chat_template_kwargs, but only for
       // servers that advertised (at discovery) that they honor it. Gating on a
       // discovered capability — not the endpoint's port — keeps the "which server
