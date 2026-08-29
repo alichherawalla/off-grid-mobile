@@ -15,7 +15,26 @@ import { uniformDownloadId } from '../services/modelDownloadService/uniformId';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AutoSetup'> };
+interface AutoSetupRuntime {
+  loadCatalog: () => ReturnType<typeof loadAutoSetupCompatibleCatalog>;
+  startPlan: (
+    plan: AutoSetupPlan,
+    completedIds?: ReadonlySet<string>,
+  ) => Promise<void>;
+  completePlan: (plan: AutoSetupPlan) => void;
+}
+
+const productionRuntime: AutoSetupRuntime = {
+  loadCatalog: loadAutoSetupCompatibleCatalog,
+  startPlan: startAutoSetupPlan,
+  completePlan: completeAutoSetupPlan,
+};
+
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'AutoSetup'>;
+  /** Explicit seam for native/network boundary integration tests. */
+  runtime?: AutoSetupRuntime;
+};
 
 const idForItem = (item: AutoSetupPlan['items'][number]) => {
   if (item.kind === 'text') return uniformDownloadId('text', item.id);
@@ -29,7 +48,10 @@ const labelForItem = (item: AutoSetupPlan['items'][number]) => {
   return 'SPEECH INPUT';
 };
 
-export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
+export const AutoSetupScreen: React.FC<Props> = ({
+  navigation,
+  runtime = productionRuntime,
+}) => {
   const [plans, setPlans] = useState<AutoSetupPlan[]>([]);
   const [selectedTier, setSelectedTier] = useState<AutoSetupTier>('balanced');
   const [loading, setLoading] = useState(true);
@@ -44,12 +66,12 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
   const load = () => {
     setLoading(true);
     setError(null);
-    loadAutoSetupCompatibleCatalog()
+    runtime.loadCatalog()
       .then(catalog => setPlans(selectAutoSetupPlans(catalog)))
       .catch(() => setError('Auto Setup could not load the model catalog.'))
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(load, [runtime]);
 
   const selected = plans.find(plan => plan.tier === selectedTier) ?? plans[0];
   const planDownloads = useMemo(() => selected
@@ -66,7 +88,7 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
     setStarting(true);
     setError(null);
     const completedIds = new Set(downloads.filter(download => download.status === 'completed').map(download => download.id));
-    try { await startAutoSetupPlan(selected, completedIds); }
+    try { await runtime.startPlan(selected, completedIds); }
     catch { setError('One or more downloads could not start. Try again.'); }
     finally { setStarting(false); }
   };
@@ -101,7 +123,7 @@ export const AutoSetupScreen: React.FC<Props> = ({ navigation }) => {
                   {(starting || planDownloads.length > 0) && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, progress * 100)}%` }]} /></View>}
                   {failed && <Text style={styles.error}>{failed.error ?? 'A download failed.'}</Text>}
                   {isComplete
-                    ? <Button title="Continue" onPress={() => { completeAutoSetupPlan(plan); navigation.replace('Main'); }} testID="auto-setup-continue" />
+                    ? <Button title="Continue" onPress={() => { runtime.completePlan(plan); navigation.replace('Main'); }} testID="auto-setup-continue" />
                     : <Button title={failed ? 'Retry Downloads' : `Download ${formatBytes(plan.totalBytes)}`} onPress={start} loading={starting} testID="auto-setup-download" />}
                 </View>
               )}

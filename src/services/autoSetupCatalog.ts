@@ -10,6 +10,20 @@ const MB = 1024 * 1024;
 
 type CompatibleTextModel = ReturnType<typeof recommendedModelsForDevice>[number];
 
+export interface AutoSetupCatalogBoundaries {
+  totalMemoryGB: () => number;
+  fetchTextFiles: typeof fetchModelFiles;
+  imageRecommendation: typeof hardwareService.getImageModelRecommendation;
+  imageModels: typeof autoSetupImageCatalogProvider.load;
+}
+
+const productionCatalogBoundaries: AutoSetupCatalogBoundaries = {
+  totalMemoryGB: () => hardwareService.getTotalMemoryGB(),
+  fetchTextFiles: fetchModelFiles,
+  imageRecommendation: () => hardwareService.getImageModelRecommendation(),
+  imageModels: () => autoSetupImageCatalogProvider.load(),
+};
+
 export function buildAutoSetupTextCandidates(
   models: CompatibleTextModel[],
   files: Record<string, import('../types').ModelFile[]>,
@@ -32,14 +46,16 @@ export function buildAutoSetupTextCandidates(
 }
 
 /** Resolve the live catalogs, then admit candidates through the existing device-fit owners. */
-export async function loadAutoSetupCompatibleCatalog(): Promise<AutoSetupCompatibleCatalog> {
-  const ramGB = hardwareService.getTotalMemoryGB();
+export async function loadAutoSetupCompatibleCatalog(
+  boundaries: AutoSetupCatalogBoundaries = productionCatalogBoundaries,
+): Promise<AutoSetupCompatibleCatalog> {
+  const ramGB = boundaries.totalMemoryGB();
   const textModels = recommendedModelsForDevice(ramGB).filter(model => model.type === 'vision');
-  const files = await fetchModelFiles(textModels);
+  const files = await boundaries.fetchTextFiles(textModels);
   const text = buildAutoSetupTextCandidates(textModels, files, ramGB);
 
-  const imageRecommendation = await hardwareService.getImageModelRecommendation();
-  const imageModels = await autoSetupImageCatalogProvider.load();
+  const imageRecommendation = await boundaries.imageRecommendation();
+  const imageModels = await boundaries.imageModels();
   const compatibleImages = imageModels.filter(model =>
     imageRecommendation.compatibleBackends.includes(model.backend) &&
     (!imageRecommendation.qnnVariant || model.backend !== 'qnn' || model.variant === imageRecommendation.qnnVariant) &&
