@@ -2,9 +2,9 @@ import type { ModelFile } from '../types';
 import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 export type AutoSetupTier = 'lean' | 'balanced' | 'extreme';
-export type AutoSetupModelKind = 'text' | 'image' | 'stt';
+type AutoSetupModelKind = 'text' | 'image' | 'stt';
 
-export interface AutoSetupCandidate<T = unknown> {
+interface AutoSetupCandidate<T = unknown> {
   id: string;
   name: string;
   kind: AutoSetupModelKind;
@@ -38,7 +38,7 @@ const PLAN_COPY: Record<AutoSetupTier, Pick<AutoSetupPlan, 'title' | 'summary'>>
   extreme: { title: 'Extreme', summary: 'The largest safe models for this device.' },
 };
 
-export const AUTO_SETUP_TEXT_TARGET_BILLIONS: Record<AutoSetupTier, number> = {
+const AUTO_SETUP_TEXT_TARGET_BILLIONS: Record<AutoSetupTier, number> = {
   lean: 2,
   balanced: 4,
   extreme: 9,
@@ -65,7 +65,7 @@ function chooseText(
 }
 
 /** Pure plan selector. Its input contains only candidates admitted by existing compatibility owners. */
-export function selectAutoSetupPlan(
+function selectAutoSetupPlan(
   tier: AutoSetupTier,
   catalog: AutoSetupCompatibleCatalog,
 ): AutoSetupPlan | null {
