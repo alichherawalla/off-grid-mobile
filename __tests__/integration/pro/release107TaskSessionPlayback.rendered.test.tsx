@@ -110,7 +110,7 @@ function visualStep(
       payloadBase64: FRAME_PAYLOAD,
       width: 100,
       height: 50,
-      capturedAt: 1_000 + sequence * 1_000,
+      capturedAt: sequence === 1 ? 2_000 : 5_500,
     },
     ...(sequence === 2 ? { result: { status: 'complete' as const } } : {}),
   };
@@ -213,7 +213,7 @@ describe('Release 107 task session playback', () => {
         screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
       );
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
-      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
+      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:03')).toBeTruthy();
       expect(screen.getByText('Opened the target')).toBeTruthy();
       expect(screen.queryByTestId('task-control-stop')).toBeNull();
       expect(screen.queryByText('The task screen is syncing.')).toBeNull();
@@ -231,14 +231,16 @@ describe('Release 107 task session playback', () => {
         'valueChange',
         1,
       );
-      expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
+      expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
       expect(screen.getByText('Selected Continue')).toBeTruthy();
       expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
 
       fireEvent.press(screen.getByTestId('task-session-toggle'));
       expect(screen.getByText('Pause')).toBeTruthy();
-      act(() => jest.advanceTimersByTime(1_000));
-      expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
+      act(() => jest.advanceTimersByTime(3_499));
+      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:03')).toBeTruthy();
+      act(() => jest.advanceTimersByTime(1));
+      expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
       expect(screen.getByText('Play')).toBeTruthy();
 
       fireEvent.press(
