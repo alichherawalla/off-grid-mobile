@@ -324,6 +324,7 @@ describe('Release 107 task session playback', () => {
 
     fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
     expect(screen.getByText('The task screen is syncing.')).toBeTruthy();
+    expect(screen.getByTestId('task-frame-loading')).toBeTruthy();
 
     const step = visualStep(run, 1);
     act(() => {
@@ -335,6 +336,7 @@ describe('Release 107 task session playback', () => {
       );
     });
     expect(screen.queryByText('The task screen is syncing.')).toBeNull();
+    expect(screen.queryByTestId('task-frame-loading')).toBeNull();
     expect(screen.getByTestId('task-session-playback')).toBeTruthy();
     expect(screen.getByTestId('task-session-frame')).toBeTruthy();
     measureTaskSessionFrame(screen);
