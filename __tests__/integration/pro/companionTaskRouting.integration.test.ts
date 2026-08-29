@@ -9,6 +9,20 @@ import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
 
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
+
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
+
 const computerTask = {
   name: 'computer_task',
   description: `Use the selected Desktop. ${'Route carefully. '.repeat(80)}`,
@@ -87,14 +101,14 @@ describe('Mobile companion task routing integration', () => {
       .setConnectedDeviceIds(['desktop-office', 'desktop-studio']);
     calls.office.mockReset().mockResolvedValue('wrong Desktop');
     calls.studio.mockReset().mockResolvedValue('task started');
-    _registerClientDirect(
-      'office-tools',
-      { callTool: calls.office, close: jest.fn() } as unknown as McpClient,
-    );
-    _registerClientDirect(
-      'studio-tools',
-      { callTool: calls.studio, close: jest.fn() } as unknown as McpClient,
-    );
+    _registerClientDirect('office-tools', {
+      callTool: calls.office,
+      close: jest.fn(),
+    } as unknown as McpClient);
+    _registerClientDirect('studio-tools', {
+      callTool: calls.studio,
+      close: jest.fn(),
+    } as unknown as McpClient);
   });
 
   afterEach(() => {
@@ -112,7 +126,9 @@ describe('Mobile companion task routing integration', () => {
     expect(schema[0].function.parameters.properties).toHaveProperty(
       'execution_device',
     );
-    expect(schema[0].function.parameters.properties).not.toHaveProperty('notes');
+    expect(schema[0].function.parameters.properties).not.toHaveProperty(
+      'notes',
+    );
 
     const result = await McpToolExtension.execute({
       id: 'task-call-1',
@@ -136,6 +152,7 @@ describe('Mobile companion task routing integration', () => {
       {
         [TASK_ORIGIN_META_KEY]: {
           conversationId: 'chat-mobile-1',
+          launchId: expect.any(String),
           deviceId: 'phone-1',
           deviceName: 'Ali phone',
           executionDeviceId: 'desktop-studio',
