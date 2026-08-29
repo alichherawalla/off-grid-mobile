@@ -10,6 +10,8 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -25,8 +27,14 @@ class MeshResidencyService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val generation = intent?.getLongExtra(EXTRA_GENERATION, -1L) ?: -1L
+        if (!isCurrentGeneration(generation)) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         try {
             startForegroundCompat()
+            publish(generation, ResidencySnapshot("background"))
         } catch (error: RuntimeException) {
             val startWasDenied =
                 error is SecurityException ||
@@ -36,6 +44,10 @@ class MeshResidencyService : Service() {
 
             // Promotion can be denied after startForegroundService() has already returned. Stop
             // this service now so Android does not later kill the process for a late promotion.
+            publish(
+                generation,
+                ResidencySnapshot("foreground_only", "promotion_denied"),
+            )
             stopImmediately()
         }
 
@@ -46,6 +58,7 @@ class MeshResidencyService : Service() {
 
     /** Android gives a timed foreground service only a few seconds to stop after this callback. */
     override fun onTimeout(startId: Int, fgsType: Int) {
+        publishCurrent(ResidencySnapshot("foreground_only", "timed_out"))
         stopImmediately()
     }
 
@@ -57,6 +70,7 @@ class MeshResidencyService : Service() {
 
     override fun onDestroy() {
         residencyRequested.set(false)
+        markUnexpectedStop()
         super.onDestroy()
     }
 
@@ -78,7 +92,22 @@ class MeshResidencyService : Service() {
         const val NOTIFICATION_ID = 4711
         const val FOREGROUND_SERVICE_TYPE =
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        private const val EXTRA_GENERATION = "mesh_residency_generation"
+        private const val PROMOTION_DEADLINE_MS = 5_000L
         private val residencyRequested = AtomicBoolean(false)
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private val lock = Any()
+        private var activeGeneration = 0L
+        private var snapshot = ResidencySnapshot("inactive")
+        private val waiters = mutableListOf<(ResidencySnapshot) -> Unit>()
+
+        data class ResidencySnapshot(
+            val status: String,
+            val reason: String? = null,
+        ) {
+            fun asMap(): Map<String, String?> =
+                mapOf("status" to status, "reason" to reason)
+        }
 
         /**
          * Ensure the channel exists before the first foreground start.
@@ -112,25 +141,97 @@ class MeshResidencyService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
 
-        fun start(context: Context) {
-            if (!residencyRequested.compareAndSet(false, true)) return
-            ensureChannel(context)
-            val intent = Intent(context, MeshResidencyService::class.java)
+        fun start(context: Context, onResult: (ResidencySnapshot) -> Unit) {
+            val generation: Long
+            synchronized(lock) {
+                if (snapshot.status == "background") {
+                    onResult(snapshot)
+                    return
+                }
+                if (snapshot.status == "starting") {
+                    waiters.add(onResult)
+                    return
+                }
+                activeGeneration += 1
+                generation = activeGeneration
+                snapshot = ResidencySnapshot("starting")
+                waiters.add(onResult)
+            }
+            residencyRequested.set(true)
             try {
+                ensureChannel(context)
+                val intent =
+                    Intent(context, MeshResidencyService::class.java)
+                        .putExtra(EXTRA_GENERATION, generation)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     context.startService(intent)
                 }
-            } catch (error: RuntimeException) {
+            } catch (_: RuntimeException) {
                 residencyRequested.set(false)
-                throw error
+                publish(
+                    generation,
+                    ResidencySnapshot("foreground_only", "promotion_denied"),
+                )
             }
+            mainHandler.postDelayed({
+                val timedOut = publish(
+                    generation,
+                    ResidencySnapshot("foreground_only", "promotion_timeout"),
+                    onlyIfStarting = true,
+                )
+                if (timedOut) {
+                    residencyRequested.set(false)
+                    context.stopService(Intent(context, MeshResidencyService::class.java))
+                }
+            }, PROMOTION_DEADLINE_MS)
         }
 
         fun stop(context: Context) {
             residencyRequested.set(false)
+            synchronized(lock) {
+                activeGeneration += 1
+                snapshot = ResidencySnapshot("inactive")
+                val pending = waiters.toList()
+                waiters.clear()
+                pending.forEach { it(snapshot) }
+            }
             context.stopService(Intent(context, MeshResidencyService::class.java))
+        }
+
+        fun currentSnapshot(): ResidencySnapshot = synchronized(lock) { snapshot }
+
+        private fun isCurrentGeneration(generation: Long): Boolean =
+            synchronized(lock) { generation == activeGeneration && snapshot.status == "starting" }
+
+        private fun publishCurrent(next: ResidencySnapshot) {
+            val generation = synchronized(lock) { activeGeneration }
+            publish(generation, next)
+        }
+
+        private fun markUnexpectedStop() {
+            val generation = synchronized(lock) {
+                if (snapshot.status == "background") activeGeneration else null
+            } ?: return
+            publish(generation, ResidencySnapshot("foreground_only", "unavailable"))
+        }
+
+        private fun publish(
+            generation: Long,
+            next: ResidencySnapshot,
+            onlyIfStarting: Boolean = false,
+        ): Boolean {
+            val pending: List<(ResidencySnapshot) -> Unit>
+            synchronized(lock) {
+                if (generation != activeGeneration) return false
+                if (onlyIfStarting && snapshot.status != "starting") return false
+                snapshot = next
+                pending = waiters.toList()
+                waiters.clear()
+            }
+            pending.forEach { it(next) }
+            return true
         }
     }
 }

@@ -64,14 +64,17 @@ class MeshResidencyServiceTest {
     @Config(sdk = [34], application = Application::class)
     fun timeoutStopsResidencyImmediately() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        MeshResidencyService.start(context)
+        var startedStatus: String? = null
+        MeshResidencyService.start(context) { startedStatus = it.status }
+        val startIntent = shadowOf(context as Application).nextStartedService
         val service =
             org.robolectric.Robolectric
                 .buildService(MeshResidencyService::class.java)
                 .create()
                 .get()
 
-        service.onStartCommand(null, 0, 17)
+        service.onStartCommand(startIntent, 0, 17)
+        assertEquals("background", startedStatus)
         service.onTimeout(17, MeshResidencyService.FOREGROUND_SERVICE_TYPE)
 
         val shadow = shadowOf(service)
@@ -79,8 +82,11 @@ class MeshResidencyServiceTest {
         assertTrue(shadow.notificationShouldRemoved)
         assertTrue(shadow.isStoppedBySelf)
 
-        MeshResidencyService.start(context)
+        var restartedStatus: String? = null
+        MeshResidencyService.start(context) { restartedStatus = it.status }
         assertNotNull(shadowOf(context as Application).nextStartedService)
+        assertEquals("starting", MeshResidencyService.currentSnapshot().status)
+        assertEquals(null, restartedStatus)
     }
 
     @Test
@@ -94,5 +100,41 @@ class MeshResidencyServiceTest {
         val restartMode = service.onStartCommand(null, 0, 18)
 
         assertEquals(Service.START_NOT_STICKY, restartMode)
+    }
+
+    @Test
+    fun timeoutIsProjectedAsForegroundOnlyInsteadOfBackgroundRunning() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        MeshResidencyService.start(context) {}
+        val startIntent = shadowOf(context as Application).nextStartedService
+        val service =
+            org.robolectric.Robolectric
+                .buildService(MeshResidencyService::class.java)
+                .create()
+                .get()
+
+        service.onStartCommand(startIntent, 0, 19)
+        service.onTimeout(19, MeshResidencyService.FOREGROUND_SERVICE_TYPE)
+
+        assertEquals("foreground_only", MeshResidencyService.currentSnapshot().status)
+        assertEquals("timed_out", MeshResidencyService.currentSnapshot().reason)
+    }
+
+    @Test
+    fun unexpectedServiceStopRemovesTheBackgroundReachabilityClaim() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        MeshResidencyService.start(context) {}
+        val startIntent = shadowOf(context as Application).nextStartedService
+        val controller =
+            org.robolectric.Robolectric
+                .buildService(MeshResidencyService::class.java)
+                .create()
+        val service = controller.get()
+
+        service.onStartCommand(startIntent, 0, 20)
+        controller.destroy()
+
+        assertEquals("foreground_only", MeshResidencyService.currentSnapshot().status)
+        assertEquals("unavailable", MeshResidencyService.currentSnapshot().reason)
     }
 }

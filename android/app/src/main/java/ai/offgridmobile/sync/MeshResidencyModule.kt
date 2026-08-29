@@ -28,8 +28,9 @@ class MeshResidencyModule(
     @ReactMethod
     fun begin(promise: Promise) {
         try {
-            MeshResidencyService.start(reactContext)
-            promise.resolve(null)
+            MeshResidencyService.start(reactContext) { snapshot ->
+                promise.resolve(snapshot.asMap())
+            }
         } catch (e: IllegalStateException) {
             // Android throws when a foreground service is started from a disallowed state (for
             // example a background start without an exemption). Report it rather than crashing: the
@@ -38,6 +39,11 @@ class MeshResidencyModule(
         } catch (e: SecurityException) {
             promise.reject("mesh_residency_denied", e)
         }
+    }
+
+    @ReactMethod
+    fun state(promise: Promise) {
+        promise.resolve(MeshResidencyService.currentSnapshot().asMap())
     }
 
     @ReactMethod

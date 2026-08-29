@@ -2,8 +2,9 @@ import { NativeModules } from 'react-native';
 import { nativeMeshResidencyBoundary } from '../../../src/services/sync/nativeMeshResidency';
 
 interface ResidencyFake {
-  begin: jest.Mock<Promise<void>, []>;
+  begin: jest.Mock<Promise<unknown>, []>;
   end: jest.Mock<Promise<void>, []>;
+  state: jest.Mock<Promise<unknown>, []>;
   getConstants: jest.Mock<unknown, []>;
 }
 
@@ -24,8 +25,9 @@ describe('what the phone promises about staying reachable in the background', ()
 
   const install = (constants: unknown): ResidencyFake => {
     const fake: ResidencyFake = {
-      begin: jest.fn(async () => undefined),
+      begin: jest.fn(async () => ({ status: 'background' })),
       end: jest.fn(async () => undefined),
+      state: jest.fn(async () => ({ status: 'background' })),
       getConstants: jest.fn(() => constants),
     };
     native.MeshResidencyModule = fake;
@@ -164,17 +166,26 @@ describe('what the phone promises about staying reachable in the background', ()
       showsOngoingIndicator: true,
     });
 
-    await nativeMeshResidencyBoundary.begin();
+    await expect(nativeMeshResidencyBoundary.begin()).resolves.toEqual({
+      status: 'background',
+    });
+    await expect(nativeMeshResidencyBoundary.state()).resolves.toEqual({
+      status: 'background',
+    });
     await nativeMeshResidencyBoundary.end();
 
     expect(fake.begin).toHaveBeenCalledTimes(1);
+    expect(fake.state).toHaveBeenCalledTimes(1);
     expect(fake.end).toHaveBeenCalledTimes(1);
   });
 
   it('is safe to hold and release on a build that cannot do either', async () => {
     // No module. Releasing residency that was never held happens on every app close, and a throw there
     // would surface as a crash on backgrounding.
-    await expect(nativeMeshResidencyBoundary.begin()).resolves.toBeUndefined();
+    await expect(nativeMeshResidencyBoundary.begin()).resolves.toEqual({
+      status: 'foreground_only',
+      reason: 'unavailable',
+    });
     await expect(nativeMeshResidencyBoundary.end()).resolves.toBeUndefined();
   });
 
