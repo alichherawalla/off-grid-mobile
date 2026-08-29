@@ -13,6 +13,7 @@ const proExists = fs.existsSync(path.resolve(proPackagePath, 'package.json'));
 // than enabling `unstable_enablePackageExports` globally (that flag changes resolution for every
 // dep and breaks libraries with malformed exports maps). The package ships prebuilt CJS in dist/.
 const syncPackagePath = path.resolve(__dirname, '../shared/packages/sync');
+const automationPackagePath = path.resolve(__dirname, '../shared/packages/automation');
 const ragPackagePath = path.resolve(__dirname, '../shared/packages/rag');
 // @offgrid/models: cross-platform model contracts (catalog, reasoning-budget rule) shared
 // with desktop. Out-of-root like rag, prebuilt CJS in dist/.
@@ -33,6 +34,7 @@ const config = {
   // package is out-of-root, so Metro must be told to watch it (for its dist) — nothing else needed.
   watchFolders: [
     syncPackagePath,
+    automationPackagePath,
     ragPackagePath,
     modelsPackagePath,
     speechPackagePath,
@@ -61,6 +63,9 @@ const config = {
       '@offgrid/models': path.resolve(modelsPackagePath, 'dist/index.js'),
       '@offgrid/speech': path.resolve(speechPackagePath, 'dist/index.cjs'),
       '@offgrid/ui': path.resolve(uiPackagePath, 'dist/index.js'),
+      // @offgrid/sync owns this dependency in its package manifest. Metro still needs the
+      // out-of-root file dependency mapped to a watched, built CommonJS entry.
+      '@offgrid/automation': path.resolve(automationPackagePath, 'dist/index.js'),
       // Points to the real pro package when present on disk (store builds),
       // falls back to a null stub so free builds bundle cleanly.
       '@offgrid/pro': proExists ? proPackagePath : proStubPath,
