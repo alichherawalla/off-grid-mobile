@@ -42,6 +42,7 @@ interface DenseModelCardContentProps {
   supportsAcceleration?: boolean;
   recommended?: RecommendedConfig;
   isTrending?: boolean;
+  credibilitySource?: ModelCredibility['source'];
   credibilityLabel?: string;
   incompatibleReason?: string;
 }
@@ -58,6 +59,7 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
   supportsAcceleration,
   recommended,
   isTrending,
+  credibilitySource,
   credibilityLabel,
   incompatibleReason,
 }) => {
@@ -71,6 +73,12 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
     supportsAcceleration ? 'NPU/GPU' : undefined,
     incompatibleReason,
   ].filter((value): value is string => !!value);
+  const isVerified = credibilitySource === 'verified-quantizer';
+  const sourceLabels = [
+    model.author,
+    isVerified ? undefined : credibilityLabel,
+    recommended?.pillLabel ?? (isTrending ? 'Trending' : undefined),
+  ].filter((value): value is string => !!value);
 
   return (
     <>
@@ -81,10 +89,16 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
             <MaterialIcon name="whatshot" size={14} color={colors.trending} />
           )}
           <Text style={styles.denseSource} numberOfLines={1}>
-            {[model.author, credibilityLabel, recommended?.pillLabel ?? (isTrending ? 'Trending' : undefined)]
-              .filter(Boolean)
-              .join(' · ')}
+            {sourceLabels.join(' · ')}
           </Text>
+          {isVerified && (
+            <Icon
+              name="check-circle"
+              size={12}
+              color={colors.primary}
+              accessibilityLabel="Verified"
+            />
+          )}
         </View>
       </View>
       {!!description && (

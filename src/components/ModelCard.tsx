@@ -113,6 +113,7 @@ const ModelCardHeading: React.FC<ModelCardHeadingProps> = ({
     supportsAcceleration={supportsAcceleration}
     recommended={recommended}
     isTrending={isTrending}
+    credibilitySource={credibility?.source}
     credibilityLabel={credibilityInfo?.label}
     incompatibleReason={incompatibleReason}
   />
