@@ -46,6 +46,23 @@ Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session sta
 
 **Merge strategy: ALWAYS a merge commit. NEVER squash (and never rebase-merge).** When merging a PR, use `gh pr merge --merge` (or the "Create a merge commit" button) so the full commit history is preserved on `main`. Do not squash under any circumstances - the small, meaningful per-concern commits are the record and must survive the merge. This applies to both the core repo and the `pro` submodule.
 
+## Required Development Order
+
+Use this order. Do not start a later gate while an earlier gate is open.
+
+1. Finish the requested production code. Apply YAGNI, SOLID, SRP, SSOT, and DRY. Reuse the smallest
+   existing seam that completes the journey. Do not follow unrelated findings or add speculative
+   systems.
+2. Live-verify the complete journey on the real development surfaces and devices.
+3. Write and run E2E checks from the exact successful live steps.
+4. Add only the integration tests needed for failure, race, security, offline, or coverage paths.
+5. Run production and packaged builds only after the live, E2E, and integration gates pass.
+6. Push the reviewed heads to GitHub only after the production builds pass.
+7. Keep CI and every valid hosted review signal green on those exact pushed heads.
+
+Type checks, focused lint, and development installs are allowed while coding. They are code gates,
+not production-build or release-ready evidence.
+
 ### Commit early, commit often - never lose progress (agents especially)
 
 **A long task is a chain of small, GREEN, committed steps - not one giant uncommitted diff.** Agents run against context/session limits; anything uncommitted is lost when the session ends. So:
@@ -223,17 +240,16 @@ since upstream:
 - Android checks require the Gradle wrapper in `android/`; the iOS build needs a booted-or-available
   simulator SDK. Verified locally: `assembleDebug assembleRelease` produces both APKs (~14 min).
 
-**Workflow implication (TDD / adversarial red-first):** write a failing test, commit it red (commit is
-free), then drive it green; the branch must be green before `git push` (the gate blocks a red push).
+**Workflow implication:** follow the Required Development Order above. Live proof comes before new
+E2E and integration tests. Production builds come after those tests, and before the GitHub push.
 Never bypass the push gate with `--no-verify`. `core.hooksPath` is `.husky/_` (husky v9); there is no
 pre-commit hook by design.
 
 ## Testing (lean — this is the whole doctrine)
 
-**Tests come LAST, and only when Mac asks.** Finish every source change first — typecheck clean, lint
-clean, running on the device. Mac verifies it by hand. THEN, when he explicitly says so, write the test.
-Writing one earlier is a defect even if the test is good: it spends the turn on the wrong thing and
-encodes behaviour nobody has confirmed yet.
+**Tests follow live verification.** Finish every source change first with YAGNI, SOLID, SRP, SSOT,
+and DRY. Typecheck and lint the code, then verify the complete journey on the real development
+surfaces. Convert the successful live steps to E2E checks. Add targeted integration tests after E2E.
 
 **One rendered integration test per fix. Nothing more.**
 
