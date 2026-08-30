@@ -292,6 +292,32 @@ describe('Auto Setup release journey', () => {
     });
   });
 
+  it('keeps the selected plan fixed after its download session starts', async () => {
+    textDownloads.completeOnStart = false;
+    imageDownloads.completeOnStart = false;
+    speechDownloads.completeOnStart = false;
+    const ui = render(
+      <AutoSetupScreen
+        navigation={navigation}
+        sessionFactory={sessionFactory}
+      />,
+    );
+    await waitFor(() =>
+      expect(ui.getByTestId('auto-setup-plan-balanced')).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId('auto-setup-download'));
+    await waitFor(() =>
+      expect(ui.getAllByText(/STARTING|0%/).length).toBeGreaterThan(0),
+    );
+    fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
+
+    expect(ui.getByText('Gemma 4 E4B')).toBeTruthy();
+    expect(ui.queryByText('Qwen 3.5 9B')).toBeNull();
+    expect(useAppStore.getState().settings.modelLoadingMode).toBe('balanced');
+    ui.unmount();
+  });
+
   it('ends a stalled catalog request at its deadline', async () => {
     const stalledCatalog: AutoSetupCatalogBoundaries = {
       ...catalogBoundaries,

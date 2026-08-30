@@ -22,6 +22,7 @@ import type {
   OpenAIConfig,
   OpenAIStreamState,
 } from './openAICompatibleTypes';
+import { remoteAuthorizationHeaders } from '../remoteTransportPolicy';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';
 
@@ -148,9 +149,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       };
-      if (this.config.apiKey) {
-        headers.Authorization = `Bearer ${this.config.apiKey}`;
-      }
+      Object.assign(headers, remoteAuthorizationHeaders(this.config.endpoint, this.config.apiKey));
 
       let baseUrl = this.config.endpoint;
       while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);

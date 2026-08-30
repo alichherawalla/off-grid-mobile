@@ -337,6 +337,19 @@ describe('ModelResidencyManager', () => {
     modelResidencyManager.setBudgetOverrideMB(1000);
   });
 
+  it('keeps a replacement resident when its old owner unregisters', () => {
+    const oldOwner = modelResidencyManager.register(
+      { key: 'text', type: 'text', sizeMB: 400 }, async () => {}, 1,
+    );
+    const currentOwner = modelResidencyManager.register(
+      { key: 'text', type: 'text', sizeMB: 800 }, async () => {}, 2,
+    );
+    expect(modelResidencyManager.unregister('text', oldOwner)).toBe(false);
+    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(modelResidencyManager.unregister('text', currentOwner)).toBe(true);
+    expect(modelResidencyManager.isResident('text')).toBe(false);
+  });
+
   it('loads a model and tracks it as resident', async () => {
     const load = jest.fn(async () => {});
     const res = await modelResidencyManager.ensureResident(

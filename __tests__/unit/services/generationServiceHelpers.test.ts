@@ -10,6 +10,7 @@ jest.mock('../../../src/services/llm', () => ({
     isModelLoaded: jest.fn(() => false),
     isCurrentlyGenerating: jest.fn(() => false),
     generateResponse: jest.fn(),
+    prepareConversationBoundary: jest.fn(() => Promise.resolve()),
     getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
     getPerformanceStats: jest.fn(() => ({
       lastTokensPerSecond: 10,
@@ -324,6 +325,30 @@ describe('prepareGenerationImpl', () => {
 
     const svc = makeSvc();
     await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow('No model loaded');
+  });
+
+  it('clears generation state when conversation preparation rejects', async () => {
+    const { llmService: llm } = require('../../../src/services/llm');
+    const clearStreamingMessage = jest.fn();
+    llm.isModelLoaded.mockReturnValue(true);
+    llm.prepareConversationBoundary.mockRejectedValueOnce(
+      new Error('Conversation preparation failed'),
+    );
+    mockedGetState.mockReturnValue(makeLlmAppState());
+    (useChatStore.getState as jest.Mock).mockReturnValue({
+      startStreaming: jest.fn(),
+      clearStreamingMessage,
+    });
+    const svc = makeSvc();
+    svc.resetState.mockImplementation(() => {
+      svc.state.isGenerating = false;
+    });
+
+    await expect(prepareGenerationImpl(svc, 'conv-1')).rejects.toThrow(
+      'Conversation preparation failed',
+    );
+    expect(svc.state.isGenerating).toBe(false);
+    expect(clearStreamingMessage).toHaveBeenCalledTimes(1);
   });
 
 });

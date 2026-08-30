@@ -46,6 +46,7 @@ const OP_CAPABILITY: Record<Op, keyof ModelDownload['capabilities']> = {
 class ModelDownloadService {
   private readonly providers = new Map<ModelDownloadType, DownloadProvider>();
   private readonly providerUnsubs = new Map<ModelDownloadType, () => void>();
+  private readonly providerRegistrations = new Map<ModelDownloadType, symbol>();
   private readonly listeners = new Set<Listener>();
   /** Last seen status per download id — the basis for transition detection/logging. */
   private readonly lastStatus = new Map<string, ModelDownloadStatus>();
@@ -55,6 +56,7 @@ class ModelDownloadService {
 
   /** Register a domain's provider. Re-registering replaces (and re-subscribes). */
   register(provider: DownloadProvider): () => void {
+    const registration = Symbol(provider.modelType);
     this.providerUnsubs.get(provider.modelType)?.();
     // Re-registering: forget this type's last-seen statuses so the next list logs
     // its downloads as 'new' rather than churning gone/new against stale ids.
@@ -64,12 +66,15 @@ class ModelDownloadService {
     this.providers.set(provider.modelType, provider);
     const unsub = provider.subscribe(() => { this.onProviderChange(); });
     this.providerUnsubs.set(provider.modelType, unsub);
+    this.providerRegistrations.set(provider.modelType, registration);
     logger.log(`[DL-SM] provider registered type=${provider.modelType}`);
     this.onProviderChange(); // capture/log this provider's initial state
     return () => {
-      if (this.providers.get(provider.modelType) !== provider) return;
+      if (this.providers.get(provider.modelType) !== provider ||
+          this.providerRegistrations.get(provider.modelType) !== registration) return;
       this.providerUnsubs.get(provider.modelType)?.();
       this.providerUnsubs.delete(provider.modelType);
+      this.providerRegistrations.delete(provider.modelType);
       this.providers.delete(provider.modelType);
       for (const id of this.lastStatus.keys()) {
         if (id.startsWith(`${provider.modelType}:`)) this.lastStatus.delete(id);
@@ -258,6 +263,7 @@ class ModelDownloadService {
     if (this.selfRefreshTimer) { clearTimeout(this.selfRefreshTimer); this.selfRefreshTimer = null; }
     this.providers.clear();
     this.providerUnsubs.clear();
+    this.providerRegistrations.clear();
     this.listeners.clear();
     this.lastStatus.clear();
     this.lastList = [];

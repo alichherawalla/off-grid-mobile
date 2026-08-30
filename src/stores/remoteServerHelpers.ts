@@ -17,6 +17,10 @@ import {
   detectVisionCapability,
   detectToolCallingCapability,
 } from '../utils/remoteCapabilityDetect';
+import {
+  REMOTE_FETCH_REDIRECT_POLICY,
+  remoteAuthorizationHeaders,
+} from '../services/remoteTransportPolicy';
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
@@ -25,7 +29,11 @@ async function fetchForDiscovery(url: string, init: RequestInit): Promise<Respon
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
+    });
   } finally {
     clearTimeout(timeoutId);
   }
@@ -34,12 +42,16 @@ async function fetchForDiscovery(url: string, init: RequestInit): Promise<Respon
 async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMediaModelIds> {
   const url = server.endpoint.replace(/\/+$/, '');
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (server.apiKey) headers.Authorization = `Bearer ${server.apiKey}`;
+  Object.assign(headers, remoteAuthorizationHeaders(server.endpoint, server.apiKey));
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(`${url}/v1/models`, { headers, signal: controller.signal });
+    const response = await fetch(`${url}/v1/models`, {
+      headers,
+      signal: controller.signal,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
+    });
     if (!response.ok) return {};
     const payload = await response.json();
     if (!Array.isArray(payload?.data)) return {};
@@ -192,9 +204,7 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
-  if (server.apiKey) {
-    headers.Authorization = `Bearer ${server.apiKey}`;
-  }
+  Object.assign(headers, remoteAuthorizationHeaders(server.endpoint, server.apiKey));
 
   // Try OpenAI-compatible endpoint first
   try {

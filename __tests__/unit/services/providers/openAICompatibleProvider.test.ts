@@ -228,7 +228,7 @@ describe('OpenAICompatibleProvider', () => {
 
     it('should include API key in headers when provided', async () => {
       const secureProvider = new OpenAICompatibleProvider('secure', {
-        endpoint: 'http://api.example.com',
+        endpoint: 'https://api.example.com',
         apiKey: 'secret-key',
         modelId: 'test-model',
       });
@@ -346,7 +346,7 @@ describe('OpenAICompatibleProvider', () => {
       endpoint?: string;
     }) => {
       const p = new OpenAICompatibleProvider('s', {
-        endpoint: opts.endpoint ?? 'http://example.com:9999',
+        endpoint: opts.endpoint ?? 'https://example.com:9999',
         modelId: 'qwen3',
       });
       await p.loadModel('qwen3');

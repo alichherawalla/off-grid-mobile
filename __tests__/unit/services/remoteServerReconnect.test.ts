@@ -25,6 +25,7 @@ describe('remote server reconnect', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     useRemoteServerStore.getState().clearAllServers();
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
     global.fetch = originalFetch;
@@ -64,6 +65,30 @@ describe('remote server reconnect', () => {
         },
       ],
     });
+  });
+
+  it('does not move a credentialed server onto discovered private-LAN HTTP', async () => {
+    const oldEndpoint = 'https://desktop.example.test:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = useRemoteServerStore.getState().addServer({
+      name: 'Credentialed Desktop',
+      endpoint: oldEndpoint,
+      providerType: 'openai-compatible',
+    });
+    jest.spyOn(remoteServerManager, 'getApiKey').mockResolvedValue('secret');
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(useRemoteServerStore.getState().getServerById(serverId)?.endpoint).toBe(oldEndpoint);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      expect.objectContaining({ endpoint: discoveredEndpoint }),
+    ]);
   });
 
   it('scans when auto-discovery is enabled and the active server is reachable', async () => {

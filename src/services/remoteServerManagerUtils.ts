@@ -9,6 +9,7 @@ import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/open
 import { providerRegistry } from './providers/registry';
 import { capabilitiesUnknown } from '../stores/remoteModelCapabilities';
 import logger from '../utils/logger';
+import { remoteAuthorizationHeaders } from './remoteTransportPolicy';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 
@@ -69,7 +70,10 @@ export { detectVisionCapability, detectToolCallingCapability } from '../utils/re
 export async function createProviderForServerImpl(server: RemoteServer): Promise<void> {
   const apiKey = await getApiKeyImpl(server.id);
   logger.log('[RemoteServerManager] createProvider:', server.name, '| endpoint:', server.endpoint, '| hasApiKey:', !!apiKey);
-  const provider = createOpenAIProvider(server.id, server.endpoint, { apiKey: apiKey || undefined });
+  const authorization = remoteAuthorizationHeaders(server.endpoint, apiKey);
+  const provider = createOpenAIProvider(server.id, server.endpoint, {
+    apiKey: authorization.Authorization?.replace(/^Bearer /, ''),
+  });
   providerRegistry.registerProvider(server.id, provider);
 }
 
@@ -120,6 +124,7 @@ export async function setActiveRemoteTextModelImpl(
     if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
       provider.updateCapabilities({
         supportsVision: discoveredModel.capabilities.supportsVision,
+        supportsToolCalling: discoveredModel.capabilities.supportsToolCalling,
         supportsThinking: discoveredModel.capabilities.supportsThinking,
         acceptsThinkingKwarg: discoveredModel.capabilities.acceptsThinkingKwarg,
       });

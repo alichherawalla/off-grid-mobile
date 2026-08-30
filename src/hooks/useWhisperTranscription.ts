@@ -213,6 +213,11 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     }
     if (startNonce.current !== currentNonce || !mountedRef.current) {
       logger.log('[Whisper] Start superseded during model load (stopped/cancelled) — aborting, no ghost recording');
+      if (mountedRef.current) {
+        setIsStartingRecording(false);
+        setIsTranscribing(false);
+        transcribingStartTime.current = null;
+      }
       return;
     }
     if (!ready) {

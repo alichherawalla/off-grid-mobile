@@ -584,6 +584,28 @@ describe('AppSheet', () => {
         { timeout: 2000 },
       );
     });
+
+    it('blocks backdrop, header, and system dismissal when not dismissible', () => {
+      const onClose = jest.fn();
+      const { UNSAFE_getByType, getByTestId } = render(
+        <AppSheet
+          visible={true}
+          dismissible={false}
+          onClose={onClose}
+          title="Activation"
+        >
+          <Text>Content</Text>
+        </AppSheet>
+      );
+
+      fireEvent.press(UNSAFE_getByType(TouchableWithoutFeedback));
+      fireEvent.press(getByTestId('app-sheet-close'));
+      act(() => {
+        UNSAFE_getByType(Modal).props.onRequestClose();
+      });
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================================
@@ -795,6 +817,32 @@ describe('AppSheet', () => {
       expect(onClose).toHaveBeenCalled();
 
       jest.restoreAllMocks();
+    });
+
+    it('uses the latest dismissible value to block a swipe already wired to the handle', () => {
+      const onClose = jest.fn();
+      const ui = render(
+        <AppSheet visible={true} dismissible onClose={onClose}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+      const handle = getHandleContainer(ui.UNSAFE_getAllByType);
+      expect(handle).toBeTruthy();
+
+      ui.rerender(
+        <AppSheet visible={true} dismissible={false} onClose={onClose}>
+          <Text>Content</Text>
+        </AppSheet>
+      );
+      act(() => {
+        expect(
+          handle.props.onMoveShouldSetResponder?.(makeTouchEvent(200, 0)),
+        ).toBe(false);
+        handle.props.onResponderMove?.(makeTouchEvent(200, 0));
+        handle.props.onResponderRelease?.(makeTouchEvent(200, 200));
+      });
+
+      expect(onClose).not.toHaveBeenCalled();
     });
   });
 

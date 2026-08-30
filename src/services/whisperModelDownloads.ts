@@ -15,8 +15,7 @@ export interface DownloadedWhisperModel {
 
 /** Owns Whisper download queue identity and native-download cleanup. */
 export class WhisperModelDownloads {
-  private activeDownloadId: string | null = null;
-  private activeDownloadModelId: string | null = null;
+  private readonly activeDownloadIds = new Map<string, string>();
 
   async downloadModel(
     modelId: string,
@@ -75,13 +74,15 @@ export class WhisperModelDownloads {
         silent: true,
       });
 
+    let ownedDownloadId: string | null = null;
     try {
       try {
-        this.activeDownloadId = await downloadIdPromise;
-        this.activeDownloadModelId = modelId;
+        const downloadId = await downloadIdPromise;
+        ownedDownloadId = downloadId;
+        this.activeDownloadIds.set(modelId, downloadId);
         useDownloadStore
           .getState()
-          .retryEntry(modelKey, this.activeDownloadId);
+          .retryEntry(modelKey, downloadId);
         await promise;
       } catch (error) {
         if ((error as { cancelled?: boolean })?.cancelled) {
@@ -92,8 +93,9 @@ export class WhisperModelDownloads {
         await RNFS.unlink(destPath).catch(() => {});
         throw error;
       } finally {
-        this.activeDownloadId = null;
-        this.activeDownloadModelId = null;
+        if (this.activeDownloadIds.get(modelId) === ownedDownloadId) {
+          this.activeDownloadIds.delete(modelId);
+        }
       }
 
       try {
@@ -126,15 +128,12 @@ export class WhisperModelDownloads {
   }
 
   async deleteModel(modelId: string): Promise<void> {
-    if (
-      this.activeDownloadId !== null &&
-      this.activeDownloadModelId === modelId
-    ) {
+    const activeDownloadId = this.activeDownloadIds.get(modelId);
+    if (activeDownloadId !== undefined) {
       await backgroundDownloadService
-        .cancelDownload(this.activeDownloadId)
+        .cancelDownload(activeDownloadId)
         .catch(() => {});
-      this.activeDownloadId = null;
-      this.activeDownloadModelId = null;
+      this.activeDownloadIds.delete(modelId);
     }
 
     const path = whisperModelFiles.getModelPath(modelId);

@@ -24,6 +24,7 @@ import {
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
 } from './remoteServerManagerUtils';
+import { canReconcileCredentialedEndpoint, remoteAuthorizationHeaders } from './remoteTransportPolicy';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
 const trimSlash = (url: string): string => {
@@ -98,9 +99,11 @@ class RemoteServerManager {
     const provider = providerRegistry.getProvider(id);
     if (provider && 'updateConfig' in provider) {
       const apiKey = await this.getApiKey(id);
+      const endpoint = updates.endpoint || existingServer.endpoint;
+      const authorization = remoteAuthorizationHeaders(endpoint, apiKey);
       (provider as OpenAICompatibleProvider).updateConfig({
-        endpoint: updates.endpoint || existingServer.endpoint,
-        apiKey: apiKey || undefined,
+        endpoint,
+        apiKey: authorization.Authorization?.replace(/^Bearer /, ''),
       });
     }
 
@@ -252,6 +255,11 @@ class RemoteServerManager {
         : null;
 
       if (samePortServer) {
+        const hasStoredCredential = (await this.getApiKey(samePortServer.id)) !== null;
+        if (!canReconcileCredentialedEndpoint(d.endpoint, hasStoredCredential)) {
+          found.push(d);
+          continue;
+        }
         await this.applyMovedServer(samePortServer, d.endpoint, d.name);
         moved.push(samePortServer.id);
       } else {

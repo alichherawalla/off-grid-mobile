@@ -106,12 +106,18 @@ export const ProUnlockModal: React.FC<Props> = ({
   };
 
   const hasInput = licenseKey.trim().length > 0;
+  // Activation owns this sheet until it reaches a terminal state. A parent
+  // entitlement refresh can clear `visible` while the request is still in
+  // flight; keep the progress and success result on screen until the person
+  // dismisses them.
+  const sheetVisible = visible || loading || success;
 
   return (
     <AppSheet
-      visible={visible}
+      visible={sheetVisible}
       onClose={success ? finishSuccess : close}
       onHeaderClosePress={success ? finishSuccess : close}
+      dismissible={!loading}
       enableDynamicSizing
       title={success ? 'Pro activated' : 'Enter your license key'}
       closeLabel={success ? 'Done' : 'Cancel'}

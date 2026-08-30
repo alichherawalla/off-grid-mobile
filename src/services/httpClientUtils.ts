@@ -3,6 +3,7 @@
  */
 
 import { isTailscaleIPv4 } from '../utils/network';
+import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from './remoteTransportPolicy';
 
 function mimeTypeFromExtension(ext: string | undefined): string {
   if (ext === 'png') return 'image/png';
@@ -113,11 +114,7 @@ export function isPrivateNetworkEndpoint(endpoint: string): boolean {
     }
 
     // .local (mDNS/Bonjour)
-    if (hostname.endsWith('.local')) {
-      return true;
-    }
-
-    return false;
+    return hostname.endsWith('.local');
   } catch {
     // Invalid URL - be conservative
     return false;
@@ -139,20 +136,22 @@ export async function testEndpoint(
     let url = endpoint;
     while (url.endsWith('/')) url = url.slice(0, -1);
 
-    const authHeaders: Record<string, string> = { Accept: 'application/json' };
-    if (apiKey) authHeaders.Authorization = `Bearer ${apiKey}`;
+    const authHeaders: Record<string, string> = {
+      Accept: 'application/json',
+      ...remoteAuthorizationHeaders(url, apiKey),
+    };
 
     // Try to reach the base URL first
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const response = await fetch(`${url}/v1/models`, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: authHeaders,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(`${url}/v1/models`, {
+        method: 'GET', signal: controller.signal, headers: authHeaders,
+        redirect: REMOTE_FETCH_REDIRECT_POLICY,
+      });
+    } finally { clearTimeout(timeoutId); }
     const latency = Date.now() - startTime;
 
     if (!response.ok) {
@@ -164,6 +163,7 @@ export async function testEndpoint(
             method: 'GET',
             signal: controller.signal,
             headers: authHeaders,
+            redirect: REMOTE_FETCH_REDIRECT_POLICY,
           });
           if (altResponse.ok) {
             return { success: true, latency };
@@ -196,22 +196,23 @@ async function checkOllamaEndpoint(
   timeout: number,
   apiKey?: string,
 ): Promise<{ type: string } | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    timeoutId = setTimeout(() => controller.abort(), timeout);
     // Use origin only to avoid double-path when endpoint already has a prefix (e.g. /api)
     const origin = new URL(url).origin;
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const headers = remoteAuthorizationHeaders(origin, apiKey);
     const response = await fetch(`${origin}/api/tags`, {
       signal: controller.signal,
       headers,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
     });
     clearTimeout(timeoutId);
     if (response.ok) return { type: 'ollama' };
   } catch {
     // Not Ollama
-  }
+  } finally { if (timeoutId) clearTimeout(timeoutId); }
   return null;
 }
 
@@ -220,14 +221,15 @@ async function checkLmStudioEndpoint(
   timeout: number,
   apiKey?: string,
 ): Promise<{ type: string } | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    timeoutId = setTimeout(() => controller.abort(), timeout);
+    const headers = remoteAuthorizationHeaders(url, apiKey);
     const response = await fetch(`${url}/v1/models`, {
       signal: controller.signal,
       headers,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
     });
     clearTimeout(timeoutId);
     if (response.ok) {
@@ -238,7 +240,7 @@ async function checkLmStudioEndpoint(
     }
   } catch {
     // Not LM Studio
-  }
+  } finally { if (timeoutId) clearTimeout(timeoutId); }
   return null;
 }
 
@@ -259,11 +261,11 @@ export async function detectServerType(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const headers: Record<string, string> = {};
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const headers = remoteAuthorizationHeaders(url, apiKey);
       const response = await fetch(`${url}/v1/models`, {
         signal: controller.signal,
         headers,
+        redirect: REMOTE_FETCH_REDIRECT_POLICY,
       });
       clearTimeout(timeoutId);
 

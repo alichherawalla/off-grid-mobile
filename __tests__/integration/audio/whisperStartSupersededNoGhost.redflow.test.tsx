@@ -55,5 +55,6 @@ describe('realtime dictation: releasing the mic during model load starts NO ghos
     // realtimeActive() true.
     expect(h.boundary.whisper!.realtimeActive()).toBe(false);
     expect(h.boundary.whisper!.hasRealtimeSubscriber()).toBe(false);
+    expect(h.view!.queryByText('Transcribing...')).toBeNull();
   }, 30000);
 });

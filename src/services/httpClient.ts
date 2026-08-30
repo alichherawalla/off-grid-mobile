@@ -7,6 +7,7 @@
 
 import logger from '../utils/logger';
 import { createSSELineProcessor } from './httpClientSSE';
+import { isCredentialTransportDowngrade } from './remoteTransportPolicy';
 
 export { parseOpenAIMessage, parseAnthropicMessage, parseSSEStream } from './httpClientSSE';
 export { imageToBase64DataUrl, isPrivateNetworkEndpoint, testEndpoint, detectServerType } from './httpClientUtils';
@@ -146,6 +147,14 @@ export async function createStreamingRequest(
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
         clearTimeout(timeoutId);
+        // React Native strips Authorization on redirects in both native clients:
+        // iOS rebuilds redirect headers in RCTHTTPRequestHandler; Android OkHttp
+        // removes Authorization when the URL cannot reuse the connection. Reject
+        // the downgraded response as well, so no result can arrive over cleartext.
+        if (isCredentialTransportDowngrade(url, xhr.responseURL, 'Authorization' in headers)) {
+          reject(new Error('Remote server redirected credentials to an insecure endpoint'));
+          return;
+        }
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             // Process any remaining data
@@ -256,6 +265,10 @@ export async function createNDJSONStreamingRequest(
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
         clearTimeout(timeoutId);
+        if (isCredentialTransportDowngrade(url, xhr.responseURL, 'Authorization' in headers)) {
+          reject(new Error('Remote server redirected credentials to an insecure endpoint'));
+          return;
+        }
         if (xhr.status >= 200 && xhr.status < 300) {
           const text = xhr.responseText;
           if (text.length > processedLength) {

@@ -67,7 +67,7 @@ describe('remoteMediaRuntime', () => {
     });
   });
 
-  it('sends image work to the configured model without putting the key in the server record', async () => {
+  it('keeps private-LAN HTTP unauthenticated and rejects redirects', async () => {
     const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
     global.fetch = jest.fn(async (url, init) => {
       calls.push([url, init]);
@@ -79,15 +79,28 @@ describe('remoteMediaRuntime', () => {
     ).resolves.toEqual({ base64: 'image-bytes', url: undefined });
 
     expect(calls[0]?.[0]).toBe('http://192.168.1.30:7878/v1/images/generations');
-    expect(calls[0]?.[1]?.headers).toMatchObject({
-      Authorization: 'Bearer device-secret',
-      'Content-Type': 'application/json',
-    });
+    expect(calls[0]?.[1]?.headers).toMatchObject({ 'Content-Type': 'application/json' });
+    expect(calls[0]?.[1]?.headers).not.toHaveProperty('Authorization');
+    expect(calls[0]?.[1]?.redirect).toBe('error');
     expect(JSON.parse(String(calls[0]?.[1]?.body))).toMatchObject({
       model: 'flux-schnell',
       prompt: 'A quiet desk',
     });
     expect(server).not.toHaveProperty('apiKey');
+  });
+
+  it('sends a stored credential only to an HTTPS endpoint', async () => {
+    const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    global.fetch = jest.fn(async (url, init) => {
+      calls.push([url, init]);
+      return jsonResponse({ data: [{ b64_json: 'image-bytes' }] });
+    }) as typeof fetch;
+    await remoteMediaRuntime.generateImage(
+      { ...server, endpoint: 'https://desktop.example.test' },
+      { prompt: 'A quiet desk' },
+    );
+    expect(calls[0]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer device-secret' });
+    expect(calls[0]?.[1]?.redirect).toBe('error');
   });
 
   it('uses the transcription endpoint and reports an empty server response', async () => {

@@ -37,6 +37,7 @@ jest.mock('../../../src/services/proLicenseService', () => ({
 }));
 
 import { ProDetailScreen } from '../../../src/screens/ProDetailScreen';
+import { ProUnlockModal } from '../../../src/screens/ProDetailScreen/ProUnlockModal';
 
 /**
  * PARTIALLY GREEN, and the four that remain red are red for one reason: this suite mocks
@@ -142,6 +143,38 @@ describe('ProDetailScreen', () => {
       expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'),
     );
     await waitFor(() => expect(getByText('Pro activated')).toBeTruthy());
+  });
+
+  it('keeps an in-flight activation and its result visible if the parent closes', async () => {
+    let finishActivation!: (result: { ok: true }) => void;
+    mockActivateProByKey.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishActivation = resolve;
+        }),
+    );
+    const onClose = jest.fn();
+    const onUnlocked = jest.fn();
+    const ui = render(
+      <ProUnlockModal visible onClose={onClose} onUnlocked={onUnlocked} />,
+    );
+    fireEvent.changeText(ui.getByTestId('license-key-input'), 'key/abc123');
+    fireEvent.press(ui.getByTestId('unlock-cta'));
+    expect(ui.getByText('Activating...')).toBeTruthy();
+
+    ui.rerender(
+      <ProUnlockModal
+        visible={false}
+        onClose={onClose}
+        onUnlocked={onUnlocked}
+      />,
+    );
+    expect(ui.getByText('Activating...')).toBeTruthy();
+
+    finishActivation({ ok: true });
+    await waitFor(() => expect(ui.getByText('Pro activated')).toBeTruthy());
+    expect(onUnlocked).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('lets the user dismiss the success card with Got it', async () => {

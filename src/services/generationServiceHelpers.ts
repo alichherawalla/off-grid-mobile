@@ -248,23 +248,25 @@ export async function prepareGenerationImpl(
   });
   svc.state.routedToolNames = undefined; // reset so a prior turn's tools don't leak
   useChatStore.getState().startStreaming(conversationId);
-  // Drain pending native stop so LLM is idle before we start.
-  if (svc.pendingStop !== null) await svc.pendingStop;
-  if (!svc.state.isGenerating) return false; // stop called during drain
-  svc.abortRequested = false;
+  try {
+    // Drain pending native stop so LLM is idle before we start.
+    if (svc.pendingStop !== null) await svc.pendingStop;
+    if (!svc.state.isGenerating) return false; // stop called during drain
+    svc.abortRequested = false;
 
-  const readinessError = await checkProviderReadiness(svc);
-  if (readinessError) {
+    const readinessError = await checkProviderReadiness(svc);
+    if (readinessError) throw new Error(readinessError);
+
+    // Navigation effects are not a generation barrier: on a new chat, Send can win
+    // that race. Clear/switch native conversation state here, after readiness and
+    // before any prompt or tool-routing completion reaches the local engine.
+    if (!svc.isUsingRemoteProvider()) {
+      await prepareActiveConversation(conversationId);
+    }
+  } catch (error) {
     svc.resetState();
     useChatStore.getState().clearStreamingMessage();
-    throw new Error(readinessError);
-  }
-
-  // Navigation effects are not a generation barrier: on a new chat, Send can win
-  // that race. Clear/switch native conversation state here, after readiness and
-  // before any prompt or tool-routing completion reaches the local engine.
-  if (!svc.isUsingRemoteProvider()) {
-    await prepareActiveConversation(conversationId);
+    throw error;
   }
 
   svc.tokenBuffer = '';

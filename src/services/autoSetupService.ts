@@ -331,8 +331,17 @@ export function createAutoSetupSession(
     },
     load,
     selectTier(tier) {
+      // The selected plan is immutable once its download session starts. If a
+      // completed or active session could switch tiers, its outcomes would
+      // describe the old plan while complete() activated the new plan.
+      if (state.phase === 'downloading' || state.phase === 'completed') return;
       persistTierIntent(tier);
-      publish({ selectedTier: tier, outcomes: {}, error: null });
+      publish({
+        phase: 'ready',
+        selectedTier: tier,
+        outcomes: {},
+        error: null,
+      });
     },
     start,
     complete() {

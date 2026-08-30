@@ -37,6 +37,7 @@ import {
 
 class ModelResidencyManager {
   private readonly residents = new Map<string, RegisteredResident>();
+  private readonly residentRegistrations = new Map<string, symbol>();
   private budgetOverrideMB: number | null = null;
   /**
    * Current load policy (single owner). The View (settings screen) dispatches an
@@ -271,13 +272,17 @@ class ModelResidencyManager {
     spec: ResidentSpec,
     unload: UnloadFn,
     now: number = Date.now(),
-  ): void {
+  ): symbol {
+    const registration = Symbol(spec.key);
     this.residents.set(spec.key, { ...spec, lastUsedAt: now, unload });
+    this.residentRegistrations.set(spec.key, registration);
+    return registration;
   }
 
   /** Forget a capability-owned resident after that capability has released its native engine. */
-  unregister(key: string): void {
-    this.residents.delete(key);
+  unregister(key: string, registration: symbol): boolean {
+    if (this.residentRegistrations.get(key) !== registration) return false;
+    return this.residentRegistrations.delete(key) && this.residents.delete(key);
   }
 
   /**
@@ -484,6 +489,7 @@ class ModelResidencyManager {
   /** Test helper. */
   _reset(): void {
     this.residents.clear();
+    this.residentRegistrations.clear();
     this.budgetOverrideMB = null;
     this.opChain = Promise.resolve();
     this.sessionOverrides.clear();

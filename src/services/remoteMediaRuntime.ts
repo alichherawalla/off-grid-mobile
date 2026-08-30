@@ -1,5 +1,6 @@
 import { remoteServerManager } from './remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../types';
+import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from './remoteTransportPolicy';
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
@@ -42,9 +43,10 @@ async function request(
       headers: {
         Accept: 'application/json',
         ...(init.headers ?? {}),
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...remoteAuthorizationHeaders(server.endpoint, apiKey),
       },
       signal: controller.signal,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');

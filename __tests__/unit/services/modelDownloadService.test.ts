@@ -206,4 +206,14 @@ describe('ModelDownloadService', () => {
     p._onChange?.();
     expect(listener).toHaveBeenCalled();
   });
+
+  it('keeps a newer registration when an old cleanup handle runs', async () => {
+    const provider = makeProvider('text', [dl('text:a', 'text')]);
+    const oldCleanup = modelDownloadService.register(provider);
+    const currentCleanup = modelDownloadService.register(provider);
+    oldCleanup();
+    expect((await modelDownloadService.list()).map(item => item.id)).toEqual(['text:a']);
+    currentCleanup();
+    expect(await modelDownloadService.list()).toEqual([]);
+  });
 });

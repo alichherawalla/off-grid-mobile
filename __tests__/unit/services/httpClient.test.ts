@@ -871,6 +871,17 @@ describe('httpClient', () => {
       await expect(promise).resolves.toBeUndefined();
     });
 
+    it('rejects a credentialed HTTPS stream that reports an HTTP redirect target', async () => {
+      const promise = createStreamingRequest(
+        'https://desktop.example.test/v1/chat',
+        { body: {}, headers: { Authorization: 'Bearer token' } },
+        jest.fn(),
+      );
+      mockXHR.responseURL = 'http://192.168.1.30:7878/v1/chat';
+      simulateComplete('data: final\n\n');
+      await expect(promise).rejects.toThrow('redirected credentials');
+    });
+
     it('should reject on HTTP error', async () => {
       const promise = startStream();
 
@@ -1157,6 +1168,17 @@ describe('httpClient', () => {
       expect(onLine).toHaveBeenCalledTimes(2);
       expect(onLine).toHaveBeenCalledWith({ done: false });
       expect(onLine).toHaveBeenCalledWith({ done: true });
+    });
+
+    it('rejects a credentialed HTTPS stream that reports an HTTP redirect target', async () => {
+      const promise = createNDJSONStreamingRequest(
+        'https://desktop.example.test/api/chat',
+        { body: {}, headers: { Authorization: 'Bearer token' } },
+        jest.fn(),
+      );
+      mockXHR.responseURL = 'http://192.168.1.30:11434/api/chat';
+      simulateSuccess();
+      await expect(promise).rejects.toThrow('redirected credentials');
     });
 
     it('flushes partial buffered line on readyState=4', async () => {
