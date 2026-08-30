@@ -14,6 +14,9 @@ import type { RootStackParamList } from '../navigation/types';
 import { useRemoteServerForm } from '../components/RemoteServerEditor/useRemoteServerForm';
 import { createStyles } from '../components/RemoteServerEditor/styles';
 
+// Private-LAN model servers use HTTP by design. Public addresses show an explicit warning.
+const PRIVATE_LAN_ENDPOINT_EXAMPLE = 'http://192.168.1.50:7878'; // NOSONAR
+
 type Navigation = NativeStackNavigationProp<RootStackParamList, 'RemoteServerEditor'>;
 type EditorRoute = RouteProp<RootStackParamList, 'RemoteServerEditor'>;
 
@@ -70,7 +73,7 @@ export const RemoteServerEditorScreen: React.FC = () => {
           style={[styles.input, form.errors.endpoint && styles.inputError]}
           value={form.endpoint}
           onChangeText={form.setEndpoint}
-          placeholder="http://192.168.1.50:7878"
+          placeholder={PRIVATE_LAN_ENDPOINT_EXAMPLE}
           placeholderTextColor={theme.colors.textMuted}
           autoCapitalize="none"
           autoCorrect={false}

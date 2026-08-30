@@ -451,6 +451,7 @@ jest.mock('react-native-device-info', () => ({
   isEmulator: jest.fn(() => Promise.resolve(false)),
   getDeviceId: jest.fn(() => 'test-device-id'),
   getHardware: jest.fn(() => Promise.resolve('unknown')),
+  getIpAddress: jest.fn(() => Promise.resolve('192.168.1.20')),
 }));
 
 // react-native-image-picker mock

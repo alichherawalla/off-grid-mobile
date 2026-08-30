@@ -1361,3 +1361,41 @@ Keep this gap open until the final Mobile code and these installed checks pass:
 
 Android live verification is explicitly deferred while the phone is disconnected. Do not close this
 gap from unit, rendered, simulator, or iPhone evidence alone.
+
+### Reconnect review failures are code-resolved; device proof stays open (2026-08-30)
+
+Five PR 637 review failures were valid at Mobile `1263ac08`:
+
+1. App startup could start reconnect recovery while remote provider initialization still changed the
+   same registry and store.
+2. A server move or WiFi rejoin with the same phone IP did not trigger active-connection validation.
+3. An IP lookup that completed after watcher teardown could schedule recovery from a stopped watcher.
+4. Port-only moved-server matching could overwrite a reachable saved server when a second server used
+   the same port.
+5. A reachable active server returned before the enabled auto-discovery rule could run.
+
+The directed code fix makes provider initialization settle before watcher startup, gives the watcher
+a teardown generation, validates an active connection after a same-IP check, limits moved-server
+mapping to one missing saved endpoint and one unmatched discovered endpoint on the port, and evaluates
+auto-discovery before the reachable-server return.
+
+Focused local evidence on the release tree:
+
+- `networkReconnect.test.ts`: same-IP foreground validation, stale lookup teardown, and steady-state
+  same-IP poll suppression pass.
+- `remoteServerReconnect.test.ts`: 2/2 passed through the real manager, real stores, and real LAN
+  discovery logic for ambiguous port ownership and enabled discovery with a reachable active server.
+- The existing focused `remoteServerManager.test.ts` suite passes 41/41.
+- `App.test.tsx`: 3/3 passed with the targeted ignore override, including provider initialization
+  ordering and teardown safety. This file is excluded by the default Jest configuration, so the
+  exact targeted command is part of the evidence.
+
+The first focused manager draft failed because its fixture used the wrong production setting key
+(`remoteAutoDiscovery`). That mock-based draft was removed. Its replacement uses the real app store
+action and canonical `autoDiscoverRemoteModels` key. This was a test-fixture failure, not a product
+failure. The first targeted App teardown failed because the old debug-log fixture did not expose
+`stopDebugLogFile()`. The fixture now matches the production lifecycle, and the targeted App run
+passes 3/3 without the prior post-test teardown crash.
+
+Keep the parent Release 107 reconnect gap open. The code is not built or live verified on iOS or
+Android. The final installed-device reconnect journeys remain required.

@@ -4,7 +4,7 @@
  */
 
 import 'react-native-gesture-handler';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -91,6 +91,7 @@ function App() {
   const AppRoot = useSlot(SLOTS.appRoot);
   const applyPendingProRedirect = useProExpiryRedirect();
   const [isInitializing, setIsInitializing] = useState(true);
+  const startupGeneration = useRef(0);
   const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
@@ -224,7 +225,7 @@ function App() {
     setDownloadedImageModels,
   ]);
 
-  const initializeApp = useCallback(async () => {
+  const initializeApp = useCallback(async (generation: number) => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       logger.log('[BOOT] app store hydrate');
@@ -275,12 +276,18 @@ function App() {
 
       // Initialize remote server providers in the background — don't block
       // the home screen while fetching models from potentially unreachable servers.
-      remoteServerManager.initializeProviders().catch((err) => {
-        logger.error('[App] Failed to initialize remote server providers:', err);
-      });
-
-      // Watch for network changes and auto-recover the active remote connection (no manual rescan).
-      startNetworkReconnectWatcher();
+      remoteServerManager
+        .initializeProviders()
+        .catch((err) => {
+          logger.error('[App] Failed to initialize remote server providers:', err);
+        })
+        .finally(() => {
+          if (generation !== startupGeneration.current) return;
+          // Recovery and provider initialization both update the registry and remote-server store.
+          // Start recovery only after initialization releases those owners. A failed initialization
+          // must still start the watcher so a later network recovery can repair the connection.
+          startNetworkReconnectWatcher();
+        });
 
       // Check if passphrase is set and lock app if needed
       logger.log('[BOOT] auth passphrase check');
@@ -335,8 +342,12 @@ function App() {
   ]);
 
   useEffect(() => {
-    initializeApp();
-    return () => stopNetworkReconnectWatcher();
+    const generation = ++startupGeneration.current;
+    initializeApp(generation);
+    return () => {
+      startupGeneration.current += 1;
+      stopNetworkReconnectWatcher();
+    };
   }, [initializeApp]);
 
   const handleUnlock = useCallback(() => {

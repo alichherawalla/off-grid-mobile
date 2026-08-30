@@ -229,15 +229,26 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
     const existingServers = store.servers;
     const existingEndpoints = new Set(existingServers.map((s) => trimSlash(s.endpoint)));
+    const discoveredEndpoints = new Set(discovered.map((server) => trimSlash(server.endpoint)));
+    const unmatchedDiscovered = discovered.filter(
+      (server) => !existingEndpoints.has(trimSlash(server.endpoint)),
+    );
+    const missingExisting = existingServers.filter(
+      (server) => !discoveredEndpoints.has(trimSlash(server.endpoint)),
+    );
     const moved: string[] = [];
     const found: DiscoveredServer[] = [];
 
-    for (const d of discovered) {
-      if (existingEndpoints.has(trimSlash(d.endpoint))) continue;
-
+    for (const d of unmatchedDiscovered) {
       const dPort = portOf(d.endpoint);
-      const samePortServer = dPort
-        ? existingServers.find((s) => portOf(s.endpoint) === dPort)
+      const samePortCandidates = dPort
+        ? missingExisting.filter((server) => portOf(server.endpoint) === dPort)
+        : [];
+      const unmatchedOnPort = dPort
+        ? unmatchedDiscovered.filter((server) => portOf(server.endpoint) === dPort)
+        : [];
+      const samePortServer = samePortCandidates.length === 1 && unmatchedOnPort.length === 1
+        ? samePortCandidates[0]
         : null;
 
       if (samePortServer) {
@@ -273,18 +284,20 @@ class RemoteServerManager {
    */
   async recoverActiveConnection(): Promise<void> {
     const activeId = useRemoteServerStore.getState().activeServerId;
+    const autoDiscover = shouldAutoDiscoverRemoteModels(useAppStore.getState().settings);
 
     if (activeId) {
       const result = await this.testConnection(activeId).catch(() => ({ success: false }));
-      if (result.success) {
+      if (result.success && !autoDiscover) {
         logger.log('[RemoteServerManager] Active server still reachable; no rescan needed');
         return;
       }
-      logger.log('[RemoteServerManager] Active server unreachable; rescanning to recover');
+      logger.log(result.success
+        ? '[RemoteServerManager] Active server reachable; scanning because auto-discovery is enabled'
+        : '[RemoteServerManager] Active server unreachable; rescanning to recover');
     }
 
-    const allowScan =
-      shouldAutoDiscoverRemoteModels(useAppStore.getState().settings) || !!activeId;
+    const allowScan = autoDiscover || !!activeId;
     if (!allowScan) return;
 
     const { moved, found } = await this.scanAndReconcile();

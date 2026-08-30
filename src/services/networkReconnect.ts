@@ -27,15 +27,18 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let lastIp: string | null = null;
 let started = false;
+let lifecycleGeneration = 0;
 
 function isUsableIp(ip: string | null | undefined): ip is string {
   return !!ip && ip !== '0.0.0.0';
 }
 
-function scheduleRecovery(reason: string): void {
+function scheduleRecovery(reason: string, generation: number): void {
+  if (!started || generation !== lifecycleGeneration) return;
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
+    if (!started || generation !== lifecycleGeneration) return;
     logger.log(`[NetReconnect] recovering after ${reason}`);
     remoteServerManager
       .recoverActiveConnection()
@@ -43,17 +46,25 @@ function scheduleRecovery(reason: string): void {
   }, DEBOUNCE_MS);
 }
 
-async function checkIpChanged(): Promise<void> {
+async function checkIpChanged(
+  generation = lifecycleGeneration,
+  validateUnchanged = false,
+): Promise<void> {
   let ip: string;
   try {
     ip = await getIpAddress();
   } catch {
     return;
   }
+  if (!started || generation !== lifecycleGeneration) return;
   if (!isUsableIp(ip)) return;
   if (isUsableIp(lastIp) && ip !== lastIp) {
     logger.log(`[NetReconnect] device IP changed ${lastIp} -> ${ip}`);
-    scheduleRecovery('network change');
+    scheduleRecovery('network change', generation);
+  } else if (validateUnchanged && isUsableIp(lastIp)) {
+    // A server can move, or WiFi can rejoin, while this phone receives the same private IP.
+    // The manager performs a cheap active-endpoint check before it decides whether to scan.
+    scheduleRecovery('active connection validation', generation);
   }
   lastIp = ip;
 }
@@ -73,7 +84,7 @@ function stopPoll(): void {
 function handleAppState(state: AppStateStatus): void {
   if (state === 'active') {
     // The network may have changed while backgrounded; compare current IP to the last one we saw.
-    checkIpChanged().catch(() => { /* checkIpChanged never rejects */ });
+    checkIpChanged(lifecycleGeneration, true).catch(() => { /* checkIpChanged never rejects */ });
     startPoll();
   } else {
     stopPoll();
@@ -84,8 +95,11 @@ function handleAppState(state: AppStateStatus): void {
 export function startNetworkReconnectWatcher(): void {
   if (started) return;
   started = true;
+  const generation = ++lifecycleGeneration;
   // Seed the baseline IP without triggering a recovery on first launch.
-  getIpAddress().then((ip) => { if (isUsableIp(ip)) lastIp = ip; }).catch(() => { /* no network yet */ });
+  getIpAddress().then((ip) => {
+    if (started && generation === lifecycleGeneration && isUsableIp(ip)) lastIp = ip;
+  }).catch(() => { /* no network yet */ });
   appStateSub = AppState.addEventListener('change', handleAppState);
   if (AppState.currentState === 'active') startPoll();
   logger.log('[NetReconnect] watcher started');
@@ -93,6 +107,8 @@ export function startNetworkReconnectWatcher(): void {
 
 /** Stop watching. Used on teardown; the watcher is otherwise app-lifetime. */
 export function stopNetworkReconnectWatcher(): void {
+  started = false;
+  lifecycleGeneration += 1;
   appStateSub?.remove();
   appStateSub = null;
   stopPoll();
@@ -100,5 +116,4 @@ export function stopNetworkReconnectWatcher(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
-  started = false;
 }
