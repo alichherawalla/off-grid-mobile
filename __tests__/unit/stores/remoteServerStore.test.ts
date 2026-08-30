@@ -720,8 +720,8 @@ describe('remoteServerStore', () => {
     });
   });
 
-  describe('fetchModelsFromServer with apiKey', () => {
-    it('should use Authorization header when apiKey is provided', async () => {
+  describe('store credential boundary', () => {
+    it('does not persist or send an API key passed directly to the public store', async () => {
       const mockFetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -744,8 +744,9 @@ describe('remoteServerStore', () => {
       await useRemoteServerStore.getState().discoverModels(serverId);
 
       expect(mockFetch).toHaveBeenCalled();
+      expect(useRemoteServerStore.getState().getServerById(serverId)).not.toHaveProperty('apiKey');
       const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[1].headers.Authorization).toBe('Bearer secret-key');
+      expect(callArgs[1].headers).not.toHaveProperty('Authorization');
     });
   });
 

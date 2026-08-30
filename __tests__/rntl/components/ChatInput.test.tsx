@@ -53,6 +53,7 @@ jest.mock('../../../src/services/documentService', () => ({
 // Mock the stores
 const mockUseWhisperStore = jest.fn();
 const mockUseAppStore = jest.fn();
+const mockRemoteServerState = { servers: [], activeServerId: null };
 const mockUseUiModeStore = jest.fn((selector?: (s: { interfaceMode: string }) => unknown) => {
   const state = { interfaceMode: 'chat' };
   return selector ? selector(state) : state;
@@ -65,9 +66,13 @@ jest.mock('../../../src/stores', () => {
   // mocked store needs getState too (mirrors the hook return).
   const useAppStore = () => mockUseAppStore();
   useAppStore.getState = () => mockUseAppStore();
+  const useRemoteServerStore = (selector?: (state: typeof mockRemoteServerState) => unknown) =>
+    selector ? selector(mockRemoteServerState) : mockRemoteServerState;
+  useRemoteServerStore.getState = () => mockRemoteServerState;
   return {
     useWhisperStore: () => mockUseWhisperStore(),
     useAppStore,
+    useRemoteServerStore,
     useUiModeStore,
   };
 });

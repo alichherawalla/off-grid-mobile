@@ -17,10 +17,11 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useRoute: () => ({ params: undefined }),
   useIsFocused: () => true, useFocusEffect: () => {},
 }));
 
-import { RemoteServersScreen } from '../../../src/screens/RemoteServersScreen';
+import { RemoteServerEditorScreen } from '../../../src/screens/RemoteServerEditorScreen';
 import { ModelSelectorModal } from '../../../src/components/ModelSelectorModal';
 import { useRemoteServerStore } from '../../../src/stores';
 
@@ -48,9 +49,8 @@ describe('T053 (rendered) — remote model is marked in the selector (cloud/Remo
 
     // Real gesture: add a remote server via the modal (T046 flow) → real addServer + testConnection
     // populate the store (serverHealth healthy + discoveredModels from /v1/models).
-    const servers = render(<RemoteServersScreen />);
-    fireEvent.press(servers.getByTestId('add-server'));
-    fireEvent.changeText(await waitFor(() => servers.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
+    const servers = render(<RemoteServerEditorScreen />);
+    fireEvent.changeText(await waitFor(() => servers.getByPlaceholderText('Off Grid AI Desktop')), 'My LM Studio');
     fireEvent.changeText(servers.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
     fireEvent.press(servers.getByTestId('test-connection'));
     await waitFor(() => { expect(servers.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });

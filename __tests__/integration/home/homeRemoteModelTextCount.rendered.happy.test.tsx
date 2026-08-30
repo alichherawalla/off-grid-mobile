@@ -43,7 +43,7 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
      
     const React = require('react');
     const rtl = requireRTL();
-    const { RemoteServersScreen } = require('../../../src/screens/RemoteServersScreen');
+    const { RemoteServerEditorScreen } = require('../../../src/screens/RemoteServerEditorScreen');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
      
@@ -61,20 +61,19 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
     });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
-    return { React, rtl, RemoteServersScreen, HomeScreen, useRemoteServerStore, useAppStore, nav, opts };
+    return { React, rtl, RemoteServerEditorScreen, HomeScreen, useRemoteServerStore, useAppStore, nav, opts };
   };
 
   // Arrive at "a remote server is connected + its models discovered" through the REAL Add-Server UI (T046 flow).
   const connectServerViaUI = async (env: ReturnType<typeof setup>) => {
-    const { React, rtl, RemoteServersScreen, nav } = env;
-    const srv = rtl.render(React.createElement(RemoteServersScreen, { navigation: nav }));
-    rtl.fireEvent.press(srv.getByTestId('add-server'));
-    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
+    const { React, rtl, RemoteServerEditorScreen } = env;
+    const srv = rtl.render(React.createElement(RemoteServerEditorScreen));
+    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('Off Grid AI Desktop')), 'My LM Studio');
     rtl.fireEvent.changeText(srv.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
     rtl.fireEvent.press(srv.getByTestId('test-connection'));
     await rtl.waitFor(() => { expect(srv.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
     rtl.fireEvent.press(srv.getByTestId('save-server'));
-    await rtl.waitFor(() => { expect(srv.queryByText('My LM Studio')).not.toBeNull(); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(env.useRemoteServerStore.getState().servers).toHaveLength(1); }, { timeout: 4000 });
     srv.unmount();
   };
 

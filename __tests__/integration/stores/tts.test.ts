@@ -171,10 +171,17 @@ describe('TTS integration', () => {
 
   describe('Chat Mode: speak → stop', () => {
     it('completes the full Chat Mode flow', async () => {
+      let finishSpeaking!: () => void;
+      mockEngine.speak.mockImplementationOnce(
+        () => new Promise<void>(resolve => { finishSpeaking = resolve; }),
+      );
+
       // Speak
       const speakPromise = getState().speak('hello', 'msg1');
+      await Promise.resolve(); // let the remote-voice preflight choose the local engine
       expect(getState().currentMessageId).toBe('msg1');
 
+      finishSpeaking();
       await speakPromise;
       expect(mockEngine.speak).toHaveBeenCalledWith('hello', expect.objectContaining({
         speed: 1.0,

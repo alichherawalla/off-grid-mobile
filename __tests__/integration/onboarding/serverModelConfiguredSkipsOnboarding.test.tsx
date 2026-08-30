@@ -36,6 +36,7 @@
  */
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+jest.unmock('@react-navigation/native');
 import { NavigationContainer } from '@react-navigation/native';
 
 // Safe-area infra (jsdom has no native safe-area). Presentation-only shim, not app logic — the same
@@ -80,7 +81,7 @@ async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
   fireEvent.press(await waitFor(() => ui.getByText('Add Server')));
 
   // Fill the real modal (targeted by placeholders, like the RemoteServersScreen flow).
-  fireEvent.changeText(await waitFor(() => ui.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My Desktop');
+  fireEvent.changeText(await waitFor(() => ui.getByPlaceholderText('Off Grid AI Desktop')), 'My Desktop');
   fireEvent.changeText(ui.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
 
   // Test Connection first — the real probe runs over the faked /v1/models. Save stays disabled until it
@@ -90,6 +91,7 @@ async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
 
   // Save the server (the modal's "Add manually", the last such text).
   fireEvent.press(ui.getByTestId('save-server'));
+  await waitFor(() => { expect(ui.queryByTestId('server-name')).toBeNull(); }, { timeout: 4000 });
 
   // The onboarding screen's real health check now marks the server reachable → its Connect button renders.
   const connect = await waitFor(() => ui.getByTestId(/^discovered-server-.*-connect$/), { timeout: 4000 });

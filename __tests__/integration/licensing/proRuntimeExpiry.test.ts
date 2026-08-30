@@ -40,6 +40,9 @@ describe('the Pro runtime when access expires', () => {
 
   afterEach(async () => {
     await deactivate();
+    // The restricted Sync bootstrap intentionally survives Pro deactivation. This test starts that
+    // process, so it must also await and stop it before Jest removes the native boundary.
+    await syncService.stop();
     _clearHooksForTesting();
     _clearSlotsForTesting();
     _clearScreensForTesting();
