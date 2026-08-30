@@ -30,11 +30,12 @@ import {
   type NativeFileSystemBoundary,
 } from './nativeFileSystem';
 
-// The serial coverage gate loads more than 600 suites into one process. Near the end of that run,
-// module setup and garbage collection can delay a real native-boundary journey beyond Jest's
-// 10-second default even when the same journey finishes in under two seconds alone. Keep the
-// user-visible RNTL assertions strict; only these integration journeys get a load-tolerant ceiling.
-jest.setTimeout(30_000);
+// The hosted serial coverage gate loads more than 600 suites into one process. Near the end of that
+// run, instrumentation and garbage collection can delay any real native-boundary journey beyond the
+// normal ceiling even when it finishes in seconds alone. Keep every behavior wait strict, but give
+// the CI process one shared outer budget instead of adding per-suite exceptions as random suites
+// cross the default under load.
+jest.setTimeout(process.env.CI === 'true' ? 90_000 : 30_000);
 
 // ---------------------------------------------------------------------------
 // Fake: LiteRTModule (Android litert engine). Destructured at import in src/services/litert.ts.

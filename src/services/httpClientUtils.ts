@@ -3,7 +3,10 @@
  */
 
 import { isTailscaleIPv4 } from '../utils/network';
-import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import {
+  REMOTE_FETCH_REDIRECT_POLICY,
+  remoteAuthorizationHeaders,
+} from './remoteTransportPolicy';
 
 function mimeTypeFromExtension(ext: string | undefined): string {
   if (ext === 'png') return 'image/png';
@@ -130,6 +133,7 @@ export async function testEndpoint(
   apiKey?: string,
 ): Promise<{ success: boolean; error?: string; latency?: number }> {
   const startTime = Date.now();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   try {
     // Normalize endpoint (remove trailing slashes)
@@ -143,15 +147,14 @@ export async function testEndpoint(
 
     // Try to reach the base URL first
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    let response: Response;
-    try {
-      response = await fetch(`${url}/v1/models`, {
-        method: 'GET', signal: controller.signal, headers: authHeaders,
-        redirect: REMOTE_FETCH_REDIRECT_POLICY,
-      });
-    } finally { clearTimeout(timeoutId); }
+    const response = await fetch(`${url}/v1/models`, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: authHeaders,
+      redirect: REMOTE_FETCH_REDIRECT_POLICY,
+    });
     const latency = Date.now() - startTime;
 
     if (!response.ok) {
@@ -188,6 +191,8 @@ export async function testEndpoint(
       error: error instanceof Error ? error.message : 'Unknown error',
       latency,
     };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -212,7 +217,9 @@ async function checkOllamaEndpoint(
     if (response.ok) return { type: 'ollama' };
   } catch {
     // Not Ollama
-  } finally { if (timeoutId) clearTimeout(timeoutId); }
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
   return null;
 }
 
@@ -240,7 +247,9 @@ async function checkLmStudioEndpoint(
     }
   } catch {
     // Not LM Studio
-  } finally { if (timeoutId) clearTimeout(timeoutId); }
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
   return null;
 }
 

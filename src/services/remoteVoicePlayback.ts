@@ -10,7 +10,9 @@ function arrayBufferToBase64(value: ArrayBuffer): string {
   const chunkSize = 0x8000;
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    binary += String.fromCodePoint(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
   }
   return globalThis.btoa(binary);
 }
@@ -21,17 +23,20 @@ export function activeRemoteVoiceServer(): RemoteServer | null {
 }
 
 /** Synthesize one remote voice clip into the file-backed playback seam. */
-export async function synthesizeRemoteVoiceFile(
-  input: {
-    server: RemoteServer;
-    text: string;
-    messageId: string;
-    signal: AbortSignal;
-  },
-): Promise<string> {
+export async function synthesizeRemoteVoiceFile(input: {
+  server: RemoteServer;
+  text: string;
+  messageId: string;
+  signal: AbortSignal;
+}): Promise<string> {
   const { server, text, messageId, signal } = input;
-  const result = await remoteMediaRuntime.synthesizeVoice(server, { text }, { signal });
-  if (result.audio.byteLength === 0) throw new Error('Remote server returned no voice audio');
+  const result = await remoteMediaRuntime.synthesizeVoice(
+    server,
+    { text },
+    { signal },
+  );
+  if (result.audio.byteLength === 0)
+    throw new Error('Remote server returned no voice audio');
   const directory = `${RNFS.CachesDirectoryPath}/remote_voice`;
   await RNFS.mkdir(directory);
   const extension = result.contentType.includes('wav') ? 'wav' : 'mp3';

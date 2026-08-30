@@ -24,7 +24,10 @@ import {
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
 } from './remoteServerManagerUtils';
-import { canReconcileCredentialedEndpoint, remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import {
+  canReconcileCredentialedEndpoint,
+  remoteAuthorizationHeaders,
+} from './remoteTransportPolicy';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
 const trimSlash = (url: string): string => {
@@ -35,7 +38,11 @@ const trimSlash = (url: string): string => {
 
 /** Extract the port from an endpoint, or null if it cannot be parsed. */
 const portOf = (endpoint: string): string | null => {
-  try { return new URL(endpoint).port; } catch { return null; }
+  try {
+    return new URL(endpoint).port;
+  } catch {
+    return null;
+  }
 };
 
 function uniqueSamePortServer(
@@ -61,15 +68,14 @@ class RemoteServerManager {
    * Add a new remote server
    */
   async addServer(
-    config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string }
+    config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string },
   ): Promise<RemoteServer> {
     const store = useRemoteServerStore.getState();
 
     // Deduplicate: if a server with the same endpoint already exists, return it
-    const trimSlashes = (url: string) => { let s = url.toLowerCase(); while (s.endsWith('/')) s = s.slice(0, -1); return s; };
-    const normalizedEndpoint = trimSlashes(config.endpoint);
+    const normalizedEndpoint = trimSlash(config.endpoint);
     const existing = store.servers.find(
-      (s) => trimSlashes(s.endpoint) === normalizedEndpoint
+      s => trimSlash(s.endpoint) === normalizedEndpoint,
     );
     if (existing) {
       logger.log('[RemoteServerManager] Server already exists:', existing.name);
@@ -96,7 +102,7 @@ class RemoteServerManager {
    */
   async updateServer(
     id: string,
-    updates: Partial<Omit<RemoteServer, 'id' | 'createdAt'>>
+    updates: Partial<Omit<RemoteServer, 'id' | 'createdAt'>>,
   ): Promise<void> {
     const store = useRemoteServerStore.getState();
     const existingServer = store.getServerById(id);
@@ -149,7 +155,9 @@ class RemoteServerManager {
   }
 
   /** Get server with API key (for provider) */
-  async getServerWithApiKey(id: string): Promise<(RemoteServer & { apiKey?: string }) | null> {
+  async getServerWithApiKey(
+    id: string,
+  ): Promise<(RemoteServer & { apiKey?: string }) | null> {
     const server = this.getServer(id);
     if (!server) return null;
     const apiKey = await this.getApiKey(id);
@@ -160,7 +168,7 @@ class RemoteServerManager {
    * Test server connection
    */
   async testConnection(
-    id: string
+    id: string,
   ): Promise<{ success: boolean; error?: string; models?: RemoteModel[] }> {
     const store = useRemoteServerStore.getState();
     return store.testConnection(id);
@@ -169,9 +177,11 @@ class RemoteServerManager {
   /** Test connection to a server by endpoint (before adding) */
   async testConnectionByEndpoint(
     endpoint: string,
-    apiKey?: string
+    apiKey?: string,
   ): Promise<ServerTestResult> {
-    return useRemoteServerStore.getState().testConnectionByEndpoint(endpoint, apiKey);
+    return useRemoteServerStore
+      .getState()
+      .testConnectionByEndpoint(endpoint, apiKey);
   }
 
   /**
@@ -195,12 +205,18 @@ class RemoteServerManager {
   }
 
   /** Set the active remote text model */
-  async setActiveRemoteTextModel(serverId: string, modelId: string): Promise<void> {
+  async setActiveRemoteTextModel(
+    serverId: string,
+    modelId: string,
+  ): Promise<void> {
     return setActiveRemoteTextModelImpl(serverId, modelId);
   }
 
   /** Set the active remote vision/image model */
-  async setActiveRemoteImageModel(serverId: string, modelId: string): Promise<void> {
+  async setActiveRemoteImageModel(
+    serverId: string,
+    modelId: string,
+  ): Promise<void> {
     return setActiveRemoteImageModelImpl(serverId, modelId);
   }
 
@@ -237,25 +253,35 @@ class RemoteServerManager {
    * of servers that moved. Does NOT gate on settings — the caller decides whether a scan is allowed.
    * This is the single owner of the "server moved to a new IP" reconciliation; UI callers delegate here.
    */
-  async scanAndReconcile(): Promise<{ moved: string[]; found: DiscoveredServer[] }> {
+  async scanAndReconcile(): Promise<{
+    moved: string[];
+    found: DiscoveredServer[];
+  }> {
     let discovered: DiscoveredServer[];
     try {
       discovered = await discoverLANServers();
     } catch (error) {
-      logger.warn('[RemoteServerManager] LAN scan failed:', (error as Error).message);
+      logger.warn(
+        '[RemoteServerManager] LAN scan failed:',
+        (error as Error).message,
+      );
       return { moved: [], found: [] };
     }
     if (discovered.length === 0) return { moved: [], found: [] };
 
     const store = useRemoteServerStore.getState();
     const existingServers = store.servers;
-    const existingEndpoints = new Set(existingServers.map((s) => trimSlash(s.endpoint)));
-    const discoveredEndpoints = new Set(discovered.map((server) => trimSlash(server.endpoint)));
+    const existingEndpoints = new Set(
+      existingServers.map(s => trimSlash(s.endpoint)),
+    );
+    const discoveredEndpoints = new Set(
+      discovered.map(server => trimSlash(server.endpoint)),
+    );
     const unmatchedDiscovered = discovered.filter(
-      (server) => !existingEndpoints.has(trimSlash(server.endpoint)),
+      server => !existingEndpoints.has(trimSlash(server.endpoint)),
     );
     const missingExisting = existingServers.filter(
-      (server) => !discoveredEndpoints.has(trimSlash(server.endpoint)),
+      server => !discoveredEndpoints.has(trimSlash(server.endpoint)),
     );
     const moved: string[] = [];
     const found: DiscoveredServer[] = [];
@@ -266,7 +292,10 @@ class RemoteServerManager {
         missingExisting,
         unmatchedDiscovered,
       );
-      if (!samePortServer || !(await this.reconcileMovedServer(samePortServer, d))) {
+      if (
+        !samePortServer ||
+        !(await this.reconcileMovedServer(samePortServer, d))
+      ) {
         found.push(d);
         continue;
       }
@@ -280,8 +309,21 @@ class RemoteServerManager {
     server: RemoteServer,
     discovered: DiscoveredServer,
   ): Promise<boolean> {
-    const hasStoredCredential = (await this.getApiKey(server.id)) !== null;
-    if (!canReconcileCredentialedEndpoint(discovered.endpoint, hasStoredCredential)) {
+    let apiKey: string | null;
+    try {
+      apiKey = await this.getApiKey(server.id);
+    } catch {
+      // An unavailable Keychain is not proof that this server has no credential.
+      // Keep the discovery unclaimed until credential ownership can be confirmed.
+      return false;
+    }
+    const hasStoredCredential = apiKey !== null;
+    if (
+      !canReconcileCredentialedEndpoint(
+        discovered.endpoint,
+        hasStoredCredential,
+      )
+    ) {
       return false;
     }
     await this.applyMovedServer(server, discovered.endpoint, discovered.name);
@@ -289,15 +331,33 @@ class RemoteServerManager {
   }
 
   /** Update a saved server that has moved to a new endpoint, and re-select it if it was active. */
-  private async applyMovedServer(server: RemoteServer, endpoint: string, name: string): Promise<void> {
-    logger.log('[RemoteServerManager] Server moved to new IP, updating:', server.name, '->', endpoint);
+  private async applyMovedServer(
+    server: RemoteServer,
+    endpoint: string,
+    name: string,
+  ): Promise<void> {
+    logger.log(
+      '[RemoteServerManager] Server moved to new IP, updating:',
+      server.name,
+      '->',
+      endpoint,
+    );
     await this.updateServer(server.id, { endpoint, name });
-    try { await this.discoverModels(server.id); } catch { /* offline — models repopulate on next reach */ }
+    try {
+      await this.discoverModels(server.id);
+    } catch {
+      /* offline — models repopulate on next reach */
+    }
     const store = useRemoteServerStore.getState();
     if (store.activeServerId === server.id && store.activeRemoteTextModelId) {
       try {
-        await this.setActiveRemoteTextModel(server.id, store.activeRemoteTextModelId);
-      } catch { /* user can re-select from the picker */ }
+        await this.setActiveRemoteTextModel(
+          server.id,
+          store.activeRemoteTextModelId,
+        );
+      } catch {
+        /* user can re-select from the picker */
+      }
     }
   }
 
@@ -310,24 +370,34 @@ class RemoteServerManager {
    */
   async recoverActiveConnection(): Promise<void> {
     const activeId = useRemoteServerStore.getState().activeServerId;
-    const autoDiscover = shouldAutoDiscoverRemoteModels(useAppStore.getState().settings);
+    const autoDiscover = shouldAutoDiscoverRemoteModels(
+      useAppStore.getState().settings,
+    );
 
     if (activeId) {
-      const result = await this.testConnection(activeId).catch(() => ({ success: false }));
+      const result = await this.testConnection(activeId).catch(() => ({
+        success: false,
+      }));
       if (result.success && !autoDiscover) {
-        logger.log('[RemoteServerManager] Active server still reachable; no rescan needed');
+        logger.log(
+          '[RemoteServerManager] Active server still reachable; no rescan needed',
+        );
         return;
       }
-      logger.log(result.success
-        ? '[RemoteServerManager] Active server reachable; scanning because auto-discovery is enabled'
-        : '[RemoteServerManager] Active server unreachable; rescanning to recover');
+      logger.log(
+        result.success
+          ? '[RemoteServerManager] Active server reachable; scanning because auto-discovery is enabled'
+          : '[RemoteServerManager] Active server unreachable; rescanning to recover',
+      );
     }
 
     const allowScan = autoDiscover || !!activeId;
     if (!allowScan) return;
 
     const { moved, found } = await this.scanAndReconcile();
-    logger.log(`[RemoteServerManager] Recovery scan complete: ${moved.length} moved, ${found.length} new`);
+    logger.log(
+      `[RemoteServerManager] Recovery scan complete: ${moved.length} moved, ${found.length} new`,
+    );
   }
 
   /**
@@ -356,7 +426,6 @@ class RemoteServerManager {
   private async removeApiKey(serverId: string): Promise<void> {
     return removeApiKeyImpl(serverId);
   }
-
 }
 
 /** Singleton instance */

@@ -1,4 +1,5 @@
 import { getIpAddress } from 'react-native-device-info';
+import * as Keychain from 'react-native-keychain';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
@@ -22,6 +23,7 @@ describe('remote server reconnect', () => {
     useRemoteServerStore.getState().clearAllServers();
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
     (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.30');
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -80,15 +82,71 @@ describe('remote server reconnect', () => {
       endpoint: oldEndpoint,
       providerType: 'openai-compatible',
     });
-    jest.spyOn(remoteServerManager, 'getApiKey').mockResolvedValue('secret');
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
+      username: `server_${serverId}`,
+      password: 'secret', // NOSONAR - test boundary value, not a real credential
+    });
 
     const result = await remoteServerManager.scanAndReconcile();
 
-    expect(useRemoteServerStore.getState().getServerById(serverId)?.endpoint).toBe(oldEndpoint);
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(oldEndpoint);
     expect(result.moved).toEqual([]);
     expect(result.found).toEqual([
       expect.objectContaining({ endpoint: discoveredEndpoint }),
     ]);
+  });
+
+  it('keeps a same-port discovery unclaimed when Keychain lookup fails', async () => {
+    const oldEndpoint = 'https://desktop.example.test:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = useRemoteServerStore.getState().addServer({
+      name: 'Desktop with unavailable credentials',
+      endpoint: oldEndpoint,
+      providerType: 'openai-compatible',
+    });
+    (Keychain.getGenericPassword as jest.Mock).mockRejectedValueOnce(
+      new Error('Keychain unavailable'),
+    );
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(oldEndpoint);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      expect.objectContaining({ endpoint: discoveredEndpoint }),
+    ]);
+  });
+
+  it('reconciles a unique same-port discovery after Keychain confirms no credential', async () => {
+    const oldEndpoint = 'http://192.168.1.10:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = useRemoteServerStore.getState().addServer({
+      name: 'Uncredentialed Desktop',
+      endpoint: oldEndpoint,
+      providerType: 'openai-compatible',
+    });
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(discoveredEndpoint);
+    expect(result.moved).toEqual([serverId]);
+    expect(result.found).toEqual([]);
   });
 
   it('scans when auto-discovery is enabled and the active server is reachable', async () => {

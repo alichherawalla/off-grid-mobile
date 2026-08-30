@@ -1,4 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+} from 'react';
 import {
   View,
   Text,
@@ -132,16 +138,16 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  // Keep onClose ref current for PanResponder
+  // Stable dismissal handlers read only committed props. Render-phase writes can
+  // leak values from a concurrent render that React later discards.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
   const dismissibleRef = useRef(dismissible);
-  dismissibleRef.current = dismissible;
-
-  // Keep onClosed ref current so the animateOut completion always calls the
-  // latest callback without recreating the close handlers.
   const onClosedRef = useRef(onClosed);
-  onClosedRef.current = onClosed;
+  useLayoutEffect(() => {
+    dismissibleRef.current = dismissible;
+    onCloseRef.current = onClose;
+    onClosedRef.current = onClosed;
+  }, [dismissible, onClose, onClosed]);
 
   // Guards backdrop-tap dismiss during animate-in.
   // Using a ref (not state) so there are zero re-renders — a state-based
@@ -156,9 +162,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // Calculate sheet max height from largest snap point
   const sheetMaxHeight = enableDynamicSizing
     ? SCREEN_HEIGHT * 0.85
-    : resolveSnapPoint(
-      snapPoints?.[snapPoints.length - 1] || '50%',
-    );
+    : resolveSnapPoint(snapPoints?.[snapPoints.length - 1] || '50%');
 
   const levelTokens = elevationTokens[elevation];
 
@@ -237,7 +241,6 @@ export const AppSheet: React.FC<AppSheetProps> = ({
         };
       }
       setModalVisible(true);
-
     } else if (modalVisible) {
       animateOut(() => {
         setModalVisible(false);
@@ -248,11 +251,18 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Track keyboard height so the sheet lifts above the keyboard
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, e =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
     const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => { showSub.remove(); hideSub.remove(); };
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   // Called by Modal when the Dialog is fully rendered and ready for touch
@@ -374,7 +384,10 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
           {/* Bottom safe area spacer — hidden when keyboard is up (keyboard height includes it) */}
           {bottomInset > 0 && keyboardHeight === 0 && (
-            <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
+            <View
+              testID="bottom-safe-area-spacer"
+              style={{ height: bottomInset }}
+            />
           )}
         </Animated.View>
       </View>

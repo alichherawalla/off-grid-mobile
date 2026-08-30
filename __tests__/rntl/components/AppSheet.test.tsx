@@ -16,7 +16,13 @@
  */
 
 import React from 'react';
-import { Text, Keyboard, Modal, TouchableWithoutFeedback, View } from 'react-native';
+import {
+  Text,
+  Keyboard,
+  Modal,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { AppSheet } from '../../../src/components/AppSheet';
 
@@ -36,18 +42,14 @@ describe('AppSheet', () => {
   // ============================================================================
   describe('visibility', () => {
     it('returns null when not visible and modalVisible is false', () => {
-      const { toJSON } = render(
-        <AppSheet {...defaultProps} visible={false} />
-      );
+      const { toJSON } = render(<AppSheet {...defaultProps} visible={false} />);
 
       // When visible is false and internal modalVisible is false, renders null
       expect(toJSON()).toBeNull();
     });
 
     it('renders Modal when visible is true', () => {
-      const { toJSON } = render(
-        <AppSheet {...defaultProps} visible={true} />
-      );
+      const { toJSON } = render(<AppSheet {...defaultProps} visible={true} />);
 
       // When visible is true, the component sets modalVisible=true and renders Modal
       expect(toJSON()).toBeTruthy();
@@ -60,7 +62,7 @@ describe('AppSheet', () => {
   describe('header', () => {
     it('shows title in header', () => {
       const { getByText } = render(
-        <AppSheet {...defaultProps} visible={true} title="My Sheet" />
+        <AppSheet {...defaultProps} visible={true} title="My Sheet" />,
       );
 
       expect(getByText('My Sheet')).toBeTruthy();
@@ -68,7 +70,7 @@ describe('AppSheet', () => {
 
     it('shows close button with default "Done" label', () => {
       const { getByText } = render(
-        <AppSheet {...defaultProps} visible={true} title="Sheet" />
+        <AppSheet {...defaultProps} visible={true} title="Sheet" />,
       );
 
       expect(getByText('Done')).toBeTruthy();
@@ -81,7 +83,7 @@ describe('AppSheet', () => {
           visible={true}
           title="Sheet"
           closeLabel="Cancel"
-        />
+        />,
       );
 
       expect(getByText('Cancel')).toBeTruthy();
@@ -94,7 +96,7 @@ describe('AppSheet', () => {
           visible={true}
           title="Hidden Title"
           showHeader={false}
-        />
+        />,
       );
 
       // Header title should not render when showHeader is false
@@ -104,7 +106,7 @@ describe('AppSheet', () => {
 
     it('does not render header when title is not provided', () => {
       const { queryByText } = render(
-        <AppSheet {...defaultProps} visible={true} />
+        <AppSheet {...defaultProps} visible={true} />,
       );
 
       // No title means no header row rendered (showHeader && title condition)
@@ -118,7 +120,7 @@ describe('AppSheet', () => {
   describe('handle', () => {
     it('shows handle by default', () => {
       const { toJSON } = render(
-        <AppSheet {...defaultProps} visible={true} title="Sheet" />
+        <AppSheet {...defaultProps} visible={true} title="Sheet" />,
       );
 
       // The handle container is always rendered by default (showHandle=true)
@@ -129,11 +131,21 @@ describe('AppSheet', () => {
 
     it('hides handle when showHandle is false', () => {
       const withHandle = render(
-        <AppSheet {...defaultProps} visible={true} title="Sheet" showHandle={true} />
+        <AppSheet
+          {...defaultProps}
+          visible={true}
+          title="Sheet"
+          showHandle={true}
+        />,
       );
 
       const withoutHandle = render(
-        <AppSheet {...defaultProps} visible={true} title="Sheet" showHandle={false} />
+        <AppSheet
+          {...defaultProps}
+          visible={true}
+          title="Sheet"
+          showHandle={false}
+        />,
       );
 
       // The tree without handle should be smaller (no handleContainer view)
@@ -151,7 +163,7 @@ describe('AppSheet', () => {
       const { getByText } = render(
         <AppSheet {...defaultProps} visible={true}>
           <Text>Custom Child Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(getByText('Custom Child Content')).toBeTruthy();
@@ -162,7 +174,7 @@ describe('AppSheet', () => {
         <AppSheet {...defaultProps} visible={true}>
           <Text>First Child</Text>
           <Text>Second Child</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(getByText('First Child')).toBeTruthy();
@@ -177,13 +189,9 @@ describe('AppSheet', () => {
     it('pressing close button triggers dismiss animation', async () => {
       const onClose = jest.fn();
       const { getByText } = render(
-        <AppSheet
-          visible={true}
-          onClose={onClose}
-          title="Closeable Sheet"
-        >
+        <AppSheet visible={true} onClose={onClose} title="Closeable Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const doneButton = getByText('Done');
@@ -195,7 +203,7 @@ describe('AppSheet', () => {
         () => {
           expect(onClose).toHaveBeenCalled();
         },
-        { timeout: 2000 }
+        { timeout: 2000 },
       );
     });
   });
@@ -211,7 +219,7 @@ describe('AppSheet', () => {
           visible={true}
           snapPoints={['30%', '60%']}
           title="Snap Sheet"
-        />
+        />,
       );
 
       expect(toJSON()).toBeTruthy();
@@ -224,7 +232,7 @@ describe('AppSheet', () => {
           visible={true}
           snapPoints={[200, 400]}
           title="Numeric Snap"
-        />
+        />,
       );
 
       expect(toJSON()).toBeTruthy();
@@ -237,7 +245,7 @@ describe('AppSheet', () => {
           visible={true}
           enableDynamicSizing={true}
           title="Dynamic Sheet"
-        />
+        />,
       );
 
       expect(toJSON()).toBeTruthy();
@@ -245,11 +253,7 @@ describe('AppSheet', () => {
 
     it('renders without snap points (default 50%)', () => {
       const { toJSON } = render(
-        <AppSheet
-          {...defaultProps}
-          visible={true}
-          title="Default Snap"
-        />
+        <AppSheet {...defaultProps} visible={true} title="Default Snap" />,
       );
 
       expect(toJSON()).toBeTruthy();
@@ -262,14 +266,19 @@ describe('AppSheet', () => {
   describe('elevation', () => {
     it('uses level3 elevation by default', () => {
       const { toJSON } = render(
-        <AppSheet {...defaultProps} visible={true} title="Level 3" />
+        <AppSheet {...defaultProps} visible={true} title="Level 3" />,
       );
       expect(toJSON()).toBeTruthy();
     });
 
     it('accepts level4 elevation', () => {
       const { toJSON } = render(
-        <AppSheet {...defaultProps} visible={true} title="Level 4" elevation="level4" />
+        <AppSheet
+          {...defaultProps}
+          visible={true}
+          title="Level 4"
+          elevation="level4"
+        />,
       );
       expect(toJSON()).toBeTruthy();
     });
@@ -289,7 +298,9 @@ describe('AppSheet', () => {
       mockAddListener = jest.spyOn(Keyboard, 'addListener').mockReturnValue({
         remove: mockRemove,
       } as any);
-      mockDismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => { });
+      mockDismiss = jest
+        .spyOn(Keyboard, 'dismiss')
+        .mockImplementation(() => {});
       mockIsVisible = jest.spyOn(Keyboard, 'isVisible' as any);
     });
 
@@ -305,7 +316,7 @@ describe('AppSheet', () => {
       const { toJSON } = render(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(Keyboard.dismiss).not.toHaveBeenCalled();
@@ -324,7 +335,7 @@ describe('AppSheet', () => {
       const { toJSON } = render(
         <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Initially not visible
@@ -334,7 +345,7 @@ describe('AppSheet', () => {
       render(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(Keyboard.dismiss).toHaveBeenCalled();
@@ -355,14 +366,14 @@ describe('AppSheet', () => {
       const { rerender, getByText } = render(
         <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Open the sheet — keyboard is visible, so modal deferred
       rerender(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(Keyboard.dismiss).toHaveBeenCalled();
@@ -384,13 +395,13 @@ describe('AppSheet', () => {
       const { rerender, getByText } = render(
         <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       rerender(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(Keyboard.dismiss).toHaveBeenCalled();
@@ -418,13 +429,13 @@ describe('AppSheet', () => {
       const { rerender } = render(
         <AppSheet visible={false} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       rerender(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Fire the keyboard hide callback
@@ -448,7 +459,7 @@ describe('AppSheet', () => {
       const { unmount } = render(
         <AppSheet visible={true} onClose={jest.fn()} title="Sheet">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       expect(Keyboard.addListener).toHaveBeenCalled();
@@ -525,7 +536,7 @@ describe('AppSheet', () => {
       const { rerender, toJSON } = render(
         <AppSheet visible={true} onClose={onClose} title="Transition">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Should be visible
@@ -535,14 +546,17 @@ describe('AppSheet', () => {
       rerender(
         <AppSheet visible={false} onClose={onClose} title="Transition">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Wait for animation to complete
-      await waitFor(() => {
-        // After animation, the component may render null or a modal
-        expect(true).toBe(true);
-      }, { timeout: 1000 });
+      await waitFor(
+        () => {
+          // After animation, the component may render null or a modal
+          expect(true).toBe(true);
+        },
+        { timeout: 1000 },
+      );
     });
 
     it('backdrop tap triggers dismiss', async () => {
@@ -550,7 +564,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Backdrop Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const backdrop = UNSAFE_getByType(TouchableWithoutFeedback);
@@ -569,7 +583,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Back Button">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const modal = UNSAFE_getByType(Modal);
@@ -595,7 +609,7 @@ describe('AppSheet', () => {
           title="Activation"
         >
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       fireEvent.press(UNSAFE_getByType(TouchableWithoutFeedback));
@@ -605,6 +619,41 @@ describe('AppSheet', () => {
       });
 
       expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('uses the latest committed close callback from an existing handler', async () => {
+      const firstClose = jest.fn();
+      const latestClose = jest.fn();
+      const firstClosed = jest.fn();
+      const latestClosed = jest.fn();
+      const ui = render(
+        <AppSheet
+          visible={true}
+          onClose={firstClose}
+          onClosed={firstClosed}
+          title="Callback"
+        >
+          <Text>Content</Text>
+        </AppSheet>,
+      );
+      const backdrop = ui.UNSAFE_getByType(TouchableWithoutFeedback);
+
+      ui.rerender(
+        <AppSheet
+          visible={true}
+          onClose={latestClose}
+          onClosed={latestClosed}
+          title="Callback"
+        >
+          <Text>Content</Text>
+        </AppSheet>,
+      );
+      fireEvent.press(backdrop);
+
+      await waitFor(() => expect(latestClose).toHaveBeenCalledTimes(1));
+      expect(latestClosed).toHaveBeenCalledTimes(1);
+      expect(firstClose).not.toHaveBeenCalled();
+      expect(firstClosed).not.toHaveBeenCalled();
     });
   });
 
@@ -620,7 +669,7 @@ describe('AppSheet', () => {
           visible={true}
           snapPoints={['invalid-snap']}
           title="Fallback Snap"
-        />
+        />,
       );
 
       expect(toJSON()).toBeTruthy();
@@ -635,7 +684,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={jest.fn()} title="AnimateIn Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const modal = UNSAFE_getByType(Modal);
@@ -676,7 +725,11 @@ describe('AppSheet', () => {
      * PanResponder accumulates dy via: dy += currentPageY - previousPageY.
      * Pass previousY to control the delta: dy_delta = pageY - previousY.
      */
-    function makeTouchEvent(pageY: number, previousY?: number, timestamp = Date.now()) {
+    function makeTouchEvent(
+      pageY: number,
+      previousY?: number,
+      timestamp = Date.now(),
+    ) {
       const prevY = previousY ?? pageY;
       const touchEntry = {
         touchActive: true,
@@ -692,8 +745,26 @@ describe('AppSheet', () => {
       };
       return {
         nativeEvent: {
-          touches: [{ pageX: 0, pageY, identifier: 0, locationX: 0, locationY: pageY, timestamp }],
-          changedTouches: [{ pageX: 0, pageY, identifier: 0, locationX: 0, locationY: pageY, timestamp }],
+          touches: [
+            {
+              pageX: 0,
+              pageY,
+              identifier: 0,
+              locationX: 0,
+              locationY: pageY,
+              timestamp,
+            },
+          ],
+          changedTouches: [
+            {
+              pageX: 0,
+              pageY,
+              identifier: 0,
+              locationX: 0,
+              locationY: pageY,
+              timestamp,
+            },
+          ],
           target: 1,
           timestamp,
         },
@@ -710,7 +781,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getAllByType } = render(
         <AppSheet visible={true} onClose={jest.fn()}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const handle = getHandleContainer(UNSAFE_getAllByType);
@@ -719,7 +790,9 @@ describe('AppSheet', () => {
       // The onStartShouldSetResponder handler is the PanResponder wrapper around
       // onStartShouldSetPanResponder. Calling it exercises line 168.
       act(() => {
-        const result = handle.props.onStartShouldSetResponder?.(makeTouchEvent(100));
+        const result = handle.props.onStartShouldSetResponder?.(
+          makeTouchEvent(100),
+        );
         // Our config returns false, so the responder should not claim the gesture
         expect(result).toBe(false);
       });
@@ -729,7 +802,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getAllByType } = render(
         <AppSheet visible={true} onClose={jest.fn()}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const handle = getHandleContainer(UNSAFE_getAllByType);
@@ -737,7 +810,9 @@ describe('AppSheet', () => {
 
       act(() => {
         // Calling onMoveShouldSetResponder exercises the onMoveShouldSetPanResponder callback
-        const result = handle.props.onMoveShouldSetResponder?.(makeTouchEvent(115));
+        const result = handle.props.onMoveShouldSetResponder?.(
+          makeTouchEvent(115),
+        );
         if (result !== undefined) {
           expect(typeof result).toBe('boolean');
         }
@@ -748,7 +823,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getAllByType } = render(
         <AppSheet visible={true} onClose={jest.fn()}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const handle = getHandleContainer(UNSAFE_getAllByType);
@@ -768,7 +843,7 @@ describe('AppSheet', () => {
       const { UNSAFE_getAllByType } = render(
         <AppSheet visible={true} onClose={onClose}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const handle = getHandleContainer(UNSAFE_getAllByType);
@@ -790,16 +865,20 @@ describe('AppSheet', () => {
       // This lets us exercise lines 189-192 (the dismiss completion: setModalVisible +
       // onClose) without depending on the native animation driver in jest.
       const { Animated: RNAnimated } = require('react-native');
-      const startMock = jest.fn((cb?: ((result: { finished: boolean }) => void)) => {
-        if (cb) cb({ finished: true });
-      });
-      jest.spyOn(RNAnimated, 'parallel').mockReturnValue({ start: startMock } as any);
+      const startMock = jest.fn(
+        (cb?: (result: { finished: boolean }) => void) => {
+          if (cb) cb({ finished: true });
+        },
+      );
+      jest
+        .spyOn(RNAnimated, 'parallel')
+        .mockReturnValue({ start: startMock } as any);
 
       const onClose = jest.fn();
       const { UNSAFE_getAllByType } = render(
         <AppSheet visible={true} onClose={onClose}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const handle = getHandleContainer(UNSAFE_getAllByType);
@@ -819,12 +898,12 @@ describe('AppSheet', () => {
       jest.restoreAllMocks();
     });
 
-    it('uses the latest dismissible value to block a swipe already wired to the handle', () => {
+    it('uses the latest committed dismissible value for an existing swipe handle', () => {
       const onClose = jest.fn();
       const ui = render(
         <AppSheet visible={true} dismissible onClose={onClose}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
       const handle = getHandleContainer(ui.UNSAFE_getAllByType);
       expect(handle).toBeTruthy();
@@ -832,7 +911,7 @@ describe('AppSheet', () => {
       ui.rerender(
         <AppSheet visible={true} dismissible={false} onClose={onClose}>
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
       act(() => {
         expect(
@@ -855,18 +934,22 @@ describe('AppSheet', () => {
       // This simulates the sheet mid-animation where backdropEnabled=false.
       const { Animated: RNAnimated } = require('react-native');
       const startMock = jest.fn(); // callback deliberately NOT called
-      jest.spyOn(RNAnimated, 'parallel').mockReturnValue({ start: startMock } as any);
+      jest
+        .spyOn(RNAnimated, 'parallel')
+        .mockReturnValue({ start: startMock } as any);
 
       const onClose = jest.fn();
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Guard Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Trigger animateIn (sets backdropEnabled=false, callback never fires)
       const modal = UNSAFE_getByType(Modal);
-      act(() => { modal.props.onShow(); });
+      act(() => {
+        modal.props.onShow();
+      });
 
       // Backdrop press while animation is still running — must be ignored
       const backdrop = UNSAFE_getByType(TouchableWithoutFeedback);
@@ -880,29 +963,38 @@ describe('AppSheet', () => {
     it('backdrop press works once animateIn completes (backdropEnabled=true)', async () => {
       // Fire the .start() callback synchronously so backdropEnabled becomes true.
       const { Animated: RNAnimated } = require('react-native');
-      const startMock = jest.fn((cb?: (result: { finished: boolean }) => void) => {
-        cb?.({ finished: true });
-      });
-      jest.spyOn(RNAnimated, 'parallel').mockReturnValue({ start: startMock } as any);
+      const startMock = jest.fn(
+        (cb?: (result: { finished: boolean }) => void) => {
+          cb?.({ finished: true });
+        },
+      );
+      jest
+        .spyOn(RNAnimated, 'parallel')
+        .mockReturnValue({ start: startMock } as any);
 
       const onClose = jest.fn();
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Guard Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       // Trigger animateIn — callback fires synchronously → backdropEnabled=true
       const modal = UNSAFE_getByType(Modal);
-      act(() => { modal.props.onShow(); });
+      act(() => {
+        modal.props.onShow();
+      });
 
       // Backdrop press after animation completes — must dismiss
       const backdrop = UNSAFE_getByType(TouchableWithoutFeedback);
       fireEvent.press(backdrop);
 
-      await waitFor(() => {
-        expect(onClose).toHaveBeenCalled();
-      }, { timeout: 2000 });
+      await waitFor(
+        () => {
+          expect(onClose).toHaveBeenCalled();
+        },
+        { timeout: 2000 },
+      );
 
       jest.restoreAllMocks();
     });
@@ -911,25 +1003,31 @@ describe('AppSheet', () => {
       // Allow animateIn to complete, then verify animateOut disables backdrop.
       const { Animated: RNAnimated } = require('react-native');
       let callCount = 0;
-      const startMock = jest.fn((cb?: (result: { finished: boolean }) => void) => {
-        callCount++;
-        if (callCount === 1) {
-          // First call is animateIn — fire immediately so backdropEnabled=true
-          cb?.({ finished: true });
-        }
-        // Second call is animateOut — do NOT fire, simulating mid-dismiss state
-      });
-      jest.spyOn(RNAnimated, 'parallel').mockReturnValue({ start: startMock } as any);
+      const startMock = jest.fn(
+        (cb?: (result: { finished: boolean }) => void) => {
+          callCount++;
+          if (callCount === 1) {
+            // First call is animateIn — fire immediately so backdropEnabled=true
+            cb?.({ finished: true });
+          }
+          // Second call is animateOut — do NOT fire, simulating mid-dismiss state
+        },
+      );
+      jest
+        .spyOn(RNAnimated, 'parallel')
+        .mockReturnValue({ start: startMock } as any);
 
       const onClose = jest.fn();
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={onClose} title="Guard Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const modal = UNSAFE_getByType(Modal);
-      act(() => { modal.props.onShow(); }); // animateIn completes → backdropEnabled=true
+      act(() => {
+        modal.props.onShow();
+      }); // animateIn completes → backdropEnabled=true
 
       const backdrop = UNSAFE_getByType(TouchableWithoutFeedback);
 
@@ -959,22 +1057,24 @@ describe('AppSheet', () => {
       const { UNSAFE_getByType } = render(
         <AppSheet visible={true} onClose={jest.fn()} title="Timing Test">
           <Text>Content</Text>
-        </AppSheet>
+        </AppSheet>,
       );
 
       const modal = UNSAFE_getByType(Modal);
-      act(() => { modal.props.onShow(); });
+      act(() => {
+        modal.props.onShow();
+      });
 
       // animateIn should use timing (for guaranteed callback) not spring
       expect(timingSpy).toHaveBeenCalled();
       // The translateY call should have toValue: 0 (slide in)
       const slideInCall = timingSpy.mock.calls.find(
-        ([, config]: any[]) => config?.toValue === 0
+        ([, config]: any[]) => config?.toValue === 0,
       );
       expect(slideInCall).toBeTruthy();
       // Spring should NOT be used for the entry animation
       const springToZero = springSpy.mock.calls.find(
-        ([, config]: any[]) => config?.toValue === 0
+        ([, config]: any[]) => config?.toValue === 0,
       );
       expect(springToZero).toBeFalsy();
 
