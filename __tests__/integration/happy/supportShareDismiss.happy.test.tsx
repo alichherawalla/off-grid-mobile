@@ -2,7 +2,7 @@
  * HAPPY-PATH (UI integration, HEAVY entry point) — the "Support Open-Source AI" share sheet dismisses
  * after the user shares on X and does NOT re-nag on later generations.
  *
- * Row T096 (Area 14): "Trigger the support-share sheet → tap Share on X → return to app → the sheet is
+ * Row T096 (Area 14): "Trigger the support sheet → tap Rate Us → return to app → the sheet is
  * dismissed (doesn't re-nag)". Device finding (docs/DEVICE_TEST_FINDINGS.md): "Support-sheet dismissal —
  * the 'support open source AI' share sheet dismisses correctly after returning from X (doesn't re-nag)."
  *
@@ -10,12 +10,12 @@
  * (checkSharePrompt increments the real textGenerationCount and, via shouldShowSharePrompt, emits the
  * prompt after 2 text generations, then again every 10th). The REAL SharePromptSheet renders inside
  * ChatScreen. We arrive at the sheet by SENDING real messages (never store.setState / emitSharePrompt),
- * tap the REAL "Share on X" button, and assert on the RENDERED UI:
+ * tap the real store-rating button, and assert on the rendered UI:
  *   1. after the share, the sheet is gone, AND
  *   2. after driving generations up to the every-10th re-trigger count, the sheet does NOT re-appear.
  *
  * The ONLY device boundary faked is Linking.openURL (the leaf that hands the X compose intent to the OS —
- * "tap Share on X"), plus the engine leaf via chatHarness. The re-nag guard under test is the REAL
+ * "tap Rate Us"), plus the engine leaf via chatHarness. The re-nag guard under test is the real
  * `hasEngagedSharePrompt` persistence: handleEngage sets it, and the real checkSharePrompt honors it.
  */
 import { setupChatScreen } from '../../harness/chatHarness';

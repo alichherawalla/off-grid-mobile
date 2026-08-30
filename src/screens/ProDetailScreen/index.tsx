@@ -55,6 +55,11 @@ const PILLARS = [
     desc: 'Your chats, projects, files, models, and copied text stay current over your own network, never a cloud relay.',
   },
   {
+    icon: 'monitor',
+    title: 'Your Desktop does the heavy work',
+    desc: 'Create images, transcribe speech, and hear replies with the models active on your named Desktop. You choose which models it serves.',
+  },
+  {
     icon: 'check-circle',
     title: 'It acts, you approve',
     desc: 'It drafts the reply, files the ticket, updates the doc - never on its own. Every action is yours to approve.',

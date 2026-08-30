@@ -22,40 +22,33 @@ function makeStore(overrides: any = {}) {
     hasRegisteredPro: false,
     isProActive: false,
     proAhaTriggeredBy: null,
-    textGenerationCount: 3,
-    imageGenerationCount: 3,
+    textGenerationCount: 10,
+    imageGenerationCount: 10,
     setProAhaTriggeredBy: jest.fn(),
     ...overrides,
   };
 }
 
 describe('shouldShowProAha', () => {
-  it('returns true at threshold (3)', () => {
-    expect(shouldShowProAha(3)).toBe(true);
+  it('returns true at threshold (10)', () => {
+    expect(shouldShowProAha(10)).toBe(true);
   });
 
   it('returns false below threshold', () => {
     expect(shouldShowProAha(2)).toBe(false);
     expect(shouldShowProAha(1)).toBe(false);
+    expect(shouldShowProAha(9)).toBe(false);
   });
 
-  it('returns false between threshold and repeat start', () => {
+  it('returns false after the one automatic offer', () => {
     expect(shouldShowProAha(4)).toBe(false);
+    expect(shouldShowProAha(11)).toBe(false);
     expect(shouldShowProAha(14)).toBe(false);
-  });
-
-  it('returns true at repeat start (15)', () => {
-    expect(shouldShowProAha(15)).toBe(true);
-  });
-
-  it('returns true at each repeat interval (25, 35)', () => {
-    expect(shouldShowProAha(25)).toBe(true);
-    expect(shouldShowProAha(35)).toBe(true);
-  });
-
-  it('returns false between repeat intervals', () => {
+    expect(shouldShowProAha(15)).toBe(false);
     expect(shouldShowProAha(16)).toBe(false);
     expect(shouldShowProAha(24)).toBe(false);
+    expect(shouldShowProAha(25)).toBe(false);
+    expect(shouldShowProAha(35)).toBe(false);
   });
 });
 
@@ -110,7 +103,7 @@ describe('checkProPromptForText', () => {
   });
 
   it('triggers when all conditions met', () => {
-    const store = makeStore({ textGenerationCount: 3 });
+    const store = makeStore({ textGenerationCount: 10 });
     mockedGetState.mockReturnValue(store);
     checkProPromptForText(0);
     expect(store.setProAhaTriggeredBy).toHaveBeenCalledWith('text');
@@ -122,14 +115,14 @@ describe('checkProPromptForImage', () => {
   afterEach(() => jest.useRealTimers());
 
   it('triggers for image when count meets threshold', () => {
-    const store = makeStore({ imageGenerationCount: 3 });
+    const store = makeStore({ imageGenerationCount: 10 });
     mockedGetState.mockReturnValue(store);
     checkProPromptForImage(0);
     expect(store.setProAhaTriggeredBy).toHaveBeenCalledWith('image');
   });
 
   it('skips when hasRegisteredPro=true', () => {
-    const store = makeStore({ hasRegisteredPro: true, imageGenerationCount: 3 });
+    const store = makeStore({ hasRegisteredPro: true, imageGenerationCount: 10 });
     mockedGetState.mockReturnValue(store);
     checkProPromptForImage(0);
     expect(store.setProAhaTriggeredBy).not.toHaveBeenCalled();

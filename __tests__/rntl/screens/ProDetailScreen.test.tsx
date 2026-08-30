@@ -99,6 +99,16 @@ describe('ProDetailScreen', () => {
     );
   });
 
+  it('shows the remote media outcomes and named Desktop control', () => {
+    const { getByText } = render(<ProDetailScreen />);
+    expect(getByText('Your Desktop does the heavy work')).toBeTruthy();
+    expect(
+      getByText(
+        'Create images, transcribe speech, and hear replies with the models active on your named Desktop. You choose which models it serves.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('shows the Off Grid AI Desktop link to Pro-active users too', async () => {
     useAppStore.setState({ hasRegisteredPro: true });
     const { getByText } = render(<ProDetailScreen />);
