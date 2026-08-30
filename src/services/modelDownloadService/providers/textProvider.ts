@@ -82,6 +82,11 @@ function reattach(downloadId: string): void {
 export const textProvider: DownloadProvider = {
   modelType: 'text',
 
+  async start(request): Promise<void> {
+    if (request.modelType !== 'text') throw new Error('Invalid text download request');
+    await startModelDownload(request.modelId, request.file);
+  },
+
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];
     for (const e of textEntries()) {

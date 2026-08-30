@@ -26,6 +26,7 @@ import { queuedUniformId } from './uniformId';
 import {
   DownloadProvider,
   ModelDownload,
+  ModelDownloadStartRequest,
   ModelDownloadStatus,
   ModelDownloadType,
 } from './types';
@@ -142,6 +143,15 @@ class ModelDownloadService {
     this.logTransitions(merged);
     this.lastList = merged;
     return merged;
+  }
+
+  async start(request: ModelDownloadStartRequest): Promise<void> {
+    const provider = this.providers.get(request.modelType);
+    if (!provider?.start) throw new Error(`No download starter registered for ${request.modelType}`);
+    logger.log(`[DL-SM] start type=${request.modelType}`);
+    await provider.start(request);
+    await this.list();
+    this.notify();
   }
 
   /** Compare each download's status to what we last saw and log every change. */

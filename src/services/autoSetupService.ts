@@ -1,9 +1,6 @@
-import { startModelDownload } from './startModelDownload';
-import { startImageModelDownload } from './imageModelDownloadOwner';
 import { modelDownloadService } from './modelDownloadService';
-import type { ModelDownload } from './modelDownloadService/types';
+import type { ModelDownload, ModelDownloadStartRequest } from './modelDownloadService/types';
 import { useAppStore } from '../stores';
-import { useWhisperStore } from '../stores/whisperStore';
 import { uniformDownloadId } from './modelDownloadService/uniformId';
 import {
   loadAutoSetupCompatibleCatalog,
@@ -16,18 +13,14 @@ import {
 } from './autoSetupPlan';
 
 export interface AutoSetupDownloadBoundaries {
-  startText: typeof startModelDownload;
-  startImage: typeof startImageModelDownload;
-  startSpeech: (modelId: string) => Promise<unknown>;
+  start: (request: ModelDownloadStartRequest) => Promise<void>;
   list: () => Promise<ModelDownload[]>;
   cancel: (id: string) => Promise<void>;
   subscribe: (listener: () => void) => () => void;
 }
 
 const productionDownloadBoundaries: AutoSetupDownloadBoundaries = {
-  startText: startModelDownload,
-  startImage: startImageModelDownload,
-  startSpeech: modelId => useWhisperStore.getState().downloadModel(modelId),
+  start: request => modelDownloadService.start(request),
   list: () => modelDownloadService.list(),
   cancel: id => modelDownloadService.cancel(id),
   subscribe: listener => modelDownloadService.subscribe(listener),
@@ -303,26 +296,18 @@ export function createAutoSetupSession(
     if (activeIds.size === 0) return;
 
     const [text, image, stt] = plan.items;
-    const app = useAppStore.getState();
     const jobs = [
       {
         id: autoSetupDownloadId(text),
-        run: () => downloads.startText(text.payload.modelId, text.payload.file),
+        run: () => downloads.start({ modelType: 'text', modelId: text.payload.modelId, file: text.payload.file }),
       },
       {
         id: autoSetupDownloadId(image),
-        run: () =>
-          downloads.startImage(image.payload, {
-            addDownloadedImageModel: app.addDownloadedImageModel,
-            activeImageModelId: app.activeImageModelId,
-            setActiveImageModelId: app.setActiveImageModelId,
-            setAlertState: () => undefined,
-            triedImageGen: app.onboardingChecklist.triedImageGen,
-          }),
+        run: () => downloads.start({ modelType: 'image', model: image.payload }),
       },
       {
         id: autoSetupDownloadId(stt),
-        run: () => downloads.startSpeech(stt.payload.modelId),
+        run: () => downloads.start({ modelType: 'stt', modelId: stt.payload.modelId }),
       },
     ].filter(job => activeIds.has(job.id));
     const starts = await Promise.allSettled(jobs.map(job => job.run()));
@@ -385,7 +370,10 @@ export function createAutoSetupSession(
       disposed = true;
       operation += 1;
       unsubscribeDownloads();
-      stopActive(false).catch(() => undefined);
+      // Leaving Auto Setup must not cancel model downloads. Their lifecycle belongs
+      // to modelDownloadService, so Download Manager can keep showing and controlling
+      // the same work after this screen is gone.
+      activeIds.clear();
       listeners.clear();
     },
   };

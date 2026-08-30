@@ -25,6 +25,11 @@ export type ModelDownloadStatus =
   | 'completed'     // on disk + registered in its domain store
   | 'error';        // failed; retryable
 
+export type ModelDownloadStartRequest =
+  | { modelType: 'text'; modelId: string; file: import('../../types').ModelFile }
+  | { modelType: 'image'; model: import('../imageModelDownloadTypes').ImageModelDescriptor }
+  | { modelType: 'stt'; modelId: string };
+
 /**
  * What a given download supports RIGHT NOW. This is how the abstraction handles
  * capability gaps gracefully instead of letting them become bugs (Liskov +
@@ -80,6 +85,9 @@ export interface ModelDownload {
  */
 export interface DownloadProvider {
   readonly modelType: ModelDownloadType;
+
+  /** Start through the provider that also lists and controls this download type. */
+  start?(request: ModelDownloadStartRequest): Promise<void>;
 
   /** Current downloads for this type — both in-progress and completed. */
   list(): Promise<ModelDownload[]>;

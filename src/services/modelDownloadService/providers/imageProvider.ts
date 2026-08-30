@@ -24,6 +24,7 @@ import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores
 import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
+import { startImageModelDownload } from '../../imageModelDownloadOwner';
 import type { DownloadProvider, ModelDownload } from '../types';
 
 /**
@@ -50,6 +51,18 @@ const findEntry = (modelId: string): DownloadEntry | undefined =>
 
 export const imageProvider: DownloadProvider = {
   modelType: 'image',
+
+  async start(request): Promise<void> {
+    if (request.modelType !== 'image') throw new Error('Invalid image download request');
+    const app = useAppStore.getState();
+    await startImageModelDownload(request.model, {
+      addDownloadedImageModel: app.addDownloadedImageModel,
+      activeImageModelId: app.activeImageModelId,
+      setActiveImageModelId: app.setActiveImageModelId,
+      setAlertState: () => undefined,
+      triedImageGen: app.onboardingChecklist.triedImageGen,
+    });
+  },
 
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];

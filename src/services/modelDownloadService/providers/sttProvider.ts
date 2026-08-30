@@ -12,6 +12,7 @@
 import { whisperService } from '../../whisperService';
 import { backgroundDownloadService } from '../../backgroundDownloadService';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
+import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
@@ -38,6 +39,11 @@ function findEntry(modelId: string) {
 
 export const sttProvider: DownloadProvider = {
   modelType: 'stt',
+
+  async start(request): Promise<void> {
+    if (request.modelType !== 'stt') throw new Error('Invalid STT download request');
+    await useWhisperStore.getState().downloadModel(request.modelId);
+  },
 
   async list(): Promise<ModelDownload[]> {
     const out: ModelDownload[] = [];

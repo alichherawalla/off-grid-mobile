@@ -10,6 +10,7 @@ import { modelDownloadService } from '../../../src/services/modelDownloadService
 import type {
   DownloadProvider,
   ModelDownload,
+  ModelDownloadStartRequest,
   ModelDownloadType,
 } from '../../../src/services/modelDownloadService/types';
 import { uniformDownloadId } from '../../../src/services/modelDownloadService/uniformId';
@@ -43,7 +44,7 @@ class NativeDownloadBoundary implements DownloadProvider {
     return this.downloads;
   }
 
-  start(id: string, name: string, sizeBytes: number): Promise<void> {
+  private begin(id: string, name: string, sizeBytes: number): Promise<void> {
     this.downloads = [
       {
         id: uniformDownloadId(this.modelType, id),
@@ -58,6 +59,36 @@ class NativeDownloadBoundary implements DownloadProvider {
     ];
     this.listeners.forEach(listener => listener());
     return Promise.resolve();
+  }
+
+  start(request: ModelDownloadStartRequest): Promise<void> {
+    if (request.modelType === 'text') {
+      return this.begin(`${request.modelId}/${request.file.name}`, request.file.name, request.file.size);
+    }
+    if (request.modelType === 'image') {
+      return this.begin(request.model.id, request.model.name, request.model.size);
+    }
+    return this.begin(request.modelId, request.modelId, 1 * MB);
+  }
+
+  setProgress(progress: number): void {
+    this.downloads = this.downloads.map(download => ({
+      ...download,
+      bytesDownloaded: download.sizeBytes * progress,
+      progress,
+      status: 'downloading',
+    }));
+    this.listeners.forEach(listener => listener());
+  }
+
+  complete(): void {
+    this.downloads = this.downloads.map(download => ({
+      ...download,
+      bytesDownloaded: download.sizeBytes,
+      progress: 1,
+      status: 'completed',
+    }));
+    this.listeners.forEach(listener => listener());
   }
 
   subscribe(listener: () => void): () => void {
@@ -133,19 +164,14 @@ const catalogBoundaries: AutoSetupCatalogBoundaries = {
 };
 
 describe('Auto Setup release journey', () => {
-  const navigation = { navigate: jest.fn(), replace: jest.fn() } as any;
+  const navigation = { navigate: jest.fn(), push: jest.fn(), replace: jest.fn() } as any;
   const textDownloads = new NativeDownloadBoundary('text');
   const imageDownloads = new NativeDownloadBoundary('image');
   const speechDownloads = new NativeDownloadBoundary('stt');
   let unregister: Array<() => void> = [];
 
   const downloadBoundaries: AutoSetupDownloadBoundaries = {
-    startText: async (modelId, file) =>
-      textDownloads.start(`${modelId}/${file.name}`, file.name, file.size),
-    startImage: async model =>
-      imageDownloads.start(model.id, model.name, model.size),
-    startSpeech: async modelId =>
-      speechDownloads.start(modelId, modelId, 1 * MB),
+    start: request => modelDownloadService.start(request),
     list: () => modelDownloadService.list(),
     cancel: id => modelDownloadService.cancel(id),
     subscribe: listener => modelDownloadService.subscribe(listener),
@@ -224,7 +250,7 @@ describe('Auto Setup release journey', () => {
       expect(ui.getByTestId('auto-setup-advanced')).toBeTruthy(),
     );
     fireEvent.press(ui.getByTestId('auto-setup-advanced'));
-    expect(navigation.navigate).toHaveBeenCalledWith('AdvancedSetup');
+    expect(navigation.push).toHaveBeenCalledWith('AdvancedSetup');
   });
 
   it('shows the failed model and cancels the other downloads as one session', async () => {
@@ -232,10 +258,11 @@ describe('Auto Setup release journey', () => {
     speechDownloads.completeOnStart = false;
     const failingDownloads: AutoSetupDownloadBoundaries = {
       ...downloadBoundaries,
-      startImage: async () => {
-        return Promise.reject({
-          message: 'Image model download could not start.',
-        });
+      start: async request => {
+        if (request.modelType === 'image') {
+          return Promise.reject({ message: 'Image model download could not start.' });
+        }
+        return modelDownloadService.start(request);
       },
     };
     const ui = render(
@@ -269,7 +296,7 @@ describe('Auto Setup release journey', () => {
     });
   });
 
-  it('cancels active downloads when setup unmounts', async () => {
+  it('keeps central download records alive after setup unmounts', async () => {
     textDownloads.completeOnStart = false;
     imageDownloads.completeOnStart = false;
     speechDownloads.completeOnStart = false;
@@ -287,10 +314,30 @@ describe('Auto Setup release journey', () => {
       expect(ui.getAllByText(/STARTING|0%/).length).toBeGreaterThan(0),
     );
 
+    const beforeUnmount = await modelDownloadService.list();
+    expect(beforeUnmount).toHaveLength(3);
+
     ui.unmount();
 
     await waitFor(async () => {
-      expect(await modelDownloadService.list()).toEqual([]);
+      const afterUnmount = await modelDownloadService.list();
+      expect(afterUnmount.map(download => download.id)).toEqual(
+        beforeUnmount.map(download => download.id),
+      );
+      expect(afterUnmount.every(download => download.status === 'downloading')).toBe(true);
+    });
+
+    textDownloads.setProgress(0.42);
+    await waitFor(async () => {
+      const text = (await modelDownloadService.list()).find(download => download.modelType === 'text');
+      expect(text?.progress).toBe(0.42);
+    });
+
+    textDownloads.complete();
+    await waitFor(async () => {
+      const text = (await modelDownloadService.list()).find(download => download.modelType === 'text');
+      expect(text?.status).toBe('completed');
+      expect(text?.progress).toBe(1);
     });
   });
 
