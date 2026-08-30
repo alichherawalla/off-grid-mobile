@@ -397,6 +397,28 @@ describe('ModelCard', () => {
       );
       expect(getByText('')).toBeTruthy();
     });
+
+    it('shows an accessible verified icon without visible Verified text', () => {
+      const { getByLabelText, queryByText } = render(
+        <ModelCard
+          model={{
+            ...baseModel,
+            author: 'Unsloth',
+            credibility: {
+              source: 'verified-quantizer',
+              isOfficial: false,
+              isVerifiedQuantizer: true,
+              verifiedBy: 'Unsloth',
+            },
+          }}
+          compact={true}
+        />
+      );
+
+      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(queryByText('Verified')).toBeNull();
+      expect(queryByText(/Unsloth/)).toBeTruthy();
+    });
   });
 
   // ============================================================================

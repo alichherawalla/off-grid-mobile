@@ -134,6 +134,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   cardRowDense: {
     alignItems: 'center' as const,
     marginTop: 0,
+    gap: SPACING.sm,
   },
   cardContent: {
     flex: 1,

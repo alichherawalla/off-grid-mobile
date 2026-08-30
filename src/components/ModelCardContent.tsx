@@ -85,19 +85,19 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
       <View style={styles.denseTitleRow}>
         <Text style={styles.denseName} numberOfLines={1}>{model.name}</Text>
         <View style={styles.denseSourceGroup}>
-          {(recommended || isTrending) && (
-            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
-          )}
-          <Text style={styles.denseSource} numberOfLines={1}>
-            {sourceLabels.join(' · ')}
-          </Text>
           {isVerified && (
-            <Icon
-              name="check-circle"
+            <MaterialIcon
+              name="verified"
               size={12}
               color={colors.primary}
               accessibilityLabel="Verified"
             />
+          )}
+          <Text style={styles.denseSource} numberOfLines={1}>
+            {sourceLabels.join(' · ')}
+          </Text>
+          {(recommended || isTrending) && (
+            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
           )}
         </View>
       </View>
