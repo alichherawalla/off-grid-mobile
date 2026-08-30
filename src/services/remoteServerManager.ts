@@ -42,9 +42,11 @@ class RemoteServerManager {
       return existing;
     }
 
-    const id = store.addServer(config);
-    if (config.apiKey) {
-      await this.storeApiKey(id, config.apiKey);
+    // Credentials belong only in Keychain. Never put them in the persisted Zustand server record.
+    const { apiKey, ...publicConfig } = config;
+    const id = store.addServer(publicConfig);
+    if (apiKey) {
+      await this.storeApiKey(id, apiKey);
     }
 
     const server = store.getServerById(id);

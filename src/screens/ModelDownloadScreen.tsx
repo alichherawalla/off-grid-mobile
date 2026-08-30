@@ -11,7 +11,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, ModelCard } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { RemoteServerModal } from '../components/RemoteServerModal';
 import { useTheme, useThemedStyles } from '../theme';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import { isAccelerableQuant } from '../utils/acceleration';
@@ -143,7 +142,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [reachableServerIds, setReachableServerIds] = useState<Set<string>>(new Set());
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(true);
-  const [showServerModal, setShowServerModal] = useState(false);
   const healthCheckInFlight = useRef(false);
 
   const { colors } = useTheme();
@@ -289,11 +287,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
     finally { setConnectingServerId(null); }
   };
 
-  const handleServerSaved = useCallback(() => {
-    setShowServerModal(false);
-    refreshServerHealth();
-  }, [refreshServerHealth]);
-
   const totalRamGB = hardwareService.getTotalMemoryGB();
 
   // Curated LiteRT models — Android-only. Offer a file when it FITS the RAM budget, OR when it is
@@ -366,7 +359,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
             isScanning={isScanning}
             onConnectServer={handleConnectServer}
             onScanNetwork={handleScanNetwork}
-            onAddManually={() => setShowServerModal(true)}
+            onAddManually={() => navigation.navigate('RemoteServerEditor')}
             colors={colors}
           />
 
@@ -440,7 +433,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <CustomAlert visible={alertState.visible} title={alertState.title} message={alertState.message} buttons={alertState.buttons} onClose={() => setAlertState(hideAlert())} />
-        <RemoteServerModal visible={showServerModal} onClose={() => setShowServerModal(false)} onSave={handleServerSaved} />
       </View>
     </SafeAreaView>
   );

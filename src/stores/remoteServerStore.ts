@@ -89,8 +89,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       // Server CRUD
       addServer: (serverData) => {
         const id = generateId();
+        const { apiKey: _apiKey, ...publicData } = serverData;
         const server: RemoteServer = {
-          ...serverData,
+          ...publicData,
           id,
           createdAt: new Date().toISOString(),
         };
@@ -103,9 +104,11 @@ export const useRemoteServerStore = create<RemoteServerState>()(
 
       updateServer: (id, updates) => {
         set((state) => ({
-          servers: state.servers.map((s) =>
-            s.id === id ? { ...s, ...updates } : s
-          ),
+          servers: state.servers.map((server) => {
+            if (server.id !== id) return server;
+            const { apiKey: _apiKey, ...publicServer } = { ...server, ...updates };
+            return publicServer;
+          }),
         }));
         logger.log('[RemoteServer] Updated server:', id);
       },
@@ -248,6 +251,21 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             }));
           }
 
+          if (result.success && result.mediaModels) {
+            set((state) => ({
+              servers: state.servers.map((candidate) => candidate.id === serverId
+                ? {
+                    ...candidate,
+                    mediaModels: {
+                      ...result.mediaModels,
+                      ...candidate.mediaModels,
+                    },
+                    updatedAt: new Date().toISOString(),
+                  }
+                : candidate),
+            }));
+          }
+
           return result;
         } catch (error) {
           set({ isLoading: false, testingServerId: null });
@@ -312,7 +330,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       name: 'remote-servers',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        servers: state.servers,
+        servers: state.servers.map(({ apiKey: _apiKey, ...server }) => server),
         activeServerId: state.activeServerId,
         activeRemoteTextModelId: state.activeRemoteTextModelId,
         activeRemoteImageModelId: state.activeRemoteImageModelId,
@@ -322,4 +340,3 @@ export const useRemoteServerStore = create<RemoteServerState>()(
     }
   )
 );
-

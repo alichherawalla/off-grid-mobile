@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useAppStore } from '../../stores';
+import { useWhisperStore, useAppStore, useRemoteServerStore } from '../../stores';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
@@ -54,13 +54,24 @@ function cancelActiveCapture(input: {
 }
 
 /** Build the one readiness boundary shared by realtime and file transcription. */
-function createWhisperReadiness(downloadedModelId: string | null): () => Promise<boolean> {
+function createWhisperReadiness(
+  downloadedModelId: string | null,
+  remoteTranscriptionAvailable: boolean,
+): () => Promise<boolean> {
+  if (remoteTranscriptionAvailable) return async () => true;
   return () => ensureWhisperForTranscription({
     isSelectedModelLoaded: () => !!downloadedModelId &&
       whisperService.getLoadedModelPath() === whisperService.getModelPath(downloadedModelId),
     hasDownloadedModel: () => !!downloadedModelId,
     loadWhisper: () => useWhisperStore.getState().loadModel(),
     freeGenerationModels: () => activeModelService.unloadAllModels(true).then(() => {}),
+  });
+}
+
+function useRemoteTranscriptionAvailable(): boolean {
+  return useRemoteServerStore(state => {
+    const server = state.servers.find(item => item.id === state.activeServerId);
+    return !!server?.mediaModels?.transcription;
   });
 }
 
@@ -73,6 +84,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
   const onAutoSendRef = useRef(onAutoSend);
   onAutoSendRef.current = onAutoSend;
   const { downloadedModelId, transcriptionLanguage } = useWhisperStore();
+  const remoteTranscriptionAvailable = useRemoteTranscriptionAvailable();
   const [isDirectRecording, setIsDirectRecording] = useState(false);
   const [isAudioModeRecording, setIsAudioModeRecording] = useState(false);
   /** Hands-free: the mic is open but nobody has spoken yet, so the turn has not begun. */
@@ -91,7 +103,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
   const shouldUseFilePath = (): boolean =>
     isInAudioInterfaceMode() && !!downloadedModelId && !supportsDirectAudio();
 
-  const ensureWhisper = createWhisperReadiness(downloadedModelId);
+  const ensureWhisper = createWhisperReadiness(downloadedModelId, remoteTranscriptionAvailable);
 
   const {
     isRecording: isWhisperRecording,
@@ -111,7 +123,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
   const error = directError ?? whisperError;
 
   // voiceAvailable: direct audio OR whisper downloaded
-  const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
+  const voiceAvailable = supportsDirectAudio() || !!downloadedModelId || remoteTranscriptionAvailable;
 
   useVoiceSessionDriver({
     // Hands-free auto-arm is voice-mode only (a global setting leaves the session in `listen`, so
@@ -144,7 +156,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
 
-    if (supportsDirectAudio()) {
+    if (supportsDirectAudio() || remoteTranscriptionAvailable) {
       try {
         setIsDirectRecording(true);
         await audioRecorderService.startRecording();
@@ -184,7 +196,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
   const transcribeRecordedFile = async (path: string, errLabel: string): Promise<{ whisperReady: boolean; transcript: string }> => {
     let whisperReady = false;
     let transcript = '';
-    if (downloadedModelId) {
+    if (downloadedModelId || remoteTranscriptionAvailable) {
       setIsTranscribingFile(true);
       try {
         whisperReady = await ensureWhisper();

@@ -17,6 +17,9 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [notes, setNotes] = useState('');
+  const [imageModelId, setImageModelId] = useState('');
+  const [transcriptionModelId, setTranscriptionModelId] = useState('');
+  const [voiceModelId, setVoiceModelId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -30,6 +33,9 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       setName(server.name);
       setEndpoint(server.endpoint);
       setNotes(server.notes || '');
+      setImageModelId(server.mediaModels?.image || '');
+      setTranscriptionModelId(server.mediaModels?.transcription || '');
+      setVoiceModelId(server.mediaModels?.voice || '');
       // Load existing API key from keychain so user can see it's set
       remoteServerManager.getApiKey(server.id).then((key) => {
         if (!cancelled) setApiKey(key || '');
@@ -40,6 +46,9 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       setEndpoint('');
       setApiKey('');
       setNotes('');
+      setImageModelId('');
+      setTranscriptionModelId('');
+      setVoiceModelId('');
     }
     setErrors({});
     setTestResult(null);
@@ -79,6 +88,13 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
         if (result.models && result.models.length > 0) {
           setDiscoveredModels(result.models);
         }
+        if (result.mediaModels) {
+          setImageModelId((current) => current || result.mediaModels?.image || '');
+          setTranscriptionModelId(
+            (current) => current || result.mediaModels?.transcription || '',
+          );
+          setVoiceModelId((current) => current || result.mediaModels?.voice || '');
+        }
       } else {
         const triedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
         setTestResult({ success: false, message: `${result.error || 'Connection failed'}\nTried: ${triedUrl}` });
@@ -92,28 +108,58 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
 
   const saveServer = useCallback(async () => {
     try {
+      const mediaModels = {
+        ...(imageModelId.trim() ? { image: imageModelId.trim() } : {}),
+        ...(transcriptionModelId.trim()
+          ? { transcription: transcriptionModelId.trim() }
+          : {}),
+        ...(voiceModelId.trim() ? { voice: voiceModelId.trim() } : {}),
+      };
       if (server) {
-        await remoteServerManager.updateServer(server.id, { name, endpoint, notes, apiKey });
+        await remoteServerManager.updateServer(server.id, {
+          name,
+          endpoint,
+          notes,
+          apiKey,
+          mediaModels,
+        });
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(server.id, discoveredModels);
         }
         onSave?.(server);
       } else {
         const newServer = await remoteServerManager.addServer({
-          name, endpoint, providerType: 'openai-compatible', notes: notes || undefined, apiKey: apiKey || undefined,
+          name,
+          endpoint,
+          providerType: 'openai-compatible',
+          notes: notes || undefined,
+          apiKey: apiKey || undefined,
+          mediaModels,
         });
         if (discoveredModels.length > 0) {
           useRemoteServerStore.getState().setDiscoveredModels(newServer.id, discoveredModels);
         }
-        // Silently probe health so status shows immediately instead of "Unknown"
-        remoteServerManager.testConnection(newServer.id).catch(() => { });
+        // Probe before closing so no network work outlives this editor session.
+        await remoteServerManager.testConnection(newServer.id).catch(() => undefined);
         onSave?.(newServer);
       }
       onClose();
     } catch (error) {
       setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Failed to save server'));
     }
-  }, [server, name, endpoint, apiKey, notes, discoveredModels, onSave, onClose]);
+  }, [
+    server,
+    name,
+    endpoint,
+    apiKey,
+    notes,
+    imageModelId,
+    transcriptionModelId,
+    voiceModelId,
+    discoveredModels,
+    onSave,
+    onClose,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (!validateForm()) return;
@@ -138,6 +184,9 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     endpoint, setEndpoint,
     apiKey, setApiKey,
     notes, setNotes,
+    imageModelId, setImageModelId,
+    transcriptionModelId, setTranscriptionModelId,
+    voiceModelId, setVoiceModelId,
     errors,
     isTesting,
     testResult,

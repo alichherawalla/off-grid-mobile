@@ -30,6 +30,7 @@ export function saveImageGenerationResult(
     guidanceScale: number;
     useOpenCL: boolean;
     startTime: number;
+    isRemote?: boolean;
   },
 ): GeneratedImage {
   const { params, activeImageModel } = input;
@@ -37,7 +38,7 @@ export function saveImageGenerationResult(
   if (params.conversationId) result.conversationId = params.conversationId;
   const appStore = useAppStore.getState();
   appStore.addGeneratedImage(result);
-  appStore.markImageModelWarmed(activeImageModel.id);
+  if (!input.isRemote) appStore.markImageModelWarmed(activeImageModel.id);
   appStore.completeChecklistStep('triedImageGen');
   scheduleImageSharePrompt();
 

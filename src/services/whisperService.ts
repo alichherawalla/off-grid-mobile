@@ -12,6 +12,8 @@ import * as whisperModelFiles from './whisperModelFiles';
 import { whisperDecodeOptions } from './whisperDecodeOptions';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
+import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { remoteMediaRuntime } from './remoteMediaRuntime';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
 // to keep this file within the max-lines budget). Behavior-neutral: every existing
@@ -33,6 +35,7 @@ class WhisperService {
   private stopFn: (() => Promise<void>) | null = null;
   private readonly realtimeStart = new RealtimeStartBarrier();
   private isReleasingContext: boolean = false;
+  private remoteTranscription: AbortController | null = null;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
   private readonly modelDownloads = new WhisperModelDownloads();
@@ -354,6 +357,11 @@ class WhisperService {
 
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
+    if (this.remoteTranscription) {
+      this.remoteTranscription.abort();
+      this.remoteTranscription = null;
+      return;
+    }
     try {
       if (!this.stopFn) {
         logger.log('[WhisperService] Stop is waiting for realtime startup');
@@ -438,6 +446,22 @@ class WhisperService {
       onProgress?: (progress: number) => void;
     },
   ): Promise<string> {
+    const remoteServer = useRemoteServerStore.getState().getActiveServer();
+    if (remoteServer?.mediaModels?.transcription) {
+      const controller = new AbortController();
+      this.remoteTranscription = controller;
+      try {
+        return cleanTranscription(
+          await remoteMediaRuntime.transcribe(
+            remoteServer,
+            { fileUri: filePath, language: options?.language },
+            { signal: controller.signal },
+          ),
+        );
+      } finally {
+        if (this.remoteTranscription === controller) this.remoteTranscription = null;
+      }
+    }
     if (!this.context) {
       throw new Error('No Whisper model loaded');
     }

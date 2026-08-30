@@ -175,14 +175,6 @@ jest.mock('../../../src/components/Button', () => ({
   },
 }));
 
-jest.mock('../../../src/components/RemoteServerModal', () => ({
-  RemoteServerModal: ({ visible }: any) => {
-    if (!visible) return null;
-    const { View, Text } = require('react-native');
-    return <View testID="remote-server-modal"><Text>Add Remote Server</Text></View>;
-  },
-}));
-
 jest.mock('../../../src/components/AnimatedEntry', () => ({
   AnimatedEntry: ({ children }: any) => children,
 }));

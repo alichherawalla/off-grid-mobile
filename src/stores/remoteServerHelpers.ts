@@ -6,7 +6,7 @@
  * Extracted from remoteServerStore to keep the store file under the line limit.
  */
 
-import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
+import { RemoteServer, RemoteModel, RemoteMediaModelIds, ServerTestResult } from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import {
@@ -20,6 +20,34 @@ import {
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
+
+async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMediaModelIds> {
+  const url = server.endpoint.replace(/\/+$/, '');
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (server.apiKey) headers.Authorization = `Bearer ${server.apiKey}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${url}/v1/models`, { headers, signal: controller.signal });
+    if (!response.ok) return {};
+    const payload = await response.json();
+    if (!Array.isArray(payload?.data)) return {};
+
+    const result: RemoteMediaModelIds = {};
+    for (const model of payload.data as Array<{ id?: unknown; kind?: unknown }>) {
+      if (typeof model.id !== 'string' || typeof model.kind !== 'string') continue;
+      if (model.kind === 'image' && !result.image) result.image = model.id;
+      if (model.kind === 'transcription' && !result.transcription) result.transcription = model.id;
+      if (model.kind === 'speech' && !result.voice) result.voice = model.id;
+    }
+    return result;
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 /**
  * The Off Grid AI Desktop gateway tags every /v1/models entry with a modality
@@ -72,7 +100,10 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
     }
 
     // Try to discover models
-    const models = await fetchModelsFromServer(server);
+    const [models, mediaModels] = await Promise.all([
+      fetchModelsFromServer(server),
+      fetchGatewayMediaModels(server),
+    ]);
 
     // Detect server type
     const serverType = await detectServerType(server.endpoint, 5000, server.apiKey);
@@ -81,6 +112,7 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
       success: true,
       latency: testResult.latency,
       models,
+      mediaModels,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,
@@ -118,13 +150,17 @@ export async function testEndpointAndGetModels(
       createdAt: new Date().toISOString(),
       apiKey,
     };
-    const models = await fetchModelsFromServer(tempServer);
+    const [models, mediaModels] = await Promise.all([
+      fetchModelsFromServer(tempServer),
+      fetchGatewayMediaModels(tempServer),
+    ]);
     const serverType = await detectServerType(endpoint, 5000, apiKey);
 
     return {
       success: true,
       latency: testResult.latency,
       models,
+      mediaModels,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,

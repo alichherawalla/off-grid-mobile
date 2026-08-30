@@ -20,7 +20,6 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, useThemedStyles } from '../theme';
 import { useRemoteServerStore, useAppStore } from '../stores';
-import { RemoteServerModal } from '../components/RemoteServerModal';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Button } from '../components/Button';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
@@ -43,8 +42,6 @@ export const RemoteServersScreen: React.FC = () => {
   const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } = useRemoteServerStore();
   const autoDiscover = useAppStore(s => s.settings.autoDiscoverRemoteModels === true);
   const updateSettings = useAppStore(s => s.updateSettings);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
@@ -177,7 +174,7 @@ export const RemoteServersScreen: React.FC = () => {
           <Button
             title="Add manually"
             variant="secondary"
-            onPress={() => setShowAddModal(true)}
+            onPress={() => navigation.navigate('RemoteServerEditor')}
             style={styles.actionButton}
             testID="add-server"
             icon={<Icon name="plus" size={14} color={theme.colors.text} />}
@@ -265,7 +262,9 @@ export const RemoteServersScreen: React.FC = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.serverAction}
-                      onPress={() => setEditingServer(server)}
+                      onPress={() =>
+                        navigation.navigate('RemoteServerEditor', { serverId: server.id })
+                      }
                     >
                       <Icon name="edit-2" size={13} color={theme.colors.textSecondary} />
                       <Text style={styles.serverActionText}>Edit</Text>
@@ -286,19 +285,6 @@ export const RemoteServersScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
-
-      <RemoteServerModal
-        visible={showAddModal || !!editingServer}
-        onClose={() => {
-          setShowAddModal(false);
-          setEditingServer(null);
-        }}
-        server={editingServer || undefined}
-        onSave={() => {
-          setShowAddModal(false);
-          setEditingServer(null);
-        }}
-      />
 
       <CustomAlert
         {...alertState}

@@ -10,6 +10,8 @@ import {
   defaultImageSteps,
 } from '../utils/imageGenAdvice';
 import { Platform } from 'react-native';
+import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { runRemoteImageGeneration } from './remoteImageGeneration';
 import {
   generationProgressStatus,
   imagePhaseTransitionLog,
@@ -55,6 +57,7 @@ class ImageGenerationService {
 
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
+  private remoteRequest: AbortController | null = null;
   /** Last generate request, so a failure card's Retry button can re-run it. */
   private _lastParams: GenerateImageParams | null = null;
 
@@ -106,21 +109,7 @@ class ImageGenerationService {
       appStore.setImagePreviewPath(this.state.previewPath);
   }
 
-  /**
-   * The SINGLE owner of generation failure (SRP): move to the error phase AND
-   * surface the reason via the common dismissible failure card (modelFailureHandler)
-   * — NOT a flat chat message. So a failure is never silent, never a chat bubble,
-   * and the handling is defined once. The card detects insufficient-memory from the
-   * error text and offers "Free memory & Retry" (re-runs the last request); when the
-   * underlying cause is the OVERRIDABLE memory gate it ALSO offers "Load Anyway"
-   * (re-run forcing the load past the budget) — parity with the text-model path.
-   * Returns null for `return this._fail(...)`.
-   *
-   * `opts.cause` carries the ORIGINAL thrown error (not just its message) so the
-   * failure surface can read the OverridableMemoryError discriminant. Without it the
-   * typed error is lost to a string and the override can never be offered — the exact
-   * bug this fixes.
-   */
+  /** Own the terminal error state and its retry actions. */
   private _fail(error: string, opts?: { cause?: unknown }): null {
     this.updateState({
       phase: 'error',
@@ -366,6 +355,17 @@ class ImageGenerationService {
     }
     this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
+    const remoteServer = useRemoteServerStore.getState().getActiveServer();
+    if (remoteServer?.mediaModels?.image) {
+      return runRemoteImageGeneration(params, remoteServer, {
+        updateState: state => this.updateState(state),
+        fail: message => this._fail(message),
+        isCancelled: () => this.cancelRequested,
+        setRequest: controller => {
+          this.remoteRequest = controller;
+        },
+      });
+    }
     const { settings, activeImageModelId, downloadedImageModels } =
       useAppStore.getState();
     const activeImageModel = downloadedImageModels.find(
@@ -462,6 +462,7 @@ class ImageGenerationService {
   async cancelGeneration(): Promise<void> {
     if (!isInFlight(this.state.phase)) return;
     this.cancelRequested = true;
+    this.remoteRequest?.abort();
     // Publish the terminal while conversation identity is still present. Sync subscribers run
     // synchronously, so every peer can remove its live image card before native cancellation waits.
     this.updateState({

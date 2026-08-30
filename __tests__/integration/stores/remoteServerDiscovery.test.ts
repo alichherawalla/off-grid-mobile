@@ -28,6 +28,7 @@ jest.mock('../../../src/services/httpClient', () => ({
 }));
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { detectServerType, testEndpoint } from '../../../src/services/httpClient';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -566,6 +567,36 @@ describe('remoteServerDiscovery integration', () => {
       expect(models.some((m) => m.id === 'sdxl')).toBe(false);
       expect(models.some((m) => m.id === 'kokoro')).toBe(false);
       expect(models.some((m) => m.id === 'whisper-base')).toBe(false);
+    });
+
+    it('records active media models when it tests a named Desktop', async () => {
+      addServer({ id: 'srv-gw', endpoint: 'http://192.168.1.44:7878', name: 'Studio Mac' }); // NOSONAR
+      (testEndpoint as jest.Mock).mockResolvedValue({ success: true, latency: 8 });
+      (detectServerType as jest.Mock).mockResolvedValue({ type: 'off-grid-desktop' });
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(jsonResponse({
+            object: 'list',
+            data: [
+              { id: 'gemma-3', kind: 'chat' },
+              { id: 'sdxl', kind: 'image' },
+              { id: 'kokoro', kind: 'speech' },
+              { id: 'whisper-base', kind: 'transcription' },
+            ],
+          }));
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+
+      const result = await useRemoteServerStore.getState().testConnection('srv-gw');
+
+      expect(result.mediaModels).toEqual({
+        image: 'sdxl',
+        transcription: 'whisper-base',
+        voice: 'kokoro',
+      });
+      expect(useRemoteServerStore.getState().getServerById('srv-gw')?.mediaModels)
+        .toEqual(result.mediaModels);
     });
 
     it('still lists models from servers that do not send kind (Ollama/LM Studio)', async () => {

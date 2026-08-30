@@ -2,7 +2,7 @@ import type { ThemeColors, ThemeShadows } from '../../theme/palettes';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 
 /**
- * The add / edit server sheet, on the same tokens as the rest of the app.
+ * The full-screen server editor, on the same tokens as the rest of the app.
  *
  * This file named no token at all before: fourteen hardcoded font sizes with no family, seven
  * weights of 500 or 600 against a bar of 400, and about thirty magic spacings. So the sheet drew
@@ -12,8 +12,12 @@ import { SPACING, TYPOGRAPHY } from '../../constants';
  */
 export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
   return {
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
     container: {
-      // No flex: 1 - let content size naturally with enableDynamicSizing
+      flex: 1,
     },
     content: {
       paddingHorizontal: SPACING.lg,

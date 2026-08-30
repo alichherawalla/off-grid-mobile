@@ -174,6 +174,12 @@ export async function initializeProvidersImpl(
 
   for (const server of servers) {
     try {
+      // One-time migration from builds that wrote the key into AsyncStorage. Move it into Keychain,
+      // then rewrite the public server record without the credential.
+      if (server.apiKey) {
+        await storeApiKeyImpl(server.id, server.apiKey);
+        store.updateServer(server.id, { apiKey: undefined });
+      }
       await createProviderForServerImpl(server);
       // Re-discover models on startup to refresh capability data from the server
       // (persisted data may be stale if models were added/removed while offline)
