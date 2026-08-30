@@ -74,10 +74,44 @@ describe('Android mesh residency truth in the rendered Sync journey', () => {
       await meshResidencyPolicy.hold();
     });
 
-    expect(ui.getByText('Foreground only')).toBeTruthy();
+    expect(ui.queryByText('Foreground only')).toBeNull();
     expect(ui.getByTestId('sync-residency-notice').props.children).toBe(
       'Sync works while Off Grid AI Mobile is open. Android could not keep this device reachable in the background.',
     );
     expect(ui.queryByText('Running in background')).toBeNull();
+  });
+
+  it('keeps the Discoverable toggle as the status owner when advertising health is stale', () => {
+    useSyncStore.getState().setRuntimeHealth({
+      transport: {
+        listener: { state: 'ready' },
+        routes: [{ id: 'lan', state: 'ready' }],
+      },
+      discovery: {
+        routes: [
+          {
+            id: 'lan',
+            browse: { state: 'ready' },
+            advertise: {
+              state: 'failed',
+              error: 'Nearby network access is unavailable.',
+            },
+            peerCount: 0,
+          },
+        ],
+      },
+      scan: { state: 'settled', finishedAt: Date.now() },
+      peerCount: 0,
+    });
+
+    const ui = render(
+      <NavigationContainer>
+        <SyncScreen />
+      </NavigationContainer>,
+    );
+
+    expect(ui.getByTestId('sync-toggle-discoverable')).toBeTruthy();
+    expect(ui.queryByText('Not discoverable')).toBeNull();
+    expect(ui.getByText(/Other devices cannot find this device/)).toBeTruthy();
   });
 });

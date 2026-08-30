@@ -1,14 +1,8 @@
 import { installRealSqlite } from '../../harness/sqliteFake';
 
-/**
- * Mobile startup must compact the durable op log before whole-record snapshots enter the JS heap.
- *
- * This uses the real Pro store, the real shared sync store, and a real in-memory SQLite engine. Only
- * the native op-sqlite binding is replaced. Repeated large snapshots are the production failure:
- * loading all of them before the normal in-memory compaction can exhaust a phone's process.
- */
+/** Uses the real Pro store and shared sync store with only the native SQLite binding replaced. */
 describe('Pro state op store startup', () => {
-  it('deletes superseded snapshots before returning the startup log', async () => {
+  it('keeps the complete operation log across restart', async () => {
     installRealSqlite();
 
     const { StateOpStore } = require('../../../pro/sync/stateOpStore');
@@ -42,8 +36,44 @@ describe('Pro state op store startup', () => {
     const loaded = await new StateOpStore().load();
 
     expect(loaded.map((op: { opId: string }) => op.opId)).toEqual([
+      'old-task',
       'current-task',
     ]);
-    expect(countOps(opStoreDriver)).toBe(1);
+    expect(countOps(opStoreDriver)).toBe(2);
+  });
+
+  it('keeps receive watermarks across restart', async () => {
+    installRealSqlite();
+
+    const { StateOpStore } = require('../../../pro/sync/stateOpStore');
+    const store = new StateOpStore();
+    await store.load();
+    store.append({
+      opId: 'phone-old-value',
+      entity: 'shared_file',
+      entityId: 'file-1',
+      kind: 'put',
+      fields: { name: 'old.png' },
+      lamport: 40,
+      deviceId: 'phone',
+      ts: 1,
+    });
+    store.append({
+      opId: 'desktop-current-value',
+      entity: 'shared_file',
+      entityId: 'file-1',
+      kind: 'put',
+      fields: { name: 'current.png' },
+      lamport: 41,
+      deviceId: 'desktop',
+      ts: 2,
+    });
+
+    const restarted = new StateOpStore();
+    await restarted.load();
+
+    expect(restarted.entityVersionVector()).toEqual({
+      shared_file: { phone: 40, desktop: 41 },
+    });
   });
 });

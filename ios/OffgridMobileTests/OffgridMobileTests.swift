@@ -21,6 +21,52 @@ private func makeTempDirectory() -> URL {
   return url
 }
 
+final class BlobChannelInterfaceCandidatesTests: XCTestCase {
+  func testUsableKeepsOnlyActiveUnicastInterfacesAndPreservesNames() {
+    let candidates = [
+      record("en0", "192.168.1.10"),
+      record("utun3", "100.80.1.2"),
+      record("lo0", "127.0.0.1", isLoopback: true),
+      record("en0", "169.254.2.3", isLinkLocal: true),
+      record("down0", "10.0.0.4", isUp: false),
+      record("any0", "0.0.0.0", isAnyLocal: true),
+      record("cast0", "224.0.0.1", isMulticast: true),
+    ]
+
+    XCTAssertEqual(
+      BlobChannelSupport.usableInterfaceCandidates(candidates),
+      [record("en0", "192.168.1.10"), record("utun3", "100.80.1.2")])
+  }
+
+  func testUsableDeduplicatesPerInterfaceWithoutCollapsingDifferentInterfaces() {
+    let candidate = record("utun3", "100.64.0.9")
+
+    XCTAssertEqual(
+      BlobChannelSupport.usableInterfaceCandidates(
+        [candidate, candidate, record("utun4", "100.64.0.9")]),
+      [candidate, record("utun4", "100.64.0.9")])
+  }
+
+  private func record(
+    _ interfaceName: String,
+    _ host: String,
+    isUp: Bool = true,
+    isLoopback: Bool = false,
+    isLinkLocal: Bool = false,
+    isAnyLocal: Bool = false,
+    isMulticast: Bool = false
+  ) -> BlobChannelSupport.InterfaceCandidate {
+    BlobChannelSupport.InterfaceCandidate(
+      interfaceName: interfaceName,
+      host: host,
+      isUp: isUp,
+      isLoopback: isLoopback,
+      isLinkLocal: isLinkLocal,
+      isAnyLocal: isAnyLocal,
+      isMulticast: isMulticast)
+  }
+}
+
 final class BlobReceiveWindowTests: XCTestCase {
   func testBodyWaitsForOneCompleteAuthenticatedFrame() {
     let productionFrame = 4 * 1_048_576 + BlobFrameCipher.tagBytes

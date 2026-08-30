@@ -35,6 +35,23 @@ class BlobChannelModule(
         work.execute { promise.resolve(BlobCrypto.lanAddress()) }
     }
 
+    /** All current IPv4 interfaces; the shared QR projector decides which routes are safe. */
+    @ReactMethod
+    fun interfaceCandidates(promise: Promise) {
+        work.execute {
+            val result = Arguments.createArray()
+            BlobCrypto.interfaceCandidates().forEach { candidate ->
+                result.pushMap(
+                    Arguments.createMap().apply {
+                        putString("host", candidate.host)
+                        putString("interfaceName", candidate.interfaceName)
+                    },
+                )
+            }
+            promise.resolve(result)
+        }
+    }
+
     /**
      * Offer an endpoint for one transfer, and answer the url a peer should stream to.
      *

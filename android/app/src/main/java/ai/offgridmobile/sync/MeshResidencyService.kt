@@ -13,6 +13,8 @@ import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -105,8 +107,12 @@ class MeshResidencyService : Service() {
             val status: String,
             val reason: String? = null,
         ) {
-            fun asMap(): Map<String, String?> =
-                mapOf("status" to status, "reason" to reason)
+            /** Project service state into the only map type that can cross the React Native bridge. */
+            fun toWritableMap(target: WritableMap = Arguments.createMap()): WritableMap =
+                target.apply {
+                    putString("status", status)
+                    if (reason == null) putNull("reason") else putString("reason", reason)
+                }
         }
 
         /**

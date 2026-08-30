@@ -28,6 +28,8 @@ import logger from '../../utils/logger';
 interface BlobNativeModule {
   /** The IPv4 address this device's native sync endpoints can actually listen on. */
   lanAddress?(): Promise<string | null>;
+  /** Current IPv4 interfaces. Shared sync code owns route safety and classification. */
+  interfaceCandidates?(): Promise<unknown>;
   serve(options: {
     requestId: string;
     destinationPath: string;
@@ -67,6 +69,40 @@ function nativeChannel(): BlobNativeModule | undefined {
 /** The address shared by the control socket and native blob endpoint, from one native owner. */
 export async function nativeSyncLanAddress(): Promise<string> {
   return (await nativeChannel()?.lanAddress?.()) ?? '';
+}
+
+export interface NativePairingRouteCandidate {
+  host: string;
+  interfaceName?: string;
+}
+
+/** Stateless live read for the existing address watcher and the pairing QR flow. */
+export async function nativePairingRouteCandidates(): Promise<
+  NativePairingRouteCandidate[]
+> {
+  const value = await nativeChannel()?.interfaceCandidates?.();
+  if (!Array.isArray(value)) return [];
+  const candidates: NativePairingRouteCandidate[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const candidate = entry as { host?: unknown; interfaceName?: unknown };
+    if (typeof candidate.host !== 'string' || candidate.host.length === 0) {
+      continue;
+    }
+    if (
+      candidate.interfaceName !== undefined &&
+      typeof candidate.interfaceName !== 'string'
+    ) {
+      continue;
+    }
+    candidates.push({
+      host: candidate.host,
+      ...(candidate.interfaceName
+        ? { interfaceName: candidate.interfaceName }
+        : {}),
+    });
+  }
+  return candidates;
 }
 
 /**

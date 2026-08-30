@@ -66,6 +66,7 @@ export interface NativeSyncCallbacks {
   onDiscovered?: (device: DiscoveredDevice) => void;
   onLost?: (deviceId: string) => void;
   onDiscoveryStateChanged?: (snapshot: DiscoveryScanSnapshot) => void;
+  onReconnectFailed?: (device: DeviceInfo, error: Error) => void;
   onHealthChanged?: (health: SyncDiscoverabilityHealthInput) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
   onMessage?: (deviceId: string, message: Message) => void;
@@ -237,6 +238,7 @@ export function createNativeSync(
       cbs.onDiscoveryStateChanged?.(snapshot);
       publishHealth();
     },
+    onReconnectFailed: cbs.onReconnectFailed,
     additionalSources: proximity
       ? [{ id: 'proximity', service: proximity.discovery }]
       : undefined,
@@ -296,7 +298,7 @@ export function createNativeSync(
     if (addressWatch) return;
     addressWatch = setInterval(() => {
       if (!active) return;
-      void reactToLocalAddress().catch((error: unknown) => {
+      reactToLocalAddress().catch((error: unknown) => {
         logger.warn(
           `[SYNC] could not follow this device's address change: ${
             error instanceof Error ? error.message : String(error)

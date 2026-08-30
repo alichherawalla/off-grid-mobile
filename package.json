@@ -74,6 +74,7 @@
     "react-native-inappbrowser-reborn": "^3.7.1",
     "react-native-keyboard-controller": "^1.21.12",
     "react-native-keychain": "^10.0.0",
+    "react-native-qrcode-svg": "^6.3.21",
     "react-native-reanimated": "^4.2.1",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "^4.20.0",

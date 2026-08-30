@@ -45,9 +45,12 @@ jest.mock('react-native-edge-to-edge', () => ({
 // QR scanner (mesh Scan-to-pair) can render in jest without the native view.
 jest.mock('react-native-vision-camera', () => ({
   Camera: () => null,
-  useCameraDevice: () => undefined,
-  useCameraPermission: () => ({ hasPermission: false, requestPermission: jest.fn() }),
-  useCodeScanner: (config: unknown) => config,
+  useCameraDevice: jest.fn(() => undefined),
+  useCameraPermission: jest.fn(() => ({
+    hasPermission: false,
+    requestPermission: jest.fn(),
+  })),
+  useCodeScanner: jest.fn((config: unknown) => config),
 }));
 
 // ============================================================================

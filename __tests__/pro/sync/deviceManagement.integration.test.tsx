@@ -1,7 +1,9 @@
 import React from 'react';
+import { NativeModules, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   fireEvent,
+  act,
   render,
   waitFor,
   within,
@@ -9,8 +11,21 @@ import {
 } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TcpSocket from 'react-native-tcp-socket';
-import { OFFGRID_SYNC_PORT, type DeviceInfo } from '@offgrid/sync';
+import QRCode from 'react-native-qrcode-svg';
+import {
+  OFFGRID_SYNC_PORT,
+  PAIRING_QR_VALIDITY_MS,
+  encodePairingQrPayload,
+  parsePairingCode,
+  parsePairingQrPayload,
+  type DeviceInfo,
+} from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
+import {
+  useCameraDevice,
+  useCameraPermission,
+  useCodeScanner,
+} from 'react-native-vision-camera';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
   registerScreen,
@@ -90,6 +105,7 @@ const mesh = createLicensedMesh();
 
 describe('Pro mobile saved-device management journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
+  let extraRemotes: ReturnType<typeof buildSyncEngine>[] = [];
   let ui: ReturnType<typeof render> | undefined;
   let secrets: Map<string, string>;
   /** What the pairing store has actually written, read back out of the Keychain the app used. */
@@ -99,6 +115,7 @@ describe('Pro mobile saved-device management journey', () => {
 
   beforeEach(async () => {
     mesh.reset();
+    extraRemotes = [];
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
     resetTcpPortRoutes();
@@ -134,14 +151,376 @@ describe('Pro mobile saved-device management journey', () => {
   });
 
   afterEach(async () => {
+    jest.useRealTimers();
     mesh.restore();
     ui?.unmount();
     await remote?.engine.stop();
+    await Promise.all(extraRemotes.map(peer => peer.engine.stop()));
     await syncService.stop();
     _clearScreensForTesting();
     _clearSlotsForTesting();
     _clearSectionsForTesting();
+    useAppStore.getState().setThemeMode('system');
+    delete (NativeModules as Record<string, unknown>).SyncBlobChannelModule;
+    (useCameraDevice as jest.Mock).mockReturnValue(undefined);
+    (useCameraPermission as jest.Mock).mockReturnValue({
+      hasPermission: false,
+      requestPermission: jest.fn(),
+    });
+    (useCodeScanner as jest.Mock).mockClear();
   });
+
+  it('shows the current pairing QR on demand and updates it after rotation', async () => {
+    (NativeModules as Record<string, unknown>).SyncBlobChannelModule = {
+      lanAddress: jest.fn(async () => '192.168.1.25'),
+      interfaceCandidates: jest.fn(async () => [
+        { host: '192.168.1.25', interfaceName: 'en0' },
+        { host: '100.70.80.90', interfaceName: 'utun4' },
+      ]),
+    };
+    useAppStore.getState().setThemeMode('dark');
+    await syncService.start();
+    ui = render(
+      <NavigationContainer>
+        <SyncScreen />
+      </NavigationContainer>,
+    );
+
+    const firstCode = await pairingCodeOnScreen(ui);
+    expect(ui.getByLabelText('Show pairing QR code')).toBeTruthy();
+    expect(ui.queryByTestId('sync-pairing-qr')).toBeNull();
+    const codeRow = within(ui.getByTestId('sync-pairing-code-row'));
+    const actionRow = within(ui.getByTestId('sync-pairing-code-actions'));
+    expect(codeRow.getByTestId('sync-pairing-code-value')).toBeTruthy();
+    expect(actionRow.getByTestId('sync-rotate-pairing-code')).toBeTruthy();
+    const showQr = ui.getByTestId('sync-show-pairing-qr');
+    const scanQr = ui.getByTestId('sync-open-pairing-scanner');
+    expect(actionRow.getByTestId('sync-show-pairing-qr')).toBe(showQr);
+    expect(actionRow.getByTestId('sync-open-pairing-scanner')).toBe(scanQr);
+    expect(StyleSheet.flatten(showQr.props.style)).toEqual(
+      expect.objectContaining({ width: 44, height: 44 }),
+    );
+    expect(StyleSheet.flatten(scanQr.props.style)).toEqual(
+      expect.objectContaining({ width: 44, height: 44 }),
+    );
+    expect(
+      (
+        NativeModules.SyncBlobChannelModule as {
+          interfaceCandidates: jest.Mock;
+        }
+      ).interfaceCandidates,
+    ).not.toHaveBeenCalled();
+
+    fireEvent.press(ui.getByTestId('sync-show-pairing-qr'));
+    expect(ui.getByTestId('sync-pairing-qr-loading')).toBeTruthy();
+    const firstQr = await waitFor(() => ui!.getByTestId('sync-pairing-qr'));
+    expect(firstQr.props.accessibilityRole).toBe('image');
+    expect(firstQr.props.accessibilityValue).toBeUndefined();
+    const firstQrSvg = ui.UNSAFE_getByType(QRCode);
+    const firstValue = firstQrSvg.props.value as string;
+    const firstPayload = parsePairingQrPayload(firstValue);
+    expect(firstPayload).toEqual(
+      expect.objectContaining({
+        device: expect.objectContaining({ id: PHONE_FINGERPRINT }),
+        pairingCode: parsePairingCode(firstCode),
+        routes: [
+          { kind: 'lan', host: '192.168.1.25', port: OFFGRID_SYNC_PORT },
+          {
+            kind: 'tailscale',
+            host: '100.70.80.90',
+            port: OFFGRID_SYNC_PORT,
+          },
+        ],
+        issuedAt: expect.any(Number),
+      }),
+    );
+    expect(firstQr.props.accessibilityHint).toMatch(/pairing code/i);
+    expect(firstQrSvg.props.value).toBe(firstValue);
+    expect(firstQrSvg.props.ecl).toBe('H');
+    expect(firstQrSvg.props.logo).toBeTruthy();
+
+    useAppStore.getState().setThemeMode('light');
+    expect(
+      await waitFor(() => ui!.getByTestId('sync-pairing-qr')),
+    ).toBeTruthy();
+    fireEvent.press(ui.getByText('Close'));
+    await waitFor(() =>
+      expect(ui!.queryByTestId('sync-pairing-qr')).toBeNull(),
+    );
+
+    fireEvent.press(ui.getByTestId('sync-rotate-pairing-code'));
+    await waitFor(() =>
+      expect(
+        ui!.getByTestId('sync-pairing-code-value').props.children,
+      ).not.toBe(firstCode),
+    );
+    const nextCode = await pairingCodeOnScreen(ui);
+    jest.useFakeTimers({ now: Date.now() });
+    fireEvent.press(ui.getByTestId('sync-show-pairing-qr'));
+    expect(ui.getByTestId('sync-pairing-qr-loading')).toBeTruthy();
+    const rotatedQr = await waitFor(() => ui!.getByTestId('sync-pairing-qr'));
+    expect(rotatedQr.props.accessibilityValue).toBeUndefined();
+    const rotatedValue = ui.UNSAFE_getByType(QRCode).props.value as string;
+    expect(parsePairingQrPayload(rotatedValue)).toEqual(
+      expect.objectContaining({ pairingCode: parsePairingCode(nextCode) }),
+    );
+    expect(rotatedValue).not.toBe(firstValue);
+    expect(nextCode).not.toBe(firstCode);
+
+    const rotatedPayload = parsePairingQrPayload(rotatedValue);
+    await act(async () => {
+      jest.advanceTimersByTime(PAIRING_QR_VALIDITY_MS - 60_000);
+      await Promise.resolve();
+    });
+    const refreshedValue = ui.UNSAFE_getByType(QRCode).props.value as string;
+    const refreshedPayload = parsePairingQrPayload(refreshedValue);
+    expect(refreshedValue).not.toBe(rotatedValue);
+    expect(refreshedPayload).toEqual(
+      expect.objectContaining({
+        device: rotatedPayload?.device,
+        pairingCode: rotatedPayload?.pairingCode,
+        routes: rotatedPayload?.routes,
+        issuedAt: expect.any(Number),
+      }),
+    );
+    expect(refreshedPayload!.issuedAt).toBeGreaterThan(
+      rotatedPayload!.issuedAt,
+    );
+    jest.useRealTimers();
+  });
+
+  it('keeps the QR action unavailable until the pairing code is ready', () => {
+    ui = render(
+      <NavigationContainer>
+        <SyncScreen />
+      </NavigationContainer>,
+    );
+
+    expect(ui.getByTestId('sync-pairing-code-value').props.children).toBe(
+      'Loading...',
+    );
+    expect(
+      ui.getByTestId('sync-show-pairing-qr').props.accessibilityState.disabled,
+    ).toBe(true);
+    fireEvent.press(ui.getByTestId('sync-show-pairing-qr'));
+    expect(ui.queryByTestId('sync-pairing-qr')).toBeNull();
+  });
+
+  it('shows one visible scanner, rejects an expired code, then pairs the exact QR device and route', async () => {
+    mesh.register({
+      id: 'desktop-qr-peer',
+      name: 'QR Desktop',
+      platform: 'macos',
+    });
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-qr-peer',
+      name: 'QR Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '192.168.1.90',
+      port: 0,
+    };
+    const persistence = new MembershipPersistenceBoundary();
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
+      getSharedSecret: deviceId =>
+        persistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: persistence,
+      membershipPersistence: persistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <SyncScreen />
+        </NavigationContainer>
+      </>,
+    );
+
+    fireEvent.press(ui.getByTestId('sync-open-pairing-scanner'));
+    expect(ui.getByText('Camera access needed')).toBeTruthy();
+    expect(ui.getAllByTestId('qr-scanner-close')).toHaveLength(1);
+    fireEvent.press(ui.getByTestId('qr-scanner-close'));
+
+    (useCameraDevice as jest.Mock).mockReturnValue({ id: 'back-camera' });
+    (useCameraPermission as jest.Mock).mockReturnValue({
+      hasPermission: true,
+      requestPermission: jest.fn(),
+    });
+    fireEvent.press(ui.getByTestId('sync-open-pairing-scanner'));
+    const scanner = (useCodeScanner as jest.Mock).mock.calls.at(-1)?.[0] as {
+      onCodeScanned(codes: { value: string }[]): void;
+    };
+    const encode = (now: number) =>
+      encodePairingQrPayload(
+        {
+          device: remoteDevice,
+          pairingCode: TYPED_PAIRING_CODE,
+          routes: [
+            {
+              kind: 'lan',
+              host: remoteDevice.host,
+              port: remoteDevice.port,
+            },
+          ],
+        },
+        now,
+      );
+
+    act(() => {
+      scanner.onCodeScanned([
+        { value: encode(Date.now() - PAIRING_QR_VALIDITY_MS - 1) },
+      ]);
+    });
+    expect(ui.getByText(/This QR code has expired/)).toBeTruthy();
+
+    act(() => {
+      scanner.onCodeScanned([{ value: encode(Date.now()) }]);
+    });
+    expect(ui.getAllByText('Connecting to QR Desktop').length).toBeGreaterThan(
+      0,
+    );
+    await waitFor(
+      () =>
+        expect(
+          within(ui!.getByTestId('sync-paired-desktop-qr-peer')).getByText(
+            /Connected/,
+          ),
+        ).toBeTruthy(),
+      { timeout: 10_000 },
+    );
+    await waitFor(() => {
+      const failure = ui!.queryByTestId('qr-scanner-status');
+      if (failure) throw new Error(`scanner failed: ${failure.props.children}`);
+      expect(ui!.queryByTestId('qr-scanner-close')).toBeNull();
+    });
+    expect(
+      getTcpDials().some(
+        dial =>
+          dial.host === remoteDevice.host && dial.port === remoteDevice.port,
+      ),
+    ).toBe(true);
+  }, 20_000);
+
+  it('keeps Rescan running when one saved peer is unreachable and another is reachable', async () => {
+    const devices: DeviceInfo[] = [
+      {
+        id: 'desktop-unreachable',
+        name: 'Studio Desktop',
+        platform: 'macos',
+        version: '1',
+        host: '127.0.0.1',
+        port: 0,
+      },
+      {
+        id: 'desktop-reachable',
+        name: 'Travel Desktop',
+        platform: 'macos',
+        version: '1',
+        host: '127.0.0.1',
+        port: 0,
+      },
+    ];
+    for (const device of devices) {
+      mesh.register({
+        id: device.id,
+        name: device.name,
+        platform: device.platform,
+      });
+      const persistence = new MembershipPersistenceBoundary();
+      const peer = buildSyncEngine({
+        pairingEntitlement: mesh.peer(),
+        localDevice: device,
+        tcpModule: nativeTcpBoundary,
+        getPassphrase: async () => TYPED_PAIRING_CODE,
+        getSharedSecret: deviceId =>
+          persistence.getActive(deviceId)?.sharedSecret,
+        pairingPersistence: persistence,
+        membershipPersistence: persistence,
+      });
+      await peer.engine.start(0);
+      device.port = peer.transport.boundPort ?? 0;
+      extraRemotes.push(peer);
+    }
+
+    await syncService.start();
+    ui = render(
+      <NavigationContainer>
+        <SyncScreen />
+      </NavigationContainer>,
+    );
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    const code = await pairingCodeOnScreen(ui);
+    for (const peer of extraRemotes) {
+      await peer.engine.pair(
+        { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+        code,
+      );
+    }
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-paired-desktop-unreachable')).toBeTruthy(),
+    );
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-paired-desktop-reachable')).toBeTruthy(),
+    );
+
+    await extraRemotes[0].engine.stop();
+    discovery.lose(devices[0].id);
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId('sync-paired-desktop-unreachable')).getByText(
+          /Offline/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    await waitFor(() => expect(ui!.queryByTestId('sync-scanning')).toBeNull());
+    fireEvent.press(ui.getByTestId('sync-rescan'));
+    await waitFor(() => expect(ui!.getByTestId('sync-scanning')).toBeTruthy());
+    discovery.resolve(devices[0]);
+    discovery.resolve(devices[1]);
+
+    await waitFor(
+      () =>
+        expect(
+          getTcpDials().some(
+            dial => dial.port === devices[0].port && dial.refused,
+          ),
+        ).toBe(true),
+      { timeout: 10_000 },
+    );
+    await waitFor(() =>
+      expect(
+        useSyncStore.getState().reachabilityErrorByDeviceId[devices[0].id],
+      ).toBeTruthy(),
+    );
+    await waitFor(
+      () =>
+        expect(
+          within(ui!.getByTestId('sync-paired-desktop-unreachable')).getByText(
+            /Could not reach/,
+          ),
+        ).toBeTruthy(),
+      { timeout: 10_000 },
+    );
+    expect(
+      within(ui.getByTestId('sync-paired-desktop-reachable')).getByText(
+        /Connected/,
+      ),
+    ).toBeTruthy();
+    expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
+    expect(ui.getByTestId('sync-reconnect-desktop-unreachable')).toBeTruthy();
+  }, 20_000);
 
   it('disconnects, reconnects, pairs again from an offline row, and forgets a paired desktop', async () => {
     // This desktop has been on the licence all along, as a real paired peer would be: the roster is
@@ -563,7 +942,9 @@ describe('Pro mobile saved-device management journey', () => {
     });
 
     fireEvent.press(ui.getByTestId('sync-open-connection-settings'));
-    expect(await waitFor(() => ui!.getByTestId('sync-port-input'))).toBeTruthy();
+    expect(
+      await waitFor(() => ui!.getByTestId('sync-port-input')),
+    ).toBeTruthy();
     fireEvent.changeText(ui.getByTestId('sync-port-input'), '40123');
     fireEvent.press(ui.getByTestId('sync-port-save'));
     await waitFor(() => {

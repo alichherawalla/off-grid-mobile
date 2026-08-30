@@ -114,7 +114,10 @@ describe('the licence this phone holds', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await load()
+      .proLicenseProvider.clearForTesting?.()
+      .catch(() => undefined);
     jest.useRealTimers();
     keygen.restore();
     jest.restoreAllMocks();
@@ -244,18 +247,35 @@ describe('the licence this phone holds', () => {
       });
     });
 
-    it('waits for the mesh, and says so when it never arrives', async () => {
+    it('waits through delayed Sync startup for the registration owner', async () => {
+      jest.useFakeTimers();
+      const provider = load();
+      const mesh = activationOwner();
+
+      const activation = provider.proLicenseProvider.activate!(LICENCE_KEY);
+      setTimeout(
+        () => provider.setDirectEntitlementActivationOwner(mesh.owner),
+        6_000,
+      );
+
+      await jest.advanceTimersByTimeAsync(6_000);
+      await expect(activation).resolves.toEqual({ ok: true });
+      expect(mesh.calls).toEqual(['prepare', 'commit', 'finalize']);
+    });
+
+    it('reports local activation startup when the registration owner never arrives', async () => {
+      jest.useFakeTimers();
       const provider = load();
 
       // No activation owner registered: on a build where sync has not started, the seat cannot be claimed. This
-      // is the reason activation appears to hang and then fails rather than reporting a bad key.
-      await expect(
-        provider.proLicenseProvider.activate!(LICENCE_KEY),
-      ).resolves.toEqual({
+      // is local startup state, not proof that the licence service could not be reached.
+      const activation = provider.proLicenseProvider.activate!(LICENCE_KEY);
+      await jest.advanceTimersByTimeAsync(30_000);
+      await expect(activation).resolves.toEqual({
         ok: false,
-        reason: 'network_unavailable',
+        reason: 'activation_unavailable',
       });
-    }, 10_000);
+    });
 
     it('lets the mesh be swapped out and put back', async () => {
       const provider = load();
@@ -487,7 +507,9 @@ describe('the licence this phone holds', () => {
       provider.setDirectEntitlementActivationOwner(activationOwner().owner);
       await provider.proLicenseProvider.activate!(LICENCE_KEY);
 
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: true,
         tier: 'monthly',
       });
@@ -543,11 +565,17 @@ describe('the licence this phone holds', () => {
       provider.setDirectEntitlementActivationOwner(activationOwner().owner);
       await provider.proLicenseProvider.activate!(LICENCE_KEY);
 
-      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(true);
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        true,
+      );
       await jest.advanceTimersByTimeAsync(5_001);
 
-      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(false);
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        false,
+      );
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: false,
         credentialSaved: true,
       });
@@ -596,7 +624,9 @@ describe('the licence this phone holds', () => {
       now = start + 5_000;
       await provider.proLicenseProvider.revalidate!('foreground');
 
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: false,
         credentialSaved: true,
         expired: true,
@@ -617,12 +647,16 @@ describe('the licence this phone holds', () => {
       );
       const provider = load();
 
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: false,
         credentialSaved: true,
         expired: true,
       });
-      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(false);
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        false,
+      );
     });
 
     it('closes access at the exact saved deadline without a network event', async () => {
@@ -642,7 +676,9 @@ describe('the licence this phone holds', () => {
 
       await jest.advanceTimersByTimeAsync(5_000);
 
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: false,
         expired: true,
       });
@@ -659,7 +695,9 @@ describe('the licence this phone holds', () => {
 
       await jest.advanceTimersByTimeAsync(10 * 365 * 24 * 60 * 60 * 1_000);
 
-      await expect(provider.proLicenseProvider.getInfo()).resolves.toMatchObject({
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
         isPro: true,
         tier: 'lifetime',
         expiry: null,

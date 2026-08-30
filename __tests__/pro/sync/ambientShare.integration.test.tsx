@@ -240,7 +240,9 @@ describe('mobile ambient sharing journey', () => {
           entity: string,
           entityId: string,
           fields: Record<string, unknown>,
-        ) => remoteRecords.set(`${entity}:${entityId}`, fields),
+        ) => {
+          remoteRecords.set(`${entity}:${entityId}`, fields);
+        },
         remove: (entity: string, entityId: string) =>
           remoteRecords.delete(`${entity}:${entityId}`),
       },
@@ -648,6 +650,7 @@ describe('mobile ambient sharing journey', () => {
     ).toBeTruthy();
     fireEvent.press(ui.getByTestId('sync-file-filter-screenshot'));
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
+
   }, 30_000);
 
   async function captureScreenshot(options: {

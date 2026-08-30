@@ -1,9 +1,11 @@
 package ai.offgridmobile.sync
 
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableMap
 
 /**
  * Android half of the mesh residency contract (see src/services/sync/nativeMeshResidency.ts).
@@ -14,6 +16,7 @@ import com.facebook.react.bridge.ReactMethod
  */
 class MeshResidencyModule(
     private val reactContext: ReactApplicationContext,
+    private val snapshotMapFactory: () -> WritableMap = { Arguments.createMap() },
 ) : ReactContextBaseJavaModule(reactContext) {
     override fun getName(): String = "MeshResidencyModule"
 
@@ -29,7 +32,7 @@ class MeshResidencyModule(
     fun begin(promise: Promise) {
         try {
             MeshResidencyService.start(reactContext) { snapshot ->
-                promise.resolve(snapshot.asMap())
+                promise.resolve(snapshot.toWritableMap(snapshotMapFactory()))
             }
         } catch (e: IllegalStateException) {
             // Android throws when a foreground service is started from a disallowed state (for
@@ -43,7 +46,9 @@ class MeshResidencyModule(
 
     @ReactMethod
     fun state(promise: Promise) {
-        promise.resolve(MeshResidencyService.currentSnapshot().asMap())
+        promise.resolve(
+            MeshResidencyService.currentSnapshot().toWritableMap(snapshotMapFactory()),
+        )
     }
 
     @ReactMethod

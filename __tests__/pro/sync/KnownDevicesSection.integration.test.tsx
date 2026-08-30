@@ -63,6 +63,7 @@ describe('<KnownDevicesSection/> action ownership', () => {
         manualEndpointDeviceIds={[]}
         onSendModel={jest.fn()}
         onForget={jest.fn(async () => undefined)}
+        reachabilityErrors={{}}
       />,
     );
 
