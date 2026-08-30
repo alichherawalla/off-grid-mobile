@@ -1287,3 +1287,77 @@ Local evidence: Mobile and Mobile Pro typecheck and ESLint pass; seven focused s
 covering both task kinds, applied, rejected, unrelated, and timed-out controls, two-Desktop default and
 named routing, disabled/offline rejection, chat rendering, and non-task approval preservation. Keep
 this entry open only for the final narrow and wide physical-device checks on iOS and Android.
+
+---
+
+## RESOLVED 2026-08-29: a fresh Android device reported the license server as unavailable
+
+The connected Android device reached Keygen. Validation returned HTTP 200 with
+`FINGERPRINT_SCOPE_MISMATCH`. This code means the key exists but the new device fingerprint is not on
+the license yet. It is an internal activation signal, not a network error and not a user-facing
+failure.
+
+The fixed activation path passed live at 23:34 local:
+
+- the first machine-list request returned HTTP 200 with four devices;
+- machine activation returned HTTP 201;
+- the local entitlement transaction completed prepare, commit, and finalize;
+- the final machine-list request returned HTTP 200 with five devices;
+- the user confirmed that Off Grid AI Pro activation succeeded.
+
+This closes the fresh-device activation defect. Do not repeat the live check unless licensing code or
+activation-owner wiring changes. The final Android production build remains a separate release gate.
+
+---
+
+## Release 107 two-way exact-operation Sync needs final device proof
+
+**Status:** Shared Code and build evidence exist; final Mobile Built and Live verified gates are
+open. Filed 2026-08-29.
+
+Mobile loads the full operation log through `loadOps()`. No Mobile production caller uses Shared
+compaction helpers. Durable per-entity and per-device watermarks restore anti-entropy position, while
+exact operation IDs own delivery acknowledgement and deduplication. Mobile must still accept a valid
+delayed operation below a watermark.
+
+Keep this gap open until the final Android and iOS builds pass and one final physical journey proves
+both directions:
+
+1. One Mobile change reaches Desktop once.
+2. One Desktop change reaches Mobile once.
+3. A restart does not cause a record flood or active compaction.
+4. A destination-gated delayed operation still arrives when its destination becomes eligible.
+
+---
+
+## Release 107 QR, reconnect, and residency changes need final Mobile proof
+
+**Status:** Shared QR and Android residency Code evidence pass. Mobile UI code is still being
+finalized. Final iOS and Android Built and Live verified gates are open. Filed 2026-08-30.
+
+The Shared pairing contract is built and tested. The Sync ESM, CJS, and DTS builds pass. Focused QR,
+real-handshake, and ESM/CJS runtime checks pass 21/21. The final QR suite passes 11/11. Sync typecheck,
+focused ESLint, and diff check pass.
+
+The Android residency crash came from resolving a Kotlin `LinkedHashMap` through a React Native
+Promise. `MeshResidencyModule.begin()` and `state()` now use one canonical `ResidencySnapshot` to
+`WritableMap` projection. Native checks pass 7/7. Focused rendered checks pass 23/23 with
+open-handle detection and a clean exit.
+
+Keep this gap open until the final Mobile code and these installed checks pass:
+
+1. On iPhone, Show QR Code opens a bottom sheet. The code is hidden before that action.
+2. Scan QR Code is a direct action. A valid scan identifies the device, shows the connection target,
+   selects the best reachable private route, and completes the identity-confirmed handshake.
+3. Stale, malformed, duplicate, and wrong-device payloads stop without pairing. A plain pairing code
+   remains available.
+4. Rescan continues when one saved route is unavailable. That device row shows the failure and its
+   reconnect action. The screen does not show an orphaned page-level transport error.
+5. The local device card uses the Discoverable to new devices and Find nearby devices controls. It
+   does not repeat them with a generic Not discoverable label.
+6. The final iOS build passes and the iPhone flows pass through iPhone Mirroring.
+7. After the Android phone is connected again, the final Android build passes. Start Personal Mesh,
+   confirm there is no residency crash, then repeat QR, reconnect, and discovery checks on Android.
+
+Android live verification is explicitly deferred while the phone is disconnected. Do not close this
+gap from unit, rendered, simulator, or iPhone evidence alone.
