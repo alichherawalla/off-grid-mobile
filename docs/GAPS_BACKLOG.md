@@ -1399,3 +1399,29 @@ passes 3/3 without the prior post-test teardown crash.
 
 Keep the parent Release 107 reconnect gap open. The code is not built or live verified on iOS or
 Android. The final installed-device reconnect journeys remain required.
+
+### Android QR permission and duplicate-scan failures found in the final device pass (2026-08-30)
+
+**Status:** code repair in progress; final Android build and installed verification required.
+
+The connected Android build did not request camera access because its manifest did not declare
+`android.permission.CAMERA`. The scanner used VisionCamera's runtime permission owner correctly, but
+Android cannot display a runtime prompt for a permission absent from the installed package.
+
+The user then scanned a QR for a device that was already connected. Mobile started a second pairing
+handshake and showed `The connection closed before pairing completed.` The transport message was a
+symptom of the redundant handshake. A connected identity must make the scan idempotent. A saved but
+offline identity must use its stored trust to reconnect through the safe QR route instead of starting
+a new pairing handshake.
+
+Evidence:
+
+- `adb dumpsys package ai.offgridmobile.dev` did not list Camera under runtime permissions.
+- `adb appops get ai.offgridmobile.dev CAMERA` returned `ignore`.
+- The pre-fix native manifest contract failed because Camera was absent.
+- The pre-fix rendered Personal Mesh journey recorded a second TCP dial for the repeated QR scan.
+- User screenshot: `Screenshot 2026-08-30 at 6.59.55 AM.png` showed the false connection-closed error.
+
+Close this gap only after the native manifest contract and rendered repeat-scan journey pass, the
+Android debug and release builds pass, the fixed debug app is installed without clearing data, and
+opening Scan QR shows the Android camera permission prompt once. Do not automate the camera scan.

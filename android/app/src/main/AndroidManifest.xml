@@ -12,6 +12,10 @@
     <!-- For voice recording -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- Requested only when the user opens the QR scanner. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- For haptic feedback -->
     <uses-permission android:name="android.permission.VIBRATE" />
 

@@ -237,12 +237,18 @@ describe('Pro mobile saved-device management journey', () => {
     expect(firstQr.props.accessibilityHint).toMatch(/pairing code/i);
     expect(firstQrSvg.props.value).toBe(firstValue);
     expect(firstQrSvg.props.ecl).toBe('H');
-    expect(firstQrSvg.props.logo).toBeTruthy();
+    expect(firstQrSvg.props.size).toBe(240);
+    expect(firstQrSvg.props.logoSize).toBe(42);
+    expect(firstQrSvg.props.color).toBe('#0A0A0A');
+    expect(firstQrSvg.props.backgroundColor).toBe('#FFFFFF');
+    const darkLogo = firstQrSvg.props.logo;
+    expect(darkLogo).toBeTruthy();
 
     useAppStore.getState().setThemeMode('light');
     expect(
       await waitFor(() => ui!.getByTestId('sync-pairing-qr')),
     ).toBeTruthy();
+    expect(ui.UNSAFE_getByType(QRCode).props.logo).not.toBe(darkLogo);
     fireEvent.press(ui.getByText('Close'));
     await waitFor(() =>
       expect(ui!.queryByTestId('sync-pairing-qr')).toBeNull(),
@@ -345,6 +351,9 @@ describe('Pro mobile saved-device management journey', () => {
 
     fireEvent.press(ui.getByTestId('sync-open-pairing-scanner'));
     expect(ui.getByText('Camera access needed')).toBeTruthy();
+    expect(
+      StyleSheet.flatten(ui.getByTestId('qr-scanner-root').props.style),
+    ).toEqual(expect.objectContaining({ zIndex: 2 }));
     expect(ui.getAllByTestId('qr-scanner-close')).toHaveLength(1);
     fireEvent.press(ui.getByTestId('qr-scanner-close'));
 
@@ -386,6 +395,7 @@ describe('Pro mobile saved-device management journey', () => {
     expect(ui.getAllByText('Connecting to QR Desktop').length).toBeGreaterThan(
       0,
     );
+    expect(ui.getByTestId('qr-scanner-loading')).toBeTruthy();
     await waitFor(
       () =>
         expect(
@@ -406,6 +416,70 @@ describe('Pro mobile saved-device management journey', () => {
           dial.host === remoteDevice.host && dial.port === remoteDevice.port,
       ),
     ).toBe(true);
+
+    const pairedRowsBeforeRepeat = useSyncStore
+      .getState()
+      .knownDevices.filter(device => device.id === remoteDevice.id);
+    expect(pairedRowsBeforeRepeat).toHaveLength(1);
+    const dialCountBeforeRepeat = getTcpDials().length;
+
+    fireEvent.press(ui.getByTestId('sync-open-pairing-scanner'));
+    const repeatedScanner = (useCodeScanner as jest.Mock).mock.calls.at(
+      -1,
+    )?.[0] as {
+      onCodeScanned(codes: { value: string }[]): void;
+    };
+    act(() => {
+      repeatedScanner.onCodeScanned([{ value: encode(Date.now()) }]);
+    });
+
+    await waitFor(() =>
+      expect(ui!.queryByTestId('qr-scanner-close')).toBeNull(),
+    );
+    expect(ui.queryByText('Pairing failed')).toBeNull();
+    expect(getTcpDials()).toHaveLength(dialCountBeforeRepeat);
+    expect(
+      useSyncStore
+        .getState()
+        .knownDevices.filter(device => device.id === remoteDevice.id),
+    ).toHaveLength(1);
+
+    const mobileDevice = useSyncStore.getState().thisDevice;
+    if (!mobileDevice) throw new Error('Sync did not create the Mobile device');
+    persistence.dropActive(mobileDevice.id);
+    remote.engine.disconnect(mobileDevice.id);
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+          /Offline|Needs repair/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    const dialCountBeforeRepairScan = getTcpDials().length;
+    fireEvent.press(ui.getByTestId('sync-open-pairing-scanner'));
+    const repairScanner = (useCodeScanner as jest.Mock).mock.calls.at(
+      -1,
+    )?.[0] as {
+      onCodeScanned(codes: { value: string }[]): void;
+    };
+    act(() => {
+      repairScanner.onCodeScanned([{ value: encode(Date.now()) }]);
+    });
+    expect(ui.getByTestId('qr-scanner-loading')).toBeTruthy();
+
+    await waitFor(
+      () =>
+        expect(
+          within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
+            /Connected/,
+          ),
+        ).toBeTruthy(),
+      { timeout: 10_000 },
+    );
+    expect(getTcpDials().length).toBeGreaterThan(dialCountBeforeRepairScan);
+    expect(persistence.getActive(mobileDevice.id)).toBeTruthy();
+    expect(ui.queryByText('unknown_device')).toBeNull();
   }, 20_000);
 
   it('keeps Rescan running when one saved peer is unreachable and another is reachable', async () => {
@@ -629,6 +703,9 @@ describe('Pro mobile saved-device management journey', () => {
       within(ui!.getByTestId('sync-home-card')).getByText(
         /0 connected - 1 saved/,
       ),
+    ).toBeTruthy();
+    expect(
+      within(ui!.getByTestId('sync-home-card')).getByText(/Discoverable/),
     ).toBeTruthy();
     fireEvent.press(ui.getByTestId('open-sync-from-home'));
 
@@ -935,13 +1012,15 @@ describe('Pro mobile saved-device management journey', () => {
     const discovery = getDiscoveryBoundaries().at(-1);
     if (!discovery) throw new Error('Sync discovery did not start');
     const stopsBefore = discovery.stopCount;
+    expect(ui.queryByTestId('sync-toggle-browsing')).toBeNull();
+    fireEvent.press(ui.getByTestId('sync-open-device-settings'));
+    expect(await waitFor(() => ui!.getByText('Device settings'))).toBeTruthy();
     fireEvent(ui.getByTestId('sync-toggle-browsing'), 'valueChange', false);
     await waitFor(() => {
       expect(discovery.stopCount).toBeGreaterThan(stopsBefore);
       expect(ui!.getByTestId('sync-browsing-off')).toBeTruthy();
     });
 
-    fireEvent.press(ui.getByTestId('sync-open-connection-settings'));
     expect(
       await waitFor(() => ui!.getByTestId('sync-port-input')),
     ).toBeTruthy();

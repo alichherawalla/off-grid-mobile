@@ -80,4 +80,32 @@ describe('<KnownDevicesSection/> action ownership', () => {
       expect(ui.queryByTestId('sync-reconnect-loader-mac-debug')).toBeNull(),
     );
   });
+
+  it('shows one actionable message when reconnect and reachability report the same failure', async () => {
+    const device = savedDevice('mac-debug', 'OGAD: Mac (Debug)');
+    const ui = render(
+      <KnownDevicesSection
+        devices={[device]}
+        pairingDeviceId={null}
+        onPair={jest.fn()}
+        onRepair={jest.fn(async () => 'reconnected')}
+        onDisconnect={jest.fn(() => true)}
+        onReconnect={jest.fn(async () => {
+          throw new Error('Host unreachable');
+        })}
+        onSetManualEndpoint={jest.fn()}
+        manualEndpointDeviceIds={[]}
+        onSendModel={jest.fn()}
+        onForget={jest.fn(async () => undefined)}
+        reachabilityErrors={{ 'mac-debug': 'Host unreachable' }}
+      />,
+    );
+
+    fireEvent.press(ui.getByTestId('sync-reconnect-mac-debug'));
+
+    await waitFor(() =>
+      expect(ui.getAllByText(/Could not reach/)).toHaveLength(1),
+    );
+    expect(ui.getByText(/Offline/)).toBeTruthy();
+  });
 });

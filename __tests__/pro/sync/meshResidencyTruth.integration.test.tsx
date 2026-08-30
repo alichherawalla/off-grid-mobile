@@ -1,7 +1,7 @@
 import React from 'react';
 import { NativeModules } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { meshResidencyPolicy } from '../../../pro/sync/meshResidency';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
@@ -110,6 +110,8 @@ describe('Android mesh residency truth in the rendered Sync journey', () => {
       </NavigationContainer>,
     );
 
+    expect(ui.queryByTestId('sync-toggle-discoverable')).toBeNull();
+    fireEvent.press(ui.getByTestId('sync-open-device-settings'));
     expect(ui.getByTestId('sync-toggle-discoverable')).toBeTruthy();
     expect(ui.queryByText('Not discoverable')).toBeNull();
     expect(ui.getByText(/Other devices cannot find this device/)).toBeTruthy();
