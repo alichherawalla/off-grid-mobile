@@ -21,6 +21,16 @@ import {
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
 
+async function fetchForDiscovery(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMediaModelIds> {
   const url = server.endpoint.replace(/\/+$/, '');
   const headers: Record<string, string> = { Accept: 'application/json' };
@@ -188,16 +198,10 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
 
   // Try OpenAI-compatible endpoint first
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
-
-    const response = await fetch(`${url}/v1/models`, {
+    const response = await fetchForDiscovery(`${url}/v1/models`, {
       method: 'GET',
       headers,
-      signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
@@ -265,17 +269,11 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
 
   // Try Ollama-specific endpoint (use origin to avoid double-path if endpoint has a prefix)
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
-
     const ollamaUrl = `${new URL(url).origin}/api/tags`;
-    const response = await fetch(ollamaUrl, {
+    const response = await fetchForDiscovery(ollamaUrl, {
       method: 'GET',
       headers,
-      signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
