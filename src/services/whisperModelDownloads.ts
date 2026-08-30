@@ -35,11 +35,9 @@ function cancelNativeOwner(
   owner: ActiveDownloadOwner,
   downloadId: string,
 ): Promise<void> {
-  if (!owner.nativeCancel) {
-    owner.nativeCancel = backgroundDownloadService
-      .cancelDownload(downloadId)
-      .catch(() => {});
-  }
+  owner.nativeCancel ??= backgroundDownloadService
+    .cancelDownload(downloadId)
+    .catch(() => {});
   return owner.nativeCancel;
 }
 
