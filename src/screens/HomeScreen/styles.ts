@@ -234,7 +234,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.sm + SPACING.xs,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
@@ -251,7 +251,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 10,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm + 2,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.sm + SPACING.xs,
     ...shadows.small,
   },
   conversationInfo: {
@@ -283,7 +283,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     width: 44,
     borderRadius: 10,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.sm + SPACING.xs,
     marginLeft: SPACING.sm,
   },
   statsRow: {
