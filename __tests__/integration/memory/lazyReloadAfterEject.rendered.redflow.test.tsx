@@ -9,6 +9,10 @@
  */
 import { setupChatScreen } from '../../harness/chatHarness';
 
+// Full CI coverage instrumentation makes this real rendered journey take
+// longer than Jest's 30-second default on the hosted macOS runner.
+jest.setTimeout(90_000);
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,
