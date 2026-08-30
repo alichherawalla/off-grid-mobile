@@ -48,7 +48,7 @@ const origin = {
 const FRAME_PAYLOAD = '/9j/2Q==';
 
 const taskToolName = (kind: SyncedTaskRun['kind']): string =>
-  kind === 'computer_use' ? 'computer_task' : kind;
+  kind === 'computer_use' ? 'computer_use' : kind;
 
 function taskRun(
   kind: SyncedTaskRun['kind'],

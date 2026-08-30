@@ -3,6 +3,8 @@ const mockEmailCalendarEntitlement = jest.fn();
 const mockDisconnectServer = jest.fn();
 const mockAudioCleanup = jest.fn();
 const mockGrantCleanup = jest.fn();
+const mockGrantRefreshCleanup = jest.fn();
+const mockCompanionTaskCleanup = jest.fn();
 const mockReconcileCleanup = jest.fn();
 let mockLicenseInfoListener: ((info: { isPro: boolean }) => void) | undefined;
 
@@ -86,12 +88,24 @@ jest.mock('../../pro/mcp/mcpService', () => ({
   reconnectSavedServers: jest.fn(async () => undefined),
 }));
 jest.mock('../../pro/mcp/mcpToolGrantService', () => ({
+  initConnectedToolGrantRefresh: () => mockGrantRefreshCleanup,
   initMcpToolGrants: () => mockGrantCleanup,
   initToolGrantReconcile: () => mockReconcileCleanup,
 }));
+jest.mock('../../pro/mcp/companionTaskMesh', () => ({
+  initCompanionTaskMesh: () => mockCompanionTaskCleanup,
+}));
 
 jest.mock('../../pro/sync/syncService', () => ({
-  syncService: { start: jest.fn(async () => undefined) },
+  syncService: {
+    prepareActivation: jest.fn(async () => undefined),
+    start: jest.fn(async () => undefined),
+    onAppMessage: jest.fn(() => jest.fn()),
+    onDisconnected: jest.fn(() => jest.fn()),
+    connectedDeviceIds: jest.fn(() => []),
+    thisDeviceId: jest.fn(() => undefined),
+    sendApp: jest.fn(() => false),
+  },
 }));
 jest.mock('../../pro/sync/modelTransferService', () => ({
   modelTransferService: { start: jest.fn() },
@@ -214,6 +228,8 @@ describe('the paid mobile runtime after live entitlement loss', () => {
     expect(disposeByHook.get('audio.hook')).toHaveBeenCalledTimes(1);
     expect(mockAudioCleanup).toHaveBeenCalledTimes(1);
     expect(mockGrantCleanup).toHaveBeenCalledTimes(1);
+    expect(mockGrantRefreshCleanup).toHaveBeenCalledTimes(1);
+    expect(mockCompanionTaskCleanup).toHaveBeenCalledTimes(1);
     expect(mockReconcileCleanup).toHaveBeenCalledTimes(1);
     expect(mockDisconnectServer).toHaveBeenCalledWith('server-1');
 

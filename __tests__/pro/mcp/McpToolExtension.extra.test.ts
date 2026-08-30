@@ -17,6 +17,7 @@
 // executeMcpTool is the sole boundary (needs a live native MCP client). Keep the rest
 // of mcpService REAL so getMcpToolsPrompt / parseMcpToolCallsFromText run for real.
 const mockExecuteMcpTool = jest.fn();
+const mockExecuteCompanionTask = jest.fn();
 jest.mock('@offgrid/pro/mcp/mcpService', () => {
   const actual = jest.requireActual('@offgrid/pro/mcp/mcpService');
   return {
@@ -25,6 +26,9 @@ jest.mock('@offgrid/pro/mcp/mcpService', () => {
     executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
   };
 });
+jest.mock('@offgrid/pro/mcp/companionTaskMesh', () => ({
+  executeCompanionTask: (input: unknown) => mockExecuteCompanionTask(input),
+}));
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -362,7 +366,10 @@ describe('execute', () => {
       ],
       connectedDeviceIds: ['desktop-1', 'desktop-2'],
     });
-    mockExecuteMcpTool.mockResolvedValue({ content: 'started', durationMs: 9 });
+    mockExecuteCompanionTask.mockResolvedValue({
+      content: 'started',
+      durationMs: 9,
+    });
 
     await McpToolExtension.execute({
       id: 'task-1',
@@ -374,20 +381,18 @@ describe('execute', () => {
       context: { conversationId: 'chat-mobile-1' },
     });
 
-    expect(mockExecuteMcpTool).toHaveBeenCalledWith(
-      'web_use',
-      { task: 'Find a flight', execution_device: 'studio alias' },
-      {
-        origin: {
+    expect(mockExecuteCompanionTask).toHaveBeenCalledWith({
+      deviceId: 'desktop-2',
+      name: 'web_use',
+      args: { task: 'Find a flight', execution_device: 'studio alias' },
+      origin: {
           conversationId: 'chat-mobile-1',
           launchId: expect.any(String),
           deviceId: 'phone-1',
           deviceName: 'Ali phone',
           executionDeviceId: 'desktop-2',
-        },
-        ownerId: 'studio-tools',
       },
-    );
+    });
   });
 
   it('returns a typed error result (does NOT throw) when the call rejects with an Error', async () => {

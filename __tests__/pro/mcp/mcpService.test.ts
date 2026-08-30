@@ -19,6 +19,7 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 // `mock`-prefixed so the hoisted jest.mock factory may reference them. The fake reads its
 // per-test behavior from these module-level knobs (a URL-keyed behavior map + a default).
 const mockClientCtor = jest.fn();
+const mockClientClose = jest.fn();
 const mockClientBehaviorByUrl: Record<
   string,
   {
@@ -45,6 +46,9 @@ jest.mock('../../../pro/mcp/mcpClient', () => {
     callTool() {
       const b = mockClientBehaviorByUrl[this.config.url];
       return b?.callTool ? b.callTool() : Promise.resolve('');
+    }
+    close() {
+      mockClientClose(this.config.url);
     }
   }
   return { McpClient: FakeMcpClient };
@@ -303,6 +307,25 @@ describe('connectServer', () => {
     await expect(executeMcpTool('badtool', {})).rejects.toThrow(
       'is not connected',
     );
+  });
+
+  it('discards a stale connection after the route is replaced', async () => {
+    const srv: McpServerConfig = { id: 'moving', name: 'Mac', url: 'http://old/mcp' };
+    useMcpStore.setState({ servers: [srv] });
+    let finishList!: (tools: McpTool[]) => void;
+    mockClientBehaviorByUrl['http://old/mcp'] = {
+      listTools: () => new Promise(resolve => { finishList = resolve; }),
+    };
+
+    const pending = connectServer('moving');
+    await new Promise(resolve => setImmediate(resolve));
+    disconnectServer('moving');
+    finishList([tool('computer_use')]);
+    await pending;
+
+    expect(mockClientClose).toHaveBeenCalledWith('http://old/mcp');
+    expect(useMcpStore.getState().connectionStates.moving).toBeUndefined();
+    expect(useMcpStore.getState().serverTools.moving).toBeUndefined();
   });
 
   describe('oauth flow', () => {

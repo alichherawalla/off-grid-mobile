@@ -32,3 +32,5 @@ export { ragService, retrievalService } from './rag';
 ;
 // Remote Server Manager
 export { remoteServerManager } from './remoteServerManager';
+export { remoteMediaRuntime } from './remoteMediaRuntime';
+export { activeRemoteVoiceServer, synthesizeRemoteVoiceFile } from './remoteVoicePlayback';

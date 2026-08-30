@@ -44,6 +44,14 @@ const runningComputerTask = {
   phase: 'acting' as const,
   currentStep: 4,
   currentAction: 'Typing the message',
+  plan: {
+    phases: [
+      { id: 'open', title: 'Open Slack' },
+      { id: 'find', title: 'Find Ali' },
+      { id: 'send', title: 'Send the update' },
+    ],
+    activePhaseIndex: 2,
+  },
   progress: [
     { sequence: 1, label: 'Opened Slack', at: 10 },
     { sequence: 2, label: 'Found Ali', at: 20 },
@@ -115,7 +123,7 @@ describe('synced Web Use and Computer Use task in chat', () => {
     const screen = render(
       <TaskChatCard
         message={{
-          toolName: 'computer_task',
+          toolName: 'computer_use',
           toolCallId: 'computer-call-1',
           content: `Task started. Task reference: ${runningComputerTask.taskId}.`,
         }}
@@ -124,8 +132,16 @@ describe('synced Web Use and Computer Use task in chat', () => {
 
     expect(screen.getByText('COMPUTER USE')).toBeTruthy();
     expect(screen.getByText(runningComputerTask.title)).toBeTruthy();
+    expect(screen.getByText('PLAN')).toBeTruthy();
+    expect(screen.getByText('Open Slack')).toBeTruthy();
+    expect(screen.getByText('Find Ali')).toBeTruthy();
+    expect(screen.getByText('Send the update')).toBeTruthy();
+    expect(screen.getAllByText('DONE')).toHaveLength(2);
+    expect(screen.getByText('NOW')).toBeTruthy();
     expect(screen.getByText('Typing the message')).toBeTruthy();
-    expect(screen.queryByText('Opened Slack')).toBeNull();
+    expect(screen.getByText('ACTIVITY')).toBeTruthy();
+    expect(screen.getByText('Opened Slack')).toBeTruthy();
+    expect(screen.getByText('Found Ali')).toBeTruthy();
     act(() =>
       fireEvent(screen.getByTestId('task-session-frame'), 'layout', {
         nativeEvent: { layout: { width: 300, height: 200, x: 0, y: 0 } },

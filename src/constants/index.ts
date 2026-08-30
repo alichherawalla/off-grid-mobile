@@ -17,10 +17,10 @@ export const OFF_GRID_DESKTOP_BENEFIT =
   'More power, same privacy. Run bigger models on Mac or Windows and keep every device in sync.';
 
 export const PRO_AHA_FEATURES = [
-  'Ambient across your devices',
-  'Proactive, not reactive',
-  'Private by architecture',
-  'It acts, you approve',
+  'Create images with the model active on your Desktop',
+  'Transcribe speech with the model active on your Desktop',
+  'Hear replies in the voice active on your Desktop',
+  'Control which models your named Desktop serves',
 ];
 
 // Hugging Face API configuration

@@ -13,7 +13,6 @@ import { CustomAlert, hideAlert, showAlert, SharePromptSheet, ProAhaSheet } from
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';
-import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
@@ -100,11 +99,6 @@ export const ChatScreen: React.FC = () => {
 
   const [proAhaVisible, setProAhaVisible] = useState(false);
   const proAhaShownThisSession = useRef(false);
-  useEffect(() => {
-    // Reset cycle on each new chat session so PRO sheet can fire again
-    useAppStore.getState().setProAhaTriggeredBy(null);
-    proAhaShownThisSession.current = false;
-  }, []);
   useEffect(() => subscribeProPrompt(() => {
     if (proAhaShownThisSession.current) return;
     proAhaShownThisSession.current = true;

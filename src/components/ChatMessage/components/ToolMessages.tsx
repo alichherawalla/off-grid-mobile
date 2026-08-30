@@ -24,7 +24,7 @@ function getToolIcon(toolName?: string): string {
     case 'web_use':
       return 'globe';
     case 'computer_use':
-    case 'computer_task':
+    case 'computer_use':
       return 'monitor';
     case 'calculator':
       return 'hash';
@@ -55,7 +55,7 @@ function getToolLabel(toolName?: string, content?: string): string {
     case 'web_use':
       return 'Web Use';
     case 'computer_use':
-    case 'computer_task':
+    case 'computer_use':
       return 'Computer Use';
     default:
       return toolName || 'Tool result';
@@ -66,7 +66,7 @@ function isTaskToolName(toolName?: string): boolean {
   return (
     toolName === 'web_use' ||
     toolName === 'computer_use' ||
-    toolName === 'computer_task'
+    toolName === 'computer_use'
   );
 }
 

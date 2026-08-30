@@ -222,4 +222,54 @@ describe('Release 107 rendered task-control acknowledgement', () => {
       });
     },
   );
+
+  it.each(['web_use', 'computer_use'] as const)(
+    'continues a waiting %s task after the user completes the step on its Mac',
+    async kind => {
+      const waiting: SyncedTaskRun = {
+        ...runningTask(kind),
+        status: 'waiting',
+        phase: 'waiting',
+        currentAction: 'Sign in on Office Mac',
+      };
+      const screen = renderTask(waiting);
+
+      expect(screen.getByText('Continue')).toBeTruthy();
+      expect(screen.getByText(/Complete the requested step on Office Mac/)).toBeTruthy();
+      expect(screen.getByText(/Your phone does not take control of the Mac/)).toBeTruthy();
+      expect(screen.queryByText('Take Over')).toBeNull();
+
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('task-control-continue'));
+      });
+      const request = useTaskRunStore.getState().requestedControlByTaskId[waiting.taskId];
+      expect(request).toMatchObject({ kind: 'resume', label: 'Continue', state: 'pending' });
+      expect(screen.getByText('Continue requested')).toBeTruthy();
+
+      act(() => {
+        materializer.put(
+          TASK_RUN_ENTITY,
+          waiting.taskId,
+          {
+            ...waiting,
+            status: 'running',
+            phase: 'acting',
+            currentAction: 'Continuing after sign-in',
+            updatedAt: 30,
+            latestControlResult: {
+              controlId: request!.controlId,
+              kind: 'resume',
+              outcome: 'applied',
+              respondedAt: 30,
+            },
+          },
+          origin,
+        );
+      });
+
+      expect(screen.queryByText('Continue requested')).toBeNull();
+      expect(screen.getByText('Continuing after sign-in')).toBeTruthy();
+      expect(screen.queryByTestId('task-handoff-guidance')).toBeNull();
+    },
+  );
 });

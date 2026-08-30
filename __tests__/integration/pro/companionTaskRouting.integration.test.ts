@@ -1,13 +1,24 @@
-import { TASK_ORIGIN_META_KEY } from '@offgrid/sync';
 import { McpToolExtension } from '@offgrid/pro/mcp/McpToolExtension';
-import type { McpClient } from '@offgrid/pro/mcp/mcpClient';
-import {
-  _registerClientDirect,
-  disconnectServer,
-} from '@offgrid/pro/mcp/mcpService';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
+import { initCompanionTaskMesh } from '@offgrid/pro/mcp/companionTaskMesh';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
+
+const mockMeshListeners: Array<(deviceId: string, channel: string, data: unknown) => void> = [];
+const mockMeshSendApp = jest.fn();
+
+jest.mock('@offgrid/pro/sync/syncService', () => ({
+  syncService: {
+    onAppMessage: (listener: (deviceId: string, channel: string, data: unknown) => void) => {
+      mockMeshListeners.push(listener);
+      return () => {
+        const index = mockMeshListeners.indexOf(listener);
+        if (index >= 0) mockMeshListeners.splice(index, 1);
+      };
+    },
+    sendApp: (...args: unknown[]) => mockMeshSendApp(...args),
+  },
+}));
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -24,7 +35,7 @@ jest.mock('react-native-zeroconf', () => {
 });
 
 const computerTask = {
-  name: 'computer_task',
+  name: 'computer_use',
   description: `Use the selected Desktop. ${'Route carefully. '.repeat(80)}`,
   inputSchema: {
     type: 'object',
@@ -53,17 +64,14 @@ function addDesktop(serverId: string, deviceId: string, name: string) {
 }
 
 describe('Mobile companion task routing integration', () => {
-  const calls = {
-    office: jest.fn(),
-    studio: jest.fn(),
-  };
+  let stopMesh: (() => void) | undefined;
 
   beforeEach(() => {
     useSyncStore.getState().reset();
     useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
     addDesktop('office-tools', 'desktop-office', 'Office Mac');
     addDesktop('studio-tools', 'desktop-studio', 'Studio Mac');
-    useMcpStore.getState().setEnabledTools(['computer_task']);
+    useMcpStore.getState().setEnabledTools(['computer_use']);
     useSyncStore.getState().setThisDevice({
       id: 'phone-1',
       name: 'Ali phone',
@@ -99,21 +107,27 @@ describe('Mobile companion task routing integration', () => {
     useSyncStore
       .getState()
       .setConnectedDeviceIds(['desktop-office', 'desktop-studio']);
-    calls.office.mockReset().mockResolvedValue('wrong Desktop');
-    calls.studio.mockReset().mockResolvedValue('task started');
-    _registerClientDirect('office-tools', {
-      callTool: calls.office,
-      close: jest.fn(),
-    } as unknown as McpClient);
-    _registerClientDirect('studio-tools', {
-      callTool: calls.studio,
-      close: jest.fn(),
-    } as unknown as McpClient);
+    mockMeshSendApp.mockReset().mockImplementation((deviceId, channel, data) => {
+      if (channel !== 'companion-task-call') return true;
+      const request = data as { requestId: string };
+      queueMicrotask(() => {
+        for (const listener of mockMeshListeners) {
+          listener(deviceId, 'companion-task-result', {
+            version: 1,
+            requestId: request.requestId,
+            ok: true,
+            content: 'task started',
+            durationMs: 5,
+          });
+        }
+      });
+      return true;
+    });
+    stopMesh = initCompanionTaskMesh();
   });
 
   afterEach(() => {
-    disconnectServer('office-tools');
-    disconnectServer('studio-tools');
+    stopMesh?.();
     useMcpStore.getState().removeServer('office-tools');
     useMcpStore.getState().removeServer('studio-tools');
     useSyncStore.getState().reset();
@@ -122,7 +136,7 @@ describe('Mobile companion task routing integration', () => {
   it('keeps Desktop selection visible to the model and sends its canonical ID', async () => {
     const schema = McpToolExtension.getOpenAISchemas!() as Array<any>;
     expect(schema).toHaveLength(1);
-    expect(schema[0].function.name).toBe('computer_task');
+    expect(schema[0].function.name).toBe('computer_use');
     expect(schema[0].function.parameters.properties).toHaveProperty(
       'execution_device',
     );
@@ -132,7 +146,7 @@ describe('Mobile companion task routing integration', () => {
 
     const result = await McpToolExtension.execute({
       id: 'task-call-1',
-      name: 'computer_task',
+      name: 'computer_use',
       arguments: {
         goal: 'Open the project plan.',
         execution_device: 'studio alias',
@@ -142,22 +156,26 @@ describe('Mobile companion task routing integration', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.content).toBe('task started');
-    expect(calls.office).not.toHaveBeenCalled();
-    expect(calls.studio).toHaveBeenCalledWith(
-      'computer_task',
-      {
-        goal: 'Open the project plan.',
-        execution_device: 'studio alias',
-      },
-      {
-        [TASK_ORIGIN_META_KEY]: {
+    expect(mockMeshSendApp).toHaveBeenCalledTimes(1);
+    expect(mockMeshSendApp).toHaveBeenCalledWith(
+      'desktop-studio',
+      'companion-task-call',
+      expect.objectContaining({
+        version: 1,
+        requestId: expect.any(String),
+        name: 'computer_use',
+        args: {
+          goal: 'Open the project plan.',
+          execution_device: 'studio alias',
+        },
+        origin: {
           conversationId: 'chat-mobile-1',
           launchId: expect.any(String),
           deviceId: 'phone-1',
           deviceName: 'Ali phone',
           executionDeviceId: 'desktop-studio',
         },
-      },
+      }),
     );
   });
 });
