@@ -27,6 +27,7 @@ import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { startLoadPolicySync } from './src/services/loadPolicySync';
+import { startNetworkReconnectWatcher, stopNetworkReconnectWatcher } from './src/services/networkReconnect';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -278,6 +279,9 @@ function App() {
         logger.error('[App] Failed to initialize remote server providers:', err);
       });
 
+      // Watch for network changes and auto-recover the active remote connection (no manual rescan).
+      startNetworkReconnectWatcher();
+
       // Check if passphrase is set and lock app if needed
       logger.log('[BOOT] auth passphrase check');
       const hasPassphrase = await authService.hasPassphrase();
@@ -332,6 +336,7 @@ function App() {
 
   useEffect(() => {
     initializeApp();
+    return () => stopNetworkReconnectWatcher();
   }, [initializeApp]);
 
   const handleUnlock = useCallback(() => {
