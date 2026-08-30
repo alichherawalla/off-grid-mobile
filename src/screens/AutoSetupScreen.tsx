@@ -120,12 +120,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
               }}
               testID={`auto-setup-plan-${plan.tier}`}
             >
-              <View style={styles.detailHeader}>
-                <Text style={styles.planTitle}>{plan.title}</Text>
-                {selected?.tier === plan.tier && VoiceIndicator ? (
-                  <VoiceIndicator />
-                ) : null}
-              </View>
+              <Text style={styles.planTitle}>{plan.title}</Text>
               <Text style={styles.secondary}>{plan.summary}</Text>
               {selected?.tier === plan.tier && (
                 <View
@@ -133,21 +128,31 @@ export const AutoSetupScreen: React.FC<Props> = ({
                   testID="auto-setup-selected-plan"
                 >
                   <Text style={styles.includesLabel}>INCLUDES</Text>
-                  {plan.items.map(item => (
-                    <View
-                      key={`${plan.tier}:${item.kind}:${item.id}`}
-                      style={styles.planItem}
-                    >
-                      <Text style={styles.itemKind}>{labelForItem(item)}</Text>
-                      <Text style={styles.planItemName}>{item.name}</Text>
-                      <Text style={styles.itemSize}>
-                        {formatBytes(item.sizeBytes)}
-                        {outcomeLabel(
-                          snapshot.outcomes[autoSetupDownloadId(item)],
-                        )}
-                      </Text>
-                    </View>
-                  ))}
+                  <View style={styles.planItems}>
+                    {plan.items.map(item => (
+                      <View
+                        key={`${plan.tier}:${item.kind}:${item.id}`}
+                        style={styles.planItem}
+                      >
+                        <Text style={styles.itemKind}>
+                          {labelForItem(item)}
+                        </Text>
+                        <Text style={styles.planItemName}>{item.name}</Text>
+                        <Text style={styles.itemSize}>
+                          {formatBytes(item.sizeBytes)}
+                          {outcomeLabel(
+                            snapshot.outcomes[autoSetupDownloadId(item)],
+                          )}
+                        </Text>
+                      </View>
+                    ))}
+                    {VoiceIndicator ? (
+                      <VoiceIndicator
+                        onPress={() => navigation.push('ProDetail')}
+                        style={styles.planItem}
+                      />
+                    ) : null}
+                  </View>
                   <Text style={styles.total}>
                     {formatBytes(plan.totalBytes)} download
                   </Text>
@@ -201,7 +206,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
         <Button
           title="Configure it yourself"
           variant="ghost"
-          onPress={() => navigation.navigate('AdvancedSetup')}
+          onPress={() => navigation.push('AdvancedSetup')}
           testID="auto-setup-advanced"
         />
         <Button
@@ -237,7 +242,12 @@ function outcomeLabel(
 
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: SPACING.lg, paddingBottom: SPACING.xxl, gap: SPACING.lg },
+  content: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xxl,
+    gap: SPACING.md,
+  },
   center: {
     flex: 1,
     alignItems: 'center' as const,
@@ -248,28 +258,47 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   eyebrow: { ...TYPOGRAPHY.label, color: colors.primary },
   title: { ...TYPOGRAPHY.h2, color: colors.text },
   secondary: { ...TYPOGRAPHY.body, color: colors.textSecondary },
-  planGrid: { gap: SPACING.md },
+  planGrid: { gap: SPACING.sm },
   planGridWide: { flexDirection: 'row' as const },
-  planCard: { borderWidth: 1, borderColor: colors.border, gap: SPACING.sm },
+  planCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: SPACING.xs,
+    padding: SPACING.md,
+    borderRadius: SPACING.sm,
+  },
   planCardWide: { flex: 1 },
   selectedCard: { borderColor: colors.primary },
-  planTitle: { ...TYPOGRAPHY.h2, color: colors.text },
+  planTitle: { ...TYPOGRAPHY.h3, color: colors.text },
   expandedPlan: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: SPACING.md,
-    gap: SPACING.md,
+    marginTop: SPACING.xs,
+    paddingTop: SPACING.sm,
+    gap: SPACING.sm,
   },
   includesLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
-  planItem: { gap: SPACING.xs },
-  planItemName: { ...TYPOGRAPHY.body, color: colors.text },
-  itemSize: { ...TYPOGRAPHY.meta, color: colors.textSecondary },
-  total: { ...TYPOGRAPHY.meta, color: colors.primary },
-  detailHeader: {
+  planItems: {
     flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
+    gap: SPACING.sm,
   },
+  planItem: {
+    flexBasis: '45%' as const,
+    flexGrow: 1,
+    gap: SPACING.xs,
+    padding: SPACING.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: SPACING.sm,
+    backgroundColor: colors.surfaceLight,
+  },
+  planItemName: { ...TYPOGRAPHY.body, color: colors.text },
+  itemSize: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+  },
+  total: { ...TYPOGRAPHY.meta, color: colors.primary },
   itemKind: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted },
   progressTrack: {
     height: SPACING.xs,

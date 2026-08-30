@@ -16,6 +16,7 @@ import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -128,8 +129,10 @@ export const ProjectsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="projects-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>Projects</Text>
+      <ScreenHeader
+        title="Projects"
+        variant="tab"
+        right={
           <Button
             title="New"
             variant="primary"
@@ -138,7 +141,8 @@ export const ProjectsScreen: React.FC = () => {
             icon={<Icon name="plus" size={16} color={colors.primary} />}
             testID="new-project-button"
           />
-      </View>
+        }
+      />
 
       <Text style={styles.subtitle}>
         Projects group related chats with shared context and instructions.
@@ -189,41 +193,25 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   swipeableContainer: {
     overflow: 'visible' as const,
   },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
   subtitle: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
   },
   list: {
-    padding: SPACING.lg,
-    paddingTop: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   projectItem: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
+    paddingVertical: SPACING.sm,
     borderRadius: 10,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     ...shadows.small,
   },
   projectIcon: {
@@ -276,7 +264,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: SPACING.xxl,
+    paddingHorizontal: SPACING.md,
   },
   emptyIcon: {
     width: 48,
@@ -323,7 +311,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     width: 50,
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: SPACING.sm,
     marginLeft: 10,
   },
 });

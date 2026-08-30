@@ -1,5 +1,5 @@
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { TYPOGRAPHY } from '../constants';
+import { SPACING, TYPOGRAPHY } from '../constants';
 
 export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   card: {
@@ -9,26 +9,47 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 16,
     ...shadows.small,
   },
-  cardCompact: {
-    padding: 12,
-    marginBottom: 12,
-    borderRadius: 12,
+  cardDense: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginTop: 0,
+    marginBottom: SPACING.md,
+    borderRadius: SPACING.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
   },
-  compactTopRow: {
+  denseTitleRow: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    marginBottom: 4,
-    gap: 6,
+    alignItems: 'baseline' as const,
+    gap: SPACING.sm,
   },
-  compactNameGroup: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+  denseName: {
+    ...TYPOGRAPHY.body,
+    color: colors.text,
     flex: 1,
-    gap: 6,
-    minWidth: 0,
   },
-  compactName: {
+  denseSourceGroup: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.xs,
+    maxWidth: '45%' as const,
+  },
+  denseSource: {
+    ...TYPOGRAPHY.labelSmall,
+    color: colors.primary,
     flexShrink: 1,
+  },
+  denseDescription: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  denseMeta: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+    marginTop: SPACING.xs,
   },
   authorTag: {
     backgroundColor: colors.surfaceLight,
@@ -105,15 +126,14 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textSecondary,
     marginBottom: 12,
   },
-  descriptionCompact: {
-    marginBottom: 4,
-    ...TYPOGRAPHY.meta,
-    color: colors.textSecondary,
-  },
   cardRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
     marginTop: 2,
+  },
+  cardRowDense: {
+    alignItems: 'center' as const,
+    marginTop: 0,
   },
   cardContent: {
     flex: 1,
@@ -122,10 +142,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     gap: 6,
-  },
-  infoRowCompact: {
-    marginTop: 4,
-    marginBottom: 6,
   },
   infoBadge: {
     backgroundColor: colors.surfaceLight,
@@ -155,26 +171,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   recommendedPillText: {
     ...TYPOGRAPHY.metaSmall,
     color: colors.surface,
-  },
-  cardRecommended: {
-    padding: 16,
-    marginBottom: 20,
-    marginTop: 4,
-    borderRadius: 14,
-  },
-  compactNameRecommended: {
-    ...TYPOGRAPHY.h3,
-    color: colors.text,
-  },
-  recommendedChip: {
-    backgroundColor: `${colors.primary}20`,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  recommendedChipText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.primary,
   },
   // GPU/NPU capability badge — emerald accent to signal hardware acceleration.
   accelBadge: {

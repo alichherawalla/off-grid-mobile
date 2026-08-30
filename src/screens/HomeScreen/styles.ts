@@ -9,14 +9,15 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     flex: 1,
   },
   content: {
-    padding: 20,
-    paddingBottom: 32,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xxl,
   },
   header: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginBottom: 20,
+    marginBottom: SPACING.md,
   },
   headerLeft: {
     flexDirection: 'row' as const,
@@ -119,7 +120,7 @@ const createModelCardStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     fontWeight: '500' as const,
   },
   newChatButton: {
-    marginBottom: 20,
+    marginBottom: SPACING.md,
   },
 });
 const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
@@ -128,9 +129,10 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    gap: 16,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+    gap: SPACING.md,
     ...shadows.small,
   },
   galleryCardInfo: {
@@ -149,11 +151,11 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   desktopCard: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: colors.primary,
-    gap: 10,
+    gap: SPACING.sm,
     ...shadows.small,
   },
   desktopCardHeader: {
@@ -210,9 +212,10 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   setupCard: {
     alignItems: 'center' as const,
-    padding: 20,
-    marginBottom: 20,
-    gap: 12,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
   },
   setupActions: {
     flexDirection: 'row' as const,
@@ -224,13 +227,13 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     textAlign: 'center' as const,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: SPACING.md,
   },
   sectionHeader: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    marginBottom: 12,
+    marginBottom: SPACING.sm,
   },
   sectionTitle: {
     ...TYPOGRAPHY.h3,
@@ -247,7 +250,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 10,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm + 2,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     ...shadows.small,
   },
   conversationInfo: {
@@ -279,7 +282,7 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     width: 44,
     borderRadius: 10,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
     marginLeft: SPACING.sm,
   },
   statsRow: {

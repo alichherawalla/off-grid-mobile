@@ -12,6 +12,7 @@ import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
 import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
+import { SPACING } from '../../constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,30 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        {item.status !== 'failed' && (
+        {item.status === 'failed' ? (
+          <View style={styles.failedActionsRow}>
+            {isRetryable(item.reasonCode) && (
+              <TouchableOpacity
+                style={styles.retryButton}
+                hitSlop={SPACING.md}
+                testID="failed-retry-button"
+                onPress={() => onRetry(item)}
+              >
+                <Icon name="refresh-cw" size={14} color={colors.primary} />
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.removeButton}
+              hitSlop={SPACING.md}
+              testID="failed-remove-button"
+              onPress={() => onRemove(item)}
+            >
+              <Icon name="trash-2" size={14} color={colors.error} />
+              <Text style={styles.removeButtonText}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
           <TouchableOpacity
             style={styles.cancelButton}
             testID="remove-download-button"
@@ -148,28 +172,6 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           </View>
         )}
       </View>
-      {item.status === 'failed' && (
-        <View style={styles.failedActionsRow}>
-          {isRetryable(item.reasonCode) && (
-            <TouchableOpacity
-              style={styles.retryButton}
-              testID="failed-retry-button"
-              onPress={() => onRetry(item)}
-            >
-              <Icon name="refresh-cw" size={14} color={colors.primary} />
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.removeButton}
-            testID="failed-remove-button"
-            onPress={() => onRemove(item)}
-          >
-            <Icon name="trash-2" size={14} color={colors.error} />
-            <Text style={styles.removeButtonText}>Remove</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </Card>
   );
 };
@@ -216,10 +218,18 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
     bytesPerSecond: repairEntry.bytesPerSecond,
     status: repairEntry.status,
   }) : undefined;
+  const completedMeta = [
+    item.author,
+    formatBytes(item.fileSize),
+    item.quantization,
+    item.downloadedAt
+      ? new Date(item.downloadedAt).toLocaleDateString()
+      : undefined,
+  ].filter(Boolean).join(' · ');
 
   return (
     <Card style={styles.downloadCard}>
-      <View style={styles.downloadHeader}>
+      <View style={[styles.downloadHeader, styles.completedHeader]}>
         <View style={styles.modelTypeIcon}>
           <Icon
             name={modelTypeIconName(item, needsVisionRepair)}
@@ -229,7 +239,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         </View>
         <View style={styles.downloadInfo}>
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-          <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
+          <Text style={styles.modelId} numberOfLines={1}>{completedMeta}</Text>
         </View>
         {needsVisionRepair && !isRepairingVision && onRepairVision && (
           <TouchableOpacity
@@ -258,25 +268,12 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           </Text>
         </View>
       )}
-      <View style={styles.downloadMeta}>
-        {!!item.quantization && (
-          <View style={[styles.quantBadge, item.modelType === 'image' && styles.imageBadge]}>
-            <Text style={[styles.quantText, item.modelType === 'image' && styles.imageQuantText]}>
-              {item.quantization}
-            </Text>
-          </View>
-        )}
-        <Text style={styles.sizeText}>{formatBytes(item.fileSize)}</Text>
-        {item.downloadedAt && (
-          <Text style={styles.dateText}>{new Date(item.downloadedAt).toLocaleDateString()}</Text>
-        )}
-        {isRepairingVision && (
-          <View style={styles.repairingBadge} testID="repairing-vision-badge">
-            <LoadingDots color={colors.primary} />
-            <Text style={styles.repairingBadgeText}>Repairing</Text>
-          </View>
-        )}
-      </View>
+      {isRepairingVision && (
+        <View style={styles.repairingBadge} testID="repairing-vision-badge">
+          <LoadingDots color={colors.primary} />
+          <Text style={styles.repairingBadgeText}>Repairing</Text>
+        </View>
+      )}
     </Card>
   );
 };

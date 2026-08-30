@@ -76,11 +76,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
     backgroundColor: colors.surface,
     borderRadius: 12,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.md,
-    marginTop: SPACING.md,
-    marginBottom: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.md,
     ...shadows.small,
   },
   header: {
@@ -92,7 +92,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   icons: {
     flexDirection: 'row' as const,
     justifyContent: 'space-between' as const,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.xs,
   },
   iconCol: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
   inactive: { opacity: 0.35 },

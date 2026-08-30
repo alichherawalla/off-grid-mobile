@@ -167,19 +167,10 @@ All screens must use a standardized header style for visual consistency. Two var
 
 **Tab Screen Header** (top-level tabs: Chats, Projects, Models, Settings):
 ```typescript
-header: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingHorizontal: SPACING.lg,
-  paddingVertical: SPACING.md,
-  borderBottomWidth: 1,
-  borderBottomColor: colors.border,
-  backgroundColor: colors.surface,
-  ...shadows.small,
-  zIndex: 1,
-}
+<ScreenHeader title="Models" variant="tab" right={downloadAction} />
 ```
+- Shared owner: `components/ScreenHeader.tsx`; do not copy this header into tab screens.
+- Padding: `SPACING.md` horizontal and `SPACING.sm` vertical.
 - Title (`TYPOGRAPHY.h2`) on the left
 - Optional action button on the right (e.g. "New", download icon)
 - `backgroundColor: colors.surface` + `shadows.small` for elevation
@@ -206,8 +197,10 @@ header: {
 **Key rules:**
 - Every header MUST have `backgroundColor: colors.surface` and `...shadows.small`
 - Every header MUST have `zIndex: 1` (so shadow renders above content below)
-- Padding is always `SPACING.lg` horizontal, `SPACING.md` vertical
+- Subscreen padding is `SPACING.lg` horizontal and `SPACING.md` vertical.
+- Top-level tab padding is `SPACING.md` horizontal and `SPACING.sm` vertical.
 - Border bottom is always 1px `colors.border`
+- Home keeps its product masthead inside the scroll content.
 
 **Exceptions:** Onboarding, LockScreen, and ModelDownload have no standard header (full-screen flows).
 

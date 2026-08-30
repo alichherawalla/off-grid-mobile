@@ -82,7 +82,7 @@ export const DownloadManagerScreen: React.FC = () => {
         );
       })}
     </ScrollView>
-  ), [activeFilter, colors, styles]);
+  ), [activeFilter, styles]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="downloaded-models-screen">

@@ -3,117 +3,29 @@ import {
   View,
   Text,
   ScrollView,
-  Platform,
   Linking,
 } from 'react-native';
 import { LoadingDots } from '../components/LoadingDots';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Card, ModelCard } from '../components';
+import { Button } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
-import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
-import { isAccelerableQuant } from '../utils/acceleration';
 import type { ThemeColors, ThemeShadows } from '../theme';
-import { RECOMMENDED_MODELS, TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
+import { TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
 import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
-import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
+import { isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { hardwareService, modelManager, remoteServerManager } from '../services';
-import { startModelDownload } from '../services/startModelDownload';
-import { recommendedModelsForDevice, trendingModelIdsForDevice } from '../utils/recommendedModels';
-import { fileExceedsBudget } from '../services/memoryBudget';
+import { hardwareService, remoteServerManager } from '../services';
 import { discoverLANServers } from '../services/networkDiscovery';
-import { ModelFile, DownloadedModel, RemoteServer } from '../types';
+import { RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
-import { fetchModelFiles, NetworkSection } from './ModelDownloadHelpers';
-import {
-  LITERT_PARENT_ID,
-  buildCuratedLiteRTFiles,
-  getCuratedLiteRTEntry,
-  curatedLiteRTDownloadWarning,
-  CuratedLiteRTEntry,
-} from '../services/curatedLiteRTRegistry';
-import { makeModelKey } from '../utils/modelKey';
+import { NetworkSection } from './ModelDownloadHelpers';
 import logger from '../utils/logger';
+import { ModelsScreen } from './ModelsScreen';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdvancedSetup'> };
-
-interface RecommendedCardProps {
-  model: typeof RECOMMENDED_MODELS[number];
-  recFile: ModelFile;
-  index: number;
-  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null | undefined;
-  downloaded: DownloadedModel | undefined;
-  totalRamGB: number;
-  isTrending: boolean;
-  onDownload: () => void;
-  onCancel: () => void;
-}
-
-const RecommendedModelCard: React.FC<RecommendedCardProps> = ({ model, recFile, index, progress, downloaded, totalRamGB, isTrending, onDownload, onCancel }) => (
-  <ModelCard
-    key={model.id}
-    testID={`recommended-model-${index}`}
-    compact
-    model={{ id: model.id, name: model.name, author: model.id.split('/')[0], description: model.description, modelType: model.type, paramCount: model.params, minRamGB: model.minRam }}
-    file={recFile}
-    downloadedModel={downloaded}
-    isDownloaded={!!downloaded}
-    isDownloading={!!progress && !progress.queued}
-    isQueued={!!progress?.queued}
-    downloadProgress={progress?.progress}
-    downloadBytes={progress?.bytes}
-    isCompatible={model.minRam <= totalRamGB && (!model.maxRam || totalRamGB <= model.maxRam)}
-    isTrending={isTrending}
-    supportsAcceleration={isAccelerableQuant(recFile.quantization)}
-    onPress={() => {}}
-    onDownload={downloaded ? undefined : onDownload}
-    onCancel={progress ? onCancel : undefined}
-  />
-);
-
-interface LiteRTCardProps {
-  file: ModelFile;
-  index: number;
-  curatedEntry: CuratedLiteRTEntry | undefined;
-  progress: { progress: number; queued?: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null | undefined;
-  downloaded: DownloadedModel | undefined;
-  totalRamGB: number;
-  onDownload: () => void;
-  onCancel: () => void;
-}
-
-// Curated LiteRT models surface at the top of the on-device list (Android only;
-// the LiteRT engine is Android-only). They download straight through the same
-// handlers as the GGUF cards — `file.downloadUrl` and the `.litertlm` extension
-// route the request to the LiteRT engine with no extra wiring.
-const LiteRTModelCard: React.FC<LiteRTCardProps> = ({ file, index, curatedEntry, progress, downloaded, totalRamGB, onDownload, onCancel }) => (
-  <ModelCard
-    testID={`litert-model-${index}`}
-    compact
-    model={{ id: LITERT_PARENT_ID, name: curatedEntry?.displayName ?? file.name, author: 'google', description: curatedEntry?.highlight, modelType: 'vision' }}
-    file={file}
-    downloadedModel={downloaded}
-    isDownloaded={!!downloaded}
-    isDownloading={!!progress && !progress.queued}
-    isQueued={!!progress?.queued}
-    downloadProgress={progress?.progress}
-    downloadBytes={progress?.bytes}
-    // Offer the card (enable its download button) when the file fits the budget OR carries a
-    // device-aware warning — the "Download anyway" sheet in handleLiteRTDownload is the guard for
-    // the over-budget case. Both branches route through the single owners (fileExceedsBudget +
-    // curatedLiteRTDownloadWarning), never a re-inlined budget calc. A card disabled here would make
-    // its warning branch unreachable (button disabled), which was the #510 defect.
-    isCompatible={!fileExceedsBudget(file.size, totalRamGB) || curatedLiteRTDownloadWarning(file.name, file.size, totalRamGB) !== null}
-    recommended={{ pillLabel: 'Recommended' }}
-    supportsAcceleration
-    onPress={() => {}}
-    onDownload={downloaded ? undefined : onDownload}
-    onCancel={progress ? onCancel : undefined}
-  />
-);
 
 /** Active-download progress for a card, or null when the model isn't downloading.
  *  `queued` (store status 'pending') drives the "Queued" label vs a live progress bar.
@@ -134,8 +46,6 @@ export function downloadProgressFor(
 
 export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
-  const [recommendedModels, setRecommendedModels] = useState<typeof RECOMMENDED_MODELS>([]);
-  const [modelFiles, setModelFiles] = useState<Record<string, ModelFile[]>>({});
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [connectingServerId, setConnectingServerId] = useState<string | null>(null);
   const [connectedServerId, setConnectedServerId] = useState<string | null>(null);
@@ -147,8 +57,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { deviceInfo, setDeviceInfo, setModelRecommendation, downloadedModels } = useAppStore();
-  const storeDownloads = useDownloadStore(s => s.downloads);
+  const { deviceInfo, setDeviceInfo, setModelRecommendation } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);
   const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
 
@@ -163,13 +72,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
         const rec = hardwareService.getModelRecommendation();
         if (cancelled) return;
         setModelRecommendation(rec);
-        const ram = hardwareService.getTotalMemoryGB();
-        // Same curated list as the Models screen, filtered to this device's RAM.
-        const compat = recommendedModelsForDevice(ram);
-        if (cancelled) return;
-        setRecommendedModels(compat);
-        const files = await fetchModelFiles(compat);
-        if (!cancelled) setModelFiles(files);
       } catch (error) {
         logger.error('Error initializing:', error);
         if (!cancelled) setAlertState(showAlert('Error', 'Failed to initialize. Please try again.'));
@@ -178,7 +80,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [setDeviceInfo, setModelRecommendation]);
 
   // Health-check persisted servers — only show reachable ones.
   // Returns { ran, reachable }: `ran` is false when the in-flight guard short-circuited this call
@@ -193,7 +95,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
     await Promise.all(
       store.servers.map(async (server) => {
         try {
-          const result = await store.testConnection(server.id);
+          const result = await remoteServerManager.testConnection(server.id);
           if (result.success) reachable.add(server.id);
         } catch { /* offline */ }
       }),
@@ -244,27 +146,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [refreshServerHealth]);
 
-  // Cancel goes through the store: removing the entry by modelKey is the
-  // single source of truth, and the native cancel cleans up the worker.
-  const handleCancelDownload = async (modelId: string, fileName: string) => {
-    const modelKey = makeModelKey(modelId, fileName);
-    const entry = useDownloadStore.getState().downloads[modelKey];
-    if (!entry) return;
-    useDownloadStore.getState().remove(modelKey);
-    try { await modelManager.cancelBackgroundDownload(entry.downloadId); } catch { /* ignore */ }
-    if (entry.mmProjDownloadId) {
-      try { await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId); } catch { /* ignore */ }
-    }
-  };
-
-  const handleDownload = async (modelId: string, file: ModelFile) => {
-    // Same mechanism as the Models screen (startModelDownload) — guard, register, and
-    // clear are shared; onboarding just surfaces the failure alert.
-    await startModelDownload(modelId, file, {
-      onError: (error) => setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error.message))),
-    });
-  };
-
   const handleConnectServer = async (server: RemoteServer) => {
     setConnectingServerId(server.id);
     try {
@@ -287,47 +168,6 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
     finally { setConnectingServerId(null); }
   };
 
-  const totalRamGB = hardwareService.getTotalMemoryGB();
-
-  // Curated LiteRT models — Android-only. Offer a file when it FITS the RAM budget, OR when it is
-  // over budget but carries a device-aware warning (e.g. Gemma 4 E4B): those download behind the
-  // "Download anyway" confirm sheet (handleLiteRTDownload) rather than being silently hidden. An
-  // over-budget file with NO warning stays hidden — there is no safe way to offer it. The decision
-  // is the single owners (fileExceedsBudget + curatedLiteRTDownloadWarning), not a re-inlined budget
-  // calc; hiding warnable files here made the warning branch dead code (#510). No HF fetch needed;
-  // the files come straight from the curated registry with their download URLs baked in.
-  const liteRTFiles = React.useMemo(
-    () => (Platform.OS === 'android'
-      ? buildCuratedLiteRTFiles().filter((f) =>
-        !fileExceedsBudget(f.size, totalRamGB)
-        || curatedLiteRTDownloadWarning(f.name, f.size, totalRamGB) !== null)
-      : []),
-    [totalRamGB],
-  );
-
-  const handleLiteRTDownload = (file: ModelFile) => {
-    const proceed = () => handleDownload(LITERT_PARENT_ID, file);
-    // Same DEVICE-AWARE decision the Models tab uses (curatedLiteRTDownloadWarning):
-    // warn only when the file genuinely exceeds this device's RAM budget, never a
-    // device-blind static flag. On a device where the model fits, no warning.
-    const warning = curatedLiteRTDownloadWarning(file.name, file.size, totalRamGB);
-    if (warning) {
-      setAlertState(showAlert(
-        warning.title,
-        warning.message,
-        [
-          { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-          { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceed(); } },
-        ],
-      ));
-      return;
-    }
-    proceed();
-  };
-
-  // One best-fit trending model per family — shared with the Models screen's scoring.
-  const trendingModelIds = React.useMemo(() => trendingModelIdsForDevice(totalRamGB), [totalRamGB]);
-
   const liveServers = servers.filter((s) => reachableServerIds.has(s.id));
 
   if (isLoading) return (
@@ -346,7 +186,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.header}>
             <Text style={styles.title}>Advanced Setup</Text>
             <Text style={styles.subtitle}>
-              Connect to a model server on your network, or download one to run directly on your device.
+              Run a model from your network or on this device.
             </Text>
           </View>
 
@@ -363,9 +203,9 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
             colors={colors}
           />
 
-          <Text style={styles.sectionTitle}>Download to Your Device</Text>
+          <Text style={styles.sectionTitle}>On This Device</Text>
 
-          <Card style={styles.deviceCard}>
+          <View style={styles.deviceCard}>
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceLabel}>Your Device</Text>
               <Text style={styles.deviceValue}>{deviceInfo?.deviceModel}</Text>
@@ -380,52 +220,8 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.deviceLabel}>Total Memory</Text>
               <Text style={styles.deviceValue}>{hardwareService.formatBytes(deviceInfo?.totalMemory || 0)}</Text>
             </View>
-          </Card>
-
-          {liteRTFiles.map((file, index) => {
-            const modelKey = makeModelKey(LITERT_PARENT_ID, file.name);
-            const progress = downloadProgressFor(storeDownloads[modelKey]);
-            return (
-              <LiteRTModelCard
-                key={file.name}
-                file={file}
-                index={index}
-                curatedEntry={getCuratedLiteRTEntry(file.name)}
-                progress={progress}
-                downloaded={downloadedModels.find(d => d.id === `${LITERT_PARENT_ID}/${file.name}`)}
-                totalRamGB={totalRamGB}
-                onDownload={() => handleLiteRTDownload(file)}
-                onCancel={() => handleCancelDownload(LITERT_PARENT_ID, file.name)}
-              />
-            );
-          })}
-
-          {recommendedModels.filter((model) => modelFiles[model.id]?.length).map((model, index) => {
-            const recFile = modelFiles[model.id][0];
-            const modelKey = makeModelKey(model.id, recFile.name);
-            const progress = downloadProgressFor(storeDownloads[modelKey]);
-            return (
-              <RecommendedModelCard
-                key={model.id}
-                model={model}
-                recFile={recFile}
-                index={index}
-                progress={progress}
-                downloaded={downloadedModels.find(d => d.id === `${model.id}/${recFile.name}`)}
-                totalRamGB={totalRamGB}
-                isTrending={trendingModelIds.has(model.id)}
-                onDownload={() => handleDownload(model.id, recFile)}
-                onCancel={() => handleCancelDownload(model.id, recFile.name)}
-              />
-            );
-          })}
-
-          {recommendedModels.length === 0 && liteRTFiles.length === 0 && (
-            <Card style={styles.warningCard}>
-              <Text style={styles.warningTitle}>Limited Compatibility</Text>
-              <Text style={styles.warningText}>Your device has limited memory. You can still browse and download smaller models from the model browser.</Text>
-            </Card>
-          )}
+          </View>
+          <ModelsScreen embedded />
         </ScrollView>
 
         <View style={styles.footer}>
@@ -444,15 +240,23 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   loadingContainer: { flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const, gap: 16 },
   loadingText: { ...TYPOGRAPHY.body, color: colors.textSecondary, textAlign: 'center' as const },
   scrollView: { flex: 1 },
-  content: { padding: 16, paddingBottom: 100 },
-  header: { marginBottom: SPACING.xl },
-  title: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: 8 },
-  subtitle: { ...TYPOGRAPHY.body, color: colors.textSecondary, lineHeight: 24 },
-  sectionTitle: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.lg },
-  deviceCard: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, marginBottom: SPACING.xl },
+  content: { paddingHorizontal: SPACING.md, paddingTop: SPACING.md, paddingBottom: 72 },
+  header: { marginBottom: SPACING.md },
+  title: { ...TYPOGRAPHY.h2, color: colors.text, marginBottom: SPACING.xs },
+  subtitle: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, lineHeight: 20 },
+  sectionTitle: { ...TYPOGRAPHY.h3, color: colors.text, marginBottom: SPACING.sm },
+  deviceCard: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
   deviceInfo: { flex: 1 },
-  deviceLabel: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginBottom: 4 },
-  deviceValue: { ...TYPOGRAPHY.body, color: colors.text },
+  deviceLabel: { ...TYPOGRAPHY.labelSmall, color: colors.textMuted, marginBottom: 2 },
+  deviceValue: { ...TYPOGRAPHY.bodySmall, color: colors.text },
   warningCard: { backgroundColor: `${colors.warning}20`, borderWidth: 1, borderColor: colors.warning },
   warningTitle: { ...TYPOGRAPHY.h3, color: colors.warning, marginBottom: 8 },
   warningText: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary, lineHeight: 20 },

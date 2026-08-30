@@ -12,6 +12,7 @@ interface ScreenHeaderProps {
   /** A status or action at the trailing edge, e.g. the Pro badge. */
   right?: ReactNode;
   testID?: string;
+  variant?: 'screen' | 'tab';
 }
 
 /**
@@ -30,12 +31,16 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   onBack,
   right,
   testID,
+  variant = 'screen',
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
-    <View style={styles.header} testID={testID}>
+    <View
+      style={[styles.header, variant === 'tab' && styles.tabHeader]}
+      testID={testID}
+    >
       {onBack ? (
         <TouchableOpacity
           style={styles.backButton}
@@ -68,6 +73,11 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     ...shadows.small,
     zIndex: 1,
+  },
+  tabHeader: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    minHeight: 0,
   },
   backButton: { padding: SPACING.xs },
   title: { ...TYPOGRAPHY.h2, color: colors.text, flex: 1 },

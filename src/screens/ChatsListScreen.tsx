@@ -11,6 +11,7 @@ import { ModelSelectorModal } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -186,8 +187,10 @@ export const ChatsListScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
+      <ScreenHeader
+        title="Chats"
+        variant="tab"
+        right={
           <Button
             title="New"
             variant="primary"
@@ -195,7 +198,8 @@ export const ChatsListScreen: React.FC = () => {
             onPress={handleNewChat}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
-      </View>
+        }
+      />
 
       {sortedConversations.length === 0 ? (
         <View style={styles.emptyState}>
@@ -272,24 +276,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   swipeableContainer: {
     overflow: 'visible' as const,
   },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
   list: {
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
   },
   chatItem: {
     flexDirection: 'row' as const,
@@ -340,7 +329,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: SPACING.xxl + SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   emptyIcon: {
     width: 72,

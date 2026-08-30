@@ -8,7 +8,7 @@ import { needsVisionRepair } from '../utils/visionRepair';
 import { getMmProjFileSize } from '../utils/modelHelpers';
 import { createStyles } from './ModelCard.styles';
 import {
-  CompactModelCardContent,
+  DenseModelCardContent,
   StandardModelCardContent,
   ModelInfoBadges,
   ModelCardActions,
@@ -85,6 +85,62 @@ function resolveCredibility(
 ) {
   return model.credibility ?? downloadedModel?.credibility;
 }
+
+interface ModelCardHeadingProps {
+  dense: boolean;
+  model: ModelCardProps['model'];
+  fileSize: number;
+  quantization?: string;
+  isVisionModel: boolean;
+  supportsAcceleration?: boolean;
+  recommended?: RecommendedConfig;
+  isTrending?: boolean;
+  credibility?: ModelCredibility;
+  credibilityInfo: { color: string; label: string } | null;
+  isActive?: boolean;
+  incompatibleReason?: string;
+}
+
+const ModelCardHeading: React.FC<ModelCardHeadingProps> = ({
+  dense, model, fileSize, quantization, isVisionModel, supportsAcceleration,
+  recommended, isTrending, credibility, credibilityInfo, isActive, incompatibleReason,
+}) => dense ? (
+  <DenseModelCardContent
+    model={model}
+    fileSize={fileSize}
+    quantization={quantization}
+    isVisionModel={isVisionModel}
+    supportsAcceleration={supportsAcceleration}
+    recommended={recommended}
+    isTrending={isTrending}
+    credibilityLabel={credibilityInfo?.label}
+    incompatibleReason={incompatibleReason}
+  />
+) : (
+  <StandardModelCardContent
+    model={model}
+    credibility={credibility}
+    credibilityInfo={credibilityInfo}
+    isActive={isActive}
+    recommended={recommended}
+    supportsAcceleration={supportsAcceleration}
+  />
+);
+
+const ModelDownloadStats: React.FC<{
+  compact?: boolean;
+  downloads?: number;
+  likes?: number;
+  styles: ReturnType<typeof createStyles>;
+}> = ({ compact, downloads = 0, likes = 0, styles }) => {
+  if (compact || downloads <= 0) return null;
+  return (
+    <View style={styles.statsRow}>
+      <Text style={styles.statsText}>{formatNumber(downloads)} downloads</Text>
+      {likes > 0 && <Text style={styles.statsText}>{formatNumber(likes)} likes</Text>}
+    </View>
+  );
+};
 
 const DownloadProgressSection: React.FC<{
   progress: number;
@@ -206,6 +262,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   failedState,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const useDenseLayout = compact;
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
@@ -231,8 +288,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
     <TouchableOpacity
       style={[
         styles.card,
-        compact && styles.cardCompact,
-        recommended && compact && styles.cardRecommended,
+        useDenseLayout && styles.cardDense,
         isActive && styles.cardActive,
         !isCompatible && styles.cardIncompatible,
       ]}
@@ -241,50 +297,38 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       disabled={!onPress}
       testID={testID}
     >
-<View style={styles.cardRow}>
+      <View style={[styles.cardRow, useDenseLayout && styles.cardRowDense]}>
         <View style={styles.cardContent}>
-          {compact ? (
-            <CompactModelCardContent
-              model={model}
-              credibility={credibility}
-              credibilityInfo={credibilityInfo}
-              isTrending={isTrending}
-              recommended={recommended}
-              supportsAcceleration={supportsAcceleration}
-            />
-          ) : (
-            <StandardModelCardContent
-              model={model}
-              credibility={credibility}
-              credibilityInfo={credibilityInfo}
-              isActive={isActive}
-              recommended={recommended}
-              supportsAcceleration={supportsAcceleration}
-            />
-          )}
-
-          <ModelInfoBadges
+          <ModelCardHeading
+            dense={!!useDenseLayout}
+            model={model}
             fileSize={fileSize}
-            sizeRange={sizeRange}
-            quantInfo={quantInfo}
             quantization={quantization}
             isVisionModel={isVisionModel}
-            needsRepair={needsRepair}
-            isRepairingVision={isRepairingVision}
-            isCompatible={isCompatible}
-            incompatibleReason={incompatibleReason}
+            supportsAcceleration={supportsAcceleration}
+            recommended={recommended}
+            isTrending={isTrending}
+            credibility={credibility}
+            credibilityInfo={credibilityInfo}
+            isActive={isActive}
+            incompatibleReason={!isCompatible ? (incompatibleReason ?? 'Too large') : undefined}
           />
 
-          {!compact && model.downloads !== undefined && model.downloads > 0 && (
-            <View style={styles.statsRow}>
-              <Text style={styles.statsText}>
-                {formatNumber(model.downloads)} downloads
-              </Text>
-              {model.likes !== undefined && model.likes > 0 && (
-                <Text style={styles.statsText}>{formatNumber(model.likes)} likes</Text>
-              )}
-            </View>
+          {!useDenseLayout && (
+            <ModelInfoBadges
+              fileSize={fileSize}
+              sizeRange={sizeRange}
+              quantInfo={quantInfo}
+              quantization={quantization}
+              isVisionModel={isVisionModel}
+              needsRepair={needsRepair}
+              isRepairingVision={isRepairingVision}
+              isCompatible={isCompatible}
+              incompatibleReason={incompatibleReason}
+            />
           )}
+
+          <ModelDownloadStats compact={compact} downloads={model.downloads} likes={model.likes} styles={styles} />
 
           {(isDownloading || isQueued) && (
             <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} count={downloadCount} />

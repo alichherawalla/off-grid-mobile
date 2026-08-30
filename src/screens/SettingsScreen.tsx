@@ -38,6 +38,7 @@ import { clearProForTesting } from '../services/proLicenseService';
 import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import { useOpenSync } from '../hooks/useOpenSync';
 import { appBuildLabel, appVersion } from '../utils/appVersion';
+import { ScreenHeader } from '../components/ScreenHeader';
 
 const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
 
@@ -150,9 +151,7 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
+      <ScreenHeader title="Settings" variant="tab" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
