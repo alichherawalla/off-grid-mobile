@@ -12,6 +12,7 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.md,
     paddingBottom: SPACING.xxl,
+    gap: SPACING.xs,
   },
   header: {
     flexDirection: 'row' as const,
