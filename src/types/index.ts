@@ -492,5 +492,5 @@ export interface DebugInfo {
   contextUsagePercent: number;
 }
 // Remote server types
-export type { RemoteServer, RemoteModel, ServerTestResult, RemoteMediaModelIds, RemoteServerCapabilities } from './remoteServer';
+export type { RemoteServer, RemoteModel, ServerTestResult, RemoteMediaModelIds } from './remoteServer';
 export { remoteServerCapabilities } from './remoteServer';
