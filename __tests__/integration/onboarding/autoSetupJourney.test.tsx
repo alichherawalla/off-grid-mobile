@@ -233,7 +233,9 @@ describe('Auto Setup release journey', () => {
     const failingDownloads: AutoSetupDownloadBoundaries = {
       ...downloadBoundaries,
       startImage: async () => {
-        throw new Error('Image model download could not start.');
+        return Promise.reject({
+          message: 'Image model download could not start.',
+        });
       },
     };
     const ui = render(

@@ -28,6 +28,16 @@ export class WhisperModelDownloads {
     const destPath = whisperModelFiles.getModelPath(modelId);
     if (await RNFS.exists(destPath)) return destPath;
 
+    return this.downloadMissingModel(model, destPath, onProgress);
+  }
+
+  private async downloadMissingModel(
+    model: (typeof WHISPER_MODELS)[number],
+    destPath: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<string> {
+    const modelId = model.id;
+
     logger.log(
       `[Whisper] Downloading ${model.name} via background download service...`,
     );

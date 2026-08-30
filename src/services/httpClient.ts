@@ -235,63 +235,26 @@ export async function createNDJSONStreamingRequest(
     Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
 
     let processedLength = 0;
-    let lineBuffer = '';
-
-    const processChunk = (text: string) => {
-      // Prepend any leftover partial line from the previous chunk
-      const combined = lineBuffer + text;
-      const lines = combined.split('\n');
-      // Last element may be an incomplete line — hold it for the next chunk
-      lineBuffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          onLine(JSON.parse(trimmed) as Record<string, unknown>);
-        } catch {
-          logger.warn('[HttpClient] Failed to parse NDJSON line:', trimmed.substring(0, 100));
-        }
-      }
-    };
+    const processor = createNDJSONProcessor(onLine);
 
     xhr.onprogress = () => {
       const text = xhr.responseText;
       if (text.length > processedLength) {
-        processChunk(text.slice(processedLength));
+        processor.process(text.slice(processedLength));
         processedLength = text.length;
       }
     };
 
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 4) {
-        clearTimeout(timeoutId);
-        if (isCredentialTransportDowngrade(url, xhr.responseURL, 'Authorization' in headers)) {
-          reject(new Error('Remote server redirected credentials to an insecure endpoint'));
-          return;
-        }
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const text = xhr.responseText;
-          if (text.length > processedLength) {
-            processChunk(text.slice(processedLength));
-          }
-          // Flush any remaining buffered line
-          if (lineBuffer.trim()) {
-            try {
-              onLine(JSON.parse(lineBuffer.trim()) as Record<string, unknown>);
-            } catch {
-              logger.warn('[HttpClient] Failed to parse final NDJSON line:', lineBuffer.substring(0, 100));
-            }
-            lineBuffer = '';
-          }
-          resolve();
-        } else {
-          // Log the full server error body — a bare "HTTP 400" is undiagnosable; the body
-          // (e.g. llama.cpp's "failed to parse grammar") is what tells you what to fix.
-          logger.error(`[HttpClient] HTTP ${xhr.status} error body: ${xhr.responseText || '(empty)'}`);
-          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
-        }
-      }
-    };
+    xhr.onreadystatechange = () => completeNDJSONRequest({
+      xhr,
+      url,
+      hasAuthorization: 'Authorization' in headers,
+      processedLength,
+      processor,
+      timeoutId,
+      resolve,
+      reject,
+    });
 
     xhr.onerror = () => { clearTimeout(timeoutId); reject(new Error('Network error')); };
     xhr.ontimeout = () => { clearTimeout(timeoutId); reject(new Error('Request timeout')); };
@@ -305,4 +268,84 @@ export async function createNDJSONStreamingRequest(
       reject(err);
     }
   });
+}
+
+interface NDJSONProcessor {
+  process(text: string): void;
+  flush(): void;
+}
+
+function parseNDJSONLine(
+  line: string,
+  onLine: (parsed: Record<string, unknown>) => void,
+  final: boolean,
+): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  try {
+    onLine(JSON.parse(trimmed) as Record<string, unknown>);
+  } catch {
+    logger.warn(
+      final
+        ? '[HttpClient] Failed to parse final NDJSON line:'
+        : '[HttpClient] Failed to parse NDJSON line:',
+      (final ? line : trimmed).substring(0, 100),
+    );
+  }
+}
+
+function createNDJSONProcessor(
+  onLine: (parsed: Record<string, unknown>) => void,
+): NDJSONProcessor {
+  let lineBuffer = '';
+  return {
+    process(text) {
+      const lines = `${lineBuffer}${text}`.split('\n');
+      lineBuffer = lines.pop() || '';
+      lines.forEach(line => parseNDJSONLine(line, onLine, false));
+    },
+    flush() {
+      parseNDJSONLine(lineBuffer, onLine, true);
+      lineBuffer = '';
+    },
+  };
+}
+
+function completeNDJSONRequest({
+  xhr,
+  url,
+  hasAuthorization,
+  processedLength,
+  processor,
+  timeoutId,
+  resolve,
+  reject,
+}: {
+  xhr: XMLHttpRequest;
+  url: string;
+  hasAuthorization: boolean;
+  processedLength: number;
+  processor: NDJSONProcessor;
+  timeoutId: ReturnType<typeof setTimeout>;
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+}): void {
+  if (xhr.readyState !== 4) return;
+  clearTimeout(timeoutId);
+  if (isCredentialTransportDowngrade(url, xhr.responseURL, hasAuthorization)) {
+    reject(new Error('Remote server redirected credentials to an insecure endpoint'));
+    return;
+  }
+  if (xhr.status >= 200 && xhr.status < 300) {
+    if (xhr.responseText.length > processedLength) {
+      processor.process(xhr.responseText.slice(processedLength));
+    }
+    processor.flush();
+    resolve();
+    return;
+  }
+  logger.error(
+    `[HttpClient] HTTP ${xhr.status} error body: ${xhr.responseText || '(empty)'}`,
+  );
+  reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
 }

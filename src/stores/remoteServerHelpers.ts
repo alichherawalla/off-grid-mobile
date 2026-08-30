@@ -25,6 +25,12 @@ import {
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
 
+function trimTrailingSlashes(value: string): string {
+  let result = value;
+  while (result.endsWith('/')) result = result.slice(0, -1);
+  return result;
+}
+
 async function fetchForDiscovery(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
@@ -40,7 +46,7 @@ async function fetchForDiscovery(url: string, init: RequestInit): Promise<Respon
 }
 
 async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMediaModelIds> {
-  const url = server.endpoint.replace(/\/+$/, '');
+  const url = trimTrailingSlashes(server.endpoint);
   const headers: Record<string, string> = { Accept: 'application/json' };
   Object.assign(headers, remoteAuthorizationHeaders(server.endpoint, server.apiKey));
 
@@ -197,8 +203,7 @@ export async function testEndpointAndGetModels(
 }
 
 export async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
-  let url = server.endpoint;
-  while (url.endsWith('/')) url = url.slice(0, -1);
+  const url = trimTrailingSlashes(server.endpoint);
 
   // Headers for authentication
   const headers: Record<string, string> = {

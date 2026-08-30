@@ -1,10 +1,19 @@
-import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import type { RemoteServer } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { remoteMediaRuntime } from './remoteMediaRuntime';
 
 let previousPath: string | null = null;
+
+function arrayBufferToBase64(value: ArrayBuffer): string {
+  const bytes = new Uint8Array(value);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return globalThis.btoa(binary);
+}
 
 export function activeRemoteVoiceServer(): RemoteServer | null {
   const server = useRemoteServerStore.getState().getActiveServer();
@@ -28,7 +37,7 @@ export async function synthesizeRemoteVoiceFile(
   const extension = result.contentType.includes('wav') ? 'wav' : 'mp3';
   const safeId = messageId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const path = `${directory}/${safeId}.${extension}`;
-  await RNFS.writeFile(path, Buffer.from(result.audio).toString('base64'), 'base64');
+  await RNFS.writeFile(path, arrayBufferToBase64(result.audio), 'base64');
   if (signal.aborted) {
     await RNFS.unlink(path).catch(() => undefined);
     throw new Error('Remote request cancelled');

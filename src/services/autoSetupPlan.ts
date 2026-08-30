@@ -32,10 +32,16 @@ export interface AutoSetupCompatibleCatalog {
   stt: AutoSetupCandidate<{ modelId: string }>[];
 }
 
-const PLAN_COPY: Record<AutoSetupTier, Pick<AutoSetupPlan, 'title' | 'summary'>> = {
+const PLAN_COPY: Record<
+  AutoSetupTier,
+  Pick<AutoSetupPlan, 'title' | 'summary'>
+> = {
   lean: { title: 'Lean', summary: 'Small downloads with lower memory use.' },
   balanced: { title: 'Balanced', summary: 'The best balance for this device.' },
-  extreme: { title: 'Extreme', summary: 'The largest safe models for this device.' },
+  extreme: {
+    title: 'Extreme',
+    summary: 'The largest safe models for this device.',
+  },
 };
 
 const AUTO_SETUP_TEXT_TARGET_BILLIONS: Record<AutoSetupTier, number> = {
@@ -44,11 +50,16 @@ const AUTO_SETUP_TEXT_TARGET_BILLIONS: Record<AutoSetupTier, number> = {
   extreme: 9,
 };
 
-function choose<T>(tier: AutoSetupTier, candidates: AutoSetupCandidate<T>[]): AutoSetupCandidate<T> | null {
+function choose<T>(
+  tier: AutoSetupTier,
+  candidates: AutoSetupCandidate<T>[],
+): AutoSetupCandidate<T> | null {
   if (candidates.length === 0) return null;
-  if (tier === 'balanced') return [...candidates].sort((a, b) => a.fitScore - b.fitScore)[0];
+  if (tier === 'balanced')
+    return [...candidates].sort((a, b) => a.fitScore - b.fitScore)[0];
   const bySize = [...candidates].sort((a, b) => a.sizeBytes - b.sizeBytes);
-  return tier === 'lean' ? bySize[0] : bySize[bySize.length - 1];
+  if (tier === 'lean') return bySize[0];
+  return bySize.at(-1) ?? null;
 }
 
 function chooseText(
@@ -60,7 +71,11 @@ function chooseText(
   return [...candidates].sort((a, b) => {
     const aDistance = Math.abs((a.parameterCountB ?? 0) - target);
     const bDistance = Math.abs((b.parameterCountB ?? 0) - target);
-    return aDistance - bDistance || a.fitScore - b.fitScore || a.sizeBytes - b.sizeBytes;
+    return (
+      aDistance - bDistance ||
+      a.fitScore - b.fitScore ||
+      a.sizeBytes - b.sizeBytes
+    );
   })[0];
 }
 
@@ -82,7 +97,9 @@ function selectAutoSetupPlan(
   };
 }
 
-export function selectAutoSetupPlans(catalog: AutoSetupCompatibleCatalog): AutoSetupPlan[] {
+export function selectAutoSetupPlans(
+  catalog: AutoSetupCompatibleCatalog,
+): AutoSetupPlan[] {
   return (['lean', 'balanced', 'extreme'] as const)
     .map(tier => selectAutoSetupPlan(tier, catalog))
     .filter((plan): plan is AutoSetupPlan => plan !== null);

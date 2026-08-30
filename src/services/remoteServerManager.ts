@@ -38,6 +38,24 @@ const portOf = (endpoint: string): string | null => {
   try { return new URL(endpoint).port; } catch { return null; }
 };
 
+function uniqueSamePortServer(
+  discovered: DiscoveredServer,
+  missingExisting: RemoteServer[],
+  unmatchedDiscovered: DiscoveredServer[],
+): RemoteServer | null {
+  const port = portOf(discovered.endpoint);
+  if (!port) return null;
+  const existingOnPort = missingExisting.filter(
+    server => portOf(server.endpoint) === port,
+  );
+  const discoveredOnPort = unmatchedDiscovered.filter(
+    server => portOf(server.endpoint) === port,
+  );
+  return existingOnPort.length === 1 && discoveredOnPort.length === 1
+    ? existingOnPort[0]
+    : null;
+}
+
 class RemoteServerManager {
   /**
    * Add a new remote server
@@ -243,31 +261,31 @@ class RemoteServerManager {
     const found: DiscoveredServer[] = [];
 
     for (const d of unmatchedDiscovered) {
-      const dPort = portOf(d.endpoint);
-      const samePortCandidates = dPort
-        ? missingExisting.filter((server) => portOf(server.endpoint) === dPort)
-        : [];
-      const unmatchedOnPort = dPort
-        ? unmatchedDiscovered.filter((server) => portOf(server.endpoint) === dPort)
-        : [];
-      const samePortServer = samePortCandidates.length === 1 && unmatchedOnPort.length === 1
-        ? samePortCandidates[0]
-        : null;
-
-      if (samePortServer) {
-        const hasStoredCredential = (await this.getApiKey(samePortServer.id)) !== null;
-        if (!canReconcileCredentialedEndpoint(d.endpoint, hasStoredCredential)) {
-          found.push(d);
-          continue;
-        }
-        await this.applyMovedServer(samePortServer, d.endpoint, d.name);
-        moved.push(samePortServer.id);
-      } else {
+      const samePortServer = uniqueSamePortServer(
+        d,
+        missingExisting,
+        unmatchedDiscovered,
+      );
+      if (!samePortServer || !(await this.reconcileMovedServer(samePortServer, d))) {
         found.push(d);
+        continue;
       }
+      moved.push(samePortServer.id);
     }
 
     return { moved, found };
+  }
+
+  private async reconcileMovedServer(
+    server: RemoteServer,
+    discovered: DiscoveredServer,
+  ): Promise<boolean> {
+    const hasStoredCredential = (await this.getApiKey(server.id)) !== null;
+    if (!canReconcileCredentialedEndpoint(discovered.endpoint, hasStoredCredential)) {
+      return false;
+    }
+    await this.applyMovedServer(server, discovered.endpoint, discovered.name);
+    return true;
   }
 
   /** Update a saved server that has moved to a new endpoint, and re-select it if it was active. */

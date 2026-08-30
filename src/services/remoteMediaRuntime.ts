@@ -19,7 +19,9 @@ export interface RemoteMediaRequestOptions {
 }
 
 function endpoint(server: RemoteServer, path: string): string {
-  return `${server.endpoint.replace(/\/+$/, '')}${path}`;
+  let base = server.endpoint;
+  while (base.endsWith('/')) base = base.slice(0, -1);
+  return `${base}${path}`;
 }
 
 async function request(
@@ -42,7 +44,7 @@ async function request(
       ...init,
       headers: {
         Accept: 'application/json',
-        ...(init.headers ?? {}),
+        ...init.headers,
         ...remoteAuthorizationHeaders(server.endpoint, apiKey),
       },
       signal: controller.signal,
@@ -122,7 +124,7 @@ export const remoteMediaRuntime = {
     });
     const payload = (await response.json()) as { text?: unknown };
     if (typeof payload.text !== 'string') {
-      throw new Error('Remote server returned no transcript');
+      throw new TypeError('Remote server returned no transcript');
     }
     return payload.text.trim();
   },

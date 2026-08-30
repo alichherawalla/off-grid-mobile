@@ -99,7 +99,17 @@ export function autoSetupDownloadId(
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return 'Unknown error';
 }
 
 function initialOutcomes(
@@ -111,6 +121,48 @@ function initialOutcomes(
       return [id, { id, phase: 'waiting', progress: 0 }];
     }),
   );
+}
+
+function downloadPhase(status: ModelDownload['status']): AutoSetupItemPhase {
+  if (status === 'completed') return 'completed';
+  if (status === 'error') return 'failed';
+  return 'downloading';
+}
+
+interface DownloadRefreshProjection {
+  outcomes: Record<string, AutoSetupItemOutcome>;
+  failure?: AutoSetupItemOutcome;
+  allCompleted: boolean;
+}
+
+function projectActiveDownloads(
+  activeIds: ReadonlySet<string>,
+  listed: ModelDownload[],
+  currentOutcomes: Record<string, AutoSetupItemOutcome>,
+): DownloadRefreshProjection {
+  const byId = new Map(listed.map(download => [download.id, download]));
+  const outcomes = { ...currentOutcomes };
+  let failure: AutoSetupItemOutcome | undefined;
+  let allCompleted = activeIds.size > 0;
+
+  for (const id of activeIds) {
+    const download = byId.get(id);
+    const current = outcomes[id] ?? { id, phase: 'starting', progress: 0 };
+    const outcome: AutoSetupItemOutcome = download
+      ? {
+          id,
+          phase: downloadPhase(download.status),
+          progress: download.progress,
+          ...(download.error ? { error: download.error } : {}),
+        }
+      : current;
+    outcomes[id] = outcome;
+    if (outcome.phase === 'failed') failure = outcome;
+    allCompleted =
+      allCompleted && download !== undefined && outcome.phase === 'completed';
+  }
+
+  return { outcomes, failure, allCompleted };
 }
 
 /** One owner for the complete Auto Setup lifecycle. The screen only renders this projection. */
@@ -163,33 +215,11 @@ export function createAutoSetupSession(
     try {
       const listed = await downloads.list();
       if (disposed) return;
-      const byId = new Map(listed.map(download => [download.id, download]));
-      const outcomes = { ...state.outcomes };
-      let failure: AutoSetupItemOutcome | undefined;
-      let allCompleted = activeIds.size > 0;
-      for (const id of activeIds) {
-        const download = byId.get(id);
-        const current = outcomes[id] ?? { id, phase: 'starting', progress: 0 };
-        if (!download) {
-          allCompleted = false;
-          outcomes[id] = current;
-          continue;
-        }
-        const phase: AutoSetupItemPhase =
-          download.status === 'completed'
-            ? 'completed'
-            : download.status === 'error'
-            ? 'failed'
-            : 'downloading';
-        outcomes[id] = {
-          id,
-          phase,
-          progress: download.progress,
-          ...(download.error ? { error: download.error } : {}),
-        };
-        if (phase === 'failed') failure = outcomes[id];
-        if (phase !== 'completed') allCompleted = false;
-      }
+      const { outcomes, failure, allCompleted } = projectActiveDownloads(
+        activeIds,
+        listed,
+        state.outcomes,
+      );
       publish({ outcomes });
       if (failure) {
         operation += 1;
