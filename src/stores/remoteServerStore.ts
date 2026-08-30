@@ -1,4 +1,3 @@
-
 /**
  * Remote Server Store
  *
@@ -12,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   RemoteServer,
   RemoteModel,
+  RemoteModelCategory,
   ServerTestResult,
 } from '../types';
 import logger from '../utils/logger';
@@ -40,6 +40,10 @@ interface RemoteServerState {
   activeRemoteTextModelId: string | null;
   /** Active remote image/vision model ID (when using remote for vision) */
   activeRemoteImageModelId: string | null;
+  /** Active server per non-text category. Text keeps activeServerId for provider routing. */
+  activeRemoteMediaServerIds: Partial<
+    Record<Exclude<RemoteModelCategory, 'text'>, string>
+  >;
 
   // Server CRUD
   addServer: (server: Omit<RemoteServer, 'id' | 'createdAt'>) => string;
@@ -55,15 +59,25 @@ interface RemoteServerState {
   setActiveRemoteImageModelId: (id: string | null) => void;
   getActiveRemoteTextModel: () => RemoteModel | null;
   getActiveRemoteImageModel: () => RemoteModel | null;
+  setActiveRemoteMediaServerId: (
+    category: Exclude<RemoteModelCategory, 'text'>,
+    serverId: string | null,
+  ) => void;
+  getActiveRemoteMediaServer: (
+    category: Exclude<RemoteModelCategory, 'text'>,
+  ) => RemoteServer | null;
 
   // Model discovery
-  discoverModels: (serverId: string) => Promise<RemoteModel[]>;
+  discoverModels: (serverId: string, apiKey?: string) => Promise<RemoteModel[]>;
   setDiscoveredModels: (serverId: string, models: RemoteModel[]) => void;
   clearDiscoveredModels: (serverId: string) => void;
 
   // Health check
-  testConnection: (serverId: string) => Promise<ServerTestResult>;
-  testConnectionByEndpoint: (endpoint: string, apiKey?: string) => Promise<ServerTestResult>;
+  testConnection: (serverId: string, apiKey?: string) => Promise<ServerTestResult>;
+  testConnectionByEndpoint: (
+    endpoint: string,
+    apiKey?: string,
+  ) => Promise<ServerTestResult>;
   updateServerHealth: (serverId: string, isHealthy: boolean) => void;
 
   // Utility
@@ -72,6 +86,30 @@ interface RemoteServerState {
   clearAllServers: () => void;
 }
 
+type PersistedRemoteServerState = Partial<RemoteServerState>;
+
+export function migrateRemoteServerState(
+  persisted: unknown,
+): PersistedRemoteServerState {
+  const state = (persisted ?? {}) as PersistedRemoteServerState;
+  if (state.activeRemoteMediaServerIds) return state;
+  const activeServer = state.servers?.find(
+    server => server.id === state.activeServerId,
+  );
+  if (!activeServer) return { ...state, activeRemoteMediaServerIds: {} };
+  return {
+    ...state,
+    activeRemoteMediaServerIds: {
+      ...(state.activeRemoteImageModelId && activeServer.mediaModels?.image
+        ? { image: activeServer.id }
+        : {}),
+      ...(activeServer.mediaModels?.transcription
+        ? { transcription: activeServer.id }
+        : {}),
+      ...(activeServer.mediaModels?.voice ? { voice: activeServer.id } : {}),
+    },
+  };
+}
 
 export const useRemoteServerStore = create<RemoteServerState>()(
   persist(
@@ -85,9 +123,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       discoveringServerId: null,
       activeRemoteTextModelId: null,
       activeRemoteImageModelId: null,
+      activeRemoteMediaServerIds: {},
 
       // Server CRUD
-      addServer: (serverData) => {
+      addServer: serverData => {
         const id = generateId();
         const { apiKey: _apiKey, ...publicData } = serverData;
         const server: RemoteServer = {
@@ -95,7 +134,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           id,
           createdAt: new Date().toISOString(),
         };
-        set((state) => ({
+        set(state => ({
           servers: [...state.servers, server],
         }));
         logger.log('[RemoteServer] Added server:', server.name);
@@ -103,78 +142,119 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       updateServer: (id, updates) => {
-        set((state) => ({
-          servers: state.servers.map((server) => {
+        set(state => ({
+          servers: state.servers.map(server => {
             if (server.id !== id) return server;
-            const { apiKey: _apiKey, ...publicServer } = { ...server, ...updates };
+            const { apiKey: _apiKey, ...publicServer } = {
+              ...server,
+              ...updates,
+            };
             return publicServer;
           }),
         }));
         logger.log('[RemoteServer] Updated server:', id);
       },
 
-      removeServer: (id) => {
+      removeServer: id => {
         const state = get();
         // Clear active server and model IDs if removing the active server
         if (state.activeServerId === id) {
           set({
             activeServerId: null,
             activeRemoteTextModelId: null,
-            activeRemoteImageModelId: null,
           });
         }
-        set((prev) => ({
-          servers: prev.servers.filter((srv) => srv.id !== id),
+        set(prev => ({
+          servers: prev.servers.filter(srv => srv.id !== id),
           discoveredModels: Object.fromEntries(
-            Object.entries(prev.discoveredModels).filter(([key]) => key !== id)
+            Object.entries(prev.discoveredModels).filter(([key]) => key !== id),
           ),
           serverHealth: Object.fromEntries(
-            Object.entries(prev.serverHealth).filter(([key]) => key !== id)
+            Object.entries(prev.serverHealth).filter(([key]) => key !== id),
           ),
+          activeRemoteMediaServerIds: Object.fromEntries(
+            Object.entries(prev.activeRemoteMediaServerIds).filter(
+              ([, serverId]) => serverId !== id,
+          ),
+          ),
+          activeRemoteImageModelId:
+            prev.activeRemoteMediaServerIds.image === id
+              ? null
+              : prev.activeRemoteImageModelId,
         }));
         logger.log('[RemoteServer] Removed server:', id);
       },
 
       // Active server
-      setActiveServerId: (id) => {
+      setActiveServerId: id => {
         set({ activeServerId: id });
         logger.log('[RemoteServer] Active server set to:', id || 'local');
       },
 
       getActiveServer: () => {
         const { servers, activeServerId } = get();
-        return servers.find((s) => s.id === activeServerId) || null;
+        return servers.find(s => s.id === activeServerId) || null;
       },
 
       // Active remote model selection
-      setActiveRemoteTextModelId: (id) => {
+      setActiveRemoteTextModelId: id => {
         set({ activeRemoteTextModelId: id });
-        logger.log('[RemoteServer] Active remote text model set to:', id || 'none');
+        logger.log(
+          '[RemoteServer] Active remote text model set to:',
+          id || 'none',
+        );
       },
 
-      setActiveRemoteImageModelId: (id) => {
+      setActiveRemoteImageModelId: id => {
         set({ activeRemoteImageModelId: id });
-        logger.log('[RemoteServer] Active remote image model set to:', id || 'none');
+        logger.log(
+          '[RemoteServer] Active remote image model set to:',
+          id || 'none',
+        );
       },
 
       getActiveRemoteTextModel: () => {
-        const { activeRemoteTextModelId, activeServerId, discoveredModels } = get();
+        const { activeRemoteTextModelId, activeServerId, discoveredModels } =
+          get();
         if (!activeRemoteTextModelId || !activeServerId) return null;
         const models = discoveredModels[activeServerId] || [];
-        return models.find((m) => m.id === activeRemoteTextModelId) || null;
+        return models.find(m => m.id === activeRemoteTextModelId) || null;
       },
 
       getActiveRemoteImageModel: () => {
-        const { activeRemoteImageModelId, activeServerId, discoveredModels } = get();
-        if (!activeRemoteImageModelId || !activeServerId) return null;
-        const models = discoveredModels[activeServerId] || [];
-        return models.find((m) => m.id === activeRemoteImageModelId) || null;
+        const {
+          activeRemoteImageModelId,
+          activeRemoteMediaServerIds,
+          discoveredModels,
+        } = get();
+        const serverId = activeRemoteMediaServerIds.image;
+        if (!activeRemoteImageModelId || !serverId) return null;
+        const models = discoveredModels[serverId] || [];
+        return models.find(m => m.id === activeRemoteImageModelId) || null;
+      },
+
+      setActiveRemoteMediaServerId: (category, serverId) => {
+        set(state => ({
+          activeRemoteMediaServerIds: serverId
+            ? { ...state.activeRemoteMediaServerIds, [category]: serverId }
+            : Object.fromEntries(
+                Object.entries(state.activeRemoteMediaServerIds).filter(
+                  ([key]) => key !== category,
+                ),
+              ),
+        }));
+      },
+
+      getActiveRemoteMediaServer: category => {
+        const { servers, activeRemoteMediaServerIds } = get();
+        const serverId = activeRemoteMediaServerIds[category];
+        return servers.find(server => server.id === serverId) ?? null;
       },
 
       // Model discovery
-      discoverModels: async (serverId) => {
+      discoverModels: async (serverId, apiKey) => {
         const { servers } = get();
-        const server = servers.find((s) => s.id === serverId);
+        const server = servers.find(s => s.id === serverId);
         if (!server) {
           throw new Error(`Server not found: ${serverId}`);
         }
@@ -182,8 +262,8 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         set({ discoveringServerId: serverId, isLoading: true });
 
         try {
-          const models = await fetchModelsFromServer(server);
-          set((state) => ({
+          const models = await fetchModelsFromServer({ ...server, apiKey });
+          set(state => ({
             discoveredModels: {
               ...state.discoveredModels,
               [serverId]: models,
@@ -200,7 +280,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       setDiscoveredModels: (serverId, models) => {
-        set((state) => ({
+        set(state => ({
           discoveredModels: {
             ...state.discoveredModels,
             [serverId]: models,
@@ -208,8 +288,8 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         }));
       },
 
-      clearDiscoveredModels: (serverId) => {
-        set((state) => {
+      clearDiscoveredModels: serverId => {
+        set(state => {
           const newDiscovered = { ...state.discoveredModels };
           delete newDiscovered[serverId];
           return { discoveredModels: newDiscovered };
@@ -217,9 +297,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       // Health check
-      testConnection: async (serverId) => {
+      testConnection: async (serverId, apiKey) => {
         const { servers } = get();
-        const server = servers.find((s) => s.id === serverId);
+        const server = servers.find(s => s.id === serverId);
         if (!server) {
           return { success: false, error: 'Server not found' };
         }
@@ -227,9 +307,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         set({ testingServerId: serverId, isLoading: true });
 
         try {
-          const result = await testServerConnection(server);
+          const result = await testServerConnection({ ...server, apiKey });
 
-          set((state) => ({
+          set(state => ({
             serverHealth: {
               ...state.serverHealth,
               [serverId]: {
@@ -243,7 +323,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
 
           // Update models if discovered
           if (result.success && result.models) {
-            set((state) => ({
+            set(state => ({
               discoveredModels: {
                 ...state.discoveredModels,
                 [serverId]: result.models!,
@@ -252,17 +332,26 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           }
 
           if (result.success && result.mediaModels) {
-            set((state) => ({
-              servers: state.servers.map((candidate) => candidate.id === serverId
-                ? {
+            set(state => ({
+              servers: state.servers.map(candidate =>
+                candidate.id === serverId
+                  ? {
                     ...candidate,
-                    mediaModels: {
-                      ...result.mediaModels,
-                      ...candidate.mediaModels,
-                    },
+                    mediaModels:
+                      result.modelManagement === 'offgrid-desktop-v1'
+                        ? result.mediaModels
+                        : {
+                            ...result.mediaModels,
+                            ...candidate.mediaModels,
+                          },
+                    modelCatalog:
+                      result.modelCatalog ?? candidate.modelCatalog,
+                    modelManagement:
+                      result.modelManagement ?? candidate.modelManagement,
                     updatedAt: new Date().toISOString(),
                   }
-                : candidate),
+                  : candidate,
+              ),
             }));
           }
 
@@ -292,7 +381,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       updateServerHealth: (serverId, isHealthy) => {
-        set((state) => ({
+        set(state => ({
           serverHealth: {
             ...state.serverHealth,
             [serverId]: {
@@ -304,15 +393,15 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       // Utility
-      getServerById: (id) => {
+      getServerById: id => {
         const { servers } = get();
-        return servers.find((s) => s.id === id) || null;
+        return servers.find(s => s.id === id) || null;
       },
 
       getModelById: (serverId, modelId) => {
         const { discoveredModels } = get();
         const models = discoveredModels[serverId] || [];
-        return models.find((m) => m.id === modelId) || null;
+        return models.find(m => m.id === modelId) || null;
       },
 
       clearAllServers: () => {
@@ -323,20 +412,24 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           serverHealth: {},
           activeRemoteTextModelId: null,
           activeRemoteImageModelId: null,
+          activeRemoteMediaServerIds: {},
         });
       },
     }),
     {
       name: 'remote-servers',
+      version: 2,
+      migrate: migrateRemoteServerState,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
+      partialize: state => ({
         servers: state.servers.map(({ apiKey: _apiKey, ...server }) => server),
         activeServerId: state.activeServerId,
         activeRemoteTextModelId: state.activeRemoteTextModelId,
         activeRemoteImageModelId: state.activeRemoteImageModelId,
+        activeRemoteMediaServerIds: state.activeRemoteMediaServerIds,
         discoveredModels: state.discoveredModels,
         // Don't persist health status - it should be refreshed
       }),
-    }
-  )
+    },
+  ),
 );

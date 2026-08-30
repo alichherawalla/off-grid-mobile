@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Plat
 import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
@@ -21,11 +22,12 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { curatedLiteRTDownloadWarning, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
+import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { modelManager } from '../../services';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
+import { fetchModelFiles } from '../../services/modelCatalogFiles';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -58,7 +60,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
   | 'isModelDownloaded' | 'getDownloadedModel' | 'isRepairingVisionModel'
->;
+> & { onboarding?: boolean };
 
 type DetailProps = Pick<Props,
   | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
@@ -111,7 +113,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
     for (const f of modelFiles) {
       if (!f.mmProjFile) continue;
       const rec = getDownloadedModel(selectedModel.id, f.name);
-      if (rec?.engine === 'llama' && !rec.isVisionModel) void modelManager.markVisionModel(rec.id);
+      if (rec?.engine === 'llama' && !rec.isVisionModel) {
+        modelManager.markVisionModel(rec.id).catch(() => undefined);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel.id, modelFiles]);
@@ -185,6 +189,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
+        compact
         recommended={recommended}
         supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}
         failedState={failedState}
@@ -193,12 +198,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
   return (
     <View testID="model-detail-screen" style={styles.flex1}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} testID="model-detail-back" style={styles.backButton}>
-          <Icon name="arrow-left" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, styles.flex1]} numberOfLines={1}>{selectedModel.name}</Text>
-      </View>
+      <ScreenHeader
+        title={selectedModel.name}
+        onBack={onBack}
+        testID="model-detail-header"
+      />
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
           <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
@@ -273,8 +277,9 @@ const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; reco
 interface ModelListItemProps {
   item: ModelInfo; index: number; focusTrigger: number;
   isDownloaded: boolean; isTrending: boolean; onPress: () => void;
+  onDownload?: () => void;
 }
-const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress }) => {
+const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress, onDownload }) => {
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
@@ -285,7 +290,7 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>;
+  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} onDownload={isCompatible ? onDownload : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>;
 };
 
 function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void): void {
@@ -323,7 +328,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
+    isModelDownloaded, getDownloadedModel, isRepairingVisionModel, onboarding = false,
   } = props;
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
   const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
@@ -334,9 +339,44 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => (
-    <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={() => handleSelectModel(item)} />
-  );
+  const downloadRecommendedFile = async (item: ModelInfo) => {
+    const files = await fetchModelFiles([item]);
+    const file = files[item.id]?.[0];
+    if (!file) {
+      setAlertState(showAlert('Download unavailable', 'No compatible Q4_K_M file was found.'));
+      return;
+    }
+    await handleDownload(item, file);
+  };
+
+  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
+    const directDownload = onboarding
+      ? () => { downloadRecommendedFile(item).catch(() => undefined); }
+      : undefined;
+    return (
+      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
+    );
+  };
+
+  const onboardingLiteRTCards = onboarding && Platform.OS === 'android'
+    ? buildCuratedLiteRTFiles().map((file, index) => {
+        const entry = getCuratedLiteRTEntry(file.name);
+        const model = { ...LITERT_RECOMMENDED_MODEL, name: entry?.displayName ?? file.name };
+        return (
+          <ModelCard
+            key={file.name}
+            compact
+            model={model}
+            file={file}
+            recommended={{ pillLabel: 'Recommended' }}
+            supportsAcceleration
+            testID={`onboarding-litert-model-${index}`}
+            onPress={() => { handleDownload(model, file); }}
+            onDownload={() => { handleDownload(model, file); }}
+          />
+        );
+      })
+    : null;
 
   const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles);
 
@@ -418,14 +458,17 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         </View>
       ) : (
         <FlatList
-          data={hasSearched ? filteredResults : [...(Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo]}
+          data={hasSearched ? filteredResults : [...(!onboarding && Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo]}
           renderItem={renderModelItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           testID="models-list"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           ListHeaderComponent={hasSearched ? null : (
-            <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
+            <>
+              <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
+              {onboardingLiteRTCards}
+            </>
           )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>

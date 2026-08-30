@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -12,12 +18,16 @@ import { useRemoteServerStore } from '../stores';
 import { useTheme, useThemedStyles } from '../theme';
 import type { RootStackParamList } from '../navigation/types';
 import { useRemoteServerForm } from '../components/RemoteServerEditor/useRemoteServerForm';
+import { RemoteModelField } from '../components/RemoteServerEditor/RemoteModelField';
 import { createStyles } from '../components/RemoteServerEditor/styles';
 
 // Private-LAN model servers use HTTP by design. Public addresses show an explicit warning.
 const PRIVATE_LAN_ENDPOINT_EXAMPLE = 'http://192.168.1.50:7878'; // NOSONAR
 
-type Navigation = NativeStackNavigationProp<RootStackParamList, 'RemoteServerEditor'>;
+type Navigation = NativeStackNavigationProp<
+  RootStackParamList,
+  'RemoteServerEditor'
+>;
 type EditorRoute = RouteProp<RootStackParamList, 'RemoteServerEditor'>;
 
 export const RemoteServerEditorScreen: React.FC = () => {
@@ -32,30 +42,16 @@ export const RemoteServerEditorScreen: React.FC = () => {
   const close = () => navigation.goBack();
   const form = useRemoteServerForm({ server, visible: true, onClose: close });
 
-  const modelField = (input: {
-    label: string;
-    value: string;
-    onChangeText: (value: string) => void;
-    placeholder: string;
-  }) => (
-    <>
-      <Text style={styles.label}>{input.label}</Text>
-      <TextInput
-        style={styles.input}
-        value={input.value}
-        onChangeText={input.onChangeText}
-        placeholder={input.placeholder}
-        placeholderTextColor={theme.colors.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-    </>
-  );
-
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScreenHeader title={server ? 'Edit server' : 'Add a server'} onBack={close} />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScreenHeader
+        title={server ? 'Edit server' : 'Add a server'}
+        onBack={close}
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
         <Text style={styles.label}>Server name</Text>
         <TextInput
           testID="server-name"
@@ -65,7 +61,9 @@ export const RemoteServerEditorScreen: React.FC = () => {
           placeholder="Off Grid AI Desktop"
           placeholderTextColor={theme.colors.textMuted}
         />
-        {form.errors.name ? <Text style={styles.errorText}>{form.errors.name}</Text> : null}
+        {form.errors.name ? (
+          <Text style={styles.errorText}>{form.errors.name}</Text>
+        ) : null}
 
         <Text style={styles.label}>Address</Text>
         <TextInput
@@ -86,8 +84,8 @@ export const RemoteServerEditorScreen: React.FC = () => {
           <View style={styles.warningContainer}>
             <Icon name="alert-triangle" size={13} color={theme.colors.error} />
             <Text style={styles.warningText}>
-              This server is on the public internet. Your prompts, images, and audio leave this
-              phone and go to whoever runs it.
+              This server is on the public internet. Your prompts, images, and
+              audio leave this phone and go to whoever runs it.
             </Text>
           </View>
         ) : (
@@ -115,27 +113,62 @@ export const RemoteServerEditorScreen: React.FC = () => {
             accessibilityRole="button"
             accessibilityLabel={showApiKey ? 'Hide API key' : 'Show API key'}
           >
-            <Icon name={showApiKey ? 'eye-off' : 'eye'} size={18} color={theme.colors.textMuted} />
+            <Icon
+              name={showApiKey ? 'eye-off' : 'eye'}
+              size={18}
+              color={theme.colors.textMuted}
+            />
           </TouchableOpacity>
         </View>
-        <Text style={styles.helperText}>The key stays in Keychain on this phone.</Text>
+        <Text style={styles.helperText}>
+          The key stays in Keychain on this phone.
+        </Text>
 
         <Text style={styles.sectionHeader}>Remote media</Text>
         <Text style={styles.helperText}>
-          Add only the models this server provides. Empty fields keep that work on this phone.
+          Add only the models this server provides. Empty fields keep that work
+          on this phone.
         </Text>
-        {modelField({
-          label: 'Image model ID', value: form.imageModelId,
-          onChangeText: form.setImageModelId, placeholder: 'gpt-image-1',
-        })}
-        {modelField({
-          label: 'Transcription model ID', value: form.transcriptionModelId,
-          onChangeText: form.setTranscriptionModelId, placeholder: 'whisper-1',
-        })}
-        {modelField({
-          label: 'Voice model ID', value: form.voiceModelId,
-          onChangeText: form.setVoiceModelId, placeholder: 'gpt-4o-mini-tts',
-        })}
+        <RemoteModelField
+          label="Text model"
+          value={form.textModelId}
+          options={form.discoveredModels}
+          onChange={form.setTextModelId}
+          placeholder="llama3.2"
+          testID="server-text-model"
+          loading={form.isTesting}
+          allowManualEntry={form.modelManagement !== 'offgrid-desktop-v1'}
+        />
+        <RemoteModelField
+          label="Image model"
+          value={form.imageModelId}
+          options={form.modelCatalog.image ?? []}
+          onChange={form.setImageModelId}
+          placeholder="gpt-image-1"
+          testID="server-image-model"
+          loading={form.isTesting}
+          allowManualEntry={form.modelManagement !== 'offgrid-desktop-v1'}
+        />
+        <RemoteModelField
+          label="Transcription model"
+          value={form.transcriptionModelId}
+          options={form.modelCatalog.transcription ?? []}
+          onChange={form.setTranscriptionModelId}
+          placeholder="whisper-1"
+          testID="server-transcription-model"
+          loading={form.isTesting}
+          allowManualEntry={form.modelManagement !== 'offgrid-desktop-v1'}
+        />
+        <RemoteModelField
+          label="Voice model"
+          value={form.voiceModelId}
+          options={form.modelCatalog.voice ?? []}
+          onChange={form.setVoiceModelId}
+          placeholder="gpt-4o-mini-tts"
+          testID="server-voice-model"
+          loading={form.isTesting}
+          allowManualEntry={form.modelManagement !== 'offgrid-desktop-v1'}
+        />
 
         <Text style={styles.label}>Notes (optional)</Text>
         <TextInput
@@ -152,7 +185,9 @@ export const RemoteServerEditorScreen: React.FC = () => {
             <View
               style={[
                 styles.statusDot,
-                form.testResult.success ? styles.statusDotSuccess : styles.statusDotError,
+                form.testResult.success
+                  ? styles.statusDotSuccess
+                  : styles.statusDotError,
               ]}
             />
             <Text style={styles.statusText}>{form.testResult.message}</Text>

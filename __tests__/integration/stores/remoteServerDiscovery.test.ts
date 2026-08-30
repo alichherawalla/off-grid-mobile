@@ -28,7 +28,10 @@ jest.mock('../../../src/services/httpClient', () => ({
 }));
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { detectServerType, testEndpoint } from '../../../src/services/httpClient';
+import {
+  detectServerType,
+  testEndpoint,
+} from '../../../src/services/httpClient';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,7 +43,7 @@ function addServer(opts: {
   endpoint: string;
   name?: string;
 }): void {
-  useRemoteServerStore.setState((state) => ({
+  useRemoteServerStore.setState(state => ({
     servers: [
       ...state.servers,
       {
@@ -217,9 +220,7 @@ describe('remoteServerDiscovery integration', () => {
           return Promise.resolve(jsonResponse({}, false, 404));
         }
         if (url.endsWith('/api/tags')) {
-          return Promise.resolve(
-            jsonResponse({ models: [{ name: 'llava' }] }),
-          );
+          return Promise.resolve(jsonResponse({ models: [{ name: 'llava' }] }));
         }
         if (url.endsWith('/api/show')) {
           return Promise.resolve(
@@ -271,7 +272,9 @@ describe('remoteServerDiscovery integration', () => {
           return Promise.resolve(
             jsonResponse({
               object: 'list',
-              data: [{ id: 'qwen3-vl-2b-thinking-mlx', max_context_length: 32768 }],
+              data: [
+                { id: 'qwen3-vl-2b-thinking-mlx', max_context_length: 32768 },
+              ],
             }),
           );
         }
@@ -372,7 +375,9 @@ describe('remoteServerDiscovery integration', () => {
       mockFetch.mockImplementation((url: string) => {
         // Match /api/v1/models before /v1/models (the former is a suffix of the latter)
         if (url.includes('/api/v1/models')) {
-          return Promise.resolve(jsonResponse({ error: 'not found' }, false, 404));
+          return Promise.resolve(
+            jsonResponse({ error: 'not found' }, false, 404),
+          );
         }
         if (url.endsWith('/v1/models')) {
           return Promise.resolve(
@@ -426,7 +431,7 @@ describe('remoteServerDiscovery integration', () => {
         .getState()
         .discoverModels('srv-ollama');
 
-      const ids = models.map((m) => m.id);
+      const ids = models.map(m => m.id);
       expect(ids).toContain('llama3.2');
       expect(ids).not.toContain('nomic-embed-text');
     });
@@ -479,7 +484,7 @@ describe('remoteServerDiscovery integration', () => {
 
       expect(models).toHaveLength(3);
 
-      const byId = Object.fromEntries(models.map((m) => [m.id, m]));
+      const byId = Object.fromEntries(models.map(m => [m.id, m]));
 
       expect(byId['llama3.2'].capabilities.supportsVision).toBe(false);
       expect(byId['llama3.2'].capabilities.maxContextLength).toBe(8192);
@@ -560,43 +565,87 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore.getState().discoverModels('srv-gw');
+      const models = await useRemoteServerStore
+        .getState()
+        .discoverModels('srv-gw');
 
-      const ids = models.map((m) => m.id).sort((a, b) => a.localeCompare(b));
+      const ids = models.map(m => m.id).sort((a, b) => a.localeCompare(b));
       expect(ids).toEqual(['gemma-3', 'qwen3-vl']);
-      expect(models.some((m) => m.id === 'sdxl')).toBe(false);
-      expect(models.some((m) => m.id === 'kokoro')).toBe(false);
-      expect(models.some((m) => m.id === 'whisper-base')).toBe(false);
+      expect(models.some(m => m.id === 'sdxl')).toBe(false);
+      expect(models.some(m => m.id === 'kokoro')).toBe(false);
+      expect(models.some(m => m.id === 'whisper-base')).toBe(false);
     });
 
-    it('records active media models when it tests a named Desktop', async () => {
-      addServer({ id: 'srv-gw', endpoint: 'http://192.168.1.44:7878', name: 'Studio Mac' }); // NOSONAR
-      (testEndpoint as jest.Mock).mockResolvedValue({ success: true, latency: 8 });
-      (detectServerType as jest.Mock).mockResolvedValue({ type: 'off-grid-desktop' });
+    it('records every categorized model and keeps the first as the initial choice', async () => {
+      addServer({
+        id: 'srv-gw',
+        endpoint: 'http://192.168.1.44:7878',
+        name: 'Studio Mac',
+      }); // NOSONAR
+      (testEndpoint as jest.Mock).mockResolvedValue({
+        success: true,
+        latency: 8,
+      });
+      (detectServerType as jest.Mock).mockResolvedValue({
+        type: 'off-grid-desktop',
+      });
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
-          return Promise.resolve(jsonResponse({
+          return Promise.resolve(
+            jsonResponse({
             object: 'list',
             data: [
               { id: 'gemma-3', kind: 'chat' },
-              { id: 'sdxl', kind: 'image' },
-              { id: 'kokoro', kind: 'speech' },
-              { id: 'whisper-base', kind: 'transcription' },
+                {
+                  id: '/models/sdxl.safetensors',
+                  name: 'Studio Image',
+                  kind: 'image',
+                },
+                { id: 'flux-schnell', name: 'Fast Image', kind: 'image' },
+                {
+                  id: '/models/kokoro.pte',
+                  name: 'Kokoro Voice',
+                  kind: 'speech',
+                },
+                {
+                  id: '/models/whisper-base.bin',
+                  name: 'Whisper Base',
+                  kind: 'transcription',
+                },
             ],
-          }));
+            }),
+          );
         }
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const result = await useRemoteServerStore.getState().testConnection('srv-gw');
+      const result = await useRemoteServerStore
+        .getState()
+        .testConnection('srv-gw');
 
       expect(result.mediaModels).toEqual({
-        image: 'sdxl',
-        transcription: 'whisper-base',
-        voice: 'kokoro',
+        text: 'gemma-3',
+        image: '/models/sdxl.safetensors',
+        transcription: '/models/whisper-base.bin',
+        voice: '/models/kokoro.pte',
       });
-      expect(useRemoteServerStore.getState().getServerById('srv-gw')?.mediaModels)
-        .toEqual(result.mediaModels);
+      expect(result.modelCatalog).toEqual({
+        text: [{ id: 'gemma-3', name: 'gemma-3' }],
+        image: [
+          { id: '/models/sdxl.safetensors', name: 'Studio Image' },
+          { id: 'flux-schnell', name: 'Fast Image' },
+        ],
+        voice: [{ id: '/models/kokoro.pte', name: 'Kokoro Voice' }],
+        transcription: [
+          { id: '/models/whisper-base.bin', name: 'Whisper Base' },
+        ],
+      });
+      expect(
+        useRemoteServerStore.getState().getServerById('srv-gw')?.mediaModels,
+      ).toEqual(result.mediaModels);
+      expect(
+        useRemoteServerStore.getState().getServerById('srv-gw')?.modelCatalog,
+      ).toEqual(result.modelCatalog);
     });
 
     it('still lists models from servers that do not send kind (Ollama/LM Studio)', async () => {
@@ -611,8 +660,10 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore.getState().discoverModels('srv-plain');
-      expect(models.map((m) => m.id)).toEqual(['llama-3.2']);
+      const models = await useRemoteServerStore
+        .getState()
+        .discoverModels('srv-plain');
+      expect(models.map(m => m.id)).toEqual(['llama-3.2']);
     });
   });
 });

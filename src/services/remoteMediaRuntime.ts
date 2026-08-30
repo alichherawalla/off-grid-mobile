@@ -24,14 +24,15 @@ function endpoint(server: RemoteServer, path: string): string {
   return `${base}${path}`;
 }
 
-async function request(
+async function request<T>(
   input: {
     server: RemoteServer;
     path: string;
     init: RequestInit;
     signal?: AbortSignal;
   },
-): Promise<Response> {
+  consume: (response: Response) => Promise<T>,
+): Promise<T> {
   const { server, path, init, signal } = input;
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -54,7 +55,9 @@ async function request(
       const detail = await response.text().catch(() => '');
       throw new Error(detail || `Remote server returned HTTP ${response.status}`);
     }
-    return response;
+    // Keep timeout and caller cancellation attached until the response body is
+    // consumed. A successful header is not a completed image/audio transfer.
+    return await consume(response);
   } catch (error) {
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
     throw error;
@@ -80,7 +83,7 @@ export const remoteMediaRuntime = {
     input: { prompt: string; size?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
-    const response = await request({
+    const payload = await request({
       server,
       path: '/v1/images/generations',
       init: {
@@ -94,10 +97,9 @@ export const remoteMediaRuntime = {
         }),
       },
       signal: options.signal,
-    });
-    const payload = (await response.json()) as {
+    }, response => response.json() as Promise<{
       data?: Array<{ b64_json?: string; url?: string }>;
-    };
+    }>);
     const image = payload.data?.[0];
     if (!image?.b64_json && !image?.url) throw new Error('Remote server returned no image');
     return { base64: image.b64_json, url: image.url };
@@ -116,13 +118,12 @@ export const remoteMediaRuntime = {
       name: 'recording.wav',
       type: 'audio/wav',
     } as unknown as Blob);
-    const response = await request({
+    const payload = await request({
       server,
       path: '/v1/audio/transcriptions',
       init: { method: 'POST', body },
       signal: options.signal,
-    });
-    const payload = (await response.json()) as { text?: unknown };
+    }, response => response.json() as Promise<{ text?: unknown }>);
     if (typeof payload.text !== 'string') {
       throw new TypeError('Remote server returned no transcript');
     }
@@ -134,7 +135,7 @@ export const remoteMediaRuntime = {
     input: { text: string; voice?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
-    const response = await request({
+    return request({
       server,
       path: '/v1/audio/speech',
       init: {
@@ -148,10 +149,9 @@ export const remoteMediaRuntime = {
         }),
       },
       signal: options.signal,
-    });
-    return {
+    }, async response => ({
       audio: await response.arrayBuffer(),
       contentType: response.headers.get('content-type') ?? 'audio/mpeg',
-    };
+    }));
   },
 };

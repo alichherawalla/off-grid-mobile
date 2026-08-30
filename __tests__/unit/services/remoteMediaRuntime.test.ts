@@ -60,11 +60,13 @@ describe('remoteMediaRuntime', () => {
       transcription: true,
       voice: true,
     });
-    expect(remoteServerCapabilities({ mediaModels: { image: '   ' } })).toEqual({
+    expect(remoteServerCapabilities({ mediaModels: { image: '   ' } })).toEqual(
+      {
       imageGeneration: false,
       transcription: false,
       voice: false,
-    });
+      },
+    );
   });
 
   it('keeps private-LAN HTTP unauthenticated and rejects redirects', async () => {
@@ -78,8 +80,12 @@ describe('remoteMediaRuntime', () => {
       remoteMediaRuntime.generateImage(server, { prompt: 'A quiet desk' }),
     ).resolves.toEqual({ base64: 'image-bytes', url: undefined });
 
-    expect(calls[0]?.[0]).toBe('http://192.168.1.30:7878/v1/images/generations');
-    expect(calls[0]?.[1]?.headers).toMatchObject({ 'Content-Type': 'application/json' });
+    expect(calls[0]?.[0]).toBe(
+      'http://192.168.1.30:7878/v1/images/generations',
+    );
+    expect(calls[0]?.[1]?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+    });
     expect(calls[0]?.[1]?.headers).not.toHaveProperty('Authorization');
     expect(calls[0]?.[1]?.redirect).toBe('error');
     expect(JSON.parse(String(calls[0]?.[1]?.body))).toMatchObject({
@@ -99,7 +105,9 @@ describe('remoteMediaRuntime', () => {
       { ...server, endpoint: 'https://desktop.example.test' },
       { prompt: 'A quiet desk' },
     );
-    expect(calls[0]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer device-secret' });
+    expect(calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: 'Bearer device-secret',
+    });
     expect(calls[0]?.[1]?.redirect).toBe('error');
   });
 
@@ -107,12 +115,16 @@ describe('remoteMediaRuntime', () => {
     global.fetch = jest.fn(async () => jsonResponse({})) as typeof fetch;
 
     await expect(
-      remoteMediaRuntime.transcribe(server, { fileUri: 'file:///recording.wav' }),
+      remoteMediaRuntime.transcribe(server, {
+        fileUri: 'file:///recording.wav',
+      }),
     ).rejects.toThrow('Remote server returned no transcript');
   });
 
   it('routes file transcription through the active server without a local Whisper model', async () => {
-    global.fetch = jest.fn(async () => jsonResponse({ text: 'Private meeting notes' })) as typeof fetch;
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ text: 'Private meeting notes' }),
+    ) as typeof fetch;
     const store = useRemoteServerStore.getState();
     const serverId = store.addServer({
       name: server.name,
@@ -120,11 +132,11 @@ describe('remoteMediaRuntime', () => {
       providerType: server.providerType,
       mediaModels: { transcription: 'whisper-large-v3' },
     });
-    store.setActiveServerId(serverId);
+    store.setActiveRemoteMediaServerId('transcription', serverId);
 
-    await expect(whisperService.transcribeFile('file:///recording.wav')).resolves.toBe(
-      'Private meeting notes',
-    );
+    await expect(
+      whisperService.transcribeFile('file:///recording.wav'),
+    ).resolves.toBe('Private meeting notes');
   });
 
   it('cancels an in-flight voice request through AbortSignal', async () => {
@@ -142,11 +154,14 @@ describe('remoteMediaRuntime', () => {
 
   it('writes remote speech into the file-backed playback seam for the active Desktop', async () => {
     const audio = Uint8Array.from([1, 2, 3, 4]).buffer;
-    global.fetch = jest.fn(async () => ({
+    global.fetch = jest.fn(
+      async () =>
+        ({
       ...jsonResponse({}, 200),
       headers: { get: () => 'audio/mpeg' },
       arrayBuffer: async () => audio,
-    } as unknown as Response)) as typeof fetch;
+        } as unknown as Response),
+    ) as typeof fetch;
     const store = useRemoteServerStore.getState();
     const id = store.addServer({
       name: 'Studio Mac',
@@ -154,7 +169,7 @@ describe('remoteMediaRuntime', () => {
       providerType: server.providerType,
       mediaModels: { voice: 'kokoro' },
     });
-    store.setActiveServerId(id);
+    store.setActiveRemoteMediaServerId('voice', id);
 
     const active = activeRemoteVoiceServer();
     expect(active?.name).toBe('Studio Mac');

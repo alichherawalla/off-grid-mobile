@@ -26,21 +26,32 @@ import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
 import { discoverLANServers } from '../services/networkDiscovery';
-import { CustomAlert, AlertState, initialAlertState, showAlert } from '../components/CustomAlert';
+import {
+  CustomAlert,
+  AlertState,
+  initialAlertState,
+  showAlert,
+} from '../components/CustomAlert';
 import { OFF_GRID_DESKTOP_URL } from '../constants';
 import { withUtm } from '../utils/utm';
 import { createStyles } from './RemoteServersScreen.styles';
 
 const DESKTOP_URL = withUtm(OFF_GRID_DESKTOP_URL, 'remote-servers');
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'RemoteServers'>;
+type NavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'RemoteServers'
+>;
 
 export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } = useRemoteServerStore();
-  const autoDiscover = useAppStore(s => s.settings.autoDiscoverRemoteModels === true);
+  const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } =
+    useRemoteServerStore();
+  const autoDiscover = useAppStore(
+    s => s.settings.autoDiscoverRemoteModels === true,
+  );
   const updateSettings = useAppStore(s => s.updateSettings);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -53,6 +64,8 @@ export const RemoteServersScreen: React.FC = () => {
       testConnection(server.id).catch(() => { });
     });
 
+  // Status refresh belongs to this screen-open event, not every health projection update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTestServer = useCallback(async (serverId: string) => {
@@ -77,7 +90,9 @@ export const RemoteServersScreen: React.FC = () => {
     try {
       const discovered = await discoverLANServers();
       const existingEndpoints = new Set(servers.map(s => s.endpoint));
-      const newServers = discovered.filter(d => !existingEndpoints.has(d.endpoint));
+      const newServers = discovered.filter(
+        d => !existingEndpoints.has(d.endpoint),
+      );
       if (newServers.length === 0) {
         // Say what was actually tried. "No servers found" leaves the user with nothing to act
         // on; the ports do, because that is what has to be listening on the other machine.
@@ -94,20 +109,28 @@ export const RemoteServersScreen: React.FC = () => {
             name: d.name,
             endpoint: d.endpoint,
             providerType: 'openai-compatible',
-          })
-        )
+          }),
+        ),
       );
-      added.forEach(s => remoteServerManager.testConnection(s.id).catch(() => { }));
-      setScanNote(`Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
+      added.forEach(s =>
+        remoteServerManager.testConnection(s.id).catch(() => {}),
+      );
+      setScanNote(
+        `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
+      );
     } catch (error) {
-      setScanNote(error instanceof Error ? error.message : 'The scan could not finish.');
+      setScanNote(
+        error instanceof Error ? error.message : 'The scan could not finish.',
+      );
     } finally {
       setIsScanning(false);
     }
   }, [servers]);
 
-  const handleDeleteServer = useCallback((server: typeof servers[0]) => {
-    setAlertState(showAlert(
+  const handleDeleteServer = useCallback(
+    (server: (typeof servers)[0]) => {
+      setAlertState(
+        showAlert(
       'Remove this server',
       `"${server.name}" will be removed from this phone. The server itself is not touched.`,
       [
@@ -120,9 +143,34 @@ export const RemoteServersScreen: React.FC = () => {
             await remoteServerManager.removeServer(server.id);
           },
         },
-      ]
-    ));
-  }, [activeServerId, setActiveServerId]);
+          ],
+        ),
+      );
+    },
+    [activeServerId, setActiveServerId],
+  );
+
+  const handleUseServer = useCallback(
+    async (server: (typeof servers)[0]) => {
+      if (activeServerId === server.id) {
+        remoteServerManager.clearActiveRemoteTextModel();
+        return;
+      }
+      const textModelId = server.mediaModels?.text;
+      if (textModelId) {
+        try {
+          await remoteServerManager.setActiveRemoteTextModel(server.id, textModelId);
+          return;
+        } catch (error) {
+          setAlertState(showAlert('Could not use this model', error instanceof Error
+            ? error.message : 'The server did not load the selected model.'));
+          return;
+        }
+      }
+      setActiveServerId(server.id);
+    },
+    [activeServerId, setActiveServerId],
+  );
 
   const openDesktopUrl = useCallback(() => {
     Linking.openURL(DESKTOP_URL).catch(() => {});
@@ -132,10 +180,13 @@ export const RemoteServersScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Remote Servers" onBack={() => navigation.goBack()} />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
         <Text style={styles.intro}>
-          Run models this phone cannot hold. Another machine on your network does the work and the
-          answer comes back here, over your own Wi-Fi.
+          Run models this phone cannot hold. Another machine on your network
+          does the work and the answer comes back here, over your own Wi-Fi.
         </Text>
 
         <View style={styles.card}>
@@ -153,8 +204,13 @@ export const RemoteServersScreen: React.FC = () => {
             <Switch
               testID="auto-discover-toggle"
               value={autoDiscover}
-              onValueChange={(v) => updateSettings({ autoDiscoverRemoteModels: v })}
-              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              onValueChange={v =>
+                updateSettings({ autoDiscoverRemoteModels: v })
+              }
+              trackColor={{
+                false: theme.colors.border,
+                true: theme.colors.primary,
+              }}
             />
           </View>
         </View>
@@ -186,14 +242,16 @@ export const RemoteServersScreen: React.FC = () => {
             textStyle={styles.scanNote}
           />
         ) : null}
-        {!isScanning && scanNote ? <Text style={styles.scanNote}>{scanNote}</Text> : null}
+        {!isScanning && scanNote ? (
+          <Text style={styles.scanNote}>{scanNote}</Text>
+        ) : null}
 
         {servers.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No servers yet</Text>
             <Text style={styles.emptyText}>
-              Off Grid AI Desktop serves your Mac&apos;s models to this phone. Ollama and LM Studio
-              work the same way.
+              Off Grid AI Desktop serves your Mac&apos;s models to this phone.
+              Ollama and LM Studio work the same way.
             </Text>
             <TouchableOpacity
               style={styles.desktopLink}
@@ -202,30 +260,38 @@ export const RemoteServersScreen: React.FC = () => {
               accessibilityLabel="Get Off Grid AI Desktop"
             >
               <Icon name="monitor" size={14} color={theme.colors.primary} />
-              <Text style={styles.desktopLinkText}>Get Off Grid AI Desktop</Text>
+              <Text style={styles.desktopLinkText}>
+                Get Off Grid AI Desktop
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
             <Text style={styles.sectionLabel}>Servers</Text>
-            {servers.map((server) => {
+            {servers.map(server => {
               const isTesting = testingId === server.id;
               const isActive = activeServerId === server.id;
               const health = serverHealth[server.id];
 
               let statusColor = styles.statusDotUnknown;
-              if (health?.isHealthy === true) statusColor = styles.statusDotActive;
-              else if (health?.isHealthy === false) statusColor = styles.statusDotInactive;
+              if (health?.isHealthy === true)
+                statusColor = styles.statusDotActive;
+              else if (health?.isHealthy === false)
+                statusColor = styles.statusDotInactive;
 
               let statusText = 'Not checked yet';
               if (isTesting) statusText = 'Checking';
               else if (health?.isHealthy === true) statusText = 'Connected';
-              else if (health?.isHealthy === false) statusText = 'Not answering';
+              else if (health?.isHealthy === false)
+                statusText = 'Not answering';
 
               return (
                 <View
                   key={server.id}
-                  style={[styles.serverCard, isActive && styles.serverCardActive]}
+                  style={[
+                    styles.serverCard,
+                    isActive && styles.serverCardActive,
+                  ]}
                   testID={`server-${server.id}`}
                 >
                   {/* Tapping the server chooses it. The store has always had an active server
@@ -233,19 +299,29 @@ export const RemoteServersScreen: React.FC = () => {
                       somewhere else. */}
                   <TouchableOpacity
                     style={styles.serverIdentity}
-                    onPress={() => setActiveServerId(isActive ? null : server.id)}
+                    onPress={() => handleUseServer(server)}
                     accessibilityRole="button"
-                    accessibilityLabel={isActive ? `Stop using ${server.name}` : `Use ${server.name}`}
+                    accessibilityLabel={
+                      isActive
+                        ? `Stop using ${server.name}`
+                        : `Use ${server.name}`
+                    }
                     testID={`server-use-${server.id}`}
                   >
                     <View style={styles.serverTopRow}>
                       <View style={[styles.statusDot, statusColor]} />
-                      <Text style={styles.serverName} numberOfLines={1}>{server.name}</Text>
-                      <Text style={isActive ? styles.activeBadge : styles.useHint}>
+                      <Text style={styles.serverName} numberOfLines={1}>
+                        {server.name}
+                      </Text>
+                      <Text
+                        style={isActive ? styles.activeBadge : styles.useHint}
+                      >
                         {isActive ? 'In use' : 'Use'}
                       </Text>
                     </View>
-                    <Text style={styles.serverEndpoint} numberOfLines={1}>{server.endpoint}</Text>
+                    <Text style={styles.serverEndpoint} numberOfLines={1}>
+                      {server.endpoint}
+                    </Text>
                     <Text style={styles.serverStatus}>{statusText}</Text>
                   </TouchableOpacity>
 
@@ -257,24 +333,45 @@ export const RemoteServersScreen: React.FC = () => {
                     >
                       {/* The row's status line already says "Checking", so the icon stays put
                           rather than being swapped for a spinner that reads as retry. */}
-                      <Icon name="refresh-cw" size={13} color={theme.colors.textSecondary} />
-                      <Text style={styles.serverActionText}>{isTesting ? 'Checking' : 'Test'}</Text>
+                      <Icon
+                        name="refresh-cw"
+                        size={13}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text style={styles.serverActionText}>
+                        {isTesting ? 'Checking' : 'Test'}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.serverAction}
                       onPress={() =>
-                        navigation.navigate('RemoteServerEditor', { serverId: server.id })
+                        navigation.navigate('RemoteServerEditor', {
+                          serverId: server.id,
+                        })
                       }
                     >
-                      <Icon name="edit-2" size={13} color={theme.colors.textSecondary} />
+                      <Icon
+                        name="edit-2"
+                        size={13}
+                        color={theme.colors.textSecondary}
+                      />
                       <Text style={styles.serverActionText}>Edit</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.serverAction, styles.serverActionDanger]}
                       onPress={() => handleDeleteServer(server)}
                     >
-                      <Icon name="trash-2" size={13} color={theme.colors.error} />
-                      <Text style={[styles.serverActionText, styles.serverActionDangerText]}>
+                      <Icon
+                        name="trash-2"
+                        size={13}
+                        color={theme.colors.error}
+                      />
+                      <Text
+                        style={[
+                          styles.serverActionText,
+                          styles.serverActionDangerText,
+                        ]}
+                      >
                         Remove
                       </Text>
                     </TouchableOpacity>

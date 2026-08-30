@@ -9,9 +9,14 @@ import { createAllStyles } from './styles';
 
 export interface ImageTabProps {
   downloadedImageModels: ONNXImageModel[];
-  remoteVisionModels: Array<{ serverId: string; serverName: string; models: RemoteModel[] }>;
+  remoteVisionModels: Array<{
+    serverId: string;
+    serverName: string;
+    models: RemoteModel[];
+  }>;
   activeImageModelId: string | null;
   activeRemoteImageModelId: string | null;
+  activeRemoteImageServerId: string | null;
   isAnyLoading: boolean;
   isLoadingImage: boolean;
   /** Id of the image model being loaded right now (the row just tapped) — drives the per-row spinner. */
@@ -23,23 +28,36 @@ export interface ImageTabProps {
 }
 
 export const ImageTab: React.FC<ImageTabProps> = ({
-  downloadedImageModels, remoteVisionModels, activeImageModelId, activeRemoteImageModelId, isAnyLoading, isLoadingImage,
-  loadingModelId = null, onSelectImageModel, onUnloadImageModel, onSelectRemoteVisionModel, onBrowseModels,
+  downloadedImageModels,
+  remoteVisionModels,
+  activeImageModelId,
+  activeRemoteImageModelId,
+  activeRemoteImageServerId,
+  isAnyLoading,
+  isLoadingImage,
+  loadingModelId = null,
+  onSelectImageModel,
+  onUnloadImageModel,
+  onSelectRemoteVisionModel,
+  onBrowseModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
   const hasLoaded = !!activeImageModelId || !!activeRemoteImageModelId;
-  const activeModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const activeModel = downloadedImageModels.find(
+    m => m.id === activeImageModelId,
+  );
 
   // Find active remote vision model info
   const activeRemoteModelInfo = useMemo(() => {
     if (!activeRemoteImageModelId) return null;
     for (const group of remoteVisionModels) {
+      if (group.serverId !== activeRemoteImageServerId) continue;
       const model = group.models.find(m => m.id === activeRemoteImageModelId);
       if (model) return { model, serverName: group.serverName };
     }
     return null;
-  }, [remoteVisionModels, activeRemoteImageModelId]);
+  }, [remoteVisionModels, activeRemoteImageModelId, activeRemoteImageServerId]);
 
   return (
     <>
@@ -49,18 +67,40 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             <Icon name="check-circle" size={14} color={colors.success} />
             <Text style={styles.loadedLabel}>Currently Loaded</Text>
           </View>
-          <View style={styles.loadedModelItem} testID="currently-loaded-image-model">
+          <View
+            style={styles.loadedModelItem}
+            testID="currently-loaded-image-model"
+          >
             <View style={styles.loadedModelInfo}>
-              <Text style={styles.loadedModelName} numberOfLines={1} testID="currently-loaded-image-model-name">
-                {activeModel?.name || activeRemoteModelInfo?.model?.name || 'Unknown'}
+              <Text
+                style={styles.loadedModelName}
+                numberOfLines={1}
+                testID="currently-loaded-image-model-name"
+              >
+                {activeModel?.name ||
+                  activeRemoteModelInfo?.model?.name ||
+                  'Unknown'}
               </Text>
-              <Text style={styles.loadedModelMeta} testID="currently-loaded-image-model-ram">
+              <Text
+                style={styles.loadedModelMeta}
+                testID="currently-loaded-image-model-ram"
+              >
                 {activeModel
-                  ? `${activeModel.style || 'Image'} • ${hardwareService.formatBytes(activeModel.size ?? 0)} • ${hardwareService.formatBytes(hardwareService.estimateImageModelRam(activeModel))} RAM`
+                  ? `${
+                      activeModel.style || 'Image'
+                    } • ${hardwareService.formatBytes(
+                      activeModel.size ?? 0,
+                    )} • ${hardwareService.formatBytes(
+                      hardwareService.estimateImageModelRam(activeModel),
+                    )} RAM`
                   : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
-            <TouchableOpacity style={styles.unloadButton} onPress={onUnloadImageModel} disabled={isAnyLoading}>
+            <TouchableOpacity
+              style={styles.unloadButton}
+              onPress={onUnloadImageModel}
+              disabled={isAnyLoading}
+            >
               {isLoadingImage ? (
                 <LoadingDots color={colors.error} />
               ) : (
@@ -74,18 +114,36 @@ export const ImageTab: React.FC<ImageTabProps> = ({
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>{hasLoaded ? 'Switch Model' : 'Available Models'}</Text>
+      <Text style={styles.sectionTitle}>
+        {hasLoaded ? 'Switch Model' : 'Available Models'}
+      </Text>
 
       {/* Local Image Models */}
-      {downloadedImageModels.length === 0 && remoteVisionModels.length === 0 && (
+      {downloadedImageModels.length === 0 &&
+        remoteVisionModels.length === 0 && (
         <View style={styles.emptyState}>
           <Icon name="image" size={40} color={colors.textMuted} />
           <Text style={styles.emptyTitle}>No Image Models</Text>
-          <Text style={styles.emptyText}>Download image models from the Models tab</Text>
+            <Text style={styles.emptyText}>
+              Download image models from the Models tab
+            </Text>
           {onBrowseModels && (
-            <TouchableOpacity style={[localStyles.actionButton, { borderColor: colors.primary }]} onPress={onBrowseModels}>
+              <TouchableOpacity
+                style={[
+                  localStyles.actionButton,
+                  { borderColor: colors.primary },
+                ]}
+                onPress={onBrowseModels}
+              >
               <Icon name="download" size={14} color={colors.primary} />
-              <Text style={[localStyles.actionButtonText, { color: colors.primary }]}>Browse Models</Text>
+                <Text
+                  style={[
+                    localStyles.actionButtonText,
+                    { color: colors.primary },
+                  ]}
+                >
+                  Browse Models
+                </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -97,7 +155,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             <Icon name="hard-drive" size={14} color={colors.textMuted} />
             <Text style={styles.sectionSubTitle}>Local Models</Text>
           </View>
-          {downloadedImageModels.map((model) => {
+          {downloadedImageModels.map(model => {
             const isCurrent = activeImageModelId === model.id;
             // While a load is in flight, the highlight + spinner follow the row being loaded, not the
             // model still resident — so tapping B moves the selection to B at once (device 2026-07-14).
@@ -108,16 +166,27 @@ export const ImageTab: React.FC<ImageTabProps> = ({
               <TouchableOpacity
                 key={model.id}
                 testID={`image-model-row-${model.id}`}
-                style={[styles.modelItem, highlight && styles.modelItemSelectedImage]}
+                style={[
+                  styles.modelItem,
+                  highlight && styles.modelItemSelectedImage,
+                ]}
                 onPress={() => onSelectImageModel(model)}
                 disabled={isAnyLoading || isCurrent}
               >
                 <View style={styles.modelInfo}>
-                  <Text style={[styles.modelName, highlight && styles.modelNameSelectedImage]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.modelName,
+                      highlight && styles.modelNameSelectedImage,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {model.name}
                   </Text>
                   <View style={styles.modelMeta}>
-                    <Text style={styles.modelSize}>{hardwareService.formatBytes(model.size)}</Text>
+                    <Text style={styles.modelSize}>
+                      {hardwareService.formatBytes(model.size)}
+                    </Text>
                     {!!model.style && (
                       <>
                         <Text style={styles.metaSeparator}>•</Text>
@@ -128,7 +197,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                 </View>
                 {isLoadingThis ? (
                   <LoadingDots color={colors.info} testID="model-row-loading" />
-                ) : (isCurrent && !loadInProgress) ? (
+                ) : isCurrent && !loadInProgress ? (
                   <View style={[styles.checkmark, styles.checkmarkImage]}>
                     <Icon name="check" size={16} color={colors.background} />
                   </View>
@@ -146,17 +215,28 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             <Icon name="wifi" size={14} color={colors.textMuted} />
             <Text style={styles.sectionSubTitle}>{serverName}</Text>
           </View>
-          {models.map((model) => {
-            const isCurrent = activeRemoteImageModelId === model.id;
+          {models.map(model => {
+            const isCurrent =
+              activeRemoteImageServerId === serverId &&
+              activeRemoteImageModelId === model.id;
             return (
               <TouchableOpacity
                 key={model.id}
-                style={[styles.modelItem, isCurrent && styles.modelItemSelectedImage]}
+                style={[
+                  styles.modelItem,
+                  isCurrent && styles.modelItemSelectedImage,
+                ]}
                 onPress={() => onSelectRemoteVisionModel(model, serverId)}
                 disabled={isAnyLoading || isCurrent}
               >
                 <View style={styles.modelInfo}>
-                  <Text style={[styles.modelName, isCurrent && styles.modelNameSelectedImage]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.modelName,
+                      isCurrent && styles.modelNameSelectedImage,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {model.name}
                   </Text>
                   <View style={styles.modelMeta}>

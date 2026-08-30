@@ -208,7 +208,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isStartingRecording,
     isTranscribing,
   });
-  const showVoiceStatus = isRecording || voiceInteractionMode !== 'idle' || voiceProcessingState !== undefined;
+  // Model loading is shared across composers. It must not replace an idle composer that did not
+  // start the voice action. The local interaction and recorder states own this surface.
+  const showVoiceStatus =
+    isRecording ||
+    voiceInteractionMode !== 'idle' ||
+    isStartingRecording ||
+    isTranscribing;
 
   const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();
   const thinkingEnabled = appSettings.thinkingEnabled;

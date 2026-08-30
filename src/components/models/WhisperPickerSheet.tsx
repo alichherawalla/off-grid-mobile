@@ -11,6 +11,8 @@ import { WHISPER_MODELS } from '../../services/whisperService';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
+import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
+import { remoteServerManager } from '../../services/remoteServerManager';
 
 type Props = {
   visible: boolean;
@@ -24,13 +26,13 @@ type Props = {
 export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const downloadedModelId = useWhisperStore((s) => s.downloadedModelId);
-  const isModelLoading = useWhisperStore((s) => s.isModelLoading);
-  const presentModelIds = useWhisperStore((s) => s.presentModelIds);
-  const downloadModel = useWhisperStore((s) => s.downloadModel);
-  const selectModel = useWhisperStore((s) => s.selectModel);
-  const deleteModelById = useWhisperStore((s) => s.deleteModelById);
-  const refreshPresentModels = useWhisperStore((s) => s.refreshPresentModels);
+  const downloadedModelId = useWhisperStore(s => s.downloadedModelId);
+  const isModelLoading = useWhisperStore(s => s.isModelLoading);
+  const presentModelIds = useWhisperStore(s => s.presentModelIds);
+  const downloadModel = useWhisperStore(s => s.downloadModel);
+  const selectModel = useWhisperStore(s => s.selectModel);
+  const deleteModelById = useWhisperStore(s => s.deleteModelById);
+  const refreshPresentModels = useWhisperStore(s => s.refreshPresentModels);
 
   // In-flight download state from the SINGLE owner the Transcription tab also reads, so the picker
   // and the tab can never disagree (the picker used to read only whisperStore.downloadProgressById
@@ -43,56 +45,102 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   }, [visible, anyDownloading]);
 
   return (
-    <AppSheet visible={visible} onClose={onClose} title="TRANSCRIPTION MODEL" enableDynamicSizing>
+    <AppSheet
+      visible={visible}
+      onClose={onClose}
+      title="TRANSCRIPTION MODEL"
+      enableDynamicSizing
+    >
       <View style={styles.content}>
-        {WHISPER_MODELS.map((m) => {
+        <RemoteModelOptionsSection
+          category="transcription"
+          onSelect={onClose}
+        />
+        <Text style={styles.sectionLabel}>On-device models</Text>
+        {WHISPER_MODELS.map(m => {
           const active = downloadedModelId === m.id;
           const present = presentModelIds.includes(m.id);
           // Per-model in-flight state from the shared owner: this row's own progress, disabled only
           // while it is busy — several models can download at once, each with its own percentage.
           const dl = stateFor(m.id);
           const busy = dl?.active ?? false;
-          const progress = dl ? presentProgress({
+          const progress = dl
+            ? presentProgress({
             progress: dl.progress,
             bytesDownloaded: dl.currentBytes,
             totalBytes: dl.totalBytes,
             bytesPerSecond: dl.bytesPerSecond,
             status: dl.queued ? 'pending' : 'running',
-          }) : undefined;
+              })
+            : undefined;
           return (
             <AnimatedPressable
               key={m.id}
               style={[styles.row, active && styles.rowActive]}
               hapticType="selection"
               disabled={busy}
-              onPress={() => { if (present) { if (!active) selectModel(m.id); } else downloadModel(m.id); }}
+              onPress={() => {
+                remoteServerManager.clearActiveRemoteMediaModel(
+                  'transcription',
+                );
+                if (present) {
+                  if (!active) selectModel(m.id);
+                } else downloadModel(m.id);
+              }}
             >
               <View style={styles.rowInfo}>
                 <Text style={styles.name} numberOfLines={1}>
-                  {m.name}{m.lang === 'multi' ? ' · 99 langs' : ' · EN'}
+                  {m.name}
+                  {m.lang === 'multi' ? ' · 99 langs' : ' · EN'}
                 </Text>
-                <Text style={styles.desc} numberOfLines={1}>{m.description}</Text>
+                <Text style={styles.desc} numberOfLines={1}>
+                  {m.description}
+                </Text>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {dl?.downloading
-                    ? progress?.detailText
-                    : `${m.size} MB`}
+                  {dl?.downloading ? progress?.detailText : `${m.size} MB`}
                 </Text>
               </View>
               {(() => {
-                if (dl?.queued) return <Icon name="clock" size={16} color={colors.textMuted} testID="whisper-row-queued" />;
-                if (dl?.downloading) return <Text style={styles.percent} testID="whisper-row-progress">{progress?.percentageText ?? 'In progress'}</Text>;
+                if (dl?.queued)
+                  return (
+                    <Icon
+                      name="clock"
+                      size={16}
+                      color={colors.textMuted}
+                      testID="whisper-row-queued"
+                    />
+                  );
+                if (dl?.downloading)
+                  return (
+                    <Text style={styles.percent} testID="whisper-row-progress">
+                      {progress?.percentageText ?? 'In progress'}
+                    </Text>
+                  );
                 // selectModel sets downloadedModelId optimistically, so the active row IS the one loading —
                 // show a spinner on it while it loads (not a premature checkmark), matching text/image.
-                if (active && isModelLoading) return <LoadingDots color={colors.primary} testID="model-row-loading" />;
-                if (active) return <Icon name="check" size={16} color={colors.primary} />;
+                if (active && isModelLoading)
+                  return (
+                    <LoadingDots
+                      color={colors.primary}
+                      testID="model-row-loading"
+                    />
+                  );
+                if (active)
+                  return <Icon name="check" size={16} color={colors.primary} />;
                 if (present) {
                   return (
-                    <AnimatedPressable hapticType="selection" hitSlop={8} onPress={() => deleteModelById(m.id)}>
+                    <AnimatedPressable
+                      hapticType="selection"
+                      hitSlop={8}
+                      onPress={() => deleteModelById(m.id)}
+                    >
                       <Icon name="trash-2" size={16} color={colors.textMuted} />
                     </AnimatedPressable>
                   );
                 }
-                return <Icon name="download" size={16} color={colors.textMuted} />;
+                return (
+                  <Icon name="download" size={16} color={colors.textMuted} />
+                );
               })()}
             </AnimatedPressable>
           );
@@ -103,7 +151,12 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
 };
 
 const createStyles = (colors: ThemeColors) => ({
-  content: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl, gap: SPACING.sm as number },
+  content: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xl,
+    gap: SPACING.sm as number,
+  },
   row: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -120,4 +173,10 @@ const createStyles = (colors: ThemeColors) => ({
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
   percent: { ...TYPOGRAPHY.meta, color: colors.primary },
+  sectionLabel: {
+    ...TYPOGRAPHY.label,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
 });

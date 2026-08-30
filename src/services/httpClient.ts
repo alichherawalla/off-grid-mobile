@@ -149,7 +149,7 @@ export async function createStreamingRequest(
   req: StreamRequestConfig,
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
-  const { body, headers = {}, timeout = 300000, signal } = req;
+  const { body, headers = {}, timeout = 0, signal } = req;
   logger.log('[HttpClient] Creating streaming request to:', url);
   return new Promise((resolve, reject) => {
     // XMLHttpRequest is required for SSE streaming in React Native as fetch
@@ -164,10 +164,10 @@ export async function createStreamingRequest(
       });
     }
 
-    const timeoutId = setTimeout(() => {
+    const timeoutId = timeout > 0 ? setTimeout(() => {
       xhr.abort();
       reject(new Error('Request timeout'));
-    }, timeout);
+    }, timeout) : undefined;
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -279,7 +279,7 @@ export async function createNDJSONStreamingRequest(
   req: StreamRequestConfig,
   onLine: (parsed: Record<string, unknown>) => void,
 ): Promise<void> {
-  const { body, headers = {}, timeout = 300000, signal } = req;
+  const { body, headers = {}, timeout = 0, signal } = req;
   logger.log('[HttpClient] Creating NDJSON streaming request to:', url);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest(); // NOSONAR
@@ -291,10 +291,10 @@ export async function createNDJSONStreamingRequest(
       });
     }
 
-    const timeoutId = setTimeout(() => {
+    const timeoutId = timeout > 0 ? setTimeout(() => {
       xhr.abort();
       reject(new Error('Request timeout'));
-    }, timeout);
+    }, timeout) : undefined;
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -412,7 +412,7 @@ function completeNDJSONRequest({
   hasAuthorization: boolean;
   processedLength: number;
   processor: NDJSONProcessor;
-  timeoutId: ReturnType<typeof setTimeout>;
+  timeoutId: ReturnType<typeof setTimeout> | undefined;
   resolve: () => void;
   reject: (reason?: unknown) => void;
 }): void {

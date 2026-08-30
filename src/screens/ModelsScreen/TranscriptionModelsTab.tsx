@@ -16,7 +16,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ModelCard } from '../../components';
 import { TranscriptionLanguageSelect } from '../../components/TranscriptionLanguageSelect';
-import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
+import {
+  CustomAlert,
+  showAlert,
+  hideAlert,
+  AlertState,
+  initialAlertState,
+} from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
@@ -25,41 +31,68 @@ import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { WHISPER_MODELS } from '../../services';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
+import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
+import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
+import { remoteServerManager } from '../../services/remoteServerManager';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
 
-const formatSize = (mb: number): string => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`);
+const formatSize = (mb: number): string =>
+  mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`;
 
 interface WhisperCardProps {
-  model: typeof WHISPER_MODELS[number];
+  model: (typeof WHISPER_MODELS)[number];
   index: number;
   downloadedModelId: string | null;
   presentModelIds: string[];
   downloading: boolean;
   queued: boolean;
   downloadProgress: number;
-  downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
+  downloadBytes?: {
+    downloaded: number;
+    total: number;
+    bytesPerSecond?: number;
+  };
   onDownload: (id: string) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
-  model, index, downloadedModelId, presentModelIds, downloading, queued, downloadProgress, downloadBytes, onDownload, onSelect, onDelete,
+  model,
+  index,
+  downloadedModelId,
+  presentModelIds,
+  downloading,
+  queued,
+  downloadProgress,
+  downloadBytes,
+  onDownload,
+  onSelect,
+  onDelete,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
   // WHISPER_MODELS sizes are in MB. Surface bytes so the STT card matches the
   // Text/Image cards ("X MB / Y MB"); for a queued model this reads "0 B / 142 MB".
   const totalBytes = model.size * 1024 * 1024;
-  const visibleDownloadBytes = (downloading || queued)
-    ? (downloadBytes ?? { downloaded: Math.round(downloadProgress * totalBytes), total: totalBytes })
+  const visibleDownloadBytes =
+    downloading || queued
+      ? downloadBytes ?? {
+          downloaded: Math.round(downloadProgress * totalBytes),
+          total: totalBytes,
+        }
     : undefined;
   return (
     <ModelCard
       compact
-      model={{ id: model.id, name: model.name, author: formatSize(model.size), description: model.description }}
+      model={{
+        id: model.id,
+        name: model.name,
+        author: formatSize(model.size),
+        description: model.description,
+      }}
       isDownloaded={present && !downloading && !queued}
       isActive={active}
       isDownloading={downloading}
@@ -68,23 +101,48 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
       downloadBytes={visibleDownloadBytes}
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
-      onPress={downloading ? undefined : (present ? (active ? undefined : () => onSelect(model.id)) : () => onDownload(model.id))}
-      onDownload={!present && !downloading ? () => onDownload(model.id) : undefined}
+      onPress={
+        downloading
+          ? undefined
+          : present
+          ? active
+            ? undefined
+            : () => onSelect(model.id)
+          : () => onDownload(model.id)
+      }
+      onDownload={
+        !present && !downloading ? () => onDownload(model.id) : undefined
+      }
       onDelete={present ? () => onDelete(model.id) : undefined}
     />
   );
 };
 
-export const TranscriptionModelsTab: React.FC = () => {
+interface TranscriptionModelsTabProps {
+  showLanguageSelector?: boolean;
+  showRemoteModels?: boolean;
+}
+
+export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
+  showLanguageSelector = true,
+  showRemoteModels = true,
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   // Reuse the Models screen's shared banner styling so it matches the other tabs.
   const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
+  const remoteLabels = useActiveRemoteModelLabels();
 
   const {
-    downloadedModelId, presentModelIds, downloadModel,
-    selectModel, deleteModelById, refreshPresentModels, error: whisperError, clearError,
+    downloadedModelId,
+    presentModelIds,
+    downloadModel,
+    selectModel,
+    deleteModelById,
+    refreshPresentModels,
+    error: whisperError,
+    clearError,
   } = useWhisperStore();
 
   // In-flight STT state from the SINGLE owner (canonical download tracker + whisper-store
@@ -111,24 +169,55 @@ export const TranscriptionModelsTab: React.FC = () => {
     }, [anyDownloading]),
   );
 
-  const handleDownload = useCallback((id: string) => {
+  const handleDownload = useCallback(
+    (id: string) => {
     // The store owns downloadingId (set/cleared in downloadModel), so a download
     // started here — or from the chat voice button — shows progress on this tab.
-    downloadModel(id).catch(err => logger.error('[Transcription] download failed:', err));
-  }, [downloadModel]);
+      remoteServerManager.clearActiveRemoteMediaModel('transcription');
+      downloadModel(id).catch(err =>
+        logger.error('[Transcription] download failed:', err),
+      );
+    },
+    [downloadModel],
+  );
 
-  const handleSelect = useCallback((id: string) => {
-    selectModel(id).catch(err => logger.error('[Transcription] select failed:', err));
-  }, [selectModel]);
+  const handleSelect = useCallback(
+    (id: string) => {
+      remoteServerManager.clearActiveRemoteMediaModel('transcription');
+      selectModel(id).catch(err =>
+        logger.error('[Transcription] select failed:', err),
+      );
+    },
+    [selectModel],
+  );
 
-  const handleDelete = useCallback((id: string) => {
-    setAlertState(showAlert('Remove Transcription Model', 'This deletes the model files for this language/size.', [
+  const handleDelete = useCallback(
+    (id: string) => {
+      setAlertState(
+        showAlert(
+          'Remove Transcription Model',
+          'This deletes the model files for this language/size.',
+          [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => { setAlertState(hideAlert()); deleteModelById(id); } },
-    ]));
-  }, [deleteModelById]);
+            {
+              text: 'Remove',
+              style: 'destructive',
+              onPress: () => {
+                setAlertState(hideAlert());
+                deleteModelById(id);
+              },
+            },
+          ],
+        ),
+      );
+    },
+    [deleteModelById],
+  );
 
-  const renderWhisperCard = (model: typeof WHISPER_MODELS[number], index: number) => {
+  const renderWhisperCard = (
+    model: (typeof WHISPER_MODELS)[number],
+    index: number,
+  ) => {
     const state = downloadStateFor(model.id);
     return (
       <WhisperCard
@@ -140,11 +229,15 @@ export const TranscriptionModelsTab: React.FC = () => {
         downloading={state?.downloading ?? false}
         queued={state?.queued ?? false}
         downloadProgress={state?.progress ?? 0}
-        downloadBytes={state?.totalBytes ? {
+        downloadBytes={
+          state?.totalBytes
+            ? {
           downloaded: state.currentBytes ?? 0,
           total: state.totalBytes,
           bytesPerSecond: state.bytesPerSecond,
-        } : undefined}
+              }
+            : undefined
+        }
         onDownload={handleDownload}
         onSelect={handleSelect}
         onDelete={handleDelete}
@@ -153,10 +246,22 @@ export const TranscriptionModelsTab: React.FC = () => {
   };
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={shared.deviceBanner}>
-        <Icon name="shield" size={11} color={colors.trending} />
-        <Text style={shared.deviceBannerText}>Transcription runs on your phone, audio is never sent anywhere</Text>
+        <Icon
+          name={remoteLabels.transcription ? 'cloud' : 'shield'}
+          size={11}
+          color={colors.trending}
+        />
+        <Text style={shared.deviceBannerText}>
+          {showRemoteModels && remoteLabels.transcription
+            ? `${remoteLabels.transcription} runs on your active remote server`
+            : 'Transcription runs on your phone, audio is never sent anywhere'}
+        </Text>
       </View>
 
       {whisperError && (
@@ -165,7 +270,13 @@ export const TranscriptionModelsTab: React.FC = () => {
         </TouchableOpacity>
       )}
 
-      <TranscriptionLanguageSelect testID="models-transcription-language" />
+      {showLanguageSelector && (
+        <TranscriptionLanguageSelect testID="models-transcription-language" />
+      )}
+
+      {showRemoteModels && (
+        <RemoteModelOptionsSection category="transcription" />
+      )}
 
       <Text style={styles.sectionLabel}>English only</Text>
       {ENGLISH_MODELS.map((m, i) => renderWhisperCard(m, i))}
@@ -183,7 +294,7 @@ export const TranscriptionModelsTab: React.FC = () => {
 const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
   ({
     flex: { flex: 1 },
-    content: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.xs, paddingBottom: SPACING.xxl },
+    content: { paddingHorizontal: SPACING.md, paddingTop: SPACING.xs, paddingBottom: SPACING.xxl },
     sectionLabel: {
       ...TYPOGRAPHY.label, textTransform: 'uppercase' as const, color: colors.textMuted,
       letterSpacing: 0.3, marginBottom: SPACING.sm, marginTop: SPACING.xs,

@@ -1,4 +1,3 @@
-
 /**
  * Remote Server Helpers
  *
@@ -6,7 +5,14 @@
  * Extracted from remoteServerStore to keep the store file under the line limit.
  */
 
-import { RemoteServer, RemoteModel, RemoteMediaModelIds, ServerTestResult } from '../types';
+import {
+  RemoteServer,
+  RemoteModel,
+  RemoteMediaModelIds,
+  RemoteModelCatalog,
+  RemoteModelCategory,
+  ServerTestResult,
+} from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
 import logger from '../utils/logger';
 import {
@@ -21,6 +27,7 @@ import {
   REMOTE_FETCH_REDIRECT_POLICY,
   remoteAuthorizationHeaders,
 } from '../services/remoteTransportPolicy';
+import { readOffGridDesktopModelState } from '../services/offGridDesktopModels';
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
@@ -31,9 +38,15 @@ function trimTrailingSlashes(value: string): string {
   return result;
 }
 
-async function fetchForDiscovery(url: string, init: RequestInit): Promise<Response> {
+async function fetchForDiscovery(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    DISCOVERY_FETCH_TIMEOUT_MS,
+  );
   try {
     return await fetch(url, {
       ...init,
@@ -45,13 +58,29 @@ async function fetchForDiscovery(url: string, init: RequestInit): Promise<Respon
   }
 }
 
-async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMediaModelIds> {
+const gatewayCategory = (kind: unknown): RemoteModelCategory | null => {
+  if (kind === 'chat' || kind === 'vision') return 'text';
+  if (kind === 'image') return 'image';
+  if (kind === 'transcription') return 'transcription';
+  if (kind === 'speech') return 'voice';
+  return null;
+};
+
+async function fetchGatewayModelCatalog(
+  server: RemoteServer,
+): Promise<RemoteModelCatalog> {
   const url = trimTrailingSlashes(server.endpoint);
   const headers: Record<string, string> = { Accept: 'application/json' };
-  Object.assign(headers, remoteAuthorizationHeaders(server.endpoint, server.apiKey));
+  Object.assign(
+    headers,
+    remoteAuthorizationHeaders(server.endpoint, server.apiKey),
+  );
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), DISCOVERY_FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    DISCOVERY_FETCH_TIMEOUT_MS,
+  );
   try {
     const response = await fetch(`${url}/v1/models`, {
       headers,
@@ -62,12 +91,25 @@ async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMedi
     const payload = await response.json();
     if (!Array.isArray(payload?.data)) return {};
 
-    const result: RemoteMediaModelIds = {};
-    for (const model of payload.data as Array<{ id?: unknown; kind?: unknown }>) {
-      if (typeof model.id !== 'string' || typeof model.kind !== 'string') continue;
-      if (model.kind === 'image' && !result.image) result.image = model.id;
-      if (model.kind === 'transcription' && !result.transcription) result.transcription = model.id;
-      if (model.kind === 'speech' && !result.voice) result.voice = model.id;
+    const result: RemoteModelCatalog = {};
+    for (const model of payload.data as Array<{
+      id?: unknown;
+      name?: unknown;
+      kind?: unknown;
+    }>) {
+      if (typeof model.id !== 'string' || typeof model.kind !== 'string')
+        continue;
+      const category = gatewayCategory(model.kind);
+      if (!category) continue;
+      const options = result[category] ?? [];
+      options.push({
+        id: model.id,
+        name:
+          typeof model.name === 'string' && model.name.trim()
+            ? displayModelName(model.name)
+            : displayModelName(model.id),
+      });
+      result[category] = options;
     }
     return result;
   } catch {
@@ -77,6 +119,14 @@ async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMedi
   }
 }
 
+function defaultModelIds(catalog: RemoteModelCatalog): RemoteMediaModelIds {
+  return Object.fromEntries(
+    Object.entries(catalog)
+      .filter(([, models]) => models?.[0])
+      .map(([category, models]) => [category, models![0].id]),
+  ) as RemoteMediaModelIds;
+}
+
 /**
  * The Off Grid AI Desktop gateway tags every /v1/models entry with a modality
  * `kind` (chat | vision | image | speech | transcription). Only chat/vision are
@@ -84,7 +134,11 @@ async function fetchGatewayMediaModels(server: RemoteServer): Promise<RemoteMedi
  * transcription (STT) models must not be listed as text. Servers that don't send
  * `kind` (Ollama, LM Studio) fall back to the name-based generative filter.
  */
-function isTextModel(model: { id?: string; name?: string; kind?: unknown }): boolean {
+function isTextModel(model: {
+  id?: string;
+  name?: string;
+  kind?: unknown;
+}): boolean {
   const kind = typeof model.kind === 'string' ? model.kind : null;
   if (kind) return kind === 'chat' || kind === 'vision';
   return isGenerativeModel(model.id ?? model.name ?? '');
@@ -111,13 +165,19 @@ export function displayModelName(id: string): string {
     /^[A-Za-z]:[\\/]/.test(id) ||
     id.includes('\\') ||
     MODEL_FILE_EXT.test(id);
-  const base = looksLikePath ? (id.split(/[\\/]/).pop() || id) : id;
+  const base = looksLikePath ? id.split(/[\\/]/).pop() || id : id;
   return base.replace(MODEL_FILE_EXT, '');
 }
 
-export async function testServerConnection(server: RemoteServer): Promise<ServerTestResult> {
+export async function testServerConnection(
+  server: RemoteServer,
+): Promise<ServerTestResult> {
   try {
-    const testResult = await testEndpoint(server.endpoint, 10000, server.apiKey);
+    const testResult = await testEndpoint(
+      server.endpoint,
+      10000,
+      server.apiKey,
+    );
 
     if (!testResult.success) {
       return {
@@ -127,20 +187,45 @@ export async function testServerConnection(server: RemoteServer): Promise<Server
       };
     }
 
-    // Try to discover models
-    const [models, mediaModels] = await Promise.all([
+    const desktopState = await readOffGridDesktopModelState(server);
+    if (desktopState) {
+      return {
+        success: true,
+        latency: testResult.latency,
+        models: desktopState.textModels,
+        mediaModels: desktopState.active,
+        modelCatalog: desktopState.catalog,
+        modelManagement: 'offgrid-desktop-v1',
+        serverInfo: { name: 'off-grid-desktop' },
+      };
+    }
+    if (server.modelManagement === 'offgrid-desktop-v1') {
+      return {
+        success: false,
+        error: 'Desktop model state could not be read.',
+        latency: testResult.latency,
+      };
+    }
+
+    // Generic OpenAI-compatible servers keep their /v1/models discovery path.
+    const [models, modelCatalog] = await Promise.all([
       fetchModelsFromServer(server),
-      fetchGatewayMediaModels(server),
+      fetchGatewayModelCatalog(server),
     ]);
 
     // Detect server type
-    const serverType = await detectServerType(server.endpoint, 5000, server.apiKey);
+    const serverType = await detectServerType(
+      server.endpoint,
+      5000,
+      server.apiKey,
+    );
 
     return {
       success: true,
       latency: testResult.latency,
       models,
-      mediaModels,
+      mediaModels: defaultModelIds(modelCatalog),
+      modelCatalog,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,
@@ -178,9 +263,23 @@ export async function testEndpointAndGetModels(
       createdAt: new Date().toISOString(),
       apiKey,
     };
-    const [models, mediaModels] = await Promise.all([
+    const desktopState = await readOffGridDesktopModelState(tempServer);
+    if (desktopState) {
+      return {
+        success: true,
+        latency: testResult.latency,
+        models: desktopState.textModels,
+        mediaModels: desktopState.active,
+        modelCatalog: desktopState.catalog,
+        modelManagement: 'offgrid-desktop-v1',
+        serverInfo: { name: 'off-grid-desktop' },
+      };
+    }
+
+    // Generic OpenAI-compatible servers keep their /v1/models discovery path.
+    const [models, modelCatalog] = await Promise.all([
       fetchModelsFromServer(tempServer),
-      fetchGatewayMediaModels(tempServer),
+      fetchGatewayModelCatalog(tempServer),
     ]);
     const serverType = await detectServerType(endpoint, 5000, apiKey);
 
@@ -188,7 +287,8 @@ export async function testEndpointAndGetModels(
       success: true,
       latency: testResult.latency,
       models,
-      mediaModels,
+      mediaModels: defaultModelIds(modelCatalog),
+      modelCatalog,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,
@@ -202,14 +302,19 @@ export async function testEndpointAndGetModels(
   }
 }
 
-export async function fetchModelsFromServer(server: RemoteServer): Promise<RemoteModel[]> {
+export async function fetchModelsFromServer(
+  server: RemoteServer,
+): Promise<RemoteModel[]> {
   const url = trimTrailingSlashes(server.endpoint);
 
   // Headers for authentication
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
-  Object.assign(headers, remoteAuthorizationHeaders(server.endpoint, server.apiKey));
+  Object.assign(
+    headers,
+    remoteAuthorizationHeaders(server.endpoint, server.apiKey),
+  );
 
   // Try OpenAI-compatible endpoint first
   try {
@@ -221,60 +326,84 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
     if (response.ok) {
       const data = await response.json();
 
-      const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
+      const nameDetect = {
+        vision: detectVisionCapability,
+        toolCalling: detectToolCallingCapability,
+      };
 
       // OpenAI format: { object: "list", data: [{ id, object, owned_by, ... }] }
       if (data?.object === 'list' && Array.isArray(data.data)) {
-        const generativeModels = data.data.filter((model: { id: string; kind?: unknown }) => isTextModel(model));
+        const generativeModels = data.data.filter(
+          (model: { id: string; kind?: unknown }) => isTextModel(model),
+        );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { id: string }) =>
-            fetchModelCapabilities(url, model.id, nameDetect)
-          )
+            fetchModelCapabilities(url, model.id, nameDetect),
+          ),
         );
-        return generativeModels.map((model: { id: string; kind?: unknown; owned_by?: string; max_context_length?: number }, i: number) => ({
+        return generativeModels.map(
+          (
+            model: {
+              id: string;
+              name?: string;
+              kind?: unknown;
+              owned_by?: string;
+              max_context_length?: number;
+            },
+            i: number,
+          ) => ({
           id: model.id,
-          name: displayModelName(model.id),
+            name: displayModelName(model.name?.trim() || model.id),
           serverId: server.id,
           capabilities: {
             // The gateway declares each model's kind authoritatively; trust kind:'vision'
             // for vision support. The name/probe-based fallback (modelInfos) can't detect a
             // gateway vision model whose id doesn't match the name heuristics, which dropped
             // the attached image client-side (the model then behaved text-only).
-            supportsVision: model.kind === 'vision' || modelInfos[i].supportsVision,
-            supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.id),
+              supportsVision:
+                model.kind === 'vision' || modelInfos[i].supportsVision,
+              supportsToolCalling:
+                modelInfos[i].supportsToolCalling ??
+                detectToolCallingCapability(model.id),
             supportsThinking: modelInfos[i].supportsThinking ?? false,
             acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
             maxContextLength: modelInfos[i].contextLength,
           },
           lastUpdated: new Date().toISOString(),
-        }));
+          }),
+        );
       }
 
       // Ollama format via /v1/models: { models: [{ name, ... }] }
       if (Array.isArray(data.models)) {
         const generativeModels = data.models.filter(
-          (model: { name: string; kind?: unknown }) => isTextModel(model)
+          (model: { name: string; kind?: unknown }) => isTextModel(model),
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            fetchModelCapabilities(url, model.name, nameDetect)
-          )
+            fetchModelCapabilities(url, model.name, nameDetect),
+          ),
         );
         return generativeModels.map(
-          (model: { name: string; details?: Record<string, unknown> }, i: number) => ({
+          (
+            model: { name: string; details?: Record<string, unknown> },
+            i: number,
+          ) => ({
             id: model.name,
             name: displayModelName(model.name),
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
+              supportsToolCalling:
+                modelInfos[i].supportsToolCalling ??
+                detectToolCallingCapability(model.name),
               supportsThinking: modelInfos[i].supportsThinking ?? false,
               acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,
             lastUpdated: new Date().toISOString(),
-          })
+          }),
         );
       }
     }
@@ -294,30 +423,38 @@ export async function fetchModelsFromServer(server: RemoteServer): Promise<Remot
       const data = await response.json();
 
       if (Array.isArray(data.models)) {
-        const nameDetect = { vision: detectVisionCapability, toolCalling: detectToolCallingCapability };
-        const generativeModels = data.models.filter(
-          (model: { name: string }) => isGenerativeModel(model.name)
+        const nameDetect = {
+          vision: detectVisionCapability,
+          toolCalling: detectToolCallingCapability,
+        };
+        const generativeModels = data.models.filter((model: { name: string }) =>
+          isGenerativeModel(model.name),
         );
         const modelInfos = await Promise.all(
           generativeModels.map((model: { name: string }) =>
-            fetchModelCapabilities(url, model.name, nameDetect)
-          )
+            fetchModelCapabilities(url, model.name, nameDetect),
+          ),
         );
         return generativeModels.map(
-          (model: { name: string; details?: Record<string, unknown> }, i: number) => ({
+          (
+            model: { name: string; details?: Record<string, unknown> },
+            i: number,
+          ) => ({
             id: model.name,
             name: displayModelName(model.name),
             serverId: server.id,
             capabilities: {
               supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling: modelInfos[i].supportsToolCalling ?? detectToolCallingCapability(model.name),
+              supportsToolCalling:
+                modelInfos[i].supportsToolCalling ??
+                detectToolCallingCapability(model.name),
               supportsThinking: modelInfos[i].supportsThinking ?? false,
               acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,
             lastUpdated: new Date().toISOString(),
-          })
+          }),
         );
       }
     }

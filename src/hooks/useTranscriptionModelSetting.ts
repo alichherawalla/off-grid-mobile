@@ -1,5 +1,7 @@
 import { useWhisperStore } from '../stores/whisperStore';
 import { WHISPER_MODELS } from '../services/whisperService';
+import { selectedRemoteModelName } from '../services/remoteModelSelection';
+import { useRemoteServerStore } from '../stores/remoteServerStore';
 
 export const NO_TRANSCRIPTION_MODEL_LABEL = 'No model selected. Tap to choose.';
 
@@ -11,10 +13,26 @@ export const NO_TRANSCRIPTION_MODEL_LABEL = 'No model selected. Tap to choose.';
 export function useTranscriptionModelSetting(): {
   modelId: string | null;
   modelName: string | null;
+  isRemote: boolean;
 } {
-  const modelId = useWhisperStore((state) => state.downloadedModelId);
+  const modelId = useWhisperStore(state => state.downloadedModelId);
+  const activeServer = useRemoteServerStore(state =>
+    state.servers.find(
+      server => server.id === state.activeRemoteMediaServerIds.transcription,
+    ),
+  );
+  const remoteModelName = selectedRemoteModelName(
+    activeServer,
+    'transcription',
+  );
   return {
-    modelId,
-    modelName: WHISPER_MODELS.find((model) => model.id === modelId)?.name ?? null,
+    modelId: remoteModelName
+      ? activeServer?.mediaModels?.transcription ?? null
+      : modelId,
+    modelName:
+      remoteModelName ??
+      WHISPER_MODELS.find(model => model.id === modelId)?.name ??
+      null,
+    isRemote: remoteModelName !== null,
   };
 }

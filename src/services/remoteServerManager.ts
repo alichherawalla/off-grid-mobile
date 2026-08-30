@@ -7,7 +7,12 @@
  * - Provider creation and management
  */
 
-import { RemoteServer, RemoteModel, ServerTestResult } from '../types';
+import {
+  RemoteServer,
+  RemoteModel,
+  RemoteModelCategory,
+  ServerTestResult,
+} from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useAppStore } from '../stores/appStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
@@ -28,6 +33,7 @@ import {
   canReconcileCredentialedEndpoint,
   remoteAuthorizationHeaders,
 } from './remoteTransportPolicy';
+import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
 const trimSlash = (url: string): string => {
@@ -171,7 +177,8 @@ class RemoteServerManager {
     id: string,
   ): Promise<{ success: boolean; error?: string; models?: RemoteModel[] }> {
     const store = useRemoteServerStore.getState();
-    return store.testConnection(id);
+    const apiKey = await this.getApiKey(id);
+    return store.testConnection(id, apiKey || undefined);
   }
 
   /** Test connection to a server by endpoint (before adding) */
@@ -192,7 +199,8 @@ class RemoteServerManager {
     const server = store.getServerById(id);
     if (!server) throw new Error(`Server not found: ${id}`);
 
-    return store.discoverModels(id);
+    const apiKey = await this.getApiKey(id);
+    return store.discoverModels(id, apiKey || undefined);
   }
 
   /**
@@ -217,7 +225,42 @@ class RemoteServerManager {
     serverId: string,
     modelId: string,
   ): Promise<void> {
-    return setActiveRemoteImageModelImpl(serverId, modelId);
+    const server = useRemoteServerStore.getState().getServerById(serverId);
+    return server?.modelManagement === 'offgrid-desktop-v1'
+      ? this.setActiveRemoteMediaModel(serverId, 'image', modelId)
+      : setActiveRemoteImageModelImpl(serverId, modelId);
+  }
+
+  /** Select one remote model for image, transcription, or voice work. */
+  async setActiveRemoteMediaModel(
+    serverId: string,
+    category: Exclude<RemoteModelCategory, 'text'>,
+    modelId: string,
+  ): Promise<void> {
+    const store = useRemoteServerStore.getState();
+    const server = store.getServerById(serverId);
+    if (!server) throw new Error(`Server not found: ${serverId}`);
+    const confirmedModels =
+      server.modelManagement === 'offgrid-desktop-v1'
+        ? await activateOffGridDesktopModel(
+            {
+              ...server,
+              apiKey: (await this.getApiKey(serverId)) ?? undefined,
+            },
+            category,
+            modelId,
+          )
+        : { ...server.mediaModels, [category]: modelId };
+    store.updateServer(serverId, {
+      mediaModels: confirmedModels,
+    });
+    store.setActiveRemoteMediaServerId(category, serverId);
+    if (category === 'image') store.setActiveRemoteImageModelId(modelId);
+    logger.log('[RemoteServerManager] Active remote media model set:', {
+      serverId,
+      category,
+      modelId,
+    });
   }
 
   /**
@@ -228,8 +271,26 @@ class RemoteServerManager {
     store.setActiveServerId(null);
     store.setActiveRemoteTextModelId(null);
     store.setActiveRemoteImageModelId(null);
+    store.setActiveRemoteMediaServerId('image', null);
+    store.setActiveRemoteMediaServerId('transcription', null);
+    store.setActiveRemoteMediaServerId('voice', null);
     providerRegistry.setActiveProvider('local');
     logger.log('[RemoteServerManager] Cleared active remote model');
+  }
+
+  clearActiveRemoteTextModel(): void {
+    const store = useRemoteServerStore.getState();
+    store.setActiveServerId(null);
+    store.setActiveRemoteTextModelId(null);
+    providerRegistry.setActiveProvider('local');
+  }
+
+  clearActiveRemoteMediaModel(
+    category: Exclude<RemoteModelCategory, 'text'>,
+  ): void {
+    const store = useRemoteServerStore.getState();
+    store.setActiveRemoteMediaServerId(category, null);
+    if (category === 'image') store.setActiveRemoteImageModelId(null);
   }
 
   /** Get the active server */

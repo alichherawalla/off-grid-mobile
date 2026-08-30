@@ -149,6 +149,7 @@ export const resetStores = (): void => {
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
+    activeRemoteMediaServerIds: {},
   });
   require('../../src/stores/downloadStore').useDownloadStore.setState({
     downloads: {},
@@ -575,6 +576,7 @@ export const resetRemoteServerStore = (): void => {
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
+    activeRemoteMediaServerIds: {},
   });
 };
 

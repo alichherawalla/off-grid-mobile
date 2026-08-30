@@ -18,7 +18,9 @@ function arrayBufferToBase64(value: ArrayBuffer): string {
 }
 
 export function activeRemoteVoiceServer(): RemoteServer | null {
-  const server = useRemoteServerStore.getState().getActiveServer();
+  const server = useRemoteServerStore
+    .getState()
+    .getActiveRemoteMediaServer('voice');
   return server?.mediaModels?.voice ? server : null;
 }
 

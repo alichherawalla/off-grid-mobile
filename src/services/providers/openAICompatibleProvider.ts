@@ -162,7 +162,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       };
       const thinkTagParser = new ThinkTagParser();
 
-      await createStreamingRequest(url, { body: requestBody, headers, timeout: 300000, signal }, (event) => {
+      await createStreamingRequest(url, { body: requestBody, headers, signal }, (event) => {
         if (signal.aborted) return;
         const message = parseOpenAIMessage(event);
         if (!message) return;

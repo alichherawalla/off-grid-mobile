@@ -328,6 +328,8 @@ class WhisperService {
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
         logger.log('[WhisperService] Recording finished');
+        // The native callback cannot await the fallback transcription.
+        // eslint-disable-next-line no-void
         void resolveFinalText(data?.result || '').then(finalText => {
           onResult({
             text: finalText,
@@ -357,13 +359,14 @@ class WhisperService {
 
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
-    if (this.remoteTranscription) {
-      this.remoteTranscription.abort();
+    const remoteTranscription = this.remoteTranscription;
+    const stoppedRemote = !!remoteTranscription;
+    if (remoteTranscription) {
+      remoteTranscription.abort();
       this.remoteTranscription = null;
-      return;
     }
     try {
-      if (!this.stopFn) {
+      if (!stoppedRemote && !this.stopFn) {
         logger.log('[WhisperService] Stop is waiting for realtime startup');
         await this.realtimeStart.wait();
       }
@@ -371,7 +374,7 @@ class WhisperService {
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
       // both see stopFn as non-null and call it twice, causing SIGSEGV in
       // finishRealtimeTranscribeJob on the native side.
-      const fn = this.stopFn;
+      const fn = stoppedRemote ? null : this.stopFn;
       this.stopFn = null;
       if (fn) {
         // Guard: only call stop if context still exists
@@ -446,7 +449,9 @@ class WhisperService {
       onProgress?: (progress: number) => void;
     },
   ): Promise<string> {
-    const remoteServer = useRemoteServerStore.getState().getActiveServer();
+    const remoteServer = useRemoteServerStore
+      .getState()
+      .getActiveRemoteMediaServer('transcription');
     if (remoteServer?.mediaModels?.transcription) {
       const controller = new AbortController();
       this.remoteTranscription = controller;
@@ -459,7 +464,8 @@ class WhisperService {
           ),
         );
       } finally {
-        if (this.remoteTranscription === controller) this.remoteTranscription = null;
+        if (this.remoteTranscription === controller)
+          this.remoteTranscription = null;
       }
     }
     if (!this.context) {

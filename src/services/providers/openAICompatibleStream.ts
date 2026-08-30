@@ -339,7 +339,7 @@ export async function generateOllamaChatImpl(
   };
 
   try {
-    await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, timeout: 300000, signal }, (line) => {
+    await createNDJSONStreamingRequest(url, { body: requestBody, headers: {}, signal }, (line) => {
       handleOllamaChatLine(line, streamState, { callbacks, signal, abort });
     });
 

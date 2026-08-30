@@ -1,7 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { remoteServerManager } from '../../services/remoteServerManager';
 import { useRemoteServerStore } from '../../stores';
-import { RemoteServer, RemoteModel } from '../../types';
+import {
+  RemoteServer,
+  RemoteModel,
+  RemoteMediaModelIds,
+  RemoteModelCatalog,
+  ServerTestResult,
+} from '../../types';
 import { isPrivateNetworkEndpoint } from '../../services/httpClient';
 import { AlertState, initialAlertState, showAlert } from '../CustomAlert';
 
@@ -12,18 +18,61 @@ interface FormOptions {
   onClose: () => void;
 }
 
-export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOptions) {
+interface ModelIdSetters {
+  text: React.Dispatch<React.SetStateAction<string>>;
+  image: React.Dispatch<React.SetStateAction<string>>;
+  transcription: React.Dispatch<React.SetStateAction<string>>;
+  voice: React.Dispatch<React.SetStateAction<string>>;
+}
+
+function applyDiscoveredModelIds(
+  result: ServerTestResult,
+  setters: ModelIdSetters,
+): void {
+  if (result.modelManagement === 'offgrid-desktop-v1') {
+    setters.text(result.mediaModels?.text ?? '');
+    setters.image(result.mediaModels?.image ?? '');
+    setters.transcription(result.mediaModels?.transcription ?? '');
+    setters.voice(result.mediaModels?.voice ?? '');
+    return;
+  }
+  setters.text(
+    current => current || result.mediaModels?.text || result.models?.[0]?.id || '',
+  );
+  setters.image(current => current || result.mediaModels?.image || '');
+  setters.transcription(
+    current => current || result.mediaModels?.transcription || '',
+  );
+  setters.voice(current => current || result.mediaModels?.voice || '');
+}
+
+export function useRemoteServerForm({
+  server,
+  visible,
+  onSave,
+  onClose,
+}: FormOptions) {
   const [name, setName] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [notes, setNotes] = useState('');
+  const [textModelId, setTextModelId] = useState('');
   const [imageModelId, setImageModelId] = useState('');
   const [transcriptionModelId, setTranscriptionModelId] = useState('');
   const [voiceModelId, setVoiceModelId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<RemoteModel[]>([]);
+  const [modelCatalog, setModelCatalog] = useState<RemoteModelCatalog>({});
+  const [modelManagement, setModelManagement] = useState<
+    RemoteServer['modelManagement']
+  >(server?.modelManagement);
+  const [confirmedMediaModels, setConfirmedMediaModels] =
+    useState<RemoteMediaModelIds>(server?.mediaModels ?? {});
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Initialize form when editing existing server
@@ -33,19 +82,26 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
       setName(server.name);
       setEndpoint(server.endpoint);
       setNotes(server.notes || '');
+      setTextModelId(server.mediaModels?.text || '');
       setImageModelId(server.mediaModels?.image || '');
       setTranscriptionModelId(server.mediaModels?.transcription || '');
       setVoiceModelId(server.mediaModels?.voice || '');
       // Load existing API key from keychain so user can see it's set
-      remoteServerManager.getApiKey(server.id).then((key) => {
+      remoteServerManager
+        .getApiKey(server.id)
+        .then(key => {
         if (!cancelled) setApiKey(key || '');
-      }).catch(() => { if (!cancelled) setApiKey(''); });
+        })
+        .catch(() => {
+          if (!cancelled) setApiKey('');
+        });
     } else {
       // Reset form for new server
       setName('');
       setEndpoint('');
       setApiKey('');
       setNotes('');
+      setTextModelId('');
       setImageModelId('');
       setTranscriptionModelId('');
       setVoiceModelId('');
@@ -53,7 +109,12 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     setErrors({});
     setTestResult(null);
     setDiscoveredModels([]);
-    return () => { cancelled = true; };
+    setModelCatalog(server?.modelCatalog ?? {});
+    setModelManagement(server?.modelManagement);
+    setConfirmedMediaModels(server?.mediaModels ?? {});
+    return () => {
+      cancelled = true;
+    };
   }, [server, visible]);
 
   const validateForm = useCallback((): boolean => {
@@ -75,45 +136,125 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     return Object.keys(newErrors).length === 0;
   }, [name, endpoint]);
 
+  const applySuccessfulConnection = useCallback((result: ServerTestResult) => {
+    const modelCount =
+      (result.models?.length ?? 0) +
+      Object.values(result.modelCatalog ?? {}).reduce(
+        (count, models) => count + (models?.length ?? 0),
+        0,
+      );
+    setTestResult({
+      success: true,
+      message: `Connected (${result.latency}ms)${
+        modelCount > 0
+          ? `\n${modelCount} model${modelCount === 1 ? '' : 's'} available`
+          : ''
+      }`,
+    });
+    setDiscoveredModels(result.models ?? []);
+    setModelCatalog(result.modelCatalog ?? {});
+    setModelManagement(result.modelManagement);
+    setConfirmedMediaModels(result.mediaModels ?? {});
+    applyDiscoveredModelIds(result, {
+      text: setTextModelId,
+      image: setImageModelId,
+      transcription: setTranscriptionModelId,
+      voice: setVoiceModelId,
+    });
+  }, []);
+
+  // A saved Desktop server can predate the managed-model contract. Refresh it
+  // when the editor opens so the user sees canonical installed choices without
+  // having to delete, recreate, or manually retest the server first.
+  useEffect(() => {
+    if (!server || !visible) return;
+    let cancelled = false;
+    setIsTesting(true);
+    (async () => {
+      try {
+        const storedApiKey = await remoteServerManager.getApiKey(server.id);
+        const result = await remoteServerManager.testConnectionByEndpoint(
+          server.endpoint,
+          storedApiKey || undefined,
+        );
+        if (!cancelled && result.success) applySuccessfulConnection(result);
+      } finally {
+        if (!cancelled) setIsTesting(false);
+      }
+    })().catch(() => {
+      if (!cancelled) setIsTesting(false);
+    });
+    return () => { cancelled = true; };
+  }, [applySuccessfulConnection, server, visible]);
+
   const handleTestConnection = useCallback(async () => {
     if (!validateForm()) return;
     setIsTesting(true);
     setTestResult(null);
     setDiscoveredModels([]);
+    setModelCatalog({});
+    setModelManagement(undefined);
+    setConfirmedMediaModels({});
     try {
-      const result = await remoteServerManager.testConnectionByEndpoint(endpoint, apiKey || undefined);
+      const result = await remoteServerManager.testConnectionByEndpoint(
+        endpoint,
+        apiKey || undefined,
+      );
       if (result.success) {
-        const resolvedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
-        setTestResult({ success: true, message: `Connected (${result.latency}ms)\n${resolvedUrl}` });
-        if (result.models && result.models.length > 0) {
-          setDiscoveredModels(result.models);
-        }
-        if (result.mediaModels) {
-          setImageModelId((current) => current || result.mediaModels?.image || '');
-          setTranscriptionModelId(
-            (current) => current || result.mediaModels?.transcription || '',
-          );
-          setVoiceModelId((current) => current || result.mediaModels?.voice || '');
-        }
+        applySuccessfulConnection(result);
       } else {
         const triedUrl = `${endpoint.replace(/\/+$/, '')}/v1/models`;
-        setTestResult({ success: false, message: `${result.error || 'Connection failed'}\nTried: ${triedUrl}` });
+        setTestResult({
+          success: false,
+          message: `${result.error || 'Connection failed'}\nTried: ${triedUrl}`,
+        });
       }
     } catch (error) {
-      setTestResult({ success: false, message: error instanceof Error ? error.message : 'Unknown error' });
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       setIsTesting(false);
     }
-  }, [endpoint, apiKey, validateForm]);
+  }, [endpoint, apiKey, applySuccessfulConnection, validateForm]);
 
   const saveServer = useCallback(async () => {
     try {
       const mediaModels = {
+        ...(textModelId.trim() ? { text: textModelId.trim() } : {}),
         ...(imageModelId.trim() ? { image: imageModelId.trim() } : {}),
         ...(transcriptionModelId.trim()
           ? { transcription: transcriptionModelId.trim() }
           : {}),
         ...(voiceModelId.trim() ? { voice: voiceModelId.trim() } : {}),
+      };
+      const desktopManaged = modelManagement === 'offgrid-desktop-v1';
+      const activateDesktopSelections = async (
+        serverId: string,
+        current: RemoteMediaModelIds,
+      ) => {
+        if (!desktopManaged) return;
+        if (mediaModels.text && mediaModels.text !== current.text) {
+          await remoteServerManager.setActiveRemoteTextModel(
+            serverId,
+            mediaModels.text,
+          );
+        }
+        for (const category of [
+          'image',
+          'transcription',
+          'voice',
+        ] as const) {
+          const modelId = mediaModels[category];
+          if (modelId && modelId !== current[category]) {
+            await remoteServerManager.setActiveRemoteMediaModel(
+              serverId,
+              category,
+              modelId,
+            );
+          }
+        }
       };
       if (server) {
         await remoteServerManager.updateServer(server.id, {
@@ -121,10 +262,28 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
           endpoint,
           notes,
           apiKey,
-          mediaModels,
+          mediaModels: desktopManaged ? server.mediaModels : mediaModels,
+          modelCatalog,
+          modelManagement,
         });
         if (discoveredModels.length > 0) {
-          useRemoteServerStore.getState().setDiscoveredModels(server.id, discoveredModels);
+          useRemoteServerStore
+            .getState()
+            .setDiscoveredModels(
+              server.id,
+              discoveredModels.map(model => ({ ...model, serverId: server.id })),
+            );
+        }
+        await activateDesktopSelections(server.id, server.mediaModels ?? {});
+        if (
+          !desktopManaged &&
+          textModelId.trim() &&
+          useRemoteServerStore.getState().activeServerId === server.id
+        ) {
+          await remoteServerManager.setActiveRemoteTextModel(
+            server.id,
+            textModelId.trim(),
+          );
         }
         onSave?.(server);
       } else {
@@ -134,18 +293,39 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
           providerType: 'openai-compatible',
           notes: notes || undefined,
           apiKey: apiKey || undefined,
-          mediaModels,
+          mediaModels: desktopManaged ? confirmedMediaModels : mediaModels,
+          modelCatalog,
+          modelManagement,
         });
         if (discoveredModels.length > 0) {
-          useRemoteServerStore.getState().setDiscoveredModels(newServer.id, discoveredModels);
+          useRemoteServerStore
+            .getState()
+            .setDiscoveredModels(
+              newServer.id,
+              discoveredModels.map(model => ({
+                ...model,
+                serverId: newServer.id,
+              })),
+            );
         }
+        await activateDesktopSelections(
+          newServer.id,
+          desktopManaged ? confirmedMediaModels : {},
+        );
         // Probe before closing so no network work outlives this editor session.
-        await remoteServerManager.testConnection(newServer.id).catch(() => undefined);
+        await remoteServerManager
+          .testConnection(newServer.id)
+          .catch(() => undefined);
         onSave?.(newServer);
       }
       onClose();
     } catch (error) {
-      setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Failed to save server'));
+      setAlertState(
+        showAlert(
+          'Error',
+          error instanceof Error ? error.message : 'Failed to save server',
+        ),
+      );
     }
   }, [
     server,
@@ -153,9 +333,13 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     endpoint,
     apiKey,
     notes,
+    textModelId,
     imageModelId,
     transcriptionModelId,
     voiceModelId,
+    modelCatalog,
+    modelManagement,
+    confirmedMediaModels,
     discoveredModels,
     onSave,
     onClose,
@@ -165,32 +349,44 @@ export function useRemoteServerForm({ server, visible, onSave, onClose }: FormOp
     if (!validateForm()) return;
     // Warn if connecting to public internet
     if (endpoint && !isPrivateNetworkEndpoint(endpoint)) {
-      setAlertState(showAlert(
+      setAlertState(
+        showAlert(
         'Public Network Warning',
         'This endpoint appears to be on the public internet. Your data will be sent to a remote server. Continue?',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Continue', onPress: () => saveServer() },
-        ]
-      ));
+          ],
+        ),
+      );
     } else {
       saveServer();
     }
-
   }, [validateForm, endpoint, saveServer]);
 
   return {
-    name, setName,
-    endpoint, setEndpoint,
-    apiKey, setApiKey,
-    notes, setNotes,
-    imageModelId, setImageModelId,
-    transcriptionModelId, setTranscriptionModelId,
-    voiceModelId, setVoiceModelId,
+    name,
+    setName,
+    endpoint,
+    setEndpoint,
+    apiKey,
+    setApiKey,
+    notes,
+    setNotes,
+    textModelId,
+    setTextModelId,
+    imageModelId,
+    setImageModelId,
+    transcriptionModelId,
+    setTranscriptionModelId,
+    voiceModelId,
+    setVoiceModelId,
     errors,
     isTesting,
     testResult,
     discoveredModels,
+    modelCatalog,
+    modelManagement,
     handleTestConnection,
     handleSave,
     isPublicNetwork: !!(endpoint && !isPrivateNetworkEndpoint(endpoint)),

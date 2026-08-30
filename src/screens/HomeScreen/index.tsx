@@ -1,7 +1,13 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, CustomAlert, hideAlert } from '../../components';
+import {
+  Button,
+  Card,
+  CustomAlert,
+  hideAlert,
+  ModelSelectorModal,
+} from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
@@ -11,7 +17,6 @@ import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
 import { RecentConversations } from './components/RecentConversations';
-import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { DesktopPromoCard } from './components/DesktopPromoCard';
 import { ModelsSummaryRow } from '../../components/models/ModelsSummaryRow';
@@ -26,11 +31,27 @@ import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
 import { useOpenSync } from '../../hooks/useOpenSync';
+import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
 };
 
+function homeModelLabels(input: {
+  text?: string;
+  image?: string;
+  voice?: string | null;
+  transcription?: string | null;
+  localVoice?: string | null;
+  localTranscription?: string;
+}): Record<ModelRowType, string> {
+  return {
+    text: input.text ?? '—',
+    image: input.image ?? '—',
+    voice: input.voice ?? input.localVoice ?? '—',
+    speech: input.transcription ?? input.localTranscription ?? '—',
+  };
+}
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
@@ -47,7 +68,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     isEjecting,
     alertState,
     setAlertState,
-    memoryInfo,
     downloadedModels,
     activeModelId,
     downloadedImageModels,
@@ -59,7 +79,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     recentConversations,
     // Remote model state
     remoteTextModels,
-    remoteImageModels,
     activeRemoteTextModelId,
     activeRemoteImageModelId,
     handleSelectTextModel,
@@ -67,10 +86,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     handleSelectImageModel,
     handleUnloadImageModel,
     // Remote model handlers
-    handleSelectRemoteTextModel,
-    handleUnloadRemoteTextModel,
-    handleSelectRemoteImageModel,
-    handleUnloadRemoteImageModel,
     handleEjectAll,
     startNewChat,
     continueChat,
@@ -90,13 +105,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     s => s.presentModelIds?.length ?? 0,
   );
   const voiceSummary = useUiModeStore(s => s.voiceSummary);
+  const remoteLabels = useActiveRemoteModelLabels();
 
-  const modelLabels: Record<ModelRowType, string> = {
-    text: activeTextModel?.name ?? '—',
-    image: activeImageModel?.name ?? '—',
-    voice: voiceSummary ?? '—',
-    speech: WHISPER_MODELS.find(m => m.id === whisperModelId)?.name ?? '—',
-  };
+  const modelLabels = homeModelLabels({
+    text: activeTextModel?.name,
+    image: activeImageModel?.name,
+    voice: remoteLabels.voice,
+    transcription: remoteLabels.transcription,
+    localVoice: voiceSummary,
+    localTranscription: WHISPER_MODELS.find(m => m.id === whisperModelId)?.name,
+  });
 
   // Downloaded-model counts shown in the Models card (replaces the old stats row).
   const modelCounts: Partial<Record<ModelRowType, number>> = {
@@ -170,12 +188,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           {/* Collapsed Models summary — tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}
           <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
-                <ModelsSummaryRow
-                  labels={modelLabels}
-                  counts={modelCounts}
-                  isLoading={loadingState.isLoading}
-                  onPress={() => setModelsManagerOpen(true)}
-                />
+            <ModelsSummaryRow
+              labels={modelLabels}
+              counts={modelCounts}
+              isLoading={loadingState.isLoading}
+              onPress={() => setModelsManagerOpen(true)}
+            />
           </AnimatedEntry>
 
           {/* New Chat Button */}
@@ -191,7 +209,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Text style={styles.setupText}>
                 {downloadedModels.length > 0 || remoteTextModels.length > 0
                   ? 'Select a text or image model to start'
-                  : 'Add a remote server or download a model to start chatting'}
+                  : 'Choose a model here or on your network.'}
               </Text>
               <View style={styles.setupActions}>
                 <Button
@@ -273,28 +291,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         </ScrollView>
       </View>
 
-      {/* Model Picker Sheet */}
-      <ModelPickerSheet
-        pickerType={pickerType}
-        loadingState={loadingState}
-        downloadedModels={downloadedModels}
-        downloadedImageModels={downloadedImageModels}
-        activeModelId={activeModelId}
-        activeImageModelId={activeImageModelId}
-        memoryInfo={memoryInfo}
-        remoteTextModels={remoteTextModels}
-        remoteImageModels={remoteImageModels}
-        activeRemoteTextModelId={activeRemoteTextModelId}
-        activeRemoteImageModelId={activeRemoteImageModelId}
+      <ModelSelectorModal
+        visible={pickerType !== null}
+        initialTab={pickerType ?? 'text'}
         onClose={() => setPickerType(null)}
-        onSelectTextModel={handleSelectTextModel}
-        onUnloadTextModel={handleUnloadTextModel}
+        onSelectModel={handleSelectTextModel}
+        onUnloadModel={handleUnloadTextModel}
         onSelectImageModel={handleSelectImageModel}
         onUnloadImageModel={handleUnloadImageModel}
-        onSelectRemoteTextModel={handleSelectRemoteTextModel}
-        onUnloadRemoteTextModel={handleUnloadRemoteTextModel}
-        onSelectRemoteImageModel={handleSelectRemoteImageModel}
-        onUnloadRemoteImageModel={handleUnloadRemoteImageModel}
+        isLoading={loadingState.isLoading}
+        onSelectionComplete={() => setPickerType(null)}
         onBrowseModels={tab => {
           setPickerType(null);
           navigation.navigate('ModelsTab', { initialTab: tab });
@@ -311,6 +317,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         remote={{
           text: !!activeRemoteTextModelId,
           image: !!activeRemoteImageModelId,
+          voice: !!remoteLabels.voice,
+          speech: !!remoteLabels.transcription,
         }}
         loadingState={loadingState}
         isEjecting={isEjecting}

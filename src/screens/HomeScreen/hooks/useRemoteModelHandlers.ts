@@ -12,9 +12,19 @@ interface RemoteModelHandlersParams {
   setAlertState: (state: any) => void;
 }
 
-export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadingState, setAlertState }: RemoteModelHandlersParams) {
-  const handleSelectRemoteTextModel = useCallback(async (model: RemoteModel) => {
-    logger.log('[useHomeScreen] handleSelectRemoteTextModel called:', model.id, model.serverId);
+export function useRemoteModelHandlers({
+  activeModelId,
+  setPickerType,
+  setLoadingState,
+  setAlertState,
+}: RemoteModelHandlersParams) {
+  const handleSelectRemoteTextModel = useCallback(
+    async (model: RemoteModel) => {
+      logger.log(
+        '[useHomeScreen] handleSelectRemoteTextModel called:',
+        model.id,
+        model.serverId,
+      );
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
     try {
@@ -22,21 +32,34 @@ export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadin
       if (activeModelId) {
         await activeModelService.unloadTextModel();
       }
-      await remoteServerManager.setActiveRemoteTextModel(model.serverId, model.id);
+        await remoteServerManager.setActiveRemoteTextModel(
+          model.serverId,
+          model.id,
+        );
       logger.log('[useHomeScreen] Remote text model set successfully');
     } catch (_error) {
-      logger.error('[useHomeScreen] Failed to set remote text model:', _error);
-      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(_error as Error).message}`));
+        logger.error(
+          '[useHomeScreen] Failed to set remote text model:',
+          _error,
+        );
+        setAlertState(
+          showAlert(
+            'Error',
+            `Failed to connect to remote model: ${(_error as Error).message}`,
+          ),
+        );
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
-  }, [activeModelId, setPickerType, setLoadingState, setAlertState]);
+    },
+    [activeModelId, setPickerType, setLoadingState, setAlertState],
+  );
 
   const handleUnloadRemoteTextModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteModel();
+      remoteServerManager.clearActiveRemoteTextModel();
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
@@ -44,23 +67,39 @@ export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadin
     }
   }, [setPickerType, setLoadingState, setAlertState]);
 
-  const handleSelectRemoteImageModel = useCallback(async (model: RemoteModel) => {
+  const handleSelectRemoteImageModel = useCallback(
+    async (model: RemoteModel) => {
     setPickerType(null);
-    setLoadingState({ isLoading: true, type: 'image', modelName: model.name });
+      setLoadingState({
+        isLoading: true,
+        type: 'image',
+        modelName: model.name,
+      });
     try {
-      await remoteServerManager.setActiveRemoteImageModel(model.serverId, model.id);
+        await remoteServerManager.setActiveRemoteMediaModel(
+          model.serverId,
+          'image',
+          model.id,
+        );
     } catch (_error) {
-      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(_error as Error).message}`));
+        setAlertState(
+          showAlert(
+            'Error',
+            `Failed to connect to remote model: ${(_error as Error).message}`,
+          ),
+        );
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
-  }, [setPickerType, setLoadingState, setAlertState]);
+    },
+    [setPickerType, setLoadingState, setAlertState],
+  );
 
   const handleUnloadRemoteImageModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteModel();
+      remoteServerManager.clearActiveRemoteMediaModel('image');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {

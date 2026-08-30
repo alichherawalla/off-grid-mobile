@@ -53,6 +53,8 @@ class GenerationService {
 
   private listeners: Set<GenerationListener> = new Set();
   private abortRequested: boolean = false;
+  /** Monotonic owner for async generation setup. Stop invalidates work that is between awaits. */
+  private generationAttempt: number = 0;
   /** Whether the last/active generation was stopped by the user — lets callers skip a
    *  "no response" retry prompt when the empty result was an intentional abort. */
   wasAborted(): boolean { return this.abortRequested; }
@@ -241,6 +243,7 @@ class GenerationService {
     // Set this even between native attempts. Conversation compaction runs after the
     // failed completion has reset `isGenerating`; Stop/Eject must still prevent its retry.
     this.abortRequested = true;
+    this.generationAttempt += 1;
     if (!this.state.isGenerating) {
       // Stop generation on every engine through the registry — no engine enumeration leaked into the caller.
       await stopAllTextEngines();

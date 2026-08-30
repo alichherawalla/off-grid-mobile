@@ -355,7 +355,7 @@ class ImageGenerationService {
     }
     this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
-    const remoteServer = useRemoteServerStore.getState().getActiveServer();
+    const remoteServer = useRemoteServerStore.getState().getActiveRemoteMediaServer('image');
     if (remoteServer?.mediaModels?.image) {
       return runRemoteImageGeneration(params, remoteServer, {
         updateState: state => this.updateState(state),

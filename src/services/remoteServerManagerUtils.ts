@@ -13,6 +13,7 @@ import { providerRegistry } from './providers/registry';
 import { capabilitiesUnknown } from '../stores/remoteModelCapabilities';
 import logger from '../utils/logger';
 import { remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 
@@ -107,24 +108,40 @@ export async function setActiveRemoteTextModelImpl(
     modelId,
   });
 
-  // Publish the remote model intent first. New-chat local preparation directly
-  // guards on this ID, so it cannot start the prior local model between the two
-  // store writes while the provider selection is being established.
-  store.setActiveRemoteTextModelId(modelId);
-  store.setActiveServerId(serverId);
+  const configuredServer = store.getServerById(serverId);
+  if (!configuredServer) throw new Error(`Server not found: ${serverId}`);
+  const desktopManaged =
+    configuredServer.modelManagement === 'offgrid-desktop-v1';
+  const confirmedModels =
+    desktopManaged
+      ? await activateOffGridDesktopModel(
+          {
+            ...configuredServer,
+            apiKey: (await getApiKeyImpl(serverId)) ?? undefined,
+          },
+          'text',
+          modelId,
+        )
+      : { ...configuredServer.mediaModels, text: modelId };
+  if (!desktopManaged) {
+    // Generic servers keep the existing publish-first behavior. New-chat local
+    // preparation uses these IDs to avoid starting the prior local model.
+    store.setActiveRemoteTextModelId(modelId);
+    store.setActiveServerId(serverId);
+    if (configuredServer.mediaModels?.text !== modelId) {
+      store.updateServer(serverId, { mediaModels: confirmedModels });
+    }
+  }
 
   let provider = providerRegistry.getProvider(serverId);
   if (!provider) {
-    const server = store.getServerById(serverId);
-    if (server) {
-      logger.log(
-        '[RemoteServerManager] Creating provider for server:',
-        serverId,
-        server.endpoint,
-      );
-      await createProviderForServerImpl(server);
-      provider = providerRegistry.getProvider(serverId);
-    }
+    logger.log(
+      '[RemoteServerManager] Creating provider for server:',
+      serverId,
+      configuredServer.endpoint,
+    );
+    await createProviderForServerImpl(configuredServer);
+    provider = providerRegistry.getProvider(serverId);
   }
 
   if (provider) {
@@ -179,6 +196,17 @@ export async function setActiveRemoteTextModelImpl(
       '[RemoteServerManager] Could not create provider for server:',
       serverId,
     );
+    if (desktopManaged) {
+      throw new Error('The Desktop model provider could not be prepared.');
+    }
+  }
+
+  // Commit Mobile state only after Desktop has confirmed activation and the
+  // provider is ready. A failed activation leaves the prior selection intact.
+  if (desktopManaged) {
+    store.updateServer(serverId, { mediaModels: confirmedModels });
+    store.setActiveRemoteTextModelId(modelId);
+    store.setActiveServerId(serverId);
   }
 
   logger.log(
@@ -193,7 +221,7 @@ export async function setActiveRemoteImageModelImpl(
   modelId: string,
 ): Promise<void> {
   const store = useRemoteServerStore.getState();
-  store.setActiveServerId(serverId);
+  store.setActiveRemoteMediaServerId('image', serverId);
   store.setActiveRemoteImageModelId(modelId);
 
   let provider = providerRegistry.getProvider(serverId);

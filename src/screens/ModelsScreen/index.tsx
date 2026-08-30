@@ -5,18 +5,45 @@ import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { MainTabParamList } from '../../navigation/types';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
-import { RECOMMENDED_MODELS } from '../../constants';
+import { RECOMMENDED_MODELS, SPACING } from '../../constants';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useModelsScreen } from './useModelsScreen';
 import { createStyles } from './styles';
-import { initialFilterState } from './constants';
 import { TextModelsTab } from './TextModelsTab';
 import { ImageModelsTab } from './ImageModelsTab';
 import { VoiceModelsUpsell } from '../../components/models/VoiceModelsUpsell';
 import { TranscriptionModelsTab } from './TranscriptionModelsTab';
 import { useSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import type { ModelTab } from './types';
+import { ScreenHeader } from '../../components/ScreenHeader';
 
-export const ModelsScreen: React.FC = () => {
+const MODEL_TABS: ReadonlyArray<{ key: ModelTab; label: string; testID?: string }> = [
+  { key: 'text', label: 'Text Models' },
+  { key: 'image', label: 'Image Models' },
+  { key: 'transcription', label: 'Transcription Models', testID: 'transcription-models-tab' },
+  { key: 'voice', label: 'Voice Models', testID: 'voice-models-tab' },
+];
+
+interface ModelsScreenProps {
+  embedded?: boolean;
+}
+
+const ScreenFrame: React.FC<{
+  embedded: boolean;
+  styles: ReturnType<typeof createStyles>;
+  children: React.ReactNode;
+}> = ({ embedded, styles, children }) =>
+  embedded ? (
+    <View style={[styles.container, embeddedStyles.container]} testID="embedded-models-screen">{children}</View>
+  ) : (
+    <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">{children}</SafeAreaView>
+  );
+
+const HideWhenEmbedded: React.FC<{ embedded: boolean; children: React.ReactNode }> = ({ embedded, children }) => (
+  <View style={embedded ? collapsedStyle.hidden : undefined}>{children}</View>
+);
+
+export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const vm = useModelsScreen();
@@ -58,17 +85,21 @@ export const ModelsScreen: React.FC = () => {
 
   const isShowingDetail = vm.activeTab === 'text' && vm.selectedModel !== null;
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
+  const content = (
+    <>
       {/* Collapse header/import/tabs when showing model detail — detail has its own header.
            Use height:0 + overflow:hidden instead of unmounting so AttachStep components
            stay mounted and measured. */}
       <View style={isShowingDetail ? collapsedStyle.hidden : undefined}>
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Models</Text>
-            <TouchableOpacity
+        <HideWhenEmbedded embedded={embedded}>
+          <ScreenHeader
+            title="Models"
+            variant="tab"
+            right={
+              <TouchableOpacity
               style={styles.downloadManagerButton}
+              hitSlop={SPACING.md}
               onPress={() => vm.navigation.navigate('DownloadManager')}
               testID="downloads-icon"
             >
@@ -78,11 +109,13 @@ export const ModelsScreen: React.FC = () => {
                   <Text testID="downloads-badge-count" style={styles.downloadBadgeText}>{vm.downloadBadgeCount}</Text>
                 </View>
               )}
-            </TouchableOpacity>
-        </View>
+              </TouchableOpacity>
+            }
+          />
+        </HideWhenEmbedded>
 
         {/* Import Local File */}
-        <View>
+        <HideWhenEmbedded embedded={embedded}><View>
           {vm.isImporting && vm.importProgress ? (
             <View style={styles.importProgressCard}>
               <View style={styles.importProgressHeader}>
@@ -104,7 +137,7 @@ export const ModelsScreen: React.FC = () => {
               <Text style={styles.importButtonText}>Import Local File</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </View></HideWhenEmbedded>
 
         {/* Tab Bar (horizontally scrollable — four tabs don't fit on a phone) */}
         <ScrollView
@@ -112,62 +145,24 @@ export const ModelsScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabBar}
         >
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => {
-              vm.setActiveTab('text');
-              vm.setFilterState(initialFilterState);
-              vm.setTextFiltersVisible(false);
-              vm.setImageFiltersVisible(false);
-            }}
-          >
-            <Text style={[styles.tabText, vm.activeTab === 'text' && styles.tabTextActive]}>Text Models</Text>
-            {vm.activeTab === 'text' && <View style={styles.tabIndicator} />}
-          </TouchableOpacity>
+          {MODEL_TABS.map(tab => (
             <TouchableOpacity
+              key={tab.key}
               style={styles.tabItem}
-              onPress={() => {
-                vm.setActiveTab('image');
-                vm.setFilterState(initialFilterState);
-                vm.setTextFiltersVisible(false);
-                vm.setImageFiltersVisible(false);
-              }}
+              testID={tab.testID}
+              onPress={() => vm.setActiveTab(tab.key)}
             >
-              <Text style={[styles.tabText, vm.activeTab === 'image' && styles.tabTextActive]}>Image Models</Text>
-              {vm.activeTab === 'image' && <View style={styles.tabIndicator} />}
+              <Text style={[styles.tabText, vm.activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
+              {vm.activeTab === tab.key && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            testID="voice-models-tab"
-            onPress={() => {
-              vm.setActiveTab('voice');
-              vm.setFilterState(initialFilterState);
-              vm.setTextFiltersVisible(false);
-              vm.setImageFiltersVisible(false);
-            }}
-          >
-            <Text style={[styles.tabText, vm.activeTab === 'voice' && styles.tabTextActive]}>Voice Models</Text>
-            {vm.activeTab === 'voice' && <View style={styles.tabIndicator} />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.tabItem}
-            testID="transcription-models-tab"
-            onPress={() => {
-              vm.setActiveTab('transcription');
-              vm.setFilterState(initialFilterState);
-              vm.setTextFiltersVisible(false);
-              vm.setImageFiltersVisible(false);
-            }}
-          >
-            <Text style={[styles.tabText, vm.activeTab === 'transcription' && styles.tabTextActive]}>Transcription Models</Text>
-            {vm.activeTab === 'transcription' && <View style={styles.tabIndicator} />}
-          </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
       {/* Text Models Tab */}
       {vm.activeTab === 'text' && (
         <TextModelsTab
+          onboarding={embedded}
           searchQuery={vm.searchQuery}
           setSearchQuery={vm.setSearchQuery}
           isLoading={vm.isLoading}
@@ -251,18 +246,29 @@ export const ModelsScreen: React.FC = () => {
       {/* Voice Models Tab: pro panel when registered, otherwise an upsell. */}
       {vm.activeTab === 'voice' && (
         VoiceModelsPanel
-          ? <VoiceModelsPanel />
+          ? <VoiceModelsPanel showRemoteModels={!embedded} />
           : <VoiceModelsUpsell onGetPro={() => vm.navigation.navigate('ProDetail')} />
       )}
 
       {/* Transcription Models Tab (speech-to-text, core). */}
-      {vm.activeTab === 'transcription' && <TranscriptionModelsTab />}
+      {vm.activeTab === 'transcription' && (
+        <TranscriptionModelsTab
+          showLanguageSelector={!embedded}
+          showRemoteModels={!embedded}
+        />
+      )}
 
       <CustomAlert {...vm.alertState} onClose={() => vm.setAlertState(hideAlert())} />
-    </SafeAreaView>
+    </>
   );
+
+  return <ScreenFrame embedded={embedded} styles={styles}>{content}</ScreenFrame>;
 };
 
 const collapsedStyle = StyleSheet.create({
   hidden: { height: 0, overflow: 'hidden' },
+});
+
+const embeddedStyles = StyleSheet.create({
+  container: { marginHorizontal: -SPACING.md },
 });

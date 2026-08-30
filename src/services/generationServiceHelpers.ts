@@ -235,6 +235,11 @@ export async function prepareGenerationImpl(
   conversationId: string,
 ): Promise<boolean> {
   if (svc.state.isGenerating) return false;
+  const attempt = ++svc.generationAttempt;
+  const stillOwnsAttempt = (): boolean =>
+    svc.generationAttempt === attempt &&
+    svc.state.isGenerating &&
+    !svc.abortRequested;
   // A NEW attempt owns the text failure surface: clear any card left by a previous failed/stopped
   // attempt at the ONE dispatch seam every path (send/retry/regenerate, local/remote, with/without
   // tools) funnels through — a stale card must never sit next to a live stream (device IMG 00:23).
@@ -251,19 +256,22 @@ export async function prepareGenerationImpl(
   try {
     // Drain pending native stop so LLM is idle before we start.
     if (svc.pendingStop !== null) await svc.pendingStop;
-    if (!svc.state.isGenerating) return false; // stop called during drain
+    if (svc.generationAttempt !== attempt || !svc.state.isGenerating) return false;
     svc.abortRequested = false;
 
     const readinessError = await checkProviderReadiness(svc);
     if (readinessError) throw new Error(readinessError);
+    if (!stillOwnsAttempt()) return false;
 
     // Navigation effects are not a generation barrier: on a new chat, Send can win
     // that race. Clear/switch native conversation state here, after readiness and
     // before any prompt or tool-routing completion reaches the local engine.
     if (!svc.isUsingRemoteProvider()) {
       await prepareActiveConversation(conversationId);
+      if (!stillOwnsAttempt()) return false;
     }
   } catch (error) {
+    if (svc.generationAttempt !== attempt) return false;
     svc.resetState();
     useChatStore.getState().clearStreamingMessage();
     throw error;
