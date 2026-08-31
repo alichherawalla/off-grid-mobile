@@ -18,6 +18,11 @@ jest.mock('@offgrid/core/utils/haptics', () => ({
   triggerHaptic: jest.fn(),
 }));
 
+const mockActiveRemoteVoiceServer = jest.fn(() => null);
+jest.mock('@offgrid/core/services/remoteVoicePlayback', () => ({
+  activeRemoteVoiceServer: () => mockActiveRemoteVoiceServer(),
+}));
+
 import { ChatInputModeToggle } from '../../../pro/audio/ui/ChatInputModeToggle';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 
@@ -35,6 +40,7 @@ const setDownloaded = (
 describe('ChatInputModeToggle', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    mockActiveRemoteVoiceServer.mockReturnValue(null);
     setDownloaded(false, 'chat');
   });
 
@@ -69,6 +75,20 @@ describe('ChatInputModeToggle', () => {
 
   it('flips interfaceMode to audio inline when the model is downloaded', () => {
     setDownloaded(true, 'chat');
+    const { getByTestId } = render(<ChatInputModeToggle />);
+
+    fireEvent.press(getByTestId('chat-mode-toggle'));
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(useTTSStore.getState().settings.interfaceMode).toBe('audio');
+  });
+
+  it('flips to audio when a remote voice model is active', () => {
+    mockActiveRemoteVoiceServer.mockReturnValue({
+      id: 'desktop',
+      mediaModels: { voice: 'kokoro' },
+    });
+    setDownloaded(false, 'chat');
     const { getByTestId } = render(<ChatInputModeToggle />);
 
     fireEvent.press(getByTestId('chat-mode-toggle'));
