@@ -172,7 +172,7 @@ APP="build/device/Build/Products/Debug-iphoneos/OffgridMobile.app"
 # writes the first Wi-Fi address it finds to ip.txt, but some networks isolate
 # clients even when both devices are on the same subnet. Prefer an explicit host;
 # otherwise use this Mac's Tailscale address when Metro is reachable there. The
-# app keeps the embedded bundle as its fallback when Metro is not running.
+# Debug builds load from this Metro address so Fast Refresh remains available after installation.
 METRO_HOST="${IOS_METRO_HOST:-}"
 if [ -z "$METRO_HOST" ] && command -v tailscale >/dev/null 2>&1; then
   TAILSCALE_HOST="$(tailscale ip -4 2>/dev/null | head -1 || true)"

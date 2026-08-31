@@ -51,10 +51,8 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
 
   override func bundleURL() -> URL? {
 #if DEBUG
-    // `ios:device` embeds main.jsbundle so a physical phone can start without Metro. Simulator
-    // debug builds do not embed it and keep the normal Metro development path.
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
-      ?? RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
+    // Debug builds must load from Metro so Fast Refresh stays connected on simulators and devices.
+    RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: "index")
 #else
     Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
