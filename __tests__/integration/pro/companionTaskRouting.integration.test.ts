@@ -3,6 +3,7 @@ import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { initCompanionTaskMesh } from '@offgrid/pro/mcp/companionTaskMesh';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
+import { useTaskRunStore } from '@offgrid/pro/tasks/taskRunStore';
 
 const mockMeshListeners: Array<(deviceId: string, channel: string, data: unknown) => void> = [];
 const mockMeshSendApp = jest.fn();
@@ -120,6 +121,23 @@ describe('Mobile companion task routing integration', () => {
             durationMs: 5,
           });
         }
+        const origin = (data as any).origin;
+        useTaskRunStore.getState().applySynced({
+          version: 1,
+          taskId: 'desktop-task-1',
+          launchId: origin.launchId,
+          requestingDeviceId: origin.deviceId,
+          conversationId: origin.conversationId,
+          kind: 'computer_use',
+          executionDevice: { id: deviceId, name: 'Studio Mac' },
+          title: 'Open the project plan.',
+          status: 'done',
+          progress: [],
+          startedAt: 1,
+          updatedAt: 2,
+          finishedAt: 2,
+          summary: 'The project plan is open.',
+        });
       });
       return true;
     });
@@ -155,7 +173,9 @@ describe('Mobile companion task routing integration', () => {
     });
 
     expect(result.error).toBeUndefined();
-    expect(result.content).toBe('task started');
+    expect(result.content).toBe(
+      'The project plan is open.\n\nTask reference: desktop-task-1.',
+    );
     expect(mockMeshSendApp).toHaveBeenCalledTimes(1);
     expect(mockMeshSendApp).toHaveBeenCalledWith(
       'desktop-studio',
