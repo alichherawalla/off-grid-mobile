@@ -11,6 +11,8 @@ interface AccordionProps {
   /** Rendered beside the chevron: the one fact worth seeing while the section is closed. */
   right?: ReactNode;
   defaultOpen?: boolean;
+  /** Use plain when the disclosure already sits inside another card. */
+  variant?: 'card' | 'plain';
   testID?: string;
   children: ReactNode;
 }
@@ -29,6 +31,7 @@ export const Accordion: React.FC<AccordionProps> = ({
   title,
   right,
   defaultOpen = false,
+  variant = 'card',
   testID,
   children,
 }) => {
@@ -37,7 +40,7 @@ export const Accordion: React.FC<AccordionProps> = ({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, variant === 'plain' && styles.plainCard]}>
       <TouchableOpacity
         style={styles.header}
         activeOpacity={0.72}
@@ -67,6 +70,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 12,
     backgroundColor: colors.surface,
     ...shadows.small,
+  },
+  plainCard: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    boxShadow: 'none',
   },
   header: {
     minHeight: 44,
