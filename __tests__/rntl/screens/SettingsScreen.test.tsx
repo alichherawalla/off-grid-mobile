@@ -10,10 +10,15 @@
 
 import React from 'react';
 import { Linking } from 'react-native';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 // Import the SAME shared URL constants the screen uses, so the tap assertions ride on the
 // single source of truth (test-side DRY) rather than re-hardcoding the URL strings.
 import { FOLLOW_X_URL, SLACK_INVITE_URL } from '../../../src/utils/sharePrompt';
+import { SUPPORT_EMAIL } from '../../../src/utils/supportEmail';
+
+jest.mock('react-native-fs', () => ({
+  getFSInfo: jest.fn(async () => ({ freeSpace: 8 * 1024 * 1024 * 1024 })),
+}));
 
 // Navigation is globally mocked in jest.setup.ts
 
@@ -54,7 +59,7 @@ const mockCompleteChecklistStep = jest.fn();
 // hoisted factory is allowed to reference it.
 const mockProState = { hasRegisteredPro: false, proBannerDismissed: false };
 jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn((selector?: any) => {
+  useAppStore: Object.assign(jest.fn((selector?: any) => {
     const state = {
       setOnboardingComplete: mockSetOnboardingComplete,
       themeMode: 'system',
@@ -65,7 +70,12 @@ jest.mock('../../../src/stores', () => ({
       proBannerDismissed: mockProState.proBannerDismissed,
     };
     return selector ? selector(state) : state;
+  }), {
+    getState: () => ({ downloadedModels: [], activeModelId: null }),
   }),
+  useRemoteServerStore: {
+    getState: () => ({ activeServerId: null }),
+  },
 }));
 
 import { SettingsScreen } from '../../../src/screens/SettingsScreen';
@@ -211,6 +221,18 @@ describe('SettingsScreen', () => {
     const { getByTestId } = render(<SettingsScreen />);
     fireEvent.press(getByTestId('join-slack'));
     expect(openURL).toHaveBeenCalledWith(SLACK_INVITE_URL);
+    openURL.mockRestore();
+  });
+
+  it('sends feedback to the shared support address', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    const { getByText } = render(<SettingsScreen />);
+
+    fireEvent.press(getByText('Send Feedback'));
+
+    await waitFor(() => {
+      expect(openURL.mock.calls[0]?.[0]).toContain(`mailto:${SUPPORT_EMAIL}?`);
+    });
     openURL.mockRestore();
   });
 

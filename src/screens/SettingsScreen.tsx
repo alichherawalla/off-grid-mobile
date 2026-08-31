@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Linking,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,8 +38,7 @@ import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import { useOpenSync } from '../hooks/useOpenSync';
 import { appBuildLabel, appVersion } from '../utils/appVersion';
 import { ScreenHeader } from '../components/ScreenHeader';
-
-const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
+import { openSupportEmail } from '../utils/supportEmail';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -91,10 +89,8 @@ export const SettingsScreen: React.FC = () => {
       ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
       : 'Device: Unknown';
 
-    const subject = encodeURIComponent(
-      `[Feedback] Off Grid AI v${appVersion()}`,
-    );
-    const body = encodeURIComponent(
+    const subject = `[Feedback] Off Grid AI v${appVersion()}`;
+    const body =
       `Hi,\n\n[Describe your feedback or issue here]\n\n` +
         `---\n` +
         `App: ${appBuildLabel()}\n` +
@@ -102,18 +98,8 @@ export const SettingsScreen: React.FC = () => {
         `RAM: ${ramGB} GB · Tier: ${tier}\n` +
         `Model: ${modelLine}\n` +
         `Free storage: ${freeGB} GB\n` +
-        `Remote server: ${remoteServer}`,
-    );
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        'Could Not Open Mail',
-        `Looks like there was an issue. You can reach out to us at ${FEEDBACK_EMAIL}`,
-        [{ text: 'OK' }],
-      );
-    }
+        `Remote server: ${remoteServer}`;
+    await openSupportEmail({ subject, body });
   };
 
   // DEV-only: flip the Pro auto-unlock. Disabling also clears the cached license

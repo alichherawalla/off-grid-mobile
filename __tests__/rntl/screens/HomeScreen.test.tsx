@@ -35,6 +35,7 @@ import {
 import { Linking, Clipboard } from 'react-native';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
+import { SUPPORT_EMAIL } from '../../../src/utils/supportEmail';
 import * as networkDiscovery from '../../../src/services/networkDiscovery';
 
 // Mock requestAnimationFrame
@@ -426,6 +427,29 @@ describe('HomeScreen', () => {
       expect(spy).toHaveBeenCalledWith(withUtm(OFF_GRID_DESKTOP_URL, 'home-promo'));
       expect(getByText('Link copied')).toBeTruthy();
       spy.mockRestore();
+    });
+  });
+
+  describe('product idea callout', () => {
+    it('opens a prefilled email to the shared support address', () => {
+      const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+      const { getByTestId, getByText } = renderHomeScreen();
+
+      expect(getByTestId('home-support-card')).toBeTruthy();
+      expect(getByText('What should we build next?')).toBeTruthy();
+      expect(
+        getByText('Tell us what you would like to see in Off Grid AI Mobile.'),
+      ).toBeTruthy();
+
+      fireEvent.press(getByTestId('home-support-email'));
+
+      const mailUrl = openURL.mock.calls[0]?.[0] as string;
+      expect(mailUrl).toContain(`mailto:${SUPPORT_EMAIL}?`);
+      expect(decodeURIComponent(mailUrl)).toContain('[Idea] Off Grid AI Mobile');
+      expect(decodeURIComponent(mailUrl)).toContain(
+        'I would like to see this in Off Grid AI Mobile:',
+      );
+      openURL.mockRestore();
     });
   });
 

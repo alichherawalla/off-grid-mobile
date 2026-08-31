@@ -211,6 +211,24 @@ const createSectionStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
   },
+  supportCard: {
+    marginBottom: SPACING.md,
+    gap: SPACING.md,
+  },
+  supportHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
+  supportTitle: {
+    ...TYPOGRAPHY.h3,
+    color: colors.text,
+    flex: 1,
+  },
+  supportDescription: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.textSecondary,
+  },
   setupCard: {
     alignItems: 'center' as const,
     paddingHorizontal: SPACING.md,

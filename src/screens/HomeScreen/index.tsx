@@ -32,6 +32,7 @@ import { useUiModeStore } from '../../stores/uiModeStore';
 import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
 import { useOpenSync } from '../../hooks/useOpenSync';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
+import { openSupportEmail } from '../../utils/supportEmail';
 
 type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
@@ -285,6 +286,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
           {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
           <DesktopPromoCard />
+
+          <AnimatedEntry index={5} staggerMs={50} trigger={focusTrigger}>
+            <Card style={styles.supportCard} testID="home-support-card">
+              <View style={styles.supportHeader}>
+                <Icon name="message-square" size={18} color={colors.primary} />
+                <Text style={styles.supportTitle}>
+                  What should we build next?
+                </Text>
+              </View>
+              <Text style={styles.supportDescription}>
+                Tell us what you would like to see in Off Grid AI Mobile.
+              </Text>
+              <Button
+                title="Write to us"
+                variant="outline"
+                size="small"
+                onPress={() =>
+                  openSupportEmail({
+                    subject: '[Idea] Off Grid AI Mobile',
+                    body: 'Hi,\n\nI would like to see this in Off Grid AI Mobile:\n\n',
+                  })
+                }
+                testID="home-support-email"
+              />
+            </Card>
+          </AnimatedEntry>
 
           {/* Model Stats row removed — the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}
