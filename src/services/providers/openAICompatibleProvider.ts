@@ -184,7 +184,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
           if (choice.finish_reason) {
             logger.log(`[Provider][DEBUG] finish_reason=${choice.finish_reason}, fullContent=${state.fullContent.length}, reasoning=${state.fullReasoningContent.length}, toolCalls=${state.toolCalls.length}`);
           }
-          if (choice.finish_reason === 'stop' || choice.finish_reason === 'tool_calls') {
+          if (
+            !state.completeCalled &&
+            (choice.finish_reason === 'stop' ||
+              choice.finish_reason === 'tool_calls')
+          ) {
             state.completeCalled = true;
             const completedCalls = state.toolCalls.filter(tc => tc.function?.name);
             logger.log(`[Provider][DEBUG] Completing — content=${state.fullContent.length} chars, reasoning=${state.fullReasoningContent.length} chars, completedCalls=${completedCalls.length}`);

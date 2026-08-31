@@ -552,7 +552,11 @@ describe('remoteServerDiscovery integration', () => {
             jsonResponse({
               object: 'list',
               data: [
-                { id: 'gemma-3', kind: 'chat' },
+                {
+                  id: 'gemma-3',
+                  kind: 'chat',
+                  capabilities: ['vision', 'tools'],
+                },
                 { id: 'qwen3-vl', kind: 'vision' },
                 { id: 'sdxl', kind: 'image' },
                 { id: 'kokoro', kind: 'speech' },
@@ -574,6 +578,9 @@ describe('remoteServerDiscovery integration', () => {
       expect(models.some(m => m.id === 'sdxl')).toBe(false);
       expect(models.some(m => m.id === 'kokoro')).toBe(false);
       expect(models.some(m => m.id === 'whisper-base')).toBe(false);
+      expect(
+        models.find(m => m.id === 'gemma-3')?.capabilities,
+      ).toMatchObject({ supportsVision: true, supportsToolCalling: true });
     });
 
     it('records every categorized model and keeps the first as the initial choice', async () => {

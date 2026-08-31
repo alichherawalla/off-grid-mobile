@@ -27,6 +27,14 @@ describe('displayModelName', () => {
     expect(displayModelName('gpt-4o-mini')).toBe('gpt-4o-mini');
   });
 
+  it('shows the provider model name for a Desktop remote inventory id', () => {
+    expect(
+      displayModelName(
+        'remote-vision:desktop-id:google%2Fgemini-3.7-flash',
+      ),
+    ).toBe('google/gemini-3.7-flash');
+  });
+
   it('keeps a namespace-style slug intact (does NOT treat / as a path separator)', () => {
     // Regression (qodo #438): "org/model" slugs must not be basename-stripped —
     // that would drop the namespace and collapse distinct models to the same label.

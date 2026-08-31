@@ -226,6 +226,31 @@ describe('OpenAICompatibleProvider', () => {
       expect(onToken).toHaveBeenCalledWith(' world');
     });
 
+    it('should complete once when a provider sends duplicate terminal chunks', async () => {
+      await provider.loadModel('test-model');
+
+      const mockCreateStreamingRequest =
+        httpClient.createStreamingRequest as jest.Mock;
+      mockCreateStreamingRequest.mockImplementation((_url, _req, onEvent) => {
+        onEvent({ data: '{"choices":[{"delta":{"content":"Hello"}}]}' });
+        onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
+        onEvent({ data: '{"choices":[{"delta":{},"finish_reason":"stop"}]}' });
+        return Promise.resolve();
+      });
+
+      const onComplete = jest.fn();
+      await provider.generate(
+        [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
+        {},
+        { onToken: jest.fn(), onComplete, onError: jest.fn() },
+      );
+
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(onComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ content: 'Hello' }),
+      );
+    });
+
     it('should include API key in headers when provided', async () => {
       const secureProvider = new OpenAICompatibleProvider('secure', {
         endpoint: 'https://api.example.com',

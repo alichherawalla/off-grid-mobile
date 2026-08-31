@@ -66,6 +66,14 @@ const gatewayCategory = (kind: unknown): RemoteModelCategory | null => {
   return null;
 };
 
+function declaredCapability(
+  capabilities: unknown,
+  capability: 'vision' | 'tools',
+): boolean | undefined {
+  if (!Array.isArray(capabilities)) return undefined;
+  return capabilities.includes(capability);
+}
+
 async function fetchGatewayModelCatalog(
   server: RemoteServer,
 ): Promise<RemoteModelCatalog> {
@@ -160,6 +168,16 @@ const MODEL_FILE_EXT = /\.(gguf|bin|safetensors|task|litertlm|pte)$/i;
  * it's returned unchanged.
  */
 export function displayModelName(id: string): string {
+  if (id.startsWith('remote-vision:')) {
+    const modelSeparator = id.indexOf(':', 'remote-vision:'.length);
+    if (modelSeparator !== -1) {
+      try {
+        return decodeURIComponent(id.slice(modelSeparator + 1));
+      } catch {
+        // Keep the stable raw id when a third-party gateway sends bad encoding.
+      }
+    }
+  }
   const looksLikePath =
     id.startsWith('/') ||
     /^[A-Za-z]:[\\/]/.test(id) ||
@@ -349,6 +367,7 @@ export async function fetchModelsFromServer(
               kind?: unknown;
               owned_by?: string;
               max_context_length?: number;
+              capabilities?: unknown;
             },
             i: number,
           ) => ({
@@ -361,8 +380,11 @@ export async function fetchModelsFromServer(
             // gateway vision model whose id doesn't match the name heuristics, which dropped
             // the attached image client-side (the model then behaved text-only).
               supportsVision:
-                model.kind === 'vision' || modelInfos[i].supportsVision,
+                model.kind === 'vision' ||
+                (declaredCapability(model.capabilities, 'vision') ??
+                  modelInfos[i].supportsVision),
               supportsToolCalling:
+                declaredCapability(model.capabilities, 'tools') ??
                 modelInfos[i].supportsToolCalling ??
                 detectToolCallingCapability(model.id),
             supportsThinking: modelInfos[i].supportsThinking ?? false,
