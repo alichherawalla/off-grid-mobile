@@ -239,7 +239,7 @@ describe('Release 107 task session playback', () => {
 
       fireEvent.press(screen.getByTestId('task-session-toggle'));
       expect(screen.getByText('Pause')).toBeTruthy();
-      act(() => jest.advanceTimersByTime(3_499));
+      act(() => jest.advanceTimersByTime(1_199));
       expect(screen.getByText('Step 1 of 2 · 0:00 / 0:03')).toBeTruthy();
       act(() => jest.advanceTimersByTime(1));
       expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
