@@ -255,6 +255,20 @@ describe('ChatMessage', () => {
       expect(getByText('Thought process')).toBeTruthy();
     });
 
+    it('renders Markdown in the collapsed thinking preview', () => {
+      const message = createAssistantMessage(
+        '<think>**Drafting Email Response**\nI am composing a direct reply.</think>Done.',
+      );
+
+      const { getByTestId, getByText, queryByText } = render(
+        <ChatMessage message={message} />,
+      );
+
+      expect(getByTestId('thinking-block-preview')).toBeTruthy();
+      expect(getByText('Drafting Email Response')).toBeTruthy();
+      expect(queryByText(/\*\*Drafting Email Response\*\*/)).toBeNull();
+    });
+
     it('expands thinking block when toggle is pressed', () => {
       const message = createAssistantMessage(
         '<think>Step 1: Check input\nStep 2: Process</think>Done!',
@@ -1667,16 +1681,18 @@ describe('ChatMessage', () => {
   // Thinking preview text (collapsed - long thinking text)
   // ============================================================================
   describe('thinking preview text', () => {
-    it('shows truncated preview when thinking text is > 80 chars and collapsed', () => {
+    it('keeps long preview content inside the bounded Markdown preview', () => {
       const longThinking = 'A'.repeat(100);
       const message = createAssistantMessage(
         `<think>${longThinking}</think>Response here.`,
       );
 
-      const { getByText } = render(<ChatMessage message={message} />);
+      const { getByTestId, getByText } = render(
+        <ChatMessage message={message} />,
+      );
 
-      // Preview should show first 80 chars + '...'
-      expect(getByText(/A{80}\.\.\./)).toBeTruthy();
+      expect(getByTestId('thinking-block-preview')).toBeTruthy();
+      expect(getByText(longThinking)).toBeTruthy();
     });
 
     it('shows full preview when thinking text is <= 80 chars', () => {
