@@ -39,6 +39,7 @@ import {
   isUnsupportedJetsamImageModel,
 } from '../../utils/modelSelectorFilters';
 import {
+  isStreamingActiveConversation,
   useChatAudioLifecycle,
   useChatConversationLifecycle,
   useChatPresentationLifecycle,
@@ -194,8 +195,10 @@ export const useChatScreen = () => {
   );
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
-  const isStreamingForThisConversation =
-    streamingForConversationId === activeConversationId;
+  const isStreamingForThisConversation = isStreamingActiveConversation(
+    streamingForConversationId,
+    activeConversationId,
+  );
 
   const genDeps = {
     activeModelId: activeModelInfo.modelId,

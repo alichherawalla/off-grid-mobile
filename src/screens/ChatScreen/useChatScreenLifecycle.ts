@@ -27,6 +27,17 @@ type StartGeneration = (
   text: string,
 ) => Promise<void>;
 
+/** A missing stream never belongs to a missing conversation. */
+export function isStreamingActiveConversation(
+  streamingConversationId: string | null,
+  activeConversationId: string | null,
+): boolean {
+  return (
+    streamingConversationId !== null &&
+    streamingConversationId === activeConversationId
+  );
+}
+
 export function useChatAudioLifecycle(
   navigation: Pick<NavigationProp<RootStackParamList>, 'addListener'>,
 ): void {

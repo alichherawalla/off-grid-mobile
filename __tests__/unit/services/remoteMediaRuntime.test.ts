@@ -178,9 +178,21 @@ describe('remoteMediaRuntime', () => {
         server: active!,
         text: 'Your summary is ready.',
         messageId: 'message:1',
+        voice: 'hf_alpha',
         signal: new AbortController().signal,
       }),
     ).resolves.toBe('/mock/caches/remote_voice/message_1.mp3');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://192.168.1.30:7878/v1/audio/speech',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'kokoro',
+          input: 'Your summary is ready.',
+          voice: 'hf_alpha',
+          response_format: 'mp3',
+        }),
+      }),
+    );
     expect(RNFS.writeFile).toHaveBeenCalledWith(
       '/mock/caches/remote_voice/message_1.mp3',
       Buffer.from(audio).toString('base64'),

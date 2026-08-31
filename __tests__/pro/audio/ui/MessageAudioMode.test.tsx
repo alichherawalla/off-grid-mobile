@@ -98,6 +98,13 @@ describe('MessageAudioMode', () => {
     expect(getByText('•••')).toBeTruthy();
   });
 
+  it('keeps a Hindi assistant answer visible in Voice Mode', () => {
+    const msg = createAssistantMessage('बाहर ही रहे आप प्लीज');
+    const { getByTestId } = renderMode(msg);
+
+    expect(getByTestId(`audio-bubble-${msg.id}`)).toBeTruthy();
+  });
+
   it('keeps the newest assistant voice answer transcript open by default', () => {
     const conversationId = useChatStore.getState().createConversation('model-1');
     const msg = useChatStore.getState().addMessage(conversationId, {

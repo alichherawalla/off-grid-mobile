@@ -29,12 +29,13 @@ export async function synthesizeRemoteVoiceFile(input: {
   server: RemoteServer;
   text: string;
   messageId: string;
+  voice?: string;
   signal: AbortSignal;
 }): Promise<string> {
-  const { server, text, messageId, signal } = input;
+  const { server, text, messageId, voice, signal } = input;
   const result = await remoteMediaRuntime.synthesizeVoice(
     server,
-    { text },
+    { text, voice },
     { signal },
   );
   if (result.audio.byteLength === 0)

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { transcriptionLanguages } from '@offgrid/speech';
 import { useWhisperStore } from '../stores/whisperStore';
 import { SettingsOptionSelect } from './SettingsOptionSelect';
+import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 
 interface TranscriptionLanguageSelectProps {
   testID?: string;
@@ -30,13 +31,20 @@ export const TranscriptionLanguageSelect: React.FC<TranscriptionLanguageSelectPr
     if (supportedValue !== language) setLanguage(supportedValue);
   }, [language, setLanguage, supportedValue]);
 
+  const selectLanguage = (nextLanguage: string) => {
+    setLanguage(nextLanguage);
+    if (nextLanguage !== 'auto') {
+      callHook(HOOKS.audioSelectLanguage, nextLanguage);
+    }
+  };
+
   return (
     <SettingsOptionSelect
       testID={testID}
       label="Language"
       value={supportedValue}
       options={options}
-      onChange={setLanguage}
+      onChange={selectLanguage}
       description={options.length === 1
         ? 'This model supports English.'
         : 'Choose a language or use auto-detect.'}
