@@ -8,6 +8,8 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 interface AccordionProps {
   /** Rendered as an uppercase label whisper, so pass it in sentence case. */
   title: string;
+  /** A single-line preview of the newest or most relevant content in the closed section. */
+  preview?: string;
   /** Rendered beside the chevron: the one fact worth seeing while the section is closed. */
   right?: ReactNode;
   defaultOpen?: boolean;
@@ -29,6 +31,7 @@ interface AccordionProps {
  */
 export const Accordion: React.FC<AccordionProps> = ({
   title,
+  preview,
   right,
   defaultOpen = false,
   variant = 'card',
@@ -46,11 +49,18 @@ export const Accordion: React.FC<AccordionProps> = ({
         activeOpacity={0.72}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={title}
+        accessibilityLabel={preview ? `${title}. Latest: ${preview}` : title}
         onPress={() => setOpen(current => !current)}
         testID={testID}
       >
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, preview && styles.titleWithPreview]}>
+          {title}
+        </Text>
+        {preview ? (
+          <Text style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
+            {preview}
+          </Text>
+        ) : null}
         {right}
         <Icon
           name={open ? 'chevron-up' : 'chevron-down'}
@@ -90,6 +100,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
+    flex: 1,
+  },
+  titleWithPreview: {
+    flex: 0,
+  },
+  preview: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
     flex: 1,
   },
   content: {

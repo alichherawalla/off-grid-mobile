@@ -28,6 +28,9 @@ describe('TaskRunDetails activity disclosure', () => {
 
     expect(disclosure.props.accessibilityState).toEqual({ expanded: false });
     expect(screen.queryByText('opened https://example.com')).toBeNull();
+    expect(
+      screen.getAllByText('milestone complete: Open example.com'),
+    ).toHaveLength(1);
     expect(screen.getByText('2')).toBeTruthy();
 
     fireEvent.press(disclosure);
@@ -35,7 +38,7 @@ describe('TaskRunDetails activity disclosure', () => {
     expect(disclosure.props.accessibilityState).toEqual({ expanded: true });
     expect(screen.getByText('opened https://example.com')).toBeTruthy();
     expect(
-      screen.getByText('milestone complete: Open example.com'),
-    ).toBeTruthy();
+      screen.getAllByText('milestone complete: Open example.com'),
+    ).toHaveLength(2);
   });
 });
