@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { encodePairingQrPayload } from '@offgrid/sync';
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -104,6 +105,24 @@ maybe('PairingCodeSheet scan-to-pair', () => {
     fireEvent.press(getByTestId('sync-test-scan'));
     await act(async () => {
       scanConfig!.onCodeScanned([{ value: VALID_QR }]);
+    });
+    expect(props.onPair).toHaveBeenCalledWith(VALID_QR);
+  });
+
+  it('pairs from the full pairing QR URL the other device shows, not just a bare code', async () => {
+    // The desktop/mobile pairing QR is an offgrid://pair/... URL carrying code=..., NOT a
+    // bare 8-char code. This sheet (opened from a device row) must read the code out of that
+    // URL - otherwise every real scan is rejected as "not a pairing code" (the shipped bug).
+    const url = encodePairingQrPayload({
+      device: { id: 'abc123def', name: 'Studio Mac', platform: 'macos', version: '0.0.107' },
+      pairingCode: VALID_QR,
+      routes: [{ kind: 'lan', host: '192.168.1.18', port: 37878 }],
+    });
+    const props = baseProps();
+    const { getByTestId } = render(<PairingCodeSheet {...props} />);
+    fireEvent.press(getByTestId('sync-test-scan'));
+    await act(async () => {
+      scanConfig!.onCodeScanned([{ value: url }]);
     });
     expect(props.onPair).toHaveBeenCalledWith(VALID_QR);
   });
