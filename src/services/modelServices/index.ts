@@ -5,7 +5,11 @@ import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { activeModelService } from '../activeModelService';
 import { mobileInventoryAdapters } from './inventoryAdapters';
-import { mobileRouteFacts } from './mobileRoute';
+import {
+  mobileRouteFacts,
+  mobileRouteId,
+  type MobileRouteFacts,
+} from './mobileRoute';
 import { mobileModelSelectionStore } from './selectionStore';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
@@ -49,6 +53,20 @@ export function activeMobileModel(modality: ActiveModelSnapshot['modality']): Ac
   return mobileLLMService.active(modality);
 }
 
+/** Refresh first so a newly downloaded or discovered route can be selected immediately. */
+export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> {
+  await refreshMobileModelServices();
+  await mobileLLMService.select(facts.modality, mobileRouteId(facts));
+  await refreshMobileModelServices();
+}
+
+export async function clearMobileModel(
+  modality: ActiveModelSnapshot['modality'],
+): Promise<void> {
+  await mobileLLMService.select(modality, null);
+  await refreshMobileModelServices();
+}
+
 /** Presentation adapter: recover the rich Mobile record after shared routing selected it. */
 export function mobileTextModelRecord(
   model: RuntimeModel | null,
@@ -67,3 +85,4 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId, mobileRouteFacts } from './mobileRoute';
+export type { MobileRouteFacts } from './mobileRoute';

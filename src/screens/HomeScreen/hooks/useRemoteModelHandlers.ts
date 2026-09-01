@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
-import { activeModelService, remoteServerManager } from '../../../services';
+import {
+  activeModelService,
+  clearMobileModel,
+  selectMobileModel,
+} from '../../../services';
 import { RemoteModel } from '../../../types';
 import { LoadingState } from './types';
 import logger from '../../../utils/logger';
@@ -32,10 +36,12 @@ export function useRemoteModelHandlers({
       if (activeModelId) {
         await activeModelService.unloadTextModel();
       }
-        await remoteServerManager.setActiveRemoteTextModel(
-          model.serverId,
-          model.id,
-        );
+        await selectMobileModel({
+          source: 'remote',
+          hostId: model.serverId,
+          modality: 'text',
+          modelId: model.id,
+        });
       logger.log('[useHomeScreen] Remote text model set successfully');
     } catch (_error) {
         logger.error(
@@ -59,7 +65,7 @@ export function useRemoteModelHandlers({
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteTextModel();
+      await clearMobileModel('text');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
@@ -76,11 +82,12 @@ export function useRemoteModelHandlers({
         modelName: model.name,
       });
     try {
-        await remoteServerManager.setActiveRemoteMediaModel(
-          model.serverId,
-          'image',
-          model.id,
-        );
+        await selectMobileModel({
+          source: 'remote',
+          hostId: model.serverId,
+          modality: 'image',
+          modelId: model.id,
+        });
     } catch (_error) {
         setAlertState(
           showAlert(
@@ -99,7 +106,7 @@ export function useRemoteModelHandlers({
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteMediaModel('image');
+      await clearMobileModel('image');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {

@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { showAlert, AlertState } from '../../../components';
-import { activeModelService } from '../../../services';
-import { useAppStore } from '../../../stores';
+import {
+  activeModelService,
+  selectMobileModel,
+} from '../../../services';
 import { DownloadedModel, ONNXImageModel } from '../../../types';
 import { LoadingState, ModelPickerType } from './types';
 
@@ -30,12 +32,14 @@ export const useModelLoading = ({
   // modality out. Loading eagerly here used to race that path and leave both a
   // text and an image model resident at the same time.
   const handleSelectTextModel = useCallback(
-    (model: DownloadedModel) => {
+    async (model: DownloadedModel) => {
       setPickerType(null);
-      // Dispatch the SELECT intent to the owning service — the View no longer writes activeModelId
-      // directly (presentation holds no authoritative state). The service is the one writer, so the
-      // selection, load-success, and load-failure states can never drift apart.
-      activeModelService.selectTextModel(model.id);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
+      });
     },
     [setPickerType],
   );
@@ -54,9 +58,14 @@ export const useModelLoading = ({
   }, [setLoadingState, setPickerType, setAlertState]);
 
   const handleSelectImageModel = useCallback(
-    (model: ONNXImageModel) => {
+    async (model: ONNXImageModel) => {
       setPickerType(null);
-      useAppStore.getState().setActiveImageModelId(model.id);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.backend ?? 'image-runtime',
+        modality: 'image',
+        modelId: model.id,
+      });
     },
     [setPickerType],
   );

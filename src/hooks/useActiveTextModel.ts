@@ -1,11 +1,8 @@
-import { useEffect, useState } from 'react';
 import { DownloadedModel, RemoteModel } from '../types';
 import {
-  activeMobileModel,
-  mobileLLMService,
   mobileTextModelRecord,
-  refreshMobileModelServices,
 } from '../services/modelServices';
+import { useActiveMobileModel } from './useActiveMobileModel';
 
 export type ActiveTextModelResult = {
   /** The resolved active model (remote preferred over local) */
@@ -27,14 +24,7 @@ export type ActiveTextModelResult = {
  * view is what let the chat refuse to send to a model the engine had loaded.
  */
 export function useActiveTextModel(): ActiveTextModelResult {
-  const [snapshot, setSnapshot] = useState(() => activeMobileModel('text'));
-
-  useEffect(() => {
-    const publish = () => setSnapshot(activeMobileModel('text'));
-    const unsubscribe = mobileLLMService.subscribe(publish);
-    refreshMobileModelServices().then(publish).catch(() => undefined);
-    return unsubscribe;
-  }, []);
+  const snapshot = useActiveMobileModel('text');
 
   const record = mobileTextModelRecord(snapshot.model);
   return {

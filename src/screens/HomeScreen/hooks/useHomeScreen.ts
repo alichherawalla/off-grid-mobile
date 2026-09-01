@@ -16,13 +16,13 @@ import {
   hardwareService,
   activeModelService,
   ResourceUsage,
-  remoteServerManager,
 } from '../../../services';
 import { Conversation, RemoteModel } from '../../../types';
 import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
+import { useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
 import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
@@ -95,9 +95,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const {
     servers: remoteServers,
     discoveredModels: remoteDiscoveredModels,
-    activeRemoteTextModelId,
-    activeRemoteImageModelId,
-    activeRemoteMediaServerIds,
   } = useRemoteServerStore();
 
   const {
@@ -111,30 +108,21 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setAlertState,
   });
 
-  // Wrap local model handlers to clear any active remote server first
-  const handleSelectTextModel = useCallback(
-    (model: Parameters<typeof _handleSelectTextModel>[0]) => {
-      remoteServerManager.clearActiveRemoteTextModel();
-      return _handleSelectTextModel(model);
-    },
-    [_handleSelectTextModel],
-  );
+  const handleSelectTextModel = _handleSelectTextModel;
+  const handleUnloadTextModel = _handleUnloadTextModel;
+  const handleSelectImageModel = _handleSelectImageModel;
 
-  const handleUnloadTextModel = useCallback(() => {
-    remoteServerManager.clearActiveRemoteTextModel();
-      return _handleUnloadTextModel();
-  }, [_handleUnloadTextModel]);
-
-  const handleSelectImageModel = useCallback(
-    (model: Parameters<typeof _handleSelectImageModel>[0]) => {
-      remoteServerManager.clearActiveRemoteMediaModel('image');
-      return _handleSelectImageModel(model);
-    },
-    [_handleSelectImageModel],
-  );
-
-  const { model: activeTextModel, modelId: activeTextModelId } =
+  const {
+    model: activeTextModel,
+    modelId: activeTextModelId,
+    isRemote: isRemoteTextModel,
+  } =
     useActiveTextModel();
+  const activeImageRoute = useActiveMobileModel('image').model;
+  const activeRemoteTextModelId = isRemoteTextModel ? activeTextModelId : null;
+  const activeRemoteImageModelId = activeImageRoute?.source === 'remote'
+    ? activeImageRoute.id
+    : null;
 
   const { runLANDiscovery } = useLANDiscovery({ navigation, setAlertState });
 
@@ -338,7 +326,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     details: { serverName: option.serverName },
     lastUpdated: '',
   }));
-  const activeRemoteImageServerId = activeRemoteMediaServerIds.image;
+  const activeRemoteImageServerId = activeImageRoute?.source === 'remote'
+    ? activeImageRoute.serverId
+    : null;
   const activeRemoteImageModel =
     activeRemoteImageModelId && activeRemoteImageServerId
       ? remoteImageModels.find(

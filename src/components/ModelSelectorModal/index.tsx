@@ -6,6 +6,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { loadingTextRowId } from './rowState';
 import {
   DownloadedModel,
@@ -15,8 +16,9 @@ import {
 } from '../../types';
 import {
   activeModelService,
-  remoteServerManager,
+  clearMobileModel,
   remoteServerModelOptions,
+  selectMobileModel,
 } from '../../services';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
@@ -36,6 +38,12 @@ import {
 import logger from '../../utils/logger';
 
 type TabType = 'text' | 'image';
+
+const remoteModelId = (model: { source: string; id: string } | null) =>
+  model?.source === 'remote' ? model.id : null;
+
+const remoteServerId = (model: { source: string; serverId?: string } | null) =>
+  model?.source === 'remote' ? model.serverId ?? null : null;
 
 function savedTextModels(
   server: RemoteServer,
@@ -104,14 +112,11 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // under a different id still marks its row instead of leaving the sheet looking empty.
   const selectedModelPath =
     activeModelService.resolveSelectedTextModel()?.filePath ?? null;
-  const {
-    servers,
-    discoveredModels,
-    serverHealth,
-    activeRemoteTextModelId,
-    activeRemoteImageModelId,
-    activeRemoteMediaServerIds,
-  } = useRemoteServerStore();
+  const { servers, discoveredModels, serverHealth } = useRemoteServerStore();
+  const activeTextRoute = useActiveMobileModel('text').model;
+  const activeImageRoute = useActiveMobileModel('image').model;
+  const activeRemoteTextModelId = remoteModelId(activeTextRoute);
+  const activeRemoteImageModelId = remoteModelId(activeImageRoute);
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
@@ -202,7 +207,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
           setLoadingImageModelId(null);
         },
         onSuccess: () => {
-          remoteServerManager.clearActiveRemoteMediaModel('image');
           onSelectImageModel?.(model);
           onSelectionComplete?.();
         },
@@ -215,7 +219,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     setIsLoadingImage(true);
     try {
       await activeModelService.unloadImageModel();
-      remoteServerManager.clearActiveRemoteMediaModel('image');
+      await clearMobileModel('image');
       onUnloadImageModel?.();
     } catch (error) {
       logger.error('Failed to unload image model:', error);
@@ -224,7 +228,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     }
   };
 
-  // Handle selecting a remote text model
   const handleSelectRemoteTextModel = async (
     model: RemoteModel,
     serverId: string,
@@ -233,7 +236,12 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       // Always go through the owner. It also waits for an in-flight local load,
       // which is not yet visible as a loaded native model.
       await activeModelService.unloadTextModel();
-      await remoteServerManager.setActiveRemoteTextModel(serverId, model.id);
+      await selectMobileModel({
+        source: 'remote',
+        hostId: serverId,
+        modality: 'text',
+        modelId: model.id,
+      });
       onSelectionComplete?.();
     } catch (error) {
       logger.error(
@@ -252,7 +260,12 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     serverId: string,
   ) => {
     try {
-      await remoteServerManager.setActiveRemoteImageModel(serverId, model.id);
+      await selectMobileModel({
+        source: 'remote',
+        hostId: serverId,
+        modality: 'image',
+        modelId: model.id,
+      });
       onSelectionComplete?.();
     } catch (error) {
       logger.error(
@@ -268,13 +281,11 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // Handle selecting a local model - clear remote selection. The tap records a SELECTION; the row
   // reflects that as selected, and shows a spinner only once the service actually starts loading.
   const handleSelectLocalModel = (model: DownloadedModel) => {
-    remoteServerManager.clearActiveRemoteTextModel();
     onSelectModel(model);
   };
 
   // Handle unload - also clear remote selection
   const handleUnloadModel = () => {
-    remoteServerManager.clearActiveRemoteTextModel();
     onUnloadModel();
   };
 
@@ -381,7 +392,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             remoteVisionModels={remoteImageModels}
               activeImageModelId={activeImageModelId}
               activeRemoteImageModelId={activeRemoteImageModelId}
-            activeRemoteImageServerId={activeRemoteMediaServerIds.image ?? null}
+            activeRemoteImageServerId={remoteServerId(activeImageRoute)}
               isAnyLoading={isAnyLoading}
               isLoadingImage={isLoadingImage}
               loadingModelId={loadingImageModelId}
