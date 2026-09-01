@@ -11,9 +11,9 @@ jest.mock('@offgrid/core/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-const mockEngine = { speak: jest.fn().mockResolvedValue(undefined), getActiveVoice: jest.fn(() => null), getPhase: jest.fn(() => 'ready'), release: jest.fn().mockResolvedValue(undefined), displayName: 'Mock' };
+const mockEngine = { id: 'kokoro', speak: jest.fn().mockResolvedValue(undefined), stop: jest.fn(), getActiveVoice: jest.fn(() => null), getPhase: jest.fn(() => 'ready'), release: jest.fn().mockResolvedValue(undefined), isFullyDownloaded: jest.fn(() => true), capabilities: { streaming: true, peakRamMB: 320 }, displayName: 'Mock' };
 jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine), getEngine: jest.fn(() => mockEngine), getRegisteredIds: jest.fn(() => ['kokoro']), has: jest.fn(() => true) },
 }));
 
 jest.mock('../../../pro/audio/ttsStore', () => ({
@@ -28,12 +28,20 @@ import {
 
 const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
 const flush = () => new Promise<void>((r) => setImmediate(r));
+async function waitForSpeakCount(count: number): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (mockEngine.speak.mock.calls.length < count) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${count} spoken segments`);
+    await flush();
+  }
+}
 
 let state: Record<string, any>;
 
 function setMode(interfaceMode: 'chat' | 'audio', isReady: boolean) {
   state = {
     settings: { interfaceMode, enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
+    voices: [],
     isReady, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
   };
 }
@@ -71,8 +79,7 @@ describe('feedStreamingText gating', () => {
 describe('streaming playback', () => {
   it('speaks a completed sentence through the engine', async () => {
     feedStreamingText('Hello there. And mo');
-    await flush();
-    await flush();
+    await waitForSpeakCount(1);
     expect(mockEngine.speak).toHaveBeenCalledTimes(1);
     expect(mockEngine.speak.mock.calls[0][0]).toBe('Hello there.');
     expect(isStreamingSpeechActive()).toBe(true);
@@ -165,7 +172,7 @@ describe('stopStreamingSpeechForTurn (user stop)', () => {
     mockEngine.speak.mockImplementation(() => new Promise<void>(() => { /* never settles */ }));
 
     feedStreamingText('One. Two. Three.'); // three segments queued
-    await flush();
+    await waitForSpeakCount(1);
     expect(mockEngine.speak).toHaveBeenCalledTimes(1); // segment 1 in flight (hung)
 
     stopStreamingSpeechForTurn(); // user stops mid-segment → queue cleared, session bumped
@@ -205,8 +212,7 @@ describe('OD9 — never speak tool-call content', () => {
       expectNoToolLeak();
     }
     finishStreamingText(FULL, 'msg-od9'); // trailing flush must not leak either
-    await flush();
-    await flush();
+    await waitForSpeakCount(2);
     expectNoToolLeak();
     // And it DID speak the real answer — both prose sentences, nothing dropped.
     expect(spokenBlob()).toContain('Sure, let me check.');
@@ -215,28 +221,24 @@ describe('OD9 — never speak tool-call content', () => {
 
   it('withholds an UNCLOSED tool-call opener mid-stream (speaks nothing from the opener on)', async () => {
     feedStreamingText('Checking now. <tool_call>\n{"name": "search"'); // opener, no closer
-    await flush();
-    await flush();
+    await waitForSpeakCount(1);
     expectNoToolLeak();
     expect(spokenBlob()).toContain('Checking now.');
   });
 
   it('a still-FORMING opener tag (no closing > yet) is withheld', async () => {
     feedStreamingText('Okay. <tool_cal'); // bare partial opener, no boundary
-    await flush();
-    await flush();
+    await waitForSpeakCount(1);
     expectNoToolLeak();
     expect(spokenBlob()).toContain('Okay.');
   });
 
   it('a plain answer with NO tool call still streams normally (unchanged)', async () => {
     feedStreamingText('First sentence. Second sen');
-    await flush();
-    await flush();
+    await waitForSpeakCount(1);
     expect(mockEngine.speak).toHaveBeenCalledWith('First sentence.', expect.anything());
     finishStreamingText('First sentence. Second sentence.', 'plain-1');
-    await flush();
-    await flush();
+    await waitForSpeakCount(2);
     expect(spokenBlob()).toContain('Second sentence.');
     expectNoToolLeak();
   });

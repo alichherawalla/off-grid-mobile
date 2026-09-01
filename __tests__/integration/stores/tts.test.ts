@@ -72,6 +72,14 @@ import { useTTSStore } from '../../../pro/audio/ttsStore';
 
 const getState = () => useTTSStore.getState();
 
+async function waitForBoundary(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for the voice boundary');
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+}
+
 const resetStore = () => {
   useTTSStore.setState({
     phase: 'ready',
@@ -176,7 +184,7 @@ describe('TTS integration', () => {
 
       // Speak
       const speakPromise = getState().speak('hello', 'msg1');
-      await Promise.resolve(); // let the remote-voice preflight choose the local engine
+      await waitForBoundary(() => typeof finishSpeaking === 'function');
       expect(getState().currentMessageId).toBe('msg1');
 
       finishSpeaking();

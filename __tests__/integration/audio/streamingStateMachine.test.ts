@@ -21,6 +21,8 @@ type SpeakMode = 'resolve' | 'hang' | 'throw';
 let speakMode: SpeakMode = 'resolve';
 let enginePhase = 'ready';
 const mockEngine = {
+  id: 'kokoro',
+  stop: jest.fn(),
   speak: jest.fn(() => {
     if (speakMode === 'throw') return Promise.reject(new Error('std::exception'));
     if (speakMode === 'hang') return new Promise<void>(() => { /* never settles */ });
@@ -31,12 +33,12 @@ const mockEngine = {
   release: jest.fn().mockResolvedValue(undefined),
   isFullyDownloaded: jest.fn(() => true),
   getRequiredAssets: jest.fn(() => [{ sizeBytes: 320 * 1024 * 1024 }]),
-  capabilities: { peakRamMB: 320 },
+  capabilities: { streaming: true, peakRamMB: 320 },
   displayName: 'Mock',
 };
 
 jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine), getEngine: jest.fn(() => mockEngine), getRegisteredIds: jest.fn(() => ['kokoro']), has: jest.fn(() => true) },
 }));
 const mockCanLoad = jest.fn((..._a: unknown[]) => false);
 jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
@@ -55,6 +57,13 @@ import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
 
 const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
 const flush = () => new Promise<void>((r) => setImmediate(r));
+async function waitForSpeakCount(count: number): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (mockEngine.speak.mock.calls.length < count) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${count} spoken segments`);
+    await flush();
+  }
+}
 let state: Record<string, any>;
 let events: SmEvent[] = [];
 let disposeSink: () => void;
@@ -77,6 +86,7 @@ beforeEach(async () => {
   _setSpeakTimeoutForTest(40); // fast timeout so the "hung" case doesn't wait 15s
   state = {
     settings: { interfaceMode: 'audio', enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
+    voices: [],
     isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
     initializeEngine: jest.fn().mockResolvedValue(undefined),
   };
@@ -158,9 +168,10 @@ describe('streaming state machine — engine errors never wedge', () => {
     speakMode = 'resolve';
     resetStreamingSpeech();
     await flush();
+    const callsBeforeRecovery = mockEngine.speak.mock.calls.length;
     feedStreamingText('Recovered. ');
     finishStreamingText('Recovered.', 'm2');
-    await flush();
+    await waitForSpeakCount(callsBeforeRecovery + 1);
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Recovered.');
   });
 });
@@ -203,7 +214,7 @@ describe('streaming state machine — reset always reclaims the lock', () => {
   it('resetStreamingSpeech clears a stuck drain so the next stream is not blocked', async () => {
     speakMode = 'hang';
     feedStreamingText('Stuck. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(isStreamingSpeechActive()).toBe(true);
 
     resetStreamingSpeech(); // the recovery path (stop / new turn)
@@ -212,7 +223,7 @@ describe('streaming state machine — reset always reclaims the lock', () => {
 
     speakMode = 'resolve';
     feedStreamingText('Fresh.');
-    await flush();
+    await waitForSpeakCount(2);
     expect(names()).toContain('stream ENGAGE (engine warm)');
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Fresh.');
   });
@@ -226,7 +237,7 @@ describe('streaming state machine — user stops mid-stream', () => {
   it('aborts cleanly without wedging/releasing the engine, and suppresses the rest of the turn', async () => {
     speakMode = 'hang'; // engine can't complete (as if paused) — the exact device condition
     feedStreamingText('One. Two. Three. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(isStreamingSpeechActive()).toBe(true);
     expect(mockEngine.speak).toHaveBeenCalledTimes(1); // segment 1 in flight (hung)
 

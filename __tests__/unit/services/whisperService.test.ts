@@ -967,7 +967,7 @@ describe('WhisperService', () => {
   describe('transcribeFile', () => {
     it('throws when no model loaded', async () => {
       await expect(
-        whisperService.transcribeFile('/path/to/audio.wav'),
+        whisperService.transcribeFileRaw('/path/to/audio.wav'),
       ).rejects.toThrow('No Whisper model loaded');
     });
 
@@ -984,7 +984,7 @@ describe('WhisperService', () => {
       mockedInitWhisper.mockResolvedValueOnce(mockContext as any);
       await whisperService.loadModel('/path/model.bin');
 
-      const result = await whisperService.transcribeFile('/audio.wav');
+      const result = await whisperService.transcribeFileRaw('/audio.wav');
 
       expect(result).toBe('transcribed text');
       expect(mockContext.transcribe).toHaveBeenCalledWith(

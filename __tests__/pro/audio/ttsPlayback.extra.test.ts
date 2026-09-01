@@ -51,6 +51,9 @@ jest.mock('../../../pro/audio/audioFilePlayer', () => ({
 // --- engine registry: dumb boundary (wraps react-native-executorch). ---
 jest.mock('../../../pro/audio/engine', () => {
   const engine = {
+    id: 'mock-tts',
+    displayName: 'Mock TTS',
+    capabilities: { streaming: false, peakRamMB: 100 },
     getPhase: jest.fn(() => 'ready' as string),
     stop: jest.fn(),
     pause: jest.fn(),
@@ -69,6 +72,7 @@ jest.mock('../../../pro/audio/engine', () => {
       getEngine: jest.fn(() => (mockCtl.engineNull ? null : engine)),
       getActiveEngineId: jest.fn(() => 'mock-tts'),
       setActiveEngine: jest.fn(),
+      getRegisteredIds: jest.fn(() => ['mock-tts']),
     },
   };
 });

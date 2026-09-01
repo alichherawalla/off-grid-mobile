@@ -11,6 +11,7 @@ import { audioRecorderService } from './audioRecorderService';
 import * as whisperModelFiles from './whisperModelFiles';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
+import { executeMobileTranscription } from './mobileTranscription';
 
 // Re-export the platform model catalog. Portable decode and transcript policy lives in
 // @offgrid/models.
@@ -249,7 +250,7 @@ class WhisperService {
           if (cleanTranscription(realtimeText)) return realtimeText;
           const fileText = options?.transcribeFallback
             ? await options.transcribeFallback(path)
-            : await this.transcribeFile(path, { language });
+            : await this.transcribeFileRaw(path, { language });
           logger.log(
             `[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(
               0,
@@ -442,9 +443,6 @@ class WhisperService {
       signal?: AbortSignal;
     },
   ): Promise<string> {
-    const { executeMobileTranscription } = await import(
-      './mobileTranscription'
-    );
     return executeMobileTranscription(filePath, options);
   }
 
