@@ -63,6 +63,11 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     await h.tapSend('tell me about cats'); // NON-draw prompt: only the force flag should make it an image
     await h.settle(50); // let handleSendFn enqueue
 
+    // The user can see that the message is waiting and can identify it.
+    expect(view.queryByTestId('queue-indicator')).not.toBeNull();
+    expect(view.queryByText('1 queued')).not.toBeNull();
+    expect(view.queryByText('tell me about cats')).not.toBeNull();
+
     // No image generated yet — turn #2 is queued, turn #1 still holds.
     expect(h.boundary.diffusion.calls.generateImage.length).toBe(0);
 
