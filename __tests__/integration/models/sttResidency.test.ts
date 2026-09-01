@@ -18,7 +18,7 @@
  * fails these tests.
  */
 
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { hardwareService } from '../../../src/services/hardware';
 
 // Native boundary: the whisper native model. A dumb stub that just flips a flag

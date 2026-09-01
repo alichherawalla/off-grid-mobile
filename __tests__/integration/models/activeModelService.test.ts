@@ -12,7 +12,7 @@
 
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../../src/services/activeModelService';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';

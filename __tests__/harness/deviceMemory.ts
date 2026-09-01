@@ -11,7 +11,7 @@
  */
 import { Platform } from 'react-native';
 import { hardwareService } from '../../src/services/hardware';
-import { modelResidencyManager } from '../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import type { LoadPolicy } from '../../src/services/memoryBudget';
 
 const originalOS = Platform.OS;

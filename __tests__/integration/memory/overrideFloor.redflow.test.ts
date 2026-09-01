@@ -6,7 +6,7 @@
  * under override (which loads) so the bypass is falsifiable, not a trivially-true assertion. The
  * actual on-device jetsam outcome is device-only (device-only); this asserts the gate verdict.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());

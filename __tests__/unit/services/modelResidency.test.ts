@@ -10,8 +10,8 @@ import {
   planEviction,
   computeBudgetMB,
   Resident,
-} from '../../../src/services/modelResidency/policy';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+} from '@offgrid/models';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { hardwareService } from '../../../src/services/hardware';
 
 const R = (

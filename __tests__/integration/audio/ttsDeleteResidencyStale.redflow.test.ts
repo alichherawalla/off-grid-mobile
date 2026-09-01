@@ -6,7 +6,7 @@
  * which can wrongly refuse or evict a later text/image load. Runs the REAL deleteModels + REAL
  * modelResidencyManager; a minimal fake TTS engine stands in for the native model.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { ttsRegistry } from '../../../pro/audio/engine';
 import { deleteModels } from '../../../pro/audio/ttsDownloadActions';
 

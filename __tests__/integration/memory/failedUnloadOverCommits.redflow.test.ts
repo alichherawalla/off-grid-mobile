@@ -7,7 +7,7 @@
  * `fits`) loads the incoming model on top → OOM. Runs the REAL modelResidencyManager over the RAM-sensor
  * stub; the only faked boundary is the native unload (made to reject).
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());

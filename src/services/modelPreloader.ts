@@ -14,7 +14,7 @@ import { useAppStore, useWhisperStore } from '../stores';
 import { activeModelService } from './activeModelService';
 import { estimateTextModelMemoryMB } from './modelMemory';
 import { WHISPER_MODELS } from './whisperService';
-import { modelResidencyManager } from './modelResidency';
+import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { generationService } from './generationService';
 import { imageGenerationService } from './imageGenerationService';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';

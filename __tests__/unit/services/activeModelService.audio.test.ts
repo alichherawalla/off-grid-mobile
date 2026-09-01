@@ -30,7 +30,7 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
 jest.mock('../../../src/services/hardware', () => ({
   hardwareService: {},
 }));
-jest.mock('../../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { runExclusive: jest.fn() },
 }));
 jest.mock('../../../src/utils/logger', () => ({

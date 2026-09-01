@@ -21,12 +21,12 @@ jest.mock('../../../src/services/hardware', () => ({
     estimateImageModelRam: jest.fn(() => 4_500 * 1024 * 1024),
   },
 }));
-jest.mock('../../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { makeRoomFor: jest.fn(), runExclusive: jest.fn((_k: string, fn: () => any) => fn()) },
 }));
 
 import { checkImageModelCanLoad } from '../../../src/services/activeModelService/loaders';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 
 const makeRoomFor = modelResidencyManager.makeRoomFor as jest.Mock;
 const model = { id: 'img-1', name: 'Test Image Model', backend: 'gpu' } as any;

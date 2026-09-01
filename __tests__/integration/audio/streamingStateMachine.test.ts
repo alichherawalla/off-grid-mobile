@@ -39,7 +39,7 @@ jest.mock('../../../pro/audio/engine', () => ({
   ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
 }));
 const mockCanLoad = jest.fn((..._a: unknown[]) => false);
-jest.mock('@offgrid/core/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { canLoadWithoutEviction: (...a: unknown[]) => mockCanLoad(...a) },
 }));
 jest.mock('../../../pro/audio/ttsStore', () => ({

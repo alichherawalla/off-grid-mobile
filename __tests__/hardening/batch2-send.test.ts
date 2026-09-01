@@ -28,7 +28,7 @@
 jest.mock('../../src/services/modelPreloader', () => ({
   abortPreload: jest.fn(),
 }));
-jest.mock('../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: {
     reclaimSttForGeneration: jest.fn(() => Promise.resolve()),
     getResidents: jest.fn(() => []),

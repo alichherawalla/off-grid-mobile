@@ -13,7 +13,7 @@
  * effective policy actually changes.
  */
 import { loadPolicyFromSettings, startLoadPolicySync } from '../../../src/services/loadPolicySync';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { useAppStore } from '../../../src/stores';
 
 describe('loadPolicyFromSettings (the one setting→policy mapping)', () => {

@@ -31,7 +31,7 @@ jest.mock('../../../src/services/whisperService', () => ({
 }));
 
 const mockCanLoad = jest.fn((_spec?: any) => true);
-jest.mock('../../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { canLoadWithoutEviction: (...a: any[]) => mockCanLoad(...a) },
 }));
 

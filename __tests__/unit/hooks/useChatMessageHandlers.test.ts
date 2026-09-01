@@ -13,7 +13,7 @@ import { createMessage } from '../../utils/factories';
 
 // Light mocks — the no-model path bails before any of these are touched, but
 // they still need to exist so the module imports cleanly.
-jest.mock('../../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { getResidents: jest.fn(() => []), reclaimSttForGeneration: jest.fn() },
 }));
 jest.mock('../../../src/services/hardware', () => ({

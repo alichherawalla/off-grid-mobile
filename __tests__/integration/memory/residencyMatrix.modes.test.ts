@@ -48,9 +48,9 @@
  * That row is tagged `oracle: 'M6'` and is EXPECTED-to-fail-on-HEAD only in aggressive; do NOT weaken it and
  * do NOT fix source here. The row×mode PASS/FAIL red list is the deliverable that drives the fix.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import type { LoadPolicy } from '../../../src/services/memoryBudget';
-import type { ResidentType } from '../../../src/services/modelResidency/policy';
+import type { ResidentType } from '@offgrid/models';
 import { setDeviceMemory, resetDeviceMemory, makeResident } from '../../harness/deviceMemory';
 
 /** A seeded resident model (already loaded), as the row describes it. */

@@ -16,7 +16,7 @@ import {
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
-import { modelResidencyManager } from './modelResidency';
+import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { dropMissingImageAttachments, modelImageAttachments } from './llmImageInput';

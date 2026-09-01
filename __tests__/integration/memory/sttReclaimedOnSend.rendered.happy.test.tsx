@@ -18,7 +18,7 @@ describe('STT reclaim on send (memory-tight) — rendered characterization', () 
     });
     h.render();
      
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { hardwareService } = require('../../../src/services/hardware');
      
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();

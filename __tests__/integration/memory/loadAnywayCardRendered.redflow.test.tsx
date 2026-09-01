@@ -62,7 +62,7 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     // GESTURE: turn on Aggressive via the real segmented control (the device was in Aggressive).
     const toggle = h.rtl.render(React.createElement(ModelLoadingModeSelector, {}));
     h.rtl.fireEvent.press(toggle.getByTestId('model-loading-mode-aggressive-button'));
-    await h.rtl.waitFor(() => { expect(require('../../../src/services/modelResidency').modelResidencyManager.getLoadPolicy()).toBe('aggressive'); });
+    await h.rtl.waitFor(() => { expect(require('@offgrid/core/services/modelServices/residencyBootstrap').modelResidencyManager.getLoadPolicy()).toBe('aggressive'); });
 
     // Precondition: no refusal surface yet.
     expect(h.view!.queryByText('Load Anyway')).toBeNull();

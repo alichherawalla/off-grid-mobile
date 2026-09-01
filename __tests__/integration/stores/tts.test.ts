@@ -117,7 +117,7 @@ describe('TTS integration', () => {
     afterEach(() => { mockEngine.getPhase.mockReturnValue('ready'); });
 
     it('a warm/preload initializeEngine() does NOT override (co-reside, honor fit)', async () => {
-      const { modelResidencyManager } = require('@offgrid/core/services/modelResidency');
+      const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
       const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
         .mockResolvedValue({ fits: true, evicted: [] });
       mockEngine.getPhase.mockReturnValue('idle');
@@ -133,7 +133,7 @@ describe('TTS integration', () => {
     });
 
     it('a speak turn forces override:true (evict the finished text model for the voice model)', async () => {
-      const { modelResidencyManager } = require('@offgrid/core/services/modelResidency');
+      const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
       const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
         .mockResolvedValue({ fits: true, evicted: ['text'] });
       mockEngine.getPhase.mockReturnValue('idle');
@@ -149,7 +149,7 @@ describe('TTS integration', () => {
     });
 
     it('a warm load that does not fit skips quietly — no error, no eviction', async () => {
-      const { modelResidencyManager } = require('@offgrid/core/services/modelResidency');
+      const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
       const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
         .mockResolvedValue({ fits: false, evicted: [] });
       mockEngine.getPhase.mockReturnValue('idle');

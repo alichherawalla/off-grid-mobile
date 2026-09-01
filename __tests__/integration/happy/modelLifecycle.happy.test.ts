@@ -18,7 +18,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     requireRTL();
      
     const { activeModelService } = require('../../../src/services/activeModelService');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { isModelReady } = require('../../../src/services/engines');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');

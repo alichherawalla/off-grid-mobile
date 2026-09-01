@@ -29,7 +29,7 @@ describe('happy — a fittable image gen succeeds with no failure card (heavy en
     // The fittable load succeeded through the REAL gate: the native image generator ran...
     await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); });
      
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     expect(modelResidencyManager.isResident('image')).toBe(true);
 
     // ...and the user sees NO "Not Enough Memory" card anywhere on the chat screen.

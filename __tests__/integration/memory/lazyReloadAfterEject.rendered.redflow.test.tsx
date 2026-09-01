@@ -28,7 +28,7 @@ describe('per-model eject — lazy reload on next use', () => {
 
     const {
       modelResidencyManager,
-    } = require('../../../src/services/modelResidency');
+    } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const textResident = () =>
       (modelResidencyManager.getResidents() as Array<{ type: string }>).some(
         r => r.type === 'text',

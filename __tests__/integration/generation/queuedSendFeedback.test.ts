@@ -29,7 +29,7 @@ jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/litert');
 jest.mock('../../../src/services/activeModelService');
 jest.mock('../../../src/services/modelPreloader', () => ({ abortPreload: jest.fn() }));
-jest.mock('../../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { reclaimSttForGeneration: jest.fn(async () => {}) },
 }));
 

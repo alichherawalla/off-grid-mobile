@@ -40,7 +40,7 @@ describe('realtime hold-to-talk dictation recovers when whisper load is blocked 
   it('frees the generation model, loads whisper, and the transcript lands in the composer', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', whisper: true });
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with
     // NO resident load — so the realtime turn's first load attempt runs for real (and blocks on the tight budget).

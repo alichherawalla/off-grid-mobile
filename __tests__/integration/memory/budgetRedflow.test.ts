@@ -11,7 +11,7 @@
  *
  * All numbers are the exact device/[MEM-SM]-log reproductions from the recon agents.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());

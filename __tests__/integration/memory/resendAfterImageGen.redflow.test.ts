@@ -8,7 +8,7 @@
  * than real free) is still refused — see aggressiveDirtyOverCommit.rendered. Runs the REAL
  * modelResidencyManager over the RAM-sensor stub (deviceMemory harness) with the device repro.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());

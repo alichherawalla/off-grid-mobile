@@ -20,7 +20,7 @@
  * would fail these tests.
  */
 
-jest.mock('../../src/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { getResidents: jest.fn(() => []), reclaimSttForGeneration: jest.fn() },
 }));
 jest.mock('../../src/services/hardware', () => ({

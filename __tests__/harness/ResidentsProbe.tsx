@@ -19,7 +19,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 // Required AFTER installNativeBoundary() → resolves the same fresh module graph the screens use.
-import { modelResidencyManager } from '../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 
 export const ResidentsProbe: React.FC = () => {
   // `modelResidencyManager` holds a plain (non-reactive) Map, and residency changes (load / eject /

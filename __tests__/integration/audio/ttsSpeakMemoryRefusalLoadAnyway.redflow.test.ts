@@ -18,7 +18,7 @@
  * RED on HEAD: the refusal throws a plain Error → isOverridableMemoryError === false → the failure store is
  * empty (speak bailed silently); no card, no Load Anyway.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory } from '../../harness/deviceMemory';
 import { ttsRegistry } from '../../../pro/audio/engine';
 import { useTTSStore } from '../../../pro/audio/ttsStore';

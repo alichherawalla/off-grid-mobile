@@ -9,7 +9,7 @@
  * but on the STT-reclaim path (PR#454 only fixed makeRoomFor). Real modelResidencyManager over the RAM
  * stub; only the native unload is faked (made to reject).
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());

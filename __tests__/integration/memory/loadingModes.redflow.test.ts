@@ -19,7 +19,7 @@
  * balanced SWAP is dirty-vs-dirty on tight real free: two dirty heavies (4000+5000=9000) can't
  * both fit ~4GB free, so the resident is evicted.
  */
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => {

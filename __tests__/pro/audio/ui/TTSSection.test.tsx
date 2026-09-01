@@ -55,7 +55,7 @@ jest.mock('../../../../pro/audio/engine', () => ({
 // The residency lock/hardware are native boundaries; the mode switch's
 // initializeEngine side-effect routes through them. Grant room so it proceeds
 // without touching real device memory.
-jest.mock('@offgrid/core/services/modelResidency', () => ({
+jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: {
     runExclusive: async (_label: string, fn: () => Promise<void>) => fn(),
     makeRoomFor: async () => ({ fits: true, evicted: [] as string[] }),

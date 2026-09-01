@@ -81,7 +81,7 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 }));
 
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
-import { modelResidencyManager } from '@offgrid/core/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { hardwareService } from '@offgrid/core/services/hardware';
 
 const getState = () => useTTSStore.getState();

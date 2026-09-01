@@ -3,7 +3,7 @@ import { showAlert, AlertState } from '../../components';
 import { Message } from '../../types';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
-import { modelResidencyManager } from '../../services/modelResidency';
+import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { hardwareService } from '../../services/hardware';
 import {
   regenerateResponseFn, executeDeleteConversationFn, handleImageGenerationFn,

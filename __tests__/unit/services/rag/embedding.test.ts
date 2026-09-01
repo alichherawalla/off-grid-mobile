@@ -13,7 +13,7 @@ const mockCopyFile = RNFS.copyFile as jest.MockedFunction<typeof RNFS.copyFile>;
 
 // Must import after mocks are set up
 import { embeddingService } from '../../../../src/services/rag/embedding';
-import { modelResidencyManager } from '../../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 
 const mockEmbedding = jest.fn();
 const mockRelease = jest.fn();

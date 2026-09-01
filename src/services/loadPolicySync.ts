@@ -14,7 +14,7 @@
  *    reactive store snapshot.
  */
 import { useAppStore } from '../stores';
-import { modelResidencyManager } from './modelResidency';
+import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { activeModelService } from './activeModelService';
 import { LoadPolicy } from './memoryBudget';
 

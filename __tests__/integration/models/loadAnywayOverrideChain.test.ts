@@ -33,7 +33,7 @@
 
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../../src/services/activeModelService';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../../src/services/llm';
 import { hardwareService } from '../../../src/services/hardware';
 import { loadModelWithOverride } from '../../../src/services/loadModelWithOverride';

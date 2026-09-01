@@ -1,4 +1,3 @@
-/** Mobile composition root for the shared model-residency application service. */
 import { AppState, Platform } from 'react-native';
 import { ModelResidencyManager } from '@offgrid/models';
 import { hardwareService } from '../hardware';

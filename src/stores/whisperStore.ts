@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { whisperService, WHISPER_MODELS } from '../services/whisperService';
-import { modelResidencyManager } from '../services/modelResidency';
+import { modelResidencyManager } from '../services/modelServices/residencyBootstrap';
 import logger from '../utils/logger';
 
 /**

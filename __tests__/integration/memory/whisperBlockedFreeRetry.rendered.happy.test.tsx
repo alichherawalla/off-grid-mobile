@@ -29,7 +29,7 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', pro: true, whisper: true });
      
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
      
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with
