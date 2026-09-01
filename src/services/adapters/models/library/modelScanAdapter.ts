@@ -3,7 +3,15 @@ import { statFile } from '../../../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../../../types';
 import { loadDownloadedModels, saveModelsList } from './modelRegistryStorageAdapter';
-import { modelPathBasename } from '@offgrid/models';
+import {
+  inferMobileImageBackend,
+  findRegisteredArtifact,
+  modelPathBasename,
+  parseArtifactSize,
+  planRecoveredTextModel,
+  recoveredImageModelIdentity,
+  recoveredModelBaseName,
+} from '@offgrid/models';
 import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete } from '../../../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
@@ -11,17 +19,13 @@ import { isMMProjFile, pickMmProjForModel } from '../../../mmproj';
 
 export { isMMProjFile };
 
-function parseSizeInt(size: string | number): number {
-  return typeof size === 'string' ? Number.parseInt(size, 10) : size;
-}
-
 async function getDirSize(dirPath: string): Promise<number> {
   try {
     const dirFiles = await RNFS.readDir(dirPath);
     let total = 0;
     for (const f of dirFiles) {
       if (f.isFile()) {
-        total += parseSizeInt(f.size);
+        total += parseArtifactSize(f.size);
       } else if (f.isDirectory()) {
         total += await getDirSize(f.path);
       }
@@ -42,8 +46,7 @@ export async function deleteOrphanedFile(filePath: string): Promise<void> {
 // The model base name (name + variant, quant stripped) used to NAME a downloaded projector. Matching a
 // projector TO a model is done by the shared strict rule (pickMmProjForModel), NOT this.
 export function extractBaseName(fileName: string): string {
-  const match = fileName.match(/^(.+?)[-_](?:Q\d|q\d|F\d|f\d)/i);
-  return match ? match[1].toLowerCase() : fileName.toLowerCase().replace('.gguf', '');
+  return recoveredModelBaseName(fileName);
 }
 
 function linkMmProjToModel(model: DownloadedModel, mmProjFiles: RNFS.ReadDirResItemT[]): void {
@@ -57,7 +60,7 @@ function linkMmProjToModel(model: DownloadedModel, mmProjFiles: RNFS.ReadDirResI
   if (match) {
     model.mmProjPath = match.path;
     model.mmProjFileName = match.name;
-    model.mmProjFileSize = parseSizeInt(match.size);
+    model.mmProjFileSize = parseArtifactSize(match.size);
     model.isVisionModel = true;
   }
 }
@@ -82,26 +85,6 @@ export async function cleanupMMProjEntries(modelsDir: string): Promise<number> {
 
   await saveModelsList(cleanedModels);
   return removedCount;
-}
-
-function detectBackend(dirName: string): 'mnn' | 'qnn' | 'coreml' {
-  if (dirName.includes('qnn') || dirName.includes('8gen') || dirName.includes('npu')) return 'qnn';
-  if (dirName.includes('coreml')) return 'coreml';
-  return 'mnn';
-}
-
-const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
-
-function isUnknownLike(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  return normalized.length === 0 || normalized === 'unknown';
-}
-
-function shouldSkipSuspiciousRecoveredTextModel(author: string, quantization: string): boolean {
-  if (isUnknownLike(author) || isUnknownLike(quantization)) {
-    return true;
-  }
-  return false;
 }
 
 export interface ScanImageModelsOpts {
@@ -173,7 +156,7 @@ async function recoverImageModelFromZipRemnant(
     return null;
   }
   await unzip(zipPath, item.path);
-  const backend = detectBackend(item.name);
+  const backend = inferMobileImageBackend(item.name);
   try {
     await ensureImageExtractionComplete({ backend, modelDir: item.path, zipPath, modelId: item.name });
   } catch {
@@ -215,7 +198,7 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
       if (legacyEntry) {
         try {
           await RNFS.writeFile(`${item.path}/_ready`, '', 'utf8').catch(() => {});
-          const backend = detectBackend(item.name);
+          const backend = inferMobileImageBackend(item.name);
           let modelPath = item.path;
           if (backend === 'coreml') modelPath = await resolveCoreMLModelDir(item.path).catch(() => item.path);
           const totalSize = await getDirSize(item.path);
@@ -241,7 +224,7 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
       if (hasReady) {
         // Unzip completed but registerAndNotify was killed — register now.
-        const newModel = await buildRecoveredImageModel(item, detectBackend(item.name));
+        const newModel = await buildRecoveredImageModel(item, inferMobileImageBackend(item.name));
         await addImageModel(newModel);
         recovered.push(newModel);
         continue;
@@ -294,18 +277,19 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
     const totalSize = await getDirSize(item.path);
     if (totalSize === 0) continue;
 
+    const identity = recoveredImageModelIdentity(item.name);
     const newModel: ONNXImageModel = {
       // Derived from the directory name and NOTHING else. `Date.now()` meant the same directory
       // adopted twice produced two ids nothing downstream could reconcile, and anything holding the
       // previous id (the selected image model) dangled. A name is unique here, so this id is stable
       // across every scan, reinstall and container move.
-      id: `recovered_${item.name}`,
-      name: item.name.replaceAll('_', ' ').replaceAll(/\.(zip|tar|gz)$/gi, ''),
+      id: identity.id,
+      name: identity.name,
       description: `Recovered ${item.name} model`,
       modelPath: item.path,
       size: totalSize,
       downloadedAt: new Date().toISOString(),
-      backend: detectBackend(item.name),
+      backend: identity.backend,
     };
 
     await addImageModel(newModel);
@@ -347,11 +331,6 @@ async function doScanForUntrackedTextModels(
    * conclusion `useTextModels.ts` had already reached for its own display matching, applied here where
    * the rows are actually created.
    */
-  const registeredByFileName = new Map(
-    registeredModels
-      .filter(model => model.fileName)
-      .map(model => [model.fileName, model] as const),
-  );
   let repairedPaths = false;
 
   const dirExists = await RNFS.exists(modelsDir);
@@ -373,7 +352,7 @@ async function doScanForUntrackedTextModels(
     // Already known. REPAIR the row's path rather than adding a second row for the same file: that is
     // the whole difference between a registry that survives a reinstall and one that grows a duplicate
     // on every launch.
-    const known = registeredByFileName.get(item.name);
+    const known = findRegisteredArtifact(registeredModels, item);
     if (known) {
       if (known.filePath !== item.path) {
         known.filePath = item.path;
@@ -390,29 +369,21 @@ async function doScanForUntrackedTextModels(
       continue;
     }
 
-    const fileSize = parseSizeInt(item.size);
-    if (fileSize < 1_000_000) continue;
-
-    const quantMatch = item.name.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
-    const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
-    const author = 'Unknown';
-
-    if (shouldSkipSuspiciousRecoveredTextModel(author, quantization) && fileSize < MIN_RECOVERED_TEXT_MODEL_BYTES) {
-      continue;
-    }
+    const plan = planRecoveredTextModel(item.name, item.size);
+    if (!plan) continue;
 
     const newModel: LlamaDownloadedModel = {
       // Derived from the file name and NOTHING else. `Date.now()` in an id meant the same file adopted
       // twice produced two different ids, so nothing downstream could ever tell them apart - and the
       // registry had no way back to one row per file. A name is unique in this directory, so this id is
       // stable across every scan, reinstall and container move.
-      id: `recovered_${item.name}`,
-      name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
-      author,
+      id: plan.id,
+      name: plan.name,
+      author: plan.author,
       filePath: item.path,
       fileName: item.name,
-      fileSize,
-      quantization,
+      fileSize: plan.fileSize,
+      quantization: plan.quantization,
       downloadedAt: new Date().toISOString(),
       credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
       engine: 'llama',
@@ -421,7 +392,6 @@ async function doScanForUntrackedTextModels(
     // Adopted WITH its projector, so a recovered vision model is a vision model.
     linkMmProjToModel(newModel, mmProjFiles);
     registeredModels.push(newModel);
-    registeredByFileName.set(newModel.fileName, newModel);
     repairedPaths = true;
     discoveredModels.push(newModel);
   }

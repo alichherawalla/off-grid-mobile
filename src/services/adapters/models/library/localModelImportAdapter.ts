@@ -9,7 +9,11 @@ import {
 } from '../../../../types';
 import { buildDownloadedModel, persistDownloadedModel } from './modelRegistryStorageAdapter';
 import { copyFileWithProgress } from '../modelFileCopyAdapter';
-import { isLiteRTFileName } from '../../../../utils/modelHelpers';
+import {
+  importedModelProgress,
+  planImportedModel,
+  resolveImportedModelUri,
+} from '@offgrid/models';
 
 export interface ImportLocalModelOpts {
   sourceUri: string;
@@ -32,26 +36,12 @@ export interface ImportLocalModelOpts {
  * reinstall. Split out when scan.ts crossed the size cap: one file was doing recovery, projector linking,
  * image-zip reconciliation AND local import.
  */
-function resolveUri(uri: string): string {
-  // Android content:// URIs are passed directly to RNFS.copyFile — no cache copy needed.
-  // iOS file:// URIs need decoding (%20 → space) so RNFS can find the file on disk.
-  if (uri.startsWith('content://')) {
-    return uri;
-  }
-  return decodeURIComponent(uri);
-}
-
-
 export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
   const { sourceUri, fileName, modelsDir, sourceSize, engine: _engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
 
-  const isLitert = isLiteRTFileName(fileName);
-  if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {
-    throw new Error('Only .gguf and .litertlm files can be imported');
-  }
-
-  const resolvedSource = resolveUri(sourceUri);
-  const resolvedMmProjSource = mmProjSourceUri ? resolveUri(mmProjSourceUri) : undefined;
+  const plan = planImportedModel(fileName, Boolean(mmProjFileName));
+  const resolvedSource = resolveImportedModelUri(sourceUri);
+  const resolvedMmProjSource = mmProjSourceUri ? resolveImportedModelUri(mmProjSourceUri) : undefined;
 
   const destPath = `${modelsDir}/${fileName}`;
   const destExists = await RNFS.exists(destPath);
@@ -61,27 +51,23 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
   }
 
   // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
-  const mainProgressScale = mmProjFileName ? 0.5 : 1;
   await copyFileWithProgress(resolvedSource, destPath, {
     knownTotalBytes: sourceSize ?? null,
-    onProgress: onProgress ? (fraction: number) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
+    onProgress: onProgress ? (fraction: number) => onProgress({ fraction: importedModelProgress(plan, 'primary', fraction), fileName }) : undefined,
   });
 
-  const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
-  const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
-  const modelName = fileName.replace(/\.gguf$/i, '').replace(/\.litertlm$/i, '').replace(/[_-]Q\d+.*/i, '');
   const fileSize = (await statFile(destPath))?.size ?? 0;
 
-  const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
+  const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization: plan.quantization, downloadUrl: '' };
   const baseModel = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
   const baseFields = {
     id: `local_import/${fileName}`,
-    name: modelName,
+    name: plan.modelName,
     author: 'Local Import',
     credibility: { source: 'community' as const, isOfficial: false, isVerifiedQuantizer: false },
   };
 
-  if (isLitert) {
+  if (plan.engine === 'litert') {
     const liteRTModel: LiteRTDownloadedModel = {
       ...baseModel, ...baseFields, engine: 'litert', liteRTVision: liteRTVision ?? false,
     };
@@ -97,7 +83,7 @@ export async function importLocalModel(opts: ImportLocalModelOpts): Promise<Down
     await copyFileWithProgress(resolvedMmProjSource, mmProjDestPath, {
       knownTotalBytes: mmProjSourceSize ?? null,
       onProgress: onProgress
-        ? (fraction: number) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
+        ? (fraction: number) => onProgress({ fraction: importedModelProgress(plan, 'projector', fraction), fileName: mmProjFileName })
         : undefined,
     });
     llamaModel.mmProjPath = mmProjDestPath;
