@@ -1,11 +1,15 @@
+/* eslint-disable max-lines -- Mobile streaming is one native/UI projection boundary; shared ChatSessionService owns turn policy. */
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment, isLiteRTModel } from '../types';
 import type { ToolResult } from './tools/types';
 import type {
+  GenerationEvents,
   GenerationContentPart,
   GenerationMessage,
+  GenerationRequest,
+  GenerationResult,
   GenerationReasoning,
   GenerationToolCall,
 } from '@offgrid/models';
@@ -212,54 +216,109 @@ class GenerationService {
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
     if (this.state.isGenerating) return;
-    if (this.pendingStop) await this.pendingStop;
-    const attempt = ++this.generationAttempt;
-    const controller = new AbortController();
-    this.currentSharedAbortController = controller;
-    this.beginSharedGeneration(conversationId);
     let firstContent = true;
-    try {
-      await refreshMobileModelServices();
-      const result = await mobileGenerationService.generate({
+    await this.generateForChatSession({
         operation: { type: 'text' },
         ...this.selectedTextRoute(),
         messages: sharedMessages(messages),
         ...sharedRequestSettings(),
         reasoning: sharedReasoning(),
-        identity: { conversationId, turnId: turnId(messages, conversationId, attempt) },
-        signal: controller.signal,
+        identity: {
+          conversationId,
+          turnId: turnId(messages, conversationId, this.generationAttempt + 1),
+        },
       }, {
         chunk: chunk => {
-          if (!this.ownsSharedAttempt(controller, attempt)) return;
-          if (chunk.content) {
-            if (firstContent) {
-              firstContent = false;
-              this.remoteTimeToFirstToken = this.state.startTime
-                ? (Date.now() - this.state.startTime) / 1000
-                : undefined;
-              this.updateState({ isThinking: false });
-              onFirstToken?.();
-            }
-            this.state.streamingContent += chunk.content;
-            this.tokenBuffer += chunk.content;
+          if (firstContent && chunk.content) {
+            firstContent = false;
+            onFirstToken?.();
           }
-          if (chunk.reasoning) {
-            this.reasoningBuffer += chunk.reasoning;
-            this.totalReasoningLength += chunk.reasoning.length;
-          }
-          this.scheduleSharedFlush(!!(chunk.content || chunk.reasoning));
         },
       });
-      if (!this.ownsSharedAttempt(controller, attempt)) return;
+  }
+
+  /**
+   * Mobile projection for the shared ChatSessionService generation port.
+   * Shared owns the turn lifecycle. This class only projects native stream state,
+   * metrics, and persistence into the existing Mobile UI store.
+   */
+  async generateForChatSession(
+    request: GenerationRequest,
+    events: GenerationEvents = {},
+  ): Promise<GenerationResult> {
+    const conversationId = request.identity?.conversationId;
+    if (!conversationId) throw new Error('Chat generation requires a conversation identity');
+    if (this.state.isGenerating) throw new Error('A generation is already running');
+    if (this.pendingStop) await this.pendingStop;
+
+    const attempt = ++this.generationAttempt;
+    const controller = new AbortController();
+    const abortFromSession = () => controller.abort();
+    request.signal?.addEventListener('abort', abortFromSession, { once: true });
+    this.currentSharedAbortController = controller;
+    this.beginSharedGeneration(conversationId);
+    let firstContent = true;
+
+    try {
+      await refreshMobileModelServices();
+      const result = await mobileGenerationService.generate(
+        {
+          ...request,
+          ...(!request.routeId ? this.selectedTextRoute() : {}),
+          ...(!request.sampling && request.maxTokens == null
+            ? sharedRequestSettings()
+            : {}),
+          reasoning: request.reasoning ?? sharedReasoning(),
+          signal: controller.signal,
+        },
+        {
+          ...events,
+          chunk: chunk => {
+            events.chunk?.(chunk);
+            if (!this.ownsSharedAttempt(controller, attempt)) return;
+            if (chunk.content) {
+              if (firstContent) {
+                firstContent = false;
+                this.remoteTimeToFirstToken = this.state.startTime
+                  ? (Date.now() - this.state.startTime) / 1000
+                  : undefined;
+                this.updateState({ isThinking: false });
+              }
+              this.state.streamingContent += chunk.content;
+              this.tokenBuffer += chunk.content;
+            }
+            if (chunk.reasoning) {
+              this.reasoningBuffer += chunk.reasoning;
+              this.totalReasoningLength += chunk.reasoning.length;
+            }
+            this.scheduleSharedFlush(!!(chunk.content || chunk.reasoning));
+          },
+          toolStarted: call => {
+            events.toolStarted?.(call);
+            this.forceFlushTokens();
+            useChatStore.getState().resetStreamingSegment();
+            this.tokenBuffer = '';
+            this.reasoningBuffer = '';
+            this.state.streamingContent = '';
+          },
+          toolCompleted: (call, toolResult) => events.toolCompleted?.(call, toolResult),
+        },
+      );
+      if (!this.ownsSharedAttempt(controller, attempt)) return result;
       this.finishSharedGeneration(conversationId, result.content);
+      return result;
     } catch (error) {
-      if (!this.ownsSharedAttempt(controller, attempt)) return;
-      logger.error('[GenerationService] Shared generation error:', error);
-      this.keepShownPartialOrClear();
-      this.resetState();
+      if (this.ownsSharedAttempt(controller, attempt)) {
+        logger.error('[GenerationService] Chat session generation error:', error);
+        this.keepShownPartialOrClear();
+        this.resetState();
+      }
       throw error;
     } finally {
-      if (this.currentSharedAbortController === controller) this.currentSharedAbortController = null;
+      request.signal?.removeEventListener('abort', abortFromSession);
+      if (this.currentSharedAbortController === controller) {
+        this.currentSharedAbortController = null;
+      }
     }
   }
 

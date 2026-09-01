@@ -54,8 +54,8 @@ export function buildGenerationMetaImpl(service: any): GenerationMeta {
     if (getActiveEngineService() === liteRTService) {
       meta = liteRTMeta(service, modelName);
     } else {
-      const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo();
-      const performance = llmService.getPerformanceStats();
+      const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo() ?? {};
+      const performance = llmService.getPerformanceStats() ?? {};
       meta = {
         gpu,
         gpuBackend,

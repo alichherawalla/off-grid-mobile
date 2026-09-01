@@ -2,40 +2,24 @@
 import { Dispatch, SetStateAction } from 'react';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
-import { APP_CONFIG } from '../../constants';
 import {
-  llmService,
   intentClassifier,
   generationService,
   imageGenerationService,
   onnxImageGeneratorService,
   ImageGenerationState,
-  buildToolSystemPromptHint,
   contextCompactionService,
-  ragService,
-  retrievalService,
 } from '../../services';
-import { getToolExtensions } from '../../services/tools/extensions';
 import {
   invalidateActiveConversation,
-  activeLocalTextCapabilities,
-  wantsLeadingThinkToken,
   localModelAcceptsImages,
-  stopAllTextEngines,
 } from '../../services/engines';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
-import { remoteToolCapabilityIssue } from '../../services/toolCapabilityPreflight';
-import { embeddingService } from '../../services/adapters/native/embeddingRuntimeAdapter';
-import {
-  useChatStore,
-  useProjectStore,
-  useRemoteServerStore,
-  useAppStore,
-} from '../../stores';
+import { useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
   Message,
@@ -47,8 +31,8 @@ import {
 } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
+import { mobileChatSession } from './mobileChatSession';
 type SetState<T> = Dispatch<SetStateAction<T>>;
-const FALLBACK_RECENT_MESSAGE_COUNT = 2;
 
 export type GenerationDeps = {
   activeModelId: string | null;
@@ -114,32 +98,6 @@ export type GenerationDeps = {
   ) => string;
   pendingProjectId?: string;
 };
-function applyCompactionPrefix(
-  conversation: any,
-  systemPrompt: string,
-  messages: Message[],
-): { prefix: Message[]; filtered: Message[] } {
-  const prefix: Message[] = [
-    { id: 'system', role: 'system', content: systemPrompt, timestamp: 0 },
-  ];
-  let filtered = messages;
-  if (
-    conversation?.compactionSummary &&
-    conversation?.compactionCutoffMessageId
-  ) {
-    prefix.push({
-      id: 'compaction-summary',
-      role: 'assistant',
-      content: `[Previous conversation summary]\n${conversation.compactionSummary}`,
-      timestamp: 0,
-    });
-    const cutoffIdx = messages.findIndex(
-      m => m.id === conversation.compactionCutoffMessageId,
-    );
-    if (cutoffIdx !== -1) filtered = messages.slice(cutoffIdx + 1);
-  }
-  return { prefix, filtered };
-}
 /**
  * The SINGLE vision gate for any turn that carries an image — used by BOTH the send and the resend paths so
  * they behave identically. Returns true (and shows a repair-aware alert) when the image can't go to the
@@ -181,28 +139,6 @@ function appendAttachmentText(
         }**\n\`\`\`\n${doc.textContent}\n\`\`\`\n---`,
       text,
     );
-}
-function buildMessagesForContext(
-  conversationId: string,
-  messageText: string,
-  systemPrompt: string,
-): Message[] {
-  const conversation = useChatStore
-    .getState()
-    .conversations.find(c => c.id === conversationId);
-  const allMessages = (conversation?.messages || []).filter(
-    m => !m.isSystemInfo,
-  );
-  const { prefix, filtered } = applyCompactionPrefix(
-    conversation,
-    systemPrompt,
-    allMessages,
-  );
-  const lastMsg = filtered.at(-1);
-  const userMessageForContext = (
-    lastMsg?.role === 'user' ? { ...lastMsg, content: messageText } : lastMsg
-  ) as Message;
-  return [...prefix, ...filtered.slice(0, -1), userMessageForContext];
 }
 /** The modality of a turn. Resolved ONCE from user intent when the turn is created, recorded on
  *  the turn's record, and READ on resend/edit so the same pipeline runs again (deterministic) —
@@ -458,190 +394,12 @@ export type StartGenerationCall = {
   targetConversationId: string;
   messageText: string;
 };
-async function prepareContext(
-  setDebugInfo: SetState<any>,
-  systemPrompt: string,
-  messages: Message[],
-): Promise<void> {
-  try {
-    const contextDebug = await llmService.getContextDebugInfo(messages);
-    setDebugInfo({ systemPrompt, ...contextDebug });
-    if (
-      contextDebug.truncatedCount > 0 ||
-      contextDebug.contextUsagePercent > 70
-    ) {
-      await llmService.clearKVCache(false).catch(() => {});
-    }
-  } catch {
-    /* ignore */
-  }
-}
-/** Run generation; if context is full, compact old messages and retry once. */
-async function generateWithCompactionRetry(
-  opts: { id: string; prompt: string; messages: Message[] },
-  enabledTools: string[],
-  projectId?: string,
-): Promise<boolean> {
-  const extCount = getToolExtensions().reduce(
-    (n, e) => n + e.enabledToolCount(),
-    0,
-  );
-  logger.log(
-    `[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`,
-  );
-  const capabilityIssue = remoteToolCapabilityIssue(
-    enabledTools.length + extCount,
-  );
-  if (capabilityIssue) throw new Error(capabilityIssue);
-  const gen = (msgs: Message[]) =>
-    enabledTools.length > 0 || extCount > 0
-      ? generationService.generateWithTools(opts.id, msgs, {
-          enabledToolIds: enabledTools,
-          projectId,
-        })
-      : generationService.generateResponse(opts.id, msgs);
-  let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
-  try {
-    const outcome = await gen(opts.messages);
-    turnInterrupted = !!(outcome as { interrupted?: boolean } | void)
-      ?.interrupted;
-  } catch (error: any) {
-    if (!contextCompactionService.isContextFullError(error)) throw error;
-    // Engine-level stop across EVERY engine (registry, OCP) - not llmService, which is llama only, so a
-    // LiteRT turn used to compact while its native generation was still running. Deliberately NOT
-    // generationService.stopGeneration(): this is mid-turn, and the owner's stop persists the partial and
-    // resets state, which would end the turn the retry below is about to continue.
-    await stopAllTextEngines().catch(() => {});
-    const conversation = useChatStore
-      .getState()
-      .conversations.find(c => c.id === opts.id);
-    const previousSummary = conversation?.compactionSummary;
-    const compacted = await contextCompactionService
-      .compact({
-        conversationId: opts.id,
-        systemPrompt: opts.prompt,
-        allMessages: opts.messages,
-        previousSummary,
-      })
-      .catch(async () => {
-        await llmService.clearKVCache(true).catch(() => {});
-        const recent = opts.messages
-          .filter(m => m.role !== 'system')
-          .slice(-FALLBACK_RECENT_MESSAGE_COUNT);
-        return [
-          {
-            id: 'system',
-            role: 'system',
-            content: opts.prompt,
-            timestamp: 0,
-          } as Message,
-          ...recent,
-        ];
-      });
-    // Stop/Eject can arrive while the summary is running. Do not start a new
-    // completion after the owner has cancelled this turn.
-    if (generationService.wasAborted()) return true;
-    const retryOutcome = await gen(compacted);
-    turnInterrupted = !!(retryOutcome as { interrupted?: boolean } | void)
-      ?.interrupted;
-  }
-  return turnInterrupted;
-}
-async function injectRagContext(
-  projectId: string | undefined,
-  query: string,
-  prompt: string,
-): Promise<string> {
-  if (!projectId) return prompt;
-  try {
-    const docs = await ragService.getDocumentsByProject(projectId);
-    const enabledDocs = docs.filter(
-      (d: import('../../services/modelServices/bootstrap/ragBootstrap').RagDocument) => d.enabled,
-    );
-    if (enabledDocs.length === 0) return prompt;
-    // Warm up embedding model in background (non-blocking)
-    if (!embeddingService.isLoaded()) {
-      embeddingService
-        .load()
-        .catch(err => logger.error('[RAG] Embedding warmup failed', err));
-    }
-    const docList = enabledDocs
-      .map((d: import('../../services/modelServices/bootstrap/ragBootstrap').RagDocument) => `- ${d.name}`)
-      .join('\n');
-    let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
-    kbPrompt +=
-      '\nUse the search_knowledge_base tool to look up specific information from these documents.';
-    const r = await ragService.searchProject(projectId, query);
-    if (r.chunks.length > 0) {
-      kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
-    }
-    return prompt + kbPrompt;
-  } catch (err) {
-    logger.error('[RAG] Context injection failed', err);
-  }
-  return prompt;
-}
-/** Gemma 4 E2B/E4B need <|think|> prepended to activate thinking mode — both llama.cpp and LiteRT.
- *  The engine-specific decision lives in engines.wantsLeadingThinkToken (the seam), not here. */
-const applyGemma4ThinkToken = (
-  prompt: string,
-  model: DownloadedModel | null | undefined,
-  opts: { isRemote: boolean },
-): string => {
-  const prepend = wantsLeadingThinkToken(model, opts);
-  // [THINK-SM] the activation decision now reads the LIVE thinking setting (no stale render snapshot),
-  // so a toggle takes effect on the very next turn (was off-by-one — device 2026-07-14).
-  logger.log(
-    `[THINK-SM] prepend=${prepend} thinkingEnabled=${
-      useAppStore.getState().settings.thinkingEnabled
-    } isRemote=${opts.isRemote} engine=${model?.engine ?? 'none'}`,
-  );
-  return prepend ? `<|think|>\n${prompt}` : prompt;
-};
-
-function resolveToolsAndPrompt(
-  deps: GenerationDeps,
-  conversation: any,
-  _messageText: string,
-): { enabledTools: string[]; rawPrompt: string; localToolSupport: boolean } {
-  const project = conversation?.projectId
-    ? useProjectStore.getState().getProject(conversation.projectId)
-    : null;
-  const { activeServerId, activeRemoteTextModelId } =
-    useRemoteServerStore.getState();
-  // Native tool-calling of the ACTIVE LOCAL engine (llama Jinja support / LiteRT loaded), resolved
-  // by the engine registry — no engine === 'litert' branch here (OCP: add a backend in engines.ts).
-  const localToolSupport = activeLocalTextCapabilities(deps.activeModel).tools;
-  // Honour the UI gate: "N/A" (supportsToolCalling === false) means the picker is unreachable, so don't inject tools the user can't disable.
-  const canUseTools =
-    deps.supportsToolCalling !== false &&
-    (localToolSupport || !!(activeServerId && activeRemoteTextModelId));
-
-  // SINGLE source of truth for the turn's tools: ONLY what the user toggled (settings.enabledTools).
-  // No auto-injection — a project no longer silently adds search_knowledge_base. This keeps the tools
-  // SENT identical to the tools the quick-settings count SHOWS (both read settings.enabledTools), so
-  // the two can never drift ("0 tools" in the popover but "Tools sent in request (1)" — device 2026-07-14).
-  // The user enables KB search explicitly when they want it.
-  const enabledTools = canUseTools ? deps.settings.enabledTools || [] : [];
-
-  const rawPrompt =
-    project?.systemPrompt ||
-    deps.settings.systemPrompt ||
-    APP_CONFIG.defaultSystemPrompt;
-  return { enabledTools, rawPrompt, localToolSupport };
-}
 export async function startGenerationFn(
   deps: GenerationDeps,
   call: StartGenerationCall,
 ): Promise<void> {
-  // PER-TURN stop truth (from the tool loop's outcome) — never the service's shared abort flag,
-  // which the NEXT turn's prepare resets (the race that mislabeled a stopped turn 'No response').
-  let turnStopped = false;
-  const { setDebugInfo, targetConversationId, messageText } = call;
+  const { targetConversationId } = call;
   if (!deps.hasActiveModel) return;
-  // Pure text executor — image-vs-text routing happens upstream in dispatchGenerationFn.
-  generationSession.begin(targetConversationId);
-  // For remote models, skip local model loading
   if (
     !deps.activeModelInfo?.isRemote &&
     deps.activeModel &&
@@ -649,62 +407,22 @@ export async function startGenerationFn(
       startGenerationFn(deps, call);
     }))
   ) {
-    generationSession.end('not-ready');
     return;
   }
-  const conversation = useChatStore
-    .getState()
-    .conversations.find(c => c.id === targetConversationId);
-  const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(
-    deps,
-    conversation,
-    messageText,
+  const conversation = useChatStore.getState().conversations.find(
+    candidate => candidate.id === targetConversationId,
   );
-  let basePrompt = await injectRagContext(
-    conversation?.projectId,
-    messageText,
-    rawPrompt,
-  );
-
-  // In voice/audio mode the pro audio feature augments the prompt for spoken
-  // output. No-op (returns undefined) in free builds.
-  basePrompt =
-    callHook<string>(HOOKS.audioAugmentPrompt, basePrompt) ?? basePrompt;
-
-  const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const activeTools = enabledTools;
-  // Text hint only when the LOCAL engine lacks native tool-calling (llama without Jinja); LiteRT
-  // and remote pass tools natively, so injecting a hint would double-inject. localToolSupport is
-  // the engine-registry answer — no engine === 'litert' branch here.
-  const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
-
-  // MCP/extension hints are injected once, centrally, by augmentSystemPromptForTools
-  // in the tool loop (covers every engine + tool path). Do NOT add them here too, or
-  // the hint lands in the system prompt twice. Only the built-in-tools text hint is
-  // added here, and only when the model lacks native Jinja tool calling.
-  const systemPrompt = applyGemma4ThinkToken(
-    useTextHint
-      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
-      : basePrompt,
-    deps.activeModel,
-    { isRemote },
-  );
-  const messagesForContext = buildMessagesForContext(
-    targetConversationId,
-    messageText,
-    systemPrompt,
-  );
-  await prepareContext(setDebugInfo, systemPrompt, messagesForContext);
+  const userMessage = [...(conversation?.messages ?? [])]
+    .reverse()
+    .find(message => message.role === 'user');
+  if (!userMessage) return;
+  generationSession.begin(targetConversationId);
   try {
-    turnStopped = await generateWithCompactionRetry(
-      {
-        id: targetConversationId,
-        prompt: systemPrompt,
-        messages: messagesForContext,
-      },
-      activeTools,
-      conversation?.projectId,
+    const turn = await mobileChatSession.sendPersisted(
+      targetConversationId,
+      userMessage.id,
     );
+    if (turn.status === 'stopped') generationSession.end('stopped');
   } catch (error: any) {
     const msg =
       error?.message || error?.toString?.() || 'Failed to generate response';
@@ -777,22 +495,11 @@ export async function startGenerationFn(
     generationSession.end('error');
     return;
   }
-  // The model produced NO output (0 tokens) — finalizeStreamingMessage only appends an
-  // assistant message when there's content/reasoning, so an empty turn leaves the user
-  // message last. Don't strand the user staring at their message: surface a retry (this
-  // happens when a model runs on an incompatible backend, e.g. a K-quant on NPU/GPU).
   const finalConv = useChatStore
     .getState()
     .conversations.find(c => c.id === targetConversationId);
   const lastMsg = finalConv?.messages[finalConv.messages.length - 1];
-  // `turnInterrupted` is THIS turn's own outcome. The shared wasAborted() flag is reset by the
-  // NEXT turn's prepare — a concurrent retry raced it and this stopped turn read "not aborted",
-  // painting the wrong 'No response / incompatible backend' card (device 2026-07-14 00:23).
-  if (
-    !turnStopped &&
-    !generationService.wasAborted() &&
-    lastMsg?.role === 'user'
-  ) {
+  if (!generationService.wasAborted() && lastMsg?.role === 'user') {
     reportModelFailure('text', 'The model produced no output', {
       title: 'No response',
       message:
@@ -988,6 +695,7 @@ export async function handleStopFn(
 ): Promise<void> {
   generationSession.end('stopped');
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise
+  mobileChatSession.stop();
   // The image X is also the remote stop signal. Start both cancellations now; waiting for the text
   // engine first leaves every paired device showing image progress while that stop call drains.
   const stops: Promise<unknown>[] = [generationService.stopGeneration()];
@@ -1081,7 +789,6 @@ export async function regenerateResponseFn(
     },
   });
   if (result.handled) return;
-  const messageText = result.messageText;
   // Same vision gate as the send path: resending a turn whose message carries an image must not push it to a
   // model that can't do vision (would crash with "Multimodal support not enabled"). Shared gate → identical UX.
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
@@ -1095,108 +802,20 @@ export async function regenerateResponseFn(
     return;
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
   generationSession.begin(targetConversationId);
-  // LiteRT: native history must be rewound to match the JS messages we're about to replay.
-  // Dispatched via the service (no engine branch here); a no-op for engines without a KV cache.
   invalidateActiveConversation();
-  const conversation = useChatStore
-    .getState()
-    .conversations.find(c => c.id === targetConversationId);
-  const messages = (conversation?.messages || []).filter(
-    (m: Message) => !m.isSystemInfo,
-  );
-  const messagesUpToUser = messages
-    .slice(0, messages.findIndex((m: Message) => m.id === userMessage.id) + 1)
-    .map(m => (m.id === userMessage.id ? { ...m, content: messageText } : m));
-  const { enabledTools, rawPrompt, localToolSupport } = resolveToolsAndPrompt(
-    deps,
-    conversation,
-    messageText,
-  );
-  const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const activeTools = enabledTools;
-  const basePrompt = await injectRagContext(
-    conversation?.projectId,
-    messageText,
-    rawPrompt,
-  );
-  const useTextHint = !isRemote && !localToolSupport && activeTools.length > 0;
-  // MCP/extension hints come solely from augmentSystemPromptForTools in the tool loop
-  // (see the send path above) — adding them here too would double-inject.
-  const systemPrompt = applyGemma4ThinkToken(
-    useTextHint
-      ? `${basePrompt}${buildToolSystemPromptHint(activeTools)}`
-      : basePrompt,
-    deps.activeModel,
-    { isRemote },
-  );
-  const { prefix, filtered } = applyCompactionPrefix(
-    conversation,
-    systemPrompt,
-    messagesUpToUser,
-  );
   try {
-    await generateWithCompactionRetry(
-      {
-        id: targetConversationId,
-        prompt: systemPrompt,
-        messages: [...prefix, ...filtered],
-      },
-      activeTools,
-      conversation?.projectId,
-    );
+    await mobileChatSession.regenerate(targetConversationId, userMessage.id);
   } catch (error: any) {
     const msg = error?.message || 'Failed to generate response';
     const isContextOverflow =
       msg.includes('too long') ||
       msg.includes('Exceeding the maximum number of tokens') ||
       msg.includes('Input token ids');
-    if (isContextOverflow) {
-      deps.setAlertState({
-        ...showAlert(
-          'Context window full',
-          "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.",
-          [
-            {
-              text: 'Settings',
-              onPress: () => {
-                deps.setAlertState({
-                  visible: false,
-                  title: '',
-                  message: '',
-                  buttons: [],
-                });
-                deps.setShowSettingsPanel?.(true);
-              },
-            },
-            {
-              text: 'New chat',
-              onPress: () => {
-                deps.setAlertState({
-                  visible: false,
-                  title: '',
-                  message: '',
-                  buttons: [],
-                });
-                const modelId = deps.activeModelInfo?.modelId;
-                if (modelId) {
-                  // Inherit the current chat's project so the context-full continuation
-                  // stays filed under the same project (Q11: it was created unfiled).
-                  const newId = deps.createConversation(
-                    modelId,
-                    undefined,
-                    conversation?.projectId,
-                  );
-                  deps.setActiveConversation(newId);
-                }
-              },
-            },
-          ],
-        ),
-        prominentMessage: true,
-      });
-    } else {
-      deps.setAlertState(showAlert('Generation Error', msg));
-    }
+    deps.setAlertState(
+      isContextOverflow
+        ? { ...showAlert('Context window full', "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat."), prominentMessage: true }
+        : showAlert('Generation Error', msg),
+    );
   }
   generationSession.end();
 }
