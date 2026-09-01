@@ -1,5 +1,5 @@
 import { hideAlert, showAlert, type AlertState } from '../../components';
-import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
+import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
 import logger from '../../utils/logger';
 import { initiateModelLoad } from './useChatModelActions';
 
@@ -39,10 +39,8 @@ export async function reloadTextModel({
   }
   logger.log('[ModelReload] reloading the active text model');
   try {
-    await mobileResidencyIntents.unloadText(true);
-    const outcome = await initiateModelLoad(modelDeps, false);
-    const reason = outcome.ok ? '' : ` reason=${outcome.reason}`;
-    logger.log(`[ModelReload] finished ok=${outcome.ok}${reason}`);
+    const result = await mobileModelCommands.reloadText(modelId, isRemote);
+    logger.log(`[ModelReload] finished result=${result}`);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     logger.error('[ModelReload] failed:', detail);

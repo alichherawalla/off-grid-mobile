@@ -1,10 +1,6 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
-import {
-  clearMobileModel,
-  selectMobileModel,
-} from '../../../services';
-import { mobileResidencyIntents } from '../../../services/modelServices/residencyIntents';
+import { mobileModelCommands } from '../../../services/modelServices/modelCommandApplication';
 import { RemoteModel } from '../../../types';
 import { LoadingState } from './types';
 import logger from '../../../utils/logger';
@@ -33,10 +29,7 @@ export function useRemoteModelHandlers({
     setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
     try {
       // Unload any active local model first — only one active model at a time
-      if (activeModelId) {
-        await mobileResidencyIntents.unloadText();
-      }
-        await selectMobileModel({
+        await mobileModelCommands.select({
           source: 'remote',
           hostId: model.serverId,
           modality: 'text',
@@ -65,7 +58,7 @@ export function useRemoteModelHandlers({
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
-      await clearMobileModel('text');
+        await mobileModelCommands.unload('text');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
@@ -82,7 +75,7 @@ export function useRemoteModelHandlers({
         modelName: model.name,
       });
     try {
-        await selectMobileModel({
+        await mobileModelCommands.select({
           source: 'remote',
           hostId: model.serverId,
           modality: 'image',
@@ -106,7 +99,7 @@ export function useRemoteModelHandlers({
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
-      await clearMobileModel('image');
+      await mobileModelCommands.unload('image');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {

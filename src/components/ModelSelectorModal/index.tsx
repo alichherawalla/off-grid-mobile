@@ -14,13 +14,8 @@ import {
   RemoteModel,
   RemoteServer,
 } from '../../types';
-import {
-  clearMobileModel,
-  resolveSelectedTextModel,
-  remoteServerModelOptions,
-  selectMobileModel,
-} from '../../services';
-import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
+import { resolveSelectedTextModel, remoteServerModelOptions } from '../../services';
+import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
   CustomAlert,
@@ -65,13 +60,6 @@ function savedTextModels(
     },
   );
 }
-
-const selectLocalImageModel = (model: ONNXImageModel) => selectMobileModel({
-  source: 'local',
-  hostId: model.backend ?? 'image-runtime',
-  modality: 'image',
-  modelId: model.id,
-});
 
 interface ModelSelectorModalProps {
   visible: boolean;
@@ -199,11 +187,15 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
-    await selectLocalImageModel(model);
     // Shared inline Load-Anyway flow so a memory-blocked image load offers the
     // override here too, instead of a dead-end "Failed to Load".
     await loadModelWithOverride(
-      opts => mobileResidencyIntents.ensureImage(model.id, undefined, opts),
+      opts => mobileModelCommands.select({
+        source: 'local',
+        hostId: model.backend ?? 'image-runtime',
+        modality: 'image',
+        modelId: model.id,
+      }, { override: opts?.override }),
       {
         setAlertState,
         onAttemptStart: () => {
@@ -226,8 +218,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const handleUnloadImageModel = async () => {
     setIsLoadingImage(true);
     try {
-      await mobileResidencyIntents.unloadImage();
-      await clearMobileModel('image');
+      await mobileModelCommands.unload('image');
       onUnloadImageModel?.();
     } catch (error) {
       logger.error('Failed to unload image model:', error);
@@ -243,8 +234,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     try {
       // Always go through the owner. It also waits for an in-flight local load,
       // which is not yet visible as a loaded native model.
-      await mobileResidencyIntents.unloadText();
-      await selectMobileModel({
+      await mobileModelCommands.select({
         source: 'remote',
         hostId: serverId,
         modality: 'text',
@@ -268,7 +258,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     serverId: string,
   ) => {
     try {
-      await selectMobileModel({
+      await mobileModelCommands.select({
         source: 'remote',
         hostId: serverId,
         modality: 'image',

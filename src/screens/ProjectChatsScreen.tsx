@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { newProjectChatRouteId } from '@offgrid/models';
 import {
   View,
   Text,
@@ -21,6 +22,7 @@ import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
+import { useActiveTextModel } from '../hooks/useActiveTextModel';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectChats'>;
@@ -157,7 +159,8 @@ export const ProjectChatsScreen: React.FC = () => {
 
   const { getProject } = useProjectStore();
   const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
-  const { downloadedModels, activeModelId } = useAppStore();
+  const { downloadedModels } = useAppStore();
+  const { modelId: activeTextModelId } = useActiveTextModel();
 
   const project = getProject(projectId);
   const hasModels = downloadedModels.length > 0;
@@ -177,7 +180,10 @@ export const ProjectChatsScreen: React.FC = () => {
       setAlertState(showAlert('No Model', 'Please download a model first from the Models tab.'));
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = newProjectChatRouteId({
+      selectedRouteId: activeTextModelId,
+      fallbackModelId: downloadedModels[0]?.id,
+    });
     if (modelId) {
       const newConversationId = createConversation(modelId, undefined, projectId);
       navigation.navigate('Chat', { conversationId: newConversationId, projectId });

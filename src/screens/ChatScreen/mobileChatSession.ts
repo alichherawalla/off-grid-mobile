@@ -1,10 +1,9 @@
 import {
   ChatSessionService,
+  ChatContextApplicationService,
+  ChatOperationApplicationService,
   CHAT_GENERATION_RECLAIM_POLICY,
-  appendProjectKnowledge,
   chatGenerationRequestDefaults,
-  composeChatContext,
-  imageIntentDecision,
   isMemoryToolAllowed,
   type ChatSessionEvent,
   type ChatQueueProjection,
@@ -138,6 +137,36 @@ export interface MobileChatCommandOptions {
 
 const commandOptions = new Map<string, MobileChatCommandOptions>();
 
+const operationService = new ChatOperationApplicationService({
+  inspect() {
+    const state = useAppStore.getState();
+    return {
+      imageEnabled: true,
+      imageGenerationRunning: mobileImageChatGeneration.isGenerating(),
+      imageRoutingMode: state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+      imageRouteAvailable: !!activeMobileRoute('image').model,
+      textRouteAvailable: !!activeMobileRoute('text').model,
+      modelAutoDetection: state.settings.autoDetectMethod === 'llm',
+      dedicatedClassifierAvailable: !!state.settings.classifierModelId
+        && state.downloadedModels.some(model => model.id === state.settings.classifierModelId),
+    };
+  },
+  provisionClassifier: () => { ensureDefaultClassifier().catch(() => undefined); },
+  classify(text, input) {
+    const state = useAppStore.getState();
+    const classifierModel = state.settings.classifierModelId
+      ? state.downloadedModels.find(model => model.id === state.settings.classifierModelId)
+      : null;
+    return intentClassifier.classifyIntent(text, {
+      useLLM: input.useModel,
+      classifierModel,
+      onStatusChange: input.onStatusChange,
+    });
+  },
+  refreshRoutes: async () => { await refreshMobileModelServices(); },
+  onClassificationError: error => logger.warn('[ChatSession] Intent classification failed; using text', error),
+});
+
 async function resolveMobileChatOperation(input: {
   userMessage: GenerationMessage;
   requestedOperation?: GenerationOperation;
@@ -146,102 +175,38 @@ async function resolveMobileChatOperation(input: {
   identity: { turnId: string };
 }): Promise<GenerationOperation> {
   const options = commandOptions.get(input.identity.turnId);
-  const state = useAppStore.getState();
-  const classifierModel = state.settings.classifierModelId
-    ? state.downloadedModels.find(model => model.id === state.settings.classifierModelId)
-    : null;
-  const recordedIntent = input.recordedOperation?.type === 'image'
-    ? 'image'
-    : input.recordedOperation ? 'text' : undefined;
-  const forceImage = options?.imageMode === 'force'
-    || input.requestedOperation?.type === 'image';
-  const imageEnabled = options?.imageMode !== 'disabled';
-  const decision = imageIntentDecision({
-    recordedIntent,
-    imageEnabled,
-    imageGenerationRunning: mobileImageChatGeneration.isGenerating(),
-    imageRoutingMode: state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
-    forceImage,
-    imageRouteAvailable: !!activeMobileRoute('image').model,
-    textRouteAvailable: !!activeMobileRoute('text').model,
-    modelAutoDetection: state.settings.autoDetectMethod === 'llm',
-    dedicatedClassifierAvailable: !!classifierModel,
-  });
-  let intent = decision.type === 'resolved' ? decision.intent : 'text';
-  if (decision.type === 'classify') {
-    if (decision.provisionClassifier) ensureDefaultClassifier().catch(() => undefined);
-    const useModel = decision.method === 'model';
-    try {
-      if (useModel) options?.onClassifying?.(true);
-      intent = await intentClassifier.classifyIntent(messageText(input.userMessage), {
-        useLLM: useModel,
-        classifierModel,
-        onStatusChange: useModel ? options?.onClassifierStatus : undefined,
-      });
-    } catch (error) {
-      logger.warn('[ChatSession] Intent classification failed; using text', error);
-      intent = 'text';
-    } finally {
-      options?.onClassifying?.(false);
-      if (intent !== 'image' && useModel) options?.onClassifierTextFallback?.();
-    }
-  }
-  if (intent === 'image' && activeMobileRoute('image').model) {
-    return { type: 'image', prompt: messageText(input.userMessage) };
-  }
-  if (!activeMobileRoute('text').model && options?.ensureTextRoute) {
-    await options.ensureTextRoute();
-    await refreshMobileModelServices();
-  }
   const hasImage = Array.isArray(input.userMessage.content)
     && input.userMessage.content.some(part => part.type === 'image');
-  return hasImage ? { type: 'vision' } : { type: 'text' };
-}
-
-async function ragMessages(
-  conversationId: string,
-  projectId: string | undefined,
-  signal: AbortSignal,
-): Promise<GenerationMessage[]> {
-  const conversation = useChatStore.getState().conversations.find(
-    candidate => candidate.id === conversationId,
-  );
-  const project = projectId
-    ? useProjectStore.getState().getProject(projectId)
-    : null;
-  const baseSystemPrompt = project?.systemPrompt
-    || useAppStore.getState().settings.systemPrompt
-    || APP_CONFIG.defaultSystemPrompt;
-  let systemPrompt = callHook<string>(HOOKS.audioAugmentPrompt, baseSystemPrompt) ?? baseSystemPrompt;
-  if (project && !signal.aborted) {
-    try {
-      const documents = await ragService.getDocumentsByProject(project.id);
-      const enabled = documents.filter(document => document.enabled);
-      if (enabled.length) {
-        const query = [...(conversation?.messages ?? [])]
-          .reverse()
-          .find(message => message.role === 'user')?.content ?? '';
-        const result = await ragService.searchProject(project.id, query);
-        systemPrompt = appendProjectKnowledge({
-          systemPrompt,
-          documentNames: enabled.map(document => document.name),
-          retrievalContext: result.chunks.length
-            ? retrievalService.formatForPrompt(result)
-            : undefined,
-        });
-      }
-    } catch (error) {
-      logger.error('[ChatSession] RAG augmentation failed', error);
-    }
-  }
-  return composeChatContext({
-    systemPrompt,
-    messages: conversation?.messages ?? [],
-    compactionSummary: conversation?.compactionSummary,
-    compactionCutoffMessageId: conversation?.compactionCutoffMessageId,
-    audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
+  return operationService.resolve({
+    text: messageText(input.userMessage),
+    hasImage,
+    requestedOperation: input.requestedOperation,
+    recordedOperation: input.recordedOperation,
+    imageMode: options?.imageMode,
+    onClassifying: options?.onClassifying,
+    onClassifierStatus: options?.onClassifierStatus,
+    onClassifierTextFallback: options?.onClassifierTextFallback,
+    ensureTextRoute: options?.ensureTextRoute,
   });
 }
+
+const chatContext = new ChatContextApplicationService({
+  conversation: id => useChatStore.getState().conversations.find(candidate => candidate.id === id) ?? null,
+  project: id => useProjectStore.getState().getProject(id) ?? null,
+  defaultSystemPrompt: () => useAppStore.getState().settings.systemPrompt || APP_CONFIG.defaultSystemPrompt,
+  augmentSystemPrompt: prompt => callHook<string>(HOOKS.audioAugmentPrompt, prompt) ?? prompt,
+  async enabledDocumentNames(projectId) {
+    return (await ragService.getDocumentsByProject(projectId))
+      .filter(document => document.enabled)
+      .map(document => document.name);
+  },
+  async retrieve(projectId, query) {
+    const result = await ragService.searchProject(projectId, query);
+    return result.chunks.length ? retrievalService.formatForPrompt(result) : undefined;
+  },
+  audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
+  onRetrievalError: error => logger.error('[ChatSession] RAG augmentation failed', error),
+});
 
 function publishSessionEvent(event: ChatSessionEvent): void {
   if (event.type === 'started') {
@@ -344,11 +309,11 @@ const service = new ChatSessionService(
   repository,
   {
     rag: {
-      augment: ({ identity, signal }) => ragMessages(
-        identity.conversationId,
-        identity.projectId,
+      augment: ({ identity, signal }) => chatContext.compose({
+        conversationId: identity.conversationId,
+        projectId: identity.projectId,
         signal,
-      ),
+      }),
     },
     tools: {
       resolve: async ({ identity }) => {

@@ -1,13 +1,11 @@
 import {
   activeRemoteModelModalities,
-  ejectModelResidency,
   ensurePersistentResident,
-  ensurePersistentResidentLazy,
+  ModelLifecycleApplicationService,
   modelLoadRefusal,
   modelResidentSpec,
   runIndependentUnloads,
   unloadPersistentResident,
-  unloadPersistentResidentLazy,
   type ResidentSpec,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
@@ -104,40 +102,76 @@ function refusedLoad(override: boolean | undefined): Error {
     : new Error(refusal.message);
 }
 
+const lifecycleService = new ModelLifecycleApplicationService(modelResidencyManager, {
+  async resolveLoad(modality, modelId, command) {
+    if (modality === 'text') {
+      const model = useAppStore.getState().downloadedModels.find(candidate => candidate.id === modelId);
+      if (!model) throw new Error('Model not found');
+      return {
+        spec: await resolveTextResidentSpec(modelId),
+        routeId: mobileRouteId({ source: 'local', hostId: model.engine, modality, modelId }),
+        handlers: {
+          load: () => nativeModelLifecycle.loadTextModel(
+            modelId,
+            command.timeoutMs ?? 120_000,
+            command.override || modelResidencyManager.hasSessionOverride(modelId),
+          ),
+          unload: () => nativeModelLifecycle.unloadTextModel(true),
+        },
+      };
+    }
+    if (modality === 'image') {
+      const model = useAppStore.getState().downloadedImageModels.find(candidate => candidate.id === modelId);
+      if (!model) throw new Error('Model not found');
+      return {
+        spec: await imageSpec(modelId),
+        routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
+        handlers: {
+          load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? 180_000),
+          unload: () => nativeModelLifecycle.unloadImageModel(true),
+        },
+        forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
+      };
+    }
+    throw new Error(`Unsupported persistent lifecycle modality: ${modality}`);
+  },
+  async resolveUnload(modality) {
+    const store = useAppStore.getState();
+    const text = modality === 'text';
+    const modelId = text
+      ? nativeModelLifecycle.getState().loadedTextModelId ?? store.activeModelId
+      : nativeModelLifecycle.getState().loadedImageModelId ?? store.activeImageModelId;
+    const spec = modelId
+      ? (text ? await resolveTextResidentSpec(modelId) : await imageSpec(modelId))
+      : modelResidentSpec({
+          modality,
+          modelId: 'untracked',
+          routeId: 'untracked',
+          sizeMB: 0,
+          residencyKey: text ? 'mobile:text-engine' : 'mobile:image-engine',
+        }, modelResidencyManager.getResidents());
+    return {
+      key: spec.key,
+      hadRuntime: !!modelId,
+      unload: () => text
+        ? nativeModelLifecycle.unloadTextModel(true)
+        : nativeModelLifecycle.unloadImageModel(true),
+    };
+  },
+  selectRoute: (modality, routeId) => lifecycleProjectionPort.selectRoute(modality, routeId),
+  refreshInventory: async () => { await lifecycleProjectionPort.refreshInventory(); },
+});
+
 export async function loadTextModel(
   modelId: string,
   timeoutMs = 120_000,
   options?: LoadOptions,
 ): Promise<void> {
-  const store = useAppStore.getState();
-  const model = store.downloadedModels.find(candidate => candidate.id === modelId);
-  if (!model) throw new Error('Model not found');
-  try {
-    const acquired = await ensurePersistentResidentLazy({
-      manager: modelResidencyManager,
-      resolve: async () => ({
-        spec: await resolveTextResidentSpec(modelId),
-        handlers: {
-          load: () => nativeModelLifecycle.loadTextModel(
-            modelId,
-            timeoutMs,
-            !!options?.override || modelResidencyManager.hasSessionOverride(modelId),
-          ),
-          unload: () => nativeModelLifecycle.unloadTextModel(true),
-        },
-      }),
-      override: options?.override,
-    });
-    if (!acquired) throw refusedLoad(options?.override);
-    await lifecycleProjectionPort.selectRoute('text', mobileRouteId({
-      source: 'local',
-      hostId: model.engine,
-      modality: 'text',
-      modelId,
-    }));
-  } finally {
-    await lifecycleProjectionPort.refreshInventory();
-  }
+  const acquired = await lifecycleService.load('text', modelId, {
+    override: !!options?.override,
+    timeoutMs,
+  });
+  if (!acquired) throw refusedLoad(options?.override);
 }
 
 export async function loadImageModel(
@@ -145,31 +179,11 @@ export async function loadImageModel(
   timeoutMs = 180_000,
   options?: LoadOptions,
 ): Promise<void> {
-  try {
-    const acquired = await ensurePersistentResidentLazy({
-      manager: modelResidencyManager,
-      resolve: async () => ({
-        spec: await imageSpec(modelId),
-        handlers: {
-          load: () => nativeModelLifecycle.loadImageModel(modelId, timeoutMs),
-          unload: () => nativeModelLifecycle.unloadImageModel(true),
-        },
-        forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
-      }),
-      override: options?.override,
-    });
-    if (!acquired) throw refusedLoad(options?.override);
-    const model = useAppStore.getState().downloadedImageModels.find(
-      candidate => candidate.id === modelId,
-    );
-    if (!model) throw new Error('Model not found');
-    await lifecycleProjectionPort.selectRoute('image', mobileRouteId({
-      source: 'local',
-      hostId: model.backend ?? 'image-runtime',
-      modality: 'image',
-      modelId,
-    }));
-  } finally { await lifecycleProjectionPort.refreshInventory(); }
+  const acquired = await lifecycleService.load('image', modelId, {
+    override: !!options?.override,
+    timeoutMs,
+  });
+  if (!acquired) throw refusedLoad(options?.override);
 }
 
 /**
@@ -210,60 +224,13 @@ export async function loadTranscriptionModel(
 }
 
 export async function unloadTextModel(keepSelection = false): Promise<boolean> {
-  const selectedAtRequest = useAppStore.getState().activeModelId;
-  const requestedModelId = nativeModelLifecycle.getState().loadedTextModelId ?? selectedAtRequest;
-  const unloaded = await unloadPersistentResidentLazy({
-    manager: modelResidencyManager,
-    resolve: async () => {
-      const store = useAppStore.getState();
-      const modelId = nativeModelLifecycle.getState().loadedTextModelId ??
-        store.activeModelId ?? requestedModelId;
-      const model = modelId
-        ? store.downloadedModels.find(candidate => candidate.id === modelId)
-        : undefined;
-      const key = model
-        ? (await resolveTextResidentSpec(modelId!)).key
-        : modelResidentSpec({
-            modality: 'text', modelId: modelId ?? 'untracked', routeId: modelId ?? 'untracked', sizeMB: 0,
-            residencyKey: 'mobile:text-engine',
-          }, modelResidencyManager.getResidents()).key;
-      return { key, nativeUnload: () => nativeModelLifecycle.unloadTextModel(true) };
-    },
-  });
-  const store = useAppStore.getState();
-  if (!keepSelection) {
-    await lifecycleProjectionPort.selectRoute('text', null);
-    store.setTextModelEvicted(false);
-  }
-  await lifecycleProjectionPort.refreshInventory();
-  return unloaded || !!requestedModelId;
+  const unloaded = await lifecycleService.unload('text', keepSelection);
+  if (!keepSelection) useAppStore.getState().setTextModelEvicted(false);
+  return unloaded;
 }
 
 export async function unloadImageModel(keepSelection = false): Promise<boolean> {
-  const selectedAtRequest = useAppStore.getState().activeImageModelId;
-  const requestedModelId = nativeModelLifecycle.getState().loadedImageModelId ?? selectedAtRequest;
-  const unloaded = await unloadPersistentResidentLazy({
-    manager: modelResidencyManager,
-    resolve: async () => {
-      const store = useAppStore.getState();
-      const modelId = nativeModelLifecycle.getState().loadedImageModelId ??
-        store.activeImageModelId ?? requestedModelId;
-      const model = modelId
-        ? store.downloadedImageModels.find(candidate => candidate.id === modelId)
-        : undefined;
-      const key = model
-        ? (await imageSpec(modelId!)).key
-        : modelResidentSpec({
-            modality: 'image', modelId: modelId ?? 'untracked', routeId: modelId ?? 'untracked', sizeMB: 0,
-            residencyKey: 'mobile:image-engine',
-          }, modelResidencyManager.getResidents()).key;
-      return { key, nativeUnload: () => nativeModelLifecycle.unloadImageModel(true) };
-    },
-  });
-  if (!keepSelection) {
-    await lifecycleProjectionPort.selectRoute('image', null);
-  }
-  return unloaded || !!requestedModelId;
+  return lifecycleService.unload('image', keepSelection);
 }
 
 export async function unloadTranscriptionModel(
@@ -311,14 +278,12 @@ export async function ejectAllModels(): Promise<{ count: number }> {
   });
   const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
-  const ejected = await ejectModelResidency({
-    manager: modelResidencyManager,
+  const ejected = await lifecycleService.eject({
     localUnloads: {
       textUnloaded: () => unloadTextModel(true),
       imageUnloaded: () => unloadImageModel(true),
     },
     remoteModalities,
-    clearRemoteRoute: modality => lifecycleProjectionPort.selectRoute(modality, null),
   });
   logger.log(`[MODEL-SM] ejectAll → done count=${ejected.count}`);
   return { count: ejected.count };

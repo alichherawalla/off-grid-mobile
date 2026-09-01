@@ -18,13 +18,8 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import {
-  llmService,
-  onnxImageGeneratorService,
-  clearMobileModel,
-  selectMobileModel,
-} from '../services';
-import { mobileResidencyIntents } from '../services/modelServices/residencyIntents';
+import { onnxImageGeneratorService } from '../services';
+import { mobileModelCommands } from '../services/modelServices/modelCommandApplication';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
@@ -72,13 +67,12 @@ export const ChatsListScreen: React.FC = () => {
     // here just like the chat screen (was a dead-end "Failed to load model").
     await loadModelWithOverride(
       async (opts) => {
-        await selectMobileModel({
+        await mobileModelCommands.select({
           source: 'local',
           hostId: model.engine,
           modality: 'text',
           modelId: model.id,
-        });
-        await mobileResidencyIntents.ensureText(model.id, undefined, opts);
+        }, { override: opts?.override });
       },
       {
         setAlertState,
@@ -92,13 +86,12 @@ export const ChatsListScreen: React.FC = () => {
   const handleSelectImageModel = async (model: any) => {
     await loadModelWithOverride(
       async (opts) => {
-        await selectMobileModel({
+        await mobileModelCommands.select({
           source: 'local',
           hostId: model.backend ?? 'image-runtime',
           modality: 'image',
           modelId: model.id,
-        });
-        await mobileResidencyIntents.ensureImage(model.id, undefined, opts);
+        }, { override: opts?.override });
       },
       {
         setAlertState,
@@ -112,10 +105,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadTextModel = async () => {
     setIsModelLoading(true);
     try {
-      if (llmService.isModelLoaded()) {
-        await mobileResidencyIntents.unloadText();
-      }
-      await clearMobileModel('text');
+      await mobileModelCommands.unload('text');
     } finally {
       setIsModelLoading(false);
     }
@@ -124,8 +114,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadImageModel = async () => {
     setIsModelLoading(true);
     try {
-      await mobileResidencyIntents.unloadImage();
-      await clearMobileModel('image');
+      await mobileModelCommands.unload('image');
     } finally {
       setIsModelLoading(false);
     }
