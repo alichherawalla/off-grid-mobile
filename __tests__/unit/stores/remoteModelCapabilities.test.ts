@@ -14,7 +14,7 @@ import {
   fetchLlamaCppPropsCached,
   fetchModelCapabilities,
   isGenerativeModel,
-} from '../../../src/stores/remoteModelCapabilities';
+} from '../../../src/services/adapters/remote/modelCapabilityDiscovery';
 
 function mockFetch(response: Partial<Response> & { ok: boolean }) {
   globalThis.fetch = jest.fn().mockResolvedValue(response);

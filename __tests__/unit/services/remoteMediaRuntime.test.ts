@@ -1,4 +1,4 @@
-import { remoteMediaRuntime } from '../../../src/services/remoteMediaRuntime';
+import { remoteMediaRuntime } from '../../../src/services/adapters/remote/mediaRuntime';
 import * as Keychain from 'react-native-keychain';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { whisperService } from '../../../src/services/whisperService';
@@ -6,7 +6,7 @@ import RNFS from 'react-native-fs';
 import {
   activeRemoteVoiceServer,
   synthesizeRemoteVoiceFile,
-} from '../../../src/services/remoteVoicePlayback';
+} from '../../../src/services/adapters/remote/voicePlayback';
 import {
   remoteServerCapabilities,
   type RemoteServer,

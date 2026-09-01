@@ -5,7 +5,7 @@ import {
   remoteAuthorizationHeaders,
   validateRemoteEndpoint,
 } from '@offgrid/models';
-import { fetchModelsFromServer } from '../../../src/stores/remoteServerHelpers';
+import { fetchModelsFromServer } from '../../../src/services/adapters/remote/serverDiscovery';
 
 describe('remote transport policy', () => {
   const originalFetch = global.fetch;
