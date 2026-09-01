@@ -13,6 +13,28 @@
 
 import { renderHook, act } from '@testing-library/react-native';
 
+let mockActiveTextSnapshot: any = {
+  model: null,
+  modelId: null,
+  modelName: 'Unknown',
+  isRemote: false,
+};
+let mockActiveImageSnapshot: any = {
+  modality: 'image',
+  model: null,
+};
+
+jest.mock('../../../src/hooks/useActiveTextModel', () => ({
+  useActiveTextModel: () => mockActiveTextSnapshot,
+}));
+
+jest.mock('../../../src/hooks/useActiveMobileModel', () => ({
+  useActiveMobileModel: (modality: string) =>
+    modality === 'image'
+      ? mockActiveImageSnapshot
+      : { modality: 'text', model: mockActiveTextSnapshot.model },
+}));
+
 // ============================================================================
 // Service mocks
 // ============================================================================
@@ -33,6 +55,16 @@ jest.mock('../../../src/services', () => ({
   hardwareService: {
     getDeviceInfo: jest.fn().mockResolvedValue({ deviceName: 'TestPhone' }),
   },
+  getResourceUsage: jest.fn().mockResolvedValue({
+    totalMemory: 8000,
+    usedMemory: 2000,
+    availableMemory: 6000,
+  }),
+  subscribeToModelState: jest.fn(() => jest.fn()),
+  syncWithNativeState: jest.fn().mockResolvedValue(undefined),
+  selectMobileModel: jest.fn().mockResolvedValue(undefined),
+  clearMobileModel: jest.fn().mockResolvedValue(undefined),
+  unloadTextModel: jest.fn().mockResolvedValue(undefined),
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
@@ -119,7 +151,10 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import { useHomeScreen } from '../../../src/screens/HomeScreen/hooks/useHomeScreen';
-import { remoteServerManager } from '../../../src/services';
+import {
+  clearMobileModel,
+  selectMobileModel,
+} from '../../../src/services';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../../../src/stores';
 import { showAlert, hideAlert } from '../../../src/components';
 
@@ -129,6 +164,13 @@ const mockNavigation = { navigate: mockNavigate } as any;
 describe('useHomeScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockActiveTextSnapshot = {
+      model: null,
+      modelId: null,
+      modelName: 'Unknown',
+      isRemote: false,
+    };
+    mockActiveImageSnapshot = { modality: 'image', model: null };
     (useRemoteServerStore as unknown as jest.Mock).mockImplementation((selector?: any) => {
       const state = {
         servers: [],
@@ -175,6 +217,12 @@ describe('useHomeScreen', () => {
     });
 
     it('creates conversation and navigates when local model is active', () => {
+      mockActiveTextSnapshot = {
+        model: { id: 'local-model-1', name: 'Local' },
+        modelId: 'local-model-1',
+        modelName: 'Local',
+        isRemote: false,
+      };
       (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [{ id: 'local-model-1', name: 'Local' }], setDownloadedModels: jest.fn(),
         activeModelId: 'local-model-1', setActiveModelId: jest.fn(),
@@ -189,6 +237,12 @@ describe('useHomeScreen', () => {
     });
 
     it('uses remote text model id when no local model is active', () => {
+      mockActiveTextSnapshot = {
+        model: { id: 'remote-model-1', name: 'Remote', serverId: 'server-1' },
+        modelId: 'remote-model-1',
+        modelName: 'Remote',
+        isRemote: true,
+      };
       (useRemoteServerStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         servers: [], discoveredModels: { 'server-1': [{ id: 'remote-model-1', name: 'Remote' }] },
         activeRemoteTextModelId: 'remote-model-1',
@@ -269,6 +323,12 @@ describe('useHomeScreen', () => {
     });
 
     it('shows eject confirmation when remote model is active', () => {
+      mockActiveTextSnapshot = {
+        model: { id: 'remote-1', name: 'Remote', serverId: 'server-1' },
+        modelId: 'remote-1',
+        modelName: 'Remote',
+        isRemote: true,
+      };
       (useRemoteServerStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         servers: [], discoveredModels: {},
         activeRemoteTextModelId: 'remote-1',
@@ -285,16 +345,21 @@ describe('useHomeScreen', () => {
   // Remote model handlers
   // ==========================================================================
   describe('handleSelectRemoteTextModel', () => {
-    it('calls setActiveRemoteTextModel and clears loading state', async () => {
+    it('selects the shared remote text route and clears loading state', async () => {
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       const model = { id: 'remote-1', serverId: 'server-1', name: 'Remote Llama', capabilities: {} } as any;
       await act(async () => { await result.current.handleSelectRemoteTextModel(model); });
-      expect(remoteServerManager.setActiveRemoteTextModel).toHaveBeenCalledWith('server-1', 'remote-1');
+      expect(selectMobileModel).toHaveBeenCalledWith({
+        source: 'remote',
+        hostId: 'server-1',
+        modality: 'text',
+        modelId: 'remote-1',
+      });
       expect(result.current.loadingState.isLoading).toBe(false);
     });
 
-    it('shows error alert when setActiveRemoteTextModel fails', async () => {
-      (remoteServerManager.setActiveRemoteTextModel as jest.Mock).mockRejectedValueOnce(
+    it('shows error alert when remote text route selection fails', async () => {
+      (selectMobileModel as jest.Mock).mockRejectedValueOnce(
         new Error('Server offline'),
       );
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
@@ -305,23 +370,28 @@ describe('useHomeScreen', () => {
   });
 
   describe('handleUnloadRemoteTextModel', () => {
-    it('calls clearActiveRemoteModel', async () => {
+    it('clears the shared text route', async () => {
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       await act(async () => { await result.current.handleUnloadRemoteTextModel(); });
-      expect(remoteServerManager.clearActiveRemoteModel).toHaveBeenCalled();
+      expect(clearMobileModel).toHaveBeenCalledWith('text');
     });
   });
 
   describe('handleSelectRemoteImageModel', () => {
-    it('calls setActiveRemoteImageModel', async () => {
+    it('selects the shared remote image route', async () => {
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       const model = { id: 'img-1', serverId: 'server-1', name: 'Vision Model', capabilities: {} } as any;
       await act(async () => { await result.current.handleSelectRemoteImageModel(model); });
-      expect(remoteServerManager.setActiveRemoteImageModel).toHaveBeenCalledWith('server-1', 'img-1');
+      expect(selectMobileModel).toHaveBeenCalledWith({
+        source: 'remote',
+        hostId: 'server-1',
+        modality: 'image',
+        modelId: 'img-1',
+      });
     });
 
-    it('shows error alert when setActiveRemoteImageModel fails', async () => {
-      (remoteServerManager.setActiveRemoteImageModel as jest.Mock).mockRejectedValueOnce(
+    it('shows error alert when remote image route selection fails', async () => {
+      (selectMobileModel as jest.Mock).mockRejectedValueOnce(
         new Error('Vision unavailable'),
       );
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
@@ -332,10 +402,10 @@ describe('useHomeScreen', () => {
   });
 
   describe('handleUnloadRemoteImageModel', () => {
-    it('calls clearActiveRemoteModel', async () => {
+    it('clears the shared image route', async () => {
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       await act(async () => { await result.current.handleUnloadRemoteImageModel(); });
-      expect(remoteServerManager.clearActiveRemoteModel).toHaveBeenCalled();
+      expect(clearMobileModel).toHaveBeenCalledWith('image');
     });
   });
 
@@ -345,6 +415,12 @@ describe('useHomeScreen', () => {
   describe('activeTextModel computation', () => {
     it('returns local model when active', () => {
       const localModel = { id: 'local-1', name: 'Local Llama' } as any;
+      mockActiveTextSnapshot = {
+        model: localModel,
+        modelId: localModel.id,
+        modelName: localModel.name,
+        isRemote: false,
+      };
       (useAppStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         downloadedModels: [localModel],
         setDownloadedModels: jest.fn(),
@@ -361,6 +437,12 @@ describe('useHomeScreen', () => {
 
     it('returns remote text model when no local model', () => {
       const remoteModel = { id: 'remote-1', serverId: 'server-1', name: 'Remote', capabilities: { supportsVision: false } } as any;
+      mockActiveTextSnapshot = {
+        model: remoteModel,
+        modelId: remoteModel.id,
+        modelName: remoteModel.name,
+        isRemote: true,
+      };
       (useRemoteServerStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
         servers: [{ id: 'server-1' }],
         discoveredModels: { 'server-1': [remoteModel] },
@@ -383,10 +465,8 @@ describe('useHomeScreen', () => {
   // Error paths in unload handlers
   // ==========================================================================
   describe('handleUnloadRemoteTextModel error path', () => {
-    it('shows error alert when clearActiveRemoteModel throws', async () => {
-      (remoteServerManager.clearActiveRemoteModel as jest.Mock).mockImplementationOnce(() => {
-        throw new Error('Clear failed');
-      });
+    it('shows error alert when clearing the shared text route fails', async () => {
+      (clearMobileModel as jest.Mock).mockRejectedValueOnce(new Error('Clear failed'));
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       await act(async () => { await result.current.handleUnloadRemoteTextModel(); });
       expect(showAlert).toHaveBeenCalledWith('Error', 'Failed to disconnect remote model');
@@ -394,10 +474,8 @@ describe('useHomeScreen', () => {
   });
 
   describe('handleUnloadRemoteImageModel error path', () => {
-    it('shows error alert when clearActiveRemoteModel throws', async () => {
-      (remoteServerManager.clearActiveRemoteModel as jest.Mock).mockImplementationOnce(() => {
-        throw new Error('Clear failed');
-      });
+    it('shows error alert when clearing the shared image route fails', async () => {
+      (clearMobileModel as jest.Mock).mockRejectedValueOnce(new Error('Clear failed'));
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
       await act(async () => { await result.current.handleUnloadRemoteImageModel(); });
       expect(showAlert).toHaveBeenCalledWith('Error', 'Failed to disconnect remote model');
@@ -410,15 +488,39 @@ describe('useHomeScreen', () => {
   describe('activeImageModel computation with remote image model', () => {
     it('returns remote image model when active', () => {
       const remoteImgModel = { id: 'img-remote-1', serverId: 'server-1', name: 'Vision', capabilities: { supportsVision: true } } as any;
+      mockActiveImageSnapshot = {
+        modality: 'image',
+        model: {
+          id: remoteImgModel.id,
+          name: remoteImgModel.name,
+          source: 'remote',
+          serverId: remoteImgModel.serverId,
+        },
+      };
       (useRemoteServerStore as unknown as jest.Mock).mockImplementation((sel?: any) => { const st = {
-        servers: [{ id: 'server-1' }],
+        servers: [{
+          id: 'server-1',
+          name: 'Server',
+          catalog: { image: [remoteImgModel] },
+        }],
         discoveredModels: { 'server-1': [remoteImgModel] },
         activeRemoteTextModelId: null,
         activeRemoteImageModelId: 'img-remote-1',
         activeServerId: 'server-1',
       }; return sel ? sel(st) : st; });
       const { result } = renderHook(() => useHomeScreen(mockNavigation));
-      expect(result.current.activeImageModel).toEqual(remoteImgModel);
+      expect(result.current.activeImageModel).toEqual({
+        id: 'img-remote-1',
+        name: 'Vision',
+        serverId: 'server-1',
+        capabilities: {
+          supportsVision: false,
+          supportsToolCalling: false,
+          supportsThinking: false,
+        },
+        details: { serverName: 'Server' },
+        lastUpdated: '',
+      });
     });
   });
 

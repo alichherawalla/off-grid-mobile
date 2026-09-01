@@ -22,7 +22,7 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
 const mockGetSoCInfo = jest.fn(async () => ({ hasNPU: true }));
 jest.mock('../../../src/services/hardware', () => ({
   hardwareService: {
-    getSoCInfo: (...args: unknown[]) => mockGetSoCInfo(...args),
+    getSoCInfo: () => mockGetSoCInfo(),
   },
 }));
 
