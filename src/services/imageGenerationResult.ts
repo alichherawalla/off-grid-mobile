@@ -1,24 +1,7 @@
 import { useAppStore, useChatStore } from '../stores';
 import type { GeneratedImage } from '../types';
 import { buildImageGenMeta, scheduleImageSharePrompt } from './imageGenerationHelpers';
-import type {
-  ActiveImageModel,
-  GenerateImageParams,
-  ImageGenerationState,
-} from './imageGenerationTypes';
-
-export function completedImageGenerationState(
-  result: GeneratedImage,
-): Partial<ImageGenerationState> {
-  return {
-    phase: 'done',
-    progress: null,
-    status: null,
-    previewPath: null,
-    result,
-    error: null,
-  };
-}
+import type { ActiveImageModel, GenerateImageParams } from './imageGenerationTypes';
 
 export function saveImageGenerationResult(
   result: GeneratedImage,

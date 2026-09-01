@@ -3,7 +3,6 @@ import {
   buildImageEnhancementMessages,
   cleanImageEnhancement,
   describeImageBackend,
-  resolveImageGenerationSettings,
 } from '@offgrid/models';
 import {
   isRuntimeOnlyMessage,
@@ -16,35 +15,8 @@ import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { reportModelFailure } from './modelFailureHandler';
 import { checkProPromptForImage } from './proPrompt';
 import type {
-  GenerateImageParams,
   ImageGenerationState,
 } from './imageGenerationTypes';
-
-export function resolveMobileImageSettings(
-  platform: string,
-  request: GenerateImageParams,
-  settings: {
-    imageSteps?: number;
-    imageGuidanceScale?: number;
-    imageWidth?: number;
-    imageHeight?: number;
-    imageThreads?: number;
-    imageUseOpenCL?: boolean;
-  },
-) {
-  return resolveImageGenerationSettings({
-    platform,
-    request,
-    settings: {
-      steps: settings.imageSteps,
-      guidanceScale: settings.imageGuidanceScale,
-      width: settings.imageWidth,
-      height: settings.imageHeight,
-      threads: settings.imageThreads,
-      useOpenCL: settings.imageUseOpenCL,
-    },
-  });
-}
 
 export function imagePhaseTransitionLog(
   previous: ImageGenerationState['phase'],

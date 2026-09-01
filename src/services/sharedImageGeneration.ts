@@ -25,7 +25,7 @@ interface SharedImageGenerationOptions {
     total: number,
     preview?: GeneratedBinaryArtifact,
   ) => void;
-  setRequest: (controller: AbortController | null) => void;
+  signal: AbortSignal;
 }
 
 /** Adapt one shared typed image result to Mobile's persisted GeneratedImage record. */
@@ -35,15 +35,12 @@ export async function executeMobileImageGeneration(
 ): Promise<GeneratedImage> {
   await refreshMobileModelServices();
   const { routeId, ...operation } = input;
-  const controller = new AbortController();
-  options.setRequest(controller);
-  try {
-    const result = await mobileGenerationService.generate(
+  const result = await mobileGenerationService.generate(
       {
         operation: { type: 'image', ...operation },
         routeId,
         allowFallback: false,
-        signal: controller.signal,
+        signal: options.signal,
         timeoutMs: 10 * 60_000,
       },
       {
@@ -76,7 +73,7 @@ export async function executeMobileImageGeneration(
     } else {
       throw new Error('Image generation returned no local image data');
     }
-    return {
+  return {
       id: imageId,
       prompt: input.prompt,
       negativePrompt: input.negativePrompt,
@@ -88,8 +85,5 @@ export async function executeMobileImageGeneration(
       seed: artifact.seed ?? input.seed ?? 0,
       modelId: result.model.id,
       createdAt: new Date().toISOString(),
-    };
-  } finally {
-    options.setRequest(null);
-  }
+  };
 }

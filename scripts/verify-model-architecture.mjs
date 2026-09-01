@@ -39,6 +39,10 @@ for (const file of files) {
   const isUi = /^src\/(components|hooks|screens)\//.test(fileName)
   const isAdapter = /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(fileName)
 
+  if (fileName === 'src/services/modelServices/remoteImageGeneration.ts') {
+    report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
+  }
+
   const visit = node => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text
@@ -62,6 +66,24 @@ for (const file of files) {
           const importedName = (element.propertyName ?? element.name).text
           if (/^(?:load|unload|eject|force)\w*Models?$/.test(importedName)) {
             report('deprecated-residency-api-outside-model-port', fileName, source, element, `import:${importedName}`)
+          }
+        }
+      }
+      if (
+        fileName === 'src/services/imageGenerationService.ts' &&
+        /(remoteServerStore|localDreamGenerator|imagePromptEnhancement|residencyIntents|sharedImageGeneration)/.test(specifier)
+      ) {
+        report('mobile-image-lifecycle-is-shared', fileName, source, node, `import:${specifier}`)
+      }
+      if (
+        fileName !== 'src/services/modelServices/imageGenerationApplication.ts' &&
+        node.importClause?.namedBindings &&
+        ts.isNamedImports(node.importClause.namedBindings)
+      ) {
+        for (const element of node.importClause.namedBindings.elements) {
+          const importedName = (element.propertyName ?? element.name).text
+          if (/^(?:imageRuntimeNeedsReload|isFirstImageRuntimeRun|imageApplicationFailure|imageProgressStatus|resolveImageGenerationSettings)$/.test(importedName)) {
+            report('mobile-image-lifecycle-is-shared', fileName, source, element, `import:${importedName}`)
           }
         }
       }
@@ -112,6 +134,22 @@ for (const file of files) {
       /^(src\/services\/(llm|litert)\.ts)$/.test(fileName)
     ) {
       report('no-route-owning-llm-api', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+    }
+
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
+      node.name &&
+      /^(?:ensureImageModelLoaded|runGenerationAndSave|enhanceImageGenerationPrompt|resolveImageGenerationRoute|retryImageGeneration|forceLoadImageModel)$/.test(node.name.getText(source))
+    ) {
+      report('mobile-image-lifecycle-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+    }
+
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      /^(?:cancelRequested|remoteImageRequest|lastImageGenerationParams)$/.test(node.name.text)
+    ) {
+      report('mobile-image-lifecycle-is-shared', fileName, source, node.name, `declaration:${node.name.text}`)
     }
 
     if (
