@@ -16,6 +16,7 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
+import { selectMobileModel } from '../../../src/services/modelServices';
 import {
   createConversation,
   createMessage,
@@ -197,11 +198,14 @@ describe('ChatsListScreen', () => {
       ).toBeTruthy();
     });
 
-    it('shows start conversation prompt when models are downloaded', () => {
+    it('shows start conversation prompt when models are downloaded', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(
@@ -224,11 +228,14 @@ describe('ChatsListScreen', () => {
       expect(getByText('Select Model')).toBeTruthy();
     });
 
-    it('shows "New Chat" button in empty state when models are downloaded', () => {
+    it('shows "New Chat" button in empty state when models are downloaded', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(getByText('New Chat')).toBeTruthy();
@@ -347,11 +354,14 @@ describe('ChatsListScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('navigates to new Chat when New button is pressed and models exist', () => {
+    it('navigates to new Chat when New button is pressed and models exist', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);
@@ -489,11 +499,14 @@ describe('ChatsListScreen', () => {
   // Empty State with Models
   // ==========================================================================
   describe('empty state new chat button', () => {
-    it('navigates when New Chat empty state button pressed', () => {
+    it('navigates when New Chat empty state button pressed', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);
