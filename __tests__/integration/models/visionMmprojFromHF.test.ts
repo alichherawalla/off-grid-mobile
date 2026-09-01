@@ -16,7 +16,11 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { isMMProjFile, pickMmProjForDownload, mmProjBelongsToModel } from '../../../src/services/mmproj';
+import {
+  isModelProjectorFile as isMMProjFile,
+  pickProjectorForDownload as pickMmProjForDownload,
+  projectorBelongsToModel as mmProjBelongsToModel,
+} from '@offgrid/models';
 import { mmProjLocalName } from '../../../src/services/adapters/models/library/downloadArtifactAdapter';
 import { RECOMMENDED_MODELS } from '../../../src/constants/models';
 

@@ -2,7 +2,7 @@ import { coordinatedDownloads as backgroundDownloadService } from './modelServic
 import { useDownloadStore, DownloadEntry, DownloadStatus, ModelType, isActiveStatus } from '../stores/downloadStore';
 import { makeModelKey, ModelKey } from '../utils/modelKey';
 import { BackgroundDownloadStatus } from '../types';
-import { isMMProjFile } from './mmproj';
+import { isModelProjectorFile as isMMProjFile } from '@offgrid/models';
 import { loadActiveDownloads } from './activeDownloadPersistence';
 import logger from '../utils/logger';
 
@@ -26,7 +26,7 @@ type NativeDownloadRow = {
 
 /**
  * Is this download-row filename a multimodal projector (mmproj) rather than a model weights file?
- * Delegates to the single source of truth (src/services/mmproj.ts) so "is this a projector" is defined
+ * Delegates to the shared projector policy so "is this a projector" is defined
  * once — the previous local copy matched only 'mmproj' and missed 'projector'/'clip' names. Re-exported so
  * modelLibrary/restore.ts's orphaned-sidecar filter shares the exact same rule (DRY).
  */

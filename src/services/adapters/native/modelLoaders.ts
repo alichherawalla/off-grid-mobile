@@ -15,10 +15,10 @@ import { hardwareService } from '../../hardware';
 import logger from '../../../utils/logger';
 import RNFS from 'react-native-fs';
 import {
-  canKeepMmProjLink,
-  isMMProjFile,
-  pickMmProjForModel,
-} from '../../mmproj';
+  canKeepProjectorLink as canKeepMmProjLink,
+  isModelProjectorFile as isMMProjFile,
+  pickProjectorForModel as pickMmProjForModel,
+} from '@offgrid/models';
 import { sizeToBytes } from '../../../utils/fileSize';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {

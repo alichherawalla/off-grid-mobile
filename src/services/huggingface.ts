@@ -13,7 +13,10 @@ import {
 } from '../constants';
 import { looksLikeVisionModel } from '../utils/visionModel';
 import { huggingFaceRevisionPath } from '../utils/modelOrigin';
-import { isMMProjFile, pickMmProjForDownload } from './mmproj';
+import {
+  isModelProjectorFile as isMMProjFile,
+  pickProjectorForDownload as pickMmProjForDownload,
+} from '@offgrid/models';
 
 class HuggingFaceService {
   private baseUrl = HF_API.baseUrl;
@@ -290,12 +293,12 @@ class HuggingFaceService {
     return 'Unknown';
   }
 
-  // Delegates to the single source of truth (src/services/mmproj.ts) so "is this a projector" is defined once.
+  // Delegates to the shared projector policy so "is this a projector" is defined once.
   private isMMProjFile(fileName: string): boolean {
     return isMMProjFile(fileName);
   }
 
-  // Routes through the single projector-rule owner (src/services/mmproj.ts). Quant is NOT a matching
+  // Routes through the shared projector-rule owner. Quant is NOT a matching
   // signal (one projector serves every quant of its model); a projector whose filename names a DIFFERENT
   // model+variant is the wrong architecture and is REFUSED, so the model downloads with its correct
   // projector or text-only rather than being mispaired (#510). See pickMmProjForDownload for the rule.

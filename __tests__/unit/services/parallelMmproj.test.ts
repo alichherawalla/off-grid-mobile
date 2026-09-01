@@ -17,7 +17,10 @@ import {
   syncCompletedBackgroundDownloads,
   mmProjLocalName,
 } from '../../../src/services/adapters/models/library/downloadArtifactAdapter';
-import { mmProjBelongsToModel, pickMmProjForDownload } from '../../../src/services/mmproj';
+import {
+  projectorBelongsToModel as mmProjBelongsToModel,
+  pickProjectorForDownload as pickMmProjForDownload,
+} from '@offgrid/models';
 import { restoreInProgressDownloads } from '../../../src/services/adapters/models/library/downloadRestoreAdapter';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { BackgroundDownloadContext } from '../../../src/services/adapters/models/library/types';

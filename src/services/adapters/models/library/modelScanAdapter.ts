@@ -14,8 +14,10 @@ import {
 } from '@offgrid/models';
 import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete } from '../../../../utils/imageModelIntegrity';
-// Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
-import { isMMProjFile, pickMmProjForModel } from '../../../mmproj';
+import {
+  isModelProjectorFile as isMMProjFile,
+  pickProjectorForModel as pickMmProjForModel,
+} from '@offgrid/models';
 
 export { isMMProjFile };
 

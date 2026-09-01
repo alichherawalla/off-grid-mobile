@@ -1,6 +1,6 @@
 /**
  * DRY / single-owner — the "is this download row a projector?" predicate in downloadHydration must be the
- * canonical isMMProjFile (src/services/mmproj.ts), not a divergent copy.
+ * canonical shared projector policy, not a divergent copy.
  *
  * downloadHydration.isMmProjFileName only matched 'mmproj' — it MISSED the 'projector' and 'clip' names the
  * canonical isMMProjFile (introduced by #510 c815752f) also recognises. getParentRows uses that predicate as

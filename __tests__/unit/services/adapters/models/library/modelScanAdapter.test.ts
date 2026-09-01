@@ -84,4 +84,4 @@ describe('extractBaseName', () => {
 });
 
 // findMatchingMmProj (the loose substring matcher) was removed — model↔projector matching is now the
-// single strict rule in src/services/mmproj.ts, covered by __tests__/integration/models/mmProjMatchesModel.test.ts.
+// single strict shared rule, covered by __tests__/integration/models/mmProjMatchesModel.test.ts.
