@@ -368,7 +368,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         const entry = getCuratedLiteRTEntry(file.name);
         const model = { ...LITERT_RECOMMENDED_MODEL, name: entry?.displayName ?? file.name };
         const startDownload = () => {
-          handleDownload(model, file).catch(() => undefined);
+          handleDownload(model, file);
         };
         const guardedDownload = buildFileDownloadHandler({
           s: { downloaded: false, progress: null, hasFailed: false },
