@@ -19,6 +19,7 @@ import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useAppStore } from '../../stores';
 import { useUiModeStore } from '../../stores';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { selectMobileModel } from '../../services/modelServices';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
@@ -64,6 +65,18 @@ const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
 // Attach + quick-settings only. The Chat/Voice mode toggle is no longer in this
 // (collapsing) row — it's rendered persistently above the input instead.
 const computePillIconsWidth = (): number => PILL_ICON_SIZE * 2;
+
+function selectFirstDownloadedImageModel(): boolean {
+  const model = useAppStore.getState().downloadedImageModels[0];
+  if (!model) return false;
+  selectMobileModel({
+    source: 'local',
+    hostId: model.backend ?? 'image-runtime',
+    modality: 'image',
+    modelId: model.id,
+  }).catch(() => undefined);
+  return true;
+}
 
 type VoiceProcessingState = 'loading' | 'starting' | 'transcribing' | undefined;
 
@@ -244,14 +257,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     // Gate on whether an image model is DOWNLOADED, not whether it was selected
     // on the Home screen. If one is downloaded but not yet selected, select it
     // here (it loads lazily on the next send). Only warn when none exist.
-    if (!imageModelLoaded) {
-      const { downloadedImageModels, setActiveImageModelId } = useAppStore.getState();
-      if (downloadedImageModels.length === 0) {
-        setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }]));
-        quickSettings.hide();
-        return;
-      }
-      setActiveImageModelId(downloadedImageModels[0].id);
+    if (!imageModelLoaded && !selectFirstDownloadedImageModel()) {
+      setAlertState(showAlert('No Image Model', 'Download an image generation model from the Models screen to enable this feature.', [{ text: 'OK' }]));
+      quickSettings.hide();
+      return;
     }
     const newMode = IMAGE_MODE_CYCLE[(IMAGE_MODE_CYCLE.indexOf(imageMode) + 1) % IMAGE_MODE_CYCLE.length];
     setImageMode(newMode);

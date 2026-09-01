@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { hardwareService } from '../../services';
+import { clearMobileModel, hardwareService, selectMobileModel } from '../../services';
 import { createStyles } from './styles';
 import { ImageQualityBasicSliders, ImageQualityAdvancedSliders } from './ImageQualitySliders';
 
@@ -13,12 +13,12 @@ import { ImageQualityBasicSliders, ImageQualityAdvancedSliders } from './ImageQu
 const ImageModelPicker: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { downloadedImageModels, activeImageModelId, setActiveImageModelId } = useAppStore();
+  const { downloadedImageModels, activeImageModelId } = useAppStore();
   const [showPicker, setShowPicker] = useState(false);
   const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
 
   const handleSelectNone = () => {
-    setActiveImageModelId(null);
+    clearMobileModel('image').catch(() => undefined);
     setShowPicker(false);
   };
 
@@ -64,7 +64,12 @@ const ImageModelPicker: React.FC = () => {
               {downloadedImageModels.map((model) => {
                 const isActive = activeImageModelId === model.id;
                 const handleSelect = () => {
-                  setActiveImageModelId(model.id);
+                  selectMobileModel({
+                    source: 'local',
+                    hostId: model.backend ?? 'image-runtime',
+                    modality: 'image',
+                    modelId: model.id,
+                  }).catch(() => undefined);
                   setShowPicker(false);
                 };
                 return (

@@ -37,6 +37,8 @@ jest.mock('../../../src/components/AppSheet', () => ({
 // Mock action fns defined outside factory for access in tests
 const mockUpdateSettings = jest.fn();
 const mockSetActiveImageModelId = jest.fn();
+const mockSelectMobileModel = jest.fn((_facts: unknown) => Promise.resolve());
+const mockClearMobileModel = jest.fn((_modality: unknown) => Promise.resolve());
 const mockResetSettings = jest.fn();
 
 let mockStoreValues: any = {};
@@ -48,6 +50,8 @@ jest.mock('../../../src/stores', () => ({
 }));
 
 jest.mock('../../../src/services', () => ({
+  selectMobileModel: (facts: any) => mockSelectMobileModel(facts),
+  clearMobileModel: (modality: any) => mockClearMobileModel(modality),
   llmService: {
     getPerformanceStats: jest.fn(() => ({
       lastTokensPerSecond: 0,
@@ -553,7 +557,12 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText('None selected'));
     fireEvent.press(getByText('SD Model'));
 
-    expect(mockSetActiveImageModelId).toHaveBeenCalledWith('img1');
+    expect(mockSelectMobileModel).toHaveBeenCalledWith({
+      source: 'local',
+      hostId: 'image-runtime',
+      modality: 'image',
+      modelId: 'img1',
+    });
   });
 
   it('selects "None" to disable image model', () => {
@@ -571,7 +580,7 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText('Image Model'));
     fireEvent.press(getByText('None (disable image gen)'));
 
-    expect(mockSetActiveImageModelId).toHaveBeenCalledWith(null);
+    expect(mockClearMobileModel).toHaveBeenCalledWith('image');
   });
 
   // ============================================================================

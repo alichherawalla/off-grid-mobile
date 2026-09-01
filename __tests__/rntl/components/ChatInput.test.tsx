@@ -17,6 +17,11 @@ import { Keyboard, Platform } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
 
+const mockSelectMobileModel = jest.fn((_facts: unknown) => Promise.resolve());
+jest.mock('../../../src/services/modelServices', () => ({
+  selectMobileModel: (facts: any) => mockSelectMobileModel(facts),
+}));
+
 // Mock image picker
 jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: jest.fn(),
@@ -1160,14 +1165,12 @@ describe('ChatInput', () => {
     it('selects the first downloaded image model and cycles mode when one is available', () => {
       // Gating is now on DOWNLOADED (not loaded) image models. With a downloaded
       // model present, toggling selects it and proceeds without the alert.
-      const setActiveImageModelId = jest.fn();
       mockUseAppStore.mockReturnValue({
         settings: { thinkingEnabled: false },
         updateSettings: jest.fn(),
         downloadedModels: [],
         activeModelId: null,
-        downloadedImageModels: [{ id: 'img-1' }],
-        setActiveImageModelId,
+        downloadedImageModels: [{ id: 'img-1', backend: 'coreml' }],
       });
 
       const onImageModeChange = jest.fn();
@@ -1181,7 +1184,12 @@ describe('ChatInput', () => {
 
       pressImageModeToggle(result);
 
-      expect(setActiveImageModelId).toHaveBeenCalledWith('img-1');
+      expect(mockSelectMobileModel).toHaveBeenCalledWith({
+        source: 'local',
+        hostId: 'coreml',
+        modality: 'image',
+        modelId: 'img-1',
+      });
       expect(result.queryByText('No Image Model')).toBeNull();
       expect(onImageModeChange).toHaveBeenCalledWith('force');
     });
