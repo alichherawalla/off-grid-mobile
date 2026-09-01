@@ -65,14 +65,14 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
     await act(async () => { await useWhisperStore.getState().loadModel(); await new Promise((r) => setTimeout(r, 0)); });
 
     // Precondition: whisper is resident (so the post-eject check is meaningful).
-    await waitFor(() => { expect(ui.getByTestId('probe-residents').props.children).toContain('whisper'); });
+    await waitFor(() => { expect(ui.getByTestId('probe-residents').props.children).toContain('transcription'); });
 
     // Trigger the REAL Eject All (the exact function the Home button's onPress calls).
     await act(async () => { await activeModelService.ejectAll(); await new Promise((r) => setTimeout(r, 0)); });
 
     // SPEC: eject frees ALL resident models, sidecars included. The fix makes whisper drop → GREEN.
     await waitFor(() => {
-      expect(ui.getByTestId('probe-residents').props.children).not.toContain('whisper');
+      expect(ui.getByTestId('probe-residents').props.children).not.toContain('transcription');
     });
   });
 });

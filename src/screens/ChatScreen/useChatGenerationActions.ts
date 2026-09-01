@@ -1,5 +1,9 @@
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
 import { Dispatch, SetStateAction } from 'react';
+import {
+  imageIntentDecision,
+  type ImageIntentDecision,
+} from '@offgrid/models';
 import { AlertState, showAlert, hideAlert } from '../../components';
 import { generationSession } from '../../services/generationSession';
 import {
@@ -17,7 +21,6 @@ import {
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
-import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
 import { useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -31,7 +34,10 @@ import {
 } from '../../types';
 import logger from '../../utils/logger';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
-import { mobileChatSession } from './mobileChatSession';
+import {
+  mobileChatSession,
+  prepareMobileChatGeneration,
+} from './mobileChatSession';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 export type GenerationDeps = {
@@ -201,15 +207,22 @@ export async function resolveTurnKind(
     imageEnabled?: boolean;
   },
 ): Promise<TurnKind> {
-  if (input.recordedKind) return input.recordedKind; // replay: the recorded fact wins
-  if (input.imageEnabled === false) return 'text'; // image route explicitly disabled for this turn
-  return (await shouldRouteToImageGenerationFn(
-    deps,
-    input.text,
-    input.forceImageMode,
-  ))
-    ? 'image'
-    : 'text';
+  const classifierModel = deps.settings.classifierModelId
+    ? deps.downloadedModels.find(model => model.id === deps.settings.classifierModelId)
+    : null;
+  const decision = imageIntentDecision({
+    recordedIntent: input.recordedKind,
+    imageEnabled: input.imageEnabled,
+    imageGenerationRunning: deps.isGeneratingImage,
+    imageRoutingMode: deps.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+    forceImage: input.forceImageMode,
+    imageRouteAvailable: !!deps.activeImageModel,
+    textRouteAvailable: deps.hasTextModel !== false,
+    modelAutoDetection: deps.settings.autoDetectMethod === 'llm',
+    dedicatedClassifierAvailable: !!classifierModel,
+  });
+  if (decision.type === 'resolved') return decision.intent;
+  return classifyTurnIntent(deps, input.text, { classifierModel, decision });
 }
 
 export async function shouldRouteToImageGenerationFn(
@@ -239,73 +252,39 @@ export async function shouldRouteToImageGenerationFn(
       deps.hasTextModel
     } autoDetect=${deps.settings.autoDetectMethod}`,
   );
-  if (deps.isGeneratingImage) {
-    logger.log('[ROUTE-SM] → false: already generating an image');
-    return false;
-  }
-  if (deps.settings.imageGenerationMode === 'manual') {
-    logger.log(
-      `[ROUTE-SM] → ${forceImageMode === true}: manual mode (only on force)`,
-    );
-    return forceImageMode === true;
-  }
-  if (forceImageMode) {
-    logger.log('[ROUTE-SM] → true: forced');
-    return true;
-  }
-  // Auto mode with no image model selected: there is nothing to route an image to
-  // (dispatch requires activeImageModel), so skip the classifier entirely. Running it
-  // here only adds latency on the send hot path and leaves a stale "Analyzing…" status.
-  if (!deps.activeImageModel) {
-    logger.log('[ROUTE-SM] → false: no image model selected');
-    return false;
-  }
-  // Route on whether an image model is SELECTED (downloaded), not whether it's
-  // currently resident — the pipeline loads it on demand. (Checked + logged above.)
-  // No text model (image-only): SMOL classifier decides text vs image, else heuristics; chat returns false.
-  if (deps.hasTextModel === false) {
-    const classifierModel = deps.settings.classifierModelId
-      ? deps.downloadedModels.find(
-          m => m.id === deps.settings.classifierModelId,
-        )
-      : null;
-    if (!classifierModel) {
-      // No classifier yet: provision SmolLM2 in the background for next time,
-      // and use fast heuristics for this turn.
-      ensureDefaultClassifier().catch(() => {});
-      const intent = await intentClassifier.classifyIntent(text, {
-        useLLM: false,
-      });
-      logger.log(
-        `[ROUTE-SM] → ${
-          intent === 'image'
-        }: no-text-model heuristic intent=${intent}`,
-      );
-      return intent === 'image';
-    }
-    deps.setIsClassifying(true);
-    try {
-      const intent = await intentClassifier.classifyIntent(text, {
-        useLLM: true,
-        classifierModel,
-      });
-      logger.log(
-        `[ROUTE-SM] → ${
-          intent === 'image'
-        }: no-text-model SMOL classifier intent=${intent}`,
-      );
-      return intent === 'image';
-    } finally {
-      deps.setIsClassifying(false);
-    }
-  }
+  const classifierModel = deps.settings.classifierModelId
+    ? deps.downloadedModels.find(model => model.id === deps.settings.classifierModelId)
+    : null;
+  const decision = imageIntentDecision({
+    imageGenerationRunning: deps.isGeneratingImage,
+    imageRoutingMode: deps.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+    forceImage: forceImageMode,
+    imageRouteAvailable: !!deps.activeImageModel,
+    textRouteAvailable: deps.hasTextModel !== false,
+    modelAutoDetection: deps.settings.autoDetectMethod === 'llm',
+    dedicatedClassifierAvailable: !!classifierModel,
+  });
+  if (decision.type === 'resolved') return decision.intent === 'image';
+  return (await classifyTurnIntent(deps, text, { classifierModel, decision })) === 'image';
+}
+
+async function classifyTurnIntent(
+  deps: Pick<
+    GenerationDeps,
+    | 'setIsClassifying'
+    | 'setAppImageGenerationStatus'
+    | 'setAppIsGeneratingImage'
+  >,
+  text: string,
+  input: {
+    classifierModel: DownloadedModel | null | undefined;
+    decision: Extract<ImageIntentDecision, { type: 'classify' }>;
+  },
+): Promise<TurnKind> {
+  const { classifierModel, decision } = input;
+  if (decision.provisionClassifier) ensureDefaultClassifier().catch(() => {});
+  const useLLM = decision.method === 'model';
   try {
-    const useLLM = deps.settings.autoDetectMethod === 'llm';
-    const classifierModel = deps.settings.classifierModelId
-      ? deps.downloadedModels.find(
-          m => m.id === deps.settings.classifierModelId,
-        )
-      : null;
     if (useLLM) deps.setIsClassifying(true);
     const intent = await intentClassifier.classifyIntent(text, {
       useLLM,
@@ -322,13 +301,13 @@ export async function shouldRouteToImageGenerationFn(
       deps.setAppImageGenerationStatus(null);
       deps.setAppIsGeneratingImage(false);
     }
-    return intent === 'image';
+    return intent;
   } catch {
     deps.setIsClassifying(false);
     deps.setAppImageGenerationStatus(null);
     deps.setAppIsGeneratingImage(false);
     logger.log('[ROUTE-SM] → false: classifier threw');
-    return false;
+    return 'text';
   }
 }
 export type ImageGenCall = {
@@ -646,7 +625,7 @@ export async function handleSendFn(
   // Vision gate (shared with resend): never send an image to a model that can't do vision.
   if (blockedImageForNonVisionModel(deps, attachments)) return;
   callHook(HOOKS.audioStop); // stop stale TTS on the new turn (not a streaming-flag effect — see useChatScreen)
-  await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before LLM+TTS so they don't OOM on tight devices
+  await prepareMobileChatGeneration();
   let targetConversationId = deps.activeConversationId;
   if (!targetConversationId) {
     const fallbackModelId =
@@ -728,7 +707,7 @@ export async function regenerateResponseFn(
     logger.log('[RESEND-SM] regenerate BAIL: no conv or no active model');
     return;
   }
-  await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before the LLM reload (memory-tight)
+  await prepareMobileChatGeneration();
   const targetConversationId = deps.activeConversationId;
   const messageTextForRoute = appendAttachmentText(
     userMessage.content,
@@ -775,7 +754,11 @@ export async function regenerateResponseFn(
   generationSession.begin(targetConversationId);
   invalidateActiveConversation();
   try {
-    await mobileChatSession.regenerate(targetConversationId, userMessage.id);
+    await mobileChatSession.regenerate(
+      targetConversationId,
+      userMessage.id,
+      kind === 'image' && !deps.activeImageModel ? { type: 'text' } : undefined,
+    );
   } catch (error: any) {
     const msg = error?.message || 'Failed to generate response';
     const isContextOverflow =

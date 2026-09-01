@@ -39,7 +39,7 @@ describe('T023b (rendered) — Eject All frees every resident, sidecars included
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();
 
     // Real precondition: image + whisper are in memory (so the post-eject check is meaningful).
-    expect(types()).toEqual(['image', 'whisper']);
+    expect(types()).toEqual(['image', 'transcription']);
 
     // The REAL Eject All (the exact function the Home "Eject All" button calls).
     await activeModelService.ejectAll();

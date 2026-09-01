@@ -7,6 +7,7 @@ import {
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExecutorPort,
+  selectToolRoutingStrategy,
 } from '@offgrid/models';
 import { useChatStore } from '../../stores/chatStore';
 import { Platform } from 'react-native';
@@ -91,10 +92,18 @@ async function mobileEffectiveToolSchemas(
   const builtIn = getToolsAsOpenAISchema(enabledToolIds);
   const extensions = getToolExtensions().flatMap(extension => extension.getOpenAISchemas?.() ?? []);
   const all = [...builtIn, ...extensions];
-  if (extensions.length === 0 || all.length <= 5 || isRemoteTextModelActive()) return all;
+  const useEmbedding = isMcpEnabled();
+  const strategy = selectToolRoutingStrategy({
+    externalToolCount: extensions.length,
+    totalToolCount: all.length,
+    remoteModel: isRemoteTextModelActive(),
+    embeddingRouting: useEmbedding,
+    modelRouting: true,
+  });
+  if (strategy === 'all') return all;
   const query = lastUserQuery(messages);
   try {
-    const selected = isMcpEnabled()
+    const selected = strategy === 'embedding'
       ? await executeMobileToolSelection(query, extensions, 12)
       : await selectRelevantTools(
           query,

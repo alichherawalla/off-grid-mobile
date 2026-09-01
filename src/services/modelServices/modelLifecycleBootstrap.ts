@@ -171,6 +171,16 @@ export async function loadImageModel(
       { override: options?.override },
     );
     if (!lease.acquired) throw refusedLoad(options?.override);
+    const model = useAppStore.getState().downloadedImageModels.find(
+      candidate => candidate.id === modelId,
+    );
+    if (!model) throw new Error('Model not found');
+    await selectMobileRoute('image', mobileRouteId({
+      source: 'local',
+      hostId: model.backend ?? 'image-runtime',
+      modality: 'image',
+      modelId,
+    }));
   } finally {
     await lease?.release();
     if (pendingImageModelId === modelId) pendingImageModelId = null;

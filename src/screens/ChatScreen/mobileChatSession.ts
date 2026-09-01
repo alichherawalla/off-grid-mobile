@@ -1,15 +1,18 @@
 import {
   ChatSessionService,
+  CHAT_GENERATION_RECLAIM_POLICY,
+  appendProjectKnowledge,
+  composeChatContext,
   type ChatSessionEvent,
   type ChatQueueProjection,
   type ChatSessionRepositoryPort,
   type ChatTurn,
-  type GenerationContentPart,
   type GenerationMessage,
   type GenerationOperation,
   type GenerationRequest,
   type GenerationResult,
   runtimeModelRouteId,
+  projectChatMessage,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -21,51 +24,16 @@ import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { mobileLLMService } from '../../services/modelServices/mobileLLMService';
 import { refreshMobileModelServices } from '../../services/modelServices';
+import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useAppStore, useChatStore, useProjectStore } from '../../stores';
 import type { MediaAttachment, Message } from '../../types';
 import logger from '../../utils/logger';
 
-function attachmentParts(attachment: MediaAttachment): GenerationContentPart[] {
-  if (attachment.type === 'image') {
-    return [{ type: 'image', uri: attachment.uri, mimeType: attachment.mimeType }];
-  }
-  if (attachment.type === 'audio') {
-    return modelInputAudioUris([attachment]).map(uri => ({
-      type: 'audio',
-      uri,
-      mimeType: attachment.mimeType,
-    }));
-  }
-  return [{
-    type: 'file',
-    uri: attachment.uri,
-    mimeType: attachment.mimeType,
-    name: attachment.fileName,
-  }];
-}
-
 function generationMessage(message: Message): GenerationMessage {
-  const parts = message.attachments?.flatMap(attachmentParts) ?? [];
-  const documents = message.attachments
-    ?.filter(attachment => attachment.type === 'document' && attachment.textContent)
-    .map(attachment => `---\nAttached document: ${attachment.fileName || 'document'}\n${attachment.textContent}\n---`)
-    .join('\n\n');
-  const text = documents ? `${message.content}\n\n${documents}` : message.content;
-  return {
-    role: message.role,
-    content: parts.length
-      ? [{ type: 'text', text }, ...parts]
-      : text,
-    reasoning: message.reasoningContent,
-    name: message.toolName,
-    toolCallId: message.toolCallId,
-    toolCalls: message.toolCalls?.map((call, index) => ({
-      id: call.id ?? `${message.id}-tool-${index}`,
-      name: call.name,
-      arguments: call.arguments,
-    })),
-  };
+  return projectChatMessage(message, {
+    audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
+  });
 }
 
 function messageText(message: GenerationMessage): string {
@@ -164,10 +132,10 @@ async function ragMessages(
   const project = projectId
     ? useProjectStore.getState().getProject(projectId)
     : null;
-  let systemPrompt = project?.systemPrompt
+  const baseSystemPrompt = project?.systemPrompt
     || useAppStore.getState().settings.systemPrompt
     || APP_CONFIG.defaultSystemPrompt;
-  systemPrompt = callHook<string>(HOOKS.audioAugmentPrompt, systemPrompt) ?? systemPrompt;
+  let systemPrompt = callHook<string>(HOOKS.audioAugmentPrompt, baseSystemPrompt) ?? baseSystemPrompt;
 
   if (projectId && !signal.aborted) {
     try {
@@ -178,35 +146,26 @@ async function ragMessages(
           .reverse()
           .find(message => message.role === 'user')?.content ?? '';
         const result = await ragService.searchProject(projectId, query);
-        systemPrompt += `\n\nYou have a knowledge base with these documents:\n${enabled
-          .map(document => `- ${document.name}`)
-          .join('\n')}`;
-        if (result.chunks.length) systemPrompt += `\n\n${retrievalService.formatForPrompt(result)}`;
+        systemPrompt = appendProjectKnowledge({
+          systemPrompt,
+          documentNames: enabled.map(document => document.name),
+          retrievalContext: result.chunks.length
+            ? retrievalService.formatForPrompt(result)
+            : undefined,
+        });
       }
     } catch (error) {
       logger.error('[ChatSession] RAG augmentation failed', error);
     }
   }
 
-  const messages = (conversation?.messages ?? [])
-    .filter(message => !message.isSystemInfo)
-    .map(generationMessage);
-  const cutoff = conversation?.compactionCutoffMessageId;
-  const cutoffIndex = cutoff
-    ? (conversation?.messages ?? []).findIndex(message => message.id === cutoff)
-    : -1;
-  const activeMessages = cutoffIndex >= 0
-    ? (conversation?.messages ?? []).slice(cutoffIndex + 1)
-      .filter(message => !message.isSystemInfo)
-      .map(generationMessage)
-    : messages;
-  return [
-    { role: 'system', content: systemPrompt },
-    ...(conversation?.compactionSummary
-      ? [{ role: 'assistant' as const, content: `[Previous conversation summary]\n${conversation.compactionSummary}` }]
-      : []),
-    ...activeMessages,
-  ];
+  return composeChatContext({
+    systemPrompt,
+    messages: conversation?.messages ?? [],
+    compactionSummary: conversation?.compactionSummary,
+    compactionCutoffMessageId: conversation?.compactionCutoffMessageId,
+    audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
+  });
 }
 
 function publishSessionEvent(event: ChatSessionEvent): void {
@@ -327,6 +286,11 @@ const service = new ChatSessionService(
   },
 );
 
+/** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
+export async function prepareMobileChatGeneration(): Promise<void> {
+  await modelResidencyManager.reclaim(CHAT_GENERATION_RECLAIM_POLICY);
+}
+
 export const mobileChatSession = {
   /** Execute a user row that Mobile has already persisted. */
   async sendPersisted(conversationId: string, turnId: string): Promise<ChatTurn> {
@@ -350,9 +314,13 @@ export const mobileChatSession = {
     });
   },
 
-  async regenerate(conversationId: string, turnId: string): Promise<ChatTurn> {
+  async regenerate(
+    conversationId: string,
+    turnId: string,
+    operation?: GenerationOperation,
+  ): Promise<ChatTurn> {
     repository.invalidate(conversationId);
-    return service.regenerate({ conversationId, turnId });
+    return service.regenerate({ conversationId, turnId, operation });
   },
 
   async edit(conversationId: string, turnId: string, message: Message): Promise<ChatTurn> {
