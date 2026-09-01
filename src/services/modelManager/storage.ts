@@ -11,7 +11,7 @@ import {
   modelPathBasename,
   resolveStoredModelPath,
 } from '@offgrid/models';
-import { reconcilePrimaryPaths } from './reconcileStoredPaths';
+import { reconcilePrimaryPaths } from '../adapters/models/storedPathAdapter';
 import { useAppStore } from '../../stores';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
 

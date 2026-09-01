@@ -8,7 +8,7 @@ import {
   ModelFile,
 } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel } from './storage';
-import { copyFileWithProgress } from './copyFile';
+import { copyFileWithProgress } from '../adapters/models/modelFileCopyAdapter';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 export interface ImportLocalModelOpts {

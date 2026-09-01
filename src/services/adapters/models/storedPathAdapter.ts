@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import logger from '../../utils/logger';
+import logger from '../../../utils/logger';
 import { modelPathBasename, resolveStoredModelPath } from '@offgrid/models';
 
 /**

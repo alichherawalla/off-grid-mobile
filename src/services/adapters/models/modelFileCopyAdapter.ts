@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../../../utils/fileStat';
 
 type CopyProgressOpts = { knownTotalBytes: number | null; onProgress?: (fraction: number) => void };
 

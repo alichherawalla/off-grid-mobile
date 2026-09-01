@@ -26,7 +26,7 @@ jest.mock('../../../../src/services/modelManager/storage', () => ({
   loadDownloadedModels: jest.fn(async () => []),
   saveModelsList: jest.fn(async () => {}),
 }));
-jest.mock('../../../../src/services/modelManager/copyFile', () => ({
+jest.mock('../../../../src/services/adapters/models/modelFileCopyAdapter', () => ({
   copyFileWithProgress: jest.fn(async (_s: string, _d: string, opts: any) => {
     opts?.onProgress?.(1);
   }),
@@ -50,7 +50,7 @@ import {
   } from '../../../../src/services/modelManager/scan';
 import { importLocalModel } from '../../../../src/services/modelManager/importLocalModel';
 import * as storage from '../../../../src/services/modelManager/storage';
-import { copyFileWithProgress } from '../../../../src/services/modelManager/copyFile';
+import { copyFileWithProgress } from '../../../../src/services/adapters/models/modelFileCopyAdapter';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 
