@@ -257,7 +257,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('15.0K dl')).toBeTruthy();
+      expect(getByText(/15\.0K dl/)).toBeTruthy();
     });
 
     it('shows model type badge in compact mode for vision', () => {
@@ -277,7 +277,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('Code')).toBeTruthy();
+      expect(getByText(/Code/)).toBeTruthy();
     });
 
     it('shows model type badge in compact mode for text', () => {
@@ -287,7 +287,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('Text')).toBeTruthy();
+      expect(getByText(/Text/)).toBeTruthy();
     });
 
     it('shows param count badge in compact mode', () => {
@@ -297,15 +297,15 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('7B params')).toBeTruthy();
+      expect(getByText(/7B params/)).toBeTruthy();
     });
 
     it('shows the NPU/GPU badge when supportsAcceleration is set', () => {
       const { getByText, queryByTestId } = render(
         <ModelCard model={{ ...baseModel, paramCount: 7 }} compact={true} supportsAcceleration />
       );
-      expect(getByText('NPU/GPU')).toBeTruthy();
-      expect(queryByTestId('npu-gpu-badge')).toBeTruthy();
+      expect(getByText(/NPU\/GPU/)).toBeTruthy();
+      expect(queryByTestId('npu-gpu-badge')).toBeNull();
     });
 
     it('hides the NPU/GPU badge when the model is not accelerable', () => {
@@ -359,7 +359,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('4GB+ RAM')).toBeTruthy();
+      expect(getByText(/4GB\+ RAM/)).toBeTruthy();
     });
 
     it('does not show download count when 0 in compact mode', () => {
@@ -387,8 +387,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('LM Studio')).toBeTruthy();
-      expect(getByText('★')).toBeTruthy();
+      expect(getByText(/test-author · LM Studio/)).toBeTruthy();
     });
 
     it('shows trending icon in compact mode', () => {
@@ -938,28 +937,28 @@ describe('ModelCard', () => {
       const { getByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{}} />,
       );
-      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByText(/test-author · Recommended/)).toBeTruthy();
     });
 
     it('renders the pill with a custom pillLabel', () => {
       const { getByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
       );
-      expect(getByText('Featured')).toBeTruthy();
+      expect(getByText(/test-author · Featured/)).toBeTruthy();
     });
 
     it('renders custom chips in place of the modelType chip row (compact)', () => {
-      const { getByText, queryByText } = render(
+      const { getByText, queryAllByText } = render(
         <ModelCard
           model={{ ...baseModel, modelType: 'vision' }}
           compact={true}
           recommended={{ chips: ['Vision', 'GPU'] }}
         />,
       );
-      expect(getByText('GPU')).toBeTruthy();
+      expect(getByText(/Vision · GPU/)).toBeTruthy();
       // Both "Vision" (custom chip) and the auto-derived modelType "Vision" would
       // collide on text — assert only one matching node renders (custom chip path).
-      expect(queryByText('Vision')).toBeTruthy();
+      expect(queryAllByText(/Vision/)).toHaveLength(1);
     });
 
     it('renders the highlight as part of the common description (compact)', () => {

@@ -34,7 +34,10 @@ interface DenseModelCardContentProps {
     name: string;
     author: string;
     description?: string;
+    downloads?: number;
     modelType?: 'text' | 'vision' | 'code';
+    paramCount?: number;
+    minRamGB?: number;
   };
   fileSize: number;
   quantization?: string;
@@ -66,18 +69,31 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const description = cardDescription(model.description, recommended?.highlightText);
-  const facts = [
+  const customFacts = recommended?.chips;
+  const modelType = isVisionModel || model.modelType === 'vision'
+    ? 'Vision'
+    : model.modelType === 'code'
+      ? 'Code'
+      : model.modelType === 'text'
+        ? 'Text'
+        : undefined;
+  const facts = customFacts ?? [
     fileSize > 0 ? huggingFaceService.formatFileSize(fileSize) : undefined,
     quantization,
-    isVisionModel || model.modelType === 'vision' ? 'Vision' : undefined,
+    modelType,
+    model.paramCount ? `${model.paramCount}B params` : undefined,
+    model.minRamGB ? `${model.minRamGB}GB+ RAM` : undefined,
     supportsAcceleration ? 'NPU/GPU' : undefined,
+    model.downloads ? `${formatCompactNumber(model.downloads)} dl` : undefined,
     incompatibleReason,
   ].filter((value): value is string => !!value);
   const isVerified = credibilitySource === 'verified-quantizer';
   const sourceLabels = [
     model.author,
     isVerified ? undefined : credibilityLabel,
-    recommended?.pillLabel ?? (isTrending ? 'Trending' : undefined),
+    recommended
+      ? (recommended.pillLabel ?? 'Recommended')
+      : (isTrending ? 'Trending' : undefined),
   ].filter((value): value is string => !!value);
 
   return (
@@ -110,6 +126,12 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
     </>
   );
 };
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
 
 /**
  * The ONE description string a card shows: the model's description plus any
