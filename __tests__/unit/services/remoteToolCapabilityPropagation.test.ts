@@ -1,20 +1,21 @@
 import { setActiveRemoteTextModelImpl } from '../../../src/services/adapters/remote/serverRuntime';
-import { OpenAICompatibleProvider } from '../../../src/services/adapters/providers/openAICompatibleProvider';
-import { providerRegistry } from '../../../src/services/adapters/providers/registry';
+import { OpenAICompatibleTransport } from '../../../src/services/adapters/providers/openAICompatibleProvider';
+import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers/registry';
 import {
   REMOTE_TOOLS_UNAVAILABLE,
   remoteToolCapabilityIssue,
 } from '../../../src/services/toolCapabilityPreflight';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { activeMobileModel, refreshMobileModelServices } from '../../../src/services/modelServices';
 
 describe('selected remote model tool capability', () => {
   beforeEach(() => {
-    providerRegistry.clear();
+    remoteTextTransportRegistry.clear();
     useRemoteServerStore.getState().clearAllServers();
   });
 
   afterEach(() => {
-    providerRegistry.clear();
+    remoteTextTransportRegistry.clear();
     useRemoteServerStore.getState().clearAllServers();
   });
 
@@ -37,15 +38,15 @@ describe('selected remote model tool capability', () => {
         lastUpdated: '2026-08-30T00:00:00.000Z',
       },
     ]);
-    const provider = new OpenAICompatibleProvider(serverId, {
+    const transport = new OpenAICompatibleTransport(serverId, {
       endpoint: 'http://192.168.1.30:7878',
-      modelId: '',
     });
-    providerRegistry.registerProvider(serverId, provider);
+    remoteTextTransportRegistry.register(serverId, transport);
 
     await setActiveRemoteTextModelImpl(serverId, 'vision-without-tools');
+    await refreshMobileModelServices();
 
-    expect(provider.capabilities.supportsToolCalling).toBe(false);
+    expect(activeMobileModel('text').model?.capabilities.tools).toBe(false);
     expect(remoteToolCapabilityIssue(1)).toBe(REMOTE_TOOLS_UNAVAILABLE);
     expect(remoteToolCapabilityIssue(0)).toBeUndefined();
   });

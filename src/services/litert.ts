@@ -452,27 +452,6 @@ class LiteRTService {
   }
 
   // ---------------------------------------------------------------------------
-  // generateToolSelection — one-shot, tools-free routing pass for the LiteRT
-  // two-pass tool selector. Runs on a throwaway native session so it never
-  // pollutes a real chat's history/KV, then drops that session so pass 2 rebuilds
-  // the real conversation. Deterministic (temperature 0).
-  // ---------------------------------------------------------------------------
-
-  async generateToolSelection(systemPrompt: string, userText: string): Promise<string> {
-    await this.prepareConversation('__tool_select__', systemPrompt, {
-      samplerConfig: { temperature: 0, topK: 1, topP: 1 },
-      tools: [],
-      history: [],
-    });
-    try {
-      // No onToolCall handler -> pure text, the model cannot call tools here.
-      return await this.generateRaw(userText, undefined, {});
-    } finally {
-      this.invalidateConversation();
-    }
-  }
-
-  // ---------------------------------------------------------------------------
   // stopGeneration
   // ---------------------------------------------------------------------------
 

@@ -85,7 +85,7 @@ describe('Share Prompt Flow Integration', () => {
       let streamCallback: any;
       let completeCallback: any;
 
-      mockLlmService.generateResponse.mockImplementation(
+      mockLlmService.runNativeCompletion.mockImplementation(
         async (_messages, { onStream, onComplete } = {}) => {
           streamCallback = onStream!;
           completeCallback = onComplete!;
@@ -150,7 +150,7 @@ describe('Share Prompt Flow Integration', () => {
       await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
-      mockLlmService.generateResponse.mockRejectedValue(new Error('Generation failed'));
+      mockLlmService.runNativeCompletion.mockRejectedValue(new Error('Generation failed'));
 
       const messages = [createMessage({ role: 'user', content: 'Hi' })];
       await expect(
@@ -175,7 +175,7 @@ describe('Share Prompt Flow Integration', () => {
       let streamCallback: any;
       let completeCallback: any;
 
-      mockLlmService.generateResponse.mockImplementation(
+      mockLlmService.runNativeCompletion.mockImplementation(
         async (_messages, { onStream, onComplete } = {}) => {
           streamCallback = onStream!;
           completeCallback = onComplete!;
@@ -191,7 +191,7 @@ describe('Share Prompt Flow Integration', () => {
       );
 
       const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      generationService.generateResponse(conversationId, messages);
+      const generation = generationService.generateResponse(conversationId, messages);
       await flushPromises();
 
       // Stream some content
@@ -200,6 +200,7 @@ describe('Share Prompt Flow Integration', () => {
 
       // Stop with content
       await generationService.stopGeneration();
+      await expect(generation).rejects.toThrow('Generation was cancelled');
 
       expect(getAppState().textGenerationCount).toBe(1);
       // First generation doesn't trigger share prompt (skipped until 2nd)

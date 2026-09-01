@@ -10,17 +10,17 @@ import {
   detectToolCallingCapability,
 } from '../../../src/services/adapters/remote/serverRuntime';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { providerRegistry } from '../../../src/services/adapters/providers/registry';
+import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers/registry';
 import * as Keychain from 'react-native-keychain';
 
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
 jest.mock('../../../src/services/adapters/providers/registry');
 jest.mock('../../../src/services/adapters/providers/openAICompatibleProvider', () => ({
-  createOpenAIProvider: jest
+  createOpenAITransport: jest
     .fn()
     .mockReturnValue({ dispose: jest.fn().mockResolvedValue(undefined) }),
-  OpenAICompatibleProvider: jest.fn(),
+  OpenAICompatibleTransport: jest.fn(),
 }));
 jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn().mockResolvedValue(true),
@@ -75,7 +75,7 @@ describe('remoteServerManager', () => {
         addServer: mockAddServer,
         getServerById: mockGetServerById,
       });
-      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(
+      (remoteTextTransportRegistry.register as jest.Mock).mockReturnValue(
         undefined,
       );
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
@@ -105,7 +105,7 @@ describe('remoteServerManager', () => {
         addServer: mockAddServer,
         getServerById: mockGetServerById,
       });
-      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(
+      (remoteTextTransportRegistry.register as jest.Mock).mockReturnValue(
         undefined,
       );
       (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
@@ -163,7 +163,7 @@ describe('remoteServerManager', () => {
         getServerById: mockGetServerById,
         updateServer: mockUpdateServer,
       });
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(null);
 
       await remoteServerManager.updateServer('server-1', { name: 'Updated' });
 
@@ -186,7 +186,7 @@ describe('remoteServerManager', () => {
         getServerById: mockGetServerById,
         updateServer: mockUpdateServer,
       });
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(null);
       (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
 
       await remoteServerManager.updateServer('server-1', { apiKey: 'new-key' });
@@ -209,7 +209,7 @@ describe('remoteServerManager', () => {
         getServerById: mockGetServerById,
         updateServer: mockUpdateServer,
       });
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(null);
       (Keychain.resetGenericPassword as jest.Mock).mockResolvedValue(true);
 
       await remoteServerManager.updateServer('server-1', { apiKey: '' });
@@ -235,14 +235,14 @@ describe('remoteServerManager', () => {
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
         removeServer: mockRemoveServer,
       });
-      (providerRegistry.unregisterProvider as jest.Mock).mockReturnValue(
+      (remoteTextTransportRegistry.unregister as jest.Mock).mockReturnValue(
         undefined,
       );
       (Keychain.resetGenericPassword as jest.Mock).mockResolvedValue(true);
 
       await remoteServerManager.removeServer('server-1');
 
-      expect(providerRegistry.unregisterProvider).toHaveBeenCalledWith(
+      expect(remoteTextTransportRegistry.unregister).toHaveBeenCalledWith(
         'server-1',
       );
       expect(Keychain.resetGenericPassword).toHaveBeenCalled();
@@ -325,7 +325,7 @@ describe('remoteServerManager', () => {
         isReady: jest.fn().mockResolvedValue(true),
       };
 
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(mockProvider);
       const store = remoteSelectionState({
         id: 'server-123',
         name: 'Test',
@@ -344,11 +344,10 @@ describe('remoteServerManager', () => {
       expect(
         store.setActiveRemoteTextModelId,
       ).toHaveBeenCalledWith('llama2');
-      expect(mockLoadModel).toHaveBeenCalledWith('llama2');
     });
 
     it('should handle missing provider gracefully', async () => {
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(undefined);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(undefined);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(
         remoteSelectionState({
           id: 'server-123',
@@ -375,7 +374,7 @@ describe('remoteServerManager', () => {
         isReady: jest.fn().mockResolvedValue(true),
       };
 
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(mockProvider);
       const store = remoteSelectionState({
         id: 'server-123',
         name: 'Test',
@@ -394,7 +393,6 @@ describe('remoteServerManager', () => {
       expect(
         store.setActiveRemoteImageModelId,
       ).toHaveBeenCalledWith('llava');
-      expect(mockLoadModel).toHaveBeenCalledWith('llava');
     });
   });
 
@@ -741,10 +739,10 @@ describe('remoteServerManager', () => {
         endpoint: 'http://localhost:11434',
       };
 
-      (providerRegistry.getProvider as jest.Mock)
+      (remoteTextTransportRegistry.get as jest.Mock)
         .mockReturnValueOnce(null) // First call returns null
         .mockReturnValueOnce(mockProvider); // Second call returns provider after creation
-      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(
+      (remoteTextTransportRegistry.register as jest.Mock).mockReturnValue(
         undefined,
       );
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(
@@ -754,13 +752,12 @@ describe('remoteServerManager', () => {
 
       await remoteServerManager.setActiveRemoteTextModel('server-1', 'llama2');
 
-      expect(providerRegistry.registerProvider).toHaveBeenCalled();
-      expect(mockLoadModel).toHaveBeenCalledWith('llama2');
+      expect(remoteTextTransportRegistry.register).toHaveBeenCalled();
     });
   });
 
   describe('setActiveRemoteImageModel - provider creation', () => {
-    it('should create provider when it does not exist', async () => {
+    it('does not create a text transport for an image-only selection', async () => {
       const mockLoadModel = jest.fn().mockResolvedValue(undefined);
       const mockProvider = {
         loadModel: mockLoadModel,
@@ -774,10 +771,10 @@ describe('remoteServerManager', () => {
         endpoint: 'http://localhost:11434',
       };
 
-      (providerRegistry.getProvider as jest.Mock)
+      (remoteTextTransportRegistry.get as jest.Mock)
         .mockReturnValueOnce(null)
         .mockReturnValueOnce(mockProvider);
-      (providerRegistry.registerProvider as jest.Mock).mockReturnValue(
+      (remoteTextTransportRegistry.register as jest.Mock).mockReturnValue(
         undefined,
       );
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(
@@ -787,8 +784,7 @@ describe('remoteServerManager', () => {
 
       await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
 
-      expect(providerRegistry.registerProvider).toHaveBeenCalled();
-      expect(mockLoadModel).toHaveBeenCalledWith('llava');
+      expect(remoteTextTransportRegistry.register).not.toHaveBeenCalled();
     });
 
     it('should warn when provider cannot be created', async () => {
@@ -800,7 +796,7 @@ describe('remoteServerManager', () => {
       const _mockLogger = { warn: jest.fn() };
       jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-      (providerRegistry.getProvider as jest.Mock).mockReturnValue(null);
+      (remoteTextTransportRegistry.get as jest.Mock).mockReturnValue(null);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(
         remoteSelectionState(null),
       );
@@ -808,7 +804,7 @@ describe('remoteServerManager', () => {
       await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
 
       // No provider created because server not found
-      expect(providerRegistry.registerProvider).not.toHaveBeenCalled();
+      expect(remoteTextTransportRegistry.register).not.toHaveBeenCalled();
     });
   });
 });

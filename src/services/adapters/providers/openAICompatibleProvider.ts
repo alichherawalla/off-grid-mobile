@@ -1,15 +1,13 @@
 /**
- * OpenAI-Compatible Provider
+ * OpenAI-Compatible Transport
  *
- * Provider implementation for OpenAI-compatible servers (Ollama, LM Studio, etc.)
- * Handles model discovery, streaming generation, vision, and tool calling.
+ * Performs OpenAI-compatible/Ollama streaming I/O. Shared services own model state and routing.
  */
 
 import { Message } from '../../../types';
 import type {
-  LLMProvider,
+  TextStreamTransport,
   ProviderType,
-  ProviderCapabilities,
   GenerationOptions,
   StreamCallbacks,
 } from './types';
@@ -23,93 +21,74 @@ import type {
   OpenAIStreamState,
 } from './openAICompatibleTypes';
 import {
-  isOllamaRemoteEndpoint,
   openAICompatibleCompletionPayload,
   remoteAuthorizationHeaders,
+  remoteTextTransport,
 } from '@offgrid/models';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';
 
 /**
- * OpenAI-Compatible Provider Implementation
+ * OpenAI-compatible streaming transport implementation.
  */
-export class OpenAICompatibleProvider implements LLMProvider {
+export class OpenAICompatibleTransport implements TextStreamTransport {
   readonly type: ProviderType = 'openai-compatible';
 
-  private config: OpenAIConfig;
+  private config: OpenAIConfig & { transport: NonNullable<OpenAIConfig['transport']> };
   private abortController: AbortController | null = null;
-  private modelCapabilities: ProviderCapabilities;
 
   constructor(
     public readonly id: string,
     config: OpenAIConfig
   ) {
-    this.config = config;
-    this.modelCapabilities = {
-      supportsVision: false,
-      supportsToolCalling: false,
-      supportsThinking: false,
-      acceptsThinkingKwarg: false, // set from discovery (/props or LM Studio probe)
+    this.config = {
+      ...config,
+      transport: config.transport ?? remoteTextTransport(config.endpoint),
     };
   }
 
-  get capabilities(): ProviderCapabilities {
-    return this.modelCapabilities;
-  }
-
   updateConfig(config: Partial<OpenAIConfig>): void {
-    this.config = { ...this.config, ...config };
+    this.config = {
+      ...this.config,
+      ...config,
+      transport: config.transport ?? (
+        config.endpoint ? remoteTextTransport(config.endpoint) : this.config.transport
+      ),
+    };
   }
-
-  async loadModel(modelId: string): Promise<void> {
-    this.config.modelId = modelId;
-    // Capabilities are set via updateCapabilities() after discovery results are applied
-  }
-
-  /**
-   * Apply authoritative capabilities from server discovery results
-   */
-  updateCapabilities(capabilities: Partial<ProviderCapabilities>): void {
-    this.modelCapabilities = { ...this.modelCapabilities, ...capabilities };
-  }
-
-  async unloadModel(): Promise<void> {
-    this.config.modelId = '';
-    this.abortController = null;
-  }
-
-  isModelLoaded(): boolean { return !!this.config.modelId; }
-
-  getLoadedModelId(): string | null { return this.config.modelId || null; }
 
   /**
    * Build the request body for the /v1/chat/completions endpoint.
    */
   private buildRequestBody(
+    modelId: string,
     openaiMessages: OpenAIChatMessage[],
     options: GenerationOptions,
   ): Record<string, unknown> {
     return openAICompatibleCompletionPayload({
-      model: this.config.modelId,
+      model: modelId,
       messages: openaiMessages,
       temperature: options.temperature,
       // max_tokens intentionally omitted — the remote server owns output limits.
       // A client-side cap (default 1024) silently truncates reasoning models that
       // need a larger budget for <think> blocks (Qwen3, DeepSeek-R1, etc).
       topP: options.topP,
-      tools: this.modelCapabilities.supportsToolCalling ? options.tools : undefined,
+      tools: options.tools,
       toolChoice: 'auto',
       reasoningWire: options.reasoningWire,
       stream: true,
     });
   }
 
+  // The transport contract keeps model, messages, wire options, and stream sink explicit.
+  // eslint-disable-next-line max-params
   async generate(
+    modelId: string,
     messages: Message[],
     options: GenerationOptions,
     callbacks: StreamCallbacks
   ): Promise<void> {
-    if (!this.config.modelId) {
+    if (!modelId) {
       callbacks.onError(new Error('No model selected'));
       return;
     }
@@ -123,19 +102,19 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
       const thinkingEnabled = options.enableThinking !== false;
 
-      logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaRemoteEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
+      logger.log(`[Provider] generate — model=${modelId}, transport=${this.config.transport}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
 
       // Route Ollama through its native /api/chat which supports think: true/false
-      if (isOllamaRemoteEndpoint(this.config.endpoint)) {
+      if (this.config.transport === 'ollama-chat') {
         return generateOllamaChatImpl(openaiMessages, {
           options, callbacks, signal,
           endpoint: this.config.endpoint,
-          modelId: this.config.modelId,
+          modelId,
           abort: () => this.abortController?.abort(),
         });
       }
 
-      const requestBody = this.buildRequestBody(openaiMessages, options);
+      const requestBody = this.buildRequestBody(modelId, openaiMessages, options);
       logger.log(`[Provider][DEBUG] OpenAI request — hasTools=${!!requestBody.tools}, toolChoice=${typeof requestBody.tool_choice === 'string' ? requestBody.tool_choice : JSON.stringify(requestBody.tool_choice) || 'none'}`);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -225,7 +204,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
     messages: Message[],
     options: GenerationOptions
   ): Promise<OpenAIChatMessage[]> {
-    return buildOpenAIMessagesImpl(messages, options, this.modelCapabilities);
+    return buildOpenAIMessagesImpl(messages, options, {
+      supportsVision: true,
+      supportsToolCalling: true,
+      supportsThinking: true,
+    });
   }
 
   async stopGeneration(): Promise<void> {
@@ -235,33 +218,26 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
   }
 
-  async getTokenCount(text: string): Promise<number> {
-    // Approximate token count for remote providers
-    // Most models use ~4 characters per token
-    return Math.ceil(text.length / 4);
-  }
-
   async isReady(): Promise<boolean> {
-    return !!this.config.modelId && !!this.config.endpoint;
+    return !!this.config.endpoint;
   }
 
   async dispose(): Promise<void> {
     await this.stopGeneration();
-    this.config.modelId = '';
   }
 }
 
 /**
  * Factory to create an OpenAI-compatible provider
  */
-export function createOpenAIProvider(
+export function createOpenAITransport(
   serverId: string,
   endpoint: string,
-  opts?: { apiKey?: string; modelId?: string }
-): OpenAICompatibleProvider {
-  return new OpenAICompatibleProvider(serverId, {
+  opts?: { apiKey?: string }
+): OpenAICompatibleTransport {
+  return new OpenAICompatibleTransport(serverId, {
     endpoint,
     apiKey: opts?.apiKey,
-    modelId: opts?.modelId || '',
+    transport: remoteTextTransport(endpoint),
   });
 }

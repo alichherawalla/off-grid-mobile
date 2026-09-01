@@ -497,9 +497,9 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateResponse
+  // runNativeCompletion
   // ========================================================================
-  describe('generateResponse', () => {
+  describe('runNativeCompletion', () => {
     const setupLoadedModel = async (overrides: Record<string, any> = {}) => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext({
@@ -519,7 +519,7 @@ describe('LLMService', () => {
     it('throws when no model loaded', async () => {
       const messages = [createUserMessage('Hello')];
 
-      await expect(llmService.generateResponse(messages)).rejects.toThrow('No model loaded');
+      await expect(llmService.runNativeCompletion(messages)).rejects.toThrow('No model loaded');
     });
 
     it('throws when generation already in progress', async () => {
@@ -528,7 +528,7 @@ describe('LLMService', () => {
 
       const messages = [createUserMessage('Hello')];
 
-      await expect(llmService.generateResponse(messages)).rejects.toThrow('Generation already in progress');
+      await expect(llmService.runNativeCompletion(messages)).rejects.toThrow('Generation already in progress');
     });
 
 
@@ -537,7 +537,7 @@ describe('LLMService', () => {
       const messages = [createUserMessage('Hello')];
       const tokens: Array<{ content?: string; reasoningContent?: string }> = [];
 
-      await llmService.generateResponse(messages, { onStream: (token) => tokens.push(token) });
+      await llmService.runNativeCompletion(messages, { onStream: (token) => tokens.push(token) });
 
       expect(tokens).toEqual([
         { content: 'Hello', reasoningContent: undefined },
@@ -550,7 +550,7 @@ describe('LLMService', () => {
       const messages = [createUserMessage('Hello')];
       const onComplete = jest.fn();
 
-      const result = await llmService.generateResponse(messages, { onComplete });
+      const result = await llmService.runNativeCompletion(messages, { onComplete });
 
       expect(result).toBe('Hello World');
       expect(onComplete).toHaveBeenCalledWith({ content: 'Hello World', reasoningContent: '' });
@@ -571,7 +571,7 @@ describe('LLMService', () => {
           tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
         });
         const onComplete = jest.fn();
-        const result = await llmService.generateResponse([createUserMessage('hi')], { onComplete });
+        const result = await llmService.runNativeCompletion([createUserMessage('hi')], { onComplete });
         expect(result).toBe('The clean answer.');
         expect(onComplete).toHaveBeenCalledWith({ content: 'The clean answer.', reasoningContent: 'the reasoning' });
       });
@@ -584,7 +584,7 @@ describe('LLMService', () => {
           }),
           tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
         });
-        const result = await llmService.generateResponse([createUserMessage('hi')]);
+        const result = await llmService.runNativeCompletion([createUserMessage('hi')]);
         expect(result).toBe('The raw answer.'); // cr.content('') → falls back to cr.text
       });
 
@@ -596,7 +596,7 @@ describe('LLMService', () => {
           }),
           tokenize: jest.fn(() => Promise.resolve({ tokens: [1] })),
         });
-        const result = await llmService.generateResponse([createUserMessage('hi')]);
+        const result = await llmService.runNativeCompletion([createUserMessage('hi')]);
         // Not blank: the accumulated raw stream is returned; chatStore.finalize hand-parses it
         // (parseModelOutput is separately tested) → reasoning split from the clean answer.
         expect(result).toContain('the answer');
@@ -607,7 +607,7 @@ describe('LLMService', () => {
       await setupLoadedModel();
       const messages = [createUserMessage('Hello')];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       const stats = llmService.getPerformanceStats();
       expect(stats.lastTokenCount).toBe(2);
@@ -622,7 +622,7 @@ describe('LLMService', () => {
 
       const messages = [createUserMessage('Hello')];
 
-      await expect(llmService.generateResponse(messages)).rejects.toThrow('gen error');
+      await expect(llmService.runNativeCompletion(messages)).rejects.toThrow('gen error');
       expect(llmService.isCurrentlyGenerating()).toBe(false);
     });
 
@@ -631,7 +631,7 @@ describe('LLMService', () => {
       const ctx = await setupLoadedModel();
       const messages = [createUserMessage('Hello')];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       const callArgs = ctx.completion.mock.calls[0]![0]!;
       expect(callArgs).toHaveProperty('messages');
@@ -656,7 +656,7 @@ describe('LLMService', () => {
       });
 
       const messages = [createUserMessage('Hello')];
-      await llmService.generateResponse(messages, { onStream: (t) => tokens.push(t) });
+      await llmService.runNativeCompletion(messages, { onStream: (t) => tokens.push(t) });
 
       expect(tokens).toEqual([{ content: 'Hello', reasoningContent: undefined }]);
     });
@@ -673,7 +673,7 @@ describe('LLMService', () => {
         },
       });
 
-      await llmService.generateResponse([createUserMessage('Hello')]);
+      await llmService.runNativeCompletion([createUserMessage('Hello')]);
 
       const callArgs = ctx.completion.mock.calls[0]![0]!;
       expect(callArgs.enable_thinking).toBeUndefined();
@@ -700,7 +700,7 @@ describe('LLMService', () => {
         },
       });
 
-      const result = await llmService.generateResponse([createUserMessage('Hello')], { onStream: (data) => streamChunks.push(data) });
+      const result = await llmService.runNativeCompletion([createUserMessage('Hello')], { onStream: (data) => streamChunks.push(data) });
 
       expect(streamChunks).toEqual([
         { content: undefined, reasoningContent: 'I am' },
@@ -713,7 +713,7 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // context window management (private, tested through generateResponse)
+  // context window management (private, tested through runNativeCompletion)
   // ========================================================================
   describe('context window management', () => {
     const setupForContextTest = async () => {
@@ -744,7 +744,7 @@ describe('LLMService', () => {
         createUserMessage('Hello'),
       ];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
       const systemMsg = oaiMessages.find((m: any) => m.role === 'system');
@@ -762,7 +762,7 @@ describe('LLMService', () => {
         createUserMessage('Q2'),
       ];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
       const contents = oaiMessages.map((m: any) => m.content);
@@ -787,7 +787,7 @@ describe('LLMService', () => {
         createUserMessage('Final question'),
       ];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       const oaiMessages = ctx.completion.mock.calls[0]![0]!.messages;
       const contents = oaiMessages.map((m: any) => m.content);
@@ -1059,7 +1059,7 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // convertToOAIMessages (private, tested via generateResponse with vision)
+  // convertToOAIMessages (private, tested via runNativeCompletion with vision)
   // ========================================================================
   describe('convertToOAIMessages', () => {
     it('converts text-only message to simple format', () => {
@@ -1170,7 +1170,7 @@ describe('LLMService', () => {
         createSystemMessage('System'),
         createUserMessage('Hello'),
       ];
-      await expect(llmService.generateResponse(messages)).resolves.toBeDefined();
+      await expect(llmService.runNativeCompletion(messages)).resolves.toBeDefined();
     });
   });
 
@@ -1582,9 +1582,9 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateResponse with vision mode
+  // runNativeCompletion with vision mode
   // ========================================================================
-  describe('generateResponse with vision mode', () => {
+  describe('runNativeCompletion with vision mode', () => {
     it('uses multimodal path when images attached and multimodal initialized', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: 500 * 1024 * 1024 } as any);
@@ -1610,7 +1610,7 @@ describe('LLMService', () => {
         attachments: [{ id: 'att-1', type: 'image' as const, uri: 'file:///photo.jpg' }],
       }];
 
-      const result = await llmService.generateResponse(messages);
+      const result = await llmService.runNativeCompletion(messages);
       expect(result).toBe('I see an image');
 
       // Verify completion was called with messages format (OAI compatible)
@@ -1640,7 +1640,7 @@ describe('LLMService', () => {
         attachments: [{ id: 'att-1', type: 'image' as const, uri: 'file:///photo.jpg' }],
       }];
 
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
 
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Images attached but multimodal not initialized')
@@ -1650,9 +1650,9 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateResponse reads settings from store
+  // runNativeCompletion reads settings from store
   // ========================================================================
-  describe('generateResponse uses store settings', () => {
+  describe('runNativeCompletion uses store settings', () => {
     it('applies temperature from settings', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext({
@@ -1675,7 +1675,7 @@ describe('LLMService', () => {
         },
       });
 
-      await llmService.generateResponse([createUserMessage('Hi')]);
+      await llmService.runNativeCompletion([createUserMessage('Hi')]);
 
       const callArgs = ctx.completion.mock.calls[0]![0]!;
       expect(callArgs.temperature).toBe(0.2);
@@ -2000,8 +2000,8 @@ describe('LLMService', () => {
     it('returns messages unchanged when messages array is empty', async () => {
       await setupForEdgeTest();
 
-      // generateResponse with empty array reaches manageContextWindow([]) → early return
-      await llmService.generateResponse([]);
+      // runNativeCompletion with empty array reaches manageContextWindow([]) → early return
+      await llmService.runNativeCompletion([]);
       // No assertions needed — just must not throw and return empty string
     });
 
@@ -2009,7 +2009,7 @@ describe('LLMService', () => {
       await setupForEdgeTest();
 
       const messages = [createSystemMessage('You are helpful')];
-      await llmService.generateResponse(messages);
+      await llmService.runNativeCompletion(messages);
       // conversationMessages.length === 0 → early return at line 537
     });
 
@@ -2020,7 +2020,7 @@ describe('LLMService', () => {
       const hugeMessage = createUserMessage('x'.repeat(4000));
 
       const ctx = (llmService as any).context;
-      await llmService.generateResponse([hugeMessage]);
+      await llmService.runNativeCompletion([hugeMessage]);
 
       // Completion was called with the message — llama.rn handles overflow natively
       expect(ctx.completion).toHaveBeenCalled();
@@ -2091,12 +2091,12 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateWithMaxTokens
+  // runNativeCappedCompletion
   // ========================================================================
-  describe('generateWithMaxTokens', () => {
+  describe('runNativeCappedCompletion', () => {
     it('throws when no model loaded', async () => {
       await expect(
-        llmService.generateWithMaxTokens([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }], 100)
+        llmService.runNativeCappedCompletion([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }], 100)
       ).rejects.toThrow('No model loaded');
     });
 
@@ -2108,7 +2108,7 @@ describe('LLMService', () => {
 
       (llmService as any).isGenerating = true;
       await expect(
-        llmService.generateWithMaxTokens([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }], 100)
+        llmService.runNativeCappedCompletion([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }], 100)
       ).rejects.toThrow('Generation already in progress');
       (llmService as any).isGenerating = false;
     });
@@ -2125,7 +2125,7 @@ describe('LLMService', () => {
       mockedInitLlama.mockResolvedValue(ctx as any);
       await llmService.loadModel('/models/test.gguf');
 
-      const result = await llmService.generateWithMaxTokens(
+      const result = await llmService.runNativeCappedCompletion(
         [{ id: '1', role: 'user', content: 'Say hello', timestamp: 0 }],
         50
       );
@@ -2134,9 +2134,9 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateResponse — context_full detection
+  // runNativeCompletion — context_full detection
   // ========================================================================
-  describe('generateResponse — context_full', () => {
+  describe('runNativeCompletion — context_full', () => {
     it('throws "Context is full" when completionResult has context_full=true', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext({
@@ -2146,7 +2146,7 @@ describe('LLMService', () => {
       await llmService.loadModel('/models/test.gguf');
 
       await expect(
-        llmService.generateResponse([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }])
+        llmService.runNativeCompletion([{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }])
       ).rejects.toThrow('Context is full');
     });
   });
@@ -2244,16 +2244,16 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // generateResponseWithTools — uses context.completion with tools
+  // runNativeToolCompletion — uses context.completion with tools
   // ========================================================================
-  describe('generateResponseWithTools', () => {
+  describe('runNativeToolCompletion', () => {
     it('returns fullResponse and empty toolCalls on successful completion', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
       await llmService.loadModel('/models/test.gguf');
 
-      const result = await llmService.generateResponseWithTools(
+      const result = await llmService.runNativeToolCompletion(
         [{ id: '1', role: 'user', content: 'Use a tool', timestamp: 0 }],
         { tools: [{ type: 'function', function: { name: 'web_search' } }] },
       );
@@ -2275,7 +2275,7 @@ describe('LLMService', () => {
         return { text: 'response', tokens_predicted: 5, timings: {} };
       });
 
-      await llmService.generateResponseWithTools(
+      await llmService.runNativeToolCompletion(
         [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
         { tools: [] },
       );

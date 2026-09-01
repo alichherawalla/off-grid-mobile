@@ -10,17 +10,15 @@ import {
   selectToolRoutingStrategy,
 } from '@offgrid/models';
 import { useChatStore } from '../../stores/chatStore';
-import { Platform } from 'react-native';
 import logger from '../../utils/logger';
 import { executeToolCall } from '../tools';
 import { getToolsAsOpenAISchema } from '../tools';
 import { getToolExtensions } from '../tools/extensions';
-import { getActiveEngineService, isRemoteTextModelActive } from '../engines';
-import { liteRTService } from '../litert';
-import { llmService } from '../llm';
+import { isRemoteTextModelActive } from '../engines';
 import { isMcpEnabled } from '../mcpContextBoost';
-import { executeMobileToolSelection } from '../mobileSidecarGeneration';
+import { executeMobileText, executeMobileToolSelection } from '../mobileSidecarGeneration';
 import { selectRelevantTools } from '../litertToolSelector';
+import { clearMobileEphemeralTextState } from './generationAdapters';
 import type { ToolCall, ToolResult } from '../tools/types';
 
 function toolCall(
@@ -85,6 +83,17 @@ function lastUserQuery(messages: import('../../types').Message[]): string {
   return [...messages].reverse().find(message => message.role === 'user' && message.content.trim())?.content.trim() ?? '';
 }
 
+async function generateToolRoutingText(system: string, user: string): Promise<string> {
+  try {
+    return await executeMobileText([
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ], { maxTokens: 64 });
+  } finally {
+    await clearMobileEphemeralTextState();
+  }
+}
+
 async function mobileEffectiveToolSchemas(
   messages: import('../../types').Message[],
   enabledToolIds: string[],
@@ -105,13 +114,7 @@ async function mobileEffectiveToolSchemas(
   try {
     const selected = strategy === 'embedding'
       ? await executeMobileToolSelection(query, extensions, 12)
-      : await selectRelevantTools(
-          query,
-          extensions,
-          getActiveEngineService() === liteRTService || Platform.OS !== 'ios'
-            ? undefined
-            : (system, user) => llmService.generateToolSelection(system, user),
-        );
+      : await selectRelevantTools(query, extensions, generateToolRoutingText);
     if (!selected?.length) return builtIn;
     return [...builtIn, ...extensions.filter(schema => selected.includes(schema.function.name))];
   } catch (error) {

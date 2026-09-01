@@ -2,6 +2,7 @@
  * Shared types for the OpenAI-Compatible Provider
  */
 import type { GenerationOptions, StreamCallbacks } from './types';
+import type { RemoteTextTransport } from '@offgrid/models';
 
 /** OpenAI chat message */
 export interface OpenAIChatMessage {
@@ -36,7 +37,7 @@ export interface OpenAIToolCall {
 export interface OpenAIConfig {
   endpoint: string;
   apiKey?: string;
-  modelId: string;
+  transport?: RemoteTextTransport;
 }
 
 /** Mutable state for a single OpenAI streaming request */

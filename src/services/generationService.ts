@@ -23,8 +23,8 @@ import {
 import { mobileGenerationService, refreshMobileModelServices } from './modelServices';
 import {
   activeMobileRoute,
-  activeMobileTextProvider,
 } from './modelServices/mobileLLMService';
+import { stopMobileRemoteTextTransport } from './modelServices/generationAdapters';
 import { mobileToolPromptMessages } from './modelServices/toolPromptPolicy';
 import { mobileToolDefinitions, mobileToolResult } from './modelServices/toolPorts';
 import { modelInputAudioUris } from './modelMedia';
@@ -451,8 +451,8 @@ class GenerationService {
     this.currentSharedAbortController = null;
     if (!this.state.isGenerating) {
       await stopAllTextEngines();
-      const provider = activeMobileTextProvider();
-      if (provider) provider.stopGeneration().catch(() => { });
+      const serverId = activeMobileRoute('text').model?.serverId;
+      if (serverId) stopMobileRemoteTextTransport(serverId).catch(() => { });
       this.keepShownPartialOrClear();
       return '';
     }
@@ -470,8 +470,8 @@ class GenerationService {
     this.resetState();
 
     if (activeMobileRoute('text').model?.source === 'remote') {
-      const provider = activeMobileTextProvider();
-      if (provider) provider.stopGeneration().catch(() => { });
+      const serverId = activeMobileRoute('text').model?.serverId;
+      if (serverId) stopMobileRemoteTextTransport(serverId).catch(() => { });
       return partialContent;
     }
 

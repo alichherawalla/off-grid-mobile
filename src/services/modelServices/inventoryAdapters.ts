@@ -13,7 +13,7 @@ import type {
 } from '../../types';
 import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 import { displayModelName } from '../adapters/remote/serverDiscovery';
-import { providerRegistry } from '../adapters/providers';
+import { remoteTextTransportRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { WHISPER_MODELS, whisperService } from '../whisperService';
@@ -250,7 +250,7 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
   async listModels() {
     const state = useRemoteServerStore.getState();
     return state.servers.flatMap(server => {
-      const provider = providerRegistry.getProvider(server.id);
+      const transport = remoteTextTransportRegistry.get(server.id);
       const text = remoteTextModels(server).map(model => {
         const identity: MobileRouteFacts = {
           source: 'remote',
@@ -270,8 +270,8 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
           },
           reasoning: model.capabilities.reasoning,
           installed: true,
-          ready: !!provider,
-          loaded: provider?.getLoadedModelId() === model.id,
+          ready: !!transport,
+          loaded: state.activeServerId === server.id && state.activeRemoteTextModelId === model.id,
           error: state.serverHealth[server.id]?.status === 'unhealthy'
             ? 'Remote server is unavailable'
             : undefined,

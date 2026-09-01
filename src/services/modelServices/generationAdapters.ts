@@ -1,5 +1,6 @@
 import {
   reasoningWireForGeneration,
+  localTextRuntime,
   parseToolCallsFromText,
   type GenerationAdapter,
   type GenerationChunk,
@@ -12,11 +13,11 @@ import {
   type ReasoningWireFragment,
   type RuntimeModel,
 } from '@offgrid/models';
-import type { MediaAttachment, Message } from '../../types';
+import type { GenerationMeta, MediaAttachment, Message } from '../../types';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';
-import { providerRegistry } from '../adapters/providers';
-import type { GenerationOptions, LLMProvider } from '../adapters/providers/types';
+import { remoteTextTransportRegistry } from '../adapters/providers';
+import type { GenerationOptions, TextStreamTransport } from '../adapters/providers/types';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
 import { modelInputAudioUris, modelInputImageUris } from '../modelMedia';
@@ -119,8 +120,11 @@ function providerToolArguments(value: string | Record<string, unknown>): Record<
 }
 
 /** Convert the callback provider bridge into the shared async chunk boundary. */
+// The bridge keeps the selected transport, model, canonical request, and wire policy explicit.
+// eslint-disable-next-line max-params
 async function* providerChunks(
-  provider: LLMProvider,
+  transport: TextStreamTransport,
+  modelId: string,
   request: GenerationRequest,
   reasoningWire: ReasoningWireFragment,
 ): AsyncIterable<GenerationChunk> {
@@ -131,9 +135,10 @@ async function* providerChunks(
     wake?.();
     wake = null;
   };
-  const abort = () => provider.stopGeneration().catch(() => undefined);
+  const abort = () => transport.stopGeneration().catch(() => undefined);
   request.signal?.addEventListener('abort', abort, { once: true });
-  const operation = provider.generate(
+  const operation = transport.generate(
+    modelId,
     mobileMessages(request.messages ?? []),
     providerOptions(request, reasoningWire),
     {
@@ -272,11 +277,81 @@ async function* liteRTChunks(
   }
 }
 
-function providerFor(model: RuntimeModel): LLMProvider {
-  const providerId = model.source === 'remote' ? model.serverId : 'local';
-  const provider = providerId ? providerRegistry.getProvider(providerId) : null;
-  if (!provider) throw new Error(`Generation provider is unavailable: ${providerId ?? model.id}`);
-  return provider;
+function generationMeta(modelId: string): GenerationMeta {
+  const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo();
+  const perf = llmService.getPerformanceStats();
+  return {
+    gpu,
+    gpuBackend,
+    gpuLayers,
+    modelName: modelId,
+    tokensPerSecond: perf.lastTokensPerSecond,
+    decodeTokensPerSecond: perf.lastDecodeTokensPerSecond,
+    timeToFirstToken: perf.lastTimeToFirstToken,
+    tokenCount: perf.lastTokenCount,
+  };
+}
+
+const llamaTextTransport: TextStreamTransport = {
+  id: 'llama.rn',
+  type: 'local',
+  // This is the native transport boundary; Shared owns the four values passed to it.
+  // eslint-disable-next-line max-params
+  async generate(modelId, messages, options, callbacks): Promise<void> {
+    if (!llmService.isModelLoaded()) throw new Error('No model loaded');
+    if (options.tools?.length) {
+      const result = await llmService.runNativeToolCompletion(messages, {
+        tools: options.tools,
+        reasoningWire: options.reasoningWire,
+        onStream: data => {
+          if (data.content) callbacks.onToken(data.content);
+          if (data.reasoningContent) callbacks.onReasoning?.(data.reasoningContent);
+        },
+      });
+      callbacks.onComplete({
+        content: result.fullResponse,
+        meta: generationMeta(modelId),
+        toolCalls: result.toolCalls.map(call => ({
+          id: call.id,
+          name: call.name,
+          arguments: typeof call.arguments === 'string'
+            ? call.arguments
+            : JSON.stringify(call.arguments),
+        })),
+      });
+      return;
+    }
+    let content = '';
+    let reasoning = '';
+    await llmService.runNativeCompletion(messages, {
+      reasoningWire: options.reasoningWire,
+      onStream: data => {
+        if (data.content) {
+          content += data.content;
+          callbacks.onToken(data.content);
+        }
+        if (data.reasoningContent) {
+          reasoning += data.reasoningContent;
+          callbacks.onReasoning?.(data.reasoningContent);
+        }
+      },
+      onComplete: result => {
+        callbacks.onComplete({
+          content: result.content || content,
+          reasoningContent: result.reasoningContent || reasoning || undefined,
+          meta: generationMeta(modelId),
+        });
+      },
+    });
+  },
+  stopGeneration: () => llmService.stopGeneration(),
+  isReady: async () => llmService.isModelLoaded(),
+};
+
+function remoteTransportFor(model: RuntimeModel): TextStreamTransport {
+  const transport = model.serverId ? remoteTextTransportRegistry.get(model.serverId) : undefined;
+  if (!transport) throw new Error(`Generation transport is unavailable: ${model.serverId ?? model.id}`);
+  return transport;
 }
 
 function adapter(id: string): GenerationAdapter {
@@ -285,7 +360,6 @@ function adapter(id: string): GenerationAdapter {
     async load(model) {
       if (model.source !== 'local') return;
       await nativeModelLifecycle.loadTextModel(model.id);
-      await providerFor(model).loadModel(model.id);
     },
     async unload(model) {
       if (model.source === 'local') await nativeModelLifecycle.unloadTextModel(true);
@@ -293,28 +367,40 @@ function adapter(id: string): GenerationAdapter {
     async *generate(model, request, context) {
       // This is the single policy-to-wire translation for every Mobile text route.
       // Read llama.rn metadata after residency has loaded the native template, including on turn one.
-      const reasoningModel = model.source === 'local' && model.providerId === 'llama'
+      const localRuntime = localTextRuntime(model);
+      const reasoningModel = localRuntime === 'llama-rn'
         ? { reasoning: llmService.getReasoningMetadata() }
         : model;
       const reasoningWire = reasoningWireForGeneration(request, reasoningModel);
-      if (model.source === 'local' && model.providerId === 'litert') {
+      if (localRuntime === 'litert') {
         yield* liteRTChunks(request, context, reasoningWire);
         return;
       }
-      if (model.source === 'local' && request.identity?.conversationId) {
-        await llmService.prepareConversationBoundary(request.identity.conversationId);
+      if (localRuntime === 'llama-rn') {
+        if (request.identity?.conversationId) {
+          await llmService.prepareConversationBoundary(request.identity.conversationId);
+        }
+        yield* providerChunks(llamaTextTransport, model.id, request, reasoningWire);
+        return;
       }
-      const provider = providerFor(model);
-      if (model.source === 'remote' && provider.getLoadedModelId() !== model.id) {
-        await provider.loadModel(model.id);
-      }
-      yield* providerChunks(provider, request, reasoningWire);
+      yield* providerChunks(remoteTransportFor(model), model.id, request, reasoningWire);
     },
     classifyError(error) {
       const message = error instanceof Error ? error.message : String(error);
       return /memory|unavailable|not ready|timeout|network/i.test(message) ? 'retryable' : 'fatal';
     },
   };
+}
+
+/** Remove an ephemeral shared-generation prompt from either native text runtime. */
+export async function clearMobileEphemeralTextState(): Promise<void> {
+  liteRTService.invalidateConversation();
+  await llmService.clearKVCache(true);
+}
+
+/** Stop the remote I/O boundary selected by Shared LLMService. */
+export async function stopMobileRemoteTextTransport(serverId: string): Promise<void> {
+  await remoteTextTransportRegistry.get(serverId)?.stopGeneration();
 }
 
 /** Shared generation receives the atomic residency lifecycle directly. */

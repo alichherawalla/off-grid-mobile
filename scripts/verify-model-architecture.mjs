@@ -91,7 +91,7 @@ for (const file of files) {
       ) {
         report('active-model-writes-use-canonical-selection-port', fileName, source, node, `call:${rawName}`)
       }
-      if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection)$/.test(rawName)) {
+      if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|completeText|completeTextWithTools|completeCappedText)$/.test(rawName)) {
         report('generation-callers-use-shared-service', fileName, source, node, `call:${rawName}`)
       }
       if (/^(chat|chatMessages|chatStream|streamChat)$/.test(rawName)) {
@@ -108,10 +108,21 @@ for (const file of files) {
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|chat|chatMessages|chatStream|streamChat)$/.test(node.name.getText(source)) &&
+      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|completeText|completeTextWithTools|completeCappedText|chat|chatMessages|chatStream|streamChat)$/.test(node.name.getText(source)) &&
       /^(src\/services\/(llm|litert)\.ts)$/.test(fileName)
     ) {
       report('no-route-owning-llm-api', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+    }
+
+    if (
+      (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
+      node.name && /^(ProviderRegistry|LLMProvider)$/.test(node.name.text)
+    ) {
+      report('no-parallel-provider-control-plane', fileName, source, node.name, `declaration:${node.name.text}`)
+    }
+
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && /^(providerRegistry|localProvider)$/.test(node.name.text)) {
+      report('no-parallel-provider-control-plane', fileName, source, node.name, `declaration:${node.name.text}`)
     }
 
     if (isAdapter && (ts.isIfStatement(node) || ts.isSwitchStatement(node) || ts.isConditionalExpression(node))) {

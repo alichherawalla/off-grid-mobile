@@ -1,86 +1,34 @@
-/**
- * Provider Registry
- *
- * Singleton registry that manages LLM providers and routes requests
- * to the correct provider based on provider ID.
- */
-
-import type { LLMProvider } from './types';
-import { localProvider } from './localProvider';
+import type { TextStreamTransport } from './types';
 import logger from '../../../utils/logger';
 
-class ProviderRegistry {
-  private providers: Map<string, LLMProvider> = new Map();
+/** I/O lookup only. Shared LLMService owns models, capabilities, selection, and routes. */
+class RemoteTextTransportRegistry {
+  private readonly transports = new Map<string, TextStreamTransport>();
 
-  constructor() {
-    // Register the local provider by default
-    this.registerProvider('local', localProvider);
+  register(serverId: string, transport: TextStreamTransport): void {
+    this.transports.set(serverId, transport);
+    logger.log('[RemoteTextTransportRegistry] Registered transport:', serverId);
   }
 
-  /**
-   * Register a new provider
-   */
-  registerProvider(id: string, provider: LLMProvider): void {
-    this.providers.set(id, provider);
-    logger.log('[ProviderRegistry] Registered provider:', id);
+  unregister(serverId: string): void {
+    this.transports.delete(serverId);
   }
 
-  /**
-   * Unregister a provider
-   */
-  unregisterProvider(id: string): void {
-    if (id === 'local') {
-      logger.warn('[ProviderRegistry] Cannot unregister local provider');
-      return;
-    }
-
-    this.providers.delete(id);
-    logger.log('[ProviderRegistry] Unregistered provider:', id);
-
+  get(serverId: string): TextStreamTransport | undefined {
+    return this.transports.get(serverId);
   }
 
-  /** Get a provider by its exact registered ID. */
-  getProvider(id: string): LLMProvider | undefined {
-    const provider = this.providers.get(id);
-    logger.log('[ProviderRegistry] getProvider:', id, 'found:', !!provider, 'providerIds:', this.getProviderIds());
-    return provider;
+  has(serverId: string): boolean {
+    return this.transports.has(serverId);
   }
 
-  /**
-   * Check if a provider exists
-   */
-  hasProvider(id: string): boolean {
-    return this.providers.has(id);
+  ids(): string[] {
+    return [...this.transports.keys()];
   }
 
-  /**
-   * Get all registered provider IDs
-   */
-  getProviderIds(): string[] {
-    return Array.from(this.providers.keys());
-  }
-
-  /**
-   * Clear all providers except local
-   */
   clear(): void {
-    // Keep only local provider
-    const localProv = this.providers.get('local');
-    this.providers.clear();
-    if (localProv) {
-      this.providers.set('local', localProv);
-    }
+    this.transports.clear();
   }
 }
 
-/** Singleton instance */
-export const providerRegistry = new ProviderRegistry();
-
-/**
- * Get provider for server ID
- *
- * Return only the provider registered for this exact remote server identity.
- */
-export function getProviderForServer(serverId: string): LLMProvider | undefined {
-  return providerRegistry.getProvider(serverId);
-}
+export const remoteTextTransportRegistry = new RemoteTextTransportRegistry();

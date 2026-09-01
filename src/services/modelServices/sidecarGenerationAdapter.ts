@@ -34,7 +34,7 @@ async function* classifierChunks(request: GenerationRequest): AsyncIterable<Gene
   const abort = () => llmService.stopGeneration().catch(() => undefined);
   request.signal?.addEventListener('abort', abort, { once: true });
   try {
-    await llmService.generateResponse([
+    await llmService.runNativeCompletion([
       { id: 'classify', role: 'user', content: prompt, timestamp: Date.now() },
     ], {
       disableThinking: true,

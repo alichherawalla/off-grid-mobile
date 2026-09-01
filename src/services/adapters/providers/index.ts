@@ -7,11 +7,8 @@
 // Types
 ;
 
-// Local provider
-export { localProvider } from './localProvider';
-
 // OpenAI-compatible provider
 ;
 
 // Registry
-export { providerRegistry } from './registry';
+export { remoteTextTransportRegistry } from './registry';

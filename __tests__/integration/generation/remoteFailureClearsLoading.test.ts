@@ -15,32 +15,25 @@
  */
 import { generationService } from '../../../src/services/generationService';
 import { generationSession } from '../../../src/services/generationSession';
-import { providerRegistry } from '../../../src/services/adapters/providers';
+import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { llmService } from '../../../src/services/llm';
 import { resetStores, setupWithConversation, flushPromises } from '../../utils/testHelpers';
 import { createMessage } from '../../utils/factories';
-import type { LLMProvider } from '../../../src/services/adapters/providers/types';
+import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
+import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 
-const SERVER_ID = 'remote-test-server';
-
-function makeFailingProvider(): LLMProvider {
+function makeFailingTransport(serverId: string): TextStreamTransport {
   return {
-    id: SERVER_ID,
-    type: 'remote' as any,
-    capabilities: { supportsThinking: false } as any,
-    loadModel: jest.fn(async () => {}),
-    unloadModel: jest.fn(async () => {}),
-    isModelLoaded: () => true,
-    getLoadedModelId: () => 'remote-model',
+    id: serverId,
+    type: 'openai-compatible',
     // The failure: the server rejects (HTTP 400).
     generate: jest.fn(async () => { throw new Error('HTTP 400: Bad Request'); }),
     stopGeneration: jest.fn(async () => {}),
-    getTokenCount: jest.fn(async () => 0),
     isReady: jest.fn(async () => true),
   };
 }
@@ -57,13 +50,24 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
   });
 
   afterEach(() => {
-    providerRegistry.unregisterProvider(SERVER_ID);
+    remoteTextTransportRegistry.clear();
     useRemoteServerStore.setState({ activeServerId: null } as any);
   });
 
   it('leaves isGenerating / isThinking / isStreaming / session all false after a remote error', async () => {
-    providerRegistry.registerProvider(SERVER_ID, makeFailingProvider());
-    useRemoteServerStore.setState({ activeServerId: SERVER_ID } as any);
+    const serverId = useRemoteServerStore.getState().addServer({
+      name: 'Failing server',
+      endpoint: 'http://remote.invalid',
+      provider: 'openai-compatible',
+    });
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+      id: 'remote-model', name: 'Remote model', serverId,
+      capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      lastUpdated: '2026-08-30T00:00:00.000Z',
+    }]);
+    remoteTextTransportRegistry.register(serverId, makeFailingTransport(serverId));
+    await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId: 'remote-model' });
+    await refreshMobileModelServices();
 
     const conversationId = setupWithConversation({ modelId: 'remote-model' });
     generationSession.begin(conversationId);

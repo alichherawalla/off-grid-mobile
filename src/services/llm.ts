@@ -271,7 +271,7 @@ class LLMService {
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-  async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean; reasoningWire?: ReasoningWireFragment }): Promise<string> {
+  async runNativeCompletion(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean; reasoningWire?: ReasoningWireFragment }): Promise<string> {
     const { onStream, onComplete, ...opts } = options ?? {};
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
@@ -311,7 +311,7 @@ class LLMService {
         if (content) fullContent += content;
         if (reasoningContent) fullReasoningContent += reasoningContent;
         onStream?.({ reasoningContent, content });
-      }), 'generateResponse');
+      }), 'runNativeCompletion');
       const cr = completionResult as any;
       // [WIRE] Full raw stream + final result, so we can build fixtures from real Gemma/Qwen wire format.
       logger.log(`[WIRE-LLAMA] ${JSON.stringify({ model: this.currentModelPath, stream: __wire, final: { content: cr?.content, text: cr?.text, reasoning_content: cr?.reasoning_content, tool_calls: cr?.tool_calls } })}`);
@@ -328,7 +328,7 @@ class LLMService {
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback; reasoningWire?: ReasoningWireFragment }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
+  async runNativeToolCompletion(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback; reasoningWire?: ReasoningWireFragment }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
     const settings = useAppStore.getState().settings;
     const fallbackWire = reasoningWireFragment(resolveReasoningPlan(
       { enabled: this.isThinkingEnabled(), budgetTokens: settings.reasoningBudget },
@@ -380,7 +380,7 @@ class LLMService {
     return messages.some(m => modelImageAttachments(m.attachments).length > 0);
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
-  async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+  async runNativeCappedCompletion(messages: Message[], maxTokens: number): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
@@ -393,22 +393,9 @@ class LLMService {
     const completionWork = safeCompletion(ctx, () => ctx.completion(
       { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
-    ), 'generateWithMaxTokens');
+    ), 'runNativeCappedCompletion');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
-  }
-  /** Ephemeral, tools-free routing pass for two-pass tool selection (not user-facing). */
-  async generateToolSelection(systemPrompt: string, userText: string): Promise<string> {
-    const messages: Message[] = [
-      { id: 'tool-select-sys', role: 'system', content: systemPrompt, timestamp: 0 },
-      { id: 'tool-select-user', role: 'user', content: userText, timestamp: 0 },
-    ];
-    try {
-      return await this.generateWithMaxTokens(messages, 64);
-    } finally {
-      // The router is not part of the chat. Remove its prompt and recurrent state.
-      await this.clearKVCache(true);
-    }
   }
   async stopGeneration(): Promise<void> {
     if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }

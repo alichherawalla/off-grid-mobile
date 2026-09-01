@@ -15,8 +15,7 @@ import {
 } from '../../types';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAppStore } from '../../stores/appStore';
-import { OpenAICompatibleProvider } from '../adapters/providers/openAICompatibleProvider';
-import { providerRegistry } from '../adapters/providers/registry';
+import { remoteTextTransportRegistry } from '../adapters/providers/registry';
 import { discoverLANServers, DiscoveredServer } from '../networkDiscovery';
 import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import logger from '../../utils/logger';
@@ -126,12 +125,12 @@ class RemoteServerManager {
     const { apiKey: _, ...storeUpdates } = updates;
     store.updateServer(id, storeUpdates);
 
-    const provider = providerRegistry.getProvider(id);
-    if (provider && 'updateConfig' in provider) {
+    const transport = remoteTextTransportRegistry.get(id);
+    if (transport?.updateConfig) {
       const apiKey = await this.getApiKey(id);
       const endpoint = updates.endpoint || existingServer.endpoint;
       const authorization = remoteAuthorizationHeaders(endpoint, apiKey);
-      (provider as OpenAICompatibleProvider).updateConfig({
+      transport.updateConfig({
         endpoint,
         apiKey: authorization.Authorization?.replace(/^Bearer /, ''),
       });
@@ -144,7 +143,7 @@ class RemoteServerManager {
    * Remove a server
    */
   async removeServer(id: string): Promise<void> {
-    providerRegistry.unregisterProvider(id);
+    remoteTextTransportRegistry.unregister(id);
     await this.removeApiKey(id);
     useRemoteServerStore.getState().removeServer(id);
     logger.log('[RemoteServerManager] Removed server:', id);
@@ -438,7 +437,7 @@ class RemoteServerManager {
     for (const server of this.getServers()) {
       await this.removeApiKey(server.id);
     }
-    providerRegistry.clear();
+    remoteTextTransportRegistry.clear();
     useRemoteServerStore.getState().clearAllServers();
   }
 

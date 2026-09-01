@@ -6,10 +6,9 @@ import * as Keychain from 'react-native-keychain';
 import type { RemoteServer } from '../../../types';
 import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import {
-  createOpenAIProvider,
-  OpenAICompatibleProvider,
+  createOpenAITransport,
 } from '../providers/openAICompatibleProvider';
-import { providerRegistry } from '../providers/registry';
+import { remoteTextTransportRegistry } from '../providers/registry';
 import logger from '../../../utils/logger';
 import {
   remoteAuthorizationHeaders,
@@ -88,10 +87,10 @@ export async function createProviderForServerImpl(
     !!apiKey,
   );
   const authorization = remoteAuthorizationHeaders(server.endpoint, apiKey);
-  const provider = createOpenAIProvider(server.id, server.endpoint, {
+  const transport = createOpenAITransport(server.id, server.endpoint, {
     apiKey: authorization.Authorization?.replace(/^Bearer /, ''),
   });
-  providerRegistry.registerProvider(server.id, provider);
+  remoteTextTransportRegistry.register(server.id, transport);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,20 +132,18 @@ export async function setActiveRemoteTextModelImpl(
     }
   }
 
-  let provider = providerRegistry.getProvider(serverId);
-  if (!provider) {
+  let transport = remoteTextTransportRegistry.get(serverId);
+  if (!transport) {
     logger.log(
       '[RemoteServerManager] Creating provider for server:',
       serverId,
       configuredServer.endpoint,
     );
     await createProviderForServerImpl(configuredServer);
-    provider = providerRegistry.getProvider(serverId);
+    transport = remoteTextTransportRegistry.get(serverId);
   }
 
-  if (provider) {
-    logger.log('[RemoteServerManager] Loading model on provider:', modelId);
-    await provider.loadModel(modelId);
+  if (transport) {
     // Apply the discovered capabilities. A record that says the model can do NOTHING is the shape a
     // failed probe leaves behind, and it is stored exactly like a real answer - so the thinking
     // toggle stayed hidden and the kwarg was never sent, for the life of the install, because of one
@@ -171,15 +168,9 @@ export async function setActiveRemoteTextModelImpl(
         );
       }
     }
-    if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
-      provider.updateCapabilities({
-        supportsVision: discoveredModel.capabilities.supportsVision,
-        supportsToolCalling: discoveredModel.capabilities.supportsToolCalling,
-        supportsThinking: discoveredModel.capabilities.supportsThinking,
-        acceptsThinkingKwarg: discoveredModel.capabilities.acceptsThinkingKwarg,
-      });
+    if (discoveredModel) {
       logger.log(
-        '[RemoteServerManager] Applied discovered capabilities for',
+        '[RemoteServerManager] Shared inventory owns discovered capabilities for',
         modelId,
         '— supportsVision:',
         discoveredModel.capabilities.supportsVision,
@@ -190,8 +181,8 @@ export async function setActiveRemoteTextModelImpl(
       );
     }
     logger.log(
-      '[RemoteServerManager] Provider ready:',
-      await provider.isReady(),
+      '[RemoteServerManager] Transport ready:',
+      await transport.isReady(),
     );
   } else {
     logger.warn(
@@ -225,28 +216,6 @@ export async function setActiveRemoteImageModelImpl(
   const store = useRemoteServerStore.getState();
   store.setActiveRemoteMediaServerId('image', serverId);
   store.setActiveRemoteImageModelId(modelId);
-
-  let provider = providerRegistry.getProvider(serverId);
-  if (!provider) {
-    const server = store.getServerById(serverId);
-    if (server) {
-      logger.log(
-        '[RemoteServerManager] Creating provider for server:',
-        serverId,
-      );
-      await createProviderForServerImpl(server);
-      provider = providerRegistry.getProvider(serverId);
-    }
-  }
-
-  if (provider) {
-    await provider.loadModel(modelId);
-  } else {
-    logger.warn(
-      '[RemoteServerManager] Could not create provider for server:',
-      serverId,
-    );
-  }
 
   logger.log(
     '[RemoteServerManager] Active remote image model set:',

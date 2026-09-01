@@ -912,7 +912,7 @@ describe('IntentClassifier', () => {
     test('should not call LLM when useLLM is false', async () => {
       await intentClassifier.classifyIntent('ambiguous message', { useLLM: false });
 
-      expect(mockLlmService.generateResponse).not.toHaveBeenCalled();
+      expect(mockLlmService.runNativeCompletion).not.toHaveBeenCalled();
     });
 
     test('should return text default when pattern is uncertain and LLM disabled', async () => {

@@ -115,35 +115,13 @@ export interface StreamCallbacks {
  * All LLM providers (local and remote) implement this interface.
  * The registry uses this to route generation requests to the correct provider.
  */
-export interface LLMProvider {
-  /** Unique provider identifier */
+export interface TextStreamTransport {
+  /** Exact external transport identity. It does not own model selection. */
   readonly id: string;
-  /** Provider type */
   readonly type: ProviderType;
-  /** Current capabilities */
-  readonly capabilities: ProviderCapabilities;
-
-  // Model Management
-
-  /** Load a model for generation */
-  loadModel(modelId: string): Promise<void>;
-
-  /** Unload the current model */
-  unloadModel(): Promise<void>;
-
-  /** Check if a model is currently loaded */
-  isModelLoaded(): boolean;
-
-  /** Get the ID of the currently loaded model (if any) */
-  getLoadedModelId(): string | null;
-
-  // Generation
-
-  /**
-   * Generate a response for the given messages.
-   * Streaming callbacks are used for real-time updates.
-   */
+  updateConfig?(config: { endpoint?: string; apiKey?: string }): void;
   generate(
+    modelId: string,
     messages: Message[],
     options: GenerationOptions,
     callbacks: StreamCallbacks
@@ -156,9 +134,6 @@ export interface LLMProvider {
   stopGeneration(): Promise<void>;
 
   // Utility
-
-  /** Get token count for text (approximate for remote providers) */
-  getTokenCount(text: string): Promise<number>;
 
   /** Check if the provider is ready for generation */
   isReady(): Promise<boolean>;

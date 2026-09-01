@@ -3,16 +3,13 @@ import {
   type SelectableToolSchema,
   type ToolSelectionGenerate,
 } from '@offgrid/models';
-import { liteRTService } from './litert';
-
 export type ToolSelectGenerate = ToolSelectionGenerate;
 
-/** Mobile supplies the LiteRT generation boundary. Shared owns prompt and parsing policy. */
+/** Shared owns prompt and parsing policy; the caller supplies the shared generation use case. */
 export function selectRelevantTools(
   userText: string,
   tools: SelectableToolSchema[],
-  generate: ToolSelectGenerate = (system, user) =>
-    liteRTService.generateToolSelection(system, user),
+  generate: ToolSelectGenerate,
 ): Promise<string[] | null> {
   return selectRelevantToolsWithModel(userText, tools, generate);
 }

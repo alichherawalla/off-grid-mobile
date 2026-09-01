@@ -111,7 +111,7 @@ describe('image-gen phase state machine — ordered transitions (cases 17, 18, 2
     mockActive.selectedTextModelId.mockReturnValue('text-1');
     // Text model loads on demand then reports loaded.
     mockLlm.isModelLoaded.mockReturnValueOnce(false).mockReturnValue(true);
-    mockLlm.generateResponse.mockResolvedValue('an enhanced red apple, studio lighting');
+    mockLlm.runNativeCompletion.mockResolvedValue('an enhanced red apple, studio lighting');
 
     const { phases, stop } = trackPhases();
     await imageGenerationService.generateImage({ prompt: 'a red apple' });
