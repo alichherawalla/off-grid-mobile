@@ -12,6 +12,7 @@
 
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../harness/activeModelLifecycle';
+import { resolveTextResidentSpec } from '../../../src/services/modelServices/modelLifecycleBootstrap';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
@@ -180,23 +181,20 @@ describe('ActiveModelService Integration', () => {
     });
 
     it('budgets a LiteRT text model as dirty memory and a GGUF as clean (F9)', async () => {
-      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor');
-      mockLlmService.isModelLoaded.mockReturnValue(true);
-
       // LiteRT weights + KV are dirty/accelerator memory -> must budget against REAL
       // free RAM (dirtyMemory:true), or the native engine can OOM on a "fits" verdict.
       const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
       useAppStore.setState({ downloadedModels: [litert] });
-      await activeModelService.loadTextModel('litert-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'text', dirtyMemory: true }), expect.anything());
+      await expect(resolveTextResidentSpec('litert-1')).resolves.toEqual(
+        expect.objectContaining({ type: 'text', dirtyMemory: true }),
+      );
 
       // GGUF/llama is clean mmap -> physical-cap budgeting unchanged (dirtyMemory:false).
-      spy.mockClear();
       const gguf = createDownloadedModel({ id: 'gguf-1', engine: 'llama' as any });
       useAppStore.setState({ downloadedModels: [gguf] });
-      await activeModelService.loadTextModel('gguf-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'text', dirtyMemory: false }), expect.anything());
-      spy.mockRestore();
+      await expect(resolveTextResidentSpec('gguf-1')).resolves.toEqual(
+        expect.objectContaining({ type: 'text', dirtyMemory: false }),
+      );
     });
 
     it('unloads a resident LiteRT model (latent bug: unload was llama-only, so LiteRT never freed)', async () => {
