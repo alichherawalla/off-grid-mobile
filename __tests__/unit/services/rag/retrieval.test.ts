@@ -156,26 +156,26 @@ describe('RetrievalService', () => {
   });
 
   describe('estimateCharBudget', () => {
-    it('reserves 25% of context window', () => {
-      expect(retrievalService.estimateCharBudget(2048)).toBe(2048);
+    it('uses the shared 40% token-window budget', () => {
+      expect(retrievalService.estimateCharBudget(2048)).toBe(3276);
     });
 
     it('scales with context length', () => {
-      expect(retrievalService.estimateCharBudget(4096)).toBe(4096);
+      expect(retrievalService.estimateCharBudget(4096)).toBe(6553);
     });
   });
 
   describe('searchWithBudget', () => {
-    it('truncates results that exceed budget', async () => {
+    it('keeps the top result and truncates later results that exceed budget', async () => {
       mockGetEmbeddings.mockReturnValue([]);
-      const longContent = 'x'.repeat(3000);
+      const longContent = 'x'.repeat(4000);
       mockGetChunks.mockReturnValue([
         { doc_id: 1, name: 'a.txt', content: longContent, position: 0, score: 0 },
         { doc_id: 2, name: 'b.txt', content: 'short', position: 0, score: 0 },
       ]);
 
       const result = await retrievalService.searchWithBudget({ projectId: 'proj1', query: 'query', contextLength: 2048 });
-      expect(result.chunks).toHaveLength(0);
+      expect(result.chunks).toHaveLength(1);
       expect(result.truncated).toBe(true);
     });
 
