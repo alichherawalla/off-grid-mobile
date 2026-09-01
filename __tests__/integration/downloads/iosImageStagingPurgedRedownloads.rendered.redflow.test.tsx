@@ -27,6 +27,7 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
     const { makeImageModelKey } = require('../../../src/utils/modelKey');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
     const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
+    const { modelDownloadRegistry } = require('../../../src/services/modelServices/downloadRegistryBootstrap');
     // The download service has no providers until the app registers them at startup — without this
     // modelDownloadService.retry() finds no owning provider and silently refuses (status stays failed).
     registerCoreDownloadProviders();
@@ -80,5 +81,10 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
     expect(view.queryByTestId('failed-retry-button')).toBeNull();
     const rows = boundary.download!.active();
     expect(rows.some(r => r.modelId === `image:${modelId}` || r.fileName === fileName)).toBe(true);
+
+    // The registry uses a short self-refresh timer while a screen is subscribed.
+    // Dispose this isolated test registry before Jest removes its React Native module graph.
+    view.unmount();
+    modelDownloadRegistry.dispose();
   });
 });

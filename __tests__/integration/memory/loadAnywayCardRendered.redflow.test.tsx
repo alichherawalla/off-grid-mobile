@@ -79,6 +79,9 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     expect(h.view!.queryByText(/it needs ~/)).not.toBeNull();
     expect(h.view!.queryByText(/Failed to load model/)).toBeNull();
 
+    // This settings root owns an asynchronous hardware refresh. Unmount it before
+    // Jest tears down the native-boundary module graph.
+    toggle.unmount();
     stopSync();
   }, 30000);
 });
