@@ -27,6 +27,7 @@ import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { hardwareService } from '../../../src/services/hardware';
 import { isOverridableMemoryError } from '../../../src/services/modelLoadErrors';
+import { isResidentType } from '../../harness/modelResidency';
 import { resetStores, getAppState } from '../../utils/testHelpers';
 import { createDownloadedModel, createONNXImageModel, createDeviceInfo } from '../../utils/factories';
 
@@ -180,9 +181,9 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
 
     expect(mockLlmService.loadModel).toHaveBeenCalled();
     expect(getAppState().activeModelId).toBe('txt');
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
     // The image model was evicted to make room (evict-then-measure).
-    expect(modelResidencyManager.isResident('image')).toBe(false);
+    expect(isResidentType(modelResidencyManager, 'image')).toBe(false);
     expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
   });
 
@@ -205,7 +206,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     // The load actually happened — same outcome as Home.
     expect(mockLlmService.loadModel).toHaveBeenCalled();
     expect(getAppState().activeModelId).toBe('txt');
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
     // And it was NOT blocked by a hard "Insufficient Memory" gate before loading.
     const blocked = deps.setAlertState.mock.calls.find(
       (c: any) => c[0]?.title === 'Insufficient Memory',
@@ -229,7 +230,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     await activeModelService.loadTextModel('too-big').catch((e: unknown) => { caught = e; });
     expect(isOverridableMemoryError(caught)).toBe(true);
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(modelResidencyManager.isResident('text')).toBe(false);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
   });
 
   /**

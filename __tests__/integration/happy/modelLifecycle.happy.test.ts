@@ -11,6 +11,7 @@
  */
 import { installNativeBoundary, GB, requireRTL } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
+import { isResidentType } from '../../harness/modelResidency';
 
 describe('happy — model lifecycle (load / unload / delete)', () => {
   it('loads a text model (resident + ready), unloads it, and deletes it from the library', async () => {
@@ -32,12 +33,12 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     // Load — becomes ready + resident.
     await activeModelService.loadTextModel('llm');
     expect(isModelReady(model)).toBe(true);
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
 
     // Unload — no longer ready/resident.
     await activeModelService.unloadTextModel();
     expect(isModelReady(model)).toBe(false);
-    expect(modelResidencyManager.isResident('text')).toBe(false);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
 
     // Delete — removed from the library.
     useAppStore.getState().removeDownloadedModel('llm');
