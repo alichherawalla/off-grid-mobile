@@ -140,6 +140,45 @@ for (const file of files) {
   }
 
   if (
+    fileName === 'src/screens/ModelsScreen/useTextModels.ts' &&
+    /(?:modelDownloadProjection|cancelBackgroundDownload|deleteModel\s*\(|mobileResidencyIntents)/.test(text)
+  ) {
+    report(
+      'model-library-command-is-shared',
+      fileName,
+      source,
+      source,
+      'screen-owned cancellation, deletion, projection, or runtime ordering',
+    )
+  }
+
+  if (
+    fileName === 'src/screens/ModelsScreen/useImageModels.ts' &&
+    /(?:resumeImageDownload|modelDownloadProjection|resumingDownloadKeysRef)/.test(text)
+  ) {
+    report(
+      'image-download-recovery-is-shared',
+      fileName,
+      source,
+      source,
+      'screen-owned recovery admission, projection, or de-duplication',
+    )
+  }
+
+  if (
+    /^src\/services\/adapters\/downloads\/(?:text|image)DownloadAdapter\.ts$/.test(fileName) &&
+    /(?:modelLibrary\.(?:deleteModel|deleteImageModel)|removeDownloaded(?:Image)?Model|unload(?:Text|Image)Model)/.test(text)
+  ) {
+    report(
+      'model-library-command-is-shared',
+      fileName,
+      source,
+      source,
+      'provider-owned package deletion, projection cleanup, or runtime ordering',
+    )
+  }
+
+  if (
     fileName === 'pro/audio/ttsStore.ts' &&
     /\b(?:ttsRegistry|modelResidencyManager|withVoiceSwitchTimeout|completedVoiceAssets|engine\.(?:setVoice|initialize|release|downloadAssets|deleteAssets|generateAndSave))\b/.test(text)
   ) {
