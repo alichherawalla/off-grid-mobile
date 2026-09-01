@@ -28,7 +28,7 @@ import {
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { createPeerEntitlement } from '../../harness/peerEntitlement';
 import { createKeygenFake } from '../../harness/keygenFake';
-import { transferredImageManifest } from '../../../src/services/modelManager/imageTransfer';
+import { transferredImageManifest } from '@offgrid/models';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
