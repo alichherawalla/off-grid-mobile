@@ -12,6 +12,12 @@ export { activeModelService } from './activeModelService';
 export type { ResourceUsage } from './activeModelService/types';
 export { generationService } from './generationService';
 export type { QueuedMessage } from './generationService';
+export {
+  mobileLLMService,
+  refreshMobileModelServices,
+  startMobileModelServices,
+  stopMobileModelServices,
+} from './modelServices';
 export { imageGenerationService } from './imageGenerationService';
 export type { ImageGenerationState } from './imageGenerationService';
 export { documentService } from './documentService';

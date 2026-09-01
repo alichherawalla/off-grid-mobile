@@ -27,6 +27,11 @@ import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { startLoadPolicySync } from './src/services/loadPolicySync';
+import {
+  refreshMobileModelServices,
+  startMobileModelServices,
+  stopMobileModelServices,
+} from './src/services/modelServices';
 import { startNetworkReconnectWatcher, stopNetworkReconnectWatcher } from './src/services/networkReconnect';
 import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
 import { useDownloadListeners } from './src/hooks/useDownloads';
@@ -273,6 +278,8 @@ function App() {
       // so getServers() / activeServerId reads see persisted data.
       logger.log('[BOOT] remote server hydrate');
       await ensureRemoteServerStoreHydrated();
+      startMobileModelServices();
+      await refreshMobileModelServices();
 
       // Initialize remote server providers in the background — don't block
       // the home screen while fetching models from potentially unreachable servers.
@@ -282,6 +289,7 @@ function App() {
           logger.error('[App] Failed to initialize remote server providers:', err);
         })
         .finally(() => {
+          refreshMobileModelServices().catch(err => logger.error('[App] Model refresh failed:', err));
           if (generation !== startupGeneration.current) return;
           // Recovery and provider initialization both update the registry and remote-server store.
           // Start recovery only after initialization releases those owners. A failed initialization
@@ -347,6 +355,7 @@ function App() {
     return () => {
       startupGeneration.current += 1;
       stopNetworkReconnectWatcher();
+      stopMobileModelServices();
     };
   }, [initializeApp]);
 
