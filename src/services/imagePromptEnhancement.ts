@@ -1,7 +1,7 @@
 import { PROMPT_ENHANCEMENT_STATUS } from '@offgrid/sync';
 import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';
-import { loadTextModel as admitTextModel } from './modelServices/modelLifecycleBootstrap';
+import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { selectedTextModelId } from './modelServices/modelState';
 import {
   getActiveEngineService,
@@ -62,7 +62,7 @@ async function loadTextModel(
   setState('Loading text model to enhance prompt...');
   let loadError: unknown = null;
   try {
-    await admitTextModel(textModelId);
+    await mobileResidencyIntents.ensureText(textModelId);
   } catch (error) {
     loadError = error;
     logger.warn('[ImageGen] Failed to load text model for enhancement:', error);

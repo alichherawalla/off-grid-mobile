@@ -10,8 +10,8 @@ import {
   hardwareService,
   huggingFaceService,
   modelLibrary,
-  unloadTextModel,
 } from '../../services';
+import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { startModelDownload } from '../../services/startModelDownload';
 import { ramFitScore } from '../../utils/recommendedModels';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
@@ -258,7 +258,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const handleDeleteModel = async (modelId: string) => {
     const model = downloadedModels.find(m => m.id === modelId);
     if (!model) return;
-    if (activeModelId === model.id) await unloadTextModel().catch(() => {});
+    if (activeModelId === model.id) await mobileResidencyIntents.unloadText().catch(() => {});
     await modelLibrary.deleteModel(model.id);
     removeDownloadedModel(model.id);
   };

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Vibration } from 'react-native';
 import { cleanTranscription } from '@offgrid/models';
-import { whisperService } from '../services/whisperService';
+import { mobileTranscriptionRuntime } from '../services/modelServices/transcriptionRuntimePort';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
 import {
@@ -78,8 +78,8 @@ export const useWhisperTranscription = ({
   useEffect(
     () => () => {
       cancelMobileTranscription();
-      if (whisperService.isCurrentlyTranscribing()) {
-        void whisperService.forceReset();
+      if (mobileTranscriptionRuntime.isTranscribing()) {
+        void mobileTranscriptionRuntime.forceReset();
       }
     },
     [],
@@ -170,18 +170,18 @@ export const useWhisperTranscription = ({
       // Check if cancelled or unmounted during the wait
       if (isCancelled.current || !mountedRef.current) {
         logger.log('[Whisper] Cancelled/unmounted during trailing capture');
-        await whisperService.forceReset();
+        await mobileTranscriptionRuntime.forceReset();
         return;
       }
 
       // Now actually stop the transcription
-      await whisperService.stopTranscription();
+      await mobileTranscriptionRuntime.stopTranscription();
       // Haptic feedback
       if (mountedRef.current) Vibration.vibrate(30);
     } catch (err) {
       logger.error('[Whisper] Stop error:', err);
       // Force reset on error
-      await whisperService.forceReset();
+      await mobileTranscriptionRuntime.forceReset();
       // On error, also clear transcribing state (only if still mounted)
       if (mountedRef.current) {
         setIsTranscribing(false);
@@ -201,8 +201,8 @@ export const useWhisperTranscription = ({
     transcribingStartTime.current = null;
     cancelMobileTranscription();
     // Also ensure recording is stopped
-    if (whisperService.isCurrentlyTranscribing()) {
-      whisperService.stopTranscription();
+    if (mobileTranscriptionRuntime.isTranscribing()) {
+      mobileTranscriptionRuntime.stopTranscription();
     }
   }, []);
 
@@ -315,7 +315,7 @@ export const useWhisperTranscription = ({
     } catch (err) {
       logger.error('[Whisper] Recording error:', err);
       // Force reset whisper service state
-      await whisperService.forceReset();
+      await mobileTranscriptionRuntime.forceReset();
       if (mountedRef.current) {
         const errorMsg =
           err instanceof Error ? err.message : 'Failed to start recording';
@@ -336,7 +336,7 @@ export const useWhisperTranscription = ({
 
   const startRecording = useCallback(async () => {
     logger.log('[Whisper] startRecording called');
-    logger.log('[Whisper] Model loaded:', whisperService.isModelLoaded());
+    logger.log('[Whisper] Model loaded:', mobileTranscriptionRuntime.isModelLoaded());
     logger.log('[Whisper] Current isRecording state:', isRecording);
 
     // Already recording → absorb the redundant press. Previously this stopped and
@@ -346,7 +346,7 @@ export const useWhisperTranscription = ({
     if (
       startInFlight.current ||
       isRecording ||
-      whisperService.isCurrentlyTranscribing()
+      mobileTranscriptionRuntime.isTranscribing()
     ) {
       logger.log(
         '[Whisper] Already recording — ignoring redundant start (no second session)',
@@ -366,7 +366,7 @@ export const useWhisperTranscription = ({
 
   return {
     isRecording,
-    isModelLoaded: isModelLoaded || whisperService.isModelLoaded(),
+    isModelLoaded: isModelLoaded || mobileTranscriptionRuntime.isModelLoaded(),
     isModelLoading,
     isStartingRecording,
     isTranscribing,

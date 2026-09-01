@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useAppStore } from '../stores';
-import { localDreamGeneratorService } from '../services/localDreamGenerator';
+import { mobileImageRuntime } from '../services/modelServices/imageRuntimePort';
 import { useActiveMobileModel } from './useActiveMobileModel';
 
 export function useClearGpuCache() {
@@ -19,7 +19,7 @@ export function useClearGpuCache() {
     }
     setClearing(true);
     try {
-      const cleared = await localDreamGeneratorService.clearOpenCLCache(activeModel.modelPath);
+      const cleared = await mobileImageRuntime.clearGpuCache(activeModel.modelPath);
       Alert.alert('Cache Cleared', `Removed ${cleared} GPU cache file(s). Next generation will retune GPU kernels (first run may be slower).`);
     } catch (e: any) {
       Alert.alert('Error', `Failed to clear GPU cache: ${e?.message || 'Unknown error'}`);

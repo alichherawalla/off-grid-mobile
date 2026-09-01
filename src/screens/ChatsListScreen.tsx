@@ -20,14 +20,11 @@ import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import {
   llmService,
-  loadImageModel,
-  loadTextModel,
   onnxImageGeneratorService,
   clearMobileModel,
   selectMobileModel,
-  unloadImageModel,
-  unloadTextModel,
 } from '../services';
+import { mobileResidencyIntents } from '../services/modelServices/residencyIntents';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
@@ -81,7 +78,7 @@ export const ChatsListScreen: React.FC = () => {
           modality: 'text',
           modelId: model.id,
         });
-        await loadTextModel(model.id, undefined, opts);
+        await mobileResidencyIntents.ensureText(model.id, undefined, opts);
       },
       {
         setAlertState,
@@ -101,7 +98,7 @@ export const ChatsListScreen: React.FC = () => {
           modality: 'image',
           modelId: model.id,
         });
-        await loadImageModel(model.id, undefined, opts);
+        await mobileResidencyIntents.ensureImage(model.id, undefined, opts);
       },
       {
         setAlertState,
@@ -116,7 +113,7 @@ export const ChatsListScreen: React.FC = () => {
     setIsModelLoading(true);
     try {
       if (llmService.isModelLoaded()) {
-        await unloadTextModel();
+        await mobileResidencyIntents.unloadText();
       }
       await clearMobileModel('text');
     } finally {
@@ -127,7 +124,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadImageModel = async () => {
     setIsModelLoading(true);
     try {
-      await unloadImageModel();
+      await mobileResidencyIntents.unloadImage();
       await clearMobileModel('image');
     } finally {
       setIsModelLoading(false);

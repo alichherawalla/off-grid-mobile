@@ -9,21 +9,6 @@ const debt = (rule, file, detail, owner, reason, removeWhen) => ({
   removeWhen,
 })
 
-const uiEngineDebt = [
-  ['src/components/ChatInput/Voice.ts', 'import:../../services/whisperService'],
-  ['src/components/models/WhisperPickerSheet.tsx', 'import:../../services/whisperService'],
-  ['src/hooks/useImageGenerationSettings.ts', 'import:../services/localDreamGenerator'],
-  ['src/hooks/useWhisperTranscription.ts', 'import:../services/whisperService'],
-  ['src/screens/ChatScreen/mobileChatSession.ts', 'import:../../services/imageGenerationService'],
-].map(([file, detail]) => debt(
-  'ui-does-not-import-raw-model-engine',
-  file,
-  detail,
-  'mobile-model-consumers',
-  'This presentation caller still imports a concrete runtime service.',
-  'A thin projection or intent port replaces the concrete service import.',
-))
-
 const generationCallDebt = [
   ['src/services/adapters/providers/localProvider.ts', 'call:generateResponse'],
   ['src/services/adapters/providers/localProvider.ts', 'call:generateResponseWithTools'],
@@ -70,34 +55,7 @@ const providerPolicyDebt = [
   'Shared route/capability policy supplies the decision and the adapter only performs I/O.',
 ))
 
-const legacyResidencyDebt = [
-  ['src/components/ChatInput/Voice.ts', 'import:unloadAllModels'],
-  ['src/screens/ChatScreen/reloadTextModel.ts', 'import:unloadTextModel'],
-  ['src/services/imageGenerationService.ts', 'import:ejectAllModels'],
-  ['src/services/imageGenerationService.ts', 'import:loadImageModel'],
-  ['src/services/imagePromptEnhancement.ts', 'import:loadTextModel'],
-  ['src/services/index.ts', 'export:ejectAllModels'],
-  ['src/services/index.ts', 'export:loadImageModel'],
-  ['src/services/index.ts', 'export:loadTextModel'],
-  ['src/services/index.ts', 'export:unloadAllModels'],
-  ['src/services/index.ts', 'export:unloadImageModel'],
-  ['src/services/index.ts', 'export:unloadTextModel'],
-  ['src/services/loadPolicySync.ts', 'import:ejectAllModels'],
-  ['src/services/modelPreloader.ts', 'import:loadTextModel'],
-  ['src/stores/whisperStore.ts', 'import:loadTranscriptionModel'],
-  ['src/stores/whisperStore.ts', 'import:unloadTranscriptionModel'],
-].map(([file, detail]) => debt(
-  'deprecated-residency-api-outside-model-port',
-  file,
-  detail,
-  'mobile-residency-consumers',
-  'This app module still controls native model residency through the legacy lifecycle bootstrap.',
-  'The caller dispatches a canonical residency intent and only a modelServices port touches the runtime.',
-))
-
 export const temporaryModelArchitectureAllowlist = [
-  ...uiEngineDebt,
-  ...legacyResidencyDebt,
   ...generationCallDebt,
   ...rawApiDebt,
   ...providerPolicyDebt,

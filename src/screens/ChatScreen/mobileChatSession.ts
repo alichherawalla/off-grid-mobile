@@ -17,7 +17,7 @@ import {
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationService } from '../../services/generationService';
-import { imageGenerationService } from '../../services/imageGenerationService';
+import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import { contextCompactionService } from '../../services/contextCompaction';
 import { ragService, retrievalService } from '../../services';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
@@ -194,10 +194,10 @@ async function generateForSession(
   const identity = request.identity;
   if (!identity?.conversationId) throw new Error('Image generation requires a conversation identity');
   await refreshMobileModelServices();
-  const abort = () => { imageGenerationService.cancelGeneration().catch(() => undefined); };
+  const abort = () => { mobileImageChatGeneration.cancel().catch(() => undefined); };
   request.signal?.addEventListener('abort', abort, { once: true });
   try {
-    const generated = await imageGenerationService.generateImage({
+    const generated = await mobileImageChatGeneration.generate({
       prompt: request.operation.prompt,
       routeId: request.routeId,
       negativePrompt: request.operation.negativePrompt,

@@ -7,7 +7,7 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { WHISPER_MODELS } from '../../services/whisperService';
+import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
@@ -61,7 +61,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
           onSelect={onClose}
         />
         <Text style={styles.sectionLabel}>On-device models</Text>
-        {WHISPER_MODELS.map(m => {
+        {mobileTranscriptionRuntime.models.map(m => {
           const active = downloadedModelId === m.id;
           const present = presentModelIds.includes(m.id);
           // Per-model in-flight state from the shared owner: this row's own progress, disabled only

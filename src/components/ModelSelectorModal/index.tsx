@@ -16,13 +16,11 @@ import {
 } from '../../types';
 import {
   clearMobileModel,
-  loadImageModel,
   resolveSelectedTextModel,
   remoteServerModelOptions,
   selectMobileModel,
-  unloadImageModel,
-  unloadTextModel,
 } from '../../services';
+import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
   CustomAlert,
@@ -205,7 +203,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     // Shared inline Load-Anyway flow so a memory-blocked image load offers the
     // override here too, instead of a dead-end "Failed to Load".
     await loadModelWithOverride(
-      opts => loadImageModel(model.id, undefined, opts),
+      opts => mobileResidencyIntents.ensureImage(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => {
@@ -228,7 +226,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const handleUnloadImageModel = async () => {
     setIsLoadingImage(true);
     try {
-      await unloadImageModel();
+      await mobileResidencyIntents.unloadImage();
       await clearMobileModel('image');
       onUnloadImageModel?.();
     } catch (error) {
@@ -245,7 +243,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     try {
       // Always go through the owner. It also waits for an in-flight local load,
       // which is not yet visible as a loaded native model.
-      await unloadTextModel();
+      await mobileResidencyIntents.unloadText();
       await selectMobileModel({
         source: 'remote',
         hostId: serverId,

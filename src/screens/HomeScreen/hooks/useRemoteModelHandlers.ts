@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
 import {
-  unloadTextModel,
   clearMobileModel,
   selectMobileModel,
 } from '../../../services';
+import { mobileResidencyIntents } from '../../../services/modelServices/residencyIntents';
 import { RemoteModel } from '../../../types';
 import { LoadingState } from './types';
 import logger from '../../../utils/logger';
@@ -34,7 +34,7 @@ export function useRemoteModelHandlers({
     try {
       // Unload any active local model first — only one active model at a time
       if (activeModelId) {
-        await unloadTextModel();
+        await mobileResidencyIntents.unloadText();
       }
         await selectMobileModel({
           source: 'remote',

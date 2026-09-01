@@ -1,5 +1,5 @@
 import { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
-import { ejectAllModels, loadImageModel } from './modelServices/modelLifecycleBootstrap';
+import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { useAppStore } from '../stores';
 import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
@@ -125,7 +125,7 @@ class ImageGenerationService {
     const onRetry = this._lastParams
       ? async () => {
           if (memoryPressure)
-            await ejectAllModels().catch(() => {});
+            await mobileResidencyIntents.ejectAll().catch(() => {});
           await this.generateImage(this._lastParams as GenerateImageParams);
         }
       : undefined;
@@ -202,7 +202,7 @@ class ImageGenerationService {
         phase: 'loading',
         status: `Loading ${activeImageModel.name}...`,
       });
-      await loadImageModel(
+      await mobileResidencyIntents.ensureImage(
         activeImageModelId,
         undefined,
         opts.override ? { override: true } : undefined,

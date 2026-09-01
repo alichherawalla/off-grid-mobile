@@ -11,13 +11,8 @@
  * sequentially (one native load at a time) so the UI stays responsive.
  */
 import { useAppStore, useWhisperStore } from '../stores';
-import {
-  loadTextModel,
-  resolveTextResidentSpec,
-  resolveTranscriptionResidentSpec,
-} from './modelServices/modelLifecycleBootstrap';
+import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { getActiveModels, selectedTextModelId } from './modelServices/modelState';
-import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { generationService } from './generationService';
 import { imageGenerationService } from './imageGenerationService';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
@@ -50,9 +45,8 @@ async function preloadText(): Promise<void> {
   if (!id || getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
-  const spec = await resolveTextResidentSpec(id);
-  if (!modelResidencyManager.canLoadWithoutEviction(spec)) return;
-  await loadTextModel(id);
+  if (!(await mobileResidencyIntents.canPreloadText(id))) return;
+  await mobileResidencyIntents.ensureText(id);
 }
 
 async function preloadTts(): Promise<void> {
@@ -65,8 +59,7 @@ async function preloadTts(): Promise<void> {
 async function preloadStt(): Promise<void> {
   const whisper = useWhisperStore.getState();
   if (!whisper.downloadedModelId || whisper.isModelLoaded) return;
-  const spec = resolveTranscriptionResidentSpec(whisper.downloadedModelId);
-  if (!modelResidencyManager.canLoadWithoutEviction(spec)) return;
+  if (!mobileResidencyIntents.canPreloadTranscription(whisper.downloadedModelId)) return;
   await whisper.loadModel();
 }
 

@@ -14,8 +14,7 @@
  *    reactive store snapshot.
  */
 import { useAppStore } from '../stores';
-import { modelResidencyManager } from './modelServices/residencyBootstrap';
-import { ejectAllModels } from './modelServices/modelLifecycleBootstrap';
+import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { LoadPolicy } from './memoryBudget';
 import { loadPolicyFromSettings } from '@offgrid/models';
 
@@ -46,14 +45,14 @@ export function startLoadPolicySync(): () => void {
     if (policy === last) return;
     const isInitialSeed = last === undefined;
     last = policy;
-    modelResidencyManager.setLoadPolicy(policy);
+    mobileResidencyIntents.setLoadPolicy(policy);
     // On a USER change of the loading mode (not the boot seed), eject EVERY resident so the new
     // policy takes effect immediately — each selected model lazily reloads on next use under the
     // new mode. setLoadPolicy only governs FUTURE loads, so without this, switching to Lean with
     // several models already resident left them all in memory until the next load (device 2026-07-14).
     // ejectAll keeps the selections (rows still show the chosen models); it only frees RAM.
     if (!isInitialSeed) {
-      void ejectAllModels().catch(() => { /* eviction is best-effort; next load re-enforces */ });
+      void mobileResidencyIntents.ejectAll().catch(() => { /* eviction is best-effort; next load re-enforces */ });
     }
   };
   // Seed from the (already hydrated) current value.

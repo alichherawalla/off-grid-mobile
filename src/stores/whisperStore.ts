@@ -1,12 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { whisperService } from '../services/whisperService';
 import {
-  loadTranscriptionModel,
-  unloadTranscriptionModel,
-  type TranscriptionLoadResult,
-} from '../services/modelServices/modelLifecycleBootstrap';
+  mobileTranscriptionRuntime,
+  type MobileTranscriptionLoadResult,
+} from '../services/modelServices/transcriptionRuntimePort';
 import {
   clearMobileModel,
   refreshMobileModelServices,
@@ -25,7 +23,7 @@ import {
  *                models", which is safe for the in-flight case too (the running load
  *                resolves on its own).
  */
-export type WhisperLoadResult = TranscriptionLoadResult;
+export type WhisperLoadResult = MobileTranscriptionLoadResult;
 
 interface WhisperState {
   // Active (selected) model ID
@@ -95,16 +93,16 @@ export const useWhisperStore = create<WhisperState>()(
         set({ error: null });
 
         try {
-          await whisperService.downloadModel(modelId, (progress) => {
+          await mobileTranscriptionRuntime.download(modelId, (progress) => {
             setProgress(set, modelId, progress);
           });
 
-          const downloadedPath = whisperService.getModelPath(modelId);
+          const downloadedPath = mobileTranscriptionRuntime.modelPath(modelId);
           set((s) => ({
             downloadedModelId: modelId,
             // Download selects the model but does not load it. If a different
             // context is resident, do not project that old context as ready.
-            isModelLoaded: whisperService.getLoadedModelPath() === downloadedPath,
+            isModelLoaded: mobileTranscriptionRuntime.loadedModelPath() === downloadedPath,
             presentModelIds: s.presentModelIds.includes(modelId) ? s.presentModelIds : [...s.presentModelIds, modelId],
           }));
 
@@ -137,14 +135,14 @@ export const useWhisperStore = create<WhisperState>()(
 
         // Prevent multiple simultaneous load attempts
         if (isModelLoading) {
-          const selectedPath = whisperService.getModelPath(downloadedModelId);
-          return whisperService.getLoadedModelPath() === selectedPath ? 'loaded' : 'error';
+          const selectedPath = mobileTranscriptionRuntime.modelPath(downloadedModelId);
+          return mobileTranscriptionRuntime.loadedModelPath() === selectedPath ? 'loaded' : 'error';
         }
 
         set({ isModelLoading: true, error: null });
 
         try {
-          const result = await loadTranscriptionModel(downloadedModelId, {
+          const result = await mobileTranscriptionRuntime.ensureLoaded(downloadedModelId, {
             onLoaded: () => set({ isModelLoaded: true, error: null }),
             onUnloaded: () => set({ isModelLoaded: false }),
           });
@@ -171,7 +169,7 @@ export const useWhisperStore = create<WhisperState>()(
 
       unloadModel: async () => {
         try {
-          await unloadTranscriptionModel(get().downloadedModelId, {
+          await mobileTranscriptionRuntime.unload(get().downloadedModelId, {
             onUnloaded: () => set({ isModelLoaded: false }),
           });
           set({ isModelLoaded: false });
@@ -187,11 +185,11 @@ export const useWhisperStore = create<WhisperState>()(
         if (!downloadedModelId) return;
 
         try {
-          await unloadTranscriptionModel(downloadedModelId, {
+          await mobileTranscriptionRuntime.unload(downloadedModelId, {
             onUnloaded: () => set({ isModelLoaded: false }),
           });
           // Then delete
-          await whisperService.deleteModel(downloadedModelId);
+          await mobileTranscriptionRuntime.delete(downloadedModelId);
           await clearMobileModel('transcription');
           set({
             downloadedModelId: null,
@@ -205,8 +203,8 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       selectModel: async (modelId: string) => {
-        const modelPath = whisperService.getModelPath(modelId);
-        const selectedModelIsLoaded = whisperService.getLoadedModelPath() === modelPath;
+        const modelPath = mobileTranscriptionRuntime.modelPath(modelId);
+        const selectedModelIsLoaded = mobileTranscriptionRuntime.loadedModelPath() === modelPath;
         if (get().downloadedModelId === modelId && selectedModelIsLoaded) {
           set({ isModelLoaded: true, error: null });
           return;
@@ -224,11 +222,11 @@ export const useWhisperStore = create<WhisperState>()(
       deleteModelById: async (modelId: string) => {
         try {
           if (get().downloadedModelId === modelId) {
-            await unloadTranscriptionModel(modelId, {
+            await mobileTranscriptionRuntime.unload(modelId, {
               onUnloaded: () => set({ isModelLoaded: false }),
             });
           }
-          await whisperService.deleteModel(modelId);
+          await mobileTranscriptionRuntime.delete(modelId);
           if (get().downloadedModelId === modelId) {
             await clearMobileModel('transcription');
           }
@@ -242,7 +240,7 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       refreshPresentModels: async () => {
-        const present = (await whisperService.listDownloadedModels())
+        const present = (await mobileTranscriptionRuntime.listDownloaded())
           .map(model => model.modelId);
         // Reconcile the active pointer against disk too. Deleting from the
         // Download Manager goes through whisperService directly (bypassing this
@@ -250,7 +248,7 @@ export const useWhisperStore = create<WhisperState>()(
         // which left the Home banner showing a deleted model. Check the active
         // model's own file (works for custom HF ids, not just the catalogue).
         const activeId = get().downloadedModelId;
-        const activeOnDisk = activeId ? await whisperService.isModelDownloaded(activeId) : true;
+        const activeOnDisk = activeId ? await mobileTranscriptionRuntime.isDownloaded(activeId) : true;
         set({
           presentModelIds: present,
           ...(activeId && !activeOnDisk ? { downloadedModelId: null, isModelLoaded: false } : {}),

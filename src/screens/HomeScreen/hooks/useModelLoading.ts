@@ -2,10 +2,9 @@ import { useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { showAlert, AlertState } from '../../../components';
 import {
-  unloadImageModel,
-  unloadTextModel,
   selectMobileModel,
 } from '../../../services';
+import { mobileResidencyIntents } from '../../../services/modelServices/residencyIntents';
 import { DownloadedModel, ONNXImageModel } from '../../../types';
 import { LoadingState, ModelPickerType } from './types';
 
@@ -50,7 +49,7 @@ export const useModelLoading = ({
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     await waitForOverlay();
     try {
-      await unloadTextModel();
+      await mobileResidencyIntents.unloadText();
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
@@ -76,7 +75,7 @@ export const useModelLoading = ({
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     await waitForOverlay();
     try {
-      await unloadImageModel();
+      await mobileResidencyIntents.unloadImage();
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {

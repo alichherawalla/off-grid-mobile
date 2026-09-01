@@ -8,14 +8,6 @@ export { authService } from './authService';
 export { whisperService, WHISPER_MODELS } from './whisperService';
 export { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 export {
-  ejectAllModels,
-  loadImageModel,
-  loadTextModel,
-  unloadAllModels,
-  unloadImageModel,
-  unloadTextModel,
-} from './modelServices/modelLifecycleBootstrap';
-export {
   getActiveModels,
   getResourceUsage,
   resolveSelectedTextModel,

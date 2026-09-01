@@ -7,11 +7,10 @@ import {
 import {
   getActiveModels,
   llmService,
-  loadTextModel,
   modelLibrary,
   selectedTextModelId,
-  unloadTextModel,
 } from '../../services';
+import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { selectMobileModel } from '../../services/modelServices';
 import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
@@ -97,7 +96,7 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return;
   try {
-    await loadTextModel(activeModelId, undefined, opts);
+    await mobileResidencyIntents.ensureText(activeModelId, undefined, opts);
     deps.setSupportsVision(loadedModelVision(activeModel));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
@@ -137,7 +136,7 @@ export async function initiateModelLoad(
   }
 
   try {
-    await loadTextModel(activeModelId);
+    await mobileResidencyIntents.ensureText(activeModelId);
     deps.setSupportsVision(loadedModelVision(activeModel));
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
@@ -214,7 +213,7 @@ export async function ensureTextModelForChatFn(deps: {
   );
   deps.setIsModelLoading(true);
   try {
-    await loadTextModel(modelId);
+    await mobileResidencyIntents.ensureText(modelId);
     return true;
   } catch {
     return false;
@@ -260,7 +259,7 @@ export async function proceedWithModelLoadFn(
   // is the authoritative gate, and its OverridableMemoryError drives the identical
   // "Load Anyway" affordance every other surface (Home/ChatsList/ModelSelector) uses.
   await loadModelWithOverride(
-    (opts) => loadTextModel(model.id, undefined, opts),
+    (opts) => mobileResidencyIntents.ensureText(model.id, undefined, opts),
     {
       setAlertState: deps.setAlertState,
       onAttemptStart: () => {
@@ -324,7 +323,7 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
   deps.setIsModelLoading(true);
   deps.setLoadingModel(activeModel ?? null);
   try {
-    await unloadTextModel();
+    await mobileResidencyIntents.unloadText();
     deps.setSupportsVision(false);
     if (deps.settings.showGenerationDetails && modelName) {
       addSystemMsg(deps, `Model unloaded: ${modelName}`);
@@ -377,7 +376,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
         if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
           try {
-            if (!cancelled) await loadTextModel(settings.classifierModelId);
+            if (!cancelled) await mobileResidencyIntents.ensureText(settings.classifierModelId);
           }
           catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
         }
