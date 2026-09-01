@@ -358,6 +358,14 @@ The following strict architecture gaps remain and prevent a **Verified** verdict
     transaction, timeout policy, and typed outcomes belong in a Shared MCP application service so
     Mobile remote MCP and Desktop MCP cannot drift.
 
+Remediation priority for the numbered findings:
+
+| Severity | Findings | Reason |
+|---|---|---|
+| P0 blocker | 6, 10-12, 21, 23, 26-27 | These paths can select, load, route, restore, or report a different model outside one canonical application transaction. |
+| P1 high | 1-5, 7-9, 13-20, 22, 28-32 | These paths duplicate policy, defaults, budgets, model-library commands, tools, RAG, sync, MCP, or UI orchestration. |
+| P2 cleanup | 24-25 | These Shared public and internal seams weaken SRP and allow future bypasses, but the current normal paths can still use the canonical facades. |
+
 Focused Desktop route/UI evidence passed 10 of 11 tests. The only failure is a stale expectation in
 `ModelsScreen.computer-use.integration.test.tsx:90`: the current UI offers `< 1B`, while the test
 still asks for `Tiny (<2B)`. The rendered output itself confirms that Holo is on Computer Use and is
