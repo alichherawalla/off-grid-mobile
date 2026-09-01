@@ -15,7 +15,11 @@ import { buildDownloadedModel, persistDownloadedModel } from './modelRegistrySto
 import logger from '../../../../utils/logger';
 import { useDownloadStore } from '../../../../stores/downloadStore';
 import { makeModelKey } from '../../../../utils/modelKey';
-import { modelProjectorLocalName } from '@offgrid/models';
+import {
+  combinedArtifactProgress,
+  modelProjectorLocalName,
+  planTextDownload,
+} from '@offgrid/models';
 
 /**
  * The on-disk projector name for a model — QUANT-INDEPENDENT (built from extractBaseName = name+variant,
@@ -136,20 +140,26 @@ export interface PerformBackgroundDownloadOpts {
 
 export async function performBackgroundDownload(opts: PerformBackgroundDownloadOpts): Promise<BackgroundDownloadInfo> {
   const { modelId, file, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
-  const localPath = `${modelsDir}/${file.name}`;
-  const mmProjLocalPath = file.mmProjFile
+  const expectedProjectorPath = file.mmProjFile
     ? `${modelsDir}/${mmProjLocalName(file.name, file.mmProjFile?.name)}`
     : null;
 
-  const mainExists = await RNFS.exists(localPath);
-  const mmProjExists = await checkMmProjExists(mmProjLocalPath, file.mmProjFile?.size);
+  const mainExists = await RNFS.exists(`${modelsDir}/${file.name}`);
+  const mmProjExists = await checkMmProjExists(expectedProjectorPath, file.mmProjFile?.size);
+  const plan = planTextDownload({
+    modelId, file, modelsDir, projectorExists: mmProjExists,
+    fallbackUrl: huggingFaceService.getDownloadUrl(modelId, file.name),
+  });
 
   if (mainExists && mmProjExists) {
-    return handleAlreadyDownloaded({ modelId, file, localPath, mmProjLocalPath, backgroundDownloadContext });
+    return handleAlreadyDownloaded({
+      modelId, file, localPath: plan.localPath,
+      mmProjLocalPath: plan.projectorPath, backgroundDownloadContext,
+    });
   }
 
   return startBgDownload({
-    modelId, file, localPath, mmProjLocalPath, mmProjExists,
+    modelId, file, localPath: plan.localPath, mmProjLocalPath: plan.projectorPath, mmProjExists,
     modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress,
   });
 }
@@ -206,23 +216,20 @@ interface StartBgDownloadOpts {
 }
 
 async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDownloadInfo> {
-  const { modelId, file, localPath, mmProjLocalPath, mmProjExists, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
+  const { modelId, file, localPath, mmProjLocalPath, mmProjExists, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onProgress } = opts;
 
   const mmProjSize = file.mmProjFile?.size || 0;
-  const combinedTotalBytes = file.size + mmProjSize;
-  const downloadUrl = file.downloadUrl || huggingFaceService.getDownloadUrl(modelId, file.name);
+  const plan = planTextDownload({
+    modelId, file, modelsDir, projectorExists: mmProjExists,
+    fallbackUrl: huggingFaceService.getDownloadUrl(modelId, file.name),
+  });
+  const combinedTotalBytes = plan.combinedTotalBytes;
+  const downloadUrl = plan.downloadUrl;
   const author = modelId.split('/')[0] || 'Unknown';
   const modelKey = makeModelKey(modelId, file.name);
 
-  const needsMmProj = !!(file.mmProjFile && mmProjLocalPath && !mmProjExists);
-  const skipSizeValidation = modelId.startsWith('offgrid/');
-  const metadataObj: Record<string, unknown> = {};
-  if (needsMmProj) {
-    metadataObj.mmProjFileName = mmProjLocalName(file.name, file.mmProjFile?.name);
-    metadataObj.mmProjDownloadUrl = file.mmProjFile?.downloadUrl;
-  }
-  if (skipSizeValidation) metadataObj.skipSizeValidation = true;
-  const metadataJson = Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : undefined;
+  const needsMmProj = plan.needsProjector;
+  const metadataJson = plan.metadataJson;
 
   // Start the mmproj sidecar BEFORE the main, so the MAIN is the last download started
   // before we return and the caller attaches watchDownload. Otherwise, under the 3-cap,
@@ -366,7 +373,13 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
   };
 
   const reportProgress = () => {
-    const combinedDownloaded = mainBytesDownloaded + mmProjBytesDownloaded;
+    const combined = combinedArtifactProgress({
+      primaryBytes: mainBytesDownloaded,
+      primaryTotal: file.size,
+      projectorBytes: mmProjBytesDownloaded,
+      projectorTotal: mmProjSize,
+    });
+    const combinedDownloaded = combined.bytesDownloaded;
     lastMainMilestone = maybeLogMilestone('main', mainBytesDownloaded, file.size, lastMainMilestone);
     if (needsMmProj && mmProjSize > 0) {
       lastMmProjMilestone = maybeLogMilestone('mmproj', mmProjBytesDownloaded, mmProjSize, lastMmProjMilestone);
@@ -409,7 +422,7 @@ async function startBgDownload(opts: StartBgDownloadOpts): Promise<BackgroundDow
       downloadId: downloadInfo.downloadId,
       modelId, fileName: file.name, bytesDownloaded: combinedDownloaded,
       totalBytes: combinedTotalBytes,
-      progress: combinedTotalBytes > 0 ? combinedDownloaded / combinedTotalBytes : 0,
+      progress: combined.progress,
     });
   };
 

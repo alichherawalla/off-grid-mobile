@@ -3,6 +3,7 @@ import { unzip } from 'react-native-zip-archive';
 import { ONNXImageModel, PersistedDownloadInfo } from '../../../../types';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
 import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
+import { isRecoverableImageDownload as hasRecoverableImageDownload } from '@offgrid/models';
 
 interface SyncCompletedImageDownloadsOpts {
   imageModelsDir: string;
@@ -13,7 +14,7 @@ interface SyncCompletedImageDownloadsOpts {
 }
 
 function isRecoverableImageDownload(metadata: PersistedDownloadInfo | undefined): metadata is PersistedDownloadInfo {
-  return !!metadata && metadata.modelId.startsWith('image:') && !!metadata.imageDownloadType;
+  return hasRecoverableImageDownload(metadata);
 }
 
 function buildRecoveredImageModel(

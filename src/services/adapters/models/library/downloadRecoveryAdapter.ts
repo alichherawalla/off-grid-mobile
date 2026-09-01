@@ -7,6 +7,7 @@ import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../../../t
 import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
 import { buildDownloadedModel, persistDownloadedModel } from './modelRegistryStorageAdapter';
 import { sizeToBytes } from '../../../../utils/fileSize';
+import { isProjectorTransferRunning } from '@offgrid/models';
 
 export async function getOrphanedTextFiles(
   modelsDir: string,
@@ -106,15 +107,6 @@ async function resolveMmProjPath(metadata: PersistedDownloadInfo): Promise<strin
 }
 
 /** Check whether a parallel mmproj download is still in progress. */
-function isMmProjStillRunning(
-  metadata: PersistedDownloadInfo,
-  activeDownloads: Array<{ downloadId: string; status: string }>,
-): boolean {
-  if (!metadata.mmProjDownloadId) return false;
-  const mmProjDl = activeDownloads.find(d => d.downloadId === metadata.mmProjDownloadId);
-  return !!mmProjDl && mmProjDl.status !== 'completed' && mmProjDl.status !== 'failed';
-}
-
 async function processCompletedDownload(
   downloadId: string, metadata: PersistedDownloadInfo, modelsDir: string,
 ): Promise<DownloadedModel> {
@@ -172,7 +164,7 @@ export async function syncCompletedBackgroundDownloads(opts: SyncDownloadsOpts):
     if (metadata.modelId.startsWith('image:') || metadata.modelId.startsWith('whisper-')) continue;
 
     if (download.status === 'completed') {
-      if (isMmProjStillRunning(metadata, activeDownloads)) continue;
+      if (isProjectorTransferRunning(metadata.mmProjDownloadId, activeDownloads)) continue;
       try {
         const model = await processCompletedDownload(download.downloadId, metadata, modelsDir);
         completedModels.push(model);

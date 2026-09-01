@@ -9,6 +9,7 @@ import {
 import logger from '../../../../utils/logger';
 import { mmProjLocalName } from './downloadArtifactAdapter';
 import { isMmProjFileName } from '../../../downloadHydration';
+import { isRestorableDownload } from '@offgrid/models';
 
 export interface RestoreDownloadsOpts {
   modelsDir: string;
@@ -25,7 +26,11 @@ type RestorableDownloadInfo = BackgroundDownloadInfo & {
 };
 
 function isRestorable(download: BackgroundDownloadInfo): boolean {
-  return download.status === 'running' || download.status === 'pending' || download.status === 'completed';
+  return isRestorableDownload(
+    download.status,
+    Boolean(download.modelId),
+    Boolean(download.fileName),
+  );
 }
 
 async function resolveMmProjState(
