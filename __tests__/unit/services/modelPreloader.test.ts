@@ -12,7 +12,7 @@ jest.mock('../../../src/stores', () => ({
 const mockLoadText = jest.fn((..._a: any[]) => Promise.resolve());
 const mockLoadImage = jest.fn((..._a: any[]) => Promise.resolve());
 const mockGetActiveModels = jest.fn(() => ({ text: { isLoaded: false }, image: { isLoaded: false } }));
-jest.mock('../../../src/services/activeModelService', () => ({
+jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),

@@ -11,7 +11,8 @@
  * sequentially (one native load at a time) so the UI stays responsive.
  */
 import { useAppStore, useWhisperStore } from '../stores';
-import { activeModelService } from './activeModelService';
+import { loadTextModel } from './modelServices/modelLifecycleBootstrap';
+import { getActiveModels, selectedTextModelId } from './modelServices/modelState';
 import { estimateTextModelMemoryMB } from './modelMemory';
 import { WHISPER_MODELS } from './whisperService';
 import { modelResidencyManager } from './modelServices/residencyBootstrap';
@@ -43,13 +44,13 @@ function isGenerationActive(): boolean {
 async function preloadText(): Promise<void> {
   const { downloadedModels } = useAppStore.getState();
   // Same owner, same answer as chat and image generation.
-  const id = activeModelService.selectedTextModelId();
-  if (!id || activeModelService.getActiveModels().text.isLoaded) return;
+  const id = selectedTextModelId();
+  if (!id || getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
   const sizeMB = await estimateTextModelMemoryMB(model, useAppStore.getState().settings);
   if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
-  await activeModelService.loadTextModel(id);
+  await loadTextModel(id);
 }
 
 async function preloadTts(): Promise<void> {

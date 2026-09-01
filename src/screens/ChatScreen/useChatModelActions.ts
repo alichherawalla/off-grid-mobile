@@ -4,7 +4,15 @@ import {
   showAlert,
   hideAlert,
 } from '../../components';
-import { llmService, activeModelService, modelManager, generationService } from '../../services';
+import {
+  generationService,
+  getActiveModels,
+  llmService,
+  loadTextModel,
+  modelManager,
+  selectedTextModelId,
+  unloadTextModel,
+} from '../../services';
 import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
@@ -88,7 +96,7 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return;
   try {
-    await activeModelService.loadTextModel(activeModelId, undefined, opts);
+    await loadTextModel(activeModelId, undefined, opts);
     deps.setSupportsVision(loadedModelVision(activeModel));
     if (deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
@@ -128,7 +136,7 @@ export async function initiateModelLoad(
   }
 
   try {
-    await activeModelService.loadTextModel(activeModelId);
+    await loadTextModel(activeModelId);
     deps.setSupportsVision(loadedModelVision(activeModel));
     if (!alreadyLoading && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
       const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
@@ -195,7 +203,7 @@ export async function ensureTextModelForChatFn(deps: {
 }): Promise<boolean> {
   // The SELECTION first, remembered choice second - from the service, which owns that order. Reading
   // lastTextModelId alone loaded the previously-picked model and left the selected one on screen.
-  const modelId = activeModelService.selectedTextModelId();
+  const modelId = selectedTextModelId();
   if (!modelId) {
     deps.setShowModelSelector(true);
     return false;
@@ -205,7 +213,7 @@ export async function ensureTextModelForChatFn(deps: {
   );
   deps.setIsModelLoading(true);
   try {
-    await activeModelService.loadTextModel(modelId);
+    await loadTextModel(modelId);
     return true;
   } catch {
     return false;
@@ -232,7 +240,7 @@ export async function ensureModelLoadedFn(
     return { ok: true };
   }
   deps.setSupportsVision(loadedModelVision(activeModel)); // LiteRT: known from the flag pre-load
-  const outcome = await initiateModelLoad(deps, activeModelService.getActiveModels().text.isLoading, onLoadedResume);
+  const outcome = await initiateModelLoad(deps, getActiveModels().text.isLoading, onLoadedResume);
   if (!outcome.ok) return outcome;
   // Post-verify against native truth — catches a load that reported ok but left no resident model.
   return isModelReady(activeModel)
@@ -251,7 +259,7 @@ export async function proceedWithModelLoadFn(
   // is the authoritative gate, and its OverridableMemoryError drives the identical
   // "Load Anyway" affordance every other surface (Home/ChatsList/ModelSelector) uses.
   await loadModelWithOverride(
-    (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
+    (opts) => loadTextModel(model.id, undefined, opts),
     {
       setAlertState: deps.setAlertState,
       onAttemptStart: () => {
@@ -312,7 +320,7 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
   deps.setIsModelLoading(true);
   deps.setLoadingModel(activeModel ?? null);
   try {
-    await activeModelService.unloadTextModel();
+    await unloadTextModel();
     deps.setSupportsVision(false);
     if (deps.settings.showGenerationDetails && modelName) {
       addSystemMsg(deps, `Model unloaded: ${modelName}`);
@@ -365,7 +373,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
         const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
         if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
           try {
-            if (!cancelled) await activeModelService.loadTextModel(settings.classifierModelId);
+            if (!cancelled) await loadTextModel(settings.classifierModelId);
           }
           catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
         }

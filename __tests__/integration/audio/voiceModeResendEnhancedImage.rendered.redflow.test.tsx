@@ -31,7 +31,7 @@ describe('T062 (voice + enhancement) — resend of an enhanced image request re-
 
     await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     await activeModelService.loadImageModel('sd');
     // Enable prompt enhancement — the setting that ran on the device before the failing resend.
     h.useAppStore.getState().updateSettings({ enhanceImagePrompts: true });

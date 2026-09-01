@@ -38,7 +38,7 @@ jest.mock('../../../src/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
 import { useAppStore } from '../../../src/stores';

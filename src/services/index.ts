@@ -7,8 +7,25 @@ export { intentClassifier } from './intentClassifier';
 export { authService } from './authService';
 export { whisperService, WHISPER_MODELS } from './whisperService';
 export { backgroundDownloadService } from './backgroundDownloadService';
-export { activeModelService } from './activeModelService';
-export type { ResourceUsage } from './activeModelService/types';
+export {
+  ejectAllModels,
+  loadImageModel,
+  loadTextModel,
+  unloadAllModels,
+  unloadImageModel,
+  unloadTextModel,
+} from './modelServices/modelLifecycleBootstrap';
+export {
+  getActiveModels,
+  getResourceUsage,
+  resolveSelectedTextModel,
+  selectedTextModelId,
+  selectTextModel,
+  subscribeToModelState,
+  supportsAudioInput,
+  syncWithNativeState,
+} from './modelServices/modelState';
+export type { ResourceUsage } from './modelServices/modelStateTypes';
 export { generationService } from './generationService';
 export type { QueuedMessage } from './generationService';
 export {

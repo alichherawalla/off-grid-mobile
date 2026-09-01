@@ -21,7 +21,7 @@
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';

@@ -2,12 +2,10 @@ import { initLlama, LlamaContext } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../../utils/logger';
-import { modelResidencyManager } from '../modelServices/residencyBootstrap';
 
 export const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
 const EMBEDDING_DIMENSION = 384;
 const EMBEDDING_CTX_SIZE = 512;
-const EMBEDDING_RESIDENT_KEY = 'embedding';
 /** Approx resident footprint: ~25MB Q8 weights + working set + 512-ctx KV. */
 export const EMBEDDING_RESIDENT_MB = 90;
 /** Bound the native init so a stalled load can't hold the global load lock. */
@@ -52,9 +50,8 @@ class EmbeddingService {
   private async doLoad(): Promise<void> {
     const modelPath = await this.ensureModelCopied();
     logger.log('[Embedding] Loading embedding model...');
-    this.context = await modelResidencyManager.runExclusive('load:embedding', async () => {
-      const context = await withTimeout(
-        initLlama({
+    this.context = await withTimeout(
+      initLlama({
           model: modelPath,
           embedding: true,
           n_gpu_layers: 0,
@@ -63,19 +60,13 @@ class EmbeddingService {
           n_threads: 2,
           use_mlock: false,
           use_mmap: true,
-        } as any),
-        {
-          ms: EMBEDDING_LOAD_TIMEOUT_MS,
-          message: 'Embedding model load timed out',
-          onOrphan: (orphan) => { (orphan as LlamaContext)?.release?.().catch(() => {}); },
-        },
-      );
-      modelResidencyManager.register(
-        { key: EMBEDDING_RESIDENT_KEY, type: 'embedding', sizeMB: EMBEDDING_RESIDENT_MB },
-        () => this.unload(),
-      );
-      return context;
-    });
+      } as any),
+      {
+        ms: EMBEDDING_LOAD_TIMEOUT_MS,
+        message: 'Embedding model load timed out',
+        onOrphan: (orphan) => { (orphan as LlamaContext)?.release?.().catch(() => {}); },
+      },
+    );
     logger.log('[Embedding] Model loaded successfully');
   }
 
@@ -129,7 +120,6 @@ class EmbeddingService {
         logger.warn('[Embedding] Error releasing context (bridge may be torn down):', e);
       }
       this.context = null;
-      modelResidencyManager.release(EMBEDDING_RESIDENT_KEY);
       logger.log('[Embedding] Model unloaded');
     }
   }

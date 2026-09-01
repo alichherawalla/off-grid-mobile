@@ -31,7 +31,7 @@ describe('Home picker fit hint — owned budget, not instantaneous free RAM (DR3
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { ModelPickerSheet } = require('../../../src/screens/HomeScreen/components/ModelPickerSheet');
      
 

@@ -1,4 +1,4 @@
-import type { ActiveModelInfo } from '../services/activeModelService/types';
+import type { ActiveModelInfo } from '../services/modelServices/modelStateTypes';
 import { mobileTextModelRecord } from '../services/modelServices';
 import { useAppStore } from '../stores/appStore';
 import { useActiveMobileModel } from './useActiveMobileModel';

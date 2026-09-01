@@ -21,7 +21,7 @@ describe('load failure clears the active model (rendered) — device 2026-07-14'
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' }); // model 'm' loaded, active
      
     const React = require('react');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { llmService } = require('../../../src/services/llm');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
      

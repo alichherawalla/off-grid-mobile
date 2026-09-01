@@ -1,5 +1,5 @@
 import { hideAlert, showAlert, type AlertState } from '../../components';
-import { activeModelService } from '../../services/activeModelService';
+import { unloadTextModel } from '../../services/modelServices/modelLifecycleBootstrap';
 import logger from '../../utils/logger';
 import { initiateModelLoad } from './useChatModelActions';
 
@@ -39,7 +39,7 @@ export async function reloadTextModel({
   }
   logger.log('[ModelReload] reloading the active text model');
   try {
-    await activeModelService.unloadTextModel(true);
+    await unloadTextModel(true);
     const outcome = await initiateModelLoad(modelDeps, false);
     const reason = outcome.ok ? '' : ` reason=${outcome.reason}`;
     logger.log(`[ModelReload] finished ok=${outcome.ok}${reason}`);

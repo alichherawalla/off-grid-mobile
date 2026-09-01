@@ -1,7 +1,8 @@
 import { PROMPT_ENHANCEMENT_STATUS } from '@offgrid/sync';
 import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';
-import { activeModelService } from './activeModelService';
+import { loadTextModel as admitTextModel } from './modelServices/modelLifecycleBootstrap';
+import { selectedTextModelId } from './modelServices/modelState';
 import {
   generateStandalone,
   getActiveEngineService,
@@ -52,7 +53,7 @@ function finishEnhancementMessage(input: {
 async function loadTextModel(
   setState: EnhancementStateWriter,
 ): Promise<boolean> {
-  const textModelId = activeModelService.selectedTextModelId();
+  const textModelId = selectedTextModelId();
   if (!textModelId) {
     logger.warn('[ImageGen] No text model available, skipping enhancement');
     reportEnhancementSkipped('no text model is selected');
@@ -61,7 +62,7 @@ async function loadTextModel(
   setState('Loading text model to enhance prompt...');
   let loadError: unknown = null;
   try {
-    await activeModelService.loadTextModel(textModelId);
+    await admitTextModel(textModelId);
   } catch (error) {
     loadError = error;
     logger.warn('[ImageGen] Failed to load text model for enhancement:', error);

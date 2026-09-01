@@ -8,7 +8,10 @@ import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
-import { activeModelService } from '../activeModelService';
+import {
+  resolveSelectedTextModel,
+  subscribeToModelState,
+} from './modelState';
 import { mobileInventoryAdapters } from './inventoryAdapters';
 import {
   mobileRouteFacts,
@@ -90,7 +93,7 @@ export function startMobileModelServices(): () => void {
     cleanups.push(useAppStore.subscribe(refresh));
     cleanups.push(useRemoteServerStore.subscribe(refresh));
     cleanups.push(useWhisperStore.subscribe(refresh));
-    cleanups.push(activeModelService.subscribe(refresh));
+    cleanups.push(subscribeToModelState(refresh));
     refreshMobileModelServices().catch(() => undefined);
   }
   return stopMobileModelServices;
@@ -130,7 +133,7 @@ export function mobileTextModelRecord(
   if (identity.source === 'local') {
     return useAppStore.getState().downloadedModels.find(
       candidate => candidate.id === identity.modelId && candidate.engine === identity.hostId,
-    ) ?? activeModelService.resolveSelectedTextModel();
+    ) ?? resolveSelectedTextModel();
   }
   return useRemoteServerStore.getState().discoveredModels[identity.hostId]?.find(
     candidate => candidate.id === identity.modelId,

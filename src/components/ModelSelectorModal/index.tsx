@@ -15,10 +15,13 @@ import {
   RemoteServer,
 } from '../../types';
 import {
-  activeModelService,
   clearMobileModel,
+  loadImageModel,
+  resolveSelectedTextModel,
   remoteServerModelOptions,
   selectMobileModel,
+  unloadImageModel,
+  unloadTextModel,
 } from '../../services';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
@@ -108,10 +111,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // (the loaded path) is null and the switcher would show "Available Models" with
   // nothing marked active. Fall back to the SELECTED model so the user can see and
   // switch their active model before it's loaded.
-  // Resolved by the owning service (activeModelService), so a selected id whose entry was rebuilt
+  // Resolved by the shared state projection, so a selected id whose entry was rebuilt
   // under a different id still marks its row instead of leaving the sheet looking empty.
   const selectedModelPath =
-    activeModelService.resolveSelectedTextModel()?.filePath ?? null;
+    resolveSelectedTextModel()?.filePath ?? null;
   const { servers, discoveredModels, serverHealth } = useRemoteServerStore();
   const activeTextRoute = useActiveMobileModel('text').model;
   const activeImageRoute = useActiveMobileModel('image').model;
@@ -195,7 +198,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     // Shared inline Load-Anyway flow so a memory-blocked image load offers the
     // override here too, instead of a dead-end "Failed to Load".
     await loadModelWithOverride(
-      opts => activeModelService.loadImageModel(model.id, undefined, opts),
+      opts => loadImageModel(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => {
@@ -218,7 +221,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const handleUnloadImageModel = async () => {
     setIsLoadingImage(true);
     try {
-      await activeModelService.unloadImageModel();
+      await unloadImageModel();
       await clearMobileModel('image');
       onUnloadImageModel?.();
     } catch (error) {
@@ -235,7 +238,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     try {
       // Always go through the owner. It also waits for an in-flight local load,
       // which is not yet visible as a loaded native model.
-      await activeModelService.unloadTextModel();
+      await unloadTextModel();
       await selectMobileModel({
         source: 'remote',
         hostId: serverId,

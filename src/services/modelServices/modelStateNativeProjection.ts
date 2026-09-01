@@ -7,7 +7,7 @@ import { hardwareService } from '../hardware';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
-import { ResourceUsage } from './types';
+import { ResourceUsage } from './modelStateTypes';
 
 export async function getResourceUsage(): Promise<ResourceUsage> {
   const info = await hardwareService.refreshMemoryInfo();

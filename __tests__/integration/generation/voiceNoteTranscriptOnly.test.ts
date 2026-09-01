@@ -16,7 +16,7 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { generationService } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import {
   resetStores,
   setupWithConversation,
@@ -27,7 +27,7 @@ import type { MediaAttachment, Message } from '../../../src/types';
 
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/litert');
-jest.mock('../../../src/services/activeModelService');
+jest.mock('../../harness/activeModelLifecycle');
 
 const mockLlm = llmService as jest.Mocked<typeof llmService>;
 const mockLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;

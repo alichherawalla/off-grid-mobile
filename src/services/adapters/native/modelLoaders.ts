@@ -1,26 +1,25 @@
 /**
- * Low-level load/unload helpers for ActiveModelService.
- * Extracted to keep index.ts under the max-lines limit.
+ * Raw React Native model-engine loaders. Admission policy is owned by the
+ * shared ModelResidencyManager before these functions run.
  */
 
 import { Platform, ToastAndroid } from 'react-native';
-import { useAppStore } from '../../stores';
-import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../types';
-import { llmService } from '../llm';
-import { liteRTService } from '../litert';
-import { unloadAllTextEngines } from '../engines';
-import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
-import { modelManager } from '../modelManager';
-import { hardwareService } from '../hardware';
-import { modelResidencyManager } from '../modelServices/residencyBootstrap';
-import logger from '../../utils/logger';
+import { useAppStore } from '../../../stores';
+import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../../types';
+import { llmService } from '../../llm';
+import { liteRTService } from '../../litert';
+import { unloadAllTextEngines } from '../../engines';
+import { localDreamGeneratorService as onnxImageGeneratorService } from '../../localDreamGenerator';
+import { modelManager } from '../../modelManager';
+import { hardwareService } from '../../hardware';
+import logger from '../../../utils/logger';
 import RNFS from 'react-native-fs';
 import {
   canKeepMmProjLink,
   isMMProjFile,
   pickMmProjForModel,
-} from '../mmproj';
-import { sizeToBytes } from '../../utils/fileSize';
+} from '../../mmproj';
+import { sizeToBytes } from '../../../utils/fileSize';
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
@@ -322,10 +321,10 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
  * refusal — whether it is overridable ("Load Anyway"). Extracted from ActiveModelService
  * to keep index.ts under the max-lines limit; behavior is unchanged.
  */
-export async function checkImageModelCanLoad(
-  modelId: string,
+export async function checkImageHardwareSupport(
+  _modelId: string,
   model: ONNXImageModel,
-  opts?: { override?: boolean },
+  _opts?: { override?: boolean },
 ): Promise<{ canLoad: boolean; error?: string; overridable?: boolean }> {
   if (model.backend === 'qnn') {
     const socInfo = await hardwareService.getSoCInfo();
@@ -337,27 +336,6 @@ export async function checkImageModelCanLoad(
           'NPU models require a Qualcomm Snapdragon processor. Your device does not have a compatible NPU. Please use a GPU model instead.',
       };
     }
-  }
-  // Residency manager is authoritative for memory: evict others to fit the budget
-  // before loading. If it can't fit even after eviction, block — unless "Load Anyway".
-  const { fits } = await modelResidencyManager.makeRoomFor(
-    {
-      key: 'image',
-      type: 'image',
-      modelId: model.id,
-      sizeMB: Math.round((hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024)),
-      // CoreML/ONNX image weights are dirty (jetsam-counted) memory → gate on real free RAM.
-      dirtyMemory: true,
-    },
-    { override: opts?.override },
-  );
-  if (!fits) {
-    // Refusal UNDER override = survival floor (hard limit) → non-overridable, so the
-    // UI stops re-offering "Load Anyway" as a no-op that re-runs the same failing load.
-    const overridable = !opts?.override;
-    return { canLoad: false, overridable, error: overridable
-      ? `Not enough memory to load ${model.name}. Free up space or choose a smaller model.`
-      : `Not enough memory to load ${model.name}, even after freeing other models. Close other apps or choose a smaller model.` };
   }
   return { canLoad: true };
 }

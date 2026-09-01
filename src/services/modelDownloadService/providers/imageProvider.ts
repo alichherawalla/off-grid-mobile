@@ -17,7 +17,7 @@
  */
 import { Platform } from 'react-native';
 import { modelManager } from '../../modelManager';
-import { activeModelService } from '../../activeModelService';
+import { unloadImageModel } from '../../modelServices/modelLifecycleBootstrap';
 import { backgroundDownloadService } from '../../backgroundDownloadService';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
@@ -140,7 +140,7 @@ export const imageProvider: DownloadProvider = {
         .catch(err => logger.log(`[DL-SM] image:${modelId} remove: native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
-    await activeModelService.unloadImageModel()
+    await unloadImageModel()
       .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
     await modelManager.deleteImageModel(modelId)
       .catch(err => logger.log(`[DL-SM] image:${modelId} remove: delete failed err=${msg(err)}`));

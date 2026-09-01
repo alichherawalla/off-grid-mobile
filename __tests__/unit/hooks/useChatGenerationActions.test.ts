@@ -38,7 +38,7 @@ jest.mock('../../../src/services/hardware', () => ({ hardwareService: {} }));
 jest.mock('../../../src/services/backgroundDownloadService', () => ({
   backgroundDownloadService: { isAvailable: jest.fn(() => false), excludeFromBackup: jest.fn(() => Promise.resolve(true)) },
 }));
-jest.mock('../../../src/services/activeModelService/index', () => ({
+jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), loadTextModel: jest.fn(), unloadTextModel: jest.fn() },

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ejectAllModelsForUser } from '../services/userModelEjection';
+import { ejectAllModelsForUser } from '../services/modelServices/ejectModelsForUser';
+import { useAppStore, useRemoteServerStore } from '../stores';
 import { useActiveMobileModel } from './useActiveMobileModel';
 
 /**
@@ -16,11 +17,14 @@ export function useEjectAllModels(): {
   ejectAll: () => Promise<number>;
 } {
   const [isEjecting, setIsEjecting] = useState(false);
-  const text = useActiveMobileModel('text').model;
-  const image = useActiveMobileModel('image').model;
+  const hasLocalText = useAppStore(state => !!state.activeModelId);
+  const hasLocalImage = useAppStore(state => !!state.activeImageModelId);
+  const hasRemoteText = useRemoteServerStore(state => !!state.activeRemoteTextModelId);
+  const hasRemoteImage = useRemoteServerStore(state => !!state.activeRemoteImageModelId);
   const transcription = useActiveMobileModel('transcription').model;
   const voice = useActiveMobileModel('voice').model;
-  const hasActiveModel = !!(text || image || transcription || voice);
+  const hasActiveModel = hasLocalText || hasLocalImage || hasRemoteText ||
+    hasRemoteImage || !!transcription || !!voice;
 
   const ejectAll = async (): Promise<number> => {
     setIsEjecting(true);

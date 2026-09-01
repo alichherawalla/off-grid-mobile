@@ -8,11 +8,11 @@
 
 import { intentClassifier, classifyToolsNeeded } from '../../../src/services/intentClassifier';
 import { llmService } from '../../../src/services/llm';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 
 // Mock dependencies
 jest.mock('../../../src/services/llm');
-jest.mock('../../../src/services/activeModelService');
+jest.mock('../../harness/activeModelLifecycle');
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 const mockActiveModelService = activeModelService as jest.Mocked<typeof activeModelService>;

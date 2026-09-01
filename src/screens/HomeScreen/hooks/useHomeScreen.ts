@@ -14,8 +14,10 @@ import {
 import {
   modelManager,
   hardwareService,
-  activeModelService,
+  getResourceUsage,
   ResourceUsage,
+  subscribeToModelState,
+  syncWithNativeState,
 } from '../../../services';
 import { Conversation, RemoteModel } from '../../../types';
 import { useModelLoading } from './useModelLoading';
@@ -27,7 +29,7 @@ import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
 import { remoteServerModelOptions } from '../../../services/remoteModelSelection';
-import { ejectAllModelsForUser } from '../../../services/userModelEjection';
+import { ejectAllModelsForUser } from '../../../services/modelServices/ejectModelsForUser';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
 import type {
@@ -146,7 +148,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       loadData();
       if (!hasInitializedNativeSync) {
         hasInitializedNativeSync = true;
-        activeModelService.syncWithNativeState();
+        syncWithNativeState();
       }
       if (lanDiscoveryState === 'idle') {
         lanDiscoveryState = 'scheduled';
@@ -212,7 +214,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const refreshMemoryInfo = useCallback(async () => {
     try {
-      const info = await activeModelService.getResourceUsage();
+      const info = await getResourceUsage();
       setMemoryInfo(info);
     } catch (_error) {
       logger.warn('[HomeScreen] Failed to get memory info:', _error);
@@ -221,7 +223,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   useEffect(() => {
     refreshMemoryInfo();
-    const unsubscribe = activeModelService.subscribe(() => {
+    const unsubscribe = subscribeToModelState(() => {
       refreshMemoryInfo();
     });
     return () => unsubscribe();

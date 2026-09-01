@@ -15,7 +15,7 @@ describe('Q14 — advisory vs authoritative image-RAM estimate diverge (red-flow
   it('sizes the same image model identically in the pre-check and the load gate', async () => {
     installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
      
-    const { checkMemoryForModel } = require('../../../src/services/activeModelService/memory');
+    const { checkMemoryForModel } = require('../../../src/services/modelServices/modelMemoryAdvisory');
     const { hardwareService } = require('../../../src/services/hardware');
      
     await hardwareService.refreshMemoryInfo();

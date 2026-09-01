@@ -1,5 +1,5 @@
 import type { DownloadedModel, ONNXImageModel } from '../../types';
-import type { ActiveModelInfo } from './types';
+import type { ActiveModelInfo } from './modelStateTypes';
 
 interface SnapshotInput {
   textModel: DownloadedModel | null;

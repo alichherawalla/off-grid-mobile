@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore, useAppStore, useRemoteServerStore } from '../../stores';
-import { activeModelService } from '../../services/activeModelService';
+import { unloadAllModels } from '../../services/modelServices/modelLifecycleBootstrap';
+import { supportsAudioInput } from '../../services/modelServices/modelState';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
@@ -65,7 +66,7 @@ function createWhisperReadiness(
       whisperService.getLoadedModelPath() === whisperService.getModelPath(downloadedModelId),
     hasDownloadedModel: () => !!downloadedModelId,
     loadWhisper: () => useWhisperStore.getState().loadModel(),
-    freeGenerationModels: () => activeModelService.unloadAllModels(true).then(() => {}),
+    freeGenerationModels: () => unloadAllModels(true).then(() => {}),
   });
 }
 
@@ -94,7 +95,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
   const [directError, setDirectError] = useState<string | null>(null);
 
   const supportsDirectAudio = (): boolean =>
-    activeModelService.supportsAudioInput() && audioRecorderService.supportsDirectAudioInput();
+    supportsAudioInput() && audioRecorderService.supportsDirectAudioInput();
 
   // The rendered composer mode is the recording mode. Passing it in prevents the
   // Voice layout and recorder from observing two different store snapshots.

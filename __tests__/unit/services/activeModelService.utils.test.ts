@@ -3,7 +3,7 @@
  * Focuses on syncWithNativeState LiteRT branch.
  */
 
-import { syncWithNativeState } from '../../../src/services/activeModelService/utils';
+import { syncWithNativeState } from '../../../src/services/modelServices/modelStateNativeProjection';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: { isModelLoaded: jest.fn() },

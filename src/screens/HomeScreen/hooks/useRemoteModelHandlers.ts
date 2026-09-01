@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
 import {
-  activeModelService,
+  unloadTextModel,
   clearMobileModel,
   selectMobileModel,
 } from '../../../services';
@@ -34,7 +34,7 @@ export function useRemoteModelHandlers({
     try {
       // Unload any active local model first — only one active model at a time
       if (activeModelId) {
-        await activeModelService.unloadTextModel();
+        await unloadTextModel();
       }
         await selectMobileModel({
           source: 'remote',

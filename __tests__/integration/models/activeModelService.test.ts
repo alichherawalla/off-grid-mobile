@@ -11,7 +11,7 @@
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
@@ -188,14 +188,14 @@ describe('ActiveModelService Integration', () => {
       const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
       useAppStore.setState({ downloadedModels: [litert] });
       await activeModelService.loadTextModel('litert-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: true }), expect.anything());
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'text', dirtyMemory: true }), expect.anything());
 
       // GGUF/llama is clean mmap -> physical-cap budgeting unchanged (dirtyMemory:false).
       spy.mockClear();
       const gguf = createDownloadedModel({ id: 'gguf-1', engine: 'llama' as any });
       useAppStore.setState({ downloadedModels: [gguf] });
       await activeModelService.loadTextModel('gguf-1').catch(() => {});
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ key: 'text', dirtyMemory: false }), expect.anything());
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'text', dirtyMemory: false }), expect.anything());
       spy.mockRestore();
     });
 
@@ -512,13 +512,13 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
 
       await activeModelService.loadTextModel('txt-1');
-      expect(modelResidencyManager.isResident('text')).toBe(true);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(true);
 
       // Under conservative single-model, loading the image evicts the resident text model.
       await activeModelService.loadImageModel('img-1');
       expect(mockLlmService.unloadModel).toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('text')).toBe(false);
-      expect(modelResidencyManager.isResident('image')).toBe(true);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(false);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'image')).toBe(true);
       expect(getAppState().activeImageModelId).toBe('img-1');
     });
 
@@ -530,12 +530,12 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
 
       await activeModelService.loadImageModel('img-1');
-      expect(modelResidencyManager.isResident('image')).toBe(true);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'image')).toBe(true);
 
       await activeModelService.loadTextModel('txt-1');
       expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('image')).toBe(false);
-      expect(modelResidencyManager.isResident('text')).toBe(true);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'image')).toBe(false);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(true);
     });
 
     it('a full text -> image -> text round-trip loads each and keeps exactly one generation model', async () => {
@@ -550,8 +550,8 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('txt-1');
 
       // Ends with exactly the text model resident — never both.
-      expect(modelResidencyManager.isResident('text')).toBe(true);
-      expect(modelResidencyManager.isResident('image')).toBe(false);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(true);
+      expect(modelResidencyManager.getResidents().some(r => r.type === 'image')).toBe(false);
     });
   });
 

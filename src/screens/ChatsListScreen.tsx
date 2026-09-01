@@ -18,7 +18,15 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
+import {
+  llmService,
+  loadImageModel,
+  loadTextModel,
+  onnxImageGeneratorService,
+  remoteServerManager,
+  unloadImageModel,
+  unloadTextModel,
+} from '../services';
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
@@ -65,7 +73,7 @@ export const ChatsListScreen: React.FC = () => {
     // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
     // here just like the chat screen (was a dead-end "Failed to load model").
     await loadModelWithOverride(
-      (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
+      (opts) => loadTextModel(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
@@ -77,7 +85,7 @@ export const ChatsListScreen: React.FC = () => {
 
   const handleSelectImageModel = async (model: any) => {
     await loadModelWithOverride(
-      (opts) => activeModelService.loadImageModel(model.id, undefined, opts),
+      (opts) => loadImageModel(model.id, undefined, opts),
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
@@ -92,7 +100,7 @@ export const ChatsListScreen: React.FC = () => {
     try {
       remoteServerManager.clearActiveRemoteModel();
       if (llmService.isModelLoaded()) {
-        await activeModelService.unloadTextModel();
+        await unloadTextModel();
       }
     } finally {
       setIsModelLoading(false);
@@ -102,7 +110,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadImageModel = async () => {
     setIsModelLoading(true);
     try {
-      await activeModelService.unloadImageModel();
+      await unloadImageModel();
     } finally {
       setIsModelLoading(false);
     }

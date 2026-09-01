@@ -37,7 +37,7 @@ describe('T062 (voice-mode) — resend of an image request re-draws, not text (D
     // 'auto'. Matches the device (auto + pattern classifier routes "draw a dog" → image; log part28/38).
     await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     await activeModelService.loadImageModel('sd');
 
     // Switch to Voice mode via the chat-input quick-settings, then VOICE-send "draw a dog" → IMAGE.

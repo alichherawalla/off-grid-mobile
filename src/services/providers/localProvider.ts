@@ -46,7 +46,7 @@ class LocalProvider implements LLMProvider {
     logger.log('[LocalProvider] Loading model:', modelId);
 
     // The modelId for local provider is the file path
-    // This is handled by activeModelService which calls llmService.loadModel
+    // The native lifecycle adapter loads the selected local engine before this provider runs.
     // Here we just track the loaded model ID
     this.loadedModelId = modelId;
   }

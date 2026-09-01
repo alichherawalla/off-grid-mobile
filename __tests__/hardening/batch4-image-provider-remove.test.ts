@@ -18,7 +18,7 @@
 jest.mock('../../src/services/modelManager', () => ({
   modelManager: { deleteImageModel: jest.fn(async () => {}) },
 }));
-jest.mock('../../src/services/activeModelService', () => ({
+jest.mock('../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) },
@@ -38,7 +38,7 @@ import { imageProvider } from '../../src/services/modelDownloadService/providers
 import { useDownloadStore } from '../../src/stores/downloadStore';
 import { useAppStore } from '../../src/stores';
 import { modelManager } from '../../src/services/modelManager';
-import { activeModelService } from '../../src/services/activeModelService';
+import { activeModelService } from '../harness/activeModelLifecycle';
 import { backgroundDownloadService } from '../../src/services/backgroundDownloadService';
 
 const mockDelete = modelManager.deleteImageModel as jest.Mock;

@@ -19,7 +19,7 @@ export type ActiveTextModelResult = {
  * The active text model, preferring remote over local. THE answer to "is a text model available" -
  * chat, the chat list and Home all read it here rather than each repeating the lookup.
  *
- * The local branch delegates to activeModelService, which tolerates a selected id whose entry was
+ * The local branch delegates to the shared selection projection, which tolerates a selected id whose entry was
  * rebuilt under a different id (see resolveModel). Repeating `find(m => m.id === activeModelId)` in a
  * view is what let the chat refuse to send to a model the engine had loaded.
  */

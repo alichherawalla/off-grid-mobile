@@ -5,7 +5,7 @@
  * remove, and that a multi-file (no native row) interrupted download is stranded.
  */
 jest.mock('../../../src/services/modelManager', () => ({ modelManager: { deleteImageModel: jest.fn(async () => {}) } }));
-jest.mock('../../../src/services/activeModelService', () => ({ activeModelService: {
+jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));
 jest.mock('../../../src/services/backgroundDownloadService', () => ({ backgroundDownloadService: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn() } }));

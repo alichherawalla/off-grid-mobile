@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { showAlert, AlertState } from '../../../components';
 import {
-  activeModelService,
+  unloadImageModel,
+  unloadTextModel,
   selectMobileModel,
 } from '../../../services';
 import { DownloadedModel, ONNXImageModel } from '../../../types';
@@ -49,7 +50,7 @@ export const useModelLoading = ({
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     await waitForOverlay();
     try {
-      await activeModelService.unloadTextModel();
+      await unloadTextModel();
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
@@ -75,7 +76,7 @@ export const useModelLoading = ({
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     await waitForOverlay();
     try {
-      await activeModelService.unloadImageModel();
+      await unloadImageModel();
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {

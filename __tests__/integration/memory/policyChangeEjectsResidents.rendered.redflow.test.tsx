@@ -27,7 +27,7 @@ describe('policy change ejects every resident (device 2026-07-14) — Lean with 
     h.render();
     await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { useAppStore } = require('../../../src/stores');

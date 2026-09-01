@@ -28,7 +28,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 
 const mockEjectAll = jest.fn(async () => ({ count: 2 }));
-jest.mock('../../../src/services/userModelEjection', () => ({
+jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
   ejectAllModelsForUser: () => mockEjectAll(),
 }));
 

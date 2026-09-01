@@ -132,7 +132,7 @@ jest.mock('../../../src/utils/coreMLModelUtils', () => ({
   downloadCoreMLTokenizerFiles: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock('../../../src/services/activeModelService', () => ({
+jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),

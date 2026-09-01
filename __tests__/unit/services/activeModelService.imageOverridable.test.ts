@@ -1,5 +1,5 @@
 /**
- * checkImageModelCanLoad — overridability of a memory-gate refusal.
+ * checkImageHardwareSupport — overridability of a memory-gate refusal.
  *
  * Guards the reliability fix: a first refusal is OVERRIDABLE (offer "Load Anyway"),
  * but a refusal that PERSISTS under override hit the residency survival floor — a hard
@@ -25,15 +25,15 @@ jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { makeRoomFor: jest.fn(), runExclusive: jest.fn((_k: string, fn: () => any) => fn()) },
 }));
 
-import { checkImageModelCanLoad } from '../../../src/services/activeModelService/loaders';
+import { checkImageHardwareSupport } from '../../../src/services/adapters/native/modelLoaders';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 
 const makeRoomFor = modelResidencyManager.makeRoomFor as jest.Mock;
 const model = { id: 'img-1', name: 'Test Image Model', backend: 'gpu' } as any;
 const check = (opts?: { override?: boolean }) =>
-  checkImageModelCanLoad('img-1', model, opts) as Promise<{ canLoad: boolean; overridable?: boolean; error?: string }>;
+  checkImageHardwareSupport('img-1', model, opts) as Promise<{ canLoad: boolean; overridable?: boolean; error?: string }>;
 
-describe('checkImageModelCanLoad — survival-floor overridability', () => {
+describe('checkImageHardwareSupport — survival-floor overridability', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('allows the load when the gate fits', async () => {

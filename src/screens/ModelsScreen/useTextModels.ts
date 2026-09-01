@@ -6,7 +6,12 @@ import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constan
 import { useAppStore } from '../../stores';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { useDownloadStore } from '../../stores/downloadStore';
-import { huggingFaceService, modelManager, hardwareService, activeModelService } from '../../services';
+import {
+  hardwareService,
+  huggingFaceService,
+  modelManager,
+  unloadTextModel,
+} from '../../services';
 import { startModelDownload } from '../../services/startModelDownload';
 import { ramFitScore } from '../../utils/recommendedModels';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
@@ -253,7 +258,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const handleDeleteModel = async (modelId: string) => {
     const model = downloadedModels.find(m => m.id === modelId);
     if (!model) return;
-    if (activeModelId === model.id) await activeModelService.unloadTextModel().catch(() => {});
+    if (activeModelId === model.id) await unloadTextModel().catch(() => {});
     await modelManager.deleteModel(model.id);
     removeDownloadedModel(model.id);
   };

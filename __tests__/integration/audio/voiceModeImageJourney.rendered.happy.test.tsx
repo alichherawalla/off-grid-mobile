@@ -25,7 +25,7 @@ describe('T084 (rendered) — voice-mode image journey (STT → route → image 
     // Place + load (activate) an image model via the real path — hasImageModel=true, imageMode stays 'auto'.
     await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
      
     await activeModelService.loadImageModel('sd');
 

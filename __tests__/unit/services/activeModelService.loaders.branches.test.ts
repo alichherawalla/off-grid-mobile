@@ -45,7 +45,7 @@ import {
   doLoadTextModel,
   doLoadImageModel,
   resolveMmProjPath,
-} from '../../../src/services/activeModelService/loaders';
+} from '../../../src/services/adapters/native/modelLoaders';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';

@@ -16,7 +16,7 @@ import { generationService } from '../../../src/services/generationService';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import { subscribeSharePrompt, resetSharePromptSession } from '../../../src/utils/sharePrompt';
 import {
   resetStores,
@@ -30,7 +30,7 @@ import { createMessage, createONNXImageModel } from '../../utils/factories';
 
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/localDreamGenerator');
-jest.mock('../../../src/services/activeModelService');
+jest.mock('../../harness/activeModelLifecycle');
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;

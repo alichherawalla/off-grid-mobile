@@ -31,7 +31,7 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import RNFS from 'react-native-fs';
-import { doLoadTextModel, resolveMmProjPath } from '../../../src/services/activeModelService/loaders';
+import { doLoadTextModel, resolveMmProjPath } from '../../../src/services/adapters/native/modelLoaders';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
 import { useAppStore } from '../../../src/stores';

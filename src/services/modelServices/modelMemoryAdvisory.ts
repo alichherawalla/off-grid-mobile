@@ -13,7 +13,7 @@ import {
   MemoryCheckSeverity,
   textOverheadMultiplier,
   IMAGE_MODEL_OVERHEAD_MULTIPLIER,
-} from './types';
+} from './modelStateTypes';
 import { useAppStore } from '../../stores';
 import { modelMemoryBudgetMB, modelWarningThresholdMB, LoadPolicy } from '../memoryBudget';
 

@@ -4,7 +4,9 @@ import type {
   GenerationRequest,
   LLMService,
 } from '@offgrid/models';
-import { activeModelService } from '../activeModelService';
+import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
+import { loadTextModel } from './modelLifecycleBootstrap';
+import { selectedTextModelId } from './modelState';
 import { llmService } from '../llm';
 import { embeddingService } from '../rag/embedding';
 import {
@@ -85,15 +87,15 @@ function adapter(id: string): GenerationAdapter {
       if (model.modality === 'embedding' || model.modality === 'tool_selection') {
         await embeddingService.load();
       } else if (model.modality === 'classifier') {
-        classifierRestoreId = activeModelService.selectedTextModelId();
-        await activeModelService.loadTextModel(model.id);
+        classifierRestoreId = selectedTextModelId();
+        await nativeModelLifecycle.loadTextModel(model.id);
       }
     },
     async unload(model) {
       if (model.modality === 'embedding' || model.modality === 'tool_selection') {
         await embeddingService.unload();
       } else if (model.modality === 'classifier') {
-        await activeModelService.unloadTextModel(true);
+        await nativeModelLifecycle.unloadTextModel(true);
       }
     },
     generate(model, request) {
@@ -106,7 +108,7 @@ function adapter(id: string): GenerationAdapter {
             const restoreId = classifierRestoreId;
             classifierRestoreId = null;
             if (restoreId && restoreId !== model.id) {
-              await activeModelService.loadTextModel(restoreId);
+              await loadTextModel(restoreId);
             }
           }
         })();

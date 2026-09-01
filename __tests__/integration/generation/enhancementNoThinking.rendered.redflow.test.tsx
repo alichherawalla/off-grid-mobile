@@ -35,7 +35,7 @@ describe('T071 (rendered) — prompt enhancement must not think (DEV-B30)', () =
 
     await h.placeImageModel({ backend: 'coreml' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     await activeModelService.loadImageModel('sd');
     await h.cycleImageMode(); // auto → ON(force): "draw a cat" routes to IMAGE
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });

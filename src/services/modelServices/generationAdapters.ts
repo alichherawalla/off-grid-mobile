@@ -12,7 +12,7 @@ import {
   type RuntimeModel,
 } from '@offgrid/models';
 import type { MediaAttachment, Message } from '../../types';
-import { activeModelService } from '../activeModelService';
+import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';
 import { providerRegistry } from '../providers';
 import type { GenerationOptions, LLMProvider } from '../providers/types';
@@ -264,11 +264,11 @@ function adapter(id: string): GenerationAdapter {
     id,
     async load(model) {
       if (model.source !== 'local') return;
-      await activeModelService.loadTextModel(model.id);
+      await nativeModelLifecycle.loadTextModel(model.id);
       await providerFor(model).loadModel(model.id);
     },
     async unload(model) {
-      if (model.source === 'local') await activeModelService.unloadTextModel(true);
+      if (model.source === 'local') await nativeModelLifecycle.unloadTextModel(true);
     },
     async *generate(model, request, context) {
       // This is the single policy-to-wire translation for every Mobile text route.
@@ -297,14 +297,15 @@ function adapter(id: string): GenerationAdapter {
   };
 }
 
-/** ActiveModelService is the temporary native admission adapter; its policy is already shared. */
 export const mobileGenerationResidency: ModelResidencyPort = {
-  async ensureResident(_spec, handlers) {
-    await handlers.load();
-    return { fits: true, loaded: true };
+  ensureResident(spec, handlers) {
+    return modelResidencyManager.ensureResident(spec, handlers);
   },
-  markUsed() {
-    modelResidencyManager.markUsed('text');
+  markUsed(key) {
+    modelResidencyManager.markUsed(key);
+  },
+  release(key) {
+    modelResidencyManager.release(key);
   },
 };
 

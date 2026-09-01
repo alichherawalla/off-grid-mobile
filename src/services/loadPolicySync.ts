@@ -15,7 +15,7 @@
  */
 import { useAppStore } from '../stores';
 import { modelResidencyManager } from './modelServices/residencyBootstrap';
-import { activeModelService } from './activeModelService';
+import { ejectAllModels } from './modelServices/modelLifecycleBootstrap';
 import { LoadPolicy } from './memoryBudget';
 import { loadPolicyFromSettings } from '@offgrid/models';
 
@@ -53,7 +53,7 @@ export function startLoadPolicySync(): () => void {
     // several models already resident left them all in memory until the next load (device 2026-07-14).
     // ejectAll keeps the selections (rows still show the chosen models); it only frees RAM.
     if (!isInitialSeed) {
-      void activeModelService.ejectAll().catch(() => { /* eviction is best-effort; next load re-enforces */ });
+      void ejectAllModels().catch(() => { /* eviction is best-effort; next load re-enforces */ });
     }
   };
   // Seed from the (already hydrated) current value.

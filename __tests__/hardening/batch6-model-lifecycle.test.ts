@@ -17,7 +17,7 @@
  */
 
 import { useAppStore } from '../../src/stores/appStore';
-import { activeModelService } from '../../src/services/activeModelService';
+import { activeModelService } from '../harness/activeModelLifecycle';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { llmService } from '../../src/services/llm';
 import { liteRTService } from '../../src/services/litert';
@@ -133,7 +133,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     expect(mockLlm.unloadModel).toHaveBeenCalled();
     expect(getAppState().activeModelId).toBeNull(); // deselected
     expect(activeModelService.getLoadedModelIds().textModelId).toBeNull();
-    expect(modelResidencyManager.isResident('text')).toBe(false); // residency released
+    expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(false); // residency released
   });
 
   it('unloadTextModel is a no-op when nothing is loaded (does not touch the engine)', async () => {
@@ -176,26 +176,16 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     await flushPromises();
 
     // Exactly one text resident (not two) — the switch replaced, not stacked.
-    const textResidents = modelResidencyManager.getResidents().filter(r => r.key === 'text');
+    const textResidents = modelResidencyManager.getResidents().filter(r => r.type === 'text');
     expect(textResidents).toHaveLength(1);
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(true);
   });
 
   // ==========================================================================
-  // BUG-FOUND: user-initiated unload of a LiteRT text model does NOT free the
-  // LiteRT engine's RAM.
-  //
-  // activeModelService.doUnloadTextModelLocked (src/services/activeModelService/
-  // index.ts) gates the native unload on `llmService.isModelLoaded()` and only
-  // calls `llmService.unloadModel()`. For a LiteRT model, llmService reports
-  // NOT loaded, so NEITHER llmService.unloadModel() NOR liteRTService.unloadModel()
-  // runs — the LiteRT weights stay resident. getActiveModels() is engine-aware
-  // (checks liteRTService.isModelLoaded()), so the seam exists on the read side
-  // but not the unload side. The unload path must dispatch per engine the same
-  // way the loader (doLoadTextModel) does. Fix belongs in the service (do NOT
-  // patch here). Skipped until src is fixed in its own PR.
+  // The raw lifecycle dispatches unload through the active native engine, so a
+  // LiteRT model cannot stay resident after shared residency releases its slot.
   // ==========================================================================
-  it.skip('[BUG] unloadTextModel(false) must unload a loaded LiteRT model from RAM', async () => {
+  it('unloadTextModel(false) frees a loaded LiteRT model from RAM', async () => {
     const lite = createDownloadedModel({
       id: 'L', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m/m.litertlm',
     });

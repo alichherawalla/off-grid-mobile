@@ -5,7 +5,11 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
-import { activeModelService } from '../activeModelService';
+import {
+  resolveSelectedTextModel,
+  selectedTextModelId,
+  selectTextModel,
+} from './modelState';
 import { remoteServerManager } from '../remoteServerManager';
 import { mobileRouteId } from './mobileRoute';
 import { selectedMobileLocalVoiceRoute } from './voiceGenerationAdapter';
@@ -35,7 +39,7 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
           modelId: remote.activeRemoteTextModelId,
         });
       }
-      const local = activeModelService.resolveSelectedTextModel();
+      const local = resolveSelectedTextModel();
       return local
         ? mobileRouteId({
             source: 'local',
@@ -77,7 +81,7 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
     }
     if (modality === 'classifier') {
       const state = useAppStore.getState();
-      const modelId = state.settings.classifierModelId ?? activeModelService.selectedTextModelId();
+      const modelId = state.settings.classifierModelId ?? selectedTextModelId();
       const model = modelId
         ? state.downloadedModels.find(candidate => candidate.id === modelId)
         : null;
@@ -135,7 +139,7 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
     }
     if (modality === 'text') {
       remoteServerManager.clearActiveRemoteTextModel();
-      activeModelService.selectTextModel(route.modelId);
+      selectTextModel(route.modelId);
     } else if (modality === 'image') {
       remoteServerManager.clearActiveRemoteMediaModel('image');
       useAppStore.getState().setActiveImageModelId(route.modelId);

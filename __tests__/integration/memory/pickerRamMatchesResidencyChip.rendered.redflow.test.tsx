@@ -74,7 +74,7 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
     const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
     const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');

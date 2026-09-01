@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { DownloadedModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
-import { textOverheadMultiplier } from '../../services/activeModelService/types';
+import { textOverheadMultiplier } from '../../services/modelServices/modelStateTypes';
 import { useAppStore } from '../../stores';
 import { ModelRow } from '../ModelRow';
 import { createAllStyles } from './styles';
@@ -48,7 +48,7 @@ export const TextTab: React.FC<TextTabProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
   // RAM label uses the SAME backend-aware overhead owner (textOverheadMultiplier) that
-  // activeModelService uses to register the resident's sizeMB, so this label and the residency
+  // shared residency uses to register the resident's sizeMB, so this label and the residency
   // chip on the manager sheet agree for the identical loaded model (they diverged: fixed 1.5×
   // here vs 2.2× on a GPU/NPU backend there — device 2026-07-14).
   const ramMultiplier = textOverheadMultiplier(

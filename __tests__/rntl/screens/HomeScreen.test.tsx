@@ -74,7 +74,7 @@ const mockEjectAll = jest.fn(async () => {
 });
 const mockCheckMemoryForModel = jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' }));
 
-jest.mock('../../../src/services/activeModelService', () => ({
+jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
@@ -228,7 +228,7 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 
 // Import after mocks
 import { HomeScreen } from '../../../src/screens/HomeScreen';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 
 const mockNavigation = {
   navigate: mockNavigate,

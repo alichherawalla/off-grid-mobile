@@ -22,7 +22,7 @@ import { resetStores } from '../../utils/testHelpers';
 // Mock the LLM so we control what it "says"
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/litert');
-jest.mock('../../../src/services/activeModelService');
+jest.mock('../../harness/activeModelLifecycle');
 
 const { llmService } = require('../../../src/services/llm');
 const { liteRTService } = require('../../../src/services/litert');

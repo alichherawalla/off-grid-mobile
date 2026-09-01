@@ -21,13 +21,13 @@ import {
   type ImageGenPhase,
 } from '../../src/services/imageGenerationService';
 import { localDreamGeneratorService } from '../../src/services/localDreamGenerator';
-import { activeModelService } from '../../src/services/activeModelService';
+import { activeModelService } from '../harness/activeModelLifecycle';
 import { llmService } from '../../src/services/llm';
 import { resetStores, flushPromises } from '../utils/testHelpers';
 import { createONNXImageModel } from '../utils/factories';
 
 jest.mock('../../src/services/localDreamGenerator');
-jest.mock('../../src/services/activeModelService');
+jest.mock('../harness/activeModelLifecycle');
 jest.mock('../../src/services/llm');
 
 const mockDream = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;

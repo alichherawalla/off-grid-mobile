@@ -24,7 +24,7 @@ describe('happy — switching text models swaps residency (one heavy model accou
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');

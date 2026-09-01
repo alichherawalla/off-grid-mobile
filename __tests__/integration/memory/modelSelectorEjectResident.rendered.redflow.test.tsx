@@ -29,7 +29,7 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
     // Real interactions to reach image + whisper resident.
     await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');

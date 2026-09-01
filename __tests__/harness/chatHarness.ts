@@ -104,7 +104,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     require('@react-native-async-storage/async-storage');
   const {
     activeModelService,
-  } = require('../../src/services/activeModelService');
+  } = require('../harness/activeModelLifecycle');
   const { HomeScreen } = require('../../src/screens/HomeScreen');
 
   const docs = boundary.fs!.DocumentDirectoryPath;

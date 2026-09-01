@@ -150,7 +150,7 @@ export const useChatScreen = () => {
   );
 
   // Which text model is active, from the ONE hook that answers it (remote preferred over local, local
-  // resolved by activeModelService). This screen used to re-derive it with its own copy of the rule,
+  // resolved by the shared model state). This screen used to re-derive it with its own copy of the rule,
   // which is how it ended up refusing to send to a model the engine had loaded.
   const activeModelInfo = useActiveTextModel();
 

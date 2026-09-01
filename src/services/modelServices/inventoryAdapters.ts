@@ -17,7 +17,11 @@ import { providerRegistry } from '../providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { WHISPER_MODELS, whisperService } from '../whisperService';
-import { activeModelService } from '../activeModelService';
+import {
+  getActiveModels,
+  resolveSelectedTextModel,
+  selectedTextModelId,
+} from './modelState';
 import {
   EMBEDDING_MODEL_FILENAME,
   EMBEDDING_RESIDENT_MB,
@@ -58,7 +62,7 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
     modelId: model.id,
   };
   const state = useAppStore.getState();
-  const selected = activeModelService.resolveSelectedTextModel()?.id === model.id;
+  const selected = resolveSelectedTextModel()?.id === model.id;
   const loaded = selected &&
     state.loadedTextModelId === model.id &&
     (model.engine === 'litert'
@@ -126,7 +130,7 @@ export const localImageInventoryAdapter: ModelInventoryAdapter = {
         modelId: model.id,
       };
       const selected = state.activeImageModelId === model.id;
-      const imageState = activeModelService.getActiveModels().image;
+      const imageState = getActiveModels().image;
       return runtime(identity, {
         name: model.name,
         kind: 'image',
@@ -319,7 +323,7 @@ export const classifierInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-classifier-inventory',
   async listModels() {
     const state = useAppStore.getState();
-    const modelId = state.settings.classifierModelId ?? activeModelService.selectedTextModelId();
+    const modelId = state.settings.classifierModelId ?? selectedTextModelId();
     const model = modelId
       ? state.downloadedModels.find(candidate => candidate.id === modelId)
       : null;

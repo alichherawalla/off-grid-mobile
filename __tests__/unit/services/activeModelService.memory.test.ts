@@ -3,7 +3,7 @@
  * Focuses on LiteRT-only branches (liteRTService loaded, llmService not loaded).
  */
 
-import { getCurrentlyLoadedMemoryGB, getOtherLoadedMemoryGB, checkMemoryForModel } from '../../../src/services/activeModelService/memory';
+import { getCurrentlyLoadedMemoryGB, getOtherLoadedMemoryGB, checkMemoryForModel } from '../../../src/services/modelServices/modelMemoryAdvisory';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: { isModelLoaded: jest.fn() },

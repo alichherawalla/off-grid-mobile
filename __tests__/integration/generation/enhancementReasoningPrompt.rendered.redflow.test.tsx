@@ -38,7 +38,7 @@ describe('T072 (rendered) — enhancement reasoning must not become the image pr
 
     await h.placeImageModel({ backend: 'coreml' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     await activeModelService.loadImageModel('sd');
     await h.cycleImageMode(); // auto → ON(force): "draw a cat" routes to IMAGE
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });

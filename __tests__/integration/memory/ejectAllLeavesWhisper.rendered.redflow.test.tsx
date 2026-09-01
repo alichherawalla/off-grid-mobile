@@ -31,7 +31,7 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
      
 

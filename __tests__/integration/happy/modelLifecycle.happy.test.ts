@@ -17,7 +17,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { isModelReady } = require('../../../src/services/engines');
     const { hardwareService } = require('../../../src/services/hardware');

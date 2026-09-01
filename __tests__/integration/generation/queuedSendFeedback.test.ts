@@ -17,7 +17,7 @@
 import { generationService } from '../../../src/services/generationService';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
-import { activeModelService } from '../../../src/services/activeModelService';
+import { activeModelService } from '../../harness/activeModelLifecycle';
 import {
   handleSendFn,
   type GenerationDeps,
@@ -27,7 +27,7 @@ import { resetStores, setupWithConversation, flushPromises } from '../../utils/t
 
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/litert');
-jest.mock('../../../src/services/activeModelService');
+jest.mock('../../harness/activeModelLifecycle');
 jest.mock('../../../src/services/modelPreloader', () => ({ abortPreload: jest.fn() }));
 jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { reclaimSttForGeneration: jest.fn(async () => {}) },

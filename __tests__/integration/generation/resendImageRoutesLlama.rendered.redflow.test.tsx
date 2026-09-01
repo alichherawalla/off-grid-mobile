@@ -27,7 +27,7 @@ describe('T062 (llama) — resend of an image request re-draws on the llama engi
     h.render();
     await h.placeImageModel({ backend: 'coreml' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     await activeModelService.loadImageModel('sd');
     await h.cycleImageMode(); // auto → ON(force)
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });

@@ -16,7 +16,7 @@ import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 // Mocks
 // ─────────────────────────────────────────────
 
-jest.mock('../../../src/services/activeModelService', () => ({
+jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
@@ -46,7 +46,7 @@ jest.mock('../../../src/services/litert', () => ({
 }));
 
 // Get mock references after hoisting
-const { activeModelService } = require('../../../src/services/activeModelService');
+const { activeModelService } = require('../../harness/activeModelLifecycle');
 const { llmService } = require('../../../src/services/llm');
 const { liteRTService } = require('../../../src/services/litert');
 const mockLiteRTLoaded = liteRTService.isModelLoaded as jest.Mock;
