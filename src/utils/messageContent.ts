@@ -115,13 +115,6 @@ export const REASONING_DELIMITERS: ReasoningDelimiter[] =
 // shared by BOTH local model load (llmHelpers.detectThinkingSupport) and remote
 // capability probing (remoteModelCapabilities) so on-device and gateway detection
 // cannot diverge - the OD7 divergence was this list omitting enable_thinking.
-const REASONING_TEMPLATE_MARKERS: RegExp[] = [
-  /<think>/i,
-  /<\|channel>thought/i,
-  /<\|channel\|>analysis/i,
-  /enable_thinking/i,
-];
-
 /**
  * Whether a chat_template indicates the model can produce reasoning - either it
  * embeds a reasoning output delimiter or exposes the enable_thinking kwarg switch.
@@ -131,8 +124,7 @@ const REASONING_TEMPLATE_MARKERS: RegExp[] = [
 export function templateEmitsReasoning(
   template: string | null | undefined,
 ): boolean {
-  if (!template) return false;
-  return REASONING_TEMPLATE_MARKERS.some(pattern => pattern.test(template));
+  return chatTemplateSupportsReasoning(template);
 }
 
 /**
@@ -253,3 +245,4 @@ import {
   stripChatControlTokens,
   type ReasoningDelimiter as SharedReasoningDelimiter,
 } from '@offgrid/sync';
+import { chatTemplateSupportsReasoning } from '@offgrid/models';

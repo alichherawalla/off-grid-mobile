@@ -10,9 +10,11 @@ import {
   OpenAICompatibleProvider,
 } from '../providers/openAICompatibleProvider';
 import { providerRegistry } from '../providers/registry';
-import { capabilitiesUnknown } from './modelCapabilityDiscovery';
 import logger from '../../../utils/logger';
-import { remoteAuthorizationHeaders } from '@offgrid/models';
+import {
+  remoteAuthorizationHeaders,
+  remoteCapabilitiesUnknown,
+} from '@offgrid/models';
 import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
@@ -150,7 +152,10 @@ export async function setActiveRemoteTextModelImpl(
     // toggle stayed hidden and the kwarg was never sent, for the life of the install, because of one
     // timeout at discovery. Ask again before believing a no.
     let discoveredModel = store.getModelById(serverId, modelId);
-    if (!discoveredModel || capabilitiesUnknown(discoveredModel.capabilities)) {
+    if (!discoveredModel || remoteCapabilitiesUnknown({
+      ...discoveredModel.capabilities,
+      contextLength: discoveredModel.capabilities.maxContextLength,
+    })) {
       logger.log(
         '[RemoteServerManager] Capabilities unknown for',
         modelId,

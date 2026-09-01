@@ -22,15 +22,13 @@ import type {
   OpenAIConfig,
   OpenAIStreamState,
 } from './openAICompatibleTypes';
-import { remoteAuthorizationHeaders } from '@offgrid/models';
-import { openAICompatibleCompletionPayload } from '@offgrid/models';
+import {
+  isOllamaRemoteEndpoint,
+  openAICompatibleCompletionPayload,
+  remoteAuthorizationHeaders,
+} from '@offgrid/models';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';
-
-/** Returns true if the endpoint looks like an Ollama server (port 11434) */
-function isOllamaEndpoint(endpoint: string): boolean {
-  return endpoint.includes(':11434');
-}
 
 /**
  * OpenAI-Compatible Provider Implementation
@@ -128,10 +126,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
       const thinkingEnabled = options.enableThinking !== false;
 
-      logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
+      logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaRemoteEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
 
       // Route Ollama through its native /api/chat which supports think: true/false
-      if (isOllamaEndpoint(this.config.endpoint)) {
+      if (isOllamaRemoteEndpoint(this.config.endpoint)) {
         return generateOllamaChatImpl(openaiMessages, {
           options, callbacks, signal,
           endpoint: this.config.endpoint,

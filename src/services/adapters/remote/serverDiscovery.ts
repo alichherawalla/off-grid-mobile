@@ -20,16 +20,14 @@ import {
 } from './modelCapabilityDiscovery';
 import { readOffGridDesktopModelState } from './offGridDesktopModels';
 import {
-  declaredRemoteCapability,
   defaultRemoteSelections,
   detectRemoteToolCallingCapability as detectToolCallingCapability,
   detectRemoteVisionCapability as detectVisionCapability,
   displayRemoteModelName,
   REMOTE_FETCH_REDIRECT_POLICY,
-  reasoningMetadataFromOpenRouter,
+  projectRemoteModelCapabilities,
   remoteModalityForKind,
   remoteAuthorizationHeaders,
-  type OpenRouterPublishedReasoning,
 } from '@offgrid/models';
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
@@ -62,12 +60,6 @@ async function fetchForDiscovery(
 }
 
 const gatewayCategory = remoteModalityForKind;
-
-/** Read OpenRouter reasoning metadata only when the model record publishes its native object. */
-function openRouterReasoning(value: unknown) {
-  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
-  return reasoningMetadataFromOpenRouter(value as OpenRouterPublishedReasoning);
-}
 
 async function fetchGatewayModelCatalog(
   server: RemoteServer,
@@ -346,24 +338,14 @@ export async function fetchModelsFromServer(
           id: model.id,
             name: displayModelName(model.name?.trim() || model.id),
           serverId: server.id,
-          capabilities: {
-            // The gateway declares each model's kind authoritatively; trust kind:'vision'
-            // for vision support. The name/probe-based fallback (modelInfos) can't detect a
-            // gateway vision model whose id doesn't match the name heuristics, which dropped
-            // the attached image client-side (the model then behaved text-only).
-              supportsVision:
-                model.kind === 'vision' ||
-                (declaredRemoteCapability(model.capabilities, 'vision') ??
-                  modelInfos[i].supportsVision),
-              supportsToolCalling:
-                declaredRemoteCapability(model.capabilities, 'tools') ??
-                modelInfos[i].supportsToolCalling ??
-                detectToolCallingCapability(model.id),
-            supportsThinking: openRouterReasoning(model.reasoning) !== undefined || (modelInfos[i].supportsThinking ?? false),
-            acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
-            reasoning: openRouterReasoning(model.reasoning) ?? modelInfos[i].reasoning,
-            maxContextLength: modelInfos[i].contextLength,
-          },
+          capabilities: projectRemoteModelCapabilities({
+            id: model.id,
+            kind: model.kind,
+            capabilities: model.capabilities,
+            reasoning: model.reasoning,
+            probed: modelInfos[i],
+            fallbackToolCalling: detectToolCallingCapability(model.id),
+          }),
           lastUpdated: new Date().toISOString(),
           }),
         );
@@ -387,16 +369,11 @@ export async function fetchModelsFromServer(
             id: model.name,
             name: displayModelName(model.name),
             serverId: server.id,
-            capabilities: {
-              supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling:
-                modelInfos[i].supportsToolCalling ??
-                detectToolCallingCapability(model.name),
-              supportsThinking: modelInfos[i].supportsThinking ?? false,
-              acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
-              reasoning: modelInfos[i].reasoning,
-              maxContextLength: modelInfos[i].contextLength,
-            },
+            capabilities: projectRemoteModelCapabilities({
+              id: model.name,
+              probed: modelInfos[i],
+              fallbackToolCalling: detectToolCallingCapability(model.name),
+            }),
             details: model.details,
             lastUpdated: new Date().toISOString(),
           }),
@@ -439,16 +416,11 @@ export async function fetchModelsFromServer(
             id: model.name,
             name: displayModelName(model.name),
             serverId: server.id,
-            capabilities: {
-              supportsVision: modelInfos[i].supportsVision,
-              supportsToolCalling:
-                modelInfos[i].supportsToolCalling ??
-                detectToolCallingCapability(model.name),
-              supportsThinking: modelInfos[i].supportsThinking ?? false,
-              acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
-              reasoning: modelInfos[i].reasoning,
-              maxContextLength: modelInfos[i].contextLength,
-            },
+            capabilities: projectRemoteModelCapabilities({
+              id: model.name,
+              probed: modelInfos[i],
+              fallbackToolCalling: detectToolCallingCapability(model.name),
+            }),
             details: model.details,
             lastUpdated: new Date().toISOString(),
           }),
