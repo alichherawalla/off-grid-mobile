@@ -1,4 +1,5 @@
 import type { RecordProvenance, SyncedToolArtifact } from '@offgrid/sync';
+import type { ModelArtifactOrigin } from '@offgrid/models';
 // Model source and credibility types
 export type ModelSource =
   | 'lmstudio'
@@ -66,17 +67,7 @@ export type ModelEngine = 'llama' | 'litert';
  *
  * Provenance is a fact we are told at download time. Record it then; never re-derive it later.
  */
-export interface ModelOrigin {
-  /** Hugging Face repo id, e.g. "ggml-org/SmolVLM-500M-Instruct-GGUF". */
-  repoId: string;
-  /**
-   * The commit the files came from. A projector fetched from `main` months after the weights can be
-   * a different build than the weights it must match, so repair pins the same revision.
-   */
-  revision: string;
-  /** Path of the primary file inside the repo. */
-  path: string;
-}
+export type ModelOrigin = ModelArtifactOrigin;
 
 interface DownloadedModelBase {
   id: string;

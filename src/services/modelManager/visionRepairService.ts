@@ -6,7 +6,7 @@ import { commitModelsList } from './storage';
 import { isMMProjFile } from './scan';
 import { canKeepMmProjLink, pickMmProjForModel } from '../mmproj';
 import { performMmProjRepairDownload } from './download';
-import { resolveVisionRepairSource } from './visionRepairSource';
+import { resolveVisionRepairSource } from '@offgrid/models';
 import { huggingFaceService } from '../huggingface';
 import type { DownloadProgressCallback } from './types';
 
