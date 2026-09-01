@@ -1,4 +1,9 @@
-import { LLMService, type ActiveModelSnapshot, type RuntimeModel } from '@offgrid/models';
+import {
+  GenerationService,
+  LLMService,
+  type ActiveModelSnapshot,
+  type RuntimeModel,
+} from '@offgrid/models';
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -11,9 +16,18 @@ import {
   type MobileRouteFacts,
 } from './mobileRoute';
 import { mobileModelSelectionStore } from './selectionStore';
+import {
+  mobileGenerationResidency,
+  reconcileMobileGenerationAdapters,
+} from './generationAdapters';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
+export const mobileGenerationService = new GenerationService(
+  mobileLLMService,
+  mobileGenerationResidency,
+);
+const generationAdapterRegistrations = new Map<string, () => void>();
 
 let started = false;
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
@@ -23,7 +37,15 @@ const cleanups: Array<() => void> = [];
 export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
   refreshChain = refreshChain
     .catch(() => [])
-    .then(() => mobileLLMService.refresh());
+    .then(() => mobileLLMService.refresh())
+    .then(models => {
+      reconcileMobileGenerationAdapters(
+        mobileGenerationService,
+        mobileLLMService,
+        generationAdapterRegistrations,
+      );
+      return models;
+    });
   return refreshChain;
 }
 

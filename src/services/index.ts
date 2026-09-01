@@ -14,6 +14,7 @@ export { generationService } from './generationService';
 export type { QueuedMessage } from './generationService';
 export {
   mobileLLMService,
+  mobileGenerationService,
   selectMobileModel,
   clearMobileModel,
   refreshMobileModelServices,
