@@ -2,7 +2,6 @@
  *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import { statFile } from '../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { showAlert } from '../utils/alertState';
 import { modelLibrary, hardwareService, backgroundDownloadService } from '../services';
@@ -15,6 +14,11 @@ import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTyp
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
 import logger from '../utils/logger';
+import {
+  downloadSequentialImageFiles,
+  type ImageMultifileRuntime,
+  type ImageMultifileSpec,
+} from './adapters/downloads/sequentialImageFileAdapter';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
 // here). Re-exported for existing importers.
@@ -34,12 +38,7 @@ interface ImageMetadata {
   imageModelCoremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
 }
 
-type MultifileRuntime = {
-  cancelled: boolean;
-  currentDownloadId?: string;
-};
-
-const activeMultifileDownloads = new Map<string, MultifileRuntime>();
+const activeMultifileDownloads = new Map<string, ImageMultifileRuntime>();
 const USER_CANCELLED_ERROR = 'user_cancelled';
 
 /** Build a synthetic downloadId for multi-file flows that don't go through WorkManager. */
@@ -47,8 +46,8 @@ function makeMultifileId(modelId: string): string {
   return `image-multi:${modelId}`;
 }
 
-function startMultifileRuntime(modelId: string): MultifileRuntime {
-  const runtime: MultifileRuntime = { cancelled: false };
+function startMultifileRuntime(modelId: string): ImageMultifileRuntime {
+  const runtime: ImageMultifileRuntime = { controller: new AbortController() };
   activeMultifileDownloads.set(modelId, runtime);
   return runtime;
 }
@@ -65,28 +64,18 @@ function isCancelledError(error: unknown): boolean {
     || (error as Error & { cancelled?: boolean }).cancelled === true;
 }
 
-function assertNotCancelled(modelId: string, runtime: MultifileRuntime) {
+function assertNotCancelled(modelId: string, runtime: ImageMultifileRuntime) {
   const stillVisible = !!useDownloadStore.getState().downloads[makeImageModelKey(modelId)];
-  if (runtime.cancelled || !stillVisible) {
-    runtime.cancelled = true;
+  if (runtime.controller.signal.aborted || !stillVisible) {
+    if (!runtime.controller.signal.aborted) runtime.controller.abort();
     throw new Error(USER_CANCELLED_ERROR);
   }
-}
-
-function wireCurrentDownloadPromise(downloadIdPromise: Promise<string> | undefined, runtime: MultifileRuntime) {
-  if (downloadIdPromise === undefined) return;
-  downloadIdPromise.then((downloadId) => {
-    runtime.currentDownloadId = downloadId;
-    if (runtime.cancelled) {
-      backgroundDownloadService.cancelDownload(downloadId).catch(() => {});
-    }
-  }).catch(() => {});
 }
 
 export async function cancelSyntheticImageDownload(modelId: string): Promise<void> {
   const runtime = activeMultifileDownloads.get(modelId);
   if (!runtime) return;
-  runtime.cancelled = true;
+  runtime.controller.abort();
   // Drop a part still waiting for a slot NOW — it has no native downloadId yet, so
   // cancelDownload can't reach it (else it promotes, briefly starts, then cancels).
   // The queue key is the part's modelId param, == makeImageModelKey(modelId).
@@ -116,58 +105,25 @@ function setMultifileFailed(syntheticId: string, deps: ImageDownloadDeps, messag
   });
 }
 
-type MultifileDownloadSpec = {
-  relativePath: string;
-  size: number;
-  url: string;
-};
-
 async function downloadSequentialFiles(opts: {
   modelInfo: ImageModelDescriptor;
-  runtime: MultifileRuntime;
+  runtime: ImageMultifileRuntime;
   syntheticId: string;
   modelDir: string;
-  files: MultifileDownloadSpec[];
+  files: ImageMultifileSpec[];
 }): Promise<void> {
   const { modelInfo, runtime, syntheticId, modelDir, files } = opts;
-  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-  let downloadedSize = 0;
-
-  for (const file of files) {
-    assertNotCancelled(modelInfo.id, runtime);
-    const filePath = `${modelDir}/${file.relativePath}`;
-    const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
-    await ensureDirectory(fileDir);
-
-    const tempFileName = `${modelInfo.id}_${file.relativePath.replaceAll('/', '_')}`;
-    const capturedDownloadedSize = downloadedSize;
-    const { downloadIdPromise, promise } = backgroundDownloadService.downloadFileTo({
-      params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, modelType: 'image', totalBytes: file.size },
-      destPath: filePath,
-      onProgress: (bytesDownloaded) => {
-        if (runtime.cancelled) return;
-        const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
-        useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
-      },
-    });
-    wireCurrentDownloadPromise(downloadIdPromise, runtime);
-    await promise;
-    runtime.currentDownloadId = undefined;
-    downloadedSize += file.size;
-    useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
-  }
-}
-
-/** Verify every part is present and non-empty before registering — a download can
- *  resolve "successfully" yet write a 0-byte file (200 with no body). Existence +
- *  non-empty only (NOT exact size: descriptor sizes drift from real bytes). Throws so
- *  the caller's catch fails it (retry-able) instead of registering garbage. */
-async function validateMultifileComplete(modelDir: string, files: MultifileDownloadSpec[]): Promise<void> {
-  for (const file of files) {
-    const filePath = `${modelDir}/${file.relativePath}`;
-    const size = (await statFile(filePath))?.size ?? -1;
-    if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
-  }
+  await downloadSequentialImageFiles({
+    modelId: modelInfo.id,
+    runtime,
+    modelDir,
+    files,
+    transfers: backgroundDownloadService,
+    isCancelled: () =>
+      !useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)],
+    onProgress: (bytes, total) =>
+      useDownloadStore.getState().updateProgress(syntheticId, bytes, total),
+  });
 }
 
 /** Remove the entry from the store. Use after register-and-notify or on error. */
@@ -299,7 +255,6 @@ export async function downloadHuggingFaceModel(
     }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
-    await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
@@ -353,7 +308,6 @@ export async function downloadCoreMLMultiFile(
     const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
-    await validateMultifileComplete(modelDir, files); // reject a silently-truncated part before registering
     useDownloadStore.getState().setProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});

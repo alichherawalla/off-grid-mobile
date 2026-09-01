@@ -17,7 +17,7 @@ import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './typ
 import { matchesSdVersionFilter } from './utils';
 import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { startImageModelDownload as downloadImageModel, type ImageDownloadDeps } from '../../services/imageModelDownloadOwner';
-import { resumeImageDownload } from './imageDownloadResume';
+import { resumeImageDownload } from '../../services/imageDownloadResume';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);

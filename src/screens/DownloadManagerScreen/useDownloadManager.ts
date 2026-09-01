@@ -22,11 +22,9 @@ import {
   queuedToActiveItem,
 } from './downloadItemMapping';
 import logger from '../../utils/logger';
-import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
-import { retryImageDownload } from './retryHandlers';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
-import { setImageDownloadOps } from '../../services/adapters/downloads/imageDownloadAdapter';
+import { setImageDownloadAlertSink } from '../../services/adapters/downloads/imageDownloadAdapter';
 import { useEffect } from 'react';
 
 export interface UseDownloadManagerResult {
@@ -50,7 +48,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
     useAppStore();
 
   const downloads = useDownloadStore(state => state.downloads);
-  const removeDownloadEntry = useDownloadStore(state => state.remove);
 
   // Downloads waiting for a concurrency slot live only in the service's queue (no
   // store row yet), so read them from their owner and show them as "Queued". Refresh
@@ -87,43 +84,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } =
     useVoiceDownloadItems(() => setAlertState(hideAlert()));
 
-  // Inject the UI-coupled image cancel/retry into the image provider so control ops
-  // route through the single download service (which logs every [DL-SM] action).
-  // These are the exact paths the manager used inline; they need alerts/resume, so
-  // they can't live in the (UI-free) provider — they're injected here.
+  // Supply only the presentation port. The provider owns all image retry and cancel
+  // policy, including synthetic multi-file cancellation and native-row cleanup.
   useEffect(() => {
-    setImageDownloadOps({
-      cancel: async (modelId, entry) => {
-        removeDownloadEntry(entry.modelKey);
-        if (entry.downloadId.startsWith('image-multi:')) {
-          await cancelSyntheticImageDownload(modelId).catch(() => {});
-          const rows = await backgroundDownloadService
-            .getActiveDownloads()
-            .catch(() => [] as any[]);
-          await Promise.all(
-            rows
-              .filter(r => r.modelId === `image:${modelId}`)
-              .map(r =>
-                backgroundDownloadService
-                  .cancelDownload(r.downloadId)
-                  .catch(() => {}),
-              ),
-          );
-        } else {
-          await backgroundDownloadService
-            .cancelDownload(entry.downloadId)
-            .catch(() => {});
-        }
-      },
-      retry: async (_modelId, entry) => {
-        await retryImageDownload(
-          entryToActiveItem(entry),
-          entry,
-          setAlertState,
-        );
-      },
-    });
-  }, [removeDownloadEntry]);
+    setImageDownloadAlertSink(setAlertState);
+    return () => setImageDownloadAlertSink();
+  }, []);
 
   /**
    * Uniform download id the service routes on. MUST go through uniformDownloadId so

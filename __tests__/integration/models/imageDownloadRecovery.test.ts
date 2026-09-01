@@ -9,6 +9,7 @@ const mockBackgroundDownloadService = {
 
 const mockModelManager = {
   getImageModelsDirectory: jest.fn(),
+  getDownloadedImageModels: jest.fn(async () => []),
   addDownloadedImageModel: jest.fn(),
 };
 
@@ -21,6 +22,10 @@ jest.mock('../../../src/utils/imageModelIntegrity', () => ({
 
 jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: mockBackgroundDownloadService,
+}));
+
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: mockModelManager,
 }));
 
 jest.mock('../../../src/services', () => ({
@@ -37,7 +42,7 @@ jest.mock('../../../src/components/CustomAlert', () => ({
 }));
 
 const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-const { resumeImageDownload } = require('../../../src/screens/ModelsScreen/imageDownloadResume');
+const { resumeImageDownload } = require('../../../src/services/imageDownloadResume');
 const { useDownloadStore } = require('../../../src/stores/downloadStore');
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

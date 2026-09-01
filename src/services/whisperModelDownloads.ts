@@ -5,6 +5,10 @@ import { makeModelKey } from '../utils/modelKey';
 import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import * as whisperModelFiles from './whisperModelFiles';
 import { WHISPER_MODELS } from './whisperModels';
+import {
+  DownloadOperationRegistry,
+  type DownloadOperationOwner,
+} from '@offgrid/models';
 
 export interface DownloadedWhisperModel {
   modelId: string;
@@ -13,53 +17,24 @@ export interface DownloadedWhisperModel {
   filePath: string;
 }
 
-interface ActiveDownloadOwner {
-  readonly modelKey: string;
-  cancelRequested: boolean;
-  nativeDownloadId: string | null;
-  nativeCancel: Promise<void> | null;
-  queuePublished: boolean;
-}
-
-function createDownloadOwner(modelKey: string): ActiveDownloadOwner {
-  return {
-    modelKey,
-    cancelRequested: false,
-    nativeDownloadId: null,
-    nativeCancel: null,
-    queuePublished: false,
-  };
-}
-
-function cancelNativeOwner(
-  owner: ActiveDownloadOwner,
-  downloadId: string,
-): Promise<void> {
-  owner.nativeCancel ??= backgroundDownloadService
-    .cancelDownload(downloadId)
-    .catch(() => {});
-  return owner.nativeCancel;
-}
-
 interface MissingModelDownloadInput {
   model: (typeof WHISPER_MODELS)[number];
   fileName: string;
   destPath: string;
-  owner: ActiveDownloadOwner;
+  owner: DownloadOperationOwner;
   onProgress?: (progress: number) => void;
 }
 
 /** Owns Whisper download queue identity and native-download cleanup. */
 export class WhisperModelDownloads {
-  private readonly activeDownloads = new Map<string, ActiveDownloadOwner>();
+  private readonly operations = new DownloadOperationRegistry();
 
   private async unlinkOwnedFile(
     modelId: string,
-    owner: ActiveDownloadOwner,
+    owner: DownloadOperationOwner,
     path: string,
   ): Promise<void> {
-    const activeOwner = this.activeDownloads.get(modelId);
-    if (activeOwner && activeOwner !== owner) return;
+    if (!this.operations.isCurrent(owner)) return;
     await RNFS.unlink(path);
   }
 
@@ -71,11 +46,9 @@ export class WhisperModelDownloads {
     if (!model) throw new Error(`Unknown model: ${modelId}`);
     const fileName = `ggml-${modelId}.bin`;
     const modelKey = makeModelKey(`whisper-${modelId}`, fileName);
-    const owner = createDownloadOwner(modelKey);
+    const owner = this.operations.begin(modelId, modelKey);
     // Ownership exists before the first asynchronous boundary. A delete that
     // arrives during directory or file checks still waits for this exact start.
-    this.activeDownloads.set(modelId, owner);
-
     try {
       await whisperModelFiles.ensureModelsDirExists();
       const destPath = whisperModelFiles.getModelPath(modelId);
@@ -96,11 +69,8 @@ export class WhisperModelDownloads {
         onProgress,
       });
     } finally {
-      if (this.activeDownloads.get(modelId) === owner) {
-        this.activeDownloads.delete(modelId);
-        if (owner.queuePublished) {
-          useDownloadStore.getState().remove(owner.modelKey);
-        }
+      if (this.operations.finish(owner) && owner.published) {
+        useDownloadStore.getState().remove(owner.modelKey);
       }
     }
   }
@@ -123,7 +93,7 @@ export class WhisperModelDownloads {
 
     // Publish the queue entry before a native concurrency slot opens. All model
     // types then use the same canonical progress store and cancellation identity.
-    owner.queuePublished = true;
+    this.operations.markPublished(owner);
     useDownloadStore.getState().add({
       modelKey,
       downloadId: queuedId,
@@ -161,10 +131,11 @@ export class WhisperModelDownloads {
       });
     downloadIdPromise.then(
       downloadId => {
-        owner.nativeDownloadId = downloadId;
-        if (owner.cancelRequested) {
-          cancelNativeOwner(owner, downloadId).catch(() => {});
-        }
+        this.operations.attachTransfer(
+          owner,
+          downloadId,
+          id => backgroundDownloadService.cancelDownload(id),
+        );
       },
       () => undefined,
     );
@@ -207,29 +178,18 @@ export class WhisperModelDownloads {
   }
 
   async deleteModel(modelId: string): Promise<void> {
-    const owner = this.activeDownloads.get(modelId);
-    if (owner) {
-      owner.cancelRequested = true;
-      // Cancel the queue owner immediately. If admission already won the race,
-      // the native-id continuation above cancels that exact request as well.
-      await backgroundDownloadService
-        .cancelDownload(`queued:${owner.modelKey}`)
-        .catch(() => {});
-      if (owner.nativeDownloadId !== null) {
-        await cancelNativeOwner(owner, owner.nativeDownloadId);
-      }
-      if (this.activeDownloads.get(modelId) === owner) {
-        this.activeDownloads.delete(modelId);
-        if (owner.queuePublished) {
-          useDownloadStore.getState().remove(owner.modelKey);
-        }
-      }
+    const owner = await this.operations.requestCancel(modelId, {
+      cancelQueued: modelKey => backgroundDownloadService
+        .cancelDownload(`queued:${modelKey}`),
+      cancelTransfer: downloadId => backgroundDownloadService.cancelDownload(downloadId),
+    });
+    if (owner?.published && !this.operations.hasReplacement(owner)) {
+      useDownloadStore.getState().remove(owner.modelKey);
     }
 
     const path = whisperModelFiles.getModelPath(modelId);
     if (await RNFS.exists(path)) {
-      const replacement = this.activeDownloads.get(modelId);
-      if (replacement && replacement !== owner) return;
+      if (owner && this.operations.hasReplacement(owner)) return;
       await RNFS.unlink(path);
     }
   }

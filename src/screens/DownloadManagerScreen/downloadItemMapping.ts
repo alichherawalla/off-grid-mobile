@@ -2,7 +2,7 @@ import { DownloadEntry } from '../../stores/downloadStore';
 import { hardwareService } from '../../services';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem } from './items';
-import { parseEntryMetadata } from './retryHandlers';
+import { parseEntryMetadata } from '../../services/imageDownloadRetry';
 import { imageBackendLabel } from '../../utils/imageBackend';
 
 /**

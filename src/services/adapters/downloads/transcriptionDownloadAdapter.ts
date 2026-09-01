@@ -14,7 +14,7 @@ import { coordinatedDownloads as backgroundDownloadService } from '../../modelSe
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
 import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';
-import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
+import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
 
 const STT_CAPABILITIES = {
@@ -126,6 +126,13 @@ export const sttProvider: DownloadProvider = {
     const store = useDownloadStore.getState();
     for (const e of Object.values(store.downloads)) {
       if (e.modelType === 'stt' && isActiveStatus(e.status)) {
+        const policy = downloadRetryPolicy({
+          platformCanResume: false,
+          syntheticTransfer: true,
+          hasNativeTransfer: Boolean(e.downloadId),
+          status: e.status,
+        });
+        if (policy.relaunch !== 'mark-interrupted') continue;
         logger.log(`[DL-SM] stt:${bareId(e.modelId)} reconcile: interrupted by app close → failed`);
         store.setStatus(e.downloadId, 'failed', { message: 'Interrupted — app closed. Tap retry.' });
       }

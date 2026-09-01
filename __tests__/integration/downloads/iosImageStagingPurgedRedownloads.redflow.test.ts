@@ -52,7 +52,7 @@ describe.each(['ios', 'android'] as const)(
       const { useDownloadStore, isActiveStatus } = require('../../../src/stores/downloadStore');
       const { useAppStore } = require('../../../src/stores');
       const { makeImageModelKey } = require('../../../src/utils/modelKey');
-      const { resumeImageDownload } = require('../../../src/screens/ModelsScreen/imageDownloadResume');
+      const { resumeImageDownload } = require('../../../src/services/imageDownloadResume');
 
       const fx = FIXTURES[platform];
       const fileName = `${fx.modelId}.zip`;

@@ -18,7 +18,7 @@ import { hardwareService } from '../../hardware';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
-import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
+import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startModelDownload } from '../../startModelDownload';
 import type { DownloadParams } from '../../backgroundDownloadTypes';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
@@ -123,7 +123,14 @@ export const textProvider: DownloadProvider = {
   async retry(id: string): Promise<void> {
     const entry = findEntry(keyOf(id));
     if (!entry) return;
-    if (Platform.OS === 'android') {
+    const policy = downloadRetryPolicy({
+      platformCanResume: Platform.OS === 'android',
+      syntheticTransfer: false,
+      hasNativeTransfer: Boolean(entry.downloadId),
+      status: entry.status,
+      restartOnInterrupted: true,
+    });
+    if (policy.retry === 'resume-native') {
       // Android resumes the existing WorkManager job in place, so it genuinely needs the live
       // downloadId to reattach to.
       if (!entry.downloadId) return;
@@ -191,11 +198,18 @@ export const textProvider: DownloadProvider = {
   },
 
   async reconcile(): Promise<void> {
-    if (Platform.OS === 'android') return; // WorkManager resumes — nothing to strand
     const store = useDownloadStore.getState();
     const registered = new Set(useAppStore.getState().downloadedModels.map(m => m.id));
     for (const e of textEntries()) {
       if (!isActiveStatus(e.status)) continue;
+      const policy = downloadRetryPolicy({
+        platformCanResume: Platform.OS === 'android',
+        syntheticTransfer: false,
+        hasNativeTransfer: Boolean(e.downloadId),
+        status: e.status,
+        restartOnInterrupted: true,
+      });
+      if (policy.relaunch === 'retain-native') continue;
       if (registered.has(e.modelKey)) {
         // Already on disk — this in-flight row is stale (a re-start of a completed
         // model). Compare by modelKey: downloadedModels are keyed by model.id which IS

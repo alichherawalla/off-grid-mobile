@@ -1,15 +1,16 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
-import { modelLibrary, backgroundDownloadService } from '../../services';
-import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ONNXImageModel } from '../../types';
-import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
-import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from '../../services/imageDownloadActions';
+import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
+import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
+import { resolveCoreMLModelDir } from '../utils/coreMLModelUtils';
+import { ONNXImageModel } from '../types';
+import { useDownloadStore, DownloadEntry } from '../stores/downloadStore';
+import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
-import { validateImageModelDir, ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
-import { makeImageModelKey } from '../../utils/modelKey';
-import logger from '../../utils/logger';
+import { validateImageModelDir, ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
+import { makeImageModelKey } from '../utils/modelKey';
+import logger from '../utils/logger';
 
 type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: Record<string, any>; deps: ImageDownloadDeps };
 

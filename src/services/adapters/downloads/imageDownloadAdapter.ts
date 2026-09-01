@@ -1,16 +1,9 @@
 /**
  * Image (ONNX/CoreML) download provider. list/remove/reconcile are service-level.
  *
- * RETRY platform split lives HERE (mirrors textProvider): Android resumes the native
- * row in-place (setStatus + retryDownload — UI-free, so the provider does it
- * directly); iOS must re-run the alert-coupled finalization/re-download, which pulls
- * CustomAlert and can't be imported into a service, so that one path is INJECTED by
- * the Download Manager via setImageDownloadOps. The UI never branches on Platform.OS
- * for retry — the provider owns the decision.
- *
- * CANCEL is UI-coupled for multi-file (synthetic `image-multi:` rows need the alert
- * path), also injected via setImageDownloadOps; it falls back to a plain native
- * cancel when no ops are registered.
+ * The provider owns retry and cancellation decisions. The UI supplies only an alert
+ * sink, which is a presentation port. Native transfer and filesystem work stay in
+ * Mobile adapters.
  *
  * resumable: zip on Android only; multi-file (synthetic `image-multi:` id, no native
  * row) is never resumable → reconcile strands stranded in-flight as retriable error.
@@ -22,24 +15,21 @@ import { coordinatedDownloads as backgroundDownloadService } from '../../modelSe
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
-import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
+import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
 import { mobileRouteId } from '../../modelServices/mobileRoute';
 import { selectMobileRoute } from '../../modelServices/mobileLLMService';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
+import { cancelSyntheticImageDownload } from '../../imageDownloadActions';
+import { retryImageDownload } from '../../imageDownloadRetry';
+import type { AlertState } from '../../../utils/alertState';
 
-/**
- * Alert-coupled image ops the Download Manager injects:
- *  - cancel: multi-file (synthetic row) cancel that needs the alert path.
- *  - retry:  the iOS re-download/finalization path (pulls CustomAlert). Android retry
- *            is handled natively inside this provider and does NOT use this op.
- */
-export interface ImageDownloadOps {
-  cancel?: (modelId: string, entry: DownloadEntry) => Promise<void>;
-  retry?: (modelId: string, entry: DownloadEntry) => Promise<void>;
+/** Presentation port only. The owning provider keeps all control-flow decisions. */
+export type ImageDownloadAlertSink = (state: AlertState) => void;
+let imageAlertSink: ImageDownloadAlertSink = () => undefined;
+export function setImageDownloadAlertSink(sink?: ImageDownloadAlertSink): void {
+  imageAlertSink = sink ?? (() => undefined);
 }
-let imageOps: ImageDownloadOps = {};
-export function setImageDownloadOps(ops: ImageDownloadOps): void { imageOps = ops; }
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const bareId = (storeModelId: string): string => storeModelId.replace(/^image:/, '');
@@ -110,11 +100,17 @@ export const imageProvider: DownloadProvider = {
     const modelId = modelIdOf(id);
     const entry = findEntry(modelId);
     if (!entry) return;
-    if (imageOps.cancel) { await imageOps.cancel(modelId, entry); return; } // UI-coupled (multi-file)
-    // Fallback: plain native cancel for a zip/native row.
+    useDownloadStore.getState().remove(entry.modelKey);
+    if (isMultifile(entry)) {
+      await cancelSyntheticImageDownload(modelId).catch(() => {});
+      const rows = await backgroundDownloadService.getActiveDownloads().catch(() => []);
+      await Promise.all(rows
+        .filter(row => row.modelId === `image:${modelId}`)
+        .map(row => backgroundDownloadService.cancelDownload(row.downloadId).catch(() => {})));
+      return;
+    }
     await backgroundDownloadService.cancelDownload(entry.downloadId)
       .catch(err => logger.log(`[DL-SM] image:${modelId} cancel: native cancel failed err=${msg(err)}`));
-    useDownloadStore.getState().remove(entry.modelKey);
   },
 
   async retry(id: string): Promise<void> {
@@ -125,9 +121,14 @@ export const imageProvider: DownloadProvider = {
     // FINISHED and then failed EXTRACTION (ImageModelIncompleteError — missing unet.bin/clip.weight),
     // or a multi-file download (synthetic `image-multi:` row), has NO live native row to resume:
     // retryDownload throws "Download not found" on EVERY tap (device-confirmed, B6). In those cases
-    // fall back to the injected full re-download path (cancels the stale row, fetches fresh).
-    const nativeResumable = Platform.OS === 'android' && !isMultifile(entry) && !!entry.downloadId;
-    if (nativeResumable) {
+    // fall back to the service recovery path (cancels the stale row, fetches fresh).
+    const policy = downloadRetryPolicy({
+      platformCanResume: Platform.OS === 'android',
+      syntheticTransfer: isMultifile(entry),
+      hasNativeTransfer: Boolean(entry.downloadId),
+      status: entry.status,
+    });
+    if (policy.retry === 'resume-native') {
       try {
         useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
         await backgroundDownloadService.retryDownload(entry.downloadId);
@@ -138,8 +139,7 @@ export const imageProvider: DownloadProvider = {
         logger.log(`[DL-SM] image:${modelId} native resume failed (${msg(e)}) — re-downloading from scratch`);
       }
     }
-    if (imageOps.retry) { await imageOps.retry(modelId, entry); return; } // full re-download (all platforms) / iOS
-    logger.log(`[DL-SM] image:${modelId} retry: no live native row and no image ops — refused`);
+    await retryImageDownload(entry, imageAlertSink);
   },
 
   async remove(id: string): Promise<void> {
@@ -166,8 +166,13 @@ export const imageProvider: DownloadProvider = {
     const store = useDownloadStore.getState();
     for (const e of imageEntries()) {
       if (!isActiveStatus(e.status)) continue;
-      const resumableOnRelaunch = !isMultifile(e) && Platform.OS === 'android';
-      if (resumableOnRelaunch) continue;
+      const policy = downloadRetryPolicy({
+        platformCanResume: Platform.OS === 'android',
+        syntheticTransfer: isMultifile(e),
+        hasNativeTransfer: Boolean(e.downloadId),
+        status: e.status,
+      });
+      if (policy.relaunch === 'retain-native') continue;
       logger.log(`[DL-SM] image:${bareId(e.modelId)} reconcile: interrupted (multifile/iOS) → failed`);
       store.setStatus(e.downloadId, 'failed', { message: 'Interrupted — app closed. Tap retry.' });
     }

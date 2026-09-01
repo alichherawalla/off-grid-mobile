@@ -34,7 +34,7 @@ jest.mock('../../../../src/services', () => ({
   },
 }));
 
-jest.mock('../../../../src/screens/ModelsScreen/imageDownloadResume', () => ({
+jest.mock('../../../../src/services/imageDownloadResume', () => ({
   resumeImageDownload: (...args: any[]) => mockResumeImageDownload(...args),
 }));
 

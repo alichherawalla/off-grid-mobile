@@ -1,18 +1,20 @@
 /**
- * Image download provider — list/remove/reconcile are service-level; cancel/retry
- * are injected by the UI (imageDownloadActions pulls CustomAlert, so the provider
- * must stay UI-free). Verifies list, injected-op delegation, native cancel fallback,
- * remove, and that a multi-file (no native row) interrupted download is stranded.
+ * Image download provider coverage for list, retry, cancellation, removal, and
+ * interrupted multi-file recovery. The UI supplies only its alert sink.
  */
 jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({ modelLibrary: { deleteImageModel: jest.fn(async () => {}) } }));
 jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({ coordinatedDownloads: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn() } }));
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({ coordinatedDownloads: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn(), getActiveDownloads: jest.fn(async () => []) } }));
+const mockRetryImageDownload = jest.fn(async (_entry: any, _sink: any) => {});
+const mockCancelSyntheticImageDownload = jest.fn(async (_modelId: string) => {});
+jest.mock('../../../src/services/imageDownloadRetry', () => ({ retryImageDownload: (entry: any, sink: any) => mockRetryImageDownload(entry, sink) }));
+jest.mock('../../../src/services/imageDownloadActions', () => ({ cancelSyntheticImageDownload: (modelId: string) => mockCancelSyntheticImageDownload(modelId) }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
 import { Platform } from 'react-native';
-import { imageProvider, setImageDownloadOps } from '../../../src/services/adapters/downloads/imageDownloadAdapter';
+import { imageProvider, setImageDownloadAlertSink } from '../../../src/services/adapters/downloads/imageDownloadAdapter';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { useAppStore } from '../../../src/stores';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
@@ -30,7 +32,7 @@ const originalOS = Platform.OS;
 beforeEach(() => {
   jest.clearAllMocks();
   setPlatform(originalOS as 'ios' | 'android');
-  setImageDownloadOps({});
+  setImageDownloadAlertSink();
   useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
   useAppStore.setState({ downloadedImageModels: [] } as any);
   useDownloadStore.getState().add(entry());
@@ -50,12 +52,12 @@ describe('imageProvider', () => {
     expect(done?.status).toBe('completed');
   });
 
-  it('delegates cancel to the injected UI op when registered', async () => {
-    const cancel = jest.fn(async () => {});
-    setImageDownloadOps({ cancel });
+  it('cancels a synthetic multi-file transfer in the service layer', async () => {
+    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
+    useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl' }));
     await imageProvider.cancel('image:sdxl');
-    expect(cancel).toHaveBeenCalledWith('sdxl', expect.objectContaining({ downloadId: 'dl-img' }));
-    expect(mockBg.cancelDownload).not.toHaveBeenCalled();
+    expect(mockCancelSyntheticImageDownload).toHaveBeenCalledWith('sdxl');
+    expect(useDownloadStore.getState().downloads['image:sdxl/m']).toBeUndefined();
   });
 
   it('falls back to a native cancel when no UI op is registered', async () => {
@@ -63,22 +65,17 @@ describe('imageProvider', () => {
     expect(mockBg.cancelDownload).toHaveBeenCalledWith('dl-img');
   });
 
-  it('iOS retry: delegates to the injected (alert-coupled) UI op', async () => {
+  it('iOS retry delegates to the service-level recovery flow', async () => {
     setPlatform('ios');
-    const retry = jest.fn(async () => {});
-    setImageDownloadOps({ retry });
     await imageProvider.retry('image:sdxl');
-    expect(retry).toHaveBeenCalledWith('sdxl', expect.objectContaining({ downloadId: 'dl-img' }));
+    expect(mockRetryImageDownload).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'dl-img' }), expect.any(Function));
     expect(mockBg.retryDownload).not.toHaveBeenCalled();
   });
 
   it('Android retry: resumes the native row directly, no UI op needed', async () => {
     setPlatform('android');
-    const retry = jest.fn(async () => {});
-    setImageDownloadOps({ retry });
     await imageProvider.retry('image:sdxl');
-    // Platform decision lives in the provider: Android never touches the injected op.
-    expect(retry).not.toHaveBeenCalled();
+    expect(mockRetryImageDownload).not.toHaveBeenCalled();
     expect(mockBg.retryDownload).toHaveBeenCalledWith('dl-img');
     expect(useDownloadStore.getState().downloads['image:sdxl/m'].status).toBe('pending');
   });
@@ -89,11 +86,9 @@ describe('imageProvider', () => {
   it('Android retry: falls back to the full re-download op when the native row is gone', async () => {
     setPlatform('android');
     mockBg.retryDownload.mockRejectedValueOnce(new Error('Download not found'));
-    const retry = jest.fn(async () => {});
-    setImageDownloadOps({ retry });
     await imageProvider.retry('image:sdxl');
     expect(mockBg.retryDownload).toHaveBeenCalledWith('dl-img'); // tried native resume first
-    expect(retry).toHaveBeenCalledWith('sdxl', expect.objectContaining({ downloadId: 'dl-img' })); // then re-download
+    expect(mockRetryImageDownload).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'dl-img' }), expect.any(Function));
   });
 
   // A multi-file (synthetic `image-multi:` row) download has no resumable native row — go straight
@@ -102,20 +97,17 @@ describe('imageProvider', () => {
     setPlatform('android');
     useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
     useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl' }));
-    const retry = jest.fn(async () => {});
-    setImageDownloadOps({ retry });
     await imageProvider.retry('image:sdxl');
     expect(mockBg.retryDownload).not.toHaveBeenCalled();
-    expect(retry).toHaveBeenCalled();
+    expect(mockRetryImageDownload).toHaveBeenCalled();
   });
 
   it('capability.retry is a STABLE constant (does not depend on injected ops)', async () => {
     // No ops injected at all — capability must still advertise retry: true on both
     // platforms (the flag must not flap when the UI injects ops in a later effect).
-    setImageDownloadOps({});
     const d1 = (await imageProvider.list()).find(x => x.id === 'image:sdxl');
     expect(d1?.capabilities.retry).toBe(true);
-    setImageDownloadOps({ retry: jest.fn(async () => {}) });
+    setImageDownloadAlertSink(jest.fn());
     const d2 = (await imageProvider.list()).find(x => x.id === 'image:sdxl');
     expect(d2?.capabilities.retry).toBe(true);
   });

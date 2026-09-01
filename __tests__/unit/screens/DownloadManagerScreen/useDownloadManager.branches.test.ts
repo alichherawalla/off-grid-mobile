@@ -8,7 +8,7 @@
  * - handleRetryDownload → modelDownloadService.retry(`${type}:${modelId}`)
  * - handleRemoveDownload (confirm) → modelDownloadService.cancel(id)
  * - handleDeleteItem: tts/stt → voice alert; text/image (confirm) → service.remove(id)
- * - the image cancel/retry ops are injected into the provider (setImageDownloadOps)
+ * - only the image alert presentation port is registered with the provider
  * - handleRepairVision + activeItems mapping (still owned by the hook) unchanged.
  */
 
@@ -37,7 +37,7 @@ const mockMDS = {
   cancel: jest.fn(async (_id: string) => {}),
   remove: jest.fn(async (_id: string) => {}),
 };
-const mockSetImageDownloadOps = jest.fn();
+const mockSetImageDownloadAlertSink = jest.fn();
 
 const mockSetRepairingVision = jest.fn();
 const mockRemove = jest.fn();
@@ -63,12 +63,12 @@ jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', ()
   get modelDownloadRegistry() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: (fn: any) => mockSubscribe(fn) }; },
 }));
 jest.mock('../../../../src/services/adapters/downloads/imageDownloadAdapter', () => ({
-  setImageDownloadOps: (...a: any[]) => mockSetImageDownloadOps(...a),
+  setImageDownloadAlertSink: (...a: any[]) => mockSetImageDownloadAlertSink(...a),
 }));
 jest.mock('../../../../src/services/imageDownloadActions', () => ({
   cancelSyntheticImageDownload: jest.fn(),
 }));
-jest.mock('../../../../src/screens/DownloadManagerScreen/retryHandlers', () => ({
+jest.mock('../../../../src/services/imageDownloadRetry', () => ({
   parseEntryMetadata: (entry: any) => { try { return entry.metadataJson ? JSON.parse(entry.metadataJson) : null; } catch { return null; } },
   retryImageDownload: jest.fn(async () => {}),
 }));
@@ -158,9 +158,9 @@ describe('control ops delegate to ModelDownloadService', () => {
     expect(mockMDS.cancel).toHaveBeenCalledWith('image:sdxl');
   });
 
-  it('registers the image cancel/retry ops with the provider', () => {
+  it('registers only the image alert presentation port', () => {
     renderHook(() => useDownloadManager());
-    expect(mockSetImageDownloadOps).toHaveBeenCalledWith(expect.objectContaining({ cancel: expect.any(Function), retry: expect.any(Function) }));
+    expect(mockSetImageDownloadAlertSink).toHaveBeenCalledWith(expect.any(Function));
   });
 });
 

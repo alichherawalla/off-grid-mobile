@@ -1,8 +1,9 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { backgroundDownloadService, modelLibrary } from '../../../../src/services';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../../src/services/modelServices/coordinatedDownloadBridge';
+import { modelLibrary } from '../../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { registerAndNotify } from '../../../../src/services/imageDownloadActions';
-import { resumeImageDownload } from '../../../../src/screens/ModelsScreen/imageDownloadResume';
+import { resumeImageDownload } from '../../../../src/services/imageDownloadResume';
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
@@ -25,12 +26,14 @@ jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
   ensureImageExtractionComplete: jest.fn(async () => {}),
 }));
 
-jest.mock('../../../../src/services', () => ({
+jest.mock('../../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
   modelLibrary: {
     getImageModelsDirectory: jest.fn(),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
-  backgroundDownloadService: {
+}));
+jest.mock('../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     moveCompletedDownload: jest.fn(),
   },
 }));

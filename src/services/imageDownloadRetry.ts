@@ -8,18 +8,18 @@
  * selection does not belong in the presentation layer. `parseEntryMetadata` stays
  * because the Download Manager's item mapping uses it.
  */
-import { AlertState } from '../../components/CustomAlert';
-import { useAppStore } from '../../stores';
-import { DownloadEntry } from '../../stores/downloadStore';
-import { backgroundDownloadService, selectMobileModel } from '../../services';
-import { DownloadItem } from './items';
-import logger from '../../utils/logger';
+import type { AlertState } from '../utils/alertState';
+import { useAppStore } from '../stores';
+import { DownloadEntry } from '../stores/downloadStore';
+import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
+import { selectMobileModel } from './modelServices';
+import logger from '../utils/logger';
 import {
   proceedWithDownload,
   type ImageDownloadDeps,
-} from '../../services/imageDownloadActions';
-import { imageDescriptorFromMetadata } from '../ModelsScreen/imageDescriptor';
-import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
+} from './imageDownloadActions';
+import { imageDescriptorFromMetadata } from './imageDescriptor';
+import { resumeImageDownload } from './imageDownloadResume';
 
 export function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
   if (!entry.metadataJson) return null;
@@ -83,20 +83,20 @@ async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: Al
  * handled the retry so the caller can stop.
  */
 async function tryResumeImageFinalization(
-  item: DownloadItem,
   entry: DownloadEntry | undefined,
   setAlertState: (s: AlertState) => void,
 ): Promise<boolean> {
   if (!entry) return false;
-  const hasAllBytes = item.fileSize > 0 && item.bytesDownloaded >= item.fileSize;
+  const totalBytes = entry?.combinedTotalBytes || entry?.totalBytes || 0;
+  const hasAllBytes = totalBytes > 0 && (entry?.bytesDownloaded || 0) >= totalBytes;
   let nativeMainStatus: string | undefined;
   try {
     const activeRows = await backgroundDownloadService.getActiveDownloads();
-    nativeMainStatus = activeRows.find(row => row.downloadId === item.downloadId)?.status;
+    nativeMainStatus = activeRows.find(row => row.downloadId === entry.downloadId)?.status;
   } catch {
     // Best-effort native state check only.
   }
-  if (item.status === 'processing' || hasAllBytes || nativeMainStatus === 'completed') {
+  if (entry.status === 'processing' || hasAllBytes || nativeMainStatus === 'completed') {
     await resumeImageFinalization(entry, setAlertState);
     return true;
   }
@@ -104,19 +104,16 @@ async function tryResumeImageFinalization(
 }
 
 /**
- * The iOS image retry path: re-run finalization when the bytes are present, else
- * re-start the download (foreground URLSession can't be resumed). Stays in the
- * presentation layer only because it needs alerts + finalization-resume; the image
- * provider delegates here (iOS only — Android resumes natively in the provider).
+ * Re-run finalization when the bytes are present. Otherwise, restart the download.
+ * User feedback goes through the injected alert port; no screen owns this policy.
  * Throws on failure so the caller can mark the row failed.
  */
 export async function retryImageDownload(
-  item: DownloadItem,
   entry: DownloadEntry | undefined,
   setAlertState: (s: AlertState) => void,
 ): Promise<void> {
-  logger.log('[DownloadDebug] Image retry requested', { modelKey: item.modelKey, modelId: item.modelId, status: item.status });
-  if (await tryResumeImageFinalization(item, entry, setAlertState)) return;
+  logger.log('[DownloadDebug] Image retry requested', { modelKey: entry?.modelKey, modelId: entry?.modelId, status: entry?.status });
+  if (await tryResumeImageFinalization(entry, setAlertState)) return;
   if (entry) await retryIosImageDownload(entry, setAlertState);
   backgroundDownloadService.startProgressPolling();
 }

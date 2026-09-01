@@ -214,7 +214,15 @@ describe('imageDownloadActions', () => {
 
   it('downloadHuggingFaceModel fails (does NOT register) when a downloaded part is missing/empty', async () => {
     // A part resolves "successfully" but wrote a 0-byte file → validateMultifileComplete rejects.
-    (RNFS.stat as jest.Mock).mockResolvedValueOnce({ size: 0 });
+    (RNFS.readDir as jest.Mock).mockResolvedValueOnce([
+      {
+        name: 'model.onnx',
+        path: '/mock/image-models/test-hf-model/unet/model.onnx',
+        size: 0,
+        isFile: () => true,
+        isDirectory: () => false,
+      },
+    ]);
     const deps = makeDeps();
 
     await downloadHuggingFaceModel(makeHFModelInfo(), deps);
