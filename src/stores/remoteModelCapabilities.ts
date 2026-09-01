@@ -7,6 +7,11 @@
  */
 
 import logger from '../utils/logger';
+import {
+  reasoningMetadataForOllama,
+  reasoningMetadataFromChatTemplate,
+  type ModelReasoningMetadata,
+} from '@offgrid/models';
 import { templateEmitsReasoning, REASONING_DELIMITERS } from '../utils/messageContent';
 
 export interface RemoteModelInfo {
@@ -16,6 +21,7 @@ export interface RemoteModelInfo {
   supportsThinking?: boolean;
   /** Server honors chat_template_kwargs.enable_thinking to toggle reasoning per request. */
   acceptsThinkingKwarg?: boolean;
+  reasoning?: ModelReasoningMetadata;
 }
 
 function parseModelInfoKeys(modelInfo: Record<string, unknown>): { contextLength: number; supportsVision: boolean } {
@@ -81,7 +87,15 @@ function extractOllamaCapabilities(data: Record<string, unknown>): RemoteModelIn
     /\.Think|\.Thinking|\.IsThinkSet/.test(template) ||
     /^RENDERER\s/m.test(modelfile);
 
-  return { contextLength, supportsVision, supportsToolCalling, supportsThinking };
+  return {
+    contextLength,
+    supportsVision,
+    supportsToolCalling,
+    supportsThinking,
+    reasoning: reasoningMetadataForOllama(
+      supportsThinking ? 'boolean' : 'unsupported',
+    ),
+  };
 }
 
 /**
@@ -179,6 +193,9 @@ export async function fetchLmStudioModelInfo(
       // the probe would strip the kwarg from a thinking model whenever the probe
       // merely flaked (timeout/network) during discovery.
       acceptsThinkingKwarg: true,
+      reasoning: supportsThinking
+        ? { transport: 'openai-compatible', control: 'enable-thinking' }
+        : { transport: 'openai-compatible', control: 'unsupported' },
     };
   } catch {
     // Timeout, network error, parse error
@@ -380,6 +397,14 @@ function parsePropsCapabilities(data: unknown): RemoteModelInfo | null {
     supportsToolCalling: templateCaps?.supports_tools === true,
     supportsThinking,
     acceptsThinkingKwarg,
+    reasoning: reasoningMetadataFromChatTemplate(
+      'llama-server',
+      template,
+      {
+        supportsTokenBudget: true,
+        reasoningFormat: reasoningFormat === 'deepseek' ? 'deepseek' : 'auto',
+      },
+    ),
   };
 }
 

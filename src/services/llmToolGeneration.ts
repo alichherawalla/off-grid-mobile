@@ -4,6 +4,7 @@
  */
 
 import { useAppStore } from '../stores/appStore';
+import type { ReasoningWireFragment } from '@offgrid/models';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
 import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
@@ -137,7 +138,7 @@ export interface ToolGenerationDeps {
 export async function generateWithToolsImpl(
   deps: ToolGenerationDeps,
   messages: Message[],
-  options: { tools: any[]; onStream?: ToolStreamCallback; onComplete?: ToolCompleteCallback },
+  options: { tools: any[]; onStream?: ToolStreamCallback; onComplete?: ToolCompleteCallback; reasoningWire?: ReasoningWireFragment },
 ): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
   if (!deps.context) throw new Error('No model loaded');
   if (deps.isGenerating) throw new Error('Generation already in progress');
@@ -169,7 +170,7 @@ export async function generateWithToolsImpl(
       ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
       tools: options.tools,
       tool_choice: 'auto',
-      ...buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model, settings.reasoningBudget),
+      ...(options.reasoningWire ?? buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model, settings.reasoningBudget)),
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));

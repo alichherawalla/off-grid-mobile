@@ -1,4 +1,5 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
+import type { ReasoningWireFragment } from '@offgrid/models';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
@@ -12,7 +13,7 @@ import {
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
   getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
-  describeGpuFallback, isTruncatedResult,
+  describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
@@ -24,10 +25,8 @@ import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { resolveSpeculative } from './mtpDetection';
-import type { StreamToken } from './llmStreamTypes';
+import type { CompleteCallback, StreamCallback, StreamToken } from './llmStreamTypes';
 export type { StreamToken };
-type StreamCallback = (data: StreamToken) => void;
-type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
 const resolveGpuBackend = (enabled: boolean, devices: string[]): string =>
   !enabled ? 'CPU' : (Platform.OS === 'ios' ? 'Metal' : (devices.join(', ') || 'OpenCL'));
 class LLMService {
@@ -236,6 +235,7 @@ class LLMService {
   supportsVision(): boolean { return this.multimodalSupport?.vision || false; }
   supportsToolCalling(): boolean { return this.toolCallingSupported; }
   supportsThinking(): boolean { return this.thinkingSupported; }
+  getReasoningMetadata() { return llamaReasoningMetadata(this.context); }
   isThinkingEnabled(): boolean { return this.thinkingSupported && useAppStore.getState().settings.thinkingEnabled; }
   isGemma4Model(): boolean {
     const path = this.currentModelPath?.toLowerCase() ?? '';
@@ -276,7 +276,7 @@ class LLMService {
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-  async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean }): Promise<string> {
+  async generateResponse(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean; reasoningWire?: ReasoningWireFragment }): Promise<string> {
     const { onStream, onComplete, ...opts } = options ?? {};
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
@@ -294,11 +294,9 @@ class LLMService {
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
       let fullContent = '', fullReasoningContent = '', streamedContentSoFar = '', streamedReasoningSoFar = '';
       const __wire: Array<Record<string, unknown>> = []; // [WIRE] capture raw per-token shape from-device
-      // A caller may force thinking OFF (e.g. the image-prompt enhancement utility call),
-      // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
-      // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
+      // Utility callers can still force thinking off; shared chat callers supply reasoningWire.
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model(), settings.reasoningBudget) };
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...(opts.reasoningWire ?? buildThinkingCompletionParams(thinkingOn, this.isGemma4Model(), settings.reasoningBudget)) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
@@ -331,7 +329,7 @@ class LLMService {
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
-  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
+  async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback; reasoningWire?: ReasoningWireFragment }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
       isThinkingEnabled: this.isThinkingEnabled(),
@@ -344,6 +342,7 @@ class LLMService {
       setIsGenerating: (v) => { this.isGenerating = v; },
     }, messages, {
       tools: options.tools,
+      reasoningWire: options.reasoningWire,
       onStream: options.onStream,
       onComplete: options.onComplete
         ? ((onComplete) => (fullResponse: string, reasoningContent: string) => onComplete({ content: fullResponse, reasoningContent }))(options.onComplete) : undefined,

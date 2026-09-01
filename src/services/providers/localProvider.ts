@@ -107,7 +107,7 @@ class LocalProvider implements LLMProvider {
 
   private async generateSimple(
     messages: Message[],
-    _options: GenerationOptions,
+    options: GenerationOptions,
     ctx: { callbacks: StreamCallbacks; buildMeta: () => GenerationMeta }
   ): Promise<void> {
     const { callbacks, buildMeta } = ctx;
@@ -115,6 +115,7 @@ class LocalProvider implements LLMProvider {
     let fullReasoningContent = '';
 
     await llmService.generateResponse(messages, {
+      reasoningWire: options.reasoningWire,
       onStream: (data) => {
         if (data.content) {
           fullContent += data.content;
@@ -149,6 +150,7 @@ class LocalProvider implements LLMProvider {
 
     const result = await llmService.generateResponseWithTools(messages, {
       tools: options.tools || [],
+      reasoningWire: options.reasoningWire,
       onStream: (data) => {
         if (data.content) {
           fullContent += data.content;

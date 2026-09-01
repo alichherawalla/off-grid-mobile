@@ -5,6 +5,7 @@
  * All providers implement this unified interface for seamless switching.
  */
 
+import type { ReasoningWireFragment } from '@offgrid/models';
 import { Message, GenerationMeta } from '../../types';
 
 /** Provider types */
@@ -76,6 +77,8 @@ export interface GenerationOptions {
   stopSequences?: string[];
   /** Whether to enable thinking/reasoning mode (Ollama: sends "think" param; others: parsed from response) */
   enableThinking?: boolean;
+  /** Provider fields resolved once by the shared reasoning policy at the generation boundary. */
+  reasoningWire?: ReasoningWireFragment;
 }
 
 /** Tool definition for function calling */
@@ -163,4 +166,3 @@ export interface LLMProvider {
   /** Clean up resources */
   dispose?(): Promise<void>;
 }
-

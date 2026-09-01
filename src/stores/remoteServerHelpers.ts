@@ -28,6 +28,7 @@ import {
   remoteAuthorizationHeaders,
 } from '../services/remoteTransportPolicy';
 import { readOffGridDesktopModelState } from '../services/offGridDesktopModels';
+import { reasoningMetadataFromOpenRouter, type OpenRouterPublishedReasoning } from '@offgrid/models';
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
@@ -72,6 +73,12 @@ function declaredCapability(
 ): boolean | undefined {
   if (!Array.isArray(capabilities)) return undefined;
   return capabilities.includes(capability);
+}
+
+/** Read OpenRouter reasoning metadata only when the model record publishes its native object. */
+function openRouterReasoning(value: unknown) {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
+  return reasoningMetadataFromOpenRouter(value as OpenRouterPublishedReasoning);
 }
 
 async function fetchGatewayModelCatalog(
@@ -368,6 +375,7 @@ export async function fetchModelsFromServer(
               owned_by?: string;
               max_context_length?: number;
               capabilities?: unknown;
+              reasoning?: unknown;
             },
             i: number,
           ) => ({
@@ -387,8 +395,9 @@ export async function fetchModelsFromServer(
                 declaredCapability(model.capabilities, 'tools') ??
                 modelInfos[i].supportsToolCalling ??
                 detectToolCallingCapability(model.id),
-            supportsThinking: modelInfos[i].supportsThinking ?? false,
+            supportsThinking: openRouterReasoning(model.reasoning) !== undefined || (modelInfos[i].supportsThinking ?? false),
             acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
+            reasoning: openRouterReasoning(model.reasoning) ?? modelInfos[i].reasoning,
             maxContextLength: modelInfos[i].contextLength,
           },
           lastUpdated: new Date().toISOString(),
@@ -421,6 +430,7 @@ export async function fetchModelsFromServer(
                 detectToolCallingCapability(model.name),
               supportsThinking: modelInfos[i].supportsThinking ?? false,
               acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
+              reasoning: modelInfos[i].reasoning,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,
@@ -472,6 +482,7 @@ export async function fetchModelsFromServer(
                 detectToolCallingCapability(model.name),
               supportsThinking: modelInfos[i].supportsThinking ?? false,
               acceptsThinkingKwarg: modelInfos[i].acceptsThinkingKwarg ?? false,
+              reasoning: modelInfos[i].reasoning,
               maxContextLength: modelInfos[i].contextLength,
             },
             details: model.details,

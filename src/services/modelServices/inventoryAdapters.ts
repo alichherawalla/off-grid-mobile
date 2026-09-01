@@ -81,6 +81,9 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
       tools: predicted.tools,
       thinking: predicted.thinking,
     },
+    reasoning: model.engine === 'llama' && loaded
+      ? llmService.getReasoningMetadata()
+      : undefined,
     residentSizeMB: Math.ceil(
       (model.fileSize + (model.engine === 'llama' ? model.mmProjFileSize ?? 0 : 0)) /
         (1024 * 1024),
@@ -257,6 +260,7 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
             tools: model.capabilities.supportsToolCalling,
             thinking: model.capabilities.supportsThinking,
           },
+          reasoning: model.capabilities.reasoning,
           installed: true,
           ready: !!provider,
           loaded: provider?.getLoadedModelId() === model.id,

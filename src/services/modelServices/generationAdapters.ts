@@ -1,13 +1,15 @@
-import type {
-  GenerationAdapter,
-  GenerationChunk,
-  GenerationContentPart,
-  GenerationMessage,
-  GenerationRequest,
-  LiveGenerationContext,
-  LLMService,
-  ModelResidencyPort,
-  RuntimeModel,
+import {
+  reasoningWireForGeneration,
+  type GenerationAdapter,
+  type GenerationChunk,
+  type GenerationContentPart,
+  type GenerationMessage,
+  type GenerationRequest,
+  type LiveGenerationContext,
+  type LLMService,
+  type ModelResidencyPort,
+  type ReasoningWireFragment,
+  type RuntimeModel,
 } from '@offgrid/models';
 import type { MediaAttachment, Message } from '../../types';
 import { activeModelService } from '../activeModelService';
@@ -57,7 +59,10 @@ function mobileMessages(messages: GenerationMessage[]): Message[] {
   });
 }
 
-function providerOptions(request: GenerationRequest): GenerationOptions {
+function providerOptions(
+  request: GenerationRequest,
+  reasoningWire: ReasoningWireFragment,
+): GenerationOptions {
   return {
     temperature: request.sampling?.temperature,
     topP: request.sampling?.topP,
@@ -66,7 +71,8 @@ function providerOptions(request: GenerationRequest): GenerationOptions {
     seed: request.sampling?.seed,
     stopSequences: request.sampling?.stop,
     maxTokens: request.maxTokens,
-    enableThinking: request.requiredCapabilities?.thinking,
+    enableThinking: request.reasoning?.enabled,
+    reasoningWire,
     tools: request.tools?.map(tool => ({
       type: 'function' as const,
       function: {
@@ -96,6 +102,7 @@ function providerToolArguments(value: string | Record<string, unknown>): Record<
 async function* providerChunks(
   provider: LLMProvider,
   request: GenerationRequest,
+  reasoningWire: ReasoningWireFragment,
 ): AsyncIterable<GenerationChunk> {
   const pending: PendingChunk[] = [];
   let wake: (() => void) | null = null;
@@ -108,7 +115,7 @@ async function* providerChunks(
   request.signal?.addEventListener('abort', abort, { once: true });
   const operation = provider.generate(
     mobileMessages(request.messages ?? []),
-    providerOptions(request),
+    providerOptions(request, reasoningWire),
     {
       onToken: content => push({ value: { content } }),
       onReasoning: reasoning => push({ value: { reasoning } }),
@@ -165,6 +172,7 @@ function toolResultText(content: Awaited<ReturnType<LiveGenerationContext['execu
 async function* liteRTChunks(
   request: GenerationRequest,
   context: LiveGenerationContext,
+  reasoningWire: ReasoningWireFragment,
 ): AsyncIterable<GenerationChunk> {
   const messages = mobileMessages(request.messages ?? []);
   const systemPrompt = messages.find(message => message.role === 'system')?.content ?? '';
@@ -180,7 +188,7 @@ async function* liteRTChunks(
     .filter((message): message is Message & { role: 'user' | 'assistant' } =>
       (message.role === 'user' || message.role === 'assistant') && !!message.content.trim())
     .map(message => ({ role: message.role, content: message.content }));
-  const tools = providerOptions(request).tools ?? [];
+  const tools = providerOptions(request, reasoningWire).tools ?? [];
   await liteRTService.prepareConversation(
     request.identity?.conversationId ?? '__shared_generation__',
     systemPrompt,
@@ -263,8 +271,14 @@ function adapter(id: string): GenerationAdapter {
       if (model.source === 'local') await activeModelService.unloadTextModel(true);
     },
     async *generate(model, request, context) {
+      // This is the single policy-to-wire translation for every Mobile text route.
+      // Read llama.rn metadata after residency has loaded the native template, including on turn one.
+      const reasoningModel = model.source === 'local' && model.providerId === 'llama'
+        ? { reasoning: llmService.getReasoningMetadata() }
+        : model;
+      const reasoningWire = reasoningWireForGeneration(request, reasoningModel);
       if (model.source === 'local' && model.providerId === 'litert') {
-        yield* liteRTChunks(request, context);
+        yield* liteRTChunks(request, context, reasoningWire);
         return;
       }
       if (model.source === 'local' && request.identity?.conversationId) {
@@ -274,7 +288,7 @@ function adapter(id: string): GenerationAdapter {
       if (model.source === 'remote' && provider.getLoadedModelId() !== model.id) {
         await provider.loadModel(model.id);
       }
-      yield* providerChunks(provider, request);
+      yield* providerChunks(provider, request, reasoningWire);
     },
     classifyError(error) {
       const message = error instanceof Error ? error.message : String(error);

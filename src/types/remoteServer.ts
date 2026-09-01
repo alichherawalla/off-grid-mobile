@@ -4,6 +4,7 @@
  * Types for managing remote LLM servers (Ollama, LM Studio, etc.)
  * that expose OpenAI-compatible or Anthropic-compatible APIs.
  */
+import type { ModelReasoningMetadata } from '@offgrid/models';
 
 /** Provider types supported by the system */
 type RemoteProviderType = 'openai-compatible' | 'anthropic';
@@ -100,6 +101,8 @@ interface RemoteModelCapabilities {
   supportsToolCalling: boolean;
   /** Supports extended thinking (reasoning tokens) */
   supportsThinking: boolean;
+  /** Provider-published reasoning control for this executable route. */
+  reasoning?: ModelReasoningMetadata;
   /**
    * Whether the server honors `chat_template_kwargs.enable_thinking` to toggle
    * reasoning per request (discovered from the server, e.g. llama.cpp /props).

@@ -89,7 +89,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private buildRequestBody(
     openaiMessages: OpenAIChatMessage[],
     options: GenerationOptions,
-    thinkingEnabled: boolean
   ): Record<string, unknown> {
     return {
       model: this.config.modelId,
@@ -104,11 +103,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         tools: options.tools,
         tool_choice: 'auto',
       }),
-      // Control Qwen3 thinking per-request via chat_template_kwargs, but only for
-      // servers that advertised (at discovery) that they honor it. Gating on a
-      // discovered capability — not the endpoint's port — keeps the "which server
-      // accepts this?" decision in one place and free of implementation coupling.
-      ...(this.modelCapabilities.acceptsThinkingKwarg && { chat_template_kwargs: { enable_thinking: thinkingEnabled } }),
+      ...options.reasoningWire,
     };
   }
 
@@ -143,7 +138,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         });
       }
 
-      const requestBody = this.buildRequestBody(openaiMessages, options, thinkingEnabled);
+      const requestBody = this.buildRequestBody(openaiMessages, options);
       logger.log(`[Provider][DEBUG] OpenAI request — hasTools=${!!requestBody.tools}, toolChoice=${typeof requestBody.tool_choice === 'string' ? requestBody.tool_choice : JSON.stringify(requestBody.tool_choice) || 'none'}`);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',

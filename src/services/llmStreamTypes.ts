@@ -4,3 +4,5 @@
  * llmToolGeneration back, forming a cycle. llm.ts re-exports it for existing importers.
  */
 export type StreamToken = { content?: string; reasoningContent?: string };
+export type StreamCallback = (data: StreamToken) => void;
+export type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;

@@ -1,5 +1,10 @@
 import { initLlama, LlamaContext } from 'llama.rn';
-import { REASONING_BUDGET_AUTO, thinkingBudgetPayload } from '@offgrid/models';
+import {
+  REASONING_BUDGET_AUTO,
+  reasoningMetadataFromChatTemplate,
+  thinkingBudgetPayload,
+  type ModelReasoningMetadata,
+} from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
@@ -290,6 +295,21 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
   } catch {
     return false;
   }
+}
+
+/** Publish only reasoning controls proven by the loaded GGUF chat template. */
+export function llamaReasoningMetadata(
+  context: LlamaContext | null,
+): ModelReasoningMetadata | undefined {
+  if (!context) return undefined;
+  const metadata = (context as any)?.model?.metadata;
+  const template = metadata?.['tokenizer.chat_template'] ?? metadata?.chat_template;
+  if (typeof template !== 'string') return undefined;
+  const reasoningFormat = template.includes('<|channel>') ? 'auto' : 'deepseek';
+  return reasoningMetadataFromChatTemplate('llama-rn', template, {
+    supportsTokenBudget: true,
+    reasoningFormat,
+  });
 }
 export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false, reasoningBudget?: number): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek'; thinking_budget_tokens?: number } {
   if (!enableThinking) return { enable_thinking: false, reasoning_format: 'none' };

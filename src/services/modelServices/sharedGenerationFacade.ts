@@ -1,6 +1,7 @@
 import type {
   GenerationContentPart,
   GenerationMessage,
+  GenerationReasoning,
   GenerationToolCall,
 } from '@offgrid/models';
 import type { MediaAttachment, Message } from '../../types';
@@ -51,6 +52,17 @@ function sharedMessages(messages: Message[]): GenerationMessage[] {
   });
 }
 
+/** Project the persisted Mobile controls into the provider-neutral shared request. */
+function sharedReasoning(): GenerationReasoning {
+  const { thinkingEnabled, reasoningBudget } = useAppStore.getState().settings;
+  return {
+    enabled: thinkingEnabled,
+    ...(reasoningBudget !== undefined && reasoningBudget > 0
+      ? { budgetTokens: reasoningBudget }
+      : {}),
+  };
+}
+
 /** Keep the existing Mobile presentation state while shared owns generation orchestration. */
 export async function generateSharedChatResponse(
   service: any,
@@ -85,6 +97,7 @@ export async function generateSharedChatResponse(
       {
         operation: { type: 'text' },
         messages: sharedMessages(messages),
+        reasoning: sharedReasoning(),
         identity: {
           conversationId,
           turnId: messages.at(-1)?.uuid ?? messages.at(-1)?.id ?? `${conversationId}-${attempt}`,
@@ -203,6 +216,7 @@ export async function generateSharedToolResponse(
       {
         operation: { type: 'text' },
         messages: sharedMessages(messages),
+        reasoning: sharedReasoning(),
         identity: {
           conversationId: request.conversationId,
           turnId: request.messages.at(-1)?.uuid
