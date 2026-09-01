@@ -51,6 +51,7 @@ import {
 import * as visionRepair from '../../adapters/models/library/visionRepairAdapter';
 import type { RepairOpts, VisionRepairContext } from '../../adapters/models/library/visionRepairAdapter';
 import { resolveOwnedDocumentPath } from '../../../utils/resolveDocumentPath';
+import { startCoordinatedTextFinalizer } from '../../adapters/models/library/coordinatedTextFinalizer';
 
 class ModelLibraryBootstrap {
   private readonly modelsDir: string;
@@ -87,6 +88,7 @@ class ModelLibraryBootstrap {
     const exclude = (p: string) => backgroundDownloadService.excludeFromBackup(p);
     await Promise.all([exclude(this.modelsDir), exclude(this.imageModelsDir),
       exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`)]);
+    startCoordinatedTextFinalizer(this.modelsDir);
   }
 
   /**
@@ -192,7 +194,7 @@ class ModelLibraryBootstrap {
   // registers a fresh onComplete listener and tryFinalize waits for the sidecar.
   resetMmProjForRetry(downloadId: string): void {
     const ctx = this.backgroundDownloadContext.get(downloadId);
-    if (!ctx || !('file' in ctx) || !ctx.mmProjDownloadId) return;
+    if (!ctx || !('file' in ctx) || 'operation' in ctx || !ctx.mmProjDownloadId) return;
     ctx.mmProjCompleted = false;
     ctx.mmProjCompleteHandled = false;
     if (!ctx.mmProjLocalPath && ctx.file.mmProjFile) {
@@ -220,6 +222,13 @@ class ModelLibraryBootstrap {
       throw new Error('Background downloads not supported on this platform');
     }
     const ctx = this.backgroundDownloadContext.get(downloadId);
+    if (ctx && 'operation' in ctx) {
+      await ctx.operation.cancel();
+      await this.cleanupCancelledTextArtifacts(ctx);
+      this.backgroundDownloadContext.delete(downloadId);
+      this.backgroundDownloadMetadataCallback?.(downloadId, null);
+      return;
+    }
     if (ctx && 'file' in ctx && ctx.mmProjDownloadId) {
       await backgroundDownloadService.cancelDownload(ctx.mmProjDownloadId).catch(() => {});
     }

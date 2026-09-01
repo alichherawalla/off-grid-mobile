@@ -1,4 +1,5 @@
 import { DownloadedModel, DownloadProgress, ModelFile } from '../../../../types';
+import type { ModelDownloadHandle } from '@offgrid/models';
 
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 export type DownloadCompleteCallback = (model: DownloadedModel) => void;
@@ -16,6 +17,16 @@ export type BackgroundDownloadMetadataCallback = (
 ) => void;
 
 export type BackgroundDownloadContext =
+  | {
+      operation: ModelDownloadHandle;
+      modelId: string;
+      file: ModelFile;
+      localPath: string;
+      mmProjLocalPath: string | null;
+      projectorArtifactId?: string;
+      unsubscribe: () => void;
+      watching?: boolean;
+    }
   | {
       modelId: string;
       file: ModelFile;

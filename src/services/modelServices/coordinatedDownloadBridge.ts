@@ -10,9 +10,16 @@ type CompleteEvent = Parameters<DownloadCompleteCallback>[0];
 type ErrorEvent = Parameters<DownloadErrorCallback>[0];
 type ProgressEvent = Parameters<DownloadProgressCallback>[0];
 type Listener<T> = (event: T) => void;
-interface ActiveHandle { manifest: ModelArtifactManifest; handle: ModelDownloadHandle; params: DownloadParams; transferId?: string; unsubscribe: () => void }
+interface ActiveHandle { manifest: ModelArtifactManifest; handle: ModelDownloadHandle; params: DownloadParams; transferId?: string; logicalId?: string; unsubscribe: () => void }
+
+export interface CoordinatedManifestHandle {
+  downloadId: string;
+  handle: ModelDownloadHandle;
+}
 
 const kindFor = (type?: string): ModelKind => type === 'image' ? 'image' : type === 'stt' ? 'transcription' : type === 'tts' ? 'voice' : 'text';
+const downloadTypeForKind = (kind: ModelKind): DownloadParams['modelType'] =>
+  kind === 'image' ? 'image' : kind === 'transcription' ? 'stt' : kind === 'voice' ? 'tts' : 'text';
 const statusFor = (phase: string): BackgroundDownloadStatus => phase === 'completed' ? 'completed' : ['failed', 'cancelled', 'interrupted'].includes(phase) ? 'failed' : phase === 'downloading' ? 'running' : 'pending';
 
 class CoordinatedDownloadBridge {
@@ -25,6 +32,28 @@ class CoordinatedDownloadBridge {
   private readonly allErrors = new Set<Listener<ErrorEvent>>();
 
   isAvailable(): boolean { return true; }
+
+  /** Start one Shared-owned operation that may contain several related artifacts. */
+  startManifest(manifest: ModelArtifactManifest): CoordinatedManifestHandle {
+    const primary = manifest.artifacts.find(artifact => artifact.role === 'primary') ?? manifest.artifacts[0];
+    if (!primary) throw new Error('Download manifest has no artifacts');
+    const handle = mobileModelDownloadCoordinator.enqueueWithHandle(manifest);
+    const params: DownloadParams = {
+      url: primary.url,
+      fileName: primary.name,
+      modelId: manifest.modelId,
+      modelKey: manifest.id,
+      modelType: downloadTypeForKind(manifest.kind),
+      totalBytes: manifest.artifacts.reduce((sum, artifact) => sum + (artifact.sizeBytes ?? 0), 0),
+    };
+    const holder: ActiveHandle = {
+      manifest, handle, params, logicalId: manifest.id, unsubscribe: () => undefined,
+    };
+    holder.unsubscribe = handle.subscribe(event => this.routeEvent(holder, event));
+    this.active.set(manifest.id, holder);
+    handle.completion.finally(() => holder.unsubscribe());
+    return { downloadId: manifest.id, handle };
+  }
 
   async startDownload(params: DownloadParams): Promise<BackgroundDownloadInfo> {
     const identity = params.modelKey ?? `${params.modelId}/${params.fileName}`;
@@ -41,7 +70,7 @@ class CoordinatedDownloadBridge {
     const transferId = admitted?.transferId ?? `completed:${id}`;
     holder.transferId = transferId;
     this.active.set(transferId, holder);
-    void handle.completion.finally(() => holder.unsubscribe());
+    handle.completion.finally(() => holder.unsubscribe());
     return { downloadId: transferId, fileName: params.fileName, modelId: params.modelId,
       status: admitted ? 'pending' : 'completed', bytesDownloaded: 0, totalBytes: params.totalBytes ?? 0,
       startedAt: Date.now() };
@@ -73,10 +102,12 @@ class CoordinatedDownloadBridge {
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
     const coordinated = mobileModelDownloadCoordinator.list().map(record => {
-      const artifact = record.artifacts[0]; const definition = record.manifest.artifacts[0];
-      return { downloadId: artifact?.transferId ?? `queued:${record.manifest.id}`, fileName: definition?.name ?? '',
-        modelId: record.manifest.modelId, status: statusFor(record.phase), bytesDownloaded: artifact?.bytesDownloaded ?? 0,
-        totalBytes: artifact?.totalBytes ?? definition?.sizeBytes ?? 0, startedAt: record.createdAt,
+      const artifact = record.artifacts.find(item => record.manifest.artifacts.find(definition => definition.id === item.artifactId)?.role === 'primary') ?? record.artifacts[0];
+      const definition = record.manifest.artifacts.find(item => item.id === artifact?.artifactId) ?? record.manifest.artifacts[0];
+      const logical = this.active.get(record.manifest.id)?.logicalId;
+      return { downloadId: logical ?? artifact?.transferId ?? `queued:${record.manifest.id}`, fileName: definition?.name ?? '',
+        modelId: record.manifest.modelId, status: statusFor(record.phase), bytesDownloaded: record.artifacts.reduce((sum, item) => sum + item.bytesDownloaded, 0),
+        totalBytes: record.artifacts.reduce((sum, item) => sum + item.totalBytes, 0), startedAt: record.createdAt,
         modelKey: record.manifest.id, modelType: record.manifest.kind === 'transcription' ? 'stt' : record.manifest.kind };
     });
     const coordinatedIds = new Set(coordinated.map(row => row.downloadId));
@@ -108,7 +139,7 @@ class CoordinatedDownloadBridge {
       totalBytes: item.manifest.artifacts.reduce((sum, artifact) => sum + (artifact.sizeBytes ?? 0), 0),
     }));
   }
-  cancelQueued(key: string): boolean { const item = this.findByIdentity(key); if (!item) return false; void item.handle.cancel(); return true; }
+  cancelQueued(key: string): boolean { const item = this.findByIdentity(key); if (!item) return false; item.handle.cancel(); return true; }
 
   downloadFileTo(opts: { params: Pick<DownloadParams, 'url' | 'fileName' | 'modelId' | 'totalBytes' | 'modelType' | 'metadataJson' | 'modelKey'>; destPath: string; onProgress?: (bytesDownloaded: number, totalBytes: number) => void; silent?: boolean }): { downloadIdPromise: Promise<string>; promise: Promise<void> } {
     const downloadIdPromise = this.startDownload(opts.params).then(info => info.downloadId);
@@ -144,20 +175,30 @@ class CoordinatedDownloadBridge {
   cleanup(): void {}
 
   private routeEvent(holder: ActiveHandle, event: ModelArtifactDownloadEvent): void {
-    if (event.type === 'admitted') { holder.transferId = event.transferId; this.active.set(event.transferId, holder); return; }
-    const id = holder.transferId; if (!id) return;
+    if (event.type === 'admitted') {
+      holder.transferId = event.transferId;
+      if (!holder.logicalId) this.active.set(event.transferId, holder);
+      return;
+    }
+    const definition = event.artifactId
+      ? holder.manifest.artifacts.find(artifact => artifact.id === event.artifactId)
+      : undefined;
+    const id = holder.logicalId
+      ? definition?.role === 'mmproj' ? `${holder.logicalId}:projector` : holder.logicalId
+      : holder.transferId;
+    if (!id) return;
     if (event.type === 'progress') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: holder.params.fileName,
+      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
         status: 'running',
         bytesDownloaded: event.bytesDownloaded, totalBytes: event.totalBytes,
         progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0 } as ProgressEvent;
       this.emit(this.progress.get(id), value); this.emit(this.allProgress, value);
     } else if (event.type === 'completed') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: holder.params.fileName,
-        localUri: `${RNFS.DocumentDirectoryPath}/${holder.manifest.artifacts[0].localName}` } as CompleteEvent;
+      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
+        localUri: definition ? `${RNFS.DocumentDirectoryPath}/${definition.localName}` : undefined } as CompleteEvent;
       this.emit(this.complete.get(id), value); this.emit(this.allComplete, value);
     } else if (event.type === 'failed' || event.type === 'cancelled') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: holder.params.fileName,
+      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
         status: 'failed', reason: event.type === 'failed' ? event.error : 'Download cancelled',
         reasonCode: event.type === 'cancelled' ? 'user_cancelled' : undefined } as ErrorEvent;
       this.emit(this.errors.get(id), value); this.emit(this.allErrors, value);
