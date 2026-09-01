@@ -2,7 +2,7 @@
 import { llmService } from './llm';
 import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
-import { Message, GenerationMeta, MediaAttachment } from '../types';
+import { Message, GenerationMeta, MediaAttachment, isLiteRTModel } from '../types';
 import type { ToolResult } from './tools/types';
 import type {
   GenerationContentPart,
@@ -56,6 +56,35 @@ function sharedReasoning(): GenerationReasoning {
   return {
     enabled: thinkingEnabled,
     ...(reasoningBudget !== undefined && reasoningBudget > 0 ? { budgetTokens: reasoningBudget } : {}),
+  };
+}
+
+function sharedRequestSettings(): {
+  maxTokens: number;
+  sampling: {
+    temperature: number;
+    topP: number;
+    repetitionPenalty?: number;
+  };
+} {
+  const state = useAppStore.getState();
+  const selected = state.downloadedModels.find(model => model.id === state.activeModelId);
+  if (selected && isLiteRTModel(selected)) {
+    return {
+      maxTokens: state.settings.liteRTMaxTokens,
+      sampling: {
+        temperature: state.settings.liteRTTemperature,
+        topP: state.settings.liteRTTopP,
+      },
+    };
+  }
+  return {
+    maxTokens: state.settings.maxTokens,
+    sampling: {
+      temperature: state.settings.temperature,
+      topP: state.settings.topP,
+      repetitionPenalty: state.settings.repeatPenalty,
+    },
   };
 }
 
@@ -206,6 +235,7 @@ class GenerationService {
       const result = await mobileGenerationService.generate({
         operation: { type: 'text' },
         messages: sharedMessages(messages),
+        ...sharedRequestSettings(),
         reasoning: sharedReasoning(),
         identity: { conversationId, turnId: turnId(messages, conversationId, attempt) },
         signal: controller.signal,
@@ -274,6 +304,7 @@ class GenerationService {
       const result = await mobileGenerationService.generate({
         operation: { type: 'text' },
         messages: sharedMessages(promptMessages),
+        ...sharedRequestSettings(),
         reasoning: sharedReasoning(),
         identity: {
           conversationId,
