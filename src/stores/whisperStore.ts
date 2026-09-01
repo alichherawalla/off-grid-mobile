@@ -1,9 +1,17 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { whisperService, WHISPER_MODELS } from '../services/whisperService';
-import { modelResidencyManager } from '../services/modelServices/residencyBootstrap';
-import logger from '../utils/logger';
+import { whisperService } from '../services/whisperService';
+import {
+  loadTranscriptionModel,
+  unloadTranscriptionModel,
+  type TranscriptionLoadResult,
+} from '../services/modelServices/modelLifecycleBootstrap';
+import {
+  clearMobileModel,
+  refreshMobileModelServices,
+  selectMobileModel,
+} from '../services/modelServices';
 
 /**
  * Outcome of a whisper load, so callers can tell WHY it didn't load:
@@ -17,7 +25,7 @@ import logger from '../utils/logger';
  *                models", which is safe for the in-flight case too (the running load
  *                resolves on its own).
  */
-export type WhisperLoadResult = 'loaded' | 'blocked' | 'error';
+export type WhisperLoadResult = TranscriptionLoadResult;
 
 interface WhisperState {
   // Active (selected) model ID
@@ -136,41 +144,16 @@ export const useWhisperStore = create<WhisperState>()(
         set({ isModelLoading: true, error: null });
 
         try {
-          const modelPath = whisperService.getModelPath(downloadedModelId);
-          const sizeMB = WHISPER_MODELS.find(m => m.id === downloadedModelId)?.size ?? 200;
-          // Load through the residency manager's global lock so STT never loads
-          // alongside another model. Make room for it first (evict to budget),
-          // then register so future loads can evict it.
-          //
-          // CRITICAL: honor the `fits` verdict. STT is a SIDECAR — if a heavier
-          // generation model owns memory, makeRoomFor returns fits=false WITHOUT
-          // evicting it (the sidecar rule won't kick out an 8.5GB model for a 142MB
-          // sidecar). We MUST NOT load anyway: doing so put whisper + the text model
-          // co-resident and OOM'd the app. STT stays out. When a voice turn needs to
-          // transcribe RIGHT NOW, the caller frees the generation model first (see
-          // ensureWhisperForTranscription in ChatInput/Voice) — we do not override
-          // the sidecar rule here.
-          const loaded = await modelResidencyManager.runExclusive('load:whisper', async () => {
-            const { fits } = await modelResidencyManager.makeRoomFor({ key: 'whisper', type: 'whisper', sizeMB });
-            if (!fits) {
-              logger.log('[Whisper] Skipping load — no room alongside the active model (single-model rule)');
-              return false;
-            }
-            await whisperService.loadModel(modelPath);
-            modelResidencyManager.register(
-              { key: 'whisper', type: 'whisper', sizeMB },
-              () => get().unloadModel(),
-            );
-            return true;
+          const result = await loadTranscriptionModel(downloadedModelId, {
+            onLoaded: () => set({ isModelLoaded: true, error: null }),
+            onUnloaded: () => set({ isModelLoaded: false }),
           });
-          const selectedModelIsLoaded = loaded &&
-            get().downloadedModelId === downloadedModelId &&
-            whisperService.getLoadedModelPath() === modelPath;
-          set({ isModelLoaded: selectedModelIsLoaded, isModelLoading: false, error: null });
-          // loaded=false means the single-model rule blocked it (not a failure) —
-          // report 'blocked' so a caller can free the resident model and retry.
-          if (selectedModelIsLoaded) return 'loaded';
-          return loaded ? 'error' : 'blocked';
+          set({
+            isModelLoaded: result === 'loaded',
+            isModelLoading: false,
+            error: null,
+          });
+          return result;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Failed to load model';
           // If the model file is missing or corrupted, clear the downloaded state
@@ -188,7 +171,9 @@ export const useWhisperStore = create<WhisperState>()(
 
       unloadModel: async () => {
         try {
-          await whisperService.unloadModel();
+          await unloadTranscriptionModel(get().downloadedModelId, {
+            onUnloaded: () => set({ isModelLoaded: false }),
+          });
           set({ isModelLoaded: false });
         } catch (error) {
           set({
@@ -202,10 +187,12 @@ export const useWhisperStore = create<WhisperState>()(
         if (!downloadedModelId) return;
 
         try {
-          // Unload first
-          await whisperService.unloadModel();
+          await unloadTranscriptionModel(downloadedModelId, {
+            onUnloaded: () => set({ isModelLoaded: false }),
+          });
           // Then delete
           await whisperService.deleteModel(downloadedModelId);
+          await clearMobileModel('transcription');
           set({
             downloadedModelId: null,
             isModelLoaded: false,
@@ -224,14 +211,27 @@ export const useWhisperStore = create<WhisperState>()(
           set({ isModelLoaded: true, error: null });
           return;
         }
-        set({ downloadedModelId: modelId, isModelLoaded: selectedModelIsLoaded, error: null });
+        await selectMobileModel({
+          source: 'local',
+          hostId: 'whisper.rn',
+          modality: 'transcription',
+          modelId,
+        });
+        set({ isModelLoaded: selectedModelIsLoaded, error: null });
         await get().loadModel();
       },
 
       deleteModelById: async (modelId: string) => {
         try {
-          if (get().downloadedModelId === modelId) await whisperService.unloadModel();
+          if (get().downloadedModelId === modelId) {
+            await unloadTranscriptionModel(modelId, {
+              onUnloaded: () => set({ isModelLoaded: false }),
+            });
+          }
           await whisperService.deleteModel(modelId);
+          if (get().downloadedModelId === modelId) {
+            await clearMobileModel('transcription');
+          }
           set((s) => ({
             presentModelIds: s.presentModelIds.filter((id) => id !== modelId),
             ...(s.downloadedModelId === modelId ? { downloadedModelId: null, isModelLoaded: false } : {}),
@@ -255,6 +255,7 @@ export const useWhisperStore = create<WhisperState>()(
           presentModelIds: present,
           ...(activeId && !activeOnDisk ? { downloadedModelId: null, isModelLoaded: false } : {}),
         });
+        await refreshMobileModelServices();
       },
 
       clearError: () => {
