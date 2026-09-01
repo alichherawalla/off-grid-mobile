@@ -12,7 +12,8 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
 import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
-import { remoteServerManager } from '../../services/remoteServerManager';
+import { selectMobileModel } from '../../services/modelServices';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 
 type Props = {
   visible: boolean;
@@ -26,7 +27,10 @@ type Props = {
 export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const downloadedModelId = useWhisperStore(s => s.downloadedModelId);
+  const activeRoute = useActiveMobileModel('transcription').model;
+  const downloadedModelId = activeRoute?.source === 'local'
+    ? activeRoute.id
+    : null;
   const isModelLoading = useWhisperStore(s => s.isModelLoading);
   const presentModelIds = useWhisperStore(s => s.presentModelIds);
   const downloadModel = useWhisperStore(s => s.downloadModel);
@@ -79,13 +83,18 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
               style={[styles.row, active && styles.rowActive]}
               hapticType="selection"
               disabled={busy}
-              onPress={() => {
-                remoteServerManager.clearActiveRemoteMediaModel(
-                  'transcription',
-                );
+              onPress={async () => {
                 if (present) {
-                  if (!active) selectModel(m.id);
-                } else downloadModel(m.id);
+                  if (!active) await selectModel(m.id);
+                } else {
+                  await downloadModel(m.id);
+                }
+                await selectMobileModel({
+                  source: 'local',
+                  hostId: 'whisper.rn',
+                  modality: 'transcription',
+                  modelId: m.id,
+                });
               }}
             >
               <View style={styles.rowInfo}>

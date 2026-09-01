@@ -33,7 +33,8 @@ import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
-import { remoteServerManager } from '../../services/remoteServerManager';
+import { selectMobileModel } from '../../services/modelServices';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
@@ -133,9 +134,12 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const remoteLabels = useActiveRemoteModelLabels();
+  const activeRoute = useActiveMobileModel('transcription').model;
+  const downloadedModelId = activeRoute?.source === 'local'
+    ? activeRoute.id
+    : null;
 
   const {
-    downloadedModelId,
     presentModelIds,
     downloadModel,
     selectModel,
@@ -170,23 +174,31 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   );
 
   const handleDownload = useCallback(
-    (id: string) => {
+    async (id: string) => {
     // The store owns downloadingId (set/cleared in downloadModel), so a download
     // started here — or from the chat voice button — shows progress on this tab.
-      remoteServerManager.clearActiveRemoteMediaModel('transcription');
-      downloadModel(id).catch(err =>
-        logger.error('[Transcription] download failed:', err),
-      );
+      try {
+        await downloadModel(id);
+        await selectMobileModel({
+          source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
+        });
+      } catch (err) {
+        logger.error('[Transcription] download failed:', err);
+      }
     },
     [downloadModel],
   );
 
   const handleSelect = useCallback(
-    (id: string) => {
-      remoteServerManager.clearActiveRemoteMediaModel('transcription');
-      selectModel(id).catch(err =>
-        logger.error('[Transcription] select failed:', err),
-      );
+    async (id: string) => {
+      try {
+        await selectModel(id);
+        await selectMobileModel({
+          source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
+        });
+      } catch (err) {
+        logger.error('[Transcription] select failed:', err);
+      }
     },
     [selectModel],
   );

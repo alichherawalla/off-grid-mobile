@@ -3,9 +3,10 @@ import { Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedPressable } from '../AnimatedPressable';
 import { SPACING, TYPOGRAPHY } from '../../constants';
-import { remoteServerManager } from '../../services/remoteServerManager';
+import { selectMobileModel } from '../../services/modelServices';
 import { remoteServerModelOptions } from '../../services/remoteModelSelection';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import type { RemoteModelCategory } from '../../types';
@@ -23,9 +24,13 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const servers = useRemoteServerStore(state => state.servers);
-  const activeServerId = useRemoteServerStore(
-    state => state.activeRemoteMediaServerIds[category] ?? null,
-  );
+  const activeRoute = useActiveMobileModel(category).model;
+  const activeServerId = activeRoute?.source === 'remote'
+    ? activeRoute.serverId ?? null
+    : null;
+  const activeModelId = activeRoute?.source === 'remote'
+    ? activeRoute.id
+    : null;
   const [selecting, setSelecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const options = useMemo(
@@ -33,9 +38,6 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
     [servers, category],
   );
   if (options.length === 0) return null;
-
-  const activeServer = servers.find(server => server.id === activeServerId);
-  const activeModelId = activeServer?.mediaModels?.[category];
 
   return (
     <View style={styles.section} testID={`remote-${category}-models`}>
@@ -55,11 +57,12 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
               setSelecting(key);
               setError(null);
               try {
-                await remoteServerManager.setActiveRemoteMediaModel(
-                  option.serverId,
-                  category,
-                  option.id,
-                );
+                await selectMobileModel({
+                  source: 'remote',
+                  hostId: option.serverId,
+                  modality: category,
+                  modelId: option.id,
+                });
                 onSelect?.();
               } catch (reason) {
                 setError(
