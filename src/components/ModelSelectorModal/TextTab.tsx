@@ -247,6 +247,7 @@ export const TextTab: React.FC<TextTabProps> = ({
             return (
               <TouchableOpacity
                 key={model.id}
+                testID="remote-model-item"
                 style={[
                   styles.modelItem,
                   isCurrent && styles.modelItemSelectedRemote,

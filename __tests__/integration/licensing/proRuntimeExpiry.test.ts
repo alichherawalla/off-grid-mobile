@@ -49,7 +49,7 @@ describe('the Pro runtime when access expires', () => {
     _clearExtensionsForTesting();
   });
 
-  it('removes every paid surface and stops Sync without an app restart', async () => {
+  it('removes every paid surface and keeps restricted Sync available without an app restart', async () => {
     activate({
       registerToolExtension,
       registerScreen,
@@ -75,6 +75,8 @@ describe('the Pro runtime when access expires', () => {
     expect(getToolExtensions().map(extension => extension.id)).toEqual([]);
     expect(getSlot(SLOTS.appRoot)).toBeUndefined();
     expect(callHook('audio.canSpeak')).toBeUndefined();
-    expect(syncService.isRunning()).toBe(false);
+    // Restricted Sync remains available so this device can reclaim access from
+    // a licensed peer. All paid Sync surfaces above are still removed.
+    expect(syncService.isRunning()).toBe(true);
   });
 });
