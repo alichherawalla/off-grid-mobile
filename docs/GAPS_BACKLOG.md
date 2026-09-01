@@ -41,19 +41,28 @@ device, model, route, and log evidence before closing this entry.
 
 ### QA sweep evidence - 2026-09-01
 
-The current combined working tree passes these code gates:
+The latest combined sweep passes these stable code gates and representative journeys:
 
-- Shared models TypeScript and architecture gates;
-- Mobile TypeScript and both model-architecture gates, with zero temporary items;
-- Mobile dependency-cruiser: 563 modules and 2,989 dependencies, with zero violations;
-- Shared models build and 329 tests;
-- 17 of 19 selected Mobile cross-service suites: 62 of 64 tests passed.
+- Shared models TypeScript and architecture gates. The most recent full Shared package run in this
+  consolidation round passed 342 tests and built its type declarations.
+- Mobile TypeScript and both model-architecture gates, with zero temporary items.
+- Mobile dependency-cruiser: 556 modules and 2,962 dependencies, with zero violations.
+- 13 selected Mobile cross-service suites: 79 tests passed. They cover canonical local/remote model
+  selection and visible identity, remote discovery, parallel local and remote tools, MCP, bounded
+  project RAG, image settings and cancelled-image Resend, image-download relaunch recovery,
+  residency swaps, voice STT/tool/answer, and Pro model transfer. Jest reported an open-handle
+  warning after this larger batch; the focused Stop/Resend/tool/RAG batch below remains clean with
+  `--detectOpenHandles`.
+- 11 selected Desktop cross-service files: 115 tests passed. They cover model selection and switch
+  ownership, chat lifecycle and visible active-model identity, tool calls, MCP, download progress,
+  transcription, model control sync, and knowledge-document sync.
 
-The passing Mobile journeys cover canonical local/remote model selection, Stop reaching LiteRT,
-Resend on llama.cpp and LiteRT, Edit and Resend, cancelled-image Resend, local image cancellation and
-progress, iOS image-download recovery, balanced/aggressive residency matrices, tool calls, bounded
-project RAG retrieval, voice-mode STT/tool/answer, voice-mode image Resend, state sync, knowledge-file
-sync, and mesh-residency UI truth.
+The current Desktop image-generation work is not yet at the static gate. Desktop TypeScript reports
+that `src/main/imagegen/application-service.ts` sends a `progress` member that is not in
+`GenerationEvents`. A focused Desktop image round passed 55 tests and failed one: cancellation
+returned `true` while the main-owned job journey expected `false`. These are current product-code
+findings in concurrent work, not device or environment failures. The stable non-image Desktop round
+above is green.
 
 This is still not live or release evidence. No physical iOS or Android journey, remote image server,
 Kokoro runtime, native model load/force-load/eject, native download interruption, packaged Desktop,
@@ -66,6 +75,9 @@ The two focused checks from this sweep are closed. A 13-suite, 27-test follow-up
 Resend; Edit and Resend; local and MCP tools; malformed tool JSON; bounded project RAG; orphan-project
 knowledge scope; and remote thinking capability detection. Jest reported no open handle in these
 follow-up runs. This is stable integration evidence, but it is not physical-device evidence.
+
+Kokoro is the only supported Mobile text-to-speech runtime. OuteTTS and Qwen3 TTS are removed and
+are not valid verification targets.
 
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
 
@@ -269,7 +281,6 @@ service.
 | SO1 | src/screens/ModelsScreen/TextModelsTab.tsx:143 handleRetryDownload | BLOCKING | Renderer re-implements download retry (Platform.OS branch, store mutation, mmproj, polling) — CLAUDE.md says this moved to ModelDownloadService. Delete; delegate to modelDownloadService.retry() like useDownloadManager. |
 | SO5 | src/screens/ModelsScreen/ImageFilterBar.tsx | DEBT | Platform.OS chooses which filter DIMENSIONS exist. Data-driven filter descriptor from service. |
 | SO6 | src/services/remoteServerManagerUtils.ts:122 | DEBT | `provider instanceof OpenAICompatibleProvider` to call updateCapabilities. Put on the provider interface (ISP). |
-| SO7 | pro/audio/ttsStore.ts:377,385 | DEBT | `instanceof OuteTTSEngine` for cache ops. Optional getAudioCacheSizeMB?/clearAudioCache? on the TTS engine interface. |
 | SO8 | src/stores/remoteServerHelpers.ts:32,188 | DEBT-low | `kind==='vision'` capability branch; fold into shared deriveRemoteCapabilities. |
 
 ### DRY (§C)
@@ -278,7 +289,6 @@ service.
 | DR3 | src/screens/HomeScreen/components/ModelPickerSheet.tsx:63,201 (*1.8/*1.5, -1.5) | DRIFTED (live) | Third memory-fit verdict bypassing memoryBudget.ts. Can say "fits" when residency refuses — the Load-Anyway/selector bug family. Call modelMemoryBudgetMB. |
 | DR4 | CHARS_PER_TOKEN=4 bare literal in llmHelpers,liteRTCompaction,litert,llm,generationServiceHelpers,providers/*,documentService | DEBT | Export CHARS_PER_TOKEN_ESTIMATE + estimateTokens(); all import. |
 | DR5 | STOP_TOKENS (llmHelpers:427) + CONTROL_TOKEN_PATTERNS (messageContent:1) + tests re-hardcode | DEBT | One token registry; derive stop-list + strip-patterns; tests import. |
-| DR6 | pro/audio outetts:363 + ttsService:207 '<\|im_end\|>' | DEBT-low | Shared IM_END_TOKEN. |
 | DR8 | remoteModelCapabilities:202 deltaHasThinking vs openAICompatibleStream:155 | DEBT | Shared REASONING_DELTA_FIELDS + deltaHasReasoning(delta). |
 
 ### Test quality (§D)
