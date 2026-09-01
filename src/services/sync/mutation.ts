@@ -10,6 +10,10 @@ import {
   isRuntimeOnlyMessage,
   type SharedFileDescriptor,
 } from '@offgrid/sync';
+import {
+  decodeModelSettingPatch,
+  encodeChangedModelSettings,
+} from '@offgrid/models';
 import type { Conversation, Message, Project } from '../../types';
 import type { KnowledgeDocumentSnapshot } from './knowledgeDocument';
 import { serializeMessageContext } from './messageContext';
@@ -38,138 +42,23 @@ export interface SyncMutation {
   fields?: Record<string, unknown>;
 }
 
-interface ModelSettingDescriptor {
-  localKey: string;
-  accepts: (value: unknown) => boolean;
-}
-
-const finiteInRange =
-  (minimum: number, maximum: number) =>
-  (value: unknown): boolean =>
-    typeof value === 'number' &&
-    Number.isFinite(value) &&
-    value >= minimum &&
-    value <= maximum;
-
-const integerInRange =
-  (minimum: number, maximum: number) =>
-  (value: unknown): boolean =>
-    Number.isInteger(value) &&
-    (value as number) >= minimum &&
-    (value as number) <= maximum;
-
-/** Desktop wire keys mapped once to the equivalent mobile setting owner keys. */
-const MODEL_SETTING_DESCRIPTORS: Readonly<
-  Record<string, ModelSettingDescriptor>
-> = {
-  temperature: { localKey: 'temperature', accepts: finiteInRange(0, 2) },
-  ctxSize: {
-    localKey: 'contextLength',
-    accepts: integerInRange(512, 1_048_576),
-  },
-  topP: { localKey: 'topP', accepts: finiteInRange(0, 1) },
-  repeatPenalty: {
-    localKey: 'repeatPenalty',
-    accepts: finiteInRange(0, 2),
-  },
-  maxTokens: { localKey: 'maxTokens', accepts: integerInRange(1, 1_048_576) },
-  maxToolCalls: {
-    localKey: 'maxToolCalls',
-    accepts: integerInRange(1, 100),
-  },
-  systemPrompt: {
-    localKey: 'systemPrompt',
-    accepts: value => typeof value === 'string',
-  },
-  kvCacheType: {
-    localKey: 'cacheType',
-    accepts: value => value === 'f16' || value === 'q8_0' || value === 'q4_0',
-  },
-  flashAttn: {
-    localKey: 'flashAttn',
-    accepts: value => typeof value === 'boolean',
-  },
-  gpuLayers: { localKey: 'gpuLayers', accepts: integerInRange(-1, 999) },
-  threads: { localKey: 'nThreads', accepts: integerInRange(0, 256) },
-  batchSize: { localKey: 'nBatch', accepts: integerInRange(1, 65_536) },
-  // Portable generation behaviour: these mean the same thing on every device, so a preference set
-  // on one is a preference everywhere. Hardware choices deliberately do NOT appear here — see below.
-  thinkingEnabled: {
-    localKey: 'thinkingEnabled',
-    accepts: value => typeof value === 'boolean',
-  },
-  imageSteps: { localKey: 'imageSteps', accepts: integerInRange(1, 200) },
-  imageGuidanceScale: {
-    localKey: 'imageGuidanceScale',
-    accepts: finiteInRange(0, 30),
-  },
-  imageWidth: { localKey: 'imageWidth', accepts: integerInRange(64, 4096) },
-  imageHeight: { localKey: 'imageHeight', accepts: integerInRange(64, 4096) },
-  enhanceImagePrompts: {
-    localKey: 'enhanceImagePrompts',
-    accepts: value => typeof value === 'boolean',
-  },
-  imageGenerationMode: {
-    localKey: 'imageGenerationMode',
-    accepts: value => value === 'auto' || value === 'manual',
-  },
-  autoDetectMethod: {
-    localKey: 'autoDetectMethod',
-    accepts: value => value === 'pattern' || value === 'llm',
-  },
-};
-
-/**
- * DELIBERATELY NOT SYNCED — settings that describe the DEVICE, not the user's intent:
- *
- * - `inferenceBackend` / `liteRTBackend`: NPU on a Snapdragon phone is meaningless on an iPhone,
- *   and pushing one device's accelerator to another selects a backend it cannot run.
- * - `imageThreads` / `imageUseOpenCL`: same reason, for the image engine.
- * - `speculativeDecoding`: whether MTP helps depends on the model FILE present on each device, and
- *   the engine gate already decides that per load.
- *
- * `threads` and `gpuLayers` are in the map above and arguably belong in this list too — a count
- * tuned for a desktop's cores is wrong for a phone's performance cluster. They sync today; changing
- * that is a behaviour change for existing meshes, so it is called out rather than done quietly.
- */
-
 export function modelSettingMutations(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
 ): SyncMutation[] {
-  const mutations: SyncMutation[] = [];
-  for (const [wireKey, descriptor] of Object.entries(
-    MODEL_SETTING_DESCRIPTORS,
-  )) {
-    const value = after[descriptor.localKey];
-    if (
-      value === undefined ||
-      Object.is(value, before[descriptor.localKey]) ||
-      !descriptor.accepts(value)
-    )
-      continue;
-    mutations.push({
+  return encodeChangedModelSettings('mobile', before, after).map(setting => ({
       entity: CORE_SYNC_ENTITIES.modelSetting,
-      entityId: wireKey,
+      entityId: setting.wireKey,
       kind: 'put',
-      fields: { value_json: JSON.stringify(value) },
-    });
-  }
-  return mutations;
+      fields: { version: setting.version, value_json: setting.valueJson },
+    }));
 }
 
 export function mobileModelSettingPatch(
   wireKey: string,
   fields: Record<string, unknown>,
 ): Record<string, unknown> | null {
-  const descriptor = MODEL_SETTING_DESCRIPTORS[wireKey];
-  if (!descriptor || typeof fields.value_json !== 'string') return null;
-  try {
-    const value = JSON.parse(fields.value_json) as unknown;
-    return descriptor.accepts(value) ? { [descriptor.localKey]: value } : null;
-  } catch {
-    return null;
-  }
+  return decodeModelSettingPatch('mobile', wireKey, fields);
 }
 
 export function conversationPutMutation(
