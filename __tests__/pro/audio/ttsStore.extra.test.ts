@@ -482,15 +482,15 @@ describe('ttsStore persist migration (onRehydrateStorage)', () => {
     expect(s.voiceId).toBeUndefined();
   });
 
-  it('does NOT overwrite an existing per-engine voice with the flat legacy key', () => {
+  it('keeps the existing per-engine voice and removes the superseded flat key', () => {
     const s = runMigration({
       engineId: 'kokoro',
       voiceByEngine: { kokoro: 'keep-me' },
       kokoroVoiceId: 'af_bella',
     });
-    // The `&& !vbe.kokoro` guard: existing per-engine voice wins, flat key untouched.
+    // The canonical per-engine voice wins. Shared removes the stale flat writer.
     expect((s.voiceByEngine as Record<string, string>).kokoro).toBe('keep-me');
-    expect(s.kokoroVoiceId).toBe('af_bella');
+    expect(s.kokoroVoiceId).toBeUndefined();
   });
 
   it('defaults engineId to kokoro when absent', () => {

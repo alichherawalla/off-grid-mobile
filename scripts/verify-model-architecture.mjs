@@ -89,6 +89,34 @@ for (const file of files) {
     report('residency-workflow-is-shared', fileName, source, source, 'module-global:pending-model-id')
   }
 
+  if (
+    fileName === 'pro/audio/ttsStore.ts' &&
+    /\b(?:ttsRegistry|modelResidencyManager|withVoiceSwitchTimeout|completedVoiceAssets|engine\.(?:setVoice|initialize|release|downloadAssets|deleteAssets|generateAndSave))\b/.test(text)
+  ) {
+    report('voice-control-plane-is-shared', fileName, source, source, 'store:voice-workflow')
+  }
+
+  if (
+    fileName === 'pro/audio/ttsPlayback.ts' &&
+    /\b(?:AbortController|dispatchPlayback|playbackStatus\s*[!=]=|currentMessageId\s*[!=]=)\b/.test(text)
+  ) {
+    report('voice-playback-control-is-shared', fileName, source, source, 'adapter:playback-state-machine')
+  }
+
+  if (
+    fileName === 'pro/audio/ttsDownloadActions.ts' &&
+    /\b(?:downloadAssets|deleteAssets|modelDownloaded|voiceAssetsDownloaded|modelResidencyManager)\b/.test(text)
+  ) {
+    report('voice-download-workflow-is-shared', fileName, source, source, 'adapter:download-policy')
+  }
+
+  if (
+    fileName === 'pro/audio/voiceGenerationPort.ts' &&
+    /\b(?:engine\.speak|initializeEngine|reconcileDownloadedFromPersisted|Promise\.race)\b/.test(text)
+  ) {
+    report('voice-synthesis-flow-is-shared', fileName, source, source, 'adapter:synthesis-policy')
+  }
+
   if (/useWhisperStore\.getState\(\)\.(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)/.test(text)) {
     report('transcription-workflow-is-shared', fileName, source, source, 'call:whisper-store-workflow')
   }
