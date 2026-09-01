@@ -19,6 +19,7 @@ import { providerRegistry } from '../adapters/providers';
 import type { GenerationOptions, LLMProvider } from '../adapters/providers/types';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
+import { modelInputAudioUris, modelInputImageUris } from '../modelMedia';
 import { getToolExtensions } from '../tools/extensions';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
@@ -235,8 +236,8 @@ async function* liteRTChunks(
   const operation = liteRTService.generateRaw(
     current?.content ?? '',
     {
-      imageUris: current?.attachments?.filter(item => item.type === 'image').map(item => item.uri),
-      audioUris: current?.attachments?.filter(item => item.type === 'audio').map(item => item.uri),
+      imageUris: modelInputImageUris(current?.attachments),
+      audioUris: modelInputAudioUris(current?.attachments),
     },
     {
       onToken: content => push({ value: { content } }),

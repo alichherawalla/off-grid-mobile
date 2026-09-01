@@ -1,46 +1,58 @@
 /**
- * RED-FLOW (integration) — Q17, rebuilt on the harness (the prior carrier mocked our own liteRTService —
- * "mocked too high"). A voice note + a tool enabled on LiteRT: the tool-loop derives audioUris inline and
- * sends the note's AUDIO to the model instead of the transcript (generationToolLoop.ts callLiteRTForLoop),
- * so native gets a stale/gone file path → device crash ("File does not exist").
- *
- * Real runToolLoop + real liteRTService; only the native LiteRTModule is faked (records what audio the
- * native layer received). UI manifestation is a device-only native crash, so the honest jest ceiling is
- * "what reached the native boundary" — audioUris must be [] (transcript-only).
+ * Native-boundary integration for the transcript-only voice-note rule. The shared
+ * GenerationService and the real Mobile LiteRT adapter run above the native fake.
  */
 import { installNativeBoundary } from '../../harness/nativeBoundary';
 import { createDownloadedModel, createMessage } from '../../utils/factories';
-import type { MediaAttachment, Message } from '../../../src/types';
+import { setupWithConversation } from '../../utils/testHelpers';
 
-describe('Q17 (harness) — voice note + tool on LiteRT sends audio to native (red-flow)', () => {
-  it('sends the transcript and NO audio to the native LiteRT model', async () => {
-    const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-     
-    const { liteRTService } = require('../../../src/services/litert');
-    const { runToolLoop } = require('../../../src/services/generationToolLoop');
-    const { useAppStore, useChatStore } = require('../../../src/stores');
-     
-
-    await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
-    boundary.litert.scriptTurn({ content: 'Paris' });
-
-    const voiceNote: MediaAttachment = { id: 'a1', type: 'audio', uri: '/stale/container/vn.wav', audioFormat: 'wav', textContent: 'what is the capital of France' } as MediaAttachment;
-    const userMsg: Message = createMessage({ role: 'user', content: 'what is the capital of France', attachments: [voiceNote] });
-    const conversationId = useChatStore.getState().createConversation('lrt');
-
-    await runToolLoop({
-      conversationId, messages: [userMsg], enabledToolIds: ['web_search'],
-      isAborted: () => false, onThinkingDone: () => {}, onStream: () => {}, onFinalResponse: () => {},
+describe('voice note on LiteRT', () => {
+  it('sends transcript text and no audio file to the native model', async () => {
+    const boundary = installNativeBoundary({
+      ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 },
     });
+    const { useAppStore } = require('../../../src/stores/appStore');
+    const {
+      refreshMobileModelServices,
+      selectMobileModel,
+    } = require('../../../src/services/modelServices');
+    const { generationService } = require('../../../src/services/generationService');
 
-    // The native layer must have received the TRANSCRIPT with NO audio uris. Today the tool-loop passes
-    // the voice note's audio inline → native gets ['/stale/.../vn.wav'] → "File does not exist" → RED.
+    useAppStore.setState({
+      downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })],
+      activeModelId: 'lrt',
+    });
+    await refreshMobileModelServices();
+    await selectMobileModel({
+      source: 'local',
+      hostId: 'litert',
+      modelId: 'lrt',
+      modality: 'text',
+    });
+    boundary.litert!.scriptTurn({ content: 'The result is 4.' });
+
+    const conversationId = setupWithConversation({ modelId: 'lrt' });
+    await generationService.generateResponse(conversationId, [createMessage({
+      role: 'user',
+      content: 'use the calculator for two plus two',
+      attachments: [{
+        id: 'voice-note',
+        type: 'audio',
+        uri: '/stale/container/voice-note.wav',
+        mimeType: 'audio/wav',
+        audioFormat: 'wav',
+      }],
+    })]);
+
+    expect(generationService.getState().isGenerating).toBe(false);
     const audioCalls = [
-      ...boundary.litert.module.sendMessageWithAudio.mock.calls,
-      ...boundary.litert.calls.sendMessageWithMedia,
+      ...boundary.litert!.module.sendMessageWithAudio.mock.calls,
+      ...boundary.litert!.calls.sendMessageWithMedia,
     ];
-    const audioSentToNative = audioCalls.flatMap(c => (Array.isArray(c[c.length - 1]) ? c[c.length - 1] : c[1]) ?? []);
+    const audioSentToNative = audioCalls.flatMap(call => {
+      const candidate = call[call.length - 1];
+      return Array.isArray(candidate) ? candidate : [];
+    });
     expect(audioSentToNative).toEqual([]);
   });
 });

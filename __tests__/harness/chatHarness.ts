@@ -171,7 +171,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   );
   const rows = await rtl.waitFor(
     () => {
-      const r = home.queryAllByTestId('model-item');
+      const r = home.queryAllByTestId(/^text-model-row-/);
       expect(r.length).toBeGreaterThan(0);
       return r;
     },
@@ -196,7 +196,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
   // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
-  if (!opts.deferInitialLoad) await activeModelService.loadTextModel('m');
+  if (!opts.deferInitialLoad) {
+    await activeModelService.loadTextModel('m');
+    const { refreshMobileModelServices } = require('../../src/services/modelServices');
+    await refreshMobileModelServices();
+  }
 
   // Stop any generation this suite leaves in flight, on THIS module graph, before the next suite resets
   // modules. Registered the same way requireRTL registers its unmount (a global jest.setup's afterEach

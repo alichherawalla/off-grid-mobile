@@ -21,17 +21,20 @@ import {
 import { mobileGenerationService } from './modelServices';
 import { mobileToolPromptMessages } from './modelServices/toolPromptPolicy';
 import { mobileToolDefinitions, mobileToolResult } from './modelServices/toolPorts';
+import { modelInputAudioUris } from './modelMedia';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
-function attachmentPart(attachment: MediaAttachment): GenerationContentPart {
-  if (attachment.type === 'image') return { type: 'image', uri: attachment.uri, mimeType: attachment.mimeType };
-  if (attachment.type === 'audio') return { type: 'audio', uri: attachment.uri, mimeType: attachment.mimeType };
-  return { type: 'file', uri: attachment.uri, mimeType: attachment.mimeType, name: attachment.fileName };
+function attachmentParts(attachment: MediaAttachment): GenerationContentPart[] {
+  if (attachment.type === 'image') return [{ type: 'image', uri: attachment.uri, mimeType: attachment.mimeType }];
+  if (attachment.type === 'audio') {
+    return modelInputAudioUris([attachment]).map(uri => ({ type: 'audio', uri, mimeType: attachment.mimeType }));
+  }
+  return [{ type: 'file', uri: attachment.uri, mimeType: attachment.mimeType, name: attachment.fileName }];
 }
 
 function sharedMessages(messages: Message[]): GenerationMessage[] {
   return messages.map(message => {
-    const attachments = message.attachments?.map(attachmentPart) ?? [];
+    const attachments = message.attachments?.flatMap(attachmentParts) ?? [];
     return {
       role: message.role,
       content: attachments.length
