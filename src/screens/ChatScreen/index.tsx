@@ -16,6 +16,7 @@ import {
   SharePromptSheet,
   ProAhaSheet,
 } from '../../components';
+import { WHISPER_MODELS } from '@offgrid/models';
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';
@@ -34,7 +35,6 @@ import {
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
-import { WHISPER_MODELS } from '../../services';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 
 function countConversationImages(conv: Conversation | undefined): number {

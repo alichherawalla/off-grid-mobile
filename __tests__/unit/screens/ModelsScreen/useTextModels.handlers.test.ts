@@ -75,6 +75,12 @@ const mockDeleteModel = jest.fn((_id: string) => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockGetDownloadedModels = jest.fn(() => Promise.resolve([]));
 
+jest.mock('../../../../src/services/modelServices/residencyIntents', () => ({
+  mobileResidencyIntents: {
+    unloadText: () => mockUnloadTextModel(),
+  },
+}));
+
 jest.mock('../../../../src/services', () => ({
   huggingFaceService: {
     searchModels: (query: string, opts?: any) => mockSearchModels(query, opts),

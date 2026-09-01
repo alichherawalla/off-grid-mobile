@@ -6,7 +6,6 @@ import {
 } from '../types';
 import {
   HF_API,
-  QUANTIZATION_INFO,
   LMSTUDIO_AUTHORS,
   OFFICIAL_MODEL_AUTHORS,
   VERIFIED_QUANTIZERS,
@@ -14,6 +13,7 @@ import {
 import { looksLikeVisionModel } from '../utils/visionModel';
 import { huggingFaceRevisionPath } from '../utils/modelOrigin';
 import {
+  QUANTIZATION_INFO,
   isModelProjectorFile as isMMProjFile,
   pickProjectorForDownload as pickMmProjForDownload,
 } from '@offgrid/models';

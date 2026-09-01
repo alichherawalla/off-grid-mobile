@@ -1,8 +1,8 @@
-import { recommendedModelsForDevice, ramFitScore } from '../utils/recommendedModels';
+import { recommendedModelsForDevice, ramFitScore } from '@offgrid/models';
 import { fileExceedsBudget } from './memoryBudget';
 import { fetchModelFiles } from './modelCatalogFiles';
 import { hardwareService } from './hardware';
-import { WHISPER_MODELS } from './whisperModels';
+import { WHISPER_MODELS } from '@offgrid/models';
 import type { AutoSetupCompatibleCatalog } from './autoSetupPlan';
 import { autoSetupImageCatalogProvider } from './autoSetupImageCatalogProvider';
 

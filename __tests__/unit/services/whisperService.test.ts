@@ -10,8 +10,8 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import RNFS from 'react-native-fs';
 import {
   whisperService,
-  WHISPER_MODELS,
 } from '../../../src/services/whisperService';
+import { WHISPER_MODELS } from '@offgrid/models';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { audioSessionManager } from '../../../src/services/audioSessionManager';
 import { audioRecorderService } from '../../../src/services/audioRecorderService';
@@ -42,6 +42,11 @@ jest.mock('../../../src/stores/downloadStore', () => ({
       remove: mockDownloadStoreRemove,
       retryEntry: mockDownloadStoreRetryEntry,
     }),
+  },
+  modelDownloadProjection: {
+    admit: (...args: unknown[]) => mockDownloadStoreAdd(...args),
+    remove: (...args: unknown[]) => mockDownloadStoreRemove(...args),
+    retry: (...args: unknown[]) => mockDownloadStoreRetryEntry(...args),
   },
 }));
 

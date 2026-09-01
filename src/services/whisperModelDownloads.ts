@@ -4,7 +4,7 @@ import { modelDownloadProjection } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import * as whisperModelFiles from './whisperModelFiles';
-import { WHISPER_MODELS } from './whisperModels';
+import { WHISPER_MODELS } from '@offgrid/models';
 import {
   DownloadOperationRegistry,
   type DownloadOperationOwner,

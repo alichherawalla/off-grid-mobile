@@ -1,7 +1,7 @@
-import { RECOMMENDED_MODELS } from '../../src/constants';
+import { RECOMMENDED_MODELS } from '@offgrid/models';
 import { buildAutoSetupTextCandidates } from '../../src/services/autoSetupCatalog';
 import { selectAutoSetupPlans } from '../../src/services/autoSetupPlan';
-import { recommendedModelsForDevice } from '../../src/utils/recommendedModels';
+import { recommendedModelsForDevice } from '@offgrid/models';
 
 const GB = 1024 ** 3;
 

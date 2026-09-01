@@ -12,13 +12,10 @@
  */
 import React from 'react';
 import { render, fireEvent, act } from '@testing-library/react-native';
+import { WHISPER_MODELS } from '@offgrid/models';
 
-jest.mock('../../../src/services', () => ({
-  WHISPER_MODELS: [
-    { id: 'tiny.en', name: 'Tiny', size: 75, lang: 'en', url: 'https://x/ggml-tiny.en.bin', description: 'Fastest, English only' },
-    { id: 'small', name: 'Small', size: 466, lang: 'multi', url: 'https://x/ggml-small.bin', description: 'High accuracy, 99 languages' },
-  ],
-}));
+const tinyCard = `transcription-model-card-${WHISPER_MODELS.findIndex(model => model.id === 'tiny.en')}`;
+const smallCard = `transcription-model-card-${WHISPER_MODELS.findIndex(model => model.id === 'small')}`;
 
 const mockWhisperActions = {
   downloadModel: jest.fn(async () => {}),
@@ -107,14 +104,14 @@ describe('TranscriptionModelsTab', () => {
 
   it('renders the built-in whisper catalogue and privacy banner', () => {
     const { getByTestId, getByText } = render(<TranscriptionModelsTab />);
-    expect(getByTestId('transcription-model-card-0-name')).toHaveTextContent('Tiny');
-    expect(getByTestId('transcription-model-card-1-name')).toHaveTextContent('Small');
+    expect(getByTestId(`${tinyCard}-name`)).toHaveTextContent('Tiny');
+    expect(getByTestId(`${smallCard}-name`)).toHaveTextContent('Small');
     expect(getByText(/audio is never sent anywhere/)).toBeTruthy();
   });
 
   it('downloads a not-present model when its card is tapped', () => {
     const { getByTestId } = render(<TranscriptionModelsTab />);
-    fireEvent.press(getByTestId('transcription-model-card-0'));
+    fireEvent.press(getByTestId(tinyCard));
     expect(mockWhisperActions.downloadModel).toHaveBeenCalledWith('tiny.en');
     expect(mockWhisperActions.selectModel).not.toHaveBeenCalled();
   });
@@ -125,11 +122,11 @@ describe('TranscriptionModelsTab', () => {
     mockWhisperState.downloadedModelId = 'small';
     const { getByTestId, queryByTestId } = render(<TranscriptionModelsTab />);
     // Both show as downloaded...
-    expect(getByTestId('transcription-model-card-0-downloaded')).toBeTruthy();
-    expect(getByTestId('transcription-model-card-1-downloaded')).toBeTruthy();
+    expect(getByTestId(`${tinyCard}-downloaded`)).toBeTruthy();
+    expect(getByTestId(`${smallCard}-downloaded`)).toBeTruthy();
     // ...but only `small` is active.
-    expect(queryByTestId('transcription-model-card-0-active')).toBeNull();
-    expect(getByTestId('transcription-model-card-1-active')).toBeTruthy();
+    expect(queryByTestId(`${tinyCard}-active`)).toBeNull();
+    expect(getByTestId(`${smallCard}-active`)).toBeTruthy();
   });
 
   it('selects a present-but-inactive model without re-downloading', () => {
@@ -137,7 +134,7 @@ describe('TranscriptionModelsTab', () => {
     mockWhisperState.presentModelIds = ['tiny.en', 'small'];
     mockWhisperState.downloadedModelId = 'small';
     const { getByTestId } = render(<TranscriptionModelsTab />);
-    fireEvent.press(getByTestId('transcription-model-card-0'));
+    fireEvent.press(getByTestId(tinyCard));
     expect(mockWhisperActions.selectModel).toHaveBeenCalledWith('tiny.en');
     expect(mockWhisperActions.downloadModel).not.toHaveBeenCalled();
   });
@@ -146,7 +143,7 @@ describe('TranscriptionModelsTab', () => {
     mockWhisperState.presentModelIds = ['small'];
     mockWhisperState.downloadedModelId = 'small';
     const { getByTestId } = render(<TranscriptionModelsTab />);
-    fireEvent.press(getByTestId('transcription-model-card-1'));
+    fireEvent.press(getByTestId(smallCard));
     expect(mockWhisperActions.selectModel).not.toHaveBeenCalled();
     expect(mockWhisperActions.downloadModel).not.toHaveBeenCalled();
   });
@@ -155,7 +152,7 @@ describe('TranscriptionModelsTab', () => {
     mockWhisperState.presentModelIds = ['tiny.en'];
     const { getByTestId } = render(<TranscriptionModelsTab />);
     // Per-model delete is only offered for present models.
-    fireEvent.press(getByTestId('transcription-model-card-0-delete'));
+    fireEvent.press(getByTestId(`${tinyCard}-delete`));
     // Delete is confirmed via CustomAlert; press the destructive button.
     const remove = (mockShowAlert.mock.results.at(-1)?.value.buttons ?? []).find(
       (b: any) => b.style === 'destructive',
@@ -170,7 +167,7 @@ describe('TranscriptionModelsTab', () => {
     seedSttDownload('tiny.en', 'failed', 0.4);
     const { getByTestId } = render(<TranscriptionModelsTab />);
     // Not stuck "downloading" → the download affordance is offered again.
-    fireEvent.press(getByTestId('transcription-model-card-0-download'));
+    fireEvent.press(getByTestId(`${tinyCard}-download`));
     expect(mockWhisperActions.downloadModel).toHaveBeenCalledWith('tiny.en');
   });
 
@@ -178,17 +175,17 @@ describe('TranscriptionModelsTab', () => {
     seedSttDownload('tiny.en', 'running', 0.6);
     const { queryByTestId } = render(<TranscriptionModelsTab />);
     // Downloading → no download button and the card is not tappable to re-download.
-    expect(queryByTestId('transcription-model-card-0-download')).toBeNull();
+    expect(queryByTestId(`${tinyCard}-download`)).toBeNull();
   });
 
   it('shows a QUEUED (pending) STT download as Queued, not as a 0% download', () => {
     // The bug: a pending STT entry rendered "0%" instead of "Queued".
     seedSttDownload('tiny.en', 'pending', 0);
     const { getByTestId, queryByTestId } = render(<TranscriptionModelsTab />);
-    expect(getByTestId('transcription-model-card-0-queued')).toBeTruthy();
-    expect(queryByTestId('transcription-model-card-0-downloading')).toBeNull();
+    expect(getByTestId(`${tinyCard}-queued`)).toBeTruthy();
+    expect(queryByTestId(`${tinyCard}-downloading`)).toBeNull();
     // Bytes are still surfaced ("0 B / size") so it matches the Text/Image cards.
-    expect(getByTestId('transcription-model-card-0-bytes')).toHaveTextContent(/^0\/\d+$/);
+    expect(getByTestId(`${tinyCard}-bytes`)).toHaveTextContent(/^0\/\d+$/);
   });
 
   // NOTE: the whisper-store FALLBACK cases moved to a real rendered test

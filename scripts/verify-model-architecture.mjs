@@ -67,6 +67,14 @@ for (const file of files) {
     report('mobile-tool-routing-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
   }
 
+  if (/^src\/(?:constants\/models|services\/(?:curatedLiteRTRegistry|whisperModels))\.ts$/.test(fileName)) {
+    report('mobile-catalog-policy-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
+  }
+
+  if (fileName === 'src/services/adapters/remote/serverDiscovery.ts' && /\/v1\/models|\/api\/tags/.test(text)) {
+    report('remote-discovery-policy-is-shared', fileName, source, source, 'literal:endpoint-order')
+  }
+
   const visit = node => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text
@@ -192,6 +200,14 @@ for (const file of files) {
       /^(?:generateWithToolsImpl|selectRelevantTools|selectToolsByEmbedding|remoteToolCapabilityIssue)$/.test(node.name.getText(source))
     ) {
       report('mobile-tool-routing-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+    }
+
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
+      node.name &&
+      /^(?:computeFilteredResults|bestFitScore|matchesOrgFilter|isTextModel|defaultModelIds|fetchGatewayModelCatalogPolicy)$/.test(node.name.getText(source))
+    ) {
+      report('mobile-catalog-policy-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
     }
 
     if (

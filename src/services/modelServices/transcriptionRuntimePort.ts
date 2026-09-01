@@ -1,5 +1,5 @@
 import { whisperService } from '../whisperService';
-import { WHISPER_MODELS } from '../whisperModels';
+import { WHISPER_MODELS } from '@offgrid/models';
 import { mobileResidencyIntents } from './residencyIntents';
 
 export type MobileTranscriptionLoadResult = 'loaded' | 'blocked' | 'error';

@@ -13,7 +13,7 @@ import {
   SoCVendor,
   ImageModelRecommendation,
 } from '../types';
-import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '../constants';
+import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '@offgrid/models';
 import { HTP_ENABLED } from '../config/featureFlags';
 import {
   appleChipForDevice,

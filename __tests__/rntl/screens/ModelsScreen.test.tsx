@@ -546,19 +546,19 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('recommended models', () => {
     it('RECOMMENDED_MODELS has entries', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       expect(RECOMMENDED_MODELS.length).toBeGreaterThan(0);
     });
 
     it('all recommended models have minRam', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       for (const model of RECOMMENDED_MODELS) {
         expect(model.minRam).toBeGreaterThan(0);
       }
     });
 
     it('all recommended models have type badges (text/vision/code)', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       const validTypes = ['text', 'vision', 'code'];
       for (const model of RECOMMENDED_MODELS) {
         expect(validTypes).toContain(model.type);
@@ -566,12 +566,12 @@ describe('ModelsScreen', () => {
     });
 
     it('recommended models have editorial ordering with Gemma 4 first', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       expect(RECOMMENDED_MODELS[0].id).toContain('gemma-4');
     });
 
     it('MODEL_ORGS contains expected organizations', () => {
-      const { MODEL_ORGS } = require('../../../src/constants');
+      const { MODEL_ORGS } = require('@offgrid/models');
       const keys = MODEL_ORGS.map((o: any) => o.key);
       expect(keys).toContain('Qwen');
       expect(keys).toContain('meta-llama');
@@ -585,19 +585,19 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('type filter', () => {
     it('filters by text models', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       const textModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'text');
       expect(textModels.length).toBeGreaterThan(0);
     });
 
     it('filters by vision models', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       const visionModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'vision');
       expect(visionModels.length).toBeGreaterThan(0);
     });
 
     it('has no code models after removal', () => {
-      const { RECOMMENDED_MODELS } = require('../../../src/constants');
+      const { RECOMMENDED_MODELS } = require('@offgrid/models');
       const codeModels = RECOMMENDED_MODELS.filter((m: any) => m.type === 'code');
       expect(codeModels.length).toBe(0);
     });

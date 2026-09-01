@@ -2,9 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
-import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
-import { fileExceedsBudget } from '../../services/memoryBudget';
 import { modelDownloadProjection, useDownloadStore } from '../../stores/downloadStore';
 import {
   hardwareService,
@@ -13,50 +11,20 @@ import {
 } from '../../services';
 import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { startModelDownload } from '../../services/startModelDownload';
-import { ramFitScore } from '../../utils/recommendedModels';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
 import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
-import { getModelType } from './utils';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
-
-const PARAM_COUNT_REGEX = /\b(\d+[.]\d+|\d+)\s?[Bb]\b/;
-
-function parseParamCount(model: ModelInfo): number | null {
-  const match = PARAM_COUNT_REGEX.exec(model.name) ?? PARAM_COUNT_REGEX.exec(model.id);
-  return match ? Number.parseFloat(match[1]) : null;
-}
-
-
-// Resolve a model's min RAM (explicit, else ~0.75GB/B params), then score via the
-// shared ramFitScore so onboarding + this screen rank fit identically.
-function bestFitScore(model: ModelInfo, ramGB: number): number {
-  return ramFitScore(model.minRamGB ?? (model.paramCount ?? 0) * 0.75, ramGB);
-}
-
-function applySort<T extends ModelInfo>(models: T[], sort: SortOption, ramGB = 0): T[] {
-  if (sort === 'recommended') return models;
-  return [...models].sort((a, b) => {
-    if (sort === 'bestfit') return bestFitScore(a, ramGB) - bestFitScore(b, ramGB);
-    if (sort === 'size') return (a.paramCount ?? parseParamCount(a) ?? 0) - (b.paramCount ?? parseParamCount(b) ?? 0);
-    if (sort === 'downloads') return (b.downloads ?? 0) - (a.downloads ?? 0);
-    const da = a.lastModified ? new Date(a.lastModified).getTime() : 0;
-    const db = b.lastModified ? new Date(b.lastModified).getTime() : 0;
-    return db - da;
-  });
-}
-
-function matchesOrgFilter(model: ModelInfo, orgs: string[]): boolean {
-  if (orgs.length === 0) return true;
-  return orgs.some(orgKey => {
-    if (model.author === orgKey) return true;
-    const orgLabel = MODEL_ORGS.find(o => o.key === orgKey)?.label || orgKey;
-    return model.id.toLowerCase().includes(orgLabel.toLowerCase()) ||
-      model.name.toLowerCase().includes(orgLabel.toLowerCase());
-  });
-}
+import {
+  MODEL_ORGS,
+  RECOMMENDED_MODELS,
+  prioritizeAccelerated,
+  queryCatalogModels,
+  recommendedCatalogModels,
+  trendingCatalogModels,
+} from '@offgrid/models';
 
 function mapCuratedModel(m: typeof RECOMMENDED_MODELS[number], details: Record<string, ModelInfo>): ModelInfo {
   const fetched = details[m.id];
@@ -72,33 +40,6 @@ async function fetchRecommendedModelDetails(): Promise<Record<string, ModelInfo>
     catch (e) { logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e); }
   }));
   return details;
-}
-
-function computeFilteredResults(
-  searchResults: ModelInfo[],
-  filterState: FilterState,
-  ramGB: number,
-): ModelInfo[] {
-  const filtered = searchResults.filter(model => {
-    if (filterState.source !== 'all' && model.credibility?.source !== filterState.source) return false;
-    if (filterState.type !== 'all' && getModelType(model) !== filterState.type) return false;
-    if (!matchesOrgFilter(model, filterState.orgs)) return false;
-    if (filterState.size !== 'all') {
-      const params = parseParamCount(model);
-      if (params !== null) {
-        const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
-        if (sizeOpt && (params < sizeOpt.min || params >= sizeOpt.max)) return false;
-      }
-    }
-    const filesWithSize = (model.files || []).filter(f => f.size > 0);
-    if (filesWithSize.length > 0 && !filesWithSize.some(f => !fileExceedsBudget(f.size, ramGB))) return false;
-    return true;
-  });
-  return filtered.map(model => {
-    const type = getModelType(model);
-    const params = parseParamCount(model);
-    return { ...model, modelType: type === 'image-gen' ? undefined : type as 'text' | 'vision' | 'code', paramCount: params ?? undefined };
-  });
 }
 
 export function useTextModels(setAlertState: (s: AlertState) => void) {
@@ -308,41 +249,32 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     filterState.sort !== 'recommended';
 
   const filteredResults = useMemo(
-    () => applySort(computeFilteredResults(searchResults, filterState, ramGB), filterState.sort, ramGB),
+    () => queryCatalogModels({ models: searchResults, state: filterState, ramGb: ramGB, organizations: MODEL_ORGS }),
     [searchResults, filterState, ramGB],
   );
 
   const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
-    const models = RECOMMENDED_MODELS
-      .filter(m => m.params <= maxParams && (!m.maxRam || ramGB <= m.maxRam))
-      .filter(m => {
-        if (filterState.type !== 'all' && m.type !== filterState.type) return false;
-        if (filterState.orgs.length > 0 && !filterState.orgs.includes(m.org)) return false;
-        if (filterState.size !== 'all') {
-          const sizeOpt = SIZE_OPTIONS.find(s => s.key === filterState.size);
-          if (sizeOpt && (m.params < sizeOpt.min || m.params >= sizeOpt.max)) return false;
-        }
-        return true;
-      })
-      .map(m => mapCuratedModel(m, recommendedModelDetails));
-    const sorted = applySort(models, filterState.sort, ramGB);
+    const size = filterState.size === 'all' ? null : SIZE_OPTIONS.find(option => option.key === filterState.size) ?? null;
+    const models = recommendedCatalogModels({ maxParams, ramGb: ramGB, type: filterState.type, orgs: filterState.orgs, size })
+      .map(model => mapCuratedModel(model, recommendedModelDetails));
+    const sorted = queryCatalogModels({
+      models,
+      state: { ...filterState, orgs: [], type: 'all', source: 'all', size: 'all', quant: 'all' },
+      ramGb: ramGB,
+    });
     // Prioritize NPU/GPU-accelerable models (LiteRT or Q4_0/Q8_0) to the top of the
     // recommended list, keeping the existing order stable within each group. Only for
     // the editorial 'recommended' sort — explicit sorts (size/downloads/…) are honored.
     if (filterState.sort !== 'recommended') return sorted;
-    return [...sorted].sort((a, b) => Number(modelSupportsNpuGpu(b)) - Number(modelSupportsNpuGpu(a)));
-  }, [deviceRecommendation.maxParameters, filterState.type, filterState.orgs, filterState.size, filterState.sort, recommendedModelDetails, ramGB]);
+    return prioritizeAccelerated(sorted, modelSupportsNpuGpu);
+  }, [deviceRecommendation.maxParameters, filterState, recommendedModelDetails, ramGB]);
 
   const trendingAsModelInfo = useMemo((): ModelInfo[] => {
     const maxParams = deviceRecommendation.maxParameters;
     // Pick the best-fit per family using the same bestFitScore used for "for you" recommendations
-    return Object.values(TRENDING_FAMILIES)
-      .map(ids => RECOMMENDED_MODELS
-        .filter(m => ids.includes(m.id) && m.params <= maxParams && (!m.maxRam || ramGB <= m.maxRam))
-        .map(m => mapCuratedModel(m, recommendedModelDetails))
-        .sort((a, b) => bestFitScore(a, ramGB) - bestFitScore(b, ramGB))[0])
-      .filter((m): m is ModelInfo => Boolean(m));
+    return trendingCatalogModels({ maxParams, ramGb: ramGB })
+      .map(model => mapCuratedModel(model, recommendedModelDetails));
   }, [deviceRecommendation.maxParameters, recommendedModelDetails, ramGB]);
 
   return {

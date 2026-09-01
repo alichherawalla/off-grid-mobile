@@ -5,7 +5,7 @@ export { llmService } from './llm';
 export { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 export { intentClassifier } from './intentClassifier';
 export { authService } from './authService';
-export { whisperService, WHISPER_MODELS } from './whisperService';
+export { whisperService } from './whisperService';
 export { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 export {
   getActiveModels,

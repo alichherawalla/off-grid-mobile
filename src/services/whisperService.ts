@@ -12,10 +12,6 @@ import * as whisperModelFiles from './whisperModelFiles';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
 
-// Re-export the platform model catalog. Portable decode and transcript policy lives in
-// @offgrid/models.
-export { WHISPER_MODELS } from './whisperModels';
-
 export interface RealtimeTranscriptionResult {
   text: string;
   isCapturing: boolean;

@@ -107,16 +107,10 @@ describe('trendingAsModelInfo — family best-fit selection', () => {
     // 9B needs 8GB RAM → ratio = 1.0, but it still scores better than 2B for an 8GB device
     // 2B needs 4GB → ratio = 0.5; |0.5 - 0.4| = 0.1, penalty = 0 → score 0.1
     // 9B needs 8GB → ratio = 1.0; |1.0 - 0.4| = 0.6, penalty = (1.0 - 0.75) * 4 = 1.0 → score 1.6
-    // 0.8B needs 3GB → ratio = 0.375; |0.375 - 0.4| = 0.025 → score 0.025 (best raw fit)
+    // Shared catalog metadata is the source of truth: 0.8B needs 2GB and 2B needs 4GB.
     // However 9B has params=9 <= maxParams=8? No: 9 > 8, so 9B is filtered out.
-    // Only 0.8B (0.8 <= 8) and 2B (2 <= 8) qualify. 0.8B has lower score.
-    // Actually for the stated test: "9B should be selected over 2B" — 9B params=9 > maxParams=8, filtered.
-    // Let's adjust: this test verifies the BEST available Qwen model is chosen (lowest bestFitScore).
-    // With maxParams=8, Qwen models that qualify: 0.8B, 2B (9B is excluded as 9>8).
-    // bestFitScore for 0.8B: minRam=3, ratio=3/8=0.375, |0.375-0.4|=0.025, no penalty → 0.025
-    // bestFitScore for 2B:   minRam=4, ratio=4/8=0.5,   |0.5-0.4|=0.1,   no penalty → 0.1
-    // So 0.8B is the best fit. The test ID matches the lowest-score candidate.
-    expect(qwenSelection!.id).toBe('unsloth/Qwen3.5-0.8B-GGUF');
+    // Both qualify, and 2B is closer to the target RAM ratio.
+    expect(qwenSelection!.id).toBe('unsloth/Qwen3.5-2B-GGUF');
   });
 
   it('returns no trending models for a very limited device (maxParams 1)', () => {
@@ -139,7 +133,7 @@ describe('trendingAsModelInfo — family best-fit selection', () => {
     expect(result.current.trendingAsModelInfo.length).toBeLessThanOrEqual(2);
 
     // Each returned model ID belongs to one of the trending families
-    const { TRENDING_MODEL_IDS } = require('../../../../src/constants');
+    const { TRENDING_MODEL_IDS } = require('@offgrid/models');
     for (const model of result.current.trendingAsModelInfo) {
       expect(TRENDING_MODEL_IDS).toContain(model.id);
     }

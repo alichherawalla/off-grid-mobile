@@ -251,7 +251,7 @@ jest.mock('../../../src/screens/ModelDownloadHelpers', () => {
 import { Platform } from 'react-native';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { AdvancedSetupScreen } from '../../../src/screens/ModelDownloadScreen';
-import { LITERT_PARENT_ID } from '../../../src/services/curatedLiteRTRegistry';
+import { LITERT_PARENT_ID } from '@offgrid/models';
 
 const MOCK_FILE = {
   name: 'model-Q4_K_M.gguf',

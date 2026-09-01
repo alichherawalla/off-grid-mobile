@@ -19,7 +19,7 @@ jest.mock('../../../../../../src/stores', () => ({
 }));
 
 import { extractBaseName } from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
-import { getCuratedLiteRTEntry, buildCuratedLiteRTUrl, CURATED_LITERT_ENTRIES } from '../../../../../../src/services/curatedLiteRTRegistry';
+import { getCuratedLiteRTEntry, buildCuratedLiteRTUrl, CURATED_LITERT_ENTRIES } from '@offgrid/models';
 
 // ---------------------------------------------------------------------------
 // curatedLiteRTRegistry

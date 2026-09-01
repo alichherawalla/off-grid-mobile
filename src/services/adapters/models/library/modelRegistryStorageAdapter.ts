@@ -1,7 +1,7 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../../../types';
-import { getCuratedLiteRTEntry } from '../../../curatedLiteRTRegistry';
+import { getCuratedLiteRTEntry } from '@offgrid/models';
 import logger from '../../../../utils/logger';
 import { statFile } from '../../../../utils/fileStat';
 import { parseHuggingFaceUrl } from '../../../../utils/modelOrigin';

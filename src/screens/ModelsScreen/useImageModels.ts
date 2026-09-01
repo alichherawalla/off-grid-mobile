@@ -8,15 +8,19 @@ import {
   hardwareService,
   selectMobileModel,
 } from '../../services';
-import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
+import { fetchAvailableModels, HFImageModel } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
-import { matchesSdVersionFilter } from './utils';
 import { startImageModelDownload as downloadImageModel, type ImageDownloadDeps } from '../../services/imageModelDownloadOwner';
 import { resumeImageDownload } from '../../services/imageDownloadResume';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
-import { uniformDownloadId } from '@offgrid/models';
+import {
+  filterImageCatalog,
+  isRecommendedImageCatalogModel,
+  recommendedImageBackendFilter,
+  uniformDownloadId,
+} from '@offgrid/models';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
@@ -137,11 +141,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
       if (cancelled) return;
       setImageRec(rec);
       if (!userChangedBackendFilter && Platform.OS !== 'ios') {
-        let filter: 'qnn' | 'mnn' | 'all';
-        if (rec.recommendedBackend === 'qnn') filter = 'qnn';
-        else if (rec.recommendedBackend === 'mnn') filter = 'mnn';
-        else filter = 'all';
-        setBackendFilter(filter);
+        setBackendFilter(recommendedImageBackendFilter(rec));
       }
     });
     return () => { cancelled = true; };
@@ -157,30 +157,21 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   }, []);
 
   const isRecommendedModel = useCallback((model: HFImageModel): boolean => {
-    if (!imageRec) return false;
-    if (model.backend !== imageRec.recommendedBackend && imageRec.recommendedBackend !== 'all') return false;
-    if (imageRec.qnnVariant && model.variant) return model.variant.includes(imageRec.qnnVariant);
-    if (imageRec.recommendedModels?.length) {
-      const fields = [model.name, model.repo, model.id].map(s => s.toLowerCase());
-      return imageRec.recommendedModels.some(p => fields.some(f => f.includes(p)));
-    }
-    return true;
+    return isRecommendedImageCatalogModel(model, imageRec);
   }, [imageRec]);
 
   const filteredHFModels = useMemo(() => {
-    const query = imageSearchQuery.toLowerCase().trim();
-    const filtered = availableHFModels.filter(m => {
-      if (showRecommendedOnly && imageRec && !isRecommendedModel(m)) return false;
-      if (backendFilter !== 'all' && m.backend !== backendFilter) return false;
-      if (styleFilter !== 'all' && guessStyle(m.name) !== styleFilter) return false;
-      if (!matchesSdVersionFilter(m.name, sdVersionFilter)) return false;
-      if (downloadedImageModels.some(d => d.id === m.id)) return false;
-      if (query && !m.displayName.toLowerCase().includes(query) && !m.name.toLowerCase().includes(query)) return false;
-      return true;
+    return filterImageCatalog({
+      models: availableHFModels,
+      backend: backendFilter,
+      style: styleFilter,
+      version: sdVersionFilter,
+      query: imageSearchQuery,
+      recommendedOnly: showRecommendedOnly,
+      recommendation: imageRec,
+      downloadedIds: new Set(downloadedImageModels.map(model => model.id)),
     });
-    if (!showRecommendedOnly) filtered.sort((a, b) => a.displayName.localeCompare(b.displayName));
-    return filtered;
-  }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery, imageRec, isRecommendedModel, showRecommendedOnly]);
+  }, [availableHFModels, backendFilter, styleFilter, sdVersionFilter, downloadedImageModels, imageSearchQuery, imageRec, showRecommendedOnly]);
 
   const hasActiveImageFilters = backendFilter !== 'all' || styleFilter !== 'all' || sdVersionFilter !== 'all';
   const imageRecommendation = imageRec?.bannerText ?? 'Loading recommendation...';

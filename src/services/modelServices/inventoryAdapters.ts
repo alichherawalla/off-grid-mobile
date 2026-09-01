@@ -19,7 +19,8 @@ import { displayModelName } from '../adapters/remote/serverDiscovery';
 import { remoteTextTransportRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
-import { WHISPER_MODELS, whisperService } from '../whisperService';
+import { whisperService } from '../whisperService';
+import { WHISPER_MODELS } from '@offgrid/models';
 import {
   getActiveModels,
 } from './modelState';
