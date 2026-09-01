@@ -62,7 +62,7 @@ async function indexedDocument(): Promise<Harness> {
   installRealSqlite();
   const { ragService } = require('../../../src/services/rag');
   const { documentService } = require('../../../src/services/documentService');
-  const { embeddingService } = require('../../../src/services/rag/embedding');
+  const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
   const {
     knowledgeDocumentSyncService,
   } = require('../../../pro/sync/knowledgeDocumentSyncService');

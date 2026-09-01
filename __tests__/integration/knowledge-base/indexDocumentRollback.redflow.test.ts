@@ -19,7 +19,7 @@ describe('PR#452 — KB indexDocument leaves a dead entry on embed failure (red-
     installRealSqlite();
      
     const { ragService } = require('../../../src/services/rag');
-    const { embeddingService } = require('../../../src/services/rag/embedding');
+    const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
     const { documentService } = require('../../../src/services/documentService');
      
 

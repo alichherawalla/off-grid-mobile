@@ -16,7 +16,7 @@ describe('search_knowledge_base — real RAG round-trip (guard)', () => {
     installRealSqlite();
      
     const { ragService } = require('../../../src/services/rag');
-    const { embeddingService } = require('../../../src/services/rag/embedding');
+    const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
     const { documentService } = require('../../../src/services/documentService');
     const { executeToolCall } = require('../../../src/services/tools/handlers');
      

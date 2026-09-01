@@ -1,7 +1,7 @@
 import { initLlama, LlamaContext } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import logger from '../../utils/logger';
+import logger from '../../../utils/logger';
 
 export const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
 const EMBEDDING_DIMENSION = 384;

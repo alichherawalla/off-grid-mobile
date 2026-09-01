@@ -1,5 +1,5 @@
-import { ragDatabase, RagSearchResult } from './database';
-import { embeddingService } from './embedding';
+import { ragDatabase, RagSearchResult } from '../adapters/rag/ragDatabaseAdapter';
+import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
 import { executeMobileEmbedding } from '../mobileSidecarGeneration';
 import {
   estimateCharBudget,

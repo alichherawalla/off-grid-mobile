@@ -144,7 +144,7 @@ function mockDeterministicVector(text: string): number[] {
     t.length % 7 === 0 ? 0.2 : 0.1,
   ];
 }
-jest.mock('../../src/services/rag/embedding', () => ({
+jest.mock('../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     load: jest.fn(() => Promise.resolve()),
     embed: jest.fn((text: string) => Promise.resolve(mockDeterministicVector(text))),
@@ -156,7 +156,7 @@ jest.mock('../../src/services/rag/embedding', () => ({
 }));
 
 import { ragService } from '../../src/services/rag';
-import { ragDatabase } from '../../src/services/rag/database';
+import { ragDatabase } from '../../src/services/adapters/rag/ragDatabaseAdapter';
 import { documentService } from '../../src/services/documentService';
 
 const mockDocService = documentService as jest.Mocked<typeof documentService>;

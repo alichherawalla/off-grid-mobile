@@ -29,7 +29,7 @@ import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { reportModelFailure } from '../../services/modelFailureHandler';
 import { remoteToolCapabilityIssue } from '../../services/toolCapabilityPreflight';
-import { embeddingService } from '../../services/rag/embedding';
+import { embeddingService } from '../../services/adapters/native/embeddingRuntimeAdapter';
 import {
   useChatStore,
   useProjectStore,

@@ -26,7 +26,7 @@ import {
   EMBEDDING_MODEL_FILENAME,
   EMBEDDING_RESIDENT_MB,
   embeddingService,
-} from '../rag/embedding';
+} from '../adapters/native/embeddingRuntimeAdapter';
 import {
   mobileExecutionAdapterId,
   type MobileRouteFacts,

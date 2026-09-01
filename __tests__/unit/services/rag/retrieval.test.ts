@@ -1,4 +1,4 @@
-jest.mock('../../../../src/services/rag/database', () => ({
+jest.mock('../../../../src/services/adapters/rag/ragDatabaseAdapter', () => ({
   ragDatabase: {
     getEmbeddingsByProject: jest.fn(() => []),
     getChunksByProject: jest.fn(() => []),
@@ -6,7 +6,7 @@ jest.mock('../../../../src/services/rag/database', () => ({
   },
 }));
 
-jest.mock('../../../../src/services/rag/embedding', () => ({
+jest.mock('../../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     isLoaded: jest.fn(() => false),
     load: jest.fn(() => Promise.resolve()),
@@ -23,8 +23,8 @@ jest.mock('../../../../src/utils/logger', () => ({
 }));
 
 import { retrievalService } from '../../../../src/services/rag/retrieval';
-import { ragDatabase } from '../../../../src/services/rag/database';
-import { embeddingService } from '../../../../src/services/rag/embedding';
+import { ragDatabase } from '../../../../src/services/adapters/rag/ragDatabaseAdapter';
+import { embeddingService } from '../../../../src/services/adapters/native/embeddingRuntimeAdapter';
 import { executeMobileEmbedding } from '../../../../src/services/mobileSidecarGeneration';
 
 const mockGetEmbeddings = ragDatabase.getEmbeddingsByProject as jest.Mock;

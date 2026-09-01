@@ -1,17 +1,17 @@
-import { ragDatabase } from './database';
+import { ragDatabase } from '../adapters/rag/ragDatabaseAdapter';
 import { chunkText } from '@offgrid/rag';
 import { retrievalService } from './retrieval';
-import { embeddingService } from './embedding';
+import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
 import { executeMobileEmbedding } from '../mobileSidecarGeneration';
 import { documentService } from '../documentService';
-import { writePastedNote } from './pastedNote';
+import { writePastedNote } from '../adapters/rag/pastedNoteFileAdapter';
 import {
   emitKnowledgeDocumentMutation,
   type KnowledgeDocumentSnapshot,
 } from '../sync/knowledgeDocument';
 import logger from '../../utils/logger';
 
-export type { RagDocument, RagSearchResult } from './database';
+export type { RagDocument, RagSearchResult } from '../adapters/rag/ragDatabaseAdapter';
 export { retrievalService } from './retrieval';
 interface IndexProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
@@ -290,7 +290,7 @@ class RagService {
   }
 
   private snapshot(
-    document: import('./database').RagDocument,
+    document: import('../adapters/rag/ragDatabaseAdapter').RagDocument,
   ): KnowledgeDocumentSnapshot {
     return {
       syncId: document.sync_id,

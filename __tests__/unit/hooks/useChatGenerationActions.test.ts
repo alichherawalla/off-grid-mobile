@@ -96,7 +96,7 @@ jest.mock('../../../src/services/rag', () => ({
   },
   retrievalService: { formatForPrompt: jest.fn(() => '<knowledge_base>mock RAG context</knowledge_base>') },
 }));
-jest.mock('../../../src/services/rag/embedding', () => ({
+jest.mock('../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     isLoaded: jest.fn(() => false),
     load: jest.fn(() => Promise.resolve()),
@@ -1107,7 +1107,7 @@ describe('RAG context injection in regenerateResponseFn', () => {
 // Embedding warmup
 // ─────────────────────────────────────────────
 
-const { embeddingService } = require('../../../src/services/rag/embedding');
+const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
 const mockEmbeddingIsLoaded = embeddingService.isLoaded as jest.Mock;
 const mockEmbeddingLoad = embeddingService.load as jest.Mock;
 

@@ -22,7 +22,7 @@ describe('knowledge document Sync identity', () => {
     `);
 
     const { ragDatabase } =
-      require('../../../src/services/rag/database') as typeof import('../../../src/services/rag/database');
+      require('../../../src/services/adapters/rag/ragDatabaseAdapter') as typeof import('../../../src/services/adapters/rag/ragDatabaseAdapter');
     await ragDatabase.ensureReady();
 
     const firstRead = ragDatabase.getAllDocuments();

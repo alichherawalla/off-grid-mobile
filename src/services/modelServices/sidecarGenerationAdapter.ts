@@ -8,7 +8,7 @@ import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { loadTextModel } from './modelLifecycleBootstrap';
 import { selectedTextModelId } from './modelState';
 import { llmService } from '../llm';
-import { embeddingService } from '../rag/embedding';
+import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
 import {
   selectToolsByEmbeddingRaw,
   type RoutableTool,

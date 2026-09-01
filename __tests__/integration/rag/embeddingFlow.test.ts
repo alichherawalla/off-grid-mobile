@@ -72,7 +72,7 @@ jest.mock('../../../src/services/modelServices', () => {
   };
 });
 
-jest.mock('../../../src/services/rag/embedding', () => ({
+jest.mock('../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     load: jest.fn(() => Promise.resolve()),
     isLoaded: jest.fn(() => true),
@@ -82,8 +82,8 @@ jest.mock('../../../src/services/rag/embedding', () => ({
 }));
 
 import { ragService, retrievalService } from '../../../src/services/rag';
-import { ragDatabase } from '../../../src/services/rag/database';
-import { embeddingService } from '../../../src/services/rag/embedding';
+import { ragDatabase } from '../../../src/services/adapters/rag/ragDatabaseAdapter';
+import { embeddingService } from '../../../src/services/adapters/native/embeddingRuntimeAdapter';
 import { cosineSimilarity } from '@offgrid/rag';
 import { documentService } from '../../../src/services/documentService';
 import { mobileGenerationService } from '../../../src/services/modelServices';

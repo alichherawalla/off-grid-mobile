@@ -7,7 +7,7 @@ jest.mock('../../../src/utils/logger', () => ({
 
 const mockEmbed = jest.fn();
 const mockLoad = jest.fn();
-jest.mock('../../../src/services/rag/embedding', () => ({
+jest.mock('../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     load: (...a: unknown[]) => mockLoad(...a),
     embed: (...a: unknown[]) => mockEmbed(...a),

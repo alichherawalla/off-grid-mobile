@@ -58,7 +58,7 @@ async function withIndexedDocs(
   installRealSqlite();
   const { ragService } = require('../../../src/services/rag');
   const { retrievalService } = require('../../../src/services/rag/retrieval');
-  const { embeddingService } = require('../../../src/services/rag/embedding');
+  const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
   const {
     executeMobileEmbedding,
   } = require('../../../src/services/mobileSidecarGeneration');

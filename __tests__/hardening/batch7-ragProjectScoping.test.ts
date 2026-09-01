@@ -28,7 +28,7 @@ var mockStore: {
   embedding: number[];
 }[] = [];
 
-jest.mock('../../src/services/rag/database', () => ({
+jest.mock('../../src/services/adapters/rag/ragDatabaseAdapter', () => ({
   ragDatabase: {
     ensureReady: jest.fn(() => Promise.resolve()),
     getEmbeddingsByProject: jest.fn((projectId: string) =>
@@ -53,7 +53,7 @@ jest.mock('../../src/services/rag/database', () => ({
 }));
 
 // Embedding native boundary: deterministic, direction-preserving unit vectors.
-jest.mock('../../src/services/rag/embedding', () => ({
+jest.mock('../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   embeddingService: {
     isLoaded: jest.fn(() => true),
     load: jest.fn(() => Promise.resolve()),
@@ -72,7 +72,7 @@ jest.mock('../../src/utils/logger', () => ({
 }));
 
 import { retrievalService } from '../../src/services/rag/retrieval';
-import { ragDatabase } from '../../src/services/rag/database';
+import { ragDatabase } from '../../src/services/adapters/rag/ragDatabaseAdapter';
 
 const mockGetEmbeddings = ragDatabase.getEmbeddingsByProject as jest.Mock;
 const mockGetChunks = ragDatabase.getChunksByProject as jest.Mock;

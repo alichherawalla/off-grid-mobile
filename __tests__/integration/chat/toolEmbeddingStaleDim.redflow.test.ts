@@ -9,7 +9,7 @@
  * boundary is the embedding model (embeddingService.embed), whose output DIMENSION we swap.
  */
 import { selectToolsByEmbedding, _resetToolEmbeddingCache } from '../../../src/services/toolEmbeddingRouter';
-import { embeddingService } from '../../../src/services/rag/embedding';
+import { embeddingService } from '../../../src/services/adapters/native/embeddingRuntimeAdapter';
 
 type Tool = { type: 'function'; function: { name: string; description: string } };
 const TOOLS: Tool[] = [

@@ -1,6 +1,6 @@
 /**
  * Semantic tool routing via the on-device embedding model (the same ~25MB
- * all-MiniLM-L6-v2 we already ship for RAG — see services/rag/embedding.ts).
+ * all-MiniLM-L6-v2 we already ship for RAG — see adapters/native/embeddingRuntimeAdapter.ts).
  *
  * Why: with several MCP servers connected, dozens of large tool schemas would
  * otherwise all land in the prompt, and the model must prefill every one before it
@@ -18,7 +18,7 @@
  * time-to-first-token win for Pro/MCP users.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { embeddingService } from './rag/embedding';
+import { embeddingService } from './adapters/native/embeddingRuntimeAdapter';
 import logger from '../utils/logger';
 import { rankToolVectorCandidates } from '@offgrid/models';
 
