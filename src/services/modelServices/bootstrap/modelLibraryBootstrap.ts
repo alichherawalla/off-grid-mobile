@@ -1,6 +1,5 @@
 import RNFS from 'react-native-fs';
 import logger from '../../../utils/logger';
-import { getMmProjFileSize } from '../../../utils/modelHelpers';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../../types';
 import { APP_CONFIG } from '../../../constants';
 import { useAppStore } from '../../../stores';
@@ -44,6 +43,8 @@ import {
 } from '../../adapters/models/library/localModelImportAdapter';
 import { determineCredibility } from '../../adapters/models/library/modelRegistryStorageAdapter';
 import {
+  isSafeImageModelId,
+  ModelLibraryRegistryService,
   resolveStoredModelPath,
   type VisionRepairOutcome,
 } from '@offgrid/models';
@@ -54,12 +55,26 @@ import { resolveOwnedDocumentPath } from '../../../utils/resolveDocumentPath';
 class ModelLibraryBootstrap {
   private readonly modelsDir: string;
   private readonly imageModelsDir: string;
+  private readonly registry: ModelLibraryRegistryService<DownloadedModel, ONNXImageModel>;
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
   private readonly backgroundDownloadContext: Map<string, BackgroundDownloadContext> = new Map();
 
   constructor() {
     this.modelsDir = `${RNFS.DocumentDirectoryPath}/${APP_CONFIG.modelStorageDir}`;
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
+    this.registry = new ModelLibraryRegistryService({
+      listText: () => loadDownloadedModels(this.modelsDir).catch(() => []),
+      saveText: saveModelsList,
+      listImages: () => loadDownloadedImageModels(this.imageModelsDir).catch(() => []),
+      saveImages: saveImageModelsList,
+      resolveOwnedTextPath: path => resolveOwnedDocumentPath(path, this.modelsDir),
+      imageRoot: modelId => isSafeImageModelId(modelId)
+        ? `${this.imageModelsDir}/${modelId}`
+        : null,
+      exists: path => RNFS.exists(path),
+      remove: path => RNFS.unlink(path),
+      freeSpace: async () => (await RNFS.getFSInfo()).freeSpace,
+    });
   }
 
   private resolveStoredPath(p: string, d: string) { return resolveStoredModelPath(p, d); }
@@ -94,57 +109,23 @@ class ModelLibraryBootstrap {
   }
 
   async getDownloadedModels(): Promise<DownloadedModel[]> {
-    try {
-      return await loadDownloadedModels(this.modelsDir);
-    } catch {
-      return [];
-    }
+    return this.registry.listText();
   }
 
   async deleteModel(modelId: string): Promise<void> {
-    const models = await this.getDownloadedModels();
-    const model = models.find(m => m.id === modelId);
-
-    if (!model) throw new Error('Model not found');
-    const modelPath = resolveOwnedDocumentPath(model.filePath, this.modelsDir);
-    if (!modelPath) {
-      throw new Error('Invalid model path: outside app directory');
-    }
-    const llamaModel = model.engine === 'llama' ? model : null;
-    const mmProjPath = llamaModel?.mmProjPath
-      ? resolveOwnedDocumentPath(llamaModel.mmProjPath, this.modelsDir)
-      : null;
-    if (llamaModel?.mmProjPath && !mmProjPath) {
-      throw new Error('Invalid mmproj path: outside app directory');
-    }
-    await RNFS.unlink(modelPath);
-
-    // Only delete mmproj if no other models reference it
-    if (llamaModel?.mmProjPath && mmProjPath) {
-      const otherModelsUsingMmproj = models.some(
-        m => m.engine === 'llama' && m.id !== modelId && m.mmProjPath === llamaModel.mmProjPath,
-      );
-      if (!otherModelsUsingMmproj) {
-        await RNFS.unlink(mmProjPath).catch(() => {});
-      }
-    }
-
-    await saveModelsList(models.filter(m => m.id !== modelId));
+    await this.registry.deleteText(modelId);
   }
 
   async getModelPath(modelId: string): Promise<string | null> {
-    const models = await this.getDownloadedModels();
-    return models.find(m => m.id === modelId)?.filePath || null;
+    return this.registry.textPath(modelId);
   }
 
   async getStorageUsed(): Promise<number> {
-    const models = await this.getDownloadedModels();
-    return models.reduce((total, model) => total + model.fileSize + getMmProjFileSize(model), 0);
+    return this.registry.textStorageUsed();
   }
 
   async getAvailableStorage(): Promise<number> {
-    const freeSpace = await RNFS.getFSInfo();
-    return freeSpace.freeSpace;
+    return this.registry.availableStorage();
   }
 
   async getOrphanedFiles(): Promise<Array<{ name: string; path: string; size: number }>> {
@@ -341,41 +322,23 @@ class ModelLibraryBootstrap {
   }
 
   async getDownloadedImageModels(): Promise<ONNXImageModel[]> {
-    try {
-      return await loadDownloadedImageModels(this.imageModelsDir);
-    } catch {
-      return [];
-    }
+    return this.registry.listImages();
   }
 
   async addDownloadedImageModel(model: ONNXImageModel): Promise<void> {
-    const models = await this.getDownloadedImageModels();
-    const idx = models.findIndex(m => m.id === model.id);
-    if (idx >= 0) models[idx] = model;
-    else models.push(model);
-    await saveImageModelsList(models);
+    await this.registry.upsertImage(model);
   }
 
   async deleteImageModel(modelId: string): Promise<void> {
-    const models = await this.getDownloadedImageModels();
-    const model = models.find(m => m.id === modelId);
-    if (!model) throw new Error('Image model not found');
-    const topLevelDir = `${this.imageModelsDir}/${modelId}`;
-    if (!topLevelDir.startsWith(`${this.imageModelsDir}/`)) {
-      throw new Error('Invalid image model path: outside app directory');
-    }
-    if (await RNFS.exists(topLevelDir)) await RNFS.unlink(topLevelDir);
-    await saveImageModelsList(models.filter(m => m.id !== modelId));
+    await this.registry.deleteImage(modelId);
   }
 
   async getImageModelPath(modelId: string): Promise<string | null> {
-    const models = await this.getDownloadedImageModels();
-    return models.find(m => m.id === modelId)?.modelPath || null;
+    return this.registry.imagePath(modelId);
   }
 
   async getImageModelsStorageUsed(): Promise<number> {
-    const models = await this.getDownloadedImageModels();
-    return models.reduce((total, model) => total + model.size, 0);
+    return this.registry.imageStorageUsed();
   }
 
   getImageModelsDirectory(): string {

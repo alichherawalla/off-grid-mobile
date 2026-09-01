@@ -18,10 +18,8 @@
 jest.mock('../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
   modelLibrary: { deleteImageModel: jest.fn(async () => {}) },
 }));
-jest.mock('../harness/activeModelLifecycle', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) },
+jest.mock('../../src/services/modelServices/modelLifecycleBootstrap', () => ({
+  unloadImageModel: jest.fn(async () => {}),
 }));
 jest.mock('../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {
@@ -38,11 +36,11 @@ import { imageProvider } from '../../src/services/adapters/downloads/imageDownlo
 import { useDownloadStore } from '../../src/stores/downloadStore';
 import { useAppStore } from '../../src/stores';
 import { modelLibrary } from '../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
-import { activeModelService } from '../harness/activeModelLifecycle';
+import { unloadImageModel } from '../../src/services/modelServices/modelLifecycleBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../src/services/modelServices/coordinatedDownloadBridge';
 
 const mockDelete = modelLibrary.deleteImageModel as jest.Mock;
-const mockUnload = activeModelService.unloadImageModel as jest.Mock;
+const mockUnload = unloadImageModel as jest.Mock;
 const mockCancel = backgroundDownloadService.cancelDownload as jest.Mock;
 
 const downloadedModel = (id: string) => ({ id, name: id.toUpperCase(), size: 500, modelPath: `/models/${id}` }) as any;
