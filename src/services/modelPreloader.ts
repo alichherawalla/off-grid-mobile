@@ -13,7 +13,7 @@
 import { useAppStore, useWhisperStore } from '../stores';
 import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { getActiveModels, selectedTextModelId } from './modelServices/modelState';
-import { generationService } from './generationService';
+import { mobileChatGenerationProjection } from './chatGenerationProjection';
 import { imageGenerationService } from './imageGenerationService';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 
@@ -33,7 +33,7 @@ export function abortPreload(): void {
 /** A generation (text or image) holds the device — never warm a model behind it. */
 function isGenerationActive(): boolean {
   return (
-    generationService.getState().isGenerating ||
+    mobileChatGenerationProjection.getState().isGenerating ||
     imageGenerationService.getState().isGenerating
   );
 }

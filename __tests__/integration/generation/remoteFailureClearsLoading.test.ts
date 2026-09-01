@@ -13,16 +13,16 @@
  * stores, and the session owner run for real, so a lingering flag surfaces here.
  * Fails-before / passes-after.
  */
-import { generationService } from '../../../src/services/generationService';
+import { mobileChatGenerationProjection } from '../../../src/services/chatGenerationProjection';
 import { generationSession } from '../../../src/services/generationSession';
 import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { llmService } from '../../../src/services/llm';
 import { resetStores, setupWithConversation, flushPromises } from '../../utils/testHelpers';
-import { createMessage } from '../../utils/factories';
 import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
 import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
+import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
@@ -46,7 +46,7 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
     // No local model loaded → generationService routes to the remote provider.
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null as any);
-    await generationService.stopGeneration().catch(() => {});
+    mobileChatSession.stop();
   });
 
   afterEach(() => {
@@ -72,13 +72,15 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
     const conversationId = setupWithConversation({ modelId: 'remote-model' });
     generationSession.begin(conversationId);
 
-    await expect(
-      generationService.generateResponse(conversationId, [createMessage({ role: 'user', content: 'hi' })]),
-    ).rejects.toThrow('HTTP 400');
+    const user = useChatStore.getState().addMessage(conversationId, {
+      role: 'user', content: 'hi', turnKind: 'text',
+    });
+    await expect(mobileChatSession.sendPersisted(conversationId, user.id))
+      .rejects.toThrow('HTTP 400');
 
     await flushPromises();
 
-    const genState = generationService.getState();
+    const genState = mobileChatGenerationProjection.getState();
     const chat = useChatStore.getState();
 
     expect(genState.isGenerating).toBe(false);
@@ -88,6 +90,6 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
     expect(chat.streamingForConversationId).toBeNull();
     // generationService cleared its own session identity; the ChatScreen action layer
     // ends the generationSession on the thrown error (mirrored by handleStop/startGeneration).
-    expect(generationService.isGeneratingFor(conversationId)).toBe(false);
+    expect(mobileChatGenerationProjection.isGeneratingFor(conversationId)).toBe(false);
   });
 });

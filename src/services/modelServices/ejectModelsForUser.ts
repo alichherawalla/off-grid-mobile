@@ -1,10 +1,10 @@
 import { ModelEjectionService } from '@offgrid/models';
-import { generationService } from '../generationService';
 import { imageGenerationService } from '../imageGenerationService';
+import { stopActiveMobileChatSession } from './chatSessionControl';
 import { ejectAllModels } from './modelLifecycleBootstrap';
 
 const service = new ModelEjectionService({
-  cancelActiveGeneration: async () => { await generationService.stopGeneration(); },
+  cancelActiveGeneration: async () => { stopActiveMobileChatSession(); },
   cancelActiveImageGeneration: () => imageGenerationService.cancelGeneration(),
   ejectAll: ejectAllModels,
 });

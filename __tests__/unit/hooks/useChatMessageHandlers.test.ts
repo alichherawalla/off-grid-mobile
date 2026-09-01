@@ -29,7 +29,7 @@ describe('handleRetryMessageFn — no active model', () => {
   let regenSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    regenSpy = jest.spyOn(generationActions, 'regenerateResponseFn').mockResolvedValue(undefined);
+    regenSpy = jest.spyOn(generationActions, 'replayPersistedChatTurnFn').mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -70,7 +70,7 @@ describe('handleEditMessageFn — no active model', () => {
   let regenSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    regenSpy = jest.spyOn(generationActions, 'regenerateResponseFn').mockResolvedValue(undefined);
+    regenSpy = jest.spyOn(generationActions, 'editPersistedChatTurnFn').mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 

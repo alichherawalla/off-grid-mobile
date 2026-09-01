@@ -54,8 +54,8 @@ jest.mock('../../../src/bootstrap/hookRegistry', () => ({
 
 let mockTextGenerating = false;
 let mockImageGenerating = false;
-jest.mock('../../../src/services/generationService', () => ({
-  generationService: { getState: () => ({ isGenerating: mockTextGenerating }) },
+jest.mock('../../../src/services/chatGenerationProjection', () => ({
+  mobileChatGenerationProjection: { getState: () => ({ isGenerating: mockTextGenerating }) },
 }));
 jest.mock('../../../src/services/imageGenerationService', () => ({
   imageGenerationService: { getState: () => ({ isGenerating: mockImageGenerating }) },

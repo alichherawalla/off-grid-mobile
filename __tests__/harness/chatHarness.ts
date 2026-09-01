@@ -209,10 +209,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // token-flush timer that fires inside the NEXT suite and fails it, which is why exactly one rendered
   // suite failed per run with a different name every time.
   {
-    const { generationService } = require('../../src/services');
+    const { mobileChatSession } = require('../../src/screens/ChatScreen/mobileChatSession');
     (
       globalThis as unknown as { __GEN_CLEANUP__?: () => Promise<void> }
-    ).__GEN_CLEANUP__ = () => generationService.stopGeneration();
+    ).__GEN_CLEANUP__ = async () => { mobileChatSession.stop(); };
   }
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation

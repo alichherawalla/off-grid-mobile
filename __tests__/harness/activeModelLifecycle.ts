@@ -30,7 +30,9 @@ import { mobileModelSelectionStore } from '../../src/services/modelServices/sele
 
 registerLifecycleProjectionPort({
   refreshInventory: async () => undefined,
-  selectRoute: (modality, routeId) => mobileModelSelectionStore.write(modality, routeId),
+  selectRoute: async (modality, routeId) => {
+    await mobileModelSelectionStore.write(modality, routeId);
+  },
 });
 
 function currentLoadedMemoryGB(): number {

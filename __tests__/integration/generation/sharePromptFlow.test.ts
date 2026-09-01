@@ -12,7 +12,6 @@
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
-import { generationService } from '../../../src/services/generationService';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
 import { refreshMobileModelServices } from '../../../src/services/modelServices';
 import { llmService } from '../../../src/services/llm';
@@ -27,7 +26,9 @@ import {
   getAppState,
   wait,
 } from '../../utils/testHelpers';
-import { createMessage, createONNXImageModel } from '../../utils/factories';
+import { createONNXImageModel } from '../../utils/factories';
+import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
+import { useChatStore } from '../../../src/stores/chatStore';
 
 jest.mock('../../../src/services/llm');
 jest.mock('../../../src/services/localDreamGenerator');
@@ -66,7 +67,7 @@ describe('Share Prompt Flow Integration', () => {
       image: { model: null, isLoaded: false, isLoading: false },
     });
 
-    await generationService.stopGeneration().catch(() => {});
+    mobileChatSession.stop();
   });
 
   afterEach(() => {
@@ -79,6 +80,7 @@ describe('Share Prompt Flow Integration', () => {
   describe('text generation triggers share prompt', () => {
     const runTextGeneration = async () => {
       const modelId = setupWithActiveModel();
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, enabledTools: [] } });
       await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
@@ -93,8 +95,10 @@ describe('Share Prompt Flow Integration', () => {
         },
       );
 
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      const promise = generationService.generateResponse(conversationId, messages);
+      const user = useChatStore.getState().addMessage(conversationId, {
+        role: 'user', content: 'Hi', turnKind: 'text',
+      });
+      const promise = mobileChatSession.sendPersisted(conversationId, user.id);
       await flushPromises();
 
       streamCallback?.({ content: 'Hello' });
@@ -147,14 +151,17 @@ describe('Share Prompt Flow Integration', () => {
   describe('failed text generation does not trigger share prompt', () => {
     it('does not increment count when generation throws', async () => {
       const modelId = setupWithActiveModel();
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, enabledTools: [] } });
       await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
       mockLlmService.runNativeCompletion.mockRejectedValue(new Error('Generation failed'));
 
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
+      const user = useChatStore.getState().addMessage(conversationId, {
+        role: 'user', content: 'Hi', turnKind: 'text',
+      });
       await expect(
-        generationService.generateResponse(conversationId, messages),
+        mobileChatSession.sendPersisted(conversationId, user.id),
       ).rejects.toThrow('Generation failed');
 
       expect(getAppState().textGenerationCount).toBe(0);
@@ -169,6 +176,7 @@ describe('Share Prompt Flow Integration', () => {
   describe('stopped generation with content triggers share prompt', () => {
     it('increments count when stopped with partial content', async () => {
       const modelId = setupWithActiveModel();
+      useAppStore.setState({ settings: { ...useAppStore.getState().settings, enabledTools: [] } });
       await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
@@ -190,8 +198,10 @@ describe('Share Prompt Flow Integration', () => {
         },
       );
 
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      const generation = generationService.generateResponse(conversationId, messages);
+      const user = useChatStore.getState().addMessage(conversationId, {
+        role: 'user', content: 'Hi', turnKind: 'text',
+      });
+      const generation = mobileChatSession.sendPersisted(conversationId, user.id);
       await flushPromises();
 
       // Stream some content
@@ -199,8 +209,8 @@ describe('Share Prompt Flow Integration', () => {
       await flushPromises();
 
       // Stop with content
-      await generationService.stopGeneration();
-      await expect(generation).rejects.toThrow('Generation was cancelled');
+      expect(mobileChatSession.stop()).toBe(true);
+      await expect(generation).resolves.toMatchObject({ status: 'stopped' });
 
       expect(getAppState().textGenerationCount).toBe(1);
       // First generation doesn't trigger share prompt (skipped until 2nd)

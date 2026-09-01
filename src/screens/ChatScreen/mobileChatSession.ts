@@ -2,11 +2,14 @@ import {
   ChatSessionService,
   CHAT_GENERATION_RECLAIM_POLICY,
   appendProjectKnowledge,
+  chatGenerationRequestDefaults,
   composeChatContext,
+  imageIntentDecision,
   type ChatSessionEvent,
   type ChatQueueProjection,
   type ChatSessionRepositoryPort,
   type ChatTurn,
+  type GenerationEvents,
   type GenerationMessage,
   type GenerationOperation,
   type GenerationRequest,
@@ -16,18 +19,22 @@ import {
 } from '@offgrid/models';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { generationService } from '../../services/generationService';
+import { mobileChatGenerationProjection } from '../../services/chatGenerationProjection';
 import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import { contextCompactionService } from '../../services/contextCompaction';
+import { intentClassifier } from '../../services/intentClassifier';
+import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { ragService, retrievalService } from '../../services';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { mobileLLMService } from '../../services/modelServices/mobileLLMService';
-import { refreshMobileModelServices } from '../../services/modelServices';
+import { mobileGenerationService, refreshMobileModelServices } from '../../services/modelServices';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
+import { registerMobileChatSessionControl } from '../../services/modelServices/chatSessionControl';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useAppStore, useChatStore, useProjectStore } from '../../stores';
 import type { MediaAttachment, Message } from '../../types';
+import { isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
 
 function generationMessage(message: Message): GenerationMessage {
@@ -117,9 +124,78 @@ class MobileChatTurnRepository implements ChatSessionRepositoryPort {
 }
 
 const repository = new MobileChatTurnRepository();
-let activeTurnId: string | null = null;
 let queue: ChatQueueProjection = { entries: [], runningCount: 0, queuedCount: 0 };
 const queueListeners = new Set<(projection: ChatQueueProjection) => void>();
+
+export interface MobileChatCommandOptions {
+  imageMode?: 'auto' | 'force' | 'disabled';
+  onClassifying?: (active: boolean) => void;
+  onClassifierStatus?: (status: string | null) => void;
+  onClassifierTextFallback?: () => void;
+  ensureTextRoute?: () => Promise<boolean>;
+}
+
+const commandOptions = new Map<string, MobileChatCommandOptions>();
+
+async function resolveMobileChatOperation(input: {
+  userMessage: GenerationMessage;
+  requestedOperation?: GenerationOperation;
+  recordedOperation?: GenerationOperation;
+  signal: AbortSignal;
+  identity: { turnId: string };
+}): Promise<GenerationOperation> {
+  const options = commandOptions.get(input.identity.turnId);
+  const state = useAppStore.getState();
+  const classifierModel = state.settings.classifierModelId
+    ? state.downloadedModels.find(model => model.id === state.settings.classifierModelId)
+    : null;
+  const recordedIntent = input.recordedOperation?.type === 'image'
+    ? 'image'
+    : input.recordedOperation ? 'text' : undefined;
+  const forceImage = options?.imageMode === 'force'
+    || input.requestedOperation?.type === 'image';
+  const imageEnabled = options?.imageMode !== 'disabled';
+  const decision = imageIntentDecision({
+    recordedIntent,
+    imageEnabled,
+    imageGenerationRunning: mobileImageChatGeneration.isGenerating(),
+    imageRoutingMode: state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+    forceImage,
+    imageRouteAvailable: !!activeMobileRoute('image').model,
+    textRouteAvailable: !!activeMobileRoute('text').model,
+    modelAutoDetection: state.settings.autoDetectMethod === 'llm',
+    dedicatedClassifierAvailable: !!classifierModel,
+  });
+  let intent = decision.type === 'resolved' ? decision.intent : 'text';
+  if (decision.type === 'classify') {
+    if (decision.provisionClassifier) ensureDefaultClassifier().catch(() => undefined);
+    const useModel = decision.method === 'model';
+    try {
+      if (useModel) options?.onClassifying?.(true);
+      intent = await intentClassifier.classifyIntent(messageText(input.userMessage), {
+        useLLM: useModel,
+        classifierModel,
+        onStatusChange: useModel ? options?.onClassifierStatus : undefined,
+      });
+    } catch (error) {
+      logger.warn('[ChatSession] Intent classification failed; using text', error);
+      intent = 'text';
+    } finally {
+      options?.onClassifying?.(false);
+      if (intent !== 'image' && useModel) options?.onClassifierTextFallback?.();
+    }
+  }
+  if (intent === 'image' && activeMobileRoute('image').model) {
+    return { type: 'image', prompt: messageText(input.userMessage) };
+  }
+  if (!activeMobileRoute('text').model && options?.ensureTextRoute) {
+    await options.ensureTextRoute();
+    await refreshMobileModelServices();
+  }
+  const hasImage = Array.isArray(input.userMessage.content)
+    && input.userMessage.content.some(part => part.type === 'image');
+  return hasImage ? { type: 'vision' } : { type: 'text' };
+}
 
 async function ragMessages(
   conversationId: string,
@@ -169,27 +245,25 @@ async function ragMessages(
 }
 
 function publishSessionEvent(event: ChatSessionEvent): void {
+  mobileChatGenerationProjection.publish(event);
   if (event.type === 'queue_changed') {
     queue = event.queue;
     queueListeners.forEach(listener => listener(queue));
     return;
   }
-  if (event.type === 'started') {
-    activeTurnId = event.turn.id;
-    return;
+  if (event.type === 'invalidated') {
+    const first = event.turnIds[0];
+    if (first) useChatStore.getState().deleteMessagesAfter(event.conversationId, first);
   }
-  if (
-    (event.type === 'completed' || event.type === 'stopped' || event.type === 'failed')
-    && activeTurnId === event.turn.id
-  ) activeTurnId = null;
 }
 
 async function generateForSession(
   request: GenerationRequest,
-  events: Parameters<typeof generationService.generateForChatSession>[1] = {},
+  events: GenerationEvents = {},
 ): Promise<GenerationResult> {
   if (request.operation?.type !== 'image') {
-    return generationService.generateForChatSession(request, events);
+    await refreshMobileModelServices();
+    return mobileGenerationService.generate(request, events);
   }
   const identity = request.identity;
   if (!identity?.conversationId) throw new Error('Image generation requires a conversation identity');
@@ -237,6 +311,28 @@ async function generateForSession(
   }
 }
 
+function chatRequestDefaults(): ChatTurn['request']['request'] {
+  const state = useAppStore.getState();
+  const selected = state.downloadedModels.find(model => model.id === state.activeModelId);
+  return chatGenerationRequestDefaults({
+    runtime: selected && isLiteRTModel(selected) ? 'litert' : 'standard',
+    standard: {
+      maxTokens: state.settings.maxTokens,
+      temperature: state.settings.temperature,
+      topP: state.settings.topP,
+      repetitionPenalty: state.settings.repeatPenalty,
+    },
+    litert: {
+      maxTokens: state.settings.liteRTMaxTokens,
+      temperature: state.settings.liteRTTemperature,
+      topP: state.settings.liteRTTopP,
+    },
+    thinkingEnabled: state.settings.thinkingEnabled,
+    reasoningBudget: state.settings.reasoningBudget,
+    maxToolCalls: state.settings.maxToolCalls,
+  });
+}
+
 const service = new ChatSessionService(
   { generate: generateForSession },
   repository,
@@ -260,6 +356,7 @@ const service = new ChatSessionService(
         return tools.length ? { tools, toolChoice: 'auto' } : {};
       },
     },
+    operation: { resolve: resolveMobileChatOperation },
     compactionRetry: {
       shouldRetry: ({ error }) => contextCompactionService.isContextFullError(error),
       mayReplaceCommittedPartial: () => false,
@@ -286,6 +383,16 @@ const service = new ChatSessionService(
   },
 );
 
+function stopActiveTurn(): boolean {
+  const running = queue.entries.find(entry => entry.status === 'running');
+  return running ? service.stop(running.turnId) : false;
+}
+
+registerMobileChatSessionControl({
+  stopActive: stopActiveTurn,
+  stopConversation: conversationId => service.stopConversation(conversationId),
+});
+
 /** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
 export async function prepareMobileChatGeneration(): Promise<void> {
   await modelResidencyManager.reclaim(CHAT_GENERATION_RECLAIM_POLICY);
@@ -293,34 +400,60 @@ export async function prepareMobileChatGeneration(): Promise<void> {
 
 export const mobileChatSession = {
   /** Execute a user row that Mobile has already persisted. */
-  async sendPersisted(conversationId: string, turnId: string): Promise<ChatTurn> {
+  async sendPersisted(
+    conversationId: string,
+    turnId: string,
+    options: MobileChatCommandOptions = {},
+  ): Promise<ChatTurn> {
     const conversation = useChatStore.getState().conversations.find(
       candidate => candidate.id === conversationId,
     );
     const message = repository.prepareNew(conversationId, turnId);
     if (!message || message.role !== 'user') throw new Error(`Chat turn not found: ${turnId}`);
-    const operation: GenerationOperation = message.turnKind === 'image'
+    const recordedOperation: GenerationOperation | undefined = message.turnKind === 'image'
       ? { type: 'image', prompt: message.content }
-      : message.attachments?.some(attachment => attachment.type === 'image')
-        ? { type: 'vision' }
-        : { type: 'text' };
-    return service.send({
-      conversationId,
-      turnId,
-      projectId: conversation?.projectId,
-      userMessage: generationMessage(message),
-      operation,
-      allowFallback: false,
-    });
+      : message.turnKind === 'text'
+        ? (message.attachments?.some(attachment => attachment.type === 'image')
+          ? { type: 'vision' }
+          : { type: 'text' })
+        : options.imageMode === 'force'
+          ? { type: 'image', prompt: message.content }
+          : options.imageMode === 'disabled'
+            ? { type: 'text' }
+            : undefined;
+    commandOptions.set(turnId, options);
+    try {
+      return await service.send({
+        conversationId,
+        turnId,
+        projectId: conversation?.projectId,
+        userMessage: generationMessage(message),
+        operation: recordedOperation,
+        allowFallback: false,
+        request: chatRequestDefaults(),
+      });
+    } finally {
+      commandOptions.delete(turnId);
+    }
   },
 
   async regenerate(
     conversationId: string,
     turnId: string,
-    operation?: GenerationOperation,
+    input?: GenerationOperation | {
+      operation?: GenerationOperation;
+      options?: MobileChatCommandOptions;
+    },
   ): Promise<ChatTurn> {
+    const operation = input && 'type' in input ? input : input?.operation;
+    const options = input && 'type' in input ? {} : input?.options ?? {};
     repository.invalidate(conversationId);
-    return service.regenerate({ conversationId, turnId, operation });
+    commandOptions.set(turnId, options);
+    try {
+      return await service.regenerate({ conversationId, turnId, operation });
+    } finally {
+      commandOptions.delete(turnId);
+    }
   },
 
   async edit(conversationId: string, turnId: string, message: Message): Promise<ChatTurn> {
@@ -333,7 +466,7 @@ export const mobileChatSession = {
   },
 
   stop(): boolean {
-    return activeTurnId ? service.stop(activeTurnId) : false;
+    return stopActiveTurn();
   },
 
   stopConversation(conversationId: string): number {

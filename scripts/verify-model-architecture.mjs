@@ -91,7 +91,7 @@ for (const file of files) {
       ) {
         report('active-model-writes-use-canonical-selection-port', fileName, source, node, `call:${rawName}`)
       }
-      if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|completeText|completeTextWithTools|completeCappedText)$/.test(rawName)) {
+      if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|dispatchGenerationFn|resolveTurnKind|regenerateResponseFn)$/.test(rawName)) {
         report('generation-callers-use-shared-service', fileName, source, node, `call:${rawName}`)
       }
       if (/^(chat|chatMessages|chatStream|streamChat)$/.test(rawName)) {
@@ -108,7 +108,7 @@ for (const file of files) {
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|completeText|completeTextWithTools|completeCappedText|chat|chatMessages|chatStream|streamChat)$/.test(node.name.getText(source)) &&
+      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|chat|chatMessages|chatStream|streamChat)$/.test(node.name.getText(source)) &&
       /^(src\/services\/(llm|litert)\.ts)$/.test(fileName)
     ) {
       report('no-route-owning-llm-api', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
@@ -141,6 +141,14 @@ for (const file of files) {
 
     if (isUi && ts.isStringLiteralLike(node) && node.text.includes('remote-vision:')) {
       report('internal-remote-vision-id-never-reaches-ui', fileName, source, node, `literal:${node.text}`)
+    }
+
+    if (
+      /^src\/screens\/ChatScreen\/(mobileChatSession|useChatGenerationActions)\.tsx?$/.test(fileName) &&
+      ts.isImportSpecifier(node) &&
+      /^(generationService|imageGenerationService|onnxImageGeneratorService)$/.test(node.name.text)
+    ) {
+      report('ui-uses-chat-projection-and-model-ports', fileName, source, node, `import:${node.name.text}`)
     }
 
     if (ts.isClassDeclaration(node) && node.name && /(DownloadQueue|DownloadCoordinator|DownloadStateMachine|DownloadRegistry|WhisperModelDownloads)$/.test(node.name.text)) {

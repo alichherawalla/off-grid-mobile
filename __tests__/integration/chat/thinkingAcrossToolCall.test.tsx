@@ -15,17 +15,17 @@ describe('thinking across a tool-call turn (guard)', () => {
     const React = require('react');
     const { render } = requireRTL();
     const { liteRTService } = require('../../../src/services/litert');
-    const { generationService } = require('../../../src/services/generationService');
+    const { mobileChatSession } = require('../../../src/screens/ChatScreen/mobileChatSession');
     const { useAppStore, useChatStore } = require('../../../src/stores');
     const { ChatMessage } = require('../../../src/components/ChatMessage');
      
 
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
+    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt', settings: { ...useAppStore.getState().settings, enabledTools: ['calculator'] } });
     const { refreshMobileModelServices } = require('../../../src/services/modelServices');
     await refreshMobileModelServices();
     const conversationId = useChatStore.getState().createConversation('lrt');
-    useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2+2' });
+    const user = useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2+2', turnKind: 'text' });
 
     boundary.litert.scriptTurn({
       reasoning: 'Let me compute this with the calculator.',
@@ -33,11 +33,7 @@ describe('thinking across a tool-call turn (guard)', () => {
       content: 'The answer is 4.',
     });
 
-    await generationService.generateWithTools(
-      conversationId,
-      useChatStore.getState().getConversationMessages(conversationId),
-      { enabledToolIds: ['calculator'] },
-    );
+    await mobileChatSession.sendPersisted(conversationId, user.id);
 
     const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
     const assistant = [...messages].reverse().find(m => m.role === 'assistant');

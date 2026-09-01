@@ -18,7 +18,7 @@ export {
   syncWithNativeState,
 } from './modelServices/modelState';
 export type { ResourceUsage } from './modelServices/modelStateTypes';
-export { generationService } from './generationService';
+export { mobileChatGenerationProjection } from './chatGenerationProjection';
 export {
   mobileLLMService,
   mobileGenerationService,

@@ -21,7 +21,7 @@ import {
   handleSelectProjectFn,
   handleSendFn,
   handleStopFn,
-  startGenerationFn,
+  runPersistedChatTurnFn,
 } from './useChatGenerationActions';
 import {
   handleDeleteConversationFn,
@@ -95,7 +95,7 @@ export function useChatScreenActions({
     targetConversationId,
     messageText,
   ) => {
-    await startGenerationFn(generationDeps, {
+    await runPersistedChatTurnFn(generationDeps, {
       setDebugInfo,
       targetConversationId,
       messageText,
@@ -112,7 +112,6 @@ export function useChatScreenActions({
       text,
       attachments,
       imageMode,
-      startGeneration,
       setDebugInfo,
     });
 

@@ -14,7 +14,9 @@ import {
 } from '../../../src/services/engines';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 import { createDownloadedModel } from '../../utils/factories';
-import { generationService } from '../../../src/services/generationService';
+import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
+import { useChatStore } from '../../../src/stores/chatStore';
+import { setupWithConversation } from '../../utils/testHelpers';
 
 function remoteTransport(id: string): TextStreamTransport {
   return {
@@ -106,13 +108,13 @@ describe('canonical Mobile text route authority', () => {
     expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
     expect(isRemoteTextModelActive()).toBe(true);
     expect(mobileLLMService.resolveRoute({ modality: 'text', routeId: active.selectedId!, allowFallback: false }))
-      .toEqual({ selected: null, candidates: [] });
-    await expect(generationService.generateResponse('fail-closed-conversation', [{
-      id: 'user-turn',
-      role: 'user',
-      content: 'Do not send this to a local model.',
-      timestamp: Date.now(),
-    }])).rejects.toThrow('No compatible text model is ready');
+      .toMatchObject({ selected: null, candidates: [], requested: { ready: false } });
+    const conversationId = setupWithConversation({ modelId });
+    const user = useChatStore.getState().addMessage(conversationId, {
+      role: 'user', content: 'Do not send this to a local model.', turnKind: 'text',
+    });
+    await expect(mobileChatSession.sendPersisted(conversationId, user.id))
+      .rejects.toThrow('No compatible text model is ready');
   });
 
   it('returns to the persisted local route only after the remote server is removed', async () => {

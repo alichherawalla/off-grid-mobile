@@ -20,7 +20,7 @@ async function toolResultContentFor(callBody: string): Promise<string> {
   const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
    
   const { llmService } = require('../../../src/services/llm');
-  const { generationService } = require('../../../src/services/generationService');
+  const { mobileChatSession } = require('../../../src/screens/ChatScreen/mobileChatSession');
   const { hardwareService } = require('../../../src/services/hardware');
   const { useAppStore, useChatStore } = require('../../../src/stores');
    
@@ -35,7 +35,7 @@ async function toolResultContentFor(callBody: string): Promise<string> {
       filePath: '/models/small.gguf',
       fileName: 'small.gguf',
     })],
-    activeModelId: 'llm',
+    activeModelId: 'llm', settings: { ...useAppStore.getState().settings, enabledTools: ['calculator'] },
   });
   const { refreshMobileModelServices } = require('../../../src/services/modelServices');
   await refreshMobileModelServices();
@@ -43,8 +43,8 @@ async function toolResultContentFor(callBody: string): Promise<string> {
   boundary.llama!.scriptCompletion({ text: `Calculating. <tool_call>${callBody}</tool_call>` });
 
   const conversationId = useChatStore.getState().createConversation('llm');
-  useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2 + 2' });
-  await generationService.generateWithTools(conversationId, useChatStore.getState().getConversationMessages(conversationId), { enabledToolIds: ['calculator'] });
+  const user = useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2 + 2', turnKind: 'text' });
+  await mobileChatSession.sendPersisted(conversationId, user.id);
 
   const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
   const toolMsg = messages.find(m => m.role === 'tool' && m.toolName === 'calculator');

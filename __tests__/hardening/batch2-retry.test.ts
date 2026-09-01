@@ -47,7 +47,7 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
   beforeEach(() => {
     resetStores();
     jest.clearAllMocks();
-    regenSpy = jest.spyOn(generationActions, 'regenerateResponseFn').mockResolvedValue(undefined);
+    regenSpy = jest.spyOn(generationActions, 'replayPersistedChatTurnFn').mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -74,12 +74,10 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
     );
 
     // trimmed everything after the prior USER message (the assistant reply is removed)
-    expect(deleteMessagesAfter).toHaveBeenCalledWith(convId, userMsg.id);
-    const conv = useChatStore.getState().conversations.find(c => c.id === convId)!;
-    expect(conv.messages.map(m => m.id)).toEqual([userMsg.id]);
+    expect(deleteMessagesAfter).not.toHaveBeenCalled();
     // regenerated for the prior user prompt
     expect(regenSpy).toHaveBeenCalledTimes(1);
-    expect(regenSpy.mock.calls[0][1]).toMatchObject({ userMessage: expect.objectContaining({ id: userMsg.id }) });
+    expect(regenSpy.mock.calls[0][1]).toMatchObject({ id: userMsg.id });
   });
 
   // Case 17: retry a USER message directly -> trims trailing, regenerates for it.
@@ -104,9 +102,9 @@ describe('batch2 handleRetryMessageFn — retry orchestration', () => {
       },
     );
 
-    expect(deleteMessagesAfter).toHaveBeenCalledWith(convId, userMsg.id);
+    expect(deleteMessagesAfter).not.toHaveBeenCalled();
     expect(regenSpy).toHaveBeenCalledTimes(1);
-    expect(regenSpy.mock.calls[0][1]).toMatchObject({ userMessage: expect.objectContaining({ id: userMsg.id }) });
+    expect(regenSpy.mock.calls[0][1]).toMatchObject({ id: userMsg.id });
   });
 
   // Case 19: after a first retry (e.g. one that was stopped), a SECOND retry is not

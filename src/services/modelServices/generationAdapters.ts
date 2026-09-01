@@ -299,28 +299,6 @@ const llamaTextTransport: TextStreamTransport = {
   // eslint-disable-next-line max-params
   async generate(modelId, messages, options, callbacks): Promise<void> {
     if (!llmService.isModelLoaded()) throw new Error('No model loaded');
-    if (options.tools?.length) {
-      const result = await llmService.runNativeToolCompletion(messages, {
-        tools: options.tools,
-        reasoningWire: options.reasoningWire,
-        onStream: data => {
-          if (data.content) callbacks.onToken(data.content);
-          if (data.reasoningContent) callbacks.onReasoning?.(data.reasoningContent);
-        },
-      });
-      callbacks.onComplete({
-        content: result.fullResponse,
-        meta: generationMeta(modelId),
-        toolCalls: result.toolCalls.map(call => ({
-          id: call.id,
-          name: call.name,
-          arguments: typeof call.arguments === 'string'
-            ? call.arguments
-            : JSON.stringify(call.arguments),
-        })),
-      });
-      return;
-    }
     let content = '';
     let reasoning = '';
     await llmService.runNativeCompletion(messages, {

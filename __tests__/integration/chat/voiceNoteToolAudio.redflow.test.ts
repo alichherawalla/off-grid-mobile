@@ -3,7 +3,7 @@
  * GenerationService and the real Mobile LiteRT adapter run above the native fake.
  */
 import { installNativeBoundary } from '../../harness/nativeBoundary';
-import { createDownloadedModel, createMessage } from '../../utils/factories';
+import { createDownloadedModel } from '../../utils/factories';
 import { setupWithConversation } from '../../utils/testHelpers';
 
 describe('voice note on LiteRT', () => {
@@ -16,7 +16,9 @@ describe('voice note on LiteRT', () => {
       refreshMobileModelServices,
       selectMobileModel,
     } = require('../../../src/services/modelServices');
-    const { generationService } = require('../../../src/services/generationService');
+    const { mobileChatGenerationProjection } = require('../../../src/services/chatGenerationProjection');
+    const { mobileChatSession } = require('../../../src/screens/ChatScreen/mobileChatSession');
+    const { useChatStore } = require('../../../src/stores/chatStore');
 
     useAppStore.setState({
       downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })],
@@ -32,9 +34,10 @@ describe('voice note on LiteRT', () => {
     boundary.litert!.scriptTurn({ content: 'The result is 4.' });
 
     const conversationId = setupWithConversation({ modelId: 'lrt' });
-    await generationService.generateResponse(conversationId, [createMessage({
+    const user = useChatStore.getState().addMessage(conversationId, {
       role: 'user',
       content: 'use the calculator for two plus two',
+      turnKind: 'text',
       attachments: [{
         id: 'voice-note',
         type: 'audio',
@@ -42,9 +45,10 @@ describe('voice note on LiteRT', () => {
         mimeType: 'audio/wav',
         audioFormat: 'wav',
       }],
-    })]);
+    });
+    await mobileChatSession.sendPersisted(conversationId, user.id);
 
-    expect(generationService.getState().isGenerating).toBe(false);
+    expect(mobileChatGenerationProjection.getState().isGenerating).toBe(false);
     const audioCalls = [
       ...boundary.litert!.module.sendMessageWithAudio.mock.calls,
       ...boundary.litert!.calls.sendMessageWithMedia,

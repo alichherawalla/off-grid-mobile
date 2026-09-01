@@ -126,11 +126,11 @@ describe('T038 (rendered) — thinking + tool-result + answer all render in a re
       { timeout: 4000 },
     );
     const {
-      generationService,
-    } = require('../../../src/services/generationService');
+      mobileChatGenerationProjection,
+    } = require('../../../src/services/chatGenerationProjection');
     await h.rtl.waitFor(
       () => {
-        expect(generationService.getState().isGenerating).toBe(false);
+        expect(mobileChatGenerationProjection.getState().isGenerating).toBe(false);
       },
       { timeout: 4000 },
     );
