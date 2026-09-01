@@ -66,10 +66,15 @@ class NativeModelLifecycle {
       : llmService.isModelLoaded();
   }
 
-  async loadTextModel(modelId: string, timeoutMs = 120_000, override = false): Promise<void> {
+  async loadTextModel(
+    modelId: string,
+    timeoutMs = 120_000,
+    override = false,
+    preserveSelection = false,
+  ): Promise<void> {
     const store = useAppStore.getState();
     if (this.textIsCurrent(modelId)) {
-      if (store.activeModelId !== modelId) store.setActiveModelId(modelId);
+      if (!preserveSelection && store.activeModelId !== modelId) store.setActiveModelId(modelId);
       return;
     }
     const model = store.downloadedModels.find(candidate => candidate.id === modelId);
@@ -82,6 +87,7 @@ class NativeModelLifecycle {
       store,
       timeoutMs,
       override,
+      preserveSelection,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;

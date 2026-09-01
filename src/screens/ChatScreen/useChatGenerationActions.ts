@@ -352,7 +352,6 @@ export async function shouldRouteToImageGenerationFn(
       const intent = await intentClassifier.classifyIntent(text, {
         useLLM: true,
         classifierModel,
-        currentModelPath: llmService.getLoadedModelPath(),
       });
       logger.log(
         `[ROUTE-SM] → ${
@@ -375,7 +374,6 @@ export async function shouldRouteToImageGenerationFn(
     const intent = await intentClassifier.classifyIntent(text, {
       useLLM,
       classifierModel,
-      currentModelPath: llmService.getLoadedModelPath(),
       onStatusChange: useLLM ? deps.setAppImageGenerationStatus : undefined,
     });
     deps.setIsClassifying(false);

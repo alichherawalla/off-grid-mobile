@@ -95,6 +95,7 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
       (model.fileSize + (model.engine === 'llama' ? model.mmProjFileSize ?? 0 : 0)) /
         (1024 * 1024),
     ),
+    residencyKey: 'mobile:text-engine',
     installed: true,
     ready: true,
     loaded,
@@ -342,6 +343,8 @@ export const classifierInventoryAdapter: ModelInventoryAdapter = {
         kind: 'classifier',
         capabilities: { classification: true, textGeneration: true },
         residentSizeMB: Math.ceil(model.fileSize / (1024 * 1024)),
+        residencyKey: 'mobile:text-engine',
+        residencyMode: 'operation',
         installed: true,
         ready: true,
         loaded: state.loadedTextModelId === model.id,

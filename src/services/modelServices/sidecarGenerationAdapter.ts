@@ -5,8 +5,6 @@ import type {
   LLMService,
 } from '@offgrid/models';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
-import { loadTextModel } from './modelLifecycleBootstrap';
-import { selectedTextModelId } from './modelState';
 import { llmService } from '../llm';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
 import {
@@ -80,15 +78,13 @@ async function* toolSelectionChunks(request: GenerationRequest): AsyncIterable<G
 }
 
 function adapter(id: string): GenerationAdapter {
-  let classifierRestoreId: string | null = null;
   return {
     id,
     async load(model) {
       if (model.modality === 'embedding' || model.modality === 'tool_selection') {
         await embeddingService.load();
       } else if (model.modality === 'classifier') {
-        classifierRestoreId = selectedTextModelId();
-        await nativeModelLifecycle.loadTextModel(model.id);
+        await nativeModelLifecycle.loadTextModel(model.id, 120_000, false, true);
       }
     },
     async unload(model) {
@@ -100,19 +96,7 @@ function adapter(id: string): GenerationAdapter {
     },
     generate(model, request) {
       if (model.modality === 'embedding') return embeddingChunks(request);
-      if (model.modality === 'classifier') {
-        return (async function* () {
-          try {
-            yield* classifierChunks(request);
-          } finally {
-            const restoreId = classifierRestoreId;
-            classifierRestoreId = null;
-            if (restoreId && restoreId !== model.id) {
-              await loadTextModel(restoreId);
-            }
-          }
-        })();
-      }
+      if (model.modality === 'classifier') return classifierChunks(request);
       if (model.modality === 'tool_selection') return toolSelectionChunks(request);
       throw new Error(`Unsupported Mobile sidecar modality: ${model.modality}`);
     },
