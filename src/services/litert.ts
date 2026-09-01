@@ -11,6 +11,12 @@
  */
 
 import { NativeModules, NativeEventEmitter, EmitterSubscription } from 'react-native';
+import {
+  estimateLiteRTTokens,
+  liteRTToolsWire,
+  normalizedLiteRTSampler,
+  planLiteRTConversation,
+} from '@offgrid/models';
 import logger from '../utils/logger';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
@@ -151,10 +157,8 @@ class LiteRTService {
   ): Promise<void> {
     if (!this.isAvailable() || !this.loaded) throw new Error('No LiteRT model loaded');
     const { samplerConfig, tools, history } = opts ?? {};
-    const temperature = samplerConfig?.temperature ?? 0.8;
-    const topK = samplerConfig?.topK ?? 40;
-    const topP = samplerConfig?.topP ?? 0.95;
-    const toolsJson = tools && tools.length > 0 ? JSON.stringify(tools) : '';
+    const { temperature, topK, topP } = normalizedLiteRTSampler(samplerConfig);
+    const toolsJson = liteRTToolsWire(tools);
     const historyJson = history && history.length > 0 ? JSON.stringify(history) : '';
     await LiteRTModule.resetConversation(systemPrompt, temperature, topK, topP, toolsJson, historyJson);
     this.activeSystemPrompt = systemPrompt;
@@ -163,10 +167,11 @@ class LiteRTService {
     // Seed the counter with estimated tokens already in the KV cache from history + system prompt.
     // The SDK loads these silently via ConversationConfig.initialMessages so they never appear
     // in lastPrefillTokenCount, causing cumulativeTokens to undercount and auto-compact to fire too late.
-    const historyChars = (history ?? []).reduce((sum, m) => sum + m.content.length, 0);
-    const systemChars = systemPrompt.length;
-    const toolsChars = toolsJson.length;
-    this.cumulativeTokens = Math.ceil((historyChars + systemChars + toolsChars) / 4);
+    this.cumulativeTokens = estimateLiteRTTokens({
+      history,
+      systemPrompt,
+      toolsWire: toolsJson,
+    });
   }
 
   /**
@@ -190,22 +195,25 @@ class LiteRTService {
       history?: Array<{ role: 'user' | 'assistant'; content: string }>;
     },
   ): Promise<void> {
-    const toolsJson = opts?.tools && opts.tools.length > 0 ? JSON.stringify(opts.tools) : '';
-
     const maxTokens = this.configuredMaxTokens;
     const history = opts?.history;
-    const incomingEstimate = history ? Math.ceil((history.reduce((s, m) => s + m.content.length, 0) + systemPrompt.length + toolsJson.length) / 4) : 0;
+    const plan = planLiteRTConversation({
+      conversationId,
+      systemPrompt,
+      tools: opts?.tools,
+      samplerConfig: opts?.samplerConfig,
+      history,
+      maxTokens,
+      state: {
+        conversationId: this.activeConversationId,
+        systemPrompt: this.activeSystemPrompt,
+        toolsWire: this.activeToolsJson,
+        samplerWire: this.activeSamplerJson,
+        cumulativeTokens: this.cumulativeTokens,
+      },
+    });
 
-    const COMPACT_THRESHOLD = 0.65;
-    const threshold = maxTokens * COMPACT_THRESHOLD;
-    // For an active session cumulativeTokens tracks actual KV cache usage — use it directly.
-    // For a new/switched session cumulativeTokens is stale; use incomingEstimate instead.
-    const isActiveSession = this.activeConversationId === conversationId;
-    const tokenMeasure = isActiveSession ? this.cumulativeTokens : incomingEstimate;
-    const needsCompact = maxTokens > 0 && history != null && history.length > 2 &&
-      tokenMeasure > threshold;
-
-    if (needsCompact && history) {
+    if (plan.compact && history) {
       await runCompaction({
         history,
         systemPrompt,
@@ -219,24 +227,10 @@ class LiteRTService {
       });
       this.activeConversationId = conversationId;
       this.activeSystemPrompt = systemPrompt;
-      this.activeToolsJson = toolsJson;
+      this.activeToolsJson = plan.toolsWire;
       return;
     }
-
-    const sc = opts?.samplerConfig;
-    const incomingSamplerJson = JSON.stringify({
-      temperature: sc?.temperature ?? 0.8,
-      topK: sc?.topK ?? 40,
-      topP: sc?.topP ?? 0.95,
-    });
-    const idChanged = this.activeConversationId !== conversationId;
-    const sysChanged = this.activeSystemPrompt !== systemPrompt;
-    const toolsChanged = this.activeToolsJson !== toolsJson;
-    // Re-apply the sampler when it differs even if id/sys/tools are unchanged — a
-    // mid-conversation temperature/top-p change must take effect on the next send (Q18).
-    const samplerChanged = this.activeSamplerJson !== incomingSamplerJson;
-    const needsReset = idChanged || sysChanged || toolsChanged || samplerChanged;
-    if (needsReset) {
+    if (plan.reset) {
       await this.resetConversation(systemPrompt, { samplerConfig: opts?.samplerConfig, tools: opts?.tools, history: opts?.history });
       this.activeConversationId = conversationId;
     }

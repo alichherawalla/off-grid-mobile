@@ -1,5 +1,13 @@
 import { DEFAULT_SETTINGS } from '../stores/appStore';
 import { selectIsLiteRT, useAppStore } from '../stores';
+import {
+  MIN_TEXT_CONTEXT_TOKENS,
+  MIN_TEXT_OUTPUT_TOKENS,
+  liteRTSettingLimits,
+  textSettingLimits,
+  updateTextContextLength,
+  updateTextOutputTokens,
+} from '@offgrid/models';
 
 export interface NumericSettingModel {
   key: string;
@@ -21,19 +29,6 @@ const formatContext = (value: number): string =>
 const formatMaxTokens = (value: number): string =>
   value >= 1024 ? `${(value / 1024).toFixed(1)}K` : String(value);
 
-const MIN_MAX_TOKENS = 64;
-
-/**
- * The most the model may WRITE, which the context it writes into is the ceiling for.
- *
- * Both sliders used to stop at the model's trained limit independently, so output could be set
- * above the context that has to hold it - a setting the engine can never honour, and one that
- * squeezes the prompt out of its own window. One rule, asked by the slider's ceiling and again when
- * the context is lowered underneath a value already chosen.
- */
-const maxTokensCeiling = (contextLength: number): number =>
-  Math.max(MIN_MAX_TOKENS, contextLength);
-
 /**
  * One headless settings model for both text-generation settings surfaces.
  * The app store owns selected values. Loaded model metadata owns both maxima.
@@ -53,15 +48,21 @@ export function useTextGenerationSettings() {
   const topP = settings.topP ?? DEFAULT_SETTINGS.topP;
   const repeatPenalty =
     settings.repeatPenalty ?? DEFAULT_SETTINGS.repeatPenalty;
-  const llamaModelLimit =
-    modelMaxContext ?? Math.max(maxTokens, contextLength, 512);
+  const llamaLimits = textSettingLimits({
+    contextLength,
+    maxTokens,
+    modelMaxContext,
+  });
 
   const liteRTTemperature =
     settings.liteRTTemperature ?? DEFAULT_SETTINGS.liteRTTemperature;
   const liteRTMaxTokens =
     settings.liteRTMaxTokens ?? DEFAULT_SETTINGS.liteRTMaxTokens;
   const liteRTTopP = settings.liteRTTopP ?? DEFAULT_SETTINGS.liteRTTopP;
-  const liteRTModelLimit = modelMaxContext ?? Math.max(liteRTMaxTokens, 512);
+  const liteRTLimits = liteRTSettingLimits({
+    maxTokens: liteRTMaxTokens,
+    modelMaxContext,
+  });
 
   const toolCalls = {
     key: 'maxToolCalls',
@@ -94,40 +95,30 @@ export function useTextGenerationSettings() {
       description: 'Maximum length of generated response',
       // Clamped for DISPLAY too: a value stored by an older build (or before the context came
       // down) must not render past the end of its own slider.
-      value: Math.min(maxTokens, maxTokensCeiling(contextLength)),
-      min: MIN_MAX_TOKENS,
-      max: Math.min(llamaModelLimit, maxTokensCeiling(contextLength)),
+      value: llamaLimits.outputValue,
+      min: MIN_TEXT_OUTPUT_TOKENS,
+      max: llamaLimits.outputMaximum,
       step: 64,
       formatValue: formatMaxTokens,
       // Clamped on WRITE as well as on display: the slider cannot reach an illegal value, but
       // nothing else should be able to store one either.
       onChange: (value: number) =>
-        updateSettings({
-          maxTokens: Math.min(value, maxTokensCeiling(contextLength)),
-        }),
+        updateSettings(updateTextOutputTokens(value, contextLength)),
     },
     contextLength: {
       key: 'contextLength',
       label: 'Context Length',
       description: 'KV cache size - larger uses more RAM (requires reload)',
       value: contextLength,
-      min: 512,
-      max: llamaModelLimit,
+      min: MIN_TEXT_CONTEXT_TOKENS,
+      max: llamaLimits.contextMaximum,
       step: 1024,
       formatValue: formatContext,
-      warning:
-        contextLength > 8192
-          ? 'High context uses significant RAM and may crash on some devices'
-          : null,
+      warning: llamaLimits.contextWarning,
       // Lowering the context lowers what can be written into it. Without this the stored output
       // length silently stays above its own ceiling.
       onChange: (value: number) =>
-        updateSettings({
-          contextLength: value,
-          ...(maxTokens > maxTokensCeiling(value)
-            ? { maxTokens: maxTokensCeiling(value) }
-            : {}),
-        }),
+        updateSettings(updateTextContextLength(value, maxTokens)),
     },
     topP: {
       key: 'topP',
@@ -171,14 +162,11 @@ export function useTextGenerationSettings() {
       description:
         'Total token budget - input, history, and output combined (requires reload)',
       value: liteRTMaxTokens,
-      min: 512,
-      max: liteRTModelLimit,
+      min: MIN_TEXT_CONTEXT_TOKENS,
+      max: liteRTLimits.contextMaximum,
       step: 1024,
       formatValue: formatContext,
-      warning:
-        liteRTMaxTokens > 8192
-          ? 'High context uses significant RAM and may slow or crash on some devices'
-          : null,
+      warning: liteRTLimits.warning,
       onChange: (value: number) => updateSettings({ liteRTMaxTokens: value }),
     },
     topP: {

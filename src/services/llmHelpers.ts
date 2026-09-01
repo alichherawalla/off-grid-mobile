@@ -5,12 +5,16 @@ import {
   isCompletionTruncated,
   llamaRnCompletionPayload,
   llamaRnReasoningMetadata,
+  backendForcesF16Cache as sharedBackendForcesF16Cache,
+  effectiveTextCacheType,
+  llamaRnModelLoadPlan,
+  gpuFallbackNotice,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
-import { Message, INFERENCE_BACKENDS } from '../types';
+import { Message } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
@@ -71,58 +75,27 @@ export interface ModelLoadParams {
  * never shows one cache type while the model ran another.
  */
 export function backendForcesF16Cache(backend: string | undefined): boolean {
-  return backend === INFERENCE_BACKENDS.OPENCL || (HTP_ENABLED && backend === INFERENCE_BACKENDS.HTP);
+  return sharedBackendForcesF16Cache(backend);
 }
 
 /** The KV cache type that will ACTUALLY be used, after backend coercion to f16. */
 export function effectiveCacheType(backend: string | undefined, requested: string | undefined): string {
-  return backendForcesF16Cache(backend) ? 'f16' : (requested || 'q8_0');
+  return effectiveTextCacheType(backend, requested);
 }
 
 export function buildModelParams(
   modelPath: string,
   settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string; inferenceBackend?: string; speculativeDecoding?: boolean },
 ): ModelLoadParams {
-  const nThreads = settings.nThreads || getOptimalThreadCount();
-  const nBatch = settings.nBatch || getOptimalBatchSize();
-  const ctxLen = settings.contextLength || APP_CONFIG.maxContextLength;
-  // inferenceBackend takes precedence; fall back to legacy enableGpu flag
-  const backend = settings.inferenceBackend;
-  // Use flash_attn_type string API (replaces deprecated flash_attn boolean).
-  // OpenCL and HTP backends crash with flash attn on — disable for those.
-  // CPU (Android/iOS) and Metal both support it; use 'auto' to let llama.cpp decide.
-  const gpuBackendIncompatible = backendForcesF16Cache(backend);
-  const flash_attn_type = (settings.flashAttn === false || gpuBackendIncompatible) ? 'off' : 'auto';
-  const gpuEnabled = backend ? backend !== INFERENCE_BACKENDS.CPU : settings.enableGpu !== false;
-  const nGpuLayers = gpuEnabled ? (settings.gpuLayers ?? DEFAULT_GPU_LAYERS) : 0;
-  const isFlashAttnEffective = flash_attn_type !== 'off';
-  const requestedCache = settings.cacheType || (isFlashAttnEffective ? 'q8_0' : 'f16');
-  // OpenCL init on affected Adreno devices can fail when cache_type_k/v are passed.
-  // effectiveCacheType coerces OpenCL/HTP to f16 (single source shared with the UI).
-  const cacheType = effectiveCacheType(backend, requestedCache);
-  return {
-    baseParams: {
-      model: modelPath, use_mlock: false, n_batch: nBatch, n_ubatch: nBatch, n_threads: nThreads,
-      use_mmap: !shouldDisableMmap(modelPath), vocab_only: false, flash_attn_type,
-      // Do NOT force kv_unified — let llama.cpp pick it per architecture. Forcing
-      // `true` (a marginal single-seq perf tweak) hung gemma3n (gemma-4 E2B/E4B):
-      // its interleaved sliding-window + heterogeneous KV layers froze building the
-      // unified KV-cache reuse map ("kv_cache: reusing layers"). The engine's
-      // per-arch default (false) handles SWA models correctly and keeps GPU/Metal.
-      no_extra_bufts: false,
-      // MTP speculative decoding, enabled at CONTEXT CREATION (llama.rn's NativeContextParams) —
-      // it changes how the graph is built, so it cannot be toggled per completion. No draft model
-      // is named on purpose: MTP models carry their own draft layers, and llama.rn falls back to
-      // the target model's embedded ones when `draft` is omitted. A model without MTP weights
-      // simply never drafts, so the flag is safe to leave on for models that can't use it.
-      ...(settings.speculativeDecoding ? { speculative: { enabled: true, type: 'mtp' as const } } : {}),
-      ...(backend === INFERENCE_BACKENDS.OPENCL ? {} : { cache_type_k: cacheType, cache_type_v: cacheType }),
-    },
-    nThreads, nBatch, ctxLen, nGpuLayers,
-    // cacheType is already coerced to 'f16' above for OpenCL/HTP; OpenCL also omits the
-    // explicit cache params and llama.cpp defaults to f16 — both are captured here.
-    usesF16Cache: cacheType === 'f16',
-  };
+  return llamaRnModelLoadPlan({
+    modelPath,
+    settings,
+    defaultThreads: getOptimalThreadCount(),
+    defaultBatch: getOptimalBatchSize(),
+    defaultContextLength: APP_CONFIG.maxContextLength,
+    defaultGpuLayers: DEFAULT_GPU_LAYERS,
+    disableMmap: shouldDisableMmap(modelPath),
+  });
 }
 export interface ContextInitResult {
   context: LlamaContext;
@@ -274,10 +247,7 @@ export function captureGpuInfo(
  * downgrade (device 2026-07-13 18:57: "Backend=GPU but ran on CPU at 3.4 tok/s").
  */
 export function describeGpuFallback(info: { requestedGpuLayers: number; activeGpuLayers: number; gpuAttemptFailed: boolean }): string | null {
-  if (info.requestedGpuLayers <= 0 || info.activeGpuLayers > 0) return null;
-  return info.gpuAttemptFailed
-    ? 'GPU unavailable - its initialization failed or timed out. Running on CPU.'
-    : 'GPU unavailable on this device - running on CPU.';
+  return gpuFallbackNotice(info);
 }
 export function supportsNativeThinking(context: LlamaContext | null): boolean {
   if (!context) return false;

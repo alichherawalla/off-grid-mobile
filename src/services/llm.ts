@@ -1,5 +1,5 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
-import { normalizeGenerationDelta, reasoningWireFragment, resolveReasoningPlan, type ReasoningWireFragment } from '@offgrid/models';
+import { nativeToolCallingSupported, normalizeGenerationDelta, reasoningWireFragment, resolveReasoningPlan, type ReasoningWireFragment } from '@offgrid/models';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
@@ -241,7 +241,7 @@ class LLMService {
       const jinja = (context as any)?.model?.chatTemplates?.jinja;
       logger.log('[LLM][TOOLS] Full jinja caps:', JSON.stringify(jinja));
       logger.log(`[WIRE-CAPS] ${JSON.stringify({ jinja })}`); // [WIRE] real chat-template tool caps
-      const supported = !!(jinja?.defaultCaps?.toolCalls || jinja?.toolUse || jinja?.toolUseCaps?.toolCalls);
+      const supported = nativeToolCallingSupported(jinja);
       logger.log('[LLM][TOOLS] toolCallingSupported =', supported);
       return supported;
     } catch (e) { logger.warn('[LLM] Error detecting tool calling support:', e); return false; }
