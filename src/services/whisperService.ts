@@ -4,19 +4,17 @@ import {
   RealtimeTranscribeEvent,
 } from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
+import { cleanTranscription, whisperDecodeOptions } from '@offgrid/models';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
-import { cleanTranscription } from './whisperModels';
 import * as whisperModelFiles from './whisperModelFiles';
-import { whisperDecodeOptions } from './whisperDecodeOptions';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
 
-// Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
-// to keep this file within the max-lines budget). Behavior-neutral: every existing
-// `import { WHISPER_MODELS, cleanTranscription } from './whisperService'` keeps working.
-export { WHISPER_MODELS, cleanTranscription } from './whisperModels';
+// Re-export the platform model catalog. Portable decode and transcript policy lives in
+// @offgrid/models.
+export { WHISPER_MODELS } from './whisperModels';
 
 export interface RealtimeTranscriptionResult {
   text: string;
@@ -444,7 +442,9 @@ class WhisperService {
       signal?: AbortSignal;
     },
   ): Promise<string> {
-    const { executeMobileTranscription } = await import('./mobileTranscription');
+    const { executeMobileTranscription } = await import(
+      './mobileTranscription'
+    );
     return executeMobileTranscription(filePath, options);
   }
 

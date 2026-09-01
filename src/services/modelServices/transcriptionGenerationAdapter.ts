@@ -5,13 +5,19 @@ import type {
   LLMService,
   RuntimeModel,
 } from '@offgrid/models';
+import {
+  classifyTranscriptionError,
+  cleanTranscription,
+} from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { remoteMediaRuntime } from '../remoteMediaRuntime';
-import { cleanTranscription, whisperService } from '../whisperService';
+import { whisperService } from '../whisperService';
 
 function transcriptionInput(request: GenerationRequest) {
   if (request.operation?.type !== 'transcription') {
-    throw new TypeError('The transcription adapter requires a transcription operation');
+    throw new TypeError(
+      'The transcription adapter requires a transcription operation',
+    );
   }
   return request.operation;
 }
@@ -25,7 +31,9 @@ async function* realtimeTranscriptionChunks(
     throw new TypeError('Realtime transcription requires a microphone input');
   }
   if (model.source !== 'local') {
-    throw new Error('The selected remote transcription route does not support a live microphone');
+    throw new Error(
+      'The selected remote transcription route does not support a live microphone',
+    );
   }
   const selectedPath = whisperService.getModelPath(model.id);
   if (whisperService.getLoadedModelPath() !== selectedPath) {
@@ -50,31 +58,37 @@ async function* realtimeTranscriptionChunks(
   };
   request.signal?.addEventListener('abort', abort, { once: true });
   try {
-    await whisperService.startRealtimeTranscription(result => {
-      push({
-        output: {
-          type: 'transcription',
-          text: cleanTranscription(result.text),
-          language: operation.language,
-          partial: result.isCapturing,
-          processTime: result.processTime,
-          recordingTime: result.recordingTime,
-        },
-        ...(!result.isCapturing ? { finishReason: 'stop' as const } : {}),
-      });
-      if (!result.isCapturing) completed = true;
-    }, {
-      language: operation.language,
-      maxLen: operation.maxLength,
-      transcribeFallback: filePath => whisperService.transcribeFileRaw(filePath, {
+    await whisperService.startRealtimeTranscription(
+      result => {
+        push({
+          output: {
+            type: 'transcription',
+            text: cleanTranscription(result.text),
+            language: operation.language,
+            partial: result.isCapturing,
+            processTime: result.processTime,
+            recordingTime: result.recordingTime,
+          },
+          ...(!result.isCapturing ? { finishReason: 'stop' as const } : {}),
+        });
+        if (!result.isCapturing) completed = true;
+      },
+      {
         language: operation.language,
-        signal: request.signal,
-      }),
-    });
+        maxLen: operation.maxLength,
+        transcribeFallback: filePath =>
+          whisperService.transcribeFileRaw(filePath, {
+            language: operation.language,
+            signal: request.signal,
+          }),
+      },
+    );
     push({ progress: { completed: 1, total: 1 } });
     while (!completed || pending.length) {
       if (!pending.length && !completed) {
-        await new Promise<void>(resolve => { wake = resolve; });
+        await new Promise<void>(resolve => {
+          wake = resolve;
+        });
       }
       const chunk = pending.shift();
       if (chunk) yield chunk;
@@ -94,7 +108,8 @@ async function* transcriptionChunks(
     return;
   }
   const fileUri = input.audio.uri;
-  if (!fileUri) throw new TypeError('The transcription adapter requires an audio file URI');
+  if (!fileUri)
+    throw new TypeError('The transcription adapter requires an audio file URI');
   let text: string;
   if (model.source === 'local') {
     const selectedPath = whisperService.getModelPath(model.id);
@@ -106,28 +121,34 @@ async function* transcriptionChunks(
     let completed = false;
     let failure: unknown;
     let transcript = '';
-    const operation = whisperService.transcribeFileRaw(fileUri, {
-      language: input.language,
-      signal: request.signal,
-      onProgress: progress => {
-        pending.push({ progress: { completed: progress, total: 100 } });
+    const operation = whisperService
+      .transcribeFileRaw(fileUri, {
+        language: input.language,
+        signal: request.signal,
+        onProgress: progress => {
+          pending.push({ progress: { completed: progress, total: 100 } });
+          const listener = wake;
+          wake = null;
+          listener?.();
+        },
+      })
+      .then(result => {
+        transcript = result;
+      })
+      .catch(error => {
+        failure = error;
+      })
+      .finally(() => {
+        completed = true;
         const listener = wake;
         wake = null;
         listener?.();
-      },
-    }).then(result => {
-      transcript = result;
-    }).catch(error => {
-      failure = error;
-    }).finally(() => {
-      completed = true;
-      const listener = wake;
-      wake = null;
-      listener?.();
-    });
+      });
     while (!completed || pending.length) {
       if (!pending.length && !completed) {
-        await new Promise<void>(resolve => { wake = resolve; });
+        await new Promise<void>(resolve => {
+          wake = resolve;
+        });
       }
       const chunk = pending.shift();
       if (chunk) yield chunk;
@@ -139,16 +160,21 @@ async function* transcriptionChunks(
     const server = useRemoteServerStore
       .getState()
       .servers.find(candidate => candidate.id === model.serverId);
-    if (!server) throw new Error(`Remote transcription server is unavailable: ${model.serverId}`);
-    text = cleanTranscription(await remoteMediaRuntime.transcribe(
-      server,
-      {
-        fileUri,
-        model: model.id,
-        language: input.language === 'auto' ? undefined : input.language,
-      },
-      { signal: request.signal },
-    ));
+    if (!server)
+      throw new Error(
+        `Remote transcription server is unavailable: ${model.serverId}`,
+      );
+    text = cleanTranscription(
+      await remoteMediaRuntime.transcribe(
+        server,
+        {
+          fileUri,
+          model: model.id,
+          language: input.language === 'auto' ? undefined : input.language,
+        },
+        { signal: request.signal },
+      ),
+    );
   }
   yield {
     output: {
@@ -165,8 +191,7 @@ function adapter(id: string): GenerationAdapter {
     id,
     generate: transcriptionChunks,
     classifyError(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return /cancel|abort/i.test(message) ? 'fatal' : 'retryable';
+      return classifyTranscriptionError(error);
     },
   };
 }
@@ -178,7 +203,8 @@ export function reconcileMobileTranscriptionAdapters(
   registrations: Map<string, () => void>,
 ): void {
   const supported = new Set(
-    models.list()
+    models
+      .list()
       .filter(model => model.modality === 'transcription')
       .map(model => model.adapterId),
   );

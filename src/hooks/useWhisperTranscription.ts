@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Vibration } from 'react-native';
-import { whisperService, cleanTranscription } from '../services/whisperService';
+import { cleanTranscription } from '@offgrid/models';
+import { whisperService } from '../services/whisperService';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
 import {
@@ -11,7 +12,12 @@ import {
 /** Safely call a state setter only if the component is still mounted. */
 const useMountedRef = () => {
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
   return mounted;
 };
 
@@ -42,7 +48,9 @@ export interface UseWhisperTranscriptionResult {
   clearResult: () => void;
 }
 
-export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscriptionParams): UseWhisperTranscriptionResult => {
+export const useWhisperTranscription = ({
+  ensureModelReady,
+}: UseWhisperTranscriptionParams): UseWhisperTranscriptionResult => {
   const [isRecording, setIsRecording] = useState(false);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -60,18 +68,22 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
   const transcribingStartTime = useRef<number | null>(null);
   const pendingResult = useRef<string | null>(null);
 
-  const { isModelLoaded, isModelLoading, transcriptionLanguage } = useWhisperStore();
+  const { isModelLoaded, isModelLoading, transcriptionLanguage } =
+    useWhisperStore();
 
   // On unmount, stop any in-flight realtime session. Without this the mic kept
   // capturing after the user navigated away without releasing the button — the
   // session stayed live for minutes with whisper pinned resident (B11). The
   // mountedRef only flips a flag; it never told the native session to stop.
-  useEffect(() => () => {
-    cancelMobileTranscription();
-    if (whisperService.isCurrentlyTranscribing()) {
-      void whisperService.forceReset();
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      cancelMobileTranscription();
+      if (whisperService.isCurrentlyTranscribing()) {
+        void whisperService.forceReset();
+      }
+    },
+    [],
+  );
 
   // NOTE: whisper is NOT eager-loaded here. It is warmed once at launch by
   // modelPreloader.preloadStt (fits-gated) and loaded on demand by startRecording. An eager
@@ -146,8 +158,14 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       // Continue recording for a bit longer to capture trailing audio
       // This helps Whisper process the speech more accurately
       // User sees "Transcribing..." during this time
-      logger.log('[Whisper] Capturing trailing audio for', TRAILING_RECORD_TIME_MS, 'ms...');
-      await new Promise<void>(resolve => setTimeout(() => resolve(), TRAILING_RECORD_TIME_MS));
+      logger.log(
+        '[Whisper] Capturing trailing audio for',
+        TRAILING_RECORD_TIME_MS,
+        'ms...',
+      );
+      await new Promise<void>(resolve =>
+        setTimeout(() => resolve(), TRAILING_RECORD_TIME_MS),
+      );
 
       // Check if cancelled or unmounted during the wait
       if (isCancelled.current || !mountedRef.current) {
@@ -207,7 +225,9 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     // we await, this start has been superseded → abort, or we'd activate a ghost recording no stop reaches.
     const currentNonce = ++startNonce.current;
 
-    logger.log('[Whisper] Ensuring the selected model is resident (blocked → free generation model → retry)...');
+    logger.log(
+      '[Whisper] Ensuring the selected model is resident (blocked → free generation model → retry)...',
+    );
     // Always ask the identity-aware readiness owner. `isModelLoaded()` only says that
     // some Whisper context exists; after a download or model switch it may be the
     // context from the previous model.
@@ -218,7 +238,9 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       ready = false;
     }
     if (startNonce.current !== currentNonce || !mountedRef.current) {
-      logger.log('[Whisper] Start superseded during model load (stopped/cancelled) — aborting, no ghost recording');
+      logger.log(
+        '[Whisper] Start superseded during model load (stopped/cancelled) — aborting, no ghost recording',
+      );
       if (mountedRef.current) {
         setIsStartingRecording(false);
         setIsTranscribing(false);
@@ -227,7 +249,9 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       return;
     }
     if (!ready) {
-      setError("Couldn't load the voice model — free some memory and try again");
+      setError(
+        "Couldn't load the voice model — free some memory and try again",
+      );
       return;
     }
 
@@ -240,40 +264,47 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
 
       logger.log('[Whisper] Starting realtime transcription...');
 
-      await startMobileRealtimeTranscription((result) => {
-        logger.log('[Whisper] Transcription result:', result.isCapturing, result.text?.slice(0, 50));
+      await startMobileRealtimeTranscription(
+        result => {
+          logger.log(
+            '[Whisper] Transcription result:',
+            result.isCapturing,
+            result.text?.slice(0, 50),
+          );
 
-        if (isCancelled.current || !mountedRef.current) return;
+          if (isCancelled.current || !mountedRef.current) return;
 
-        setRecordingTime(result.recordingTime);
+          setRecordingTime(result.recordingTime);
 
-        if (result.isCapturing) {
-          // Still recording - update partial result.
-          // Clean through cleanTranscription (the single owner of marker stripping)
-          // so a partial like "[BLANK_AUDIO] hello" shows "hello", never the raw
-          // marker. Guard: only overwrite when cleaning leaves real speech — an
-          // empty cleaned partial (pure silence/noise marker mid-capture) must NOT
-          // clobber an existing good partial or the "listening…" UI state.
-          const cleaned = cleanTranscription(result.text);
-          if (cleaned) {
-            setPartialResult(cleaned);
+          if (result.isCapturing) {
+            // Still recording - update partial result.
+            // Clean through cleanTranscription (the single owner of marker stripping)
+            // so a partial like "[BLANK_AUDIO] hello" shows "hello", never the raw
+            // marker. Guard: only overwrite when cleaning leaves real speech — an
+            // empty cleaned partial (pure silence/noise marker mid-capture) must NOT
+            // clobber an existing good partial or the "listening…" UI state.
+            const cleaned = cleanTranscription(result.text);
+            if (cleaned) {
+              setPartialResult(cleaned);
+            }
+          } else {
+            // Recording finished - haptic feedback
+            if (mountedRef.current) Vibration.vibrate(30);
+            if (mountedRef.current) setIsRecording(false);
+            // Use finalizeTranscription to ensure minimum display time
+            if (result.text && !isCancelled.current) {
+              finalizeTranscription(result.text);
+            } else if (mountedRef.current) {
+              setIsTranscribing(false);
+              setPartialResult('');
+              transcribingStartTime.current = null;
+            }
           }
-        } else {
-          // Recording finished - haptic feedback
-          if (mountedRef.current) Vibration.vibrate(30);
-          if (mountedRef.current) setIsRecording(false);
-          // Use finalizeTranscription to ensure minimum display time
-          if (result.text && !isCancelled.current) {
-            finalizeTranscription(result.text);
-          } else if (mountedRef.current) {
-            setIsTranscribing(false);
-            setPartialResult('');
-            transcribingStartTime.current = null;
-          }
-        }
-      }, {
-        language: transcriptionLanguage,
-      });
+        },
+        {
+          language: transcriptionLanguage,
+        },
+      );
       if (startNonce.current !== currentNonce || !mountedRef.current) return;
       // Do not tell the person to speak before both the fallback recorder and
       // whisper.rn have installed their native capture handles.
@@ -286,7 +317,8 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       // Force reset whisper service state
       await whisperService.forceReset();
       if (mountedRef.current) {
-        const errorMsg = err instanceof Error ? err.message : 'Failed to start recording';
+        const errorMsg =
+          err instanceof Error ? err.message : 'Failed to start recording';
         setError(errorMsg);
         setIsStartingRecording(false);
         setIsRecording(false);
@@ -295,7 +327,12 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
         Vibration.vibrate([0, 50, 50, 50]);
       }
     }
-  }, [ensureModelReady, stopRecording, finalizeTranscription, transcriptionLanguage]);
+  }, [
+    ensureModelReady,
+    stopRecording,
+    finalizeTranscription,
+    transcriptionLanguage,
+  ]);
 
   const startRecording = useCallback(async () => {
     logger.log('[Whisper] startRecording called');
@@ -311,7 +348,9 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       isRecording ||
       whisperService.isCurrentlyTranscribing()
     ) {
-      logger.log('[Whisper] Already recording — ignoring redundant start (no second session)');
+      logger.log(
+        '[Whisper] Already recording — ignoring redundant start (no second session)',
+      );
       return;
     }
     startInFlight.current = true;
@@ -324,7 +363,6 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
       startInFlight.current = false;
     }
   }, [isRecording, beginRecording]);
-
 
   return {
     isRecording,
