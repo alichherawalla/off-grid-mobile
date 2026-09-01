@@ -107,6 +107,11 @@ class EmbeddingService {
   }
 
   async embed(text: string): Promise<number[]> {
+    const { executeMobileEmbedding } = await import('../mobileSidecarGeneration');
+    return (await executeMobileEmbedding([text]))[0];
+  }
+
+  async embedRaw(text: string): Promise<number[]> {
     if (!this.context) throw new Error('Embedding model not loaded. Call load() first.');
     try {
       const result = await (this.context as any).embedding(text);
@@ -128,10 +133,13 @@ class EmbeddingService {
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
+    const { executeMobileEmbedding } = await import('../mobileSidecarGeneration');
+    return executeMobileEmbedding(texts);
+  }
+
+  async embedBatchRaw(texts: string[]): Promise<number[][]> {
     const results: number[][] = [];
-    for (const text of texts) {
-      results.push(await this.embed(text));
-    }
+    for (const text of texts) results.push(await this.embedRaw(text));
     return results;
   }
 

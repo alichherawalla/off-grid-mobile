@@ -319,8 +319,9 @@ export const classifierInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-classifier-inventory',
   async listModels() {
     const state = useAppStore.getState();
-    const model = state.settings.classifierModelId
-      ? state.downloadedModels.find(candidate => candidate.id === state.settings.classifierModelId)
+    const modelId = state.settings.classifierModelId ?? activeModelService.selectedTextModelId();
+    const model = modelId
+      ? state.downloadedModels.find(candidate => candidate.id === modelId)
       : null;
     if (!model) return [];
     return [runtime(

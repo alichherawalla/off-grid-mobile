@@ -23,6 +23,7 @@ import {
 import { mobileConversationPort, mobileToolExecutor } from './toolPorts';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
+import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
@@ -42,6 +43,7 @@ export const mobileVoiceGenerationService = new GenerationService(
 const generationAdapterRegistrations = new Map<string, () => void>();
 const transcriptionAdapterRegistrations = new Map<string, () => void>();
 const voiceAdapterRegistrations = new Map<string, () => void>();
+const sidecarAdapterRegistrations = new Map<string, () => void>();
 
 let started = false;
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
@@ -67,6 +69,11 @@ export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
         mobileVoiceGenerationService,
         mobileLLMService,
         voiceAdapterRegistrations,
+      );
+      reconcileMobileSidecarAdapters(
+        mobileGenerationService,
+        mobileLLMService,
+        sidecarAdapterRegistrations,
       );
       return models;
     });

@@ -1,7 +1,6 @@
-import { llmService } from './llm';
-import { activeModelService } from './activeModelService';
 import { DownloadedModel } from '../types';
 import logger from '../utils/logger';
+import { executeMobileClassification } from './mobileSidecarGeneration';
 
 type Intent = 'image' | 'text';
 
@@ -271,75 +270,11 @@ class IntentClassifier {
    * Use LLM for classification when pattern matching is uncertain
    */
   private async classifyWithLLM(message: string, opts: ClassifyOptions): Promise<Intent> {
-    const classificationPrompt = `Is this message asking to create, generate, or draw an image? Reply only YES or NO.
-
-Message: "${message.slice(0, 200)}"
-
-Answer:`;
-
-    let originalModelId: string | null = null;
-    let needsModelSwap = false;
-
-    // Check if we need to swap models
-    if (opts.classifierModel && opts.classifierModel.id) {
-      const currentPath = llmService.getLoadedModelPath();
-      if (currentPath !== opts.classifierModel.filePath) {
-        needsModelSwap = true;
-        // Store original model ID from the store (not path)
-        const activeInfo = activeModelService.getActiveModels();
-        originalModelId = activeInfo.text.model?.id || null;
-
-        logger.log('[IntentClassifier] Swapping to classifier model:', opts.classifierModel.name);
-        opts.onStatusChange?.(`Loading ${opts.classifierModel.name}...`);
-        // Use activeModelService singleton to load - prevents duplicate loads
-        await activeModelService.loadTextModel(opts.classifierModel.id);
-      }
+    if (opts.classifierModel) {
+      opts.onStatusChange?.(`Loading ${opts.classifierModel.name}...`);
     }
-
     opts.onStatusChange?.('Analyzing request...');
-
-    // Ensure a model is loaded
-    if (!llmService.isModelLoaded()) {
-      throw new Error('No model loaded for classification');
-    }
-
-    let response = '';
-
-    try {
-      // Use a minimal completion with low token limit for speed
-      await llmService.generateResponse(
-        [
-          {
-            id: 'classify',
-            role: 'user',
-            content: classificationPrompt,
-            timestamp: Date.now(),
-          },
-        ],
-        {
-          onStream: (data) => {
-            if (data.content) response += data.content;
-          },
-        },
-      );
-    } finally {
-      // Swap back to original model if we changed it
-      // Restore the original text model after classifying. The residency
-      // manager handles fitting it back into memory (evicting as needed).
-      if (needsModelSwap && originalModelId) {
-        opts.onStatusChange?.('Restoring text model...');
-        await activeModelService.loadTextModel(originalModelId);
-      }
-    }
-
-    // Parse response
-    const normalizedResponse = response.trim().toLowerCase();
-
-    if (normalizedResponse.includes('yes')) {
-      return 'image';
-    }
-
-    return 'text';
+    return executeMobileClassification(message);
   }
 
   /**

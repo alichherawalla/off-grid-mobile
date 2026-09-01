@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { embeddingService } from './rag/embedding';
 import logger from '../utils/logger';
 
-interface RoutableTool {
+export interface RoutableTool {
   function: { name: string; description?: string };
 }
 
@@ -150,7 +150,7 @@ async function embedTool(tool: RoutableTool, expectedDim?: number): Promise<numb
   if (cached && cached.h === hash && (expectedDim == null || cached.v.length === expectedDim)) {
     return cached.v;
   }
-  const vec = await embeddingService.embed(text);
+  const vec = await embeddingService.embedRaw(text);
   toolEmbeddingCache.set(tool.function.name, { h: hash, v: vec });
   schedulePersist();
   return vec;
@@ -161,7 +161,7 @@ async function embedTool(tool: RoutableTool, expectedDim?: number): Promise<numb
  * Throws if embedding is unavailable so the caller can fall back to its own policy
  * (e.g. keep all tools) rather than silently dropping tools on a transient failure.
  */
-export async function selectToolsByEmbedding(
+export async function selectToolsByEmbeddingRaw(
   query: string,
   tools: RoutableTool[],
   topK: number,
@@ -171,7 +171,7 @@ export async function selectToolsByEmbedding(
   }
   await hydrateCache();
   await embeddingService.load();
-  const queryVec = await embeddingService.embed(query);
+  const queryVec = await embeddingService.embedRaw(query);
   const tokens = queryTokens(query);
   const scored: Array<{ name: string; score: number }> = [];
   for (const tool of tools) {
@@ -184,6 +184,15 @@ export async function selectToolsByEmbedding(
   const selected = scored.slice(0, topK).map(s => s.name);
   logger.log(`[ToolRouter] hybrid-routed ${tools.length} → ${selected.length}: [${selected.join(', ')}]`);
   return selected;
+}
+
+export async function selectToolsByEmbedding(
+  query: string,
+  tools: RoutableTool[],
+  topK: number,
+): Promise<string[]> {
+  const { executeMobileToolSelection } = await import('./mobileSidecarGeneration');
+  return executeMobileToolSelection(query, tools, topK);
 }
 
 /** Test helper: clear the in-memory cache and re-arm hydration. */
