@@ -3,17 +3,17 @@
  * Keychain helpers, capability detectors, provider creation, and long methods.
  */
 import * as Keychain from 'react-native-keychain';
-import type { RemoteServer } from '../types';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
+import type { RemoteServer } from '../../../types';
+import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import {
   createOpenAIProvider,
   OpenAICompatibleProvider,
-} from './adapters/providers/openAICompatibleProvider';
-import { providerRegistry } from './adapters/providers/registry';
-import { capabilitiesUnknown } from './adapters/remote/modelCapabilityDiscovery';
-import logger from '../utils/logger';
+} from '../providers/openAICompatibleProvider';
+import { providerRegistry } from '../providers/registry';
+import { capabilitiesUnknown } from './modelCapabilityDiscovery';
+import logger from '../../../utils/logger';
 import { remoteAuthorizationHeaders } from '@offgrid/models';
-import { activateOffGridDesktopModel } from './adapters/remote/offGridDesktopModels';
+import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 

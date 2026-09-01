@@ -17,7 +17,7 @@ import {
 import {
   generateRemoteResponseImpl,
   generateRemoteWithToolsImpl,
-} from './generationRemoteHelpers';
+} from './modelServices/remoteGenerationCoordinator';
 import {
   generateSharedChatResponse,
   generateSharedToolResponse,

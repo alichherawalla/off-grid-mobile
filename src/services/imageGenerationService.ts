@@ -11,7 +11,7 @@ import {
 } from '../utils/imageGenAdvice';
 import { Platform } from 'react-native';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { runRemoteImageGeneration } from './remoteImageGeneration';
+import { runRemoteImageGeneration } from './modelServices/remoteImageGeneration';
 import {
   generationProgressStatus,
   imagePhaseTransitionLog,

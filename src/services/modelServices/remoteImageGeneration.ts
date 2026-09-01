@@ -1,19 +1,19 @@
 import { Platform } from 'react-native';
-import type { GeneratedImage } from '../types';
-import { useAppStore } from '../stores';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { generateId } from '../utils/generateId';
+import type { GeneratedImage } from '../../types';
+import { useAppStore } from '../../stores';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { generateId } from '../../utils/generateId';
 import {
   DEFAULT_IMAGE_GUIDANCE,
   SWEET_SPOT_SIZE,
   defaultImageSteps,
-} from '../utils/imageGenAdvice';
-import type { GenerateImageParams, ImageGenerationState } from './imageGenerationTypes';
+} from '../../utils/imageGenAdvice';
+import type { GenerateImageParams, ImageGenerationState } from '../imageGenerationTypes';
 import {
   completedImageGenerationState,
   saveImageGenerationResult,
-} from './imageGenerationResult';
-import { executeMobileImageGeneration } from './sharedImageGeneration';
+} from '../imageGenerationResult';
+import { executeMobileImageGeneration } from '../sharedImageGeneration';
 
 interface RemoteImageGenerationDeps {
   updateState: (state: Partial<ImageGenerationState>) => void;

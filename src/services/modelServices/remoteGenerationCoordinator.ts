@@ -3,10 +3,10 @@
 // Split from generationServiceHelpers.ts, which owns the LOCAL engines (llama.rn and LiteRT). The two
 // answer different questions - what this device can run, versus what a server on the network will run -
 // and only the shared preparation, meta and tool-loop wiring is common to both.
-import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
-import { runToolLoop } from './generationToolLoop';
-import type { GenerationOptions, CompletionResult } from './adapters/providers/types';
-import logger from '../utils/logger';
+import { useAppStore, useChatStore, useRemoteServerStore } from '../../stores';
+import { runToolLoop } from '../generationToolLoop';
+import type { GenerationOptions, CompletionResult } from '../adapters/providers/types';
+import logger from '../../utils/logger';
 import {
   FLUSH_INTERVAL_MS,
   buildGenerationMetaImpl,
@@ -15,7 +15,7 @@ import {
   prepareGenerationImpl,
   type GenerationRequest,
   type GenerationWithToolsRequest,
-} from './generationServiceHelpers';
+} from '../generationServiceHelpers';
 
 export async function generateRemoteResponseImpl(
   svc: any,
