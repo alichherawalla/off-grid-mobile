@@ -14,6 +14,7 @@
 import { useAppStore } from '../../../src/stores/appStore';
 import { generationService } from '../../../src/services/generationService';
 import { imageGenerationService } from '../../../src/services/imageGenerationService';
+import { refreshMobileModelServices } from '../../../src/services/modelServices';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { activeModelService } from '../../harness/activeModelLifecycle';
@@ -78,6 +79,7 @@ describe('Share Prompt Flow Integration', () => {
   describe('text generation triggers share prompt', () => {
     const runTextGeneration = async () => {
       const modelId = setupWithActiveModel();
+      await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
       let streamCallback: any;
@@ -95,9 +97,9 @@ describe('Share Prompt Flow Integration', () => {
       const promise = generationService.generateResponse(conversationId, messages);
       await flushPromises();
 
-      streamCallback?.('Hello');
+      streamCallback?.({ content: 'Hello' });
       await flushPromises();
-      completeCallback?.('');
+      completeCallback?.({ content: 'Hello', reasoningContent: '' });
       await promise;
     };
 
@@ -145,6 +147,7 @@ describe('Share Prompt Flow Integration', () => {
   describe('failed text generation does not trigger share prompt', () => {
     it('does not increment count when generation throws', async () => {
       const modelId = setupWithActiveModel();
+      await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
       mockLlmService.generateResponse.mockRejectedValue(new Error('Generation failed'));
@@ -166,15 +169,23 @@ describe('Share Prompt Flow Integration', () => {
   describe('stopped generation with content triggers share prompt', () => {
     it('increments count when stopped with partial content', async () => {
       const modelId = setupWithActiveModel();
+      await refreshMobileModelServices();
       const conversationId = setupWithConversation({ modelId });
 
       let streamCallback: any;
+      let completeCallback: any;
 
       mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream } = {}) => {
+        async (_messages, { onStream, onComplete } = {}) => {
           streamCallback = onStream!;
-          // Never call onComplete — simulates long-running gen
-          await new Promise(() => {}); // hang forever
+          completeCallback = onComplete!;
+          // Keep the native boundary active until Stop releases it.
+          await new Promise<void>(resolve => {
+            mockLlmService.stopGeneration.mockImplementation(async () => {
+              completeCallback?.({ content: '', reasoningContent: '' });
+              resolve();
+            });
+          });
           return '';
         },
       );
@@ -184,7 +195,7 @@ describe('Share Prompt Flow Integration', () => {
       await flushPromises();
 
       // Stream some content
-      streamCallback?.('Partial response');
+      streamCallback?.({ content: 'Partial response' });
       await flushPromises();
 
       // Stop with content
