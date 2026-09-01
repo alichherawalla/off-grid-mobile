@@ -5,6 +5,7 @@ import {
   chatGenerationRequestDefaults,
   composeChatContext,
   imageIntentDecision,
+  isMemoryToolAllowed,
   type ChatSessionEvent,
   type ChatQueueProjection,
   type ChatSessionRepositoryPort,
@@ -212,16 +213,15 @@ async function ragMessages(
     || useAppStore.getState().settings.systemPrompt
     || APP_CONFIG.defaultSystemPrompt;
   let systemPrompt = callHook<string>(HOOKS.audioAugmentPrompt, baseSystemPrompt) ?? baseSystemPrompt;
-
-  if (projectId && !signal.aborted) {
+  if (project && !signal.aborted) {
     try {
-      const documents = await ragService.getDocumentsByProject(projectId);
+      const documents = await ragService.getDocumentsByProject(project.id);
       const enabled = documents.filter(document => document.enabled);
       if (enabled.length) {
         const query = [...(conversation?.messages ?? [])]
           .reverse()
           .find(message => message.role === 'user')?.content ?? '';
-        const result = await ragService.searchProject(projectId, query);
+        const result = await ragService.searchProject(project.id, query);
         systemPrompt = appendProjectKnowledge({
           systemPrompt,
           documentNames: enabled.map(document => document.name),
@@ -234,7 +234,6 @@ async function ragMessages(
       logger.error('[ChatSession] RAG augmentation failed', error);
     }
   }
-
   return composeChatContext({
     systemPrompt,
     messages: conversation?.messages ?? [],
@@ -354,12 +353,15 @@ const service = new ChatSessionService(
     tools: {
       resolve: async ({ identity }) => {
         const enabledToolIds = useAppStore.getState().settings.enabledTools ?? [];
+        const admittedToolIds = enabledToolIds.filter(toolId => isMemoryToolAllowed(toolId, {
+          projectActive: !!identity.projectId && !!useProjectStore.getState().getProject(identity.projectId), allMemory: true,
+        }));
         const active = activeMobileRoute('text').model;
-        if (!enabledToolIds.length || !active?.capabilities.tools) return {};
+        if (!admittedToolIds.length || !active?.capabilities.tools) return {};
         const messages = useChatStore.getState()
           .getConversationMessages(identity.conversationId)
           .filter(message => !message.isSystemInfo);
-        const tools = await mobileToolDefinitions(enabledToolIds, messages);
+        const tools = await mobileToolDefinitions(admittedToolIds, messages);
         return tools.length ? { tools, toolChoice: 'auto' } : {};
       },
     },

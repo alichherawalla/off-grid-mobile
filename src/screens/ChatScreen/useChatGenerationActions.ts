@@ -126,6 +126,9 @@ export async function runPersistedChatTurnFn(deps: GenerationDeps, call: StartGe
       mobileCommandOptions(deps, call.imageMode),
     );
     generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
+    // An intentional stop can complete with no assistant row. That is the
+    // expected terminal state, not a model failure.
+    if (turn.status === 'stopped') return;
   } catch (error) {
     presentGenerationError(deps, call.targetConversationId, error);
     generationSession.end('error');

@@ -61,29 +61,11 @@ or cross-device replay was exercised in this sweep. The earlier iOS Resend freez
 coverage for resend routing and cancellation, but it has not been reproduced and cleared on a
 physical iPhone with native inference and logs.
 
-Two focused checks are open and have their own entries below. Jest also reported an open asynchronous
-handle after the selected suite. Re-run that group with `--detectOpenHandles` before using it as a
-stable release gate.
-
-## Stop during a tool turn still renders a false "No response" card - 2026-09-01
-
-**Verdict: fix-the-guard.**
-
-`__tests__/integration/generation/stopMidTurnThenSend.rendered.redflow.test.tsx` fails because Stop
-leaves a visible "No response" card. The busy-service assertion passes, so the native/session unwind
-is no longer reported as busy, but the interrupted empty result still reaches the wrong empty-answer
-presentation. The acceptance case is: Stop during the delayed tool turn preserves any partial output,
-shows no busy or empty-response error, restores Send, and the immediate next turn streams normally.
-
-## Orphan-project RAG integration check still calls the deleted chat function - 2026-09-01
-
-**Verdict: migrate-the-test.**
-
-`__tests__/integration/projects/orphanChatInjectsKbTool.redflow.test.ts` fails before the journey starts
-because it calls the removed `startGenerationFn` internal seam. This does not establish a current RAG
-product regression. Migrate it through the real Shared `ChatSessionService` and rendered Mobile send
-path. Keep the intended assertion: a conversation whose project was deleted must not offer
-`search_knowledge_base`.
+The two focused checks from this sweep are closed. A 13-suite, 27-test follow-up passed with
+`--detectOpenHandles`. It covers Stop with empty, partial, and reasoning-only output; immediate Send;
+Resend; Edit and Resend; local and MCP tools; malformed tool JSON; bounded project RAG; orphan-project
+knowledge scope; and remote thinking capability detection. Jest reported no open handle in these
+follow-up runs. This is stable integration evidence, but it is not physical-device evidence.
 
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
 

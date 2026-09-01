@@ -105,7 +105,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
+    const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     // Route remote: no local model loaded/selected (mirrors selecting a remote model on device).
     await llmService.unloadModel();
@@ -122,7 +122,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
       // REAL "user selects this discovered remote model" — sets it active + registers the provider
       // and applies the discovered capabilities. Same action the model picker fires.
-      await setActiveRemoteTextModelImpl(serverId, MODEL_ID);
+      await selectRemoteMobileModel(serverId, 'text', MODEL_ID);
     } finally {
       restoreFetch();
     }
@@ -151,7 +151,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
+    const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     await llmService.unloadModel();
     useAppStore.getState().setActiveModelId(null);
@@ -162,7 +162,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
         name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
       });
       await useRemoteServerStore.getState().discoverModels(serverId);
-      await setActiveRemoteTextModelImpl(serverId, MODEL_ID);
+      await selectRemoteMobileModel(serverId, 'text', MODEL_ID);
     } finally {
       restoreFetch();
     }
