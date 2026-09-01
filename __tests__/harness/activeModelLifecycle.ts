@@ -25,6 +25,13 @@ import {
 } from '../../src/services/modelServices/modelState';
 import { getCurrentlyLoadedMemoryGB } from '../../src/services/modelServices/modelMemoryAdvisory';
 import { useAppStore } from '../../src/stores/appStore';
+import { registerLifecycleProjectionPort } from '../../src/services/modelServices/lifecycleProjectionPort';
+import { mobileModelSelectionStore } from '../../src/services/modelServices/selectionStore';
+
+registerLifecycleProjectionPort({
+  refreshInventory: async () => undefined,
+  selectRoute: (modality, routeId) => mobileModelSelectionStore.write(modality, routeId),
+});
 
 function currentLoadedMemoryGB(): number {
   const ids = getLoadedModelIds();

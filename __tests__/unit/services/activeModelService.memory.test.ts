@@ -1,17 +1,9 @@
 /**
  * Unit tests for activeModelService/memory.ts
- * Focuses on LiteRT-only branches (liteRTService loaded, llmService not loaded).
+ * Uses the native lifecycle model IDs as the single residency projection.
  */
 
 import { getCurrentlyLoadedMemoryGB, getOtherLoadedMemoryGB, checkMemoryForModel } from '../../../src/services/modelServices/modelMemoryAdvisory';
-
-jest.mock('../../../src/services/llm', () => ({
-  llmService: { isModelLoaded: jest.fn() },
-}));
-
-jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn() },
-}));
 
 jest.mock('../../../src/services/hardware', () => ({
   hardwareService: {
@@ -19,12 +11,7 @@ jest.mock('../../../src/services/hardware', () => ({
   },
 }));
 
-import { llmService } from '../../../src/services/llm';
-import { liteRTService } from '../../../src/services/litert';
 import { useAppStore } from '../../../src/stores';
-
-const mockedLlm = llmService as jest.Mocked<typeof llmService>;
-const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
 
 // These tests exercise the CPU-baseline overhead (×1.5). The text estimate is now backend-aware
 // (GPU/NPU → ×2.2), and the store defaults to Metal on the iOS test env — so pin CPU for determinism.
@@ -41,12 +28,8 @@ const LISTS = {
 };
 
 describe('getCurrentlyLoadedMemoryGB', () => {
-  beforeEach(() => jest.clearAllMocks());
 
-  it('counts text model memory when only liteRTService is loaded', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(true);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
+  it('counts text model memory when the native lifecycle has a loaded id', () => {
     const result = getCurrentlyLoadedMemoryGB(
       { loadedTextModelId: 'model-1', loadedImageModelId: null },
       LISTS,
@@ -56,22 +39,16 @@ describe('getCurrentlyLoadedMemoryGB', () => {
     expect(result).toBeCloseTo(6, 1);
   });
 
-  it('returns 0 for text model when both services report not loaded', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
+  it('returns 0 for text model when the native lifecycle has no loaded id', () => {
     const result = getCurrentlyLoadedMemoryGB(
-      { loadedTextModelId: 'model-1', loadedImageModelId: null },
+      { loadedTextModelId: null, loadedImageModelId: null },
       LISTS,
     );
 
     expect(result).toBe(0);
   });
 
-  it('counts text model memory when only llmService is loaded', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(true);
-
+  it('counts text model memory from its canonical loaded id', () => {
     const result = getCurrentlyLoadedMemoryGB(
       { loadedTextModelId: 'model-1', loadedImageModelId: null },
       LISTS,
@@ -81,9 +58,6 @@ describe('getCurrentlyLoadedMemoryGB', () => {
   });
 
   it('includes image model memory regardless of text model loaded state', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
     const result = getCurrentlyLoadedMemoryGB(
       { loadedTextModelId: null, loadedImageModelId: 'img-1' },
       LISTS,
@@ -93,10 +67,7 @@ describe('getCurrentlyLoadedMemoryGB', () => {
     expect(result).toBeGreaterThan(2.9);
   });
 
-  it('sums both models when liteRT loaded and image model also loaded', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(true);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
+  it('sums both native lifecycle model ids', () => {
     const result = getCurrentlyLoadedMemoryGB(
       { loadedTextModelId: 'model-1', loadedImageModelId: 'img-1' },
       LISTS,
@@ -108,12 +79,8 @@ describe('getCurrentlyLoadedMemoryGB', () => {
 });
 
 describe('getOtherLoadedMemoryGB', () => {
-  beforeEach(() => jest.clearAllMocks());
 
-  it('counts text model memory (LiteRT only loaded) when loading an image model', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(true);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
+  it('counts the loaded text model when loading an image model', () => {
     const result = getOtherLoadedMemoryGB(
       'image',
       { loadedTextModelId: 'model-1', loadedImageModelId: null },
@@ -124,13 +91,10 @@ describe('getOtherLoadedMemoryGB', () => {
     expect(result).toBeCloseTo(6, 1);
   });
 
-  it('returns 0 for image model loading when neither service is loaded', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
+  it('returns 0 for image model loading when no text model id is loaded', () => {
     const result = getOtherLoadedMemoryGB(
       'image',
-      { loadedTextModelId: 'model-1', loadedImageModelId: null },
+      { loadedTextModelId: null, loadedImageModelId: null },
       LISTS,
     );
 
@@ -138,9 +102,6 @@ describe('getOtherLoadedMemoryGB', () => {
   });
 
   it('counts image model memory when loading a text model (no service check needed)', () => {
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-
     const result = getOtherLoadedMemoryGB(
       'text',
       { loadedTextModelId: null, loadedImageModelId: 'img-1' },
@@ -161,8 +122,6 @@ describe('getOtherLoadedMemoryGB', () => {
 describe('checkMemoryForModel — severity classification (the load-dialog decision)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedLiteRT.isModelLoaded.mockReturnValue(false);
-    mockedLlm.isModelLoaded.mockReturnValue(false); // nothing else resident
   });
 
   const listsWith = (fileSizeBytes: number) => ({

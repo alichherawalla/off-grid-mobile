@@ -31,8 +31,13 @@ import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationA
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
+import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
+registerLifecycleProjectionPort({
+  refreshInventory: refreshMobileLLMServiceInventory,
+  selectRoute: selectMobileRoute,
+});
 export const mobileGenerationService = new GenerationService(
   mobileLLMService,
   mobileGenerationResidency,

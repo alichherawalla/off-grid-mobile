@@ -1,5 +1,15 @@
-import type { ModelModality, ResidentSpec } from '@offgrid/models';
-import { useAppStore, useRemoteServerStore } from '../../stores';
+import {
+  activeRemoteModelModalities,
+  ejectModelResidency,
+  ensurePersistentResident,
+  modelLoadRefusal,
+  modelResidentSpec,
+  runIndependentUnloads,
+  unloadPersistentResident,
+  type ResidentSpec,
+} from '@offgrid/models';
+import { useAppStore } from '../../stores/appStore';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import logger from '../../utils/logger';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
@@ -8,10 +18,7 @@ import { estimateTextModelMemoryMB } from '../modelMemory';
 import { whisperService, WHISPER_MODELS } from '../whisperService';
 import { mobileRouteId } from './mobileRoute';
 import { modelResidencyManager } from './residencyBootstrap';
-import {
-  refreshMobileLLMServiceInventory,
-  selectMobileRoute,
-} from './mobileLLMService';
+import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 
 interface LoadOptions {
   override?: boolean;
@@ -28,16 +35,6 @@ interface TranscriptionLifecycleObserver {
   onUnloaded?(): void;
 }
 
-function existingResidentKey(
-  modality: ModelModality,
-  modelId: string,
-  canonicalKey: string,
-): string {
-  return modelResidencyManager.getResidents().find(
-    resident => resident.type === modality && resident.modelId === modelId,
-  )?.key ?? canonicalKey;
-}
-
 export async function resolveTextResidentSpec(modelId: string): Promise<ResidentSpec> {
   const store = useAppStore.getState();
   const model = store.downloadedModels.find(candidate => candidate.id === modelId);
@@ -48,14 +45,14 @@ export async function resolveTextResidentSpec(modelId: string): Promise<Resident
     modality: 'text',
     modelId,
   });
-  return {
-    key: existingResidentKey('text', modelId, `text:${routeId}`),
-    type: 'text',
+  return modelResidentSpec({
+    modality: 'text',
     modelId,
+    routeId,
     sizeMB: await estimateTextModelMemoryMB(model, store.settings),
     dirtyMemory: model.engine === 'litert',
     residencyKey: 'mobile:text-engine',
-  };
+  }, modelResidencyManager.getResidents());
 }
 
 async function imageSpec(modelId: string): Promise<ResidentSpec> {
@@ -70,16 +67,16 @@ async function imageSpec(modelId: string): Promise<ResidentSpec> {
     modality: 'image',
     modelId,
   });
-  return {
-    key: existingResidentKey('image', modelId, `image:${routeId}`),
-    type: 'image',
+  return modelResidentSpec({
+    modality: 'image',
     modelId,
+    routeId,
     sizeMB: Math.round(
       (hardwareService.estimateImageModelRam(model) || 0) / (1024 * 1024),
     ),
     dirtyMemory: true,
     residencyKey: 'mobile:image-engine',
-  };
+  }, modelResidencyManager.getResidents());
 }
 
 export function resolveTranscriptionResidentSpec(modelId: string): ResidentSpec {
@@ -91,28 +88,21 @@ export function resolveTranscriptionResidentSpec(modelId: string): ResidentSpec 
     modality: 'transcription',
     modelId,
   });
-  return {
-    key: existingResidentKey(
-      'transcription',
-      modelId,
-      `transcription:${routeId}`,
-    ),
-    type: 'transcription',
+  return modelResidentSpec({
+    modality: 'transcription',
     modelId,
+    routeId,
     sizeMB: model.size,
     residencyKey: 'mobile:transcription-engine',
     lifecycle: 'persistent',
-  };
+  }, modelResidencyManager.getResidents());
 }
 
 function refusedLoad(override: boolean | undefined): Error {
-  return override
-    ? new Error(
-        'Not enough free memory to load this model, even after freeing other models. Close other apps or choose a smaller model.',
-      )
-    : new OverridableMemoryError(
-        'Not enough free memory to load this model. Close other apps or choose a smaller model.',
-      );
+  const refusal = modelLoadRefusal(!!override);
+  return refusal.overridable
+    ? new OverridableMemoryError(refusal.message)
+    : new Error(refusal.message);
 }
 
 export async function loadTextModel(
@@ -120,13 +110,16 @@ export async function loadTextModel(
   timeoutMs = 120_000,
   options?: LoadOptions,
 ): Promise<void> {
+  const store = useAppStore.getState();
+  const model = store.downloadedModels.find(candidate => candidate.id === modelId);
+  if (!model) throw new Error('Model not found');
   pendingTextModelId = modelId;
-  let lease: Awaited<ReturnType<typeof modelResidencyManager.acquire>> | null = null;
   try {
     const spec = await resolveTextResidentSpec(modelId);
-    lease = await modelResidencyManager.acquire(
+    const acquired = await ensurePersistentResident({
+      manager: modelResidencyManager,
       spec,
-      {
+      handlers: {
         load: () => nativeModelLifecycle.loadTextModel(
           modelId,
           timeoutMs,
@@ -134,13 +127,18 @@ export async function loadTextModel(
         ),
         unload: () => nativeModelLifecycle.unloadTextModel(true),
       },
-      { override: options?.override },
-    );
-    if (!lease.acquired) throw refusedLoad(options?.override);
+      override: options?.override,
+    });
+    if (!acquired) throw refusedLoad(options?.override);
+    await lifecycleProjectionPort.selectRoute('text', mobileRouteId({
+      source: 'local',
+      hostId: model.engine,
+      modality: 'text',
+      modelId,
+    }));
   } finally {
-    await lease?.release();
     if (pendingTextModelId === modelId) pendingTextModelId = null;
-    await refreshMobileLLMServiceInventory();
+    await lifecycleProjectionPort.refreshInventory();
   }
 }
 
@@ -152,37 +150,31 @@ export async function loadImageModel(
   const currentSpec = nativeModelLifecycle.imageNeedsReload(modelId)
     ? await imageSpec(modelId)
     : null;
-  if (currentSpec && modelResidencyManager.isResident(currentSpec.key)) {
-    await modelResidencyManager.unload(
-      currentSpec.key,
-      () => nativeModelLifecycle.unloadImageModel(true),
-    );
-  }
   pendingImageModelId = modelId;
-  let lease: Awaited<ReturnType<typeof modelResidencyManager.acquire>> | null = null;
   try {
     const spec = currentSpec ?? await imageSpec(modelId);
-    lease = await modelResidencyManager.acquire(
+    const acquired = await ensurePersistentResident({
+      manager: modelResidencyManager,
       spec,
-      {
+      handlers: {
         load: () => nativeModelLifecycle.loadImageModel(modelId, timeoutMs),
         unload: () => nativeModelLifecycle.unloadImageModel(true),
       },
-      { override: options?.override },
-    );
-    if (!lease.acquired) throw refusedLoad(options?.override);
+      override: options?.override,
+      forceReload: !!currentSpec,
+    });
+    if (!acquired) throw refusedLoad(options?.override);
     const model = useAppStore.getState().downloadedImageModels.find(
       candidate => candidate.id === modelId,
     );
     if (!model) throw new Error('Model not found');
-    await selectMobileRoute('image', mobileRouteId({
+    await lifecycleProjectionPort.selectRoute('image', mobileRouteId({
       source: 'local',
       hostId: model.backend ?? 'image-runtime',
       modality: 'image',
       modelId,
     }));
   } finally {
-    await lease?.release();
     if (pendingImageModelId === modelId) pendingImageModelId = null;
   }
 }
@@ -199,9 +191,10 @@ export async function loadTranscriptionModel(
   try {
     const spec = resolveTranscriptionResidentSpec(modelId);
     const modelPath = whisperService.getModelPath(modelId);
-    const lease = await modelResidencyManager.acquire(
+    const acquired = await ensurePersistentResident({
+      manager: modelResidencyManager,
       spec,
-      {
+      handlers: {
         load: async () => {
           await whisperService.loadModel(modelPath);
           observer.onLoaded?.();
@@ -211,9 +204,8 @@ export async function loadTranscriptionModel(
           observer.onUnloaded?.();
         },
       },
-    );
-    if (!lease.acquired) return 'blocked';
-    await lease.release();
+    });
+    if (!acquired) return 'blocked';
     const loaded = whisperService.getLoadedModelPath() === modelPath;
     if (loaded) observer.onLoaded?.();
     return loaded ? 'loaded' : 'error';
@@ -224,7 +216,7 @@ export async function loadTranscriptionModel(
     if (pendingTranscriptionModelId === modelId) {
       pendingTranscriptionModelId = null;
     }
-    await refreshMobileLLMServiceInventory();
+    await lifecycleProjectionPort.refreshInventory();
   }
 }
 
@@ -236,16 +228,23 @@ export async function unloadTextModel(keepSelection = false): Promise<boolean> {
   const model = store.downloadedModels.find(candidate => candidate.id === modelId);
   const key = model
     ? (await resolveTextResidentSpec(modelId)).key
-    : existingResidentKey('text', modelId, `text:${modelId}`);
-  await modelResidencyManager.unload(
+    : modelResidentSpec({
+        modality: 'text',
+        modelId,
+        routeId: modelId,
+        sizeMB: 0,
+        residencyKey: 'mobile:text-engine',
+      }, modelResidencyManager.getResidents()).key;
+  await unloadPersistentResident({
+    manager: modelResidencyManager,
     key,
-    () => nativeModelLifecycle.unloadTextModel(true),
-  );
+    nativeUnload: () => nativeModelLifecycle.unloadTextModel(true),
+  });
   if (!keepSelection) {
-    await selectMobileRoute('text', null);
+    await lifecycleProjectionPort.selectRoute('text', null);
     store.setTextModelEvicted(false);
   }
-  await refreshMobileLLMServiceInventory();
+  await lifecycleProjectionPort.refreshInventory();
   return true;
 }
 
@@ -257,12 +256,21 @@ export async function unloadImageModel(keepSelection = false): Promise<boolean> 
   const model = store.downloadedImageModels.find(candidate => candidate.id === modelId);
   const key = model
     ? (await imageSpec(modelId)).key
-    : existingResidentKey('image', modelId, `image:${modelId}`);
-  await modelResidencyManager.unload(
+    : modelResidentSpec({
+        modality: 'image',
+        modelId,
+        routeId: modelId,
+        sizeMB: 0,
+        residencyKey: 'mobile:image-engine',
+      }, modelResidencyManager.getResidents()).key;
+  await unloadPersistentResident({
+    manager: modelResidencyManager,
     key,
-    () => nativeModelLifecycle.unloadImageModel(true),
-  );
-  if (!keepSelection) await selectMobileRoute('image', null);
+    nativeUnload: () => nativeModelLifecycle.unloadImageModel(true),
+  });
+  if (!keepSelection) {
+    await lifecycleProjectionPort.selectRoute('image', null);
+  }
   return true;
 }
 
@@ -278,57 +286,48 @@ export async function unloadTranscriptionModel(
       );
   if (!resident && !whisperService.isModelLoaded()) return false;
   const key = resident?.key ?? 'transcription';
-  const unloaded = await modelResidencyManager.unload(key, async () => {
-    await whisperService.unloadModel();
-    observer.onUnloaded?.();
+  const unloaded = await unloadPersistentResident({
+    manager: modelResidencyManager,
+    key,
+    nativeUnload: async () => {
+      await whisperService.unloadModel();
+      observer.onUnloaded?.();
+    },
   });
   observer.onUnloaded?.();
-  await refreshMobileLLMServiceInventory();
+  await lifecycleProjectionPort.refreshInventory();
   return unloaded;
 }
 
 export async function unloadAllModels(
   keepSelection = false,
 ): Promise<{ textUnloaded: boolean; imageUnloaded: boolean }> {
-  let textUnloaded = false;
-  let imageUnloaded = false;
-  try {
-    textUnloaded = await unloadTextModel(keepSelection);
-  } catch {
-    // Continue so one failed native engine does not strand the other engine.
-  }
-  try {
-    imageUnloaded = await unloadImageModel(keepSelection);
-  } catch {
-    // Return the partial result to the caller.
-  }
-  return { textUnloaded, imageUnloaded };
+  return runIndependentUnloads({
+    textUnloaded: () => unloadTextModel(keepSelection),
+    imageUnloaded: () => unloadImageModel(keepSelection),
+  });
 }
 
 export async function ejectAllModels(): Promise<{ count: number }> {
   const remote = useRemoteServerStore.getState();
-  const remoteModalities: ModelModality[] = [];
-  if (remote.activeRemoteTextModelId) remoteModalities.push('text');
-  if (
-    remote.activeRemoteImageModelId ||
-    remote.activeRemoteMediaServerIds.image
-  ) remoteModalities.push('image');
-  if (remote.activeRemoteMediaServerIds.transcription) {
-    remoteModalities.push('transcription');
-  }
-  if (remote.activeRemoteMediaServerIds.voice) remoteModalities.push('voice');
+  const remoteModalities = activeRemoteModelModalities({
+    textModelId: remote.activeRemoteTextModelId,
+    imageModelId: remote.activeRemoteImageModelId,
+    imageServerId: remote.activeRemoteMediaServerIds.image,
+    transcriptionServerId: remote.activeRemoteMediaServerIds.transcription,
+    voiceServerId: remote.activeRemoteMediaServerIds.voice,
+  });
   const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
-  const local = await unloadAllModels(true);
-  let count = Number(local.textUnloaded) + Number(local.imageUnloaded);
-  const sidecars = await modelResidencyManager.evictAll();
-  count += sidecars.length;
-  if (hasRemote) {
-    await Promise.all(
-      remoteModalities.map(modality => selectMobileRoute(modality, null)),
-    );
-    count += 1;
-  }
-  logger.log(`[MODEL-SM] ejectAll → done count=${count}`);
-  return { count };
+  const ejected = await ejectModelResidency({
+    manager: modelResidencyManager,
+    localUnloads: {
+      textUnloaded: () => unloadTextModel(true),
+      imageUnloaded: () => unloadImageModel(true),
+    },
+    remoteModalities,
+    clearRemoteRoute: modality => lifecycleProjectionPort.selectRoute(modality, null),
+  });
+  logger.log(`[MODEL-SM] ejectAll → done count=${ejected.count}`);
+  return { count: ejected.count };
 }

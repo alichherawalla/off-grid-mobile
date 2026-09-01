@@ -4,11 +4,10 @@
  */
 
 import { Platform, ToastAndroid } from 'react-native';
-import { useAppStore } from '../../../stores';
+import { useAppStore } from '../../../stores/appStore';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel, INFERENCE_BACKENDS } from '../../../types';
 import { llmService } from '../../llm';
 import { liteRTService } from '../../litert';
-import { unloadAllTextEngines } from '../../engines';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../../localDreamGenerator';
 import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
 import { hardwareService } from '../../hardware';
@@ -20,6 +19,16 @@ import {
   pickProjectorForModel as pickMmProjForModel,
 } from '@offgrid/models';
 import { sizeToBytes } from '../../../utils/fileSize';
+
+async function unloadNativeTextEngines(): Promise<void> {
+  for (const engine of [liteRTService, llmService]) {
+    try {
+      await engine.unloadModel();
+    } catch (error) {
+      logger.warn('[modelLoaders] text engine unload during switch failed, continuing:', error);
+    }
+  }
+}
 
 async function scanDirForMmProj(modelFilePath: string): Promise<RNFS.ReadDirResItemT | undefined> {
   const modelDir = modelFilePath.substring(0, modelFilePath.lastIndexOf('/'));
@@ -99,7 +108,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
   const liteRTModel = ctx.model;
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      await unloadAllTextEngines(); // cross-engine switch → no co-residence (engine set owned by engines.ts)
+      await unloadNativeTextEngines();
       ctx.onError();
     }
 
@@ -181,7 +190,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
 
   try {
     if (ctx.loadedTextModelId && ctx.loadedTextModelId !== ctx.modelId) {
-      await unloadAllTextEngines(); // cross-engine switch → no co-residence (engine set owned by engines.ts)
+      await unloadNativeTextEngines();
       ctx.onError(); // resets loadedTextModelId to null before reassignment
     }
 

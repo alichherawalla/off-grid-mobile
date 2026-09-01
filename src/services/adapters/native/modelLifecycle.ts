@@ -1,4 +1,3 @@
-import { getActiveEngineService } from '../../engines';
 import { hardwareService } from '../../hardware';
 import { llmService } from '../../llm';
 import { liteRTService } from '../../litert';
@@ -107,12 +106,15 @@ class NativeModelLifecycle {
   async unloadTextModel(keepSelection = false): Promise<void> {
     if (this.textLoadPromise) await this.textLoadPromise;
     const store = useAppStore.getState();
-    const isLoaded = getActiveEngineService()?.isModelLoaded() ?? false;
+    const loadedEngines = [llmService, liteRTService].filter(
+      engine => engine.isModelLoaded(),
+    );
+    const isLoaded = loadedEngines.length > 0;
     if (!store.activeModelId && !this.loadedTextModelId && !isLoaded) return;
     this.loading.text = true;
     this.changed();
     try {
-      if (isLoaded) await getActiveEngineService()?.unloadModel();
+      for (const engine of loadedEngines) await engine.unloadModel();
       this.loadedTextModelId = null;
       store.setLoadedTextModelId(null);
       if (keepSelection) {
