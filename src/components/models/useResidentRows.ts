@@ -4,10 +4,10 @@
  * modality rows onto residency types — no engine branching in the view, and both callers (Home,
  * Chat) inherit the projection with zero wiring.
  *
- * The manager holds a plain (non-reactive) Map with no subscription, so this polls getResidents()
- * while the sheet is visible — the same approach the In-Memory list used.
+ * The shared residency manager owns the reactive snapshot revision. The UI only projects it
+ * into the four model rows shown by this sheet.
  */
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { modelResidencyManager } from '../../services/modelResidency';
 import type { Resident, ResidentType } from '../../services/modelResidency/policy';
 
@@ -35,17 +35,12 @@ function residentsByRow(residents: Resident[]): Partial<Record<ModelRowType, Res
 }
 
 export function useResidentRows(active: boolean): Partial<Record<ModelRowType, Resident>> {
-  const [byRow, setByRow] = useState<Partial<Record<ModelRowType, Resident>>>(
-    () => residentsByRow(modelResidencyManager.getResidents()),
+  useSyncExternalStore(
+    active ? listener => modelResidencyManager.subscribe(listener) : () => () => {},
+    () => modelResidencyManager.getRevision(),
+    () => modelResidencyManager.getRevision(),
   );
-  useEffect(() => {
-    if (!active) return;
-    const tick = () => setByRow(residentsByRow(modelResidencyManager.getResidents()));
-    tick();
-    const id = setInterval(tick, 300);
-    return () => clearInterval(id);
-  }, [active]);
-  return byRow;
+  return residentsByRow(modelResidencyManager.getResidents());
 }
 
 /** Eject one row's resident via the owning service (its registered unload runs; lazy-reload on next use). */
