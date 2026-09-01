@@ -11,10 +11,12 @@
  * sequentially (one native load at a time) so the UI stays responsive.
  */
 import { useAppStore, useWhisperStore } from '../stores';
-import { loadTextModel } from './modelServices/modelLifecycleBootstrap';
+import {
+  loadTextModel,
+  resolveTextResidentSpec,
+  resolveTranscriptionResidentSpec,
+} from './modelServices/modelLifecycleBootstrap';
 import { getActiveModels, selectedTextModelId } from './modelServices/modelState';
-import { estimateTextModelMemoryMB } from './modelMemory';
-import { WHISPER_MODELS } from './whisperService';
 import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { generationService } from './generationService';
 import { imageGenerationService } from './imageGenerationService';
@@ -48,8 +50,8 @@ async function preloadText(): Promise<void> {
   if (!id || getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
-  const sizeMB = await estimateTextModelMemoryMB(model, useAppStore.getState().settings);
-  if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
+  const spec = await resolveTextResidentSpec(id);
+  if (!modelResidencyManager.canLoadWithoutEviction(spec)) return;
   await loadTextModel(id);
 }
 
@@ -63,8 +65,8 @@ async function preloadTts(): Promise<void> {
 async function preloadStt(): Promise<void> {
   const whisper = useWhisperStore.getState();
   if (!whisper.downloadedModelId || whisper.isModelLoaded) return;
-  const sizeMB = WHISPER_MODELS.find(m => m.id === whisper.downloadedModelId)?.size ?? 200;
-  if (!modelResidencyManager.canLoadWithoutEviction({ key: 'whisper', sizeMB })) return;
+  const spec = resolveTranscriptionResidentSpec(whisper.downloadedModelId);
+  if (!modelResidencyManager.canLoadWithoutEviction(spec)) return;
   await whisper.loadModel();
 }
 

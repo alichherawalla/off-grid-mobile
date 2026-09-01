@@ -1,17 +1,19 @@
 /**
  * RED-FLOW (integration) — V4: deleting a TTS model leaves residency accounting stale.
  *
- * ttsDownloadActions.deleteModels frees the engine's assets (deleteAssets) but never calls
- * modelResidencyManager.release('tts'). So the residency manager keeps a phantom TTS resident (~320MB),
- * which can wrongly refuse or evict a later text/image load. Runs the REAL deleteModels + REAL
- * modelResidencyManager; a minimal fake TTS engine stands in for the native model.
+ * Deleting native voice assets must also unload the canonical Shared residency entry.
+ * Otherwise a phantom voice resident can wrongly refuse or evict a later text/image load.
+ * This runs the real deleteModels and residency manager; a minimal fake TTS engine
+ * stands in for the native model boundary.
  */
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { ttsRegistry } from '../../../pro/audio/engine';
 import { deleteModels } from '../../../pro/audio/ttsDownloadActions';
+import { voiceResidentSpec } from '../../../pro/audio/ttsResidency';
 
 const fakeEngine = {
   id: 'faketts',
+  release: async () => {},
   deleteAssets: async () => {},
   checkAssetStatus: async () => [],
   getRequiredAssets: () => [],
@@ -25,14 +27,15 @@ describe('V4 — deleting TTS leaves residency stale (red-flow)', () => {
     await ttsRegistry.setActiveEngine('faketts');
 
     // TTS is loaded → registered as a resident (~320MB), as pro/audio/index.ts does on init.
-    modelResidencyManager.register({ key: 'tts', type: 'tts' as never, sizeMB: 320, canEvict: () => true }, async () => {}, 1);
-    expect(modelResidencyManager.isResident('tts')).toBe(true); // precondition
+    const spec = voiceResidentSpec(fakeEngine);
+    const lease = await modelResidencyManager.acquire(spec, { load: async () => {}, unload: async () => {} });
+    await lease.release();
+    expect(modelResidencyManager.isResident(spec.key)).toBe(true); // precondition
 
     // User deletes the TTS model in the Download Manager.
     await deleteModels({ set: () => {}, get: () => ({}) } as unknown as never);
 
-    // Correct: the residency is released so its RAM stops counting against later loads. Today
-    // deleteModels never calls release('tts') → the phantom resident lingers → RED.
-    expect(modelResidencyManager.isResident('tts')).toBe(false);
+    // The residency is unloaded, so its RAM stops counting against later loads.
+    expect(modelResidencyManager.isResident(spec.key)).toBe(false);
   });
 });

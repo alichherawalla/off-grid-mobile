@@ -8,7 +8,7 @@ import {
   type GenerationRequest,
   type LiveGenerationContext,
   type LLMService,
-  type ModelResidencyPort,
+  type ModelResidencyLifecyclePort,
   type ReasoningWireFragment,
   type RuntimeModel,
 } from '@offgrid/models';
@@ -317,17 +317,8 @@ function adapter(id: string): GenerationAdapter {
   };
 }
 
-export const mobileGenerationResidency: ModelResidencyPort = {
-  ensureResident(spec, handlers) {
-    return modelResidencyManager.ensureResident(spec, handlers);
-  },
-  markUsed(key) {
-    modelResidencyManager.markUsed(key);
-  },
-  release(key) {
-    modelResidencyManager.release(key);
-  },
-};
+/** Shared generation receives the atomic residency lifecycle directly. */
+export const mobileGenerationResidency: ModelResidencyLifecyclePort = modelResidencyManager;
 
 export function reconcileMobileGenerationAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },

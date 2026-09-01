@@ -38,7 +38,7 @@ function existingResidentKey(
   )?.key ?? canonicalKey;
 }
 
-async function textSpec(modelId: string): Promise<ResidentSpec> {
+export async function resolveTextResidentSpec(modelId: string): Promise<ResidentSpec> {
   const store = useAppStore.getState();
   const model = store.downloadedModels.find(candidate => candidate.id === modelId);
   if (!model) throw new Error('Model not found');
@@ -82,7 +82,7 @@ async function imageSpec(modelId: string): Promise<ResidentSpec> {
   };
 }
 
-function transcriptionSpec(modelId: string): ResidentSpec {
+export function resolveTranscriptionResidentSpec(modelId: string): ResidentSpec {
   const model = WHISPER_MODELS.find(candidate => candidate.id === modelId);
   if (!model) throw new Error(`Unknown transcription model: ${modelId}`);
   const routeId = mobileRouteId({
@@ -121,22 +121,27 @@ export async function loadTextModel(
   options?: LoadOptions,
 ): Promise<void> {
   pendingTextModelId = modelId;
-  const decision = await modelResidencyManager.ensureResidentLazy(
-    () => textSpec(modelId),
-    {
-      load: () => nativeModelLifecycle.loadTextModel(
-        modelId,
-        timeoutMs,
-        !!options?.override || modelResidencyManager.hasSessionOverride(modelId),
-      ),
-      unload: () => nativeModelLifecycle.unloadTextModel(true),
-    },
-    { override: options?.override },
-  ).finally(async () => {
+  let lease: Awaited<ReturnType<typeof modelResidencyManager.acquire>> | null = null;
+  try {
+    const spec = await resolveTextResidentSpec(modelId);
+    lease = await modelResidencyManager.acquire(
+      spec,
+      {
+        load: () => nativeModelLifecycle.loadTextModel(
+          modelId,
+          timeoutMs,
+          !!options?.override || modelResidencyManager.hasSessionOverride(modelId),
+        ),
+        unload: () => nativeModelLifecycle.unloadTextModel(true),
+      },
+      { override: options?.override },
+    );
+    if (!lease.acquired) throw refusedLoad(options?.override);
+  } finally {
+    await lease?.release();
     if (pendingTextModelId === modelId) pendingTextModelId = null;
     await refreshMobileLLMServiceInventory();
-  });
-  if (!decision.fits) throw refusedLoad(options?.override);
+  }
 }
 
 export async function loadImageModel(
@@ -154,17 +159,22 @@ export async function loadImageModel(
     );
   }
   pendingImageModelId = modelId;
-  const decision = await modelResidencyManager.ensureResidentLazy(
-    () => imageSpec(modelId),
-    {
-      load: () => nativeModelLifecycle.loadImageModel(modelId, timeoutMs),
-      unload: () => nativeModelLifecycle.unloadImageModel(true),
-    },
-    { override: options?.override },
-  ).finally(() => {
+  let lease: Awaited<ReturnType<typeof modelResidencyManager.acquire>> | null = null;
+  try {
+    const spec = currentSpec ?? await imageSpec(modelId);
+    lease = await modelResidencyManager.acquire(
+      spec,
+      {
+        load: () => nativeModelLifecycle.loadImageModel(modelId, timeoutMs),
+        unload: () => nativeModelLifecycle.unloadImageModel(true),
+      },
+      { override: options?.override },
+    );
+    if (!lease.acquired) throw refusedLoad(options?.override);
+  } finally {
+    await lease?.release();
     if (pendingImageModelId === modelId) pendingImageModelId = null;
-  });
-  if (!decision.fits) throw refusedLoad(options?.override);
+  }
 }
 
 /**
@@ -177,7 +187,7 @@ export async function loadTranscriptionModel(
 ): Promise<TranscriptionLoadResult> {
   pendingTranscriptionModelId = modelId;
   try {
-    const spec = transcriptionSpec(modelId);
+    const spec = resolveTranscriptionResidentSpec(modelId);
     const modelPath = whisperService.getModelPath(modelId);
     const lease = await modelResidencyManager.acquire(
       spec,
@@ -215,7 +225,7 @@ export async function unloadTextModel(keepSelection = false): Promise<boolean> {
   if (!modelId) return false;
   const model = store.downloadedModels.find(candidate => candidate.id === modelId);
   const key = model
-    ? (await textSpec(modelId)).key
+    ? (await resolveTextResidentSpec(modelId)).key
     : existingResidentKey('text', modelId, `text:${modelId}`);
   await modelResidencyManager.unload(
     key,
@@ -252,7 +262,7 @@ export async function unloadTranscriptionModel(
 ): Promise<boolean> {
   const selectedModelId = modelId ?? pendingTranscriptionModelId;
   const resident = selectedModelId
-    ? transcriptionSpec(selectedModelId)
+    ? resolveTranscriptionResidentSpec(selectedModelId)
     : modelResidencyManager.getResidents().find(
         candidate => candidate.type === 'transcription',
       );

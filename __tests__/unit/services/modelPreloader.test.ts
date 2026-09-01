@@ -14,6 +14,18 @@ const mockLoadImage = jest.fn((..._a: any[]) => Promise.resolve());
 const mockGetActiveModels = jest.fn(() => ({ text: { isLoaded: false }, image: { isLoaded: false } }));
 jest.mock('../../../src/services/modelServices/modelLifecycleBootstrap', () => ({
   loadTextModel: (...a: any[]) => mockLoadText(...a),
+  resolveTextResidentSpec: (modelId: string) => ({
+    key: `text:${modelId}`,
+    type: 'text',
+    modelId,
+    sizeMB: 700,
+  }),
+  resolveTranscriptionResidentSpec: (modelId: string) => ({
+    key: `transcription:${modelId}`,
+    type: 'transcription',
+    modelId,
+    sizeMB: 150,
+  }),
 }));
 
 jest.mock('../../../src/services/modelServices/modelState', () => ({

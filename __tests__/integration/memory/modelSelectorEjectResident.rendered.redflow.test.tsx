@@ -39,7 +39,7 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
 
     // Precondition (real): image + whisper are in memory.
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();
-    expect(types()).toEqual(['image', 'whisper']);
+    expect(types()).toEqual(['image', 'transcription']);
 
     const v = h.rtl.render(React.createElement(ModelsManagerSheet, {
       visible: true, onClose: () => {}, labels: { text: '—', image: '—', voice: '—', speech: '—' },

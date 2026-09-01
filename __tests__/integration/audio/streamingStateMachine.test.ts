@@ -183,7 +183,7 @@ describe('streaming state machine — budget-aware warm-up (the intelligent path
     mockCanLoad.mockReturnValue(true); // headroom to coexist with the LLM
     feedStreamingText('Streaming this. ');
     await flush();
-    expect(mockCanLoad).toHaveBeenCalledWith(expect.objectContaining({ key: 'tts' }));
+    expect(mockCanLoad).toHaveBeenCalledWith(expect.objectContaining({ key: expect.stringMatching(/^voice:/), type: 'voice' }));
     expect(state.initializeEngine).toHaveBeenCalled(); // warmed → will stream
     expect(names()).toContain('stream warm: budget OK → warming TTS to stream alongside the LLM');
   });

@@ -85,6 +85,7 @@ import { modelResidencyManager } from '@offgrid/core/services/modelServices/resi
 import { hardwareService } from '@offgrid/core/services/hardware';
 
 const getState = () => useTTSStore.getState();
+const voiceResident = () => modelResidencyManager.getResidents().find(r => r.type === 'voice');
 
 // Keep the store's own persisted settings coherent between tests.
 const baseSettings = {
@@ -156,7 +157,7 @@ describe('ttsStore — extra branch coverage', () => {
       await getState().initializeEngine();
 
       expect(mockCurrentEngine.initialize).not.toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('tts')).toBe(false);
+      expect(voiceResident()).toBeUndefined();
       expect(getState().error).toBeNull();
     });
 
@@ -168,25 +169,27 @@ describe('ttsStore — extra branch coverage', () => {
 
       // The OUTCOME a user feels: the voice model is actually in RAM.
       expect(mockCurrentEngine.initialize).toHaveBeenCalledTimes(1);
-      expect(modelResidencyManager.isResident('tts')).toBe(true);
-      expect(modelResidencyManager.getResidents().map(r => r.key)).toContain('tts');
+      expect(voiceResident()).toBeDefined();
       expect(getState().error).toBeNull();
     });
 
     it('warm/preload: NO room → skips quietly (not resident, no error, engine NOT initialized)', async () => {
       // A resident 3800MB model + a 1024MB budget leaves no room to co-reside 300MB TTS.
-      modelResidencyManager.setBudgetOverrideMB(1024);
-      modelResidencyManager.register(
+      modelResidencyManager.setBudgetOverrideMB(4000);
+      const llmLease = await modelResidencyManager.acquire(
         { key: 'llm', type: 'text', sizeMB: 3800 },
-        () => Promise.resolve(),
+        { load: () => Promise.resolve(), unload: () => Promise.resolve() },
+        { override: true },
       );
+      await llmLease.release();
+      modelResidencyManager.setBudgetOverrideMB(1024);
       mockCurrentEngine.capabilities.peakRamMB = 300;
 
       await getState().initializeEngine(); // override defaults to false
 
       // The false branch of `fits`: warm must NOT load and must NOT surface an error.
       expect(mockCurrentEngine.initialize).not.toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('tts')).toBe(false);
+      expect(voiceResident()).toBeUndefined();
       expect(modelResidencyManager.isResident('llm')).toBe(true); // resident not evicted for a warm
       expect(getState().error).toBeNull();
     });
@@ -203,7 +206,7 @@ describe('ttsStore — extra branch coverage', () => {
       await getState().initializeEngine({ override: true });
 
       expect(mockCurrentEngine.initialize).toHaveBeenCalled();
-      expect(modelResidencyManager.isResident('tts')).toBe(true);
+      expect(voiceResident()).toBeDefined();
       expect(getState().error).toBeNull();
     });
 
@@ -218,10 +221,10 @@ describe('ttsStore — extra branch coverage', () => {
 
       await getState().initializeEngine({ override: true });
 
-      expect(modelResidencyManager.isResident('tts')).toBe(true);
+      expect(voiceResident()).toBeDefined();
       // The registered resident carries the derived size (~300MB), proving the
       // fallback fed the residency spec — not the 0 peakRamMB.
-      const tts = modelResidencyManager.getResidents().find(r => r.key === 'tts');
+      const tts = voiceResident();
       expect(tts?.sizeMB).toBe(300);
     });
 
@@ -232,7 +235,7 @@ describe('ttsStore — extra branch coverage', () => {
 
       // canEvict is a runtime field on the resident spec that getResidents()'s stripped
       // type omits — narrow it here to assert the real in-use veto behavior.
-      const tts = modelResidencyManager.getResidents().find(r => r.key === 'tts') as
+      const tts = voiceResident() as
         (undefined | { canEvict?: () => boolean });
       // idle → evictable
       useTTSStore.setState({ playbackStatus: 'idle' });
@@ -250,18 +253,18 @@ describe('ttsStore — extra branch coverage', () => {
       mockCurrentEngine.capabilities.peakRamMB = 500;
       useTTSStore.setState({ playbackStatus: 'idle' });
       await getState().initializeEngine({ override: true });
-      expect(modelResidencyManager.isResident('tts')).toBe(true);
+      expect(voiceResident()).toBeDefined();
 
       // A larger override load evicts every evictable resident (single-model), running
       // tts's registered unload fn (which calls engine.release()).
-      await modelResidencyManager.runExclusive('load:llm', async () => {
-        await modelResidencyManager.makeRoomFor(
-          { key: 'llm', type: 'text', sizeMB: 1800 },
-          { override: true },
-        );
-      });
+      const llmLease = await modelResidencyManager.acquire(
+        { key: 'llm', type: 'text', sizeMB: 1800 },
+        { load: async () => {}, unload: async () => {} },
+        { override: true },
+      );
+      await llmLease.release();
 
-      expect(modelResidencyManager.isResident('tts')).toBe(false);
+      expect(voiceResident()).toBeUndefined();
       expect(mockCurrentEngine.release).toHaveBeenCalled();
     });
   });

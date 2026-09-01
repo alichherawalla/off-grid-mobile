@@ -20,8 +20,8 @@ export type ModelRowType = 'text' | 'image' | 'voice' | 'speech';
 const ROW_RESIDENT_TYPE: Record<ModelRowType, ResidentType> = {
   text: 'text',
   image: 'image',
-  voice: 'tts',
-  speech: 'whisper',
+  voice: 'voice',
+  speech: 'transcription',
 };
 
 /** Pure: pick the resident (if any) backing each sheet row. */

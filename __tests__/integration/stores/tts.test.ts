@@ -126,15 +126,16 @@ describe('TTS integration', () => {
 
     it('a warm/preload initializeEngine() does NOT override (co-reside, honor fit)', async () => {
       const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
-      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
-        .mockResolvedValue({ fits: true, evicted: [] });
+      const spy = jest.spyOn(modelResidencyManager, 'acquire')
+        .mockResolvedValue({ acquired: true, fits: true, loaded: true, budgetMB: 1, usedMB: 0, incomingMB: 1, evicted: [], release: async () => {} });
       mockEngine.getPhase.mockReturnValue('idle');
       mockEngine.isFullyDownloaded.mockReturnValue(true);
 
       await getState().initializeEngine();
 
       expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ key: 'tts', type: 'tts' }),
+        expect.objectContaining({ key: expect.stringMatching(/^voice:/), type: 'voice' }),
+        expect.objectContaining({ load: expect.any(Function), unload: expect.any(Function) }),
         { override: false },
       );
       spy.mockRestore();
@@ -142,15 +143,16 @@ describe('TTS integration', () => {
 
     it('a speak turn forces override:true (evict the finished text model for the voice model)', async () => {
       const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
-      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
-        .mockResolvedValue({ fits: true, evicted: ['text'] });
+      const spy = jest.spyOn(modelResidencyManager, 'acquire')
+        .mockResolvedValue({ acquired: true, fits: true, loaded: true, budgetMB: 1, usedMB: 0, incomingMB: 1, evicted: ['text'], release: async () => {} });
       mockEngine.getPhase.mockReturnValue('idle');
       mockEngine.isFullyDownloaded.mockReturnValue(true);
 
       await getState().initializeEngine({ override: true });
 
       expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ key: 'tts', type: 'tts' }),
+        expect.objectContaining({ key: expect.stringMatching(/^voice:/), type: 'voice' }),
+        expect.objectContaining({ load: expect.any(Function), unload: expect.any(Function) }),
         { override: true },
       );
       spy.mockRestore();
@@ -158,8 +160,8 @@ describe('TTS integration', () => {
 
     it('a warm load that does not fit skips quietly — no error, no eviction', async () => {
       const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
-      const spy = jest.spyOn(modelResidencyManager, 'makeRoomFor')
-        .mockResolvedValue({ fits: false, evicted: [] });
+      const spy = jest.spyOn(modelResidencyManager, 'acquire')
+        .mockResolvedValue({ acquired: false, fits: false, loaded: false, budgetMB: 1, usedMB: 1, incomingMB: 1, evicted: [], release: async () => {} });
       mockEngine.getPhase.mockReturnValue('idle');
       mockEngine.isFullyDownloaded.mockReturnValue(true);
 
