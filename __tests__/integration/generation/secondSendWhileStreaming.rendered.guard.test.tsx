@@ -50,7 +50,9 @@ describe('tapping send again mid-stream', () => {
     const queued = await h.rtl.waitFor(() => h.view!.getByTestId('queue-indicator'));
     expect(queued).toBeTruthy();
     expect(h.view!.queryByText(/1 queued/)).not.toBeNull();
-    expect(h.view!.queryByText(/and another thing/)).not.toBeNull();
+    expect(h.rtl.within(queued).getByText('and another thing')).toBeTruthy();
+    const userRows = h.view!.getAllByTestId('user-message');
+    expect(h.rtl.within(userRows[userRows.length - 1]).getByText('and another thing')).toBeTruthy();
 
     // Still one completion. A second one here is two token streams writing into one message.
     expect(h.boundary.llama!.calls.completion.length).toBe(1);

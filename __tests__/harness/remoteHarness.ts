@@ -1,7 +1,8 @@
 /**
  * remoteHarness — makes a REMOTE (OpenAI-compatible / Ollama) model ACTIVE and replays a CAPTURED device
  * SSE response at the real network boundary (XMLHttpRequest, which createStreamingRequest uses), so the
- * REAL provider + processDelta + chat render run on top. Fake ONLY the transport; everything we own runs.
+ * REAL transport adapter + Shared GenerationService + processDelta + chat render run on top. Fake ONLY
+ * the external transport; everything we own runs.
  *
  * Ground the SSE in a real captured response (docs/wire-captures/*lmstudio* / *ollama*), never a guess.
  */
@@ -59,7 +60,7 @@ export function installRemoteStream(sseBody: string | string[]): { release: () =
 }
 
 /** Make a remote OpenAI-compatible model the ACTIVE model — the real connect flow's end state (server
- *  added, its models discovered, the provider registered + made active). Discovery/connection is the
+ *  added, its models discovered, the transport registered, and its canonical route selected). Discovery is the
  *  network boundary; we pre-place its result, then mount + gesture as the user. `caps` mirrors what a
  *  server actually advertises (LM Studio/Ollama do NOT advertise supportsThinking → no thinking toggle). */
 export async function installRemoteModel(opts: {
@@ -70,7 +71,6 @@ export async function installRemoteModel(opts: {
 } = {}): Promise<{ serverId: string; modelId: string }> {
    
   const { useRemoteServerStore } = require('../../src/stores');
-  const { providerRegistry } = require('../../src/services/adapters/providers');
   const { createProviderForServerImpl } = require('../../src/services/adapters/remote/serverRuntime');
   const { llmService } = require('../../src/services/llm');
   const { clearMobileModel, selectMobileModel } = require('../../src/services/modelServices');
@@ -88,17 +88,21 @@ export async function installRemoteModel(opts: {
   const serverId = useRemoteServerStore.getState().addServer({ name, endpoint, provider });
   const model = {
     id: modelId, name: 'Remote Model', serverId, lastUpdated: 't',
-    capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false, ...opts.caps },
+    capabilities: {
+      supportsVision: false,
+      supportsToolCalling: false,
+      supportsThinking: false,
+      acceptsThinkingKwarg: !!opts.caps?.supportsThinking,
+      maxContextLength: 4096,
+      ...opts.caps,
+    },
   };
   const store = useRemoteServerStore.getState();
   store.setDiscoveredModels(serverId, [model]);
 
-  // Register the provider the SAME way the connect flow does, then select through the shared route owner.
+  // Register the transport the SAME way the connect flow does, then select through the shared route owner.
   const server = useRemoteServerStore.getState().getServerById(serverId);
   await createProviderForServerImpl(server);
-  const providerInstance = providerRegistry.getProvider(serverId);
-  providerInstance.updateConfig?.({ modelId });
-  providerInstance.modelCapabilities = { ...providerInstance.modelCapabilities, ...model.capabilities, acceptsThinkingKwarg: !!opts.caps?.supportsThinking };
   await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
   return { serverId, modelId };
 }

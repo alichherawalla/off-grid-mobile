@@ -245,6 +245,13 @@ async function ragMessages(
 }
 
 function publishSessionEvent(event: ChatSessionEvent): void {
+  if (event.type === 'started') {
+    useChatStore.getState().updateMessageTurnKind(
+      event.turn.conversationId,
+      event.turn.id,
+      event.turn.request.operation.type === 'image' ? 'image' : 'text',
+    );
+  }
   mobileChatGenerationProjection.publish(event);
   if (event.type === 'queue_changed') {
     queue = event.queue;
