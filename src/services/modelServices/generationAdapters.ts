@@ -57,6 +57,7 @@ function mobileMessages(messages: GenerationMessage[]): Message[] {
       toolCallId: message.toolCallId,
       toolName: message.name,
       toolCalls: message.toolCalls,
+      reasoningContent: message.reasoning,
     };
   });
 }

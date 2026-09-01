@@ -336,7 +336,17 @@ class GenerationService {
           }
           this.scheduleSharedFlush(!!(chunk.content || chunk.reasoning));
         },
-        toolStarted: call => options.onToolCallStart?.(call.name, decodedToolArguments(call)),
+        toolStarted: call => {
+          // The shared loop has persisted the completed assistant/tool-call round.
+          // Start the next live segment empty so its Thinking block contains only
+          // the current round, not reasoning already shown in the completed round.
+          this.forceFlushTokens();
+          useChatStore.getState().resetStreamingSegment();
+          this.tokenBuffer = '';
+          this.reasoningBuffer = '';
+          this.state.streamingContent = '';
+          options.onToolCallStart?.(call.name, decodedToolArguments(call));
+        },
         toolCompleted: (call, result) => options.onToolCallComplete?.(call.name, mobileToolResult(result, call)),
       });
       if (!this.ownsSharedAttempt(controller, attempt)) return { interrupted: true };

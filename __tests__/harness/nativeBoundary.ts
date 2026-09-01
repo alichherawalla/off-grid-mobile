@@ -415,6 +415,14 @@ function makeLlamaFake(
       ) => {
         calls.completion.push([params]);
         const scripted = completionQueue.shift() ?? pending;
+        const nativeToolCalls = scripted.toolCalls?.map((call, index) => ({
+          id: `call-${index}`,
+          type: 'function',
+          function: {
+            name: call.name,
+            arguments: JSON.stringify(call.arguments),
+          },
+        }));
         if (completionQueue.length === 0) pending = { text: '' };
         stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
         if (scripted.throwMessage) throw new Error(scripted.throwMessage);
@@ -456,7 +464,7 @@ function makeLlamaFake(
               text: `<|channel>thought\n${scripted.reasoning}<channel|>${scripted.text}`,
               content: scripted.text,
               reasoning_content: scripted.reasoning,
-              tool_calls: scripted.toolCalls,
+              tool_calls: nativeToolCalls,
               tokens_predicted: metaR.tokens_predicted ?? 8,
               tokens_evaluated: 4,
               stopped_eos: metaR.stopped_eos ?? true,
@@ -521,7 +529,7 @@ function makeLlamaFake(
         return {
           text: outText,
           content: outText,
-          tool_calls: scripted.toolCalls,
+          tool_calls: nativeToolCalls,
           tokens_predicted: meta.tokens_predicted ?? 8,
           tokens_evaluated: 4,
           stopped_eos: meta.stopped_eos ?? true,
@@ -586,7 +594,7 @@ function makeLlamaFake(
     // no markers) to assert the Thinking toggle stays hidden.
     metadata: {
       'tokenizer.chat_template':
-        chatTemplate ?? '{{bos}}<think>\n{{reasoning}}\n</think>{{content}}',
+        chatTemplate ?? '{% if enable_thinking %}<think>\n{{reasoning}}\n</think>{% endif %}{{content}}',
     },
   };
 

@@ -164,6 +164,7 @@ export const mobileConversationPort: ConversationPort = {
     useChatStore.getState().addMessage(identity.conversationId, {
       role: message.role,
       content: contentText(message.content),
+      reasoningContent: message.reasoning,
       toolCallId: message.toolCallId,
       toolName: message.name,
       toolCalls: message.toolCalls,

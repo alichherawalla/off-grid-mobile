@@ -27,7 +27,7 @@ import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
-import { reportModelFailure } from '../../services/modelFailureHandler';
+import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
 import { remoteToolCapabilityIssue } from '../../services/toolCapabilityPreflight';
 import { embeddingService } from '../../services/adapters/native/embeddingRuntimeAdapter';
 import {
@@ -907,6 +907,7 @@ export async function dispatchGenerationFn(
     forceImageMode: imageMode === 'force',
     imageEnabled: imageMode !== 'disabled',
   });
+  clearModelFailure(kind === 'image' ? 'image' : 'text');
   // ONE post-decision dispatch seam, shared with resend (image-model guard + text-provision path).
   const result = await dispatchResolvedTurn(deps, kind, {
     text,
@@ -1064,6 +1065,7 @@ export async function regenerateResponseFn(
     text: messageTextForRoute,
     recordedKind,
   });
+  clearModelFailure(kind === 'image' ? 'image' : 'text');
   // Persist the resolved kind on the turn. A legacy turn (no stamp) classified just now, and a
   // cancelled run must not leave the next resend to re-derive the modality from the wreckage.
   deps.updateMessageTurnKind?.(targetConversationId, userMessage.id, kind);
