@@ -23,6 +23,7 @@ import {
 } from './downloadItemMapping';
 import logger from '../../utils/logger';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
+import { retryModelDownload } from '../../services/modelDownloadControls';
 import { uniformDownloadId } from '@offgrid/models';
 import { setImageDownloadAlertSink } from '../../services/adapters/downloads/imageDownloadAdapter';
 import { useEffect } from 'react';
@@ -168,15 +169,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       // Single owner: the service routes retry to the owning provider (image uses
       // the injected retry above; text/stt are service-level) and logs [DL-SM].
-      await modelDownloadRegistry.retry(idOf(item));
+      await retryModelDownload(idOf(item), item.downloadId);
     } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
-      const errorMessage =
-        error?.message || 'Retry failed. Please remove and re-download.';
-      if (item.downloadId)
-        useDownloadStore.getState().setStatus(item.downloadId, 'failed', {
-          message: errorMessage,
-        });
     }
   };
 

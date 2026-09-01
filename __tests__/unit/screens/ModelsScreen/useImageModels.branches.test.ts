@@ -30,7 +30,7 @@ const mockMatchesSdVersionFilter = jest.fn();
 const mockCancelSynthetic = jest.fn();
 const mockStoreRemove = jest.fn();
 const mockStoreGetState = jest.fn();
-const mockRegistryCancel = jest.fn(async () => {});
+const mockRegistryCancel = jest.fn(async (_id: string) => {});
 
 jest.mock('../../../../src/stores', () => ({
   useAppStore: (selector?: any) => mockUseAppStore(selector),

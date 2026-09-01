@@ -62,6 +62,9 @@ jest.mock('../../../../src/services', () => ({
 jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
   get modelDownloadRegistry() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: (fn: any) => mockSubscribe(fn) }; },
 }));
+jest.mock('../../../../src/services/modelDownloadControls', () => ({
+  retryModelDownload: (id: string) => mockMDS.retry(id),
+}));
 jest.mock('../../../../src/services/adapters/downloads/imageDownloadAdapter', () => ({
   setImageDownloadAlertSink: (...a: any[]) => mockSetImageDownloadAlertSink(...a),
 }));
