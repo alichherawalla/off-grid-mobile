@@ -1,4 +1,4 @@
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/appStore';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { isLiteRTModel, type DownloadedModel } from '../types';

@@ -2,7 +2,7 @@
  * Standalone utility helpers for ActiveModelService.
  */
 
-import { useAppStore } from '../../stores';
+import { useAppStore } from '../../stores/appStore';
 import { hardwareService } from '../hardware';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';

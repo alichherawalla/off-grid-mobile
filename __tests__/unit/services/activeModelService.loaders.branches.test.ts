@@ -9,7 +9,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'android' },
   ToastAndroid: { showWithGravity: jest.fn(), LONG: 1, BOTTOM: 2 },
 }));
-jest.mock('../../../src/stores', () => ({
+jest.mock('../../../src/stores/appStore', () => ({
   useAppStore: { getState: jest.fn() },
 }));
 jest.mock('../../../src/stores/debugLogsStore', () => ({
@@ -53,7 +53,7 @@ import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
-import { useAppStore } from '../../../src/stores';
+import { useAppStore } from '../../../src/stores/appStore';
 import logger from '../../../src/utils/logger';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
@@ -151,7 +151,7 @@ describe('doLoadTextModel — mmproj clear branch', () => {
 
     await doLoadTextModel(ctx);
 
-    expect(logger.warn).toHaveBeenCalledWith('[engines] text engine unload during switch failed, continuing:', expect.any(Error));
+    expect(logger.warn).toHaveBeenCalledWith('[modelLoaders] text engine unload during switch failed, continuing:', expect.any(Error));
     expect(ctx.onError).toHaveBeenCalled(); // reset before reassignment
     expect(ctx.onLoaded).toHaveBeenCalled();
   });
@@ -188,7 +188,7 @@ describe('doLoadLiteRTModel branches', () => {
 
     await doLoadTextModel(ctx);
 
-    expect(logger.warn).toHaveBeenCalledWith('[engines] text engine unload during switch failed, continuing:', expect.any(Error));
+    expect(logger.warn).toHaveBeenCalledWith('[modelLoaders] text engine unload during switch failed, continuing:', expect.any(Error));
     expect(ctx.onError).toHaveBeenCalled();
     expect(ToastAndroid.showWithGravity).toHaveBeenCalled();
   });

@@ -32,6 +32,7 @@ import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
+import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({
@@ -90,6 +91,8 @@ export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
     });
   return refreshChain;
 }
+
+composeMobileSidecarExecution(mobileGenerationService, refreshMobileModelServices);
 
 /** Connect persisted and native Mobile projections to the shared service once. */
 export function startMobileModelServices(): () => void {

@@ -2,7 +2,7 @@ import RNFS from 'react-native-fs';
 import logger from '../../../utils/logger';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../../types';
 import { APP_CONFIG } from '../../../constants';
-import { useAppStore } from '../../../stores';
+import { useAppStore } from '../../../stores/appStore';
 import { coordinatedDownloads as backgroundDownloadService } from '../coordinatedDownloadBridge';
 import {
   BackgroundDownloadMetadataCallback,

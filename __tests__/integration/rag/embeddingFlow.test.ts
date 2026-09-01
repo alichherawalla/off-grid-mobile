@@ -78,11 +78,17 @@ import { cosineSimilarity } from '@offgrid/rag';
 import { decodeModelRouteId } from '@offgrid/models';
 import { documentService } from '../../../src/services/documentService';
 import { mobileGenerationService } from '../../../src/services/modelServices';
+import { composeMobileSidecarExecution } from '../../../src/services/modelServices/sidecarExecutionComposition';
 
 const mockDocService = documentService as jest.Mocked<typeof documentService>;
 const mockSharedGenerate = mobileGenerationService.generate as jest.Mock;
+const disposeSidecarExecution = composeMobileSidecarExecution(
+  mobileGenerationService as never,
+  async () => undefined,
+);
 
 describe('Embedding Flow Integration', () => {
+  afterAll(disposeSidecarExecution);
   beforeEach(() => {
     jest.clearAllMocks();
     (ragDatabase as any).ready = false;

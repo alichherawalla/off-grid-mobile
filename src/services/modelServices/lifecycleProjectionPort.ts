@@ -5,13 +5,17 @@ export interface LifecycleProjectionPort {
   selectRoute(modality: ModelModality, routeId: string | null): Promise<void>;
 }
 
-let port: LifecycleProjectionPort = {
+type LifecycleProjectionRegistration = Omit<LifecycleProjectionPort, 'selectRoute'> & {
+  selectRoute(modality: ModelModality, routeId: string | null): void | Promise<void>;
+};
+
+let port: LifecycleProjectionRegistration = {
   refreshInventory: async () => undefined,
   selectRoute: async () => undefined,
 };
 
 /** Composition-root registration. Lifecycle code depends inward on this port, not on LLMService. */
-export function registerLifecycleProjectionPort(next: LifecycleProjectionPort): () => void {
+export function registerLifecycleProjectionPort(next: LifecycleProjectionRegistration): () => void {
   port = next;
   return () => {
     if (port === next) {
@@ -25,5 +29,5 @@ export function registerLifecycleProjectionPort(next: LifecycleProjectionPort): 
 
 export const lifecycleProjectionPort: LifecycleProjectionPort = {
   refreshInventory: () => port.refreshInventory(),
-  selectRoute: (modality, routeId) => port.selectRoute(modality, routeId),
+  selectRoute: (modality, routeId) => Promise.resolve(port.selectRoute(modality, routeId)),
 };

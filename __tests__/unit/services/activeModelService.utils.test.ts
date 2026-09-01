@@ -17,7 +17,7 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { isModelLoaded: jest.fn(() => Promise.resolve(false)) },
 }));
 
-jest.mock('../../../src/stores', () => ({
+jest.mock('../../../src/stores/appStore', () => ({
   useAppStore: {
     getState: jest.fn(() => ({
       activeModelId: 'model-abc',

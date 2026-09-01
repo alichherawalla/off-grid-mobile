@@ -1,61 +1,41 @@
-import type { GenerationMessage, GenerationToolDefinition } from '@offgrid/models';
+import type { GenerationMessage } from '@offgrid/models';
 import type { RoutableTool } from './toolEmbeddingRouter';
-import { mobileGenerationService, refreshMobileModelServices } from './modelServices';
-import { EMBEDDING_MODEL_FILENAME } from './adapters/native/embeddingRuntimeAdapter';
-import { mobileRouteId } from './modelServices/mobileRoute';
+type SidecarExecutionPort = {
+  text(messages: GenerationMessage[], options: { maxTokens?: number; onText?: (text: string) => void }): Promise<string>;
+  embedding(inputs: string[]): Promise<number[][]>;
+  classification(input: string, routeId?: string): Promise<'image' | 'text'>;
+  toolSelection(input: string, tools: RoutableTool[], limit: number): Promise<string[]>;
+};
 
-function embeddingRoute(modality: 'embedding' | 'tool_selection'): string {
-  return mobileRouteId({
-    source: 'local',
-    hostId: 'llama.rn-sidecar',
-    modality,
-    modelId: EMBEDDING_MODEL_FILENAME,
-  });
+let port: SidecarExecutionPort | null = null;
+
+/** Composition-root seam. Domain callers depend on this narrow port, not the model-service barrel. */
+export function registerMobileSidecarExecutionPort(next: SidecarExecutionPort): () => void {
+  port = next;
+  return () => { if (port === next) port = null; };
+}
+
+function executionPort(): SidecarExecutionPort {
+  if (!port) throw new Error('Mobile sidecar execution is not registered');
+  return port;
 }
 
 export async function executeMobileText(
   messages: GenerationMessage[],
   options: { maxTokens?: number; onText?: (text: string) => void } = {},
 ): Promise<string> {
-  await refreshMobileModelServices();
-  const result = await mobileGenerationService.generate({
-    operation: { type: 'text' },
-    messages,
-    reasoning: { enabled: false },
-    maxTokens: options.maxTokens,
-    allowFallback: false,
-  }, {
-    chunk: chunk => { if (chunk.content) options.onText?.(chunk.content); },
-  });
-  return result.content;
+  return executionPort().text(messages, options);
 }
 
 export async function executeMobileEmbedding(inputs: string[]): Promise<number[][]> {
-  await refreshMobileModelServices();
-  const result = await mobileGenerationService.generate({
-    operation: { type: 'embedding', inputs },
-    routeId: embeddingRoute('embedding'),
-    allowFallback: false,
-  });
-  if (result.output.type !== 'embedding') throw new TypeError('Embedding returned an invalid result');
-  return result.output.vectors;
+  return executionPort().embedding(inputs);
 }
 
 export async function executeMobileClassification(
   input: string,
   routeId?: string,
 ): Promise<'image' | 'text'> {
-  await refreshMobileModelServices();
-  const result = await mobileGenerationService.generate({
-    operation: { type: 'classifier', input, labels: ['image', 'text'] },
-    routeId,
-    allowFallback: false,
-  });
-  if (result.output.type !== 'classification') {
-    throw new TypeError('Classification returned an invalid result');
-  }
-  return result.output.labels.reduce((best, candidate) =>
-    candidate.score > best.score ? candidate : best).label === 'image' ? 'image' : 'text';
+  return executionPort().classification(input, routeId);
 }
 
 export async function executeMobileToolSelection(
@@ -63,21 +43,5 @@ export async function executeMobileToolSelection(
   tools: RoutableTool[],
   limit: number,
 ): Promise<string[]> {
-  await refreshMobileModelServices();
-  const definitions: GenerationToolDefinition[] = tools.map(tool => ({
-    name: tool.function.name,
-    description: tool.function.description,
-    inputSchema: {},
-  }));
-  const result = await mobileGenerationService.generate({
-    operation: { type: 'tool_selection', input, limit },
-    routeId: embeddingRoute('tool_selection'),
-    tools: definitions,
-    toolChoice: 'none',
-    allowFallback: false,
-  });
-  if (result.output.type !== 'tool_selection') {
-    throw new TypeError('Tool selection returned an invalid result');
-  }
-  return result.output.toolCalls.map(call => call.name);
+  return executionPort().toolSelection(input, tools, limit);
 }

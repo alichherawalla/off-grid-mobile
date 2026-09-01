@@ -15,7 +15,7 @@ import {
   upsertRegistryRow,
 } from '@offgrid/models';
 import { reconcilePrimaryPaths } from '../storedPathAdapter';
-import { useAppStore } from '../../../../stores';
+import { useAppStore } from '../../../../stores/appStore';
 import { isLiteRTFileName } from '../../../../utils/modelHelpers';
 
 // Re-exported because this module was the published home of these helpers before they were extracted

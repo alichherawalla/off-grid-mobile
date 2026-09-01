@@ -5,11 +5,17 @@ import {
   mobileTranscriptionRuntime,
   type MobileTranscriptionLoadResult,
 } from '../services/modelServices/transcriptionRuntimePort';
-import {
-  clearMobileModel,
-  refreshMobileModelServices,
-  selectMobileModel,
-} from '../services/modelServices';
+import { lifecycleProjectionPort } from '../services/modelServices/lifecycleProjectionPort';
+import { mobileRouteId } from '../services/modelServices/mobileRoute';
+
+async function selectTranscriptionRoute(modelId: string | null): Promise<void> {
+  await lifecycleProjectionPort.selectRoute('transcription', modelId
+    ? mobileRouteId({
+        source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId,
+      })
+    : null);
+  await lifecycleProjectionPort.refreshInventory();
+}
 
 /**
  * Outcome of a whisper load, so callers can tell WHY it didn't load:
@@ -190,7 +196,7 @@ export const useWhisperStore = create<WhisperState>()(
           });
           // Then delete
           await mobileTranscriptionRuntime.delete(downloadedModelId);
-          await clearMobileModel('transcription');
+          await selectTranscriptionRoute(null);
           set({
             downloadedModelId: null,
             isModelLoaded: false,
@@ -209,12 +215,7 @@ export const useWhisperStore = create<WhisperState>()(
           set({ isModelLoaded: true, error: null });
           return;
         }
-        await selectMobileModel({
-          source: 'local',
-          hostId: 'whisper.rn',
-          modality: 'transcription',
-          modelId,
-        });
+        await selectTranscriptionRoute(modelId);
         set({ isModelLoaded: selectedModelIsLoaded, error: null });
         await get().loadModel();
       },
@@ -228,7 +229,7 @@ export const useWhisperStore = create<WhisperState>()(
           }
           await mobileTranscriptionRuntime.delete(modelId);
           if (get().downloadedModelId === modelId) {
-            await clearMobileModel('transcription');
+            await selectTranscriptionRoute(null);
           }
           set((s) => ({
             presentModelIds: s.presentModelIds.filter((id) => id !== modelId),
@@ -253,7 +254,7 @@ export const useWhisperStore = create<WhisperState>()(
           presentModelIds: present,
           ...(activeId && !activeOnDisk ? { downloadedModelId: null, isModelLoaded: false } : {}),
         });
-        await refreshMobileModelServices();
+        await lifecycleProjectionPort.refreshInventory();
       },
 
       clearError: () => {
