@@ -143,8 +143,6 @@ export interface AppState extends ProAccessSlice {
   addDownloadedModel: (model: DownloadedModel) => void;
   removeDownloadedModel: (modelId: string) => void;
   activeModelId: string | null;
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveModelId: (modelId: string | null) => void;
   /** The text model that is ACTUALLY loaded in native memory right now (engine-agnostic — llama OR litert),
    *  as opposed to activeModelId (the SELECTED model, which may be selected-but-not-yet-loaded or evicted).
    *  A reactive projection of ActiveModelService's authoritative loaded state — the SINGLE source every
@@ -181,8 +179,6 @@ export interface AppState extends ProAccessSlice {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
   addDownloadedImageModel: (model: ONNXImageModel) => void;
   removeDownloadedImageModel: (modelId: string) => void;
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveImageModelId: (modelId: string | null) => void;
   isGeneratingImage: boolean;
   imageGenerationProgress: { step: number; totalSteps: number } | null;
   imageGenerationStatus: string | null;
@@ -318,11 +314,8 @@ export const useAppStore = create<AppState>()(
           downloadedModels: state.downloadedModels.filter(
             m => m.id !== modelId,
           ),
-          activeModelId:
-            state.activeModelId === modelId ? null : state.activeModelId,
         })),
       activeModelId: null,
-      setActiveModelId: modelId => set({ activeModelId: modelId }),
       loadedTextModelId: null,
       setLoadedTextModelId: modelId => set({ loadedTextModelId: modelId }),
       textModelEvicted: false,
@@ -386,12 +379,7 @@ export const useAppStore = create<AppState>()(
           downloadedImageModels: state.downloadedImageModels.filter(
             m => m.id !== modelId,
           ),
-          activeImageModelId:
-            state.activeImageModelId === modelId
-              ? null
-              : state.activeImageModelId,
         })),
-      setActiveImageModelId: modelId => set({ activeImageModelId: modelId }),
       // Image generation state
       isGeneratingImage: false,
       imageGenerationProgress: null,

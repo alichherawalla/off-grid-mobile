@@ -162,7 +162,7 @@ describe('remote server reconnect', () => {
       endpoint,
       provider: 'openai-compatible',
     });
-    store.setActiveServerId(serverId);
+    useRemoteServerStore.setState({ activeServerId: serverId });
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: true });
 
     await remoteServerManager.recoverActiveConnection();

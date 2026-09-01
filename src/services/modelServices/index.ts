@@ -34,13 +34,23 @@ import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
 import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
+import { mobileModelSelectionService } from './modelSelectionApplication';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({
   refreshInventory: refreshMobileLLMServiceInventory,
   selectRoute: selectMobileRoute,
 });
-registerModelSelectionCommandPort({ select: selectMobileRoute });
+registerModelSelectionCommandPort({
+  select: selectMobileRoute,
+  async removeServer(serverId) {
+    await Promise.all(
+      (['text', 'image', 'transcription', 'voice', 'embedding'] as const).map(
+        modality => mobileModelSelectionService.remove({ modality, serverId }),
+      ),
+    );
+  },
+});
 export const mobileGenerationService = new GenerationService(
   mobileLLMService,
   mobileGenerationResidency,

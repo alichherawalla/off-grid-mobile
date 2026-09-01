@@ -243,7 +243,7 @@ describe('remoteServerStore', () => {
       const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveServerId(serverId);
+        useRemoteServerStore.setState({ activeServerId: serverId });
       });
 
       expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
@@ -256,23 +256,13 @@ describe('remoteServerStore', () => {
     });
   });
 
-  describe('setActiveServerId', () => {
-    it('should set active server', () => {
-      const serverId = addTestServer();
-
-      actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveServerId(serverId);
-      });
-
-      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
-    });
-
-    it('should allow clearing active server', () => {
-      actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveServerId(null);
-      });
-
-      expect(useRemoteServerStore.getState().activeServerId).toBeNull();
+  describe('selection persistence', () => {
+    it('does not expose independent selection writers', () => {
+      const state = useRemoteServerStore.getState() as any;
+      expect(state.setActiveServerId).toBeUndefined();
+      expect(state.setActiveRemoteTextModelId).toBeUndefined();
+      expect(state.setActiveRemoteImageModelId).toBeUndefined();
+      expect(state.setActiveRemoteMediaServerId).toBeUndefined();
     });
   });
 
@@ -281,7 +271,7 @@ describe('remoteServerStore', () => {
       const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveServerId(serverId);
+        useRemoteServerStore.setState({ activeServerId: serverId });
       });
 
       const activeServer = useRemoteServerStore.getState().getActiveServer();
@@ -492,7 +482,7 @@ describe('remoteServerStore', () => {
   describe('activeRemoteTextModelId', () => {
     it('should set active remote text model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
+        useRemoteServerStore.setState({ activeRemoteTextModelId: 'model-123' });
       });
 
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(
@@ -502,7 +492,7 @@ describe('remoteServerStore', () => {
 
     it('should clear active remote text model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteTextModelId('model-123');
+        useRemoteServerStore.setState({ activeRemoteTextModelId: 'model-123' });
       });
 
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(
@@ -510,7 +500,7 @@ describe('remoteServerStore', () => {
       );
 
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+        useRemoteServerStore.setState({ activeRemoteTextModelId: null });
       });
 
       expect(
@@ -522,9 +512,7 @@ describe('remoteServerStore', () => {
   describe('activeRemoteImageModelId', () => {
     it('should set active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.setState({ activeRemoteImageModelId: 'vision-model-456' });
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe(
@@ -534,9 +522,7 @@ describe('remoteServerStore', () => {
 
     it('should clear active remote image model ID', () => {
       actStoreUpdate(() => {
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteImageModelId('vision-model-456');
+        useRemoteServerStore.setState({ activeRemoteImageModelId: 'vision-model-456' });
       });
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe(
@@ -544,7 +530,7 @@ describe('remoteServerStore', () => {
       );
 
       actStoreUpdate(() => {
-        useRemoteServerStore.getState().setActiveRemoteImageModelId(null);
+        useRemoteServerStore.setState({ activeRemoteImageModelId: null });
       });
 
       expect(
@@ -586,8 +572,8 @@ describe('remoteServerStore', () => {
             lastUpdated: new Date().toISOString(),
           },
         ]);
-        useRemoteServerStore.getState().setActiveServerId(serverId);
-        useRemoteServerStore.getState().setActiveRemoteTextModelId('llama2');
+        useRemoteServerStore.setState({ activeServerId: serverId });
+        useRemoteServerStore.setState({ activeRemoteTextModelId: 'llama2' });
       });
 
       const model = useRemoteServerStore.getState().getActiveRemoteTextModel();
@@ -627,7 +613,7 @@ describe('remoteServerStore', () => {
             },
         ]);
         // Set model ID but not server ID
-        useRemoteServerStore.getState().setActiveRemoteTextModelId('llama2');
+        useRemoteServerStore.setState({ activeRemoteTextModelId: 'llama2' });
       });
 
       const model = useRemoteServerStore.getState().getActiveRemoteTextModel();
@@ -661,10 +647,8 @@ describe('remoteServerStore', () => {
               lastUpdated: new Date().toISOString(),
             },
         ]);
-        useRemoteServerStore
-          .getState()
-          .setActiveRemoteMediaServerId('image', serverId);
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('llava');
+        useRemoteServerStore.setState({ activeRemoteMediaServerIds: { image: serverId } });
+        useRemoteServerStore.setState({ activeRemoteImageModelId: 'llava' });
       });
 
       const model = useRemoteServerStore.getState().getActiveRemoteImageModel();
@@ -689,8 +673,8 @@ describe('remoteServerStore', () => {
           endpoint: 'http://s1:11434',
           provider: 'openai-compatible',
         });
-        useRemoteServerStore.getState().setActiveRemoteTextModelId('model-1');
-        useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-1');
+        useRemoteServerStore.setState({ activeRemoteTextModelId: 'model-1' });
+        useRemoteServerStore.setState({ activeRemoteImageModelId: 'vision-1' });
       });
 
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe(

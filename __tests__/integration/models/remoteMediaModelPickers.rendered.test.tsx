@@ -58,7 +58,7 @@ describe('remote media model pickers', () => {
       endpoint: 'http://192.168.1.51:7878', // NOSONAR - private LAN test fixture
       provider: 'openai-compatible',
     });
-    useRemoteServerStore.getState().setActiveServerId(textServerId);
+    useRemoteServerStore.setState({ activeServerId: textServerId });
     const ui = render(<RemoteModelOptionsSection category="voice" />);
 
     fireEvent.press(

@@ -134,7 +134,9 @@ describe('remoteMediaRuntime', () => {
       provider: server.provider,
       selections: { transcription: 'whisper-large-v3' },
     });
-    store.setActiveRemoteMediaServerId('transcription', serverId);
+    useRemoteServerStore.setState({
+      activeRemoteMediaServerIds: { transcription: serverId },
+    });
 
     await expect(
       executeMobileTranscription('file:///recording.wav'),
@@ -171,7 +173,7 @@ describe('remoteMediaRuntime', () => {
       provider: server.provider,
       selections: { voice: 'kokoro' },
     });
-    store.setActiveRemoteMediaServerId('voice', id);
+    useRemoteServerStore.setState({ activeRemoteMediaServerIds: { voice: id } });
 
     const active = activeRemoteVoiceServer();
     expect(active?.name).toBe('Studio Mac');

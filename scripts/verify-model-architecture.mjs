@@ -58,6 +58,13 @@ for (const file of files) {
   const fileName = relative(file)
   const isUi = /^src\/(components|hooks|screens)\//.test(fileName)
   const isAdapter = /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(fileName)
+  const canonicalSelectionReadSurface =
+    fileName === 'src/components/checklist/useOnboardingSteps.ts' ||
+    fileName === 'src/hooks/useEjectAllModels.ts' ||
+    fileName === 'src/screens/ProjectDetailScreen.tsx' ||
+    fileName === 'src/screens/ChatScreen/useChatScreen.ts' ||
+    fileName === 'pro/ui/McpServersScreen.tsx' ||
+    fileName === 'pro/audio/ui/AudioMessageBubble/index.tsx'
 
   if (fileName === 'src/services/modelServices/remoteImageGeneration.ts') {
     report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
@@ -87,6 +94,21 @@ for (const file of files) {
     /\bpending(?:Text|Image|Transcription)ModelId\b/.test(text)
   ) {
     report('residency-workflow-is-shared', fileName, source, source, 'module-global:pending-model-id')
+  }
+
+  if (fileName === 'src/services/modelPreloader.ts') {
+    report('dead-boot-preloader-is-removed', fileName, source, source, 'file:modelPreloader')
+  }
+
+  if (/\b(?:abortPreload|preloadSelectedModels)\b/.test(text)) {
+    report('dead-boot-preloader-is-removed', fileName, source, source, 'symbol:boot-preload')
+  }
+
+  if (
+    fileName === 'src/services/loadPolicySync.ts' &&
+    /\b(?:loadPolicyFromSettings|activeUnsubscribe|isInitialSeed|modelLoadingMode\s*[!=]=|aggressiveModelLoading\s*[!=]=)\b/.test(text)
+  ) {
+    report('load-policy-transition-is-shared', fileName, source, source, 'adapter:policy-transition')
   }
 
   if (
@@ -122,6 +144,32 @@ for (const file of files) {
   }
 
   const visit = node => {
+    if (
+      canonicalSelectionReadSurface &&
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      ts.isCallExpression(node.initializer) &&
+      /^(?:useAppStore|useRemoteServerStore)$/.test(nodeText(source, node.initializer.expression))
+    ) {
+      for (const element of node.name.elements) {
+        const name = (element.propertyName ?? element.name).getText(source)
+        if (selectionProjectionKeys.has(name)) {
+          report('ui-reads-shared-selection-snapshot', fileName, source, element, `raw-key:${name}`)
+        }
+      }
+    }
+
+    if (
+      /^src\/stores\/(?:appStore|remoteServerStore)\.ts$/.test(fileName) &&
+      (ts.isPropertySignature(node) || ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      node.name &&
+      /^(?:setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(
+        ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name) ? node.name.text : '',
+      )
+    ) {
+      report('stores-expose-no-selection-writers', fileName, source, node.name, `writer:${node.name.getText(source)}`)
+    }
+
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text
       if (isUi && /(services\/litert(?:\.|$)|llama|whisperService|localDreamGenerator|imageGenerationService|adapters\/providers)/i.test(specifier)) {
@@ -191,6 +239,13 @@ for (const file of files) {
     if (ts.isCallExpression(node)) {
       const call = nodeText(source, node.expression)
       const rawName = call.split('.').at(-1)
+      if (
+        canonicalSelectionReadSurface &&
+        /^(?:useAppStore|useRemoteServerStore)$/.test(call) &&
+        [...selectionProjectionKeys].some(key => new RegExp(`\\.${key}\\b`).test(nodeText(source, node)))
+      ) {
+        report('ui-reads-shared-selection-snapshot', fileName, source, node, `selector:${nodeText(source, node)}`)
+      }
       if (
         /^(setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(rawName) &&
         fileName !== 'src/services/modelServices/modelSelectionProjection.ts'

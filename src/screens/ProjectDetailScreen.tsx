@@ -15,12 +15,14 @@ import {
 } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './ProjectDetailScreen.styles';
-import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useChatStore, useProjectStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { formatWhen } from '../utils/localTime';
 import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
+import { useMobileModelInventory } from '../hooks/useMobileModelInventory';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
@@ -41,10 +43,11 @@ export const ProjectDetailScreen: React.FC = () => {
     setActiveConversation,
     createConversation,
   } = useChatStore();
-  const { downloadedModels, activeModelId } = useAppStore();
+  const activeText = useActiveMobileModel('text').model;
+  const textModels = useMobileModelInventory('text');
 
   const project = getProject(projectId);
-  const hasModels = downloadedModels.length > 0;
+  const hasModels = textModels.length > 0;
 
   // Get chats for this project
   const projectChats = conversations
@@ -69,7 +72,7 @@ export const ProjectDetailScreen: React.FC = () => {
       );
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = activeText?.id ?? textModels[0]?.id;
     if (modelId) {
       const newConversationId = createConversation(
         modelId,

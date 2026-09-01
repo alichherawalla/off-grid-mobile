@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import {
   NavigationProp,
   useNavigation,
@@ -15,6 +15,8 @@ import {
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
+import { useMobileModelInventory } from '../../hooks/useMobileModelInventory';
 import { hardwareService } from '../../services';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
 import {
@@ -34,11 +36,6 @@ import type { GenerationDeps } from './useChatGenerationActions';
 import { getDisplayMessages } from './types';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import {
-  isSuspiciousRecoveredImageModel,
-  isSuspiciousRecoveredTextModel,
-  isUnsupportedJetsamImageModel,
-} from '../../utils/modelSelectorFilters';
-import {
   isStreamingActiveConversation,
   useChatAudioLifecycle,
   useChatConversationLifecycle,
@@ -53,19 +50,6 @@ export { getPlaceholderText } from './types';
 export { computePendingSettings } from './pendingSettings';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
-
-function selectedImageModel(
-  input: {
-    downloaded: ReturnType<typeof useAppStore.getState>['downloadedImageModels'];
-    localId: string | null;
-    discovered: ReturnType<typeof useRemoteServerStore.getState>['discoveredModels'];
-    remoteServerId: string | undefined;
-    remoteId: string | null;
-  },
-) {
-  return input.downloaded.find(model => model.id === input.localId)
-    ?? input.discovered[input.remoteServerId ?? '']?.find(model => model.id === input.remoteId);
-}
 
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -117,10 +101,8 @@ export const useChatScreen = () => {
     useChatRuntimeSubscriptions();
 
   const {
-    activeModelId,
     downloadedModels,
     settings,
-    activeImageModelId,
     downloadedImageModels,
     setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
@@ -130,11 +112,6 @@ export const useChatScreen = () => {
     textModelEvicted,
   } = useAppStore();
 
-  // Remote model state - use proper selectors for reactivity
-  const activeServerId = useRemoteServerStore(s => s.activeServerId);
-  const activeRemoteTextModelId = useRemoteServerStore(s => s.activeRemoteTextModelId);
-  const activeRemoteImageModelId = useRemoteServerStore(s => s.activeRemoteImageModelId);
-  const activeRemoteImageServerId = useRemoteServerStore(s => s.activeRemoteMediaServerIds.image);
   const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
 
   const {
@@ -166,6 +143,8 @@ export const useChatScreen = () => {
   // resolved by the shared model state). This screen used to re-derive it with its own copy of the rule,
   // which is how it ended up refusing to send to a model the engine had loaded.
   const activeModelInfo = useActiveTextModel();
+  const activeImageSnapshot = useActiveMobileModel('image');
+  const availableModels = useMobileModelInventory();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote
@@ -175,27 +154,10 @@ export const useChatScreen = () => {
     ? (activeModelInfo.model as RemoteModel | null)
     : null;
   const hasTextModel = activeModelInfo.modelId !== null;
-  const hasActiveModel = hasTextModel || !!activeImageModelId || !!activeRemoteImageModelId;
+  const hasActiveModel = hasTextModel || activeImageSnapshot.model !== null;
   const activeModelName = activeModelInfo.modelName;
-  const availableDownloadedTextModels = useMemo(
-    () =>
-      downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
-    [downloadedModels],
-  );
-  const availableDownloadedImageModels = useMemo(
-    () =>
-      downloadedImageModels.filter(
-        model =>
-          !isSuspiciousRecoveredImageModel(model) &&
-          !isUnsupportedJetsamImageModel(model),
-      ),
-    [downloadedImageModels],
-  );
   const hasAvailableModels =
-    availableDownloadedTextModels.length > 0 ||
-    availableDownloadedImageModels.length > 0 ||
-    discoveredModels[activeServerId || '']?.length > 0 ||
-    Object.values(discoveredModels).some(models => models.length > 0);
+    availableModels.length > 0;
 
   const effectiveProjectId = activeConversation
     ? activeConversation.projectId
@@ -203,9 +165,16 @@ export const useChatScreen = () => {
   const activeProject = effectiveProjectId
     ? getProject(effectiveProjectId)
     : null;
-  const activeImageModel = selectedImageModel({ downloaded: downloadedImageModels,
-    localId: activeImageModelId, discovered: discoveredModels,
-    remoteServerId: activeRemoteImageServerId, remoteId: activeRemoteImageModelId });
+  const activeImageModel = activeImageSnapshot.model?.source === 'local'
+    ? downloadedImageModels.find(model => model.id === activeImageSnapshot.model?.id)
+    : activeImageSnapshot.model?.serverId
+      ? discoveredModels[activeImageSnapshot.model.serverId]?.find(
+          model => model.id === activeImageSnapshot.model?.id,
+        )
+      : undefined;
+  const activeLocalImageModelId = activeImageSnapshot.model?.source === 'local'
+    ? activeImageSnapshot.model.id
+    : null;
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
   const isStreamingForThisConversation = isStreamingActiveConversation(
@@ -288,16 +257,15 @@ export const useChatScreen = () => {
   useChatImageModelEffects({
     setDownloadedImageModels,
     settings,
-    activeImageModelId,
+    activeImageModelId: activeLocalImageModelId,
     downloadedModels,
   });
   useChatModelStateSync({
     activeModelInfo,
-    activeModelId,
+    activeModelId: activeModelInfo.modelId,
     activeModel,
     modelDeps,
     activeRemoteModel,
-    activeRemoteTextModelId,
     isModelLoading,
     setSupportsVision,
     setSupportsToolCalling,

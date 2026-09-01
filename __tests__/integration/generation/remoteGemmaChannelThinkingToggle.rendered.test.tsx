@@ -109,7 +109,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
     // Route remote: no local model loaded/selected (mirrors selecting a remote model on device).
     await llmService.unloadModel();
-    useAppStore.getState().setActiveModelId(null);
+    useAppStore.setState({ activeModelId: null });
 
     const restoreFetch = installDiscoveryFetch(GEMMA_CHANNEL_PROBE_SSE);
     try {
@@ -154,7 +154,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     await llmService.unloadModel();
-    useAppStore.getState().setActiveModelId(null);
+    useAppStore.setState({ activeModelId: null });
 
     const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
     try {

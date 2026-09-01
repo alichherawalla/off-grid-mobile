@@ -169,18 +169,17 @@ describe('appStore', () => {
       expect(models[0].id).toBe('model-2');
     });
 
-    it('removeDownloadedModel clears activeModelId if active model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+    it('removeDownloadedModel leaves selection reconciliation to Shared', () => {
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model = createDownloadedModel({ id: 'active-model' });
 
       addDownloadedModel(model);
-      setActiveModelId('active-model');
+      useAppStore.setState({ activeModelId: 'active-model' });
       expect(getAppState().activeModelId).toBe('active-model');
 
       removeDownloadedModel('active-model');
 
-      expect(getAppState().activeModelId).toBeNull();
+      expect(getAppState().activeModelId).toBe('active-model');
     });
 
     it('setLastTextModelId records the selected text model as a preference', () => {
@@ -189,19 +188,18 @@ describe('appStore', () => {
       setLastTextModelId('my-text-model');
       expect(getAppState().lastTextModelId).toBe('my-text-model');
       // Independent of activeModelId, so it survives residency eviction.
-      useAppStore.getState().setActiveModelId(null);
+      useAppStore.setState({ activeModelId: null });
       expect(getAppState().lastTextModelId).toBe('my-text-model');
     });
 
     it('removeDownloadedModel preserves activeModelId if different model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });
       const model2 = createDownloadedModel({ id: 'model-2' });
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      setActiveModelId('model-1');
+      useAppStore.setState({ activeModelId: 'model-1' });
 
       removeDownloadedModel('model-2');
 
@@ -212,26 +210,13 @@ describe('appStore', () => {
   // ============================================================================
   // Active Model
   // ============================================================================
-  describe('activeModel', () => {
+  describe('activeModel persistence projection', () => {
     it('starts with null activeModelId', () => {
       expect(getAppState().activeModelId).toBeNull();
     });
 
-    it('setActiveModelId updates state', () => {
-      const { setActiveModelId } = useAppStore.getState();
-
-      setActiveModelId('model-123');
-
-      expect(getAppState().activeModelId).toBe('model-123');
-    });
-
-    it('setActiveModelId can clear active model', () => {
-      const { setActiveModelId } = useAppStore.getState();
-
-      setActiveModelId('model-123');
-      setActiveModelId(null);
-
-      expect(getAppState().activeModelId).toBeNull();
+    it('does not expose an independent selection writer', () => {
+      expect((getAppState() as any).setActiveModelId).toBeUndefined();
     });
   });
 
@@ -468,27 +453,22 @@ describe('appStore', () => {
       expect(getAppState().downloadedImageModels).toHaveLength(0);
     });
 
-    it('removeDownloadedImageModel clears activeImageModelId if active', () => {
+    it('removeDownloadedImageModel leaves selection reconciliation to Shared', () => {
       const {
         addDownloadedImageModel,
-        setActiveImageModelId,
         removeDownloadedImageModel,
       } = useAppStore.getState();
       const model = createONNXImageModel({ id: 'img-model-1' });
 
       addDownloadedImageModel(model);
-      setActiveImageModelId('img-model-1');
+      useAppStore.setState({ activeImageModelId: 'img-model-1' });
       removeDownloadedImageModel('img-model-1');
 
-      expect(getAppState().activeImageModelId).toBeNull();
+      expect(getAppState().activeImageModelId).toBe('img-model-1');
     });
 
-    it('setActiveImageModelId updates state', () => {
-      const { setActiveImageModelId } = useAppStore.getState();
-
-      setActiveImageModelId('img-model-1');
-
-      expect(getAppState().activeImageModelId).toBe('img-model-1');
+    it('does not expose an independent image selection writer', () => {
+      expect((getAppState() as any).setActiveImageModelId).toBeUndefined();
     });
   });
 
@@ -847,7 +827,6 @@ describe('appStore', () => {
     it('preserves activeImageModelId when a different model is removed', () => {
       const {
         addDownloadedImageModel,
-        setActiveImageModelId,
         removeDownloadedImageModel,
       } = useAppStore.getState();
       const model1 = createONNXImageModel({ id: 'img-keep' });
@@ -855,7 +834,7 @@ describe('appStore', () => {
 
       addDownloadedImageModel(model1);
       addDownloadedImageModel(model2);
-      setActiveImageModelId('img-keep');
+      useAppStore.setState({ activeImageModelId: 'img-keep' });
 
       removeDownloadedImageModel('img-remove');
 
@@ -1070,14 +1049,13 @@ describe('appStore', () => {
     });
 
     it('handles model add and remove in sequence', () => {
-      const { addDownloadedModel, removeDownloadedModel, setActiveModelId } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'keep-model' });
       const model2 = createDownloadedModel({ id: 'temp-model' });
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      setActiveModelId('keep-model');
+      useAppStore.setState({ activeModelId: 'keep-model' });
       removeDownloadedModel('temp-model');
 
       expect(getAppState().downloadedModels).toHaveLength(1);

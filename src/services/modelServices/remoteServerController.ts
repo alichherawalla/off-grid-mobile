@@ -21,9 +21,6 @@ import {
   reconcileRemoteServerDiscovery,
   remoteEndpointIdentity,
   remoteRecoveryDecision,
-  isRemoteModelModality,
-  selectedModalitiesForRemovedServer,
-  selectionAfterRemoteServerRemoval,
   shouldAutoDiscoverRemoteModels,
 } from '@offgrid/models';
 import logger from '../../utils/logger';
@@ -41,7 +38,10 @@ import {
   remoteAuthorizationHeaders,
 } from '@offgrid/models';
 import { activateOffGridDesktopModel } from '../adapters/remote/offGridDesktopModels';
-import { selectCanonicalModel } from './modelSelectionCommandPort';
+import {
+  removeCanonicalServerSelections,
+  selectCanonicalModel,
+} from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
 
 class RemoteServerManager {
@@ -119,45 +119,7 @@ class RemoteServerManager {
    * Remove a server
    */
   async removeServer(id: string): Promise<void> {
-    const selection = useRemoteServerStore.getState();
-    const modalities = selectedModalitiesForRemovedServer({
-      serverId: id,
-      activeTextServerId: selection.activeServerId,
-      activeMediaServerIds: selection.activeRemoteMediaServerIds,
-    });
-    const app = useAppStore.getState();
-    const lastLocal = app.downloadedModels.find(model => model.id === app.lastTextModelId);
-    const localTextFallback = lastLocal
-      ? mobileRouteId({
-          source: 'local',
-          hostId: lastLocal.engine,
-          modality: 'text',
-          modelId: lastLocal.id,
-        })
-      : null;
-    const remoteModalities = modalities.filter(
-      (modality): modality is RemoteModelCategory => isRemoteModelModality(modality),
-    );
-    await Promise.all(remoteModalities.map(modality => {
-      const mediaServerId = modality === 'text'
-        ? selection.activeServerId
-        : selection.activeRemoteMediaServerIds[modality];
-      const mediaServer = selection.servers.find(server => server.id === mediaServerId);
-      const modelId = modality === 'text'
-        ? selection.activeRemoteTextModelId
-        : mediaServer?.selections?.[modality];
-      const selectedRouteId = mediaServerId && modelId
-        ? mobileRouteId({ source: 'remote', hostId: mediaServerId, modality, modelId })
-        : null;
-      return selectCanonicalModel(
-        modality,
-        selectionAfterRemoteServerRemoval({
-          removedServerId: id,
-          selectedRouteId,
-          localFallbackRouteId: modality === 'text' ? localTextFallback : null,
-        }),
-      );
-    }));
+    await removeCanonicalServerSelections(id);
     remoteTextTransportRegistry.unregister(id);
     await this.removeApiKey(id);
     useRemoteServerStore.getState().removeServer(id);

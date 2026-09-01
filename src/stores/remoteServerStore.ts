@@ -56,22 +56,11 @@ interface RemoteServerState {
   removeServer: (id: string) => void;
 
   // Active server
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveServerId: (id: string | null) => void;
   getActiveServer: () => RemoteServer | null;
 
   // Active remote model selection
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveRemoteTextModelId: (id: string | null) => void;
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveRemoteImageModelId: (id: string | null) => void;
   getActiveRemoteTextModel: () => RemoteModel | null;
   getActiveRemoteImageModel: () => RemoteModel | null;
-  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
-  setActiveRemoteMediaServerId: (
-    category: Exclude<RemoteModelCategory, 'text'>,
-    serverId: string | null,
-  ) => void;
   getActiveRemoteMediaServer: (
     category: Exclude<RemoteModelCategory, 'text'>,
   ) => RemoteServer | null;
@@ -186,32 +175,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         logger.log('[RemoteServer] Removed server:', id);
       },
 
-      // Active server
-      setActiveServerId: id => {
-        set({ activeServerId: id });
-        logger.log('[RemoteServer] Active server set to:', id || 'local');
-      },
-
       getActiveServer: () => {
         const { servers, activeServerId } = get();
         return servers.find(s => s.id === activeServerId) || null;
-      },
-
-      // Active remote model selection
-      setActiveRemoteTextModelId: id => {
-        set({ activeRemoteTextModelId: id });
-        logger.log(
-          '[RemoteServer] Active remote text model set to:',
-          id || 'none',
-        );
-      },
-
-      setActiveRemoteImageModelId: id => {
-        set({ activeRemoteImageModelId: id });
-        logger.log(
-          '[RemoteServer] Active remote image model set to:',
-          id || 'none',
-        );
       },
 
       getActiveRemoteTextModel: () => {
@@ -232,18 +198,6 @@ export const useRemoteServerStore = create<RemoteServerState>()(
         if (!activeRemoteImageModelId || !serverId) return null;
         const models = discoveredModels[serverId] || [];
         return models.find(m => m.id === activeRemoteImageModelId) || null;
-      },
-
-      setActiveRemoteMediaServerId: (category, serverId) => {
-        set(state => ({
-          activeRemoteMediaServerIds: serverId
-            ? { ...state.activeRemoteMediaServerIds, [category]: serverId }
-            : Object.fromEntries(
-                Object.entries(state.activeRemoteMediaServerIds).filter(
-                  ([key]) => key !== category,
-                ),
-              ),
-        }));
       },
 
       getActiveRemoteMediaServer: category => {

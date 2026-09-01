@@ -83,16 +83,16 @@ const mockGetResourceUsage = jest.fn(() => Promise.resolve({
 const mockSubscribeToModelState = jest.fn((_listener?: () => void) => jest.fn());
 const mockClearMobileModel = jest.fn(async (modality: string) => {
   const { useAppStore: appStore } = require('../../../src/stores/appStore');
-  if (modality === 'text') appStore.getState().setActiveModelId(null);
-  if (modality === 'image') appStore.getState().setActiveImageModelId(null);
+  if (modality === 'text') appStore.setState({ activeModelId: null });
+  if (modality === 'image') appStore.setState({ activeImageModelId: null });
 });
 const mockSelectMobileModel = jest.fn(async (route: any) => {
   const { useAppStore: appStore } = require('../../../src/stores/appStore');
   if (route.modality === 'text') {
-    appStore.getState().setActiveModelId(route.modelId);
+    appStore.setState({ activeModelId: route.modelId });
     appStore.getState().setLastTextModelId(route.modelId);
   } else if (route.modality === 'image') {
-    appStore.getState().setActiveImageModelId(route.modelId);
+    appStore.setState({ activeImageModelId: route.modelId });
   }
 });
 
@@ -161,7 +161,7 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
       // Inner require (the jest.mock factory is hoisted, so it can't close over the top-level
       // import); alias to avoid shadowing the module-scope useAppStore.
       const { useAppStore: appStore } = require('../../../src/stores');
-      appStore.getState().setActiveModelId(id);
+      appStore.setState({ activeModelId: id });
       appStore.getState().setLastTextModelId(id);
     }),
     loadImageModel: mockLoadImageModel,

@@ -49,7 +49,7 @@ describe('network reconnect watcher', () => {
       endpoint: 'http://192.168.1.10:7878',
       provider: 'openai-compatible',
     });
-    store.setActiveServerId(serverId);
+    useRemoteServerStore.setState({ activeServerId: serverId });
 
     startNetworkReconnectWatcher();
     await Promise.resolve();

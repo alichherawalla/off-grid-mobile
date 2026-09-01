@@ -1,10 +1,13 @@
-import { decodeModelRouteId, type ModelSelectionStore } from '@offgrid/models';
+import {
+  decodeModelRouteId,
+  type ModelSelectionStore,
+} from '@offgrid/models';
 import { remoteServerManager } from '../remoteServerManager';
-import { mobileModelSelectionProjection } from './modelSelectionProjection';
+import { mobileModelSelectionService } from './modelSelectionApplication';
 
 /** Shared LLMService calls this single persisted-selection adapter. */
 export const mobileModelSelectionStore: ModelSelectionStore = {
-  read: mobileModelSelectionProjection.read,
+  read: modality => mobileModelSelectionService.read(modality),
   async write(modality, canonicalId) {
     const route = canonicalId ? decodeModelRouteId(canonicalId) : null;
     if (canonicalId && !route) throw new Error('The selected model route is invalid');
@@ -20,6 +23,6 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
         throw new Error(`Remote ${modality} selection is not supported`);
       }
     }
-    await mobileModelSelectionProjection.write(modality, canonicalId);
+    await mobileModelSelectionService.write(modality, canonicalId);
   },
 };

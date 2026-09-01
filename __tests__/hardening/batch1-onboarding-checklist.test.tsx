@@ -33,12 +33,18 @@ import { useRemoteServerStore } from '../../src/stores/remoteServerStore';
 import { useOnboardingSteps } from '../../src/components/checklist/useOnboardingSteps';
 import { resetStores, getAppState } from '../utils/testHelpers';
 import { createDownloadedModel, createONNXImageModel } from '../utils/factories';
+import {
+  mobileRouteId,
+  refreshMobileModelServices,
+} from '../../src/services/modelServices';
+import { mobileModelSelectionService } from '../../src/services/modelServices/modelSelectionApplication';
 
 const stepById = (steps: any[], id: string) => steps.find((s) => s.id === id);
 
 describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real stores)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetStores();
+    await refreshMobileModelServices();
   });
 
   // ── case 6: after onboarding, step 1 (Download a Model) is the active/first
@@ -55,19 +61,23 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
 
   // ── cases 6→18→20→26→36: the full sequential progression. Each completion moves
   //    the "first incomplete" (active) step forward and bumps completedCount. ──
-  it('cases6-36: completing steps in order advances the active step and completedCount', () => {
+  it('cases6-36: completing steps in order advances the active step and completedCount', async () => {
     const { result, rerender } = renderHook(() => useOnboardingSteps());
 
     // Step 1: Download a Model → active step becomes "loadedModel" (case 18).
     act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
-    rerender({});
+    await act(refreshMobileModelServices);
     expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(true);
     expect(result.current.completedCount).toBe(1);
     expect(result.current.steps.find((s: any) => !s.completed)!.id).toBe('loadedModel');
 
     // Step 2: Load a Model → active step becomes "sentMessage" (case 20).
-    act(() => { useAppStore.getState().setActiveModelId('m-1'); });
-    rerender({});
+    await act(async () => {
+      await mobileModelSelectionService.write('text', mobileRouteId({
+        source: 'local', hostId: 'llama', modality: 'text', modelId: 'm-1',
+      }));
+      await refreshMobileModelServices();
+    });
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(true);
     expect(result.current.completedCount).toBe(2);
     expect(result.current.steps.find((s: any) => !s.completed)!.id).toBe('sentMessage');
@@ -100,7 +110,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
 
   // ── triedImageGen: disabled while no text model loaded, enabled once one is,
   //    completed only via the flag (NOT by merely downloading an image model). ──
-  it('triedImageGen: disabled→enabled on model load, completed only via flag', () => {
+  it('triedImageGen: disabled→enabled on model load, completed only via flag', async () => {
     const { result, rerender } = renderHook(() => useOnboardingSteps());
 
     // No model loaded → disabled, not completed.
@@ -113,8 +123,14 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     expect(stepById(result.current.steps, 'triedImageGen').completed).toBe(false);
 
     // Loading a TEXT model enables the step (disabled is keyed off activeModelId).
-    act(() => { useAppStore.getState().setActiveModelId('m-1'); });
-    rerender({});
+    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
+    await act(async () => {
+      await refreshMobileModelServices();
+      await mobileModelSelectionService.write('text', mobileRouteId({
+        source: 'local', hostId: 'llama', modality: 'text', modelId: 'm-1',
+      }));
+      await refreshMobileModelServices();
+    });
     expect(stepById(result.current.steps, 'triedImageGen').disabled).toBe(false);
     expect(stepById(result.current.steps, 'triedImageGen').completed).toBe(false);
 
@@ -152,24 +168,36 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
   //    Model", and an active remote text model satisfies "Load a Model" — no local
   //    download/activeModelId required. These are the hook's `|| remoteServers` and
   //    `|| activeRemoteTextModelId` branches. ─────────────────────────────────
-  it('downloadedModel/loadedModel also complete via remote server + remote active model', () => {
+  it('downloadedModel/loadedModel also complete via remote server + remote active model', async () => {
     const { result, rerender } = renderHook(() => useOnboardingSteps());
     expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(false);
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(false);
 
     // A remote server counts as "has any model" even with zero local downloads.
+    let serverId = '';
     act(() => {
-      useRemoteServerStore.getState().addServer({
+      serverId = useRemoteServerStore.getState().addServer({
         name: 'LAN box', endpoint: 'http://192.168.1.9:8080', provider: 'openai-compatible',
       });
+      useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+        id: 'remote/qwen', name: 'Qwen', serverId,
+        capabilities: {
+          supportsVision: false, supportsToolCalling: true, supportsThinking: false,
+        },
+        lastUpdated: new Date(0).toISOString(),
+      }]);
     });
-    rerender({});
+    await act(refreshMobileModelServices);
     expect(getAppState().downloadedModels.length).toBe(0);
     expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(true);
 
     // An active remote text model counts as "has active model" with no local activeModelId.
-    act(() => { useRemoteServerStore.getState().setActiveRemoteTextModelId('remote/qwen'); });
-    rerender({});
+    await act(async () => {
+      await mobileModelSelectionService.write('text', mobileRouteId({
+        source: 'remote', hostId: serverId, modality: 'text', modelId: 'remote/qwen',
+      }));
+      await refreshMobileModelServices();
+    });
     expect(getAppState().activeModelId).toBeNull();
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(true);
   });

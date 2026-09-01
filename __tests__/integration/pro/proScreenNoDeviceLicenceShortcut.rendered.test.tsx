@@ -22,12 +22,12 @@ describe('Pro entry from Home', () => {
     app.setOnboardingComplete(true);
     app.setDeviceInfo(createDeviceInfo());
     app.setDownloadedModels([model]);
-    app.setActiveModelId(model.id);
+    useAppStore.setState({ activeModelId: model.id });
   });
 
   afterEach(() => {
     const app = useAppStore.getState();
-    app.setActiveModelId(null);
+    useAppStore.setState({ activeModelId: null });
     app.setDownloadedModels([]);
     app.setOnboardingComplete(false);
   });

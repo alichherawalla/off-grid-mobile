@@ -394,7 +394,6 @@ type ModelStateSyncDeps = {
   activeModel: DownloadedModel | undefined;
   modelDeps: any;
   activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } } | null;
-  activeRemoteTextModelId: string | null;
   isModelLoading: boolean;
   setSupportsVision: (v: boolean) => void;
   setSupportsToolCalling: (v: boolean) => void;
@@ -402,7 +401,7 @@ type ModelStateSyncDeps = {
   prepareSelectedModel?: boolean;
 };
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
-  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking, prepareSelectedModel } = deps;
+  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking, prepareSelectedModel } = deps;
   const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
   // A brand-new chat is an explicit request to get the selected model ready. Start the
   // real load here so the chat renders its authoritative loading state before Send.
@@ -411,7 +410,6 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     if (
       !prepareSelectedModel ||
       activeModelInfo.isRemote ||
-      !!activeRemoteTextModelId ||
       !activeModel ||
       !activeModelId ||
       isModelReady(activeModel)
@@ -421,7 +419,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     });
     // modelDeps is a render snapshot; the identity inputs below own when a new load starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepareSelectedModel, activeModelInfo.isRemote, activeRemoteTextModelId, activeModelId, activeModel?.filePath]);
+  }, [prepareSelectedModel, activeModelInfo.isRemote, activeModelId, activeModel?.filePath]);
 
   useEffect(() => {
     // Single capability rule (engines.activeTextCapabilities); vision keys on activeModelInfo.isRemote.
@@ -432,13 +430,13 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
     }).vision);
   }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading]);
   useEffect(() => {
-    // Same rule; tools/thinking key on activeRemoteTextModelId (preserved from the prior branch).
+    // Use the same canonical route source for tool and thinking capabilities.
     const caps = activeTextCapabilities({
-      isRemote: !!activeRemoteTextModelId,
+      isRemote: activeModelInfo.isRemote,
       remoteCaps: activeRemoteModel?.capabilities,
       model: activeModel,
     });
     setSupportsToolCalling(caps.tools);
     setSupportsThinking(caps.thinking);
-  }, [activeModelId, activeModel?.engine, isModelLoading, activeRemoteTextModelId, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
+  }, [activeModelId, activeModel?.engine, isModelLoading, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
 }

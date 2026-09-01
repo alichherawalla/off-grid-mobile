@@ -35,7 +35,6 @@ function run(deps: Partial<Parameters<typeof useChatModelStateSync>[0]>) {
       activeModel: undefined,
       modelDeps: {},
       activeRemoteModel: null,
-      activeRemoteTextModelId: null,
       isModelLoading: false,
       setSupportsVision,
       setSupportsToolCalling,
@@ -64,7 +63,6 @@ describe('useChatModelStateSync — capability derivation (characterization)', (
   it('remote model: caps come from the declared remote capabilities', () => {
     const r = run({
       activeModelInfo: { isRemote: true },
-      activeRemoteTextModelId: 'srv/llama',
       activeRemoteModel: { capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: false } },
     });
     expect(r).toEqual({ vision: true, tools: true, thinking: false });

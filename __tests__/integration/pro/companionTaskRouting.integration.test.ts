@@ -69,7 +69,7 @@ describe('Mobile companion task routing integration', () => {
 
   beforeEach(() => {
     useSyncStore.getState().reset();
-    useRemoteServerStore.getState().setActiveRemoteTextModelId(null);
+    useRemoteServerStore.setState({ activeRemoteTextModelId: null });
     addDesktop('office-tools', 'desktop-office', 'Office Mac');
     addDesktop('studio-tools', 'desktop-studio', 'Studio Mac');
     useMcpStore.getState().setEnabledTools(['computer_use']);

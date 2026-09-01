@@ -110,7 +110,7 @@ describe('useOnboardingSteps', () => {
   });
 
   it('marks loadedModel as completed when activeModelId is set', () => {
-    act(() => { useAppStore.getState().setActiveModelId('model-1'); });
+    act(() => { useAppStore.setState({ activeModelId: 'model-1' }); });
     const { result } = renderHook(() => useOnboardingSteps());
     const step = result.current.steps.find((s: any) => s.id === 'loadedModel');
     expect(step.completed).toBe(true);
