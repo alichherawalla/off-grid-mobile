@@ -21,7 +21,7 @@ async function* embeddingChunks(request: GenerationRequest): AsyncIterable<Gener
   const input = operation(request);
   if (input.type !== 'embedding') throw new TypeError('An embedding operation is required');
   yield {
-    output: { type: 'embedding', vectors: await embeddingService.embedBatchRaw(input.inputs) },
+    output: { type: 'embedding', vectors: await embeddingService.embedBatch(input.inputs) },
     finishReason: 'stop',
   };
 }

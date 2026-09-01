@@ -17,7 +17,7 @@ import { getToolExtensions } from './tools/extensions';
 import { Platform } from 'react-native';
 import { selectRelevantTools } from './litertToolSelector';
 import { isMcpEnabled } from './mcpContextBoost';
-import { selectToolsByEmbedding } from './toolEmbeddingRouter';
+import { executeMobileToolSelection } from './mobileSidecarGeneration';
 import { providerRegistry } from './providers';
 import { getActiveEngineService, isRemoteTextModelActive } from './engines';
 import type { GenerationOptions, CompletionResult } from './providers/types';
@@ -1193,7 +1193,7 @@ async function selectEffectiveSchemas(
     all.length > TOOL_SELECTION_THRESHOLD
   ) {
     try {
-      const selected = await selectToolsByEmbedding(
+      const selected = await executeMobileToolSelection(
         getLastUserQuery(messages),
         extSchemas,
         MCP_TOOL_ROUTE_TOPK,

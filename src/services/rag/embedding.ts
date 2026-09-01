@@ -7,7 +7,6 @@ import { modelResidencyManager } from '../modelResidency';
 export const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
 const EMBEDDING_DIMENSION = 384;
 const EMBEDDING_CTX_SIZE = 512;
-/** Residency key for the embedding model so it's accounted for in the RAM budget. */
 const EMBEDDING_RESIDENT_KEY = 'embedding';
 /** Approx resident footprint: ~25MB Q8 weights + working set + 512-ctx KV. */
 export const EMBEDDING_RESIDENT_MB = 90;
@@ -53,13 +52,8 @@ class EmbeddingService {
   private async doLoad(): Promise<void> {
     const modelPath = await this.ensureModelCopied();
     logger.log('[Embedding] Loading embedding model...');
-    // Load through the residency manager's global lock so this small RAG model
-    // never initializes alongside another model load (the single load gateway).
-    // The init is bounded by a timeout so a stalled native load (the
-    // ThreadPool::startWorkers hang) releases the lock instead of wedging a
-    // concurrent chat-model load and tripping the OS watchdog.
     this.context = await modelResidencyManager.runExclusive('load:embedding', async () => {
-      const ctx = await withTimeout(
+      const context = await withTimeout(
         initLlama({
           model: modelPath,
           embedding: true,
@@ -76,17 +70,11 @@ class EmbeddingService {
           onOrphan: (orphan) => { (orphan as LlamaContext)?.release?.().catch(() => {}); },
         },
       );
-      // Register WHILE still holding the global load lock, so the embedding model's
-      // footprint counts against the RAM budget atomically with the load. Registering
-      // after runExclusive returns left a window where the model was in RAM but absent
-      // from the residents set — a concurrent chat-model load could then over-admit
-      // against stale free-RAM and OOM. It loads on the tiny MiniLM context and can be
-      // evicted as a last-resort sidecar; it never evicts the active generation model.
       modelResidencyManager.register(
         { key: EMBEDDING_RESIDENT_KEY, type: 'embedding', sizeMB: EMBEDDING_RESIDENT_MB },
         () => this.unload(),
       );
-      return ctx;
+      return context;
     });
     logger.log('[Embedding] Model loaded successfully');
   }
@@ -107,11 +95,6 @@ class EmbeddingService {
   }
 
   async embed(text: string): Promise<number[]> {
-    const { executeMobileEmbedding } = await import('../mobileSidecarGeneration');
-    return (await executeMobileEmbedding([text]))[0];
-  }
-
-  async embedRaw(text: string): Promise<number[]> {
     if (!this.context) throw new Error('Embedding model not loaded. Call load() first.');
     try {
       const result = await (this.context as any).embedding(text);
@@ -133,13 +116,8 @@ class EmbeddingService {
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
-    const { executeMobileEmbedding } = await import('../mobileSidecarGeneration');
-    return executeMobileEmbedding(texts);
-  }
-
-  async embedBatchRaw(texts: string[]): Promise<number[][]> {
     const results: number[][] = [];
-    for (const text of texts) results.push(await this.embedRaw(text));
+    for (const text of texts) results.push(await this.embed(text));
     return results;
   }
 
@@ -151,9 +129,6 @@ class EmbeddingService {
         logger.warn('[Embedding] Error releasing context (bridge may be torn down):', e);
       }
       this.context = null;
-      // Stop counting against the RAM budget. Safe to call during eviction: the
-      // residency manager's unload runs inside the held lock and release() only
-      // mutates the map (it never re-acquires the lock), so there's no deadlock.
       modelResidencyManager.release(EMBEDDING_RESIDENT_KEY);
       logger.log('[Embedding] Model unloaded');
     }

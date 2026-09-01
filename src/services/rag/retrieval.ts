@@ -1,5 +1,6 @@
 import { ragDatabase, RagSearchResult } from './database';
 import { embeddingService } from './embedding';
+import { executeMobileEmbedding } from '../mobileSidecarGeneration';
 import { cosineSimilarity } from './vectorMath';
 import logger from '../../utils/logger';
 
@@ -47,7 +48,7 @@ class RetrievalService {
 
     let queryVec: number[];
     try {
-      queryVec = await embeddingService.embed(query);
+      queryVec = (await executeMobileEmbedding([query]))[0];
     } catch (err) {
       logger.error('[Retrieval] Failed to embed query, falling back', err);
       return ragDatabase.getChunksByProject(projectId, topK);

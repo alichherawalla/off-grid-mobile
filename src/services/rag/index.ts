@@ -2,6 +2,7 @@ import { ragDatabase } from './database';
 import { chunkDocument } from './chunking';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
+import { executeMobileEmbedding } from '../mobileSidecarGeneration';
 import { documentService } from '../documentService';
 import { writePastedNote } from './pastedNote';
 import {
@@ -90,7 +91,7 @@ class RagService {
     try {
       await embeddingService.load();
       const texts = chunks.map(c => c.content);
-      const embeddings = await embeddingService.embedBatch(texts);
+      const embeddings = await executeMobileEmbedding(texts);
       const entries = rowIds.map((rowId, i) => ({
         chunkRowid: rowId,
         docId,
@@ -165,7 +166,7 @@ class RagService {
       try {
         await embeddingService.load();
         const texts = chunks.map(c => c.content);
-        const embeddings = await embeddingService.embedBatch(texts);
+        const embeddings = await executeMobileEmbedding(texts);
         const entries = chunks.map((chunk, i) => ({
           chunkRowid: chunk.id,
           docId: doc.id,

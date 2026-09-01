@@ -150,7 +150,7 @@ async function embedTool(tool: RoutableTool, expectedDim?: number): Promise<numb
   if (cached && cached.h === hash && (expectedDim == null || cached.v.length === expectedDim)) {
     return cached.v;
   }
-  const vec = await embeddingService.embedRaw(text);
+  const vec = await embeddingService.embed(text);
   toolEmbeddingCache.set(tool.function.name, { h: hash, v: vec });
   schedulePersist();
   return vec;
@@ -171,7 +171,7 @@ export async function selectToolsByEmbeddingRaw(
   }
   await hydrateCache();
   await embeddingService.load();
-  const queryVec = await embeddingService.embedRaw(query);
+  const queryVec = await embeddingService.embed(query);
   const tokens = queryTokens(query);
   const scored: Array<{ name: string; score: number }> = [];
   for (const tool of tools) {
@@ -191,8 +191,7 @@ export async function selectToolsByEmbedding(
   tools: RoutableTool[],
   topK: number,
 ): Promise<string[]> {
-  const { executeMobileToolSelection } = await import('./mobileSidecarGeneration');
-  return executeMobileToolSelection(query, tools, topK);
+  return selectToolsByEmbeddingRaw(query, tools, topK);
 }
 
 /** Test helper: clear the in-memory cache and re-arm hydration. */
