@@ -8,9 +8,7 @@ jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));
 jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({ coordinatedDownloads: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn(), getActiveDownloads: jest.fn(async () => []) } }));
 const mockRetryImageDownload = jest.fn(async (_entry: any, _sink: any) => {});
-const mockCancelSyntheticImageDownload = jest.fn(async (_modelId: string) => {});
 jest.mock('../../../src/services/imageDownloadRetry', () => ({ retryImageDownload: (entry: any, sink: any) => mockRetryImageDownload(entry, sink) }));
-jest.mock('../../../src/services/imageDownloadActions', () => ({ cancelSyntheticImageDownload: (modelId: string) => mockCancelSyntheticImageDownload(modelId) }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
 import { Platform } from 'react-native';
@@ -56,8 +54,8 @@ describe('imageProvider', () => {
     useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
     useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl' }));
     await imageProvider.cancel('image:sdxl');
-    expect(mockCancelSyntheticImageDownload).toHaveBeenCalledWith('sdxl');
     expect(useDownloadStore.getState().downloads['image:sdxl/m']).toBeUndefined();
+    expect(mockBg.cancelDownload).not.toHaveBeenCalled();
   });
 
   it('falls back to a native cancel when no UI op is registered', async () => {

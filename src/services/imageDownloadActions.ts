@@ -8,57 +8,37 @@ import { modelLibrary, hardwareService, backgroundDownloadService } from '../ser
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import { ONNXImageModel } from '../types';
-import {
-  isActiveStatus,
-  modelDownloadProjection,
-  useDownloadStore,
-} from '../stores/downloadStore';
-import { makeImageModelKey } from '../utils/modelKey';
 import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTypes';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
 import logger from '../utils/logger';
 import {
   downloadSequentialImageFiles,
-  type ImageMultifileRuntime,
   type ImageMultifileSpec,
 } from './adapters/downloads/sequentialImageFileAdapter';
+import {
+  shouldActivateFirstImageModel,
+  type DownloadOperationOwner,
+  type ImageDownloadPlan,
+} from '@offgrid/models';
+import {
+  attachImageTransfer,
+  beginImageDownload,
+  beginImageDownloadProcessing,
+  cancelOwnedImageDownload,
+  completeImageDownload,
+  failImageDownload,
+  isActiveImageDownload,
+  mobileImageDownloadPlan,
+  removeImageDownloadRecord,
+  reportImageDownloadProgress,
+} from './adapters/downloads/imageDownloadWorkflowAdapter';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
 // here). Re-exported for existing importers.
 export type { ImageDownloadDeps } from './imageModelDownloadTypes';
 
-interface ImageMetadata {
-  imageDownloadType: 'zip' | 'multifile';
-  imageModelName: string;
-  imageModelDescription: string;
-  imageModelSize: number;
-  imageModelStyle?: string;
-  imageModelBackend?: 'mnn' | 'qnn' | 'coreml';
-  imageModelRepo?: string;
-  imageModelAttentionVariant?: string;
-  imageModelDownloadUrl?: string;
-  imageModelHuggingFaceFiles?: { path: string; size: number }[];
-  imageModelCoremlFiles?: { path: string; relativePath: string; size: number; downloadUrl: string }[];
-}
-
-const activeMultifileDownloads = new Map<string, ImageMultifileRuntime>();
 const USER_CANCELLED_ERROR = 'user_cancelled';
-
-/** Build a synthetic downloadId for multi-file flows that don't go through WorkManager. */
-function makeMultifileId(modelId: string): string {
-  return `image-multi:${modelId}`;
-}
-
-function startMultifileRuntime(modelId: string): ImageMultifileRuntime {
-  const runtime: ImageMultifileRuntime = { controller: new AbortController() };
-  activeMultifileDownloads.set(modelId, runtime);
-  return runtime;
-}
-
-function clearMultifileRuntime(modelId: string) {
-  activeMultifileDownloads.delete(modelId);
-}
 
 function isCancelledError(error: unknown): boolean {
   // Local assertNotCancelled sentinel OR the cross-service `.cancelled` convention
@@ -68,25 +48,12 @@ function isCancelledError(error: unknown): boolean {
     || (error as Error & { cancelled?: boolean }).cancelled === true;
 }
 
-function assertNotCancelled(modelId: string, runtime: ImageMultifileRuntime) {
-  const stillVisible = !!useDownloadStore.getState().downloads[makeImageModelKey(modelId)];
-  if (runtime.controller.signal.aborted || !stillVisible) {
-    if (!runtime.controller.signal.aborted) runtime.controller.abort();
-    throw new Error(USER_CANCELLED_ERROR);
-  }
+function assertNotCancelled(owner: DownloadOperationOwner) {
+  if (owner.signal.aborted || !isActiveImageDownload(owner)) throw new Error(USER_CANCELLED_ERROR);
 }
 
 export async function cancelSyntheticImageDownload(modelId: string): Promise<void> {
-  const runtime = activeMultifileDownloads.get(modelId);
-  if (!runtime) return;
-  runtime.controller.abort();
-  // Drop a part still waiting for a slot NOW — it has no native downloadId yet, so
-  // cancelDownload can't reach it (else it promotes, briefly starts, then cancels).
-  // The queue key is the part's modelId param, == makeImageModelKey(modelId).
-  backgroundDownloadService.cancelQueued(makeImageModelKey(modelId));
-  if (runtime.currentDownloadId) {
-    await backgroundDownloadService.cancelDownload(runtime.currentDownloadId).catch(() => {});
-  }
+  await cancelOwnedImageDownload(modelId, backgroundDownloadService);
 }
 
 async function ensureDirectory(path: string): Promise<void> {
@@ -102,39 +69,34 @@ async function cleanupImageModelDir(modelId: string): Promise<void> {
   }
 }
 
-function setMultifileFailed(syntheticId: string, deps: ImageDownloadDeps, message?: string): void {
+function setMultifileFailed(owner: DownloadOperationOwner, deps: ImageDownloadDeps, message?: string): void {
   deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(message)));
-  modelDownloadProjection.reportStatus(syntheticId, 'failed', {
-    message: message || 'Multi-file download failed',
-  });
+  failImageDownload(owner, message || 'Multi-file download failed');
 }
 
 async function downloadSequentialFiles(opts: {
   modelInfo: ImageModelDescriptor;
-  runtime: ImageMultifileRuntime;
-  syntheticId: string;
+  owner: DownloadOperationOwner;
   modelDir: string;
   files: ImageMultifileSpec[];
 }): Promise<void> {
-  const { modelInfo, runtime, syntheticId, modelDir, files } = opts;
+  const { modelInfo, owner, modelDir, files } = opts;
   await downloadSequentialImageFiles({
     modelId: modelInfo.id,
-    runtime,
+    signal: owner.signal,
     modelDir,
     files,
     transfers: backgroundDownloadService,
-    isCancelled: () =>
-      !useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)],
+    isCancelled: () => owner.signal.aborted || !isActiveImageDownload(owner),
+    onTransferStarted: id => attachImageTransfer(
+      owner, id, downloadId => backgroundDownloadService.cancelDownload(downloadId),
+    ),
     onProgress: (bytes, total) =>
-      modelDownloadProjection.reportProgress(syntheticId, bytes, total, Date.now()),
+      reportImageDownloadProgress(owner, bytes, total),
   });
 }
 
 /** Remove the entry from the store. Use after register-and-notify or on error. */
-function removeStoreEntry(modelId: string) {
-  modelDownloadProjection.remove(makeImageModelKey(modelId));
-}
-
 /** Build the registerable ONNXImageModel — one definition so the zip / on-disk /
  *  multifile branches can't drift. */
 function buildImageModel(modelInfo: ImageModelDescriptor, modelPath: string): ONNXImageModel {
@@ -148,73 +110,41 @@ function buildImageModel(modelInfo: ImageModelDescriptor, modelPath: string): ON
 /** Register a downloaded image model, activate if first, then cleanup + alert. */
 export async function registerAndNotify(
   deps: ImageDownloadDeps,
-  opts: { imageModel: ONNXImageModel; modelName: string },
+  opts: { imageModel: ONNXImageModel; modelName: string; owner?: DownloadOperationOwner },
 ) {
   const { imageModel, modelName } = opts;
   await modelLibrary.addDownloadedImageModel(imageModel);
   deps.addDownloadedImageModel(imageModel);
   // Auto-load the first image model unless onboarding is still active (Step 13 needs
   // activeImageModelId null).
-  if (!deps.activeImageModelId && deps.triedImageGen) {
+  if (shouldActivateFirstImageModel({
+    hasActiveModel: Boolean(deps.activeImageModelId),
+    imageOnboardingComplete: deps.triedImageGen,
+  })) {
     await deps.selectActiveImageModel(imageModel);
   }
-  removeStoreEntry(imageModel.id);
+  if (opts.owner) completeImageDownload(opts.owner);
+  else removeImageDownloadRecord(imageModel.id);
   deps.setAlertState(showAlert('Success', `${modelName} downloaded successfully!`));
-}
-
-/** Add (or refuse-add) an image entry to the store. Returns true if a new entry was created. */
-function addImageEntry(opts: {
-  modelId: string;
-  downloadId: string;
-  fileName: string;
-  totalBytes: number;
-  metadata: ImageMetadata;
-}): boolean {
-  const { modelId, downloadId, fileName, totalBytes, metadata } = opts;
-  const modelKey = makeImageModelKey(modelId);
-  const existing = useDownloadStore.getState().downloads[modelKey];
-  if (existing && isActiveStatus(existing.status)) return false;
-  if (existing) {
-    // Failed/etc. entry from a prior attempt - reuse logical record.
-    modelDownloadProjection.retry(modelKey, downloadId);
-    return true;
-  }
-  modelDownloadProjection.admit({
-    modelKey,
-    downloadId,
-    modelId: `image:${modelId}`,
-    fileName,
-    quantization: '',
-    modelType: 'image',
-    status: 'pending',
-    bytesDownloaded: 0,
-    totalBytes,
-    combinedTotalBytes: totalBytes,
-    progress: 0,
-    createdAt: Date.now(),
-    metadataJson: JSON.stringify(metadata),
-  });
-  return true;
 }
 
 /** Wire complete + error listeners for a zip-style download. */
 function wireZipListeners(
-  ctx: { downloadId: string; modelId: string; deps: ImageDownloadDeps },
+  ctx: { downloadId: string; modelId: string; deps: ImageDownloadDeps; owner: DownloadOperationOwner },
   onCompleteWork: () => Promise<void>,
 ) {
-  const { downloadId, deps } = ctx;
+  const { downloadId, deps, owner } = ctx;
   const unsubComplete = backgroundDownloadService.onComplete(downloadId, async () => {
     unsubComplete(); unsubError();
     try { await onCompleteWork(); } catch (e: any) {
       deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(e?.message || 'Failed to process model')));
-      modelDownloadProjection.reportStatus(downloadId, 'failed', { message: e?.message || 'Failed to process model' });
+      failImageDownload(owner, e?.message || 'Failed to process model');
     }
   });
   const unsubError = backgroundDownloadService.onError(downloadId, (ev) => {
     unsubComplete(); unsubError();
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(ev.reason)));
-    // useDownloads at app root has already routed this to setStatus('failed').
-    // Keep the entry visible so the user can retry/remove. No removeStoreEntry here.
+    failImageDownload(owner, ev.reason || 'Download failed');
   });
 }
 
@@ -222,56 +152,36 @@ function wireZipListeners(
 export async function downloadHuggingFaceModel(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
+  suppliedPlan?: ImageDownloadPlan,
 ): Promise<void> {
   if (!modelInfo.huggingFaceRepo || !modelInfo.huggingFaceFiles) {
     deps.setAlertState(showAlert('Error', 'Invalid HuggingFace model configuration'));
     return;
   }
-  const syntheticId = makeMultifileId(modelInfo.id);
-  const created = addImageEntry({
-    modelId: modelInfo.id,
-    downloadId: syntheticId,
-    fileName: modelInfo.id,
-    totalBytes: modelInfo.size,
-    metadata: {
-      imageDownloadType: 'multifile',
-      imageModelName: modelInfo.name,
-      imageModelDescription: modelInfo.description,
-      imageModelSize: modelInfo.size,
-      imageModelStyle: modelInfo.style,
-      imageModelBackend: modelInfo.backend,
-      imageModelRepo: modelInfo.huggingFaceRepo,
-      imageModelHuggingFaceFiles: modelInfo.huggingFaceFiles,
-    },
-  });
-  if (!created) return;
-  const runtime = startMultifileRuntime(modelInfo.id);
+  const plan = suppliedPlan ?? mobileImageDownloadPlan(modelInfo);
+  const owner = beginImageDownload(plan);
+  if (!owner) return;
   try {
     const imageModelsDir = modelLibrary.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
     await ensureDirectory(imageModelsDir);
     await ensureDirectory(modelDir);
 
-    const files = modelInfo.huggingFaceFiles.map((file) => ({
-      relativePath: file.path,
-      size: file.size,
-      url: `https://huggingface.co/${modelInfo.huggingFaceRepo}/resolve/main/${file.path}`,
-    }));
-    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
-    assertNotCancelled(modelInfo.id, runtime);
-    modelDownloadProjection.beginProcessing(syntheticId);
-    assertNotCancelled(modelInfo.id, runtime);
+    await downloadSequentialFiles({ modelInfo, owner, modelDir, files: [...plan.artifacts] });
+    assertNotCancelled(owner);
+    beginImageDownloadProcessing(owner);
+    assertNotCancelled(owner);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
-    await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, modelDir), modelName: modelInfo.name });
+    await registerAndNotify(deps, {
+      imageModel: buildImageModel(modelInfo, modelDir), modelName: modelInfo.name, owner,
+    });
   } catch (error: any) {
     if (isCancelledError(error)) {
       await cleanupImageModelDir(modelInfo.id);
       return;
     }
-    setMultifileFailed(syntheticId, deps, error?.message);
+    setMultifileFailed(owner, deps, error?.message);
     await cleanupImageModelDir(modelInfo.id);
-  } finally {
-    clearMultifileRuntime(modelInfo.id);
   }
 }
 
@@ -279,29 +189,13 @@ export async function downloadHuggingFaceModel(
 export async function downloadCoreMLMultiFile(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
+  suppliedPlan?: ImageDownloadPlan,
 ): Promise<void> {
   if (!modelInfo.coremlFiles || modelInfo.coremlFiles.length === 0) return;
 
-  const syntheticId = makeMultifileId(modelInfo.id);
-  const created = addImageEntry({
-    modelId: modelInfo.id,
-    downloadId: syntheticId,
-    fileName: modelInfo.id,
-    totalBytes: modelInfo.size,
-    metadata: {
-      imageDownloadType: 'multifile',
-      imageModelName: modelInfo.name,
-      imageModelDescription: modelInfo.description,
-      imageModelSize: modelInfo.size,
-      imageModelStyle: modelInfo.style,
-      imageModelBackend: modelInfo.backend,
-      imageModelRepo: modelInfo.repo,
-      imageModelAttentionVariant: modelInfo.attentionVariant,
-      imageModelCoremlFiles: modelInfo.coremlFiles,
-    },
-  });
-  if (!created) return;
-  const runtime = startMultifileRuntime(modelInfo.id);
+  const plan = suppliedPlan ?? mobileImageDownloadPlan(modelInfo);
+  const owner = beginImageDownload(plan);
+  if (!owner) return;
 
   try {
     const imageModelsDir = modelLibrary.getImageModelsDirectory();
@@ -309,24 +203,21 @@ export async function downloadCoreMLMultiFile(
     await ensureDirectory(imageModelsDir);
     await ensureDirectory(modelDir);
 
-    const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
-    await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
-    assertNotCancelled(modelInfo.id, runtime);
-    modelDownloadProjection.beginProcessing(syntheticId);
-    assertNotCancelled(modelInfo.id, runtime);
+    await downloadSequentialFiles({ modelInfo, owner, modelDir, files: [...plan.artifacts] });
+    assertNotCancelled(owner);
+    beginImageDownloadProcessing(owner);
+    assertNotCancelled(owner);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
-    await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
+    await registerAndNotify(deps, {
+      imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name, owner,
+    });
     if (modelInfo.repo) downloadCoreMLTokenizerFiles(resolvedModelDir, modelInfo.repo).catch(() => {});
   } catch (error: any) {
     await cleanupImageModelDir(modelInfo.id);
     if (isCancelledError(error)) return;
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    modelDownloadProjection.reportStatus(syntheticId, 'failed', {
-      message: error?.message || 'CoreML download failed',
-    });
-  } finally {
-    clearMultifileRuntime(modelInfo.id);
+    failImageDownload(owner, error?.message || 'CoreML download failed');
   }
 }
 
@@ -335,30 +226,19 @@ export async function proceedWithDownload(
   deps: ImageDownloadDeps,
 ): Promise<void> {
   deps.setAlertState({ ...showAlert('Download Started', 'Keep app open while image model processes'), closeLabel: '' });
-  if (modelInfo.huggingFaceRepo && modelInfo.huggingFaceFiles) {
-    await downloadHuggingFaceModel(modelInfo, deps);
+  const plan = mobileImageDownloadPlan(modelInfo);
+  if (plan.kind === 'huggingface') {
+    await downloadHuggingFaceModel(modelInfo, deps, plan);
     return;
   }
-  if (modelInfo.coremlFiles && modelInfo.coremlFiles.length > 0) {
-    await downloadCoreMLMultiFile(modelInfo, deps);
+  if (plan.kind === 'coreml') {
+    await downloadCoreMLMultiFile(modelInfo, deps, plan);
     return;
   }
 
   // Zip flow: native WorkManager downloads; useDownloads routes progress; we wire completion.
-  const fileName = `${modelInfo.id}.zip`;
-  const metadata: ImageMetadata = {
-    imageDownloadType: 'zip',
-    imageModelName: modelInfo.name,
-    imageModelDescription: modelInfo.description,
-    imageModelSize: modelInfo.size,
-    imageModelStyle: modelInfo.style,
-    imageModelBackend: modelInfo.backend,
-    imageModelAttentionVariant: modelInfo.attentionVariant,
-    imageModelDownloadUrl: modelInfo.downloadUrl,
-  };
-  const modelKey = makeImageModelKey(modelInfo.id);
-  const existing = useDownloadStore.getState().downloads[modelKey];
-  if (existing && isActiveStatus(existing.status)) return;
+  const fileName = plan.fileName;
+  const modelKey = plan.modelKey;
 
   // Guard: if files already exist on disk, register without re-downloading.
   const imageModelsDir = modelLibrary.getImageModelsDirectory();
@@ -372,30 +252,27 @@ export async function proceedWithDownload(
 
   // Publish a QUEUED row IMMEDIATELY, before awaiting the (slot-limited) native start (same
   // pattern as text) — else a queued image download has no store entry until a slot frees.
-  const placeholderId = `queued:${modelKey}`; // reconciled to the real id on start
-  const created = addImageEntry({
-    modelId: modelInfo.id,
-    downloadId: placeholderId,
-    fileName,
-    totalBytes: modelInfo.size,
-    metadata,
-  });
-  if (!created) return; // an active entry already owns this key (coalesced double-tap)
+  const owner = beginImageDownload(plan);
+  if (!owner) return;
   try {
     const downloadInfo = await backgroundDownloadService.startDownload({
       url: modelInfo.downloadUrl, fileName, modelId: `image:${modelInfo.id}`,
       modelKey,
       modelType: 'image',
       totalBytes: modelInfo.size,
-      metadataJson: JSON.stringify(metadata),
+      metadataJson: plan.metadataJson,
     });
     // Reconcile the queued placeholder row to the real native downloadId so progress /
     // complete / error events (routed via downloadIdIndex) reach this entry.
-    modelDownloadProjection.retry(modelKey, downloadInfo.downloadId);
-    wireZipListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
+    attachImageTransfer(
+      owner,
+      downloadInfo.downloadId,
+      downloadId => backgroundDownloadService.cancelDownload(downloadId),
+    );
+    wireZipListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps, owner }, async () => {
       const zipPath = `${imageModelsDir}/${fileName}`;
       try {
-        modelDownloadProjection.beginProcessing(downloadInfo.downloadId);
+        beginImageDownloadProcessing(owner);
         if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
         const t0 = Date.now();
         await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
@@ -410,7 +287,9 @@ export async function proceedWithDownload(
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
         await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
         await RNFS.unlink(zipPath).catch(() => {});
-        await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name });
+        await registerAndNotify(deps, {
+          imageModel: buildImageModel(modelInfo, resolvedModelDir), modelName: modelInfo.name, owner,
+        });
       } catch (e) {
         await RNFS.unlink(zipPath).catch(() => {});
         await RNFS.unlink(modelDir).catch(() => {});
@@ -422,11 +301,11 @@ export async function proceedWithDownload(
     // Cancelled while still queued (no slot) rejects with `.cancelled` — a user
     // cancellation, not a failure: drop the placeholder row quietly.
     if (isCancelledError(error)) {
-      removeStoreEntry(modelInfo.id);
+      completeImageDownload(owner);
       return;
     }
     // Native start failed: fail the placeholder row so the card/Manager offer retry.
-    modelDownloadProjection.reportStatus(placeholderId, 'failed', { message: error?.message || 'Download failed' });
+    failImageDownload(owner, error?.message || 'Download failed');
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
   }
 }

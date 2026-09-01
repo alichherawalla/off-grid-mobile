@@ -3,11 +3,6 @@ import { runSequentialArtifactDownload } from '@offgrid/models';
 import { statFile } from '../../../utils/fileStat';
 import type { DownloadParams } from '../../backgroundDownloadTypes';
 
-export interface ImageMultifileRuntime {
-  controller: AbortController;
-  currentDownloadId?: string;
-}
-
 export interface ImageMultifileSpec {
   relativePath: string;
   size: number;
@@ -28,11 +23,12 @@ const CANCELLED = 'user_cancelled';
 /** Native file/transfer adapter for Shared sequential artifact orchestration. */
 export async function downloadSequentialImageFiles(input: {
   modelId: string;
-  runtime: ImageMultifileRuntime;
+  signal: AbortSignal;
   modelDir: string;
   files: ImageMultifileSpec[];
   transfers: ImageMultifileTransferPort;
   isCancelled(): boolean;
+  onTransferStarted(downloadId: string): void;
   onProgress(bytes: number, total: number): void;
 }): Promise<void> {
   const result = await runSequentialArtifactDownload({
@@ -42,7 +38,7 @@ export async function downloadSequentialImageFiles(input: {
       url: file.url,
       sizeBytes: file.size,
     })),
-    signal: input.runtime.controller.signal,
+    signal: input.signal,
     interruptedError: CANCELLED,
     ports: {
       // Descriptor sizes can drift. Always enter the transfer port and pass the
@@ -66,16 +62,13 @@ export async function downloadSequentialImageFiles(input: {
           onProgress,
         });
         downloadIdPromise?.then(downloadId => {
-          input.runtime.currentDownloadId = downloadId;
-          if (input.runtime.controller.signal.aborted) {
+          input.onTransferStarted(downloadId);
+          if (input.signal.aborted) {
             input.transfers.cancelDownload(downloadId).catch(() => undefined);
           }
         }).catch(() => undefined);
         await promise;
-        if (input.isCancelled() && !input.runtime.controller.signal.aborted) {
-          input.runtime.controller.abort();
-        }
-        input.runtime.currentDownloadId = undefined;
+        if (input.isCancelled() || input.signal.aborted) throw new Error(CANCELLED);
         return {
           writtenBytes: artifact.sizeBytes ?? 0,
           totalBytes: artifact.sizeBytes ?? 0,

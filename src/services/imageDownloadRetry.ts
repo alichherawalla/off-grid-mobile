@@ -15,6 +15,11 @@ import { coordinatedDownloads as backgroundDownloadService } from './modelServic
 import { selectMobileModel } from './modelServices';
 import logger from '../utils/logger';
 import {
+  imageDownloadRetryAction,
+  isSyntheticImageDownloadId,
+  parseImageDownloadMetadata,
+} from '@offgrid/models';
+import {
   proceedWithDownload,
   type ImageDownloadDeps,
 } from './imageDownloadActions';
@@ -22,12 +27,7 @@ import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { resumeImageDownload } from './imageDownloadResume';
 
 export function parseEntryMetadata(entry: DownloadEntry): Record<string, any> | null {
-  if (!entry.metadataJson) return null;
-  try {
-    return JSON.parse(entry.metadataJson);
-  } catch {
-    return null;
-  }
+  return parseImageDownloadMetadata(entry.metadataJson) ?? null;
 }
 
 async function resumeImageFinalization(
@@ -82,27 +82,6 @@ async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: Al
  * its post-download finalization re-run, not a fresh download. Returns true when it
  * handled the retry so the caller can stop.
  */
-async function tryResumeImageFinalization(
-  entry: DownloadEntry | undefined,
-  setAlertState: (s: AlertState) => void,
-): Promise<boolean> {
-  if (!entry) return false;
-  const totalBytes = entry?.combinedTotalBytes || entry?.totalBytes || 0;
-  const hasAllBytes = totalBytes > 0 && (entry?.bytesDownloaded || 0) >= totalBytes;
-  let nativeMainStatus: string | undefined;
-  try {
-    const activeRows = await backgroundDownloadService.getActiveDownloads();
-    nativeMainStatus = activeRows.find(row => row.downloadId === entry.downloadId)?.status;
-  } catch {
-    // Best-effort native state check only.
-  }
-  if (entry.status === 'processing' || hasAllBytes || nativeMainStatus === 'completed') {
-    await resumeImageFinalization(entry, setAlertState);
-    return true;
-  }
-  return false;
-}
-
 /**
  * Re-run finalization when the bytes are present. Otherwise, restart the download.
  * User feedback goes through the injected alert port; no screen owns this policy.
@@ -113,7 +92,23 @@ export async function retryImageDownload(
   setAlertState: (s: AlertState) => void,
 ): Promise<void> {
   logger.log('[DownloadDebug] Image retry requested', { modelKey: entry?.modelKey, modelId: entry?.modelId, status: entry?.status });
-  if (await tryResumeImageFinalization(entry, setAlertState)) return;
-  if (entry) await retryIosImageDownload(entry, setAlertState);
+  if (!entry) return;
+  let nativeMainStatus: string | undefined;
+  try {
+    const activeRows = await backgroundDownloadService.getActiveDownloads();
+    nativeMainStatus = activeRows.find(row => row.downloadId === entry.downloadId)?.status;
+  } catch {
+    // Best-effort native state check only.
+  }
+  const action = imageDownloadRetryAction({
+    status: entry.status,
+    bytesDownloaded: entry.bytesDownloaded,
+    totalBytes: entry.combinedTotalBytes || entry.totalBytes,
+    nativeStatus: nativeMainStatus,
+    platformCanResume: false,
+    syntheticTransfer: isSyntheticImageDownloadId(entry.downloadId),
+  });
+  if (action === 'finalize') await resumeImageFinalization(entry, setAlertState);
+  else await retryIosImageDownload(entry, setAlertState);
   backgroundDownloadService.startProgressPolling();
 }

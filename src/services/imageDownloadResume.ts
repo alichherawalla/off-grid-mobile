@@ -7,15 +7,23 @@ import { resolveCoreMLModelDir } from '../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../types';
 import {
   DownloadEntry,
-  modelDownloadProjection,
 } from '../stores/downloadStore';
 import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
-import { makeImageModelKey } from '../utils/modelKey';
 import logger from '../utils/logger';
+import {
+  imageDownloadRecoveryAction,
+  isImageArchiveReady,
+  parseImageDownloadMetadata,
+  type ImageDownloadMetadata,
+} from '@offgrid/models';
+import {
+  failImageDownloadRecord,
+  removeImageDownloadRecord,
+} from './adapters/downloads/imageDownloadWorkflowAdapter';
 
-type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: Record<string, any>; deps: ImageDownloadDeps };
+type ResumeCtx = { entry: DownloadEntry; modelId: string; metadata: ImageDownloadMetadata; deps: ImageDownloadDeps };
 
 function getExpectedZipBytes(entry: DownloadEntry): number {
   return entry.totalBytes || entry.combinedTotalBytes || 0;
@@ -42,32 +50,18 @@ async function validateModelDir(modelDir: string, backend?: string): Promise<boo
 }
 
 async function validateZipArtifact(zipPath: string, expectedBytes: number): Promise<boolean> {
-  if (!(await RNFS.exists(zipPath))) return false;
+  const exists = await RNFS.exists(zipPath);
+  if (!exists) return false;
 
   const actualSize = (await statFile(zipPath))?.size ?? 0;
-
-  if (!Number.isFinite(actualSize) || actualSize <= 0) {
-    return false;
-  }
-
-  if (expectedBytes > 0) {
-    const sizeDiffPercent = Math.abs(actualSize - expectedBytes) / expectedBytes;
-    if (sizeDiffPercent > 0.001) {
-      return false;
-    }
-  }
-
+  let header: string | undefined;
   try {
-    const header = await RNFS.read(zipPath, 4, 0, 'ascii');
-    if (!header.startsWith('PK')) {
-      return false;
-    }
+    header = await RNFS.read(zipPath, 4, 0, 'ascii');
   } catch {
     // RNFS.read() can be flaky on some bridges. Size validation is the stronger
     // signal here, so treat header-read failure as inconclusive rather than fatal.
   }
-
-  return true;
+  return isImageArchiveReady({ exists, actualBytes: actualSize, expectedBytes, header });
 }
 
 async function cleanupInvalidArtifact(path: string): Promise<void> {
@@ -87,9 +81,10 @@ async function reDownloadFromMetadata(ctx: ResumeCtx): Promise<void> {
   const { modelId, metadata, deps } = ctx;
   if (!metadata.imageModelDownloadUrl) {
     // No URL to re-fetch from. Surface a clear, honest failure rather than a stale native error.
-    modelDownloadProjection.reportStatus(ctx.entry.downloadId, 'failed', {
-      message: 'Download could not be re-downloaded. Remove it and download again.',
-    });
+    failImageDownloadRecord(
+      ctx.entry.downloadId,
+      'Download could not be re-downloaded. Remove it and download again.',
+    );
     return;
   }
   logger.log(`[ImageDownload] resumeImageDownload zip - staged bytes gone, re-downloading ${modelId}`);
@@ -114,6 +109,21 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     };
   };
 
+  const extractAndRegister = async (): Promise<void> => {
+    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
+    await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
+    try {
+      await unzip(zipPath, modelDir);
+      await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
+    } catch (error) {
+      await RNFS.unlink(modelDir).catch(() => {});
+      throw error;
+    }
+    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
+    await RNFS.unlink(zipPath).catch(() => {});
+    await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
+  };
+
   const modelDirExists = await RNFS.exists(modelDir);
   const zipExists = await RNFS.exists(zipPath);
   const modelDirValid = await validateModelDir(modelDir, metadata.imageModelBackend);
@@ -126,34 +136,28 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
     await cleanupInvalidArtifact(zipPath);
   }
 
-  if (modelDirValid) {
-    const existingModels = await modelLibrary.getDownloadedImageModels();
-    if (existingModels.some(m => m.id === modelId)) {
-      // Already registered — stale native row caused a spurious processing entry.
-      // Remove the download entry silently without re-alerting the user.
-      logger.log(`[ImageDownload] resumeImageDownload zip - already registered, removing stale entry ${modelId}`);
-      modelDownloadProjection.remove(makeImageModelKey(modelId));
-      return;
-    }
+  const existingModels = modelDirValid ? await modelLibrary.getDownloadedImageModels() : [];
+  const initialAction = imageDownloadRecoveryAction({
+    kind: 'zip',
+    modelDirectoryValid: modelDirValid,
+    archiveValid: zipValid,
+    alreadyRegistered: existingModels.some(m => m.id === modelId),
+    canRestart: Boolean(metadata.imageModelDownloadUrl),
+  });
+
+  if (initialAction === 'remove-stale') {
+    logger.log(`[ImageDownload] resumeImageDownload zip - already registered, removing stale entry ${modelId}`);
+    removeImageDownloadRecord(modelId);
+    return;
+  }
+  if (initialAction === 'register-directory') {
     logger.log(`[ImageDownload] resumeImageDownload zip - model dir exists, registering ${modelId}`);
     await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
     return;
   }
-
-  if (zipValid) {
-    if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-    await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
-    try {
-      await unzip(zipPath, modelDir);
-      await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
-    } catch (error) {
-      await RNFS.unlink(modelDir).catch(() => {});
-      throw error;
-    }
-    await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
-    await RNFS.unlink(zipPath).catch(() => {});
+  if (initialAction === 'extract-archive') {
     logger.log(`[ImageDownload] resumeImageDownload zip - zip found, unzipping ${modelId}`);
-    await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
+    await extractAndRegister();
     return;
   }
 
@@ -163,40 +167,38 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   } catch (error: any) {
     const recoveredModelDirValid = await validateModelDir(modelDir, metadata.imageModelBackend);
     const recoveredZipValid = await validateZipArtifact(zipPath, expectedZipBytes);
-    if (recoveredModelDirValid) {
+    const recoveryAction = imageDownloadRecoveryAction({
+      kind: 'zip',
+      modelDirectoryValid: recoveredModelDirValid,
+      archiveValid: recoveredZipValid,
+      nativeMoveFailed: true,
+      canRestart: Boolean(metadata.imageModelDownloadUrl),
+    });
+    if (recoveryAction === 'register-directory') {
       await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
       return;
     }
-    // Completed bytes are gone and nothing valid survives — re-download instead of dead-ending
-    // on the same "no such file" every retry (the iOS temp-purge symptom). Does not rethrow.
-    if (!recoveredZipValid) {
+    if (recoveryAction === 'restart-transfer') {
       logger.warn(`[ImageDownload] resumeImageDownload zip - completed bytes unrecoverable (${error?.message || error}) — re-downloading ${modelId}`);
       await reDownloadFromMetadata(ctx);
       return;
     }
+    if (recoveryAction === 'fail-missing-files') throw error;
   }
-  if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-  await RNFS.writeFile(`${modelDir}/_zip_name`, entry.fileName, 'utf8').catch(() => {});
-  try {
-    await unzip(zipPath, modelDir);
-    await ensureImageExtractionComplete({ backend: metadata.imageModelBackend, modelDir, zipPath, modelId });
-  } catch (error) {
-    await RNFS.unlink(modelDir).catch(() => {});
-    throw error;
-  }
-  await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
-  await RNFS.unlink(zipPath).catch(() => {});
   logger.log(`[ImageDownload] resumeImageDownload zip - moved from WorkManager, unzipping ${modelId}`);
-  await registerAndNotify(deps, { imageModel: await buildModel(modelDir), modelName: metadata.imageModelName });
+  await extractAndRegister();
 }
 
 async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
   const { entry, modelId, metadata, deps } = ctx;
   const modelDir = `${modelLibrary.getImageModelsDirectory()}/${modelId}`;
   const modelDirExists = await RNFS.exists(modelDir);
-  if (!modelDirExists) {
+  const action = imageDownloadRecoveryAction({
+    kind: 'multifile', modelDirectoryValid: modelDirExists, archiveValid: false,
+  });
+  if (action === 'fail-missing-files') {
     logger.warn(`[ImageDownload] resumeImageDownload multifile - model dir missing, marking failed ${modelId}`);
-    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
+    failImageDownloadRecord(entry.downloadId, 'Download files missing. Please retry.');
     return;
   }
   const imageModel: ONNXImageModel = {
@@ -213,12 +215,11 @@ export async function resumeImageDownload(entry: DownloadEntry, deps: ImageDownl
   const modelId = entry.modelId.replace('image:', '');
   logger.log(`[ImageDownload] resumeImageDownload modelId=${modelId} downloadId=${entry.downloadId}`);
 
-  let metadata: Record<string, any> | null = null;
-  try { metadata = entry.metadataJson ? JSON.parse(entry.metadataJson) : null; } catch { /* ignore */ }
+  const metadata = parseImageDownloadMetadata(entry.metadataJson);
 
   if (!metadata?.imageDownloadType) {
     logger.warn(`[ImageDownload] resumeImageDownload no metadata for ${modelId} - marking failed`);
-    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: 'Could not resume: missing download metadata' });
+    failImageDownloadRecord(entry.downloadId, 'Could not resume: missing download metadata');
     return;
   }
 
@@ -230,6 +231,6 @@ export async function resumeImageDownload(entry: DownloadEntry, deps: ImageDownl
     }
   } catch (error: any) {
     logger.error(`[ImageDownload] resumeImageDownload failed for ${modelId}`, error?.message);
-    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: error?.message || 'Could not resume download after restart' });
+    failImageDownloadRecord(entry.downloadId, error?.message || 'Could not resume download after restart');
   }
 }

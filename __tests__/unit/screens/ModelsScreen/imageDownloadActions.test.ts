@@ -75,6 +75,7 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
     { getState: () => mockStoreApi },
   ),
   modelDownloadProjection: {
+    get: (modelKey: string) => mockDownloads[modelKey],
     admit: (entry: any) => mockStoreApi.add(entry),
     retry: (modelKey: string, downloadId: string) =>
       mockStoreApi.retryEntry(modelKey, downloadId),
@@ -394,6 +395,7 @@ describe('imageDownloadActions', () => {
     await downloadPromise;
 
     expect(mockStoreApi.setStatus).not.toHaveBeenCalledWith('image-multi:test-hf-model', 'failed', expect.anything());
+    expect(mockAddDownloadedImageModel).not.toHaveBeenCalled();
   });
 
   it('cancelSyntheticImageDownload cancels native download when currentDownloadId is set', async () => {

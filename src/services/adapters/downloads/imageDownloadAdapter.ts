@@ -15,12 +15,18 @@ import { coordinatedDownloads as backgroundDownloadService } from '../../modelSe
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
-import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
+import {
+  imageDownloadRetryAction,
+  isSyntheticImageDownloadId,
+  downloadRetryPolicy,
+  mapDownloadStoreStatus,
+  uniformDownloadId,
+} from '@offgrid/models';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
 import { mobileRouteId } from '../../modelServices/mobileRoute';
 import { selectMobileRoute } from '../../modelServices/mobileLLMService';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
-import { cancelSyntheticImageDownload } from '../../imageDownloadActions';
+import { cancelOwnedImageDownload } from './imageDownloadWorkflowAdapter';
 import { retryImageDownload } from '../../imageDownloadRetry';
 import type { AlertState } from '../../../utils/alertState';
 
@@ -34,7 +40,7 @@ export function setImageDownloadAlertSink(sink?: ImageDownloadAlertSink): void {
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const bareId = (storeModelId: string): string => storeModelId.replace(/^image:/, '');
 const modelIdOf = (id: string): string => id.replace(/^image:/, '');
-const isMultifile = (e: DownloadEntry): boolean => e.downloadId.startsWith('image-multi:');
+const isMultifile = (e: DownloadEntry): boolean => isSyntheticImageDownloadId(e.downloadId);
 const imageEntries = (): DownloadEntry[] =>
   Object.values(useDownloadStore.getState().downloads).filter(e => e.modelType === 'image');
 const findEntry = (modelId: string): DownloadEntry | undefined =>
@@ -100,9 +106,9 @@ export const imageProvider: DownloadProvider = {
     const modelId = modelIdOf(id);
     const entry = findEntry(modelId);
     if (!entry) return;
+    if (await cancelOwnedImageDownload(modelId)) return;
     useDownloadStore.getState().remove(entry.modelKey);
     if (isMultifile(entry)) {
-      await cancelSyntheticImageDownload(modelId).catch(() => {});
       const rows = await backgroundDownloadService.getActiveDownloads().catch(() => []);
       await Promise.all(rows
         .filter(row => row.modelId === `image:${modelId}`)
@@ -122,13 +128,14 @@ export const imageProvider: DownloadProvider = {
     // or a multi-file download (synthetic `image-multi:` row), has NO live native row to resume:
     // retryDownload throws "Download not found" on EVERY tap (device-confirmed, B6). In those cases
     // fall back to the service recovery path (cancels the stale row, fetches fresh).
-    const policy = downloadRetryPolicy({
+    const action = imageDownloadRetryAction({
+      status: entry.status,
+      bytesDownloaded: entry.bytesDownloaded,
+      totalBytes: entry.combinedTotalBytes || entry.totalBytes,
       platformCanResume: Platform.OS === 'android',
       syntheticTransfer: isMultifile(entry),
-      hasNativeTransfer: Boolean(entry.downloadId),
-      status: entry.status,
     });
-    if (policy.retry === 'resume-native') {
+    if (action === 'resume-native') {
       try {
         useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
         await backgroundDownloadService.retryDownload(entry.downloadId);
