@@ -15,6 +15,8 @@ import { modelResidencyManager } from '../modelResidency';
 import { providerRegistry } from '../providers';
 import type { GenerationOptions, LLMProvider } from '../providers/types';
 import { liteRTService } from '../litert';
+import { llmService } from '../llm';
+import { resolveToolCalls } from '../generationToolLoop';
 import { mobileExecutionAdapterId } from './mobileRoute';
 
 function textAndAttachments(
@@ -77,6 +79,18 @@ function providerOptions(request: GenerationRequest): GenerationOptions {
 
 type PendingChunk = { value?: GenerationChunk; error?: unknown; done?: boolean };
 
+function providerToolArguments(value: string | Record<string, unknown>): Record<string, unknown> {
+  if (typeof value !== 'string') return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && !Array.isArray(parsed) && typeof parsed === 'object'
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 /** Convert the callback provider bridge into the shared async chunk boundary. */
 async function* providerChunks(
   provider: LLMProvider,
@@ -98,17 +112,29 @@ async function* providerChunks(
       onToken: content => push({ value: { content } }),
       onReasoning: reasoning => push({ value: { reasoning } }),
       onComplete: result => {
-        result.toolCalls?.forEach((call, index) => push({
+        const nativeCalls = result.toolCalls?.map(call => ({
+          id: call.id,
+          name: call.name,
+          arguments: providerToolArguments(call.arguments),
+        })) ?? [];
+        // Keep Mobile's compatibility parser at the provider boundary. Some local
+        // templates emit valid tool markup as text instead of native tool-call deltas.
+        const resolved = resolveToolCalls(result.content, nativeCalls);
+        resolved.effectiveToolCalls.forEach((call, index) => push({
           value: {
             toolCallDeltas: [{
               index,
               id: call.id,
               name: call.name,
-              argumentsDelta: call.arguments,
+              argumentsDelta: JSON.stringify(call.arguments),
             }],
           },
         }));
-        push({ value: { finishReason: result.toolCalls?.length ? 'tool_calls' : 'stop' } });
+        push({
+          value: {
+            finishReason: resolved.effectiveToolCalls.length ? 'tool_calls' : 'stop',
+          },
+        });
         push({ done: true });
       },
       onError: error => push({ error }),
@@ -239,6 +265,9 @@ function adapter(id: string): GenerationAdapter {
       if (model.source === 'local' && model.providerId === 'litert') {
         yield* liteRTChunks(request, context);
         return;
+      }
+      if (model.source === 'local' && request.identity?.conversationId) {
+        await llmService.prepareConversationBoundary(request.identity.conversationId);
       }
       const provider = providerFor(model);
       if (model.source === 'remote' && provider.getLoadedModelId() !== model.id) {

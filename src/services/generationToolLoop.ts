@@ -954,6 +954,18 @@ function augmentSystemPromptForTools(
   return out;
 }
 
+/** Compatibility projection while shared owns tool rounds and Mobile owns engine syntax. */
+export function mobileToolPromptMessages(
+  messages: Message[],
+  enabledToolIds: string[],
+  hasTools: boolean,
+): Message[] {
+  if (!hasTools) return messages;
+  const nativeToolCalling =
+    isLiteRTActive() || isUsingRemote() || llmService.supportsToolCalling();
+  return augmentSystemPromptForTools(messages, enabledToolIds, nativeToolCalling);
+}
+
 interface CallLLMOptions {
   onStream?: (data: StreamToken) => void;
   forceRemote?: boolean;
@@ -1041,7 +1053,7 @@ function containsToolCallMarkup(text: string): boolean {
 /** If no structured tool calls, try parsing tool-call markup (<tool_call>, <invoke>, namespaced
  *  wrappers, <function_call>) or Gemma's native format from text. Also collects tool calls from
  *  any registered extensions and strips their syntax from display text. */
-function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
+export function resolveToolCalls(fullResponse: string, toolCalls: ToolCall[]) {
   let effectiveToolCalls: ToolCall[] =
     toolCalls.length > 0 ? [...toolCalls] : [];
   let displayResponse = fullResponse;
@@ -1160,7 +1172,7 @@ function emitToolStepLimitNotice(
  * models keep the full set. Routing never enters chat/context.
  */
 async function selectEffectiveSchemas(
-  ctx: ToolLoopContext,
+  messages: Message[],
   builtInSchemas: any[],
   extSchemas: any[],
 ): Promise<any[]> {
@@ -1182,7 +1194,7 @@ async function selectEffectiveSchemas(
   ) {
     try {
       const selected = await selectToolsByEmbedding(
-        getLastUserQuery(ctx.messages),
+        getLastUserQuery(messages),
         extSchemas,
         MCP_TOOL_ROUTE_TOPK,
       );
@@ -1214,7 +1226,7 @@ async function selectEffectiveSchemas(
   try {
     // Route over the MCP/ext tools only — built-in tools are always kept.
     const selected = await selectRelevantTools(
-      getLastUserQuery(ctx.messages),
+      getLastUserQuery(messages),
       extSchemas,
       generate,
     );
@@ -1232,6 +1244,18 @@ async function selectEffectiveSchemas(
     );
     return all;
   }
+}
+
+/** Keep Mobile's proven schema-budget projection until shared owns tool selection policy. */
+export async function mobileEffectiveToolSchemas(
+  messages: Message[],
+  enabledToolIds: string[],
+): Promise<any[]> {
+  const builtInSchemas = getToolsAsOpenAISchema(enabledToolIds);
+  const extSchemas = getToolExtensions().flatMap(
+    extension => extension.getOpenAISchemas?.() ?? [],
+  );
+  return selectEffectiveSchemas(messages, builtInSchemas, extSchemas);
 }
 
 /**
@@ -1255,7 +1279,7 @@ export async function runToolLoop(
   );
 
   const effectiveSchemas = await selectEffectiveSchemas(
-    ctx,
+    ctx.messages,
     builtInSchemas,
     extSchemas,
   );

@@ -20,12 +20,17 @@ import {
   mobileGenerationResidency,
   reconcileMobileGenerationAdapters,
 } from './generationAdapters';
+import { mobileConversationPort, mobileToolExecutor } from './toolPorts';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 export const mobileGenerationService = new GenerationService(
   mobileLLMService,
   mobileGenerationResidency,
+  {
+    tools: mobileToolExecutor,
+    conversations: mobileConversationPort,
+  },
 );
 const generationAdapterRegistrations = new Map<string, () => void>();
 

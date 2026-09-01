@@ -3,7 +3,6 @@ import { llmService } from './llm';
 import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
-import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
 import logger from '../utils/logger';
@@ -19,7 +18,10 @@ import {
   generateRemoteResponseImpl,
   generateRemoteWithToolsImpl,
 } from './generationRemoteHelpers';
-import { generateSharedChatResponse } from './modelServices/sharedGenerationFacade';
+import {
+  generateSharedChatResponse,
+  generateSharedToolResponse,
+} from './modelServices/sharedGenerationFacade';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };
@@ -168,46 +170,11 @@ class GenerationService {
       onFirstToken?: () => void;
     },
   ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
-    // Route to remote provider if active
-    if (this.isUsingRemoteProvider()) {
-      return this.generateRemoteWithTools(conversationId, messages, options);
-    }
-    // Local generation with tools
-    const { enabledToolIds, projectId, ...callbacks } = options;
-    if (!(await this.prepareGeneration(conversationId))) return;
-
-    try {
-      const outcome = await runToolLoop({
-        conversationId,
-        messages,
-        enabledToolIds,
-        projectId,
-        callbacks,
-        ...this.buildToolLoopHandlers(),
-      });
-
-      // If aborted, stopGeneration() already handled cleanup.
-      logger.log(`[GenService][ToolLoop] runToolLoop done — aborted=${this.abortRequested}, streamingContent=${this.state.streamingContent?.length ?? 0}ch, tokenBuffer=${this.tokenBuffer?.length ?? 0}ch`);
-      if (!this.abortRequested) {
-        this.forceFlushTokens();
-        const store = useChatStore.getState();
-        logger.log(`[GenService][ToolLoop] pre-finalize — streamingForConvId=${store.streamingForConversationId}, targetConvId=${conversationId}, streamingMsg=${store.streamingMessage?.length ?? 0}ch`);
-        const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
-        store.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
-        logger.log(`[GenService][ToolLoop] finalizeStreamingMessage called — convId=${conversationId}`);
-        this.checkSharePrompt();
-        this.resetState();
-      }
-      return outcome;
-    } catch (error) {
-      if (this.abortRequested) return;
-      logger.error('[GenerationService] Tool generation error:', error);
-      // Even on error, keep any partial the user already saw — keepShownPartialOrClear flushes the token
-      // buffer to the store first (do NOT discard it here), then finalizes.
-      this.keepShownPartialOrClear();
-      this.resetState();
-      throw error;
-    }
+    return generateSharedToolResponse(this, {
+      conversationId,
+      messages,
+      ...options,
+    });
   }
 
   /**
