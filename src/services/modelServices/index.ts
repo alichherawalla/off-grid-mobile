@@ -27,6 +27,7 @@ import { mobileConversationPort, mobileToolExecutor } from './toolPorts';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
+import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
@@ -94,6 +95,7 @@ export function startMobileModelServices(): () => void {
     cleanups.push(useRemoteServerStore.subscribe(refresh));
     cleanups.push(useWhisperStore.subscribe(refresh));
     cleanups.push(subscribeToModelState(refresh));
+    mobileModelDownloadCoordinator.hydrate().catch(() => undefined);
     refreshMobileModelServices().catch(() => undefined);
   }
   return stopMobileModelServices;
@@ -103,6 +105,7 @@ export function stopMobileModelServices(): void {
   if (!started) return;
   started = false;
   for (const cleanup of cleanups.splice(0)) cleanup();
+  mobileModelDownloadCoordinator.shutdown().catch(() => undefined);
 }
 
 export function activeMobileModel(modality: ActiveModelSnapshot['modality']): ActiveModelSnapshot {
