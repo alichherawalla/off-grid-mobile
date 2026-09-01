@@ -3,11 +3,9 @@ import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { useDownloadStore } from '../../stores/downloadStore';
-import { makeImageModelKey } from '../../utils/modelKey';
 import {
   modelLibrary,
   hardwareService,
-  backgroundDownloadService,
   selectMobileModel,
 } from '../../services';
 import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
@@ -15,9 +13,10 @@ import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { BackendFilter, ImageFilterDimension, ImageModelDescriptor } from './types';
 import { matchesSdVersionFilter } from './utils';
-import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { startImageModelDownload as downloadImageModel, type ImageDownloadDeps } from '../../services/imageModelDownloadOwner';
 import { resumeImageDownload } from '../../services/imageDownloadResume';
+import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
+import { uniformDownloadId } from '@offgrid/models';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>([]);
@@ -189,21 +188,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleDownloadImageModel = (modelInfo: ImageModelDescriptor) =>
     downloadImageModel(modelInfo, makeDeps());
 
-  // Cancel by reading the store entry's downloadId; for synthetic multifile
-  // ids the native cancel is a no-op (downloadFileTo is in-process), but
-  // the store remove is what matters for UI.
-  const handleCancelImageDownload = async (modelId: string) => {
-    const modelKey = makeImageModelKey(modelId);
-    const entry = useDownloadStore.getState().downloads[modelKey];
-    if (!entry) return;
-    useDownloadStore.getState().remove(modelKey);
-    if (!entry.downloadId) return;
-    if (entry.downloadId.startsWith('image-multi:')) {
-      await cancelSyntheticImageDownload(modelId).catch(() => {});
-      return;
-    }
-    await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
-  };
+  const handleCancelImageDownload = (modelId: string) =>
+    modelDownloadRegistry.cancel(uniformDownloadId('image', modelId));
 
   return {
     availableHFModels, hfModelsLoading, hfModelsError,

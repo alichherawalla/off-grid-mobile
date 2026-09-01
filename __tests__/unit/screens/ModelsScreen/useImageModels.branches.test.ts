@@ -7,7 +7,7 @@
  * - hardware recommendation effect: qnn / mnn / all backend selection + userChangedBackendFilter guard
  * - isRecommendedModel guards (no rec, backend mismatch, qnnVariant, recommendedModels, default true)
  * - filteredHFModels filters (recommended-only, backend, style, sd version, downloaded, query)
- * - handleCancelImageDownload: missing entry, no downloadId, synthetic multi, native cancel
+ * - handleCancelImageDownload delegates to the download control plane
  * - loadDownloadedImageModels
  */
 
@@ -30,6 +30,7 @@ const mockMatchesSdVersionFilter = jest.fn();
 const mockCancelSynthetic = jest.fn();
 const mockStoreRemove = jest.fn();
 const mockStoreGetState = jest.fn();
+const mockRegistryCancel = jest.fn(async () => {});
 
 jest.mock('../../../../src/stores', () => ({
   useAppStore: (selector?: any) => mockUseAppStore(selector),
@@ -74,6 +75,10 @@ jest.mock('../../../../src/screens/ModelsScreen/utils', () => ({
 jest.mock('../../../../src/services/imageDownloadActions', () => ({
   handleDownloadImageModel: jest.fn(),
   cancelSyntheticImageDownload: (...a: any[]) => mockCancelSynthetic(...a),
+}));
+
+jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  modelDownloadRegistry: { cancel: (id: string) => mockRegistryCancel(id) },
 }));
 
 const setAlertState = jest.fn();
@@ -306,45 +311,16 @@ describe('filteredHFModels', () => {
 // ── handleCancelImageDownload ─────────────────────────────────────────
 
 describe('handleCancelImageDownload', () => {
-  it('returns early when there is no store entry', async () => {
-    setDownloads({});
+  it('delegates one uniform image id to the download control plane', async () => {
     const { result } = renderHook(() => useImageModels(setAlertState));
     await act(async () => { await result.current.handleCancelImageDownload('m1'); });
-    expect(mockStoreRemove).not.toHaveBeenCalled();
-    expect(mockCancelDownload).not.toHaveBeenCalled();
+    expect(mockRegistryCancel).toHaveBeenCalledWith('image:m1');
   });
 
-  it('removes entry but skips native cancel when entry has no downloadId', async () => {
-    setDownloads({ 'image:m1': { downloadId: '', modelKey: 'image:m1' } });
+  it('surfaces a download control-plane failure', async () => {
+    mockRegistryCancel.mockRejectedValueOnce(new Error('boom'));
     const { result } = renderHook(() => useImageModels(setAlertState));
-    await act(async () => { await result.current.handleCancelImageDownload('m1'); });
-    expect(mockStoreRemove).toHaveBeenCalledWith('image:m1');
-    expect(mockCancelDownload).not.toHaveBeenCalled();
-    expect(mockCancelSynthetic).not.toHaveBeenCalled();
-  });
-
-  it('cancels synthetic multi-file downloads without calling native cancel', async () => {
-    setDownloads({ 'image:m1': { downloadId: 'image-multi:m1', modelKey: 'image:m1' } });
-    const { result } = renderHook(() => useImageModels(setAlertState));
-    await act(async () => { await result.current.handleCancelImageDownload('m1'); });
-    expect(mockCancelSynthetic).toHaveBeenCalledWith('m1');
-    expect(mockCancelDownload).not.toHaveBeenCalled();
-  });
-
-  it('calls native cancelDownload for a normal downloadId', async () => {
-    setDownloads({ 'image:m1': { downloadId: 'native-7', modelKey: 'image:m1' } });
-    const { result } = renderHook(() => useImageModels(setAlertState));
-    await act(async () => { await result.current.handleCancelImageDownload('m1'); });
-    expect(mockCancelDownload).toHaveBeenCalledWith('native-7');
-  });
-
-  it('swallows native cancel rejection', async () => {
-    mockCancelDownload.mockRejectedValueOnce(new Error('boom'));
-    setDownloads({ 'image:m1': { downloadId: 'native-7', modelKey: 'image:m1' } });
-    const { result } = renderHook(() => useImageModels(setAlertState));
-    await act(async () => {
-      await expect(result.current.handleCancelImageDownload('m1')).resolves.toBeUndefined();
-    });
+    await expect(result.current.handleCancelImageDownload('m1')).rejects.toThrow('boom');
   });
 });
 

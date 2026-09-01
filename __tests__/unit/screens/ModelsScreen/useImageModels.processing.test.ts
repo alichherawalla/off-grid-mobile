@@ -121,7 +121,7 @@ describe('useImageModels processing resume', () => {
         expect.objectContaining({
           addDownloadedImageModel,
           activeImageModelId: null,
-          setActiveImageModelId,
+          selectActiveImageModel: expect.any(Function),
           setAlertState,
           triedImageGen: true,
         }),
