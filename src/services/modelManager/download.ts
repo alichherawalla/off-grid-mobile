@@ -15,7 +15,7 @@ import { buildDownloadedModel, persistDownloadedModel } from './storage';
 import logger from '../../utils/logger';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
-import { extractBaseName } from './scan';
+import { modelProjectorLocalName } from '@offgrid/models';
 
 /**
  * The on-disk projector name for a model — QUANT-INDEPENDENT (built from extractBaseName = name+variant,
@@ -23,23 +23,7 @@ import { extractBaseName } from './scan';
  * existence check then skips re-downloading the projector when a second quant is fetched, and the repair
  * path resolves to the identical name (no more `…-Q4_K_M-mmproj.gguf` vs `…-mmproj-F16.gguf` divergence).
  */
-export function mmProjLocalName(ggufFileName: string, mmProjSourceName?: string): string {
-  const base = extractBaseName(ggufFileName);
-  // Build the on-disk name as `<model-base>-mmproj-<precision>.gguf`, keeping ONLY the projector's own
-  // precision token from its source name and dropping every model-name token wherever it sits.
-  //  - `<model-base>` prefix → two repos that both ship `mmproj-F16.gguf` can't collide on disk.
-  //  - MODEL-quant-independent (extractBaseName drops the model quant) → every quant shares ONE projector file.
-  //  - precision-only projector portion → the on-disk stem always matches the model, so mmProjBelongsToModel
-  //    keeps the link. The old `/mmproj.*$/` swallowed a model name the repo put AFTER "mmproj"
-  //    (ggml-org ships `mmproj-<ModelName>-<quant>.gguf`), doubling the stem → the link was cleared and vision
-  //    never initialized ("Multimodal support not enabled" — device 2026-07-23, SmolVLM/Qwen2.5-VL on iOS).
-  // The projector's own precision is the token immediately before `.gguf`. Anchoring to `\.gguf$` makes the
-  // match LINEAR (no super-linear backtracking) and inherently takes the TRAILING token, so a precision-like
-  // token buried in a model name can never win.
-  const precision = mmProjSourceName?.match(/[-_.](iq\d[a-z0-9_]*|q\d[a-z0-9_]*|bf16|fp16|f16|f32)\.gguf$/i)?.[1];
-  const proj = precision ? `mmproj-${precision}.gguf` : 'mmproj.gguf';
-  return `${base}-${proj}`;
-}
+export const mmProjLocalName = modelProjectorLocalName;
 
 export interface MmProjRepairDownloadOpts {
   modelId: string;
