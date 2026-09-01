@@ -66,6 +66,17 @@ for (const file of files) {
     fileName === 'pro/ui/McpServersScreen.tsx' ||
     fileName === 'pro/audio/ui/AudioMessageBubble/index.tsx'
 
+  if (
+    fileName === 'pro/mcp/mcpService.ts' &&
+    /\bconnectionGenerations\b|JSON\.parse\s*\(\s*match|new\s+RegExp\s*\(|\btoolOwners\s*\[/.test(text)
+  ) {
+    report('mobile-mcp-policy-is-shared', fileName, source, source, 'local:lifecycle-parser-or-owner-policy')
+  }
+
+  if (fileName === 'src/services/modelServices/toolPorts.ts' && /selectionLimit\s*:\s*\d+/.test(text)) {
+    report('mobile-tool-selection-limit-is-shared', fileName, source, source, 'local:selection-limit')
+  }
+
   if (/\bresidencyMode\b/.test(text)) {
     report('runtime-model-has-one-lifecycle-vocabulary', fileName, source, source, 'deprecated:residencyMode')
   }

@@ -94,7 +94,6 @@ export async function mobileToolDefinitions(
     remoteModel: mobileTextEngineControl.isRemoteActive(),
     embeddingRouting: isMcpEnabled(),
     modelRouting: true,
-    selectionLimit: 12,
     schemaTokenLimit: toolSchemaTokenBudget(settings.contextLength),
   });
   if (result.fallbackReason) {
