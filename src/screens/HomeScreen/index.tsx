@@ -27,11 +27,11 @@ import {
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
-import { WHISPER_MODELS } from '../../services';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
 import { useOpenSync } from '../../hooks/useOpenSync';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { openSupportEmail } from '../../utils/supportEmail';
 
 type HomeScreenProps = {
@@ -101,7 +101,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const pendingAfterCloseRef = React.useRef<(() => void) | null>(null);
   const [whisperOpen, setWhisperOpen] = React.useState(false);
   const [voiceOpen, setVoiceOpen] = React.useState(false);
-  const whisperModelId = useWhisperStore(s => s.downloadedModelId);
+  const transcriptionRoute = useActiveMobileModel('transcription').model;
   const whisperPresentCount = useWhisperStore(
     s => s.presentModelIds?.length ?? 0,
   );
@@ -114,7 +114,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     voice: remoteLabels.voice,
     transcription: remoteLabels.transcription,
     localVoice: voiceSummary,
-    localTranscription: WHISPER_MODELS.find(m => m.id === whisperModelId)?.name,
+    localTranscription: transcriptionRoute?.source === 'local'
+      ? transcriptionRoute.name
+      : undefined,
   });
 
   // Downloaded-model counts shown in the Models card (replaces the old stats row).

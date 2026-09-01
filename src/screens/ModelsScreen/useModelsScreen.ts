@@ -8,7 +8,7 @@ import { showAlert, AlertState, initialAlertState } from '../../components/Custo
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
-import { modelManager } from '../../services';
+import { modelManager, selectMobileModel } from '../../services';
 import { isLiteRTAvailable } from '../../services/engines';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -24,13 +24,13 @@ import { isLiteRTFileName } from '../../utils/modelHelpers';
 type ZipImportDeps = {
   addDownloadedImageModel: (model: ONNXImageModel) => void;
   activeImageModelId: string | null;
-  setActiveImageModelId: (id: string | null) => void;
+  selectActiveImageModel: (model: ONNXImageModel) => Promise<void>;
   setImportProgress: (p: { fraction: number; fileName: string } | null) => void;
   setAlertState: (s: AlertState) => void;
 };
 
 async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
-  const { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState } = deps;
+  const { addDownloadedImageModel, activeImageModelId, selectActiveImageModel, setImportProgress, setAlertState } = deps;
   const imageModelsDir = modelManager.getImageModelsDirectory();
   const modelId = `local_${fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
   const modelDir = `${imageModelsDir}/${modelId}`;
@@ -68,7 +68,7 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
   };
   await modelManager.addDownloadedImageModel(imageModel);
   addDownloadedImageModel(imageModel);
-  if (!activeImageModelId) setActiveImageModelId(imageModel.id);
+  if (!activeImageModelId) await selectActiveImageModel(imageModel);
   setImportProgress({ fraction: 1, fileName });
   setAlertState(showAlert('Success', `${modelName} imported successfully!`));
 }
@@ -82,7 +82,7 @@ export function useModelsScreen() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
 
-  const { addDownloadedModel, activeImageModelId, setActiveImageModelId, addDownloadedImageModel } = useAppStore();
+  const { addDownloadedModel, activeImageModelId, addDownloadedImageModel } = useAppStore();
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);
@@ -111,7 +111,18 @@ export function useModelsScreen() {
   };
 
   const handleImportImageModelZip = (sourceUri: string, fileName: string) =>
-    importImageModelZip(sourceUri, fileName, { addDownloadedImageModel, activeImageModelId, setActiveImageModelId, setImportProgress, setAlertState });
+    importImageModelZip(sourceUri, fileName, {
+      addDownloadedImageModel,
+      activeImageModelId,
+      selectActiveImageModel: model => selectMobileModel({
+        source: 'local',
+        hostId: model.backend ?? 'image-runtime',
+        modality: 'image',
+        modelId: model.id,
+      }),
+      setImportProgress,
+      setAlertState,
+    });
 
   const isPickingRef = useRef(false);
 

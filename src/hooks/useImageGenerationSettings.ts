@@ -2,13 +2,17 @@ import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useAppStore } from '../stores';
 import { localDreamGeneratorService } from '../services/localDreamGenerator';
+import { useActiveMobileModel } from './useActiveMobileModel';
 
 export function useClearGpuCache() {
-  const { downloadedImageModels, activeImageModelId } = useAppStore();
+  const downloadedImageModels = useAppStore(state => state.downloadedImageModels);
+  const activeRoute = useActiveMobileModel('image').model;
   const [clearing, setClearing] = useState(false);
 
   const handleClearCache = useCallback(async () => {
-    const activeModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+    const activeModel = activeRoute?.source === 'local'
+      ? downloadedImageModels.find(m => m.id === activeRoute.id)
+      : null;
     if (!activeModel?.modelPath) {
       Alert.alert('No Model', 'Load an image model first.');
       return;
@@ -22,7 +26,7 @@ export function useClearGpuCache() {
     } finally {
       setClearing(false);
     }
-  }, [downloadedImageModels, activeImageModelId]);
+  }, [downloadedImageModels, activeRoute]);
 
   return { clearing, handleClearCache };
 }
