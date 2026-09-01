@@ -7,9 +7,6 @@ import {
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExecutorPort,
-  normalizeToolResult,
-  toolErrorResult,
-  toolResultModelContent,
 } from '@offgrid/models';
 import { useChatStore } from '../../stores/chatStore';
 import { Platform } from 'react-native';
@@ -25,15 +22,6 @@ import { executeMobileToolSelection } from '../mobileSidecarGeneration';
 import { selectRelevantTools } from '../litertToolSelector';
 import type { ToolCall, ToolResult } from '../tools/types';
 
-function decodeArguments(raw: string): Record<string, unknown> {
-  if (!raw.trim()) return {};
-  const value: unknown = JSON.parse(raw);
-  if (!value || Array.isArray(value) || typeof value !== 'object') {
-    throw new Error('Tool arguments must be a JSON object');
-  }
-  return value as Record<string, unknown>;
-}
-
 function toolCall(
   call: GenerationToolCall,
   context: ToolExecutionContext,
@@ -41,7 +29,9 @@ function toolCall(
   return {
     id: call.id,
     name: call.name,
-    arguments: decodeArguments(call.arguments),
+    // Shared executeGenerationTool has already decoded and schema-validated this
+    // JSON object before the platform boundary is called.
+    arguments: JSON.parse(call.arguments || '{}') as Record<string, unknown>,
     context: {
       conversationId: context.identity?.conversationId,
       projectId: context.projectId,
@@ -49,50 +39,19 @@ function toolCall(
   };
 }
 
-function toolResultMetadata(result: ToolResult): Record<string, unknown> {
-  return {
-    toolCallId: result.toolCallId,
-    name: result.name,
-    content: result.content,
-    error: result.error,
-    errorCategory: result.errorCategory,
-    status: result.status,
-    durationMs: result.durationMs,
-  };
-}
-
-/** Adapt Mobile built-in and extension tools to the shared raw tool boundary. */
+/** Invoke Mobile built-in and extension tools. Shared owns all result policy. */
 export const mobileToolExecutor: ToolExecutorPort = {
   async execute(call, context): Promise<ToolExecutionResult> {
-    const start = Date.now();
-    let mobileCall: ToolCall;
-    try {
-      mobileCall = toolCall(call, context);
-    } catch (error) {
-      const invalidCall: ToolCall = { id: call.id, name: call.name, arguments: {} };
-      const result = toolErrorResult(invalidCall, error, start);
-      return {
-        content: toolResultModelContent(result),
-        isError: true,
-        metadata: toolResultMetadata(result),
-      };
-    }
-
-    let result: ToolResult;
-    try {
-      const extension = getToolExtensions().find(item => item.canHandle(mobileCall.name));
-      const raw = extension
-        ? await extension.execute(mobileCall)
-        : await executeToolCall(mobileCall);
-      result = normalizeToolResult(mobileCall, raw);
-    } catch (error) {
-      logger.error(`[SharedTools] Tool "${mobileCall.name}" failed`, error);
-      result = toolErrorResult(mobileCall, error, start);
-    }
+    const mobileCall = toolCall(call, context);
+    const extension = getToolExtensions().find(item => item.canHandle(mobileCall.name));
+    const result = extension
+      ? await extension.execute(mobileCall)
+      : await executeToolCall(mobileCall);
     return {
-      content: toolResultModelContent(result),
-      isError: result.status === 'error',
-      metadata: toolResultMetadata(result),
+      content: result.error || result.content,
+      isError: !!result.error,
+      terminal: result.terminal,
+      metadata: { platformResult: result },
     };
   },
 };
@@ -173,18 +132,22 @@ export const mobileConversationPort: ConversationPort = {
 };
 
 export function mobileToolResult(result: ToolExecutionResult, call: GenerationToolCall): ToolResult {
-  const metadata = result.metadata ?? {};
+  const metadata = result.metadata?.toolResult;
+  const shared = metadata && typeof metadata === 'object'
+    ? metadata as Partial<ToolResult>
+    : {};
   return {
-    toolCallId: typeof metadata.toolCallId === 'string' ? metadata.toolCallId : call.id,
-    name: typeof metadata.name === 'string' ? metadata.name : call.name,
-    content: typeof metadata.content === 'string' ? metadata.content : contentText(result.content),
-    error: typeof metadata.error === 'string' ? metadata.error : undefined,
-    errorCategory: typeof metadata.errorCategory === 'string'
-      ? metadata.errorCategory as ToolResult['errorCategory']
+    toolCallId: typeof shared.toolCallId === 'string' ? shared.toolCallId : call.id,
+    name: typeof shared.name === 'string' ? shared.name : call.name,
+    content: typeof shared.content === 'string' ? shared.content : contentText(result.content),
+    error: typeof shared.error === 'string' ? shared.error : undefined,
+    errorCategory: typeof shared.errorCategory === 'string'
+      ? shared.errorCategory as ToolResult['errorCategory']
       : undefined,
-    status: metadata.status === 'ok' || metadata.status === 'empty' || metadata.status === 'error'
-      ? metadata.status
+    status: shared.status === 'ok' || shared.status === 'empty' || shared.status === 'error'
+      ? shared.status
       : result.isError ? 'error' : 'ok',
-    durationMs: typeof metadata.durationMs === 'number' ? metadata.durationMs : 0,
+    durationMs: typeof shared.durationMs === 'number' ? shared.durationMs : 0,
+    terminal: shared.terminal,
   };
 }
