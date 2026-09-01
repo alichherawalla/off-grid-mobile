@@ -1,5 +1,10 @@
 import { LlamaContext } from 'llama.rn';
-import { isNativeInferenceFailure } from '@offgrid/models';
+import {
+  estimateTextLoadMemory,
+  isNativeInferenceFailure,
+  modelMemoryFit,
+  planSafeContext,
+} from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
@@ -94,24 +99,6 @@ export async function validateModelFile(
   }
 }
 
-/**
- * Check whether the device has enough available memory to safely load a model.
- * Returns the estimated RAM needed and whether it's safe to proceed.
- *
- * Uses a 1.2x multiplier on file size as a conservative estimate of runtime RAM.
- * Context window KV cache adds additional memory proportional to context length.
- */
-/**
- * KV cache scales with both context length AND model size (layers × hidden dim).
- * We don't know the architecture before load, so approximate the per-1024-token KV
- * cost as a fraction of the model's resident weights — ~6% for an f16 cache, ~3%
- * for a quantized (q8_0/q4) cache. For a ~4 GB 7-8B model at 4096 ctx this yields
- * ~1 GB (f16) / ~0.5 GB (quant), the right order of magnitude. The previous estimate
- * (~2 MB at any size) was ~1000x too low, so the guard never caught oversized loads.
- */
-const KV_FRACTION_PER_1K_F16 = 0.06;
-const KV_FRACTION_PER_1K_QUANT = 0.03;
-
 export interface MemoryCheckArgs {
   modelFileSize: number;
   contextLength: number;
@@ -127,52 +114,54 @@ export async function checkMemoryForModel(
   estimatedMB: number;
   availableMB: number;
 }> {
-  const { modelFileSize, contextLength, getAvailableMemory, quantizedCache } =
-    args;
+  const { contextLength, getAvailableMemory } = args;
   try {
     const { available, total } = await getAvailableMemory();
     const availableMB = available / (1024 * 1024);
     const totalMB = total / (1024 * 1024);
-    // Model weights in RAM (~1x file size for mmap, up to 1.2x without)
-    const modelMB = (modelFileSize * 1.2) / (1024 * 1024);
-    // KV cache estimate: a fraction of the model weights per 1024 tokens (see above).
-    const kvFractionPer1k = quantizedCache
-      ? KV_FRACTION_PER_1K_QUANT
-      : KV_FRACTION_PER_1K_F16;
-    const kvCacheMB = (contextLength / 1024) * modelMB * kvFractionPer1k;
-    const estimatedMB = modelMB + kvCacheMB;
-    // Require at least 200MB headroom after model load for OS and app
-    const MIN_HEADROOM_MB = 200;
-    const safe = availableMB > estimatedMB + MIN_HEADROOM_MB;
-    // [MEM-SM] the pre-load fit decision — kept (surfaces the exact "it needs ~X but only Y" call
-    // on-device AND in tests via DEBUG_LOGS=1). This is the gate the qwythos refusal came from.
+    const fit = modelMemoryFit(memoryEstimate(args, contextLength), {
+      availableMB,
+      totalMB,
+    });
     logger.log(
-      `[MEM-SM] checkMemoryForModel modelMB=${Math.round(
-        modelMB,
-      )} kvMB=${Math.round(kvCacheMB)} estMB=${Math.round(
-        estimatedMB,
-      )} availMB=${Math.round(availableMB)} ctx=${contextLength} safe=${safe}`,
+      `[MEM-SM] checkMemoryForModel estMB=${Math.round(
+        fit.estimatedMB,
+      )} availMB=${Math.round(availableMB)} ctx=${contextLength} safe=${fit.safe}`,
     );
-    if (!safe) {
+    if (!fit.safe) {
       return {
         safe: false,
         reason: `Not enough memory: model needs ~${Math.round(
-          estimatedMB,
+          fit.estimatedMB,
         )}MB but only ${Math.round(
           availableMB,
         )}MB available (device total: ${Math.round(
           totalMB,
         )}MB). Try closing other apps or using a smaller model.`,
-        estimatedMB,
+        estimatedMB: fit.estimatedMB,
         availableMB,
       };
     }
-    return { safe: true, estimatedMB, availableMB };
+    return { safe: true, estimatedMB: fit.estimatedMB, availableMB };
   } catch (e: any) {
     // If we can't check memory, proceed anyway but log a warning
     logger.warn('[LLM] Could not check available memory:', e?.message || e);
     return { safe: true, estimatedMB: 0, availableMB: 0 };
   }
+}
+
+function memoryEstimate(
+  args: Pick<MemoryCheckArgs, 'modelFileSize' | 'quantizedCache'>,
+  contextLength: number,
+) {
+  const cacheType = args.quantizedCache ? 'q8_0' : 'f16';
+  return estimateTextLoadMemory({
+    weightsBytes: args.modelFileSize,
+    contextLength,
+    batchSize: 512,
+    keyCacheType: cacheType,
+    valueCacheType: cacheType,
+  });
 }
 
 /**
@@ -201,86 +190,65 @@ export async function resolveSafeContext(args: {
     override = false,
     getAvailableMemory: getMem,
   } = args;
-  // Step down from the requested size so the LARGEST fitting context wins — a request
-  // of 16384 tries 14336, 12288, ... rather than jumping straight to a hardcoded 8192
-  // ceiling and needlessly shrinking context on devices that could hold more.
-  const STEP = 2048;
-  const fallbacks: number[] = [];
-  for (let ctx = requestedCtx - STEP; ctx >= 1024; ctx -= STEP)
-    fallbacks.push(ctx);
-  for (const ctx of fallbacks) {
-    const mc = await checkMemoryForModel({
-      modelFileSize: fileSize,
-      contextLength: ctx,
-      getAvailableMemory: getMem,
-      quantizedCache,
-    });
-    if (mc.safe) {
-      logger.warn(
-        `[LLM] Memory tight — reducing context ${requestedCtx} → ${ctx} (~${mc.estimatedMB.toFixed(
-          0,
-        )}MB of ${mc.availableMB.toFixed(0)}MB available)`,
-      );
-      return { ctxLen: ctx, memCheck: mc };
-    }
+  let memory: { available: number; total: number };
+  try {
+    memory = await getMem();
+  } catch (error: any) {
+    logger.warn('[LLM] Could not check available memory:', error?.message || error);
+    return {
+      ctxLen: requestedCtx,
+      memCheck: { safe: true, estimatedMB: 0, availableMB: 0 },
+    };
   }
-  const minCtx = fallbacks.length
-    ? fallbacks[fallbacks.length - 1]
-    : requestedCtx;
-  const finalCheck = await checkMemoryForModel({
-    modelFileSize: fileSize,
-    contextLength: minCtx,
-    getAvailableMemory: getMem,
-    quantizedCache,
+  const plan = planSafeContext({
+    estimate: contextLength => memoryEstimate(
+      { modelFileSize: fileSize, quantizedCache },
+      contextLength,
+    ),
+    memory: {
+      availableMB: memory.available / (1024 * 1024),
+      totalMB: memory.total / (1024 * 1024),
+    },
+    requestedContextLength: requestedCtx,
   });
-  const modelMB = (fileSize * 1.2) / (1024 * 1024);
-  // [MEM-SM] the weights-alone refusal decision — kept. weightsExceedAvail && !override is the
-  // dead-end that used to throw a plain Error; it now throws OverridableMemoryError (Load Anyway).
+  const finalCheck = {
+    safe: plan.fit.safe,
+    estimatedMB: plan.fit.estimatedMB,
+    availableMB: plan.fit.availableMB,
+  };
+  if (plan.fit.safe) {
+    logger.warn(
+      `[LLM] Memory tight — reducing context ${requestedCtx} → ${plan.contextLength} (~${finalCheck.estimatedMB.toFixed(
+        0,
+      )}MB of ${finalCheck.availableMB.toFixed(0)}MB available)`,
+    );
+    return { ctxLen: plan.contextLength, memCheck: finalCheck };
+  }
   logger.log(
-    `[MEM-SM] resolveSafeContext gate modelMB=${Math.round(
-      modelMB,
-    )} availMB=${Math.round(
+    `[MEM-SM] resolveSafeContext gate availMB=${Math.round(
       finalCheck.availableMB,
-    )} override=${override} weightsExceedAvail=${
-      finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB
-    }`,
+    )} override=${override} weightsExceedAvail=${plan.weightsExceedAvailable}`,
   );
-  if (
-    finalCheck.availableMB > 0 &&
-    modelMB > finalCheck.availableMB &&
-    !override
-  ) {
-    // OVERRIDABLE, always: a budget refusal in ANY mode must offer "Load Anyway" — never a
-    // dead-end. This is the single behavior the image path already had (makeRoomFor →
-    // OverridableMemoryError); the text pre-load gate used to throw a plain Error here, which
-    // surfaced as an OK-only alert with no override (the 12GB-Aggressive-refused-with-no-Load-
-    // Anyway bug). OverridableMemoryError is pure, so this stays layering-clean.
+  if (plan.weightsExceedAvailable && !override) {
     throw new OverridableMemoryError(
       `Not enough memory to load this model: it needs ~${Math.round(
-        modelMB,
+        fileSize * 1.2 / (1024 * 1024),
       )}MB but only ${Math.round(
         finalCheck.availableMB,
       )}MB is available. Close other apps or choose a smaller model.`,
     );
   }
-  if (
-    override &&
-    finalCheck.availableMB > 0 &&
-    modelMB > finalCheck.availableMB
-  ) {
-    // User forced the load ("Load Anyway" / continue). Skip the hard block and let the
-    // native loader's GPU→CPU→smaller-ctx fallback + OOM recovery try — they accepted
-    // the risk, and eviction already freed everything it could. NORMAL loads still throw.
+  if (override && plan.weightsExceedAvailable) {
     logger.warn(
       `[LLM] OVERRIDE — proceeding despite tight memory (~${Math.round(
-        modelMB,
+        fileSize * 1.2 / (1024 * 1024),
       )}MB needed, ${Math.round(finalCheck.availableMB)}MB free)`,
     );
   }
   logger.warn(
-    `[LLM] Memory very tight — proceeding at minimum context ${minCtx} (estimate may be conservative)`,
+    `[LLM] Memory very tight — proceeding at minimum context ${plan.contextLength} (estimate may be conservative)`,
   );
-  return { ctxLen: minCtx, memCheck: finalCheck };
+  return { ctxLen: plan.contextLength, memCheck: finalCheck };
 }
 
 /**

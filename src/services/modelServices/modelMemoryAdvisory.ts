@@ -3,16 +3,15 @@
  * All functions are pure/standalone — they receive state via parameter objects.
  */
 
-import { DownloadedModel, ONNXImageModel } from '../../types';
+import { Platform } from 'react-native';
+import { DownloadedModel, INFERENCE_BACKENDS, ONNXImageModel } from '../../types';
 import { hardwareService } from '../hardware';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
+import { estimateRuntimeMemoryBytes, memoryAdvisory } from '@offgrid/models';
 import {
   ModelType,
   MemoryCheckResult,
-  MemoryCheckSeverity,
-  textOverheadMultiplier,
-  IMAGE_MODEL_OVERHEAD_MULTIPLIER,
 } from './modelStateTypes';
 import { useAppStore } from '../../stores';
 import { modelMemoryBudgetMB, modelWarningThresholdMB, LoadPolicy } from '../memoryBudget';
@@ -46,17 +45,23 @@ function estimateModelMemoryGB(
 ): number {
   if (type === 'text') {
     const textModel = model as DownloadedModel;
-    const sizeGB = (textModel.fileSize || 0) / (1024 * 1024 * 1024);
-    // GPU-aware overhead — same single source the residency gate uses, so pre-check and gate agree.
-    return sizeGB * textOverheadMultiplier(useAppStore.getState().settings.inferenceBackend);
+    const backend = useAppStore.getState().settings.inferenceBackend;
+    return estimateRuntimeMemoryBytes({
+      artifactBytes: textModel.fileSize || 0,
+      modality: 'text',
+      accelerated: !!backend && backend !== INFERENCE_BACKENDS.CPU,
+    }) / (1024 * 1024 * 1024);
   }
   const imageModel = model as ONNXImageModel;
   // ONE image-RAM estimator: delegate to the authoritative load-gate estimator so the
   // advisory pre-check and the gate can't diverge ('Safe to load' then a hard refusal).
   const estimate = hardwareService.estimateImageModelRam?.(imageModel);
   if (estimate != null) return estimate / (1024 * 1024 * 1024);
-  const sizeGB = (imageModel.size || 0) / (1024 * 1024 * 1024);
-  return sizeGB * IMAGE_MODEL_OVERHEAD_MULTIPLIER;
+  return estimateRuntimeMemoryBytes({
+    artifactBytes: imageModel.size || 0,
+    modality: 'image',
+    platform: Platform.OS,
+  }) / (1024 * 1024 * 1024);
 }
 
 export interface LoadedModelIds {
@@ -146,47 +151,35 @@ export async function checkMemoryForModel(
       : lists.downloadedImageModels.find(m => m.id === modelId);
 
   if (!model) {
+    const verdict = memoryAdvisory({
+      found: false,
+      requiredMemoryMB: 0,
+      budgetMB: memoryBudgetGB * 1024,
+      warningThresholdMB: warningThresholdGB * 1024,
+    });
     return {
-      canLoad: false,
-      severity: 'blocked',
-      availableMemoryGB: 0,
-      requiredMemoryGB: 0,
-      currentlyLoadedMemoryGB: 0,
-      totalRequiredMemoryGB: 0,
-      remainingAfterLoadGB: 0,
+      ...projectVerdict(verdict),
       message: 'Model not found',
     };
   }
 
   const requiredMemoryGB = estimateModelMemoryGB(model, modelType);
   const currentlyLoadedMemoryGB = getOtherLoadedMemoryGB(modelType, ids, lists);
-  const totalRequiredMemoryGB = requiredMemoryGB + currentlyLoadedMemoryGB;
-  const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
-
   const modelName = 'name' in model ? model.name : modelId;
-
-  // Already approved for this model this session → skip the gate so the user isn't
-  // re-prompted every time it's evicted and reloaded (text↔image↔TTS swaps).
-  if (sessionOverride) {
-    return {
-      canLoad: true, severity: 'safe',
-      availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
-      requiredMemoryGB, currentlyLoadedMemoryGB, totalRequiredMemoryGB,
-      remainingAfterLoadGB: remainingBudgetGB,
-      message: `${modelName} — load override approved for this session.`,
-    };
-  }
+  const verdict = memoryAdvisory({
+    requiredMemoryMB: requiredMemoryGB * 1024,
+    currentlyLoadedMemoryMB: currentlyLoadedMemoryGB * 1024,
+    budgetMB: memoryBudgetGB * 1024,
+    warningThresholdMB: warningThresholdGB * 1024,
+    override: sessionOverride,
+  });
   const requiredStr = requiredMemoryGB.toFixed(1);
-  const totalStr = totalRequiredMemoryGB.toFixed(1);
+  const totalStr = (verdict.totalRequiredMemoryMB / 1024).toFixed(1);
   const budgetStr = memoryBudgetGB.toFixed(1);
-
-  let severity: MemoryCheckSeverity;
-  let canLoad: boolean;
   let message: string;
-
-  if (totalRequiredMemoryGB > memoryBudgetGB) {
-    severity = 'critical';
-    canLoad = false;
+  if (sessionOverride) {
+    message = `${modelName} — load override approved for this session.`;
+  } else if (verdict.severity === 'critical') {
     message =
       currentlyLoadedMemoryGB > 0
         ? `Cannot load ${modelName} (~${requiredStr} GB) while other models are loaded. ` +
@@ -194,28 +187,32 @@ export async function checkMemoryForModel(
           `Unload the other model first, or choose a smaller model.`
         : `${modelName} requires ~${requiredStr} GB which exceeds your device's ~${budgetStr} GB safe limit. ` +
           `This model is too large for your device. Choose a smaller model.`;
-  } else if (totalRequiredMemoryGB > warningThresholdGB) {
-    severity = 'warning';
-    canLoad = true;
+  } else if (verdict.severity === 'warning') {
     message =
       `Loading ${modelName} will use ~${requiredStr} GB. ` +
       `Total model memory will be ~${totalStr} GB, near your device's safe limit. ` +
       `The app may become slow. Continue anyway?`;
   } else {
-    severity = 'safe';
-    canLoad = true;
     message = `${modelName} requires ~${requiredStr} GB. Safe to load.`;
   }
 
   return {
-    canLoad,
-    severity,
-    availableMemoryGB: memoryBudgetGB - currentlyLoadedMemoryGB,
-    requiredMemoryGB,
-    currentlyLoadedMemoryGB,
-    totalRequiredMemoryGB,
-    remainingAfterLoadGB: remainingBudgetGB,
+    ...projectVerdict(verdict),
     message,
+  };
+}
+
+function projectVerdict(
+  verdict: ReturnType<typeof memoryAdvisory>,
+): Omit<MemoryCheckResult, 'message'> {
+  return {
+    canLoad: verdict.canLoad,
+    severity: verdict.severity,
+    availableMemoryGB: verdict.availableMemoryMB / 1024,
+    requiredMemoryGB: verdict.requiredMemoryMB / 1024,
+    currentlyLoadedMemoryGB: verdict.currentlyLoadedMemoryMB / 1024,
+    totalRequiredMemoryGB: verdict.totalRequiredMemoryMB / 1024,
+    remainingAfterLoadGB: verdict.remainingAfterLoadMB / 1024,
   };
 }
 
@@ -255,41 +252,30 @@ export async function checkMemoryForDualModel(
     }
   }
 
-  const remainingBudgetGB = memoryBudgetGB - totalRequiredGB;
   const namesStr = modelNames.join(' + ');
   const requiredStr = totalRequiredGB.toFixed(1);
   const budgetStr = memoryBudgetGB.toFixed(1);
-
-  let severity: MemoryCheckSeverity;
-  let canLoad: boolean;
+  const verdict = memoryAdvisory({
+    requiredMemoryMB: totalRequiredGB * 1024,
+    budgetMB: memoryBudgetGB * 1024,
+    warningThresholdMB: warningThresholdGB * 1024,
+  });
   let message: string;
 
-  if (totalRequiredGB > memoryBudgetGB) {
-    severity = 'critical';
-    canLoad = false;
+  if (verdict.severity === 'critical') {
     message =
       `Cannot load both models. ` +
       `${namesStr} would require ~${requiredStr} GB, exceeding your device's ~${budgetStr} GB safe limit.`;
-  } else if (totalRequiredGB > warningThresholdGB) {
-    severity = 'warning';
-    canLoad = true;
+  } else if (verdict.severity === 'warning') {
     message =
       `Loading ${namesStr} will use ~${requiredStr} GB, near your device's safe limit. ` +
       `Performance may be affected.`;
   } else {
-    severity = 'safe';
-    canLoad = true;
     message = `${namesStr} will use ~${requiredStr} GB. Safe to load.`;
   }
 
   return {
-    canLoad,
-    severity,
-    availableMemoryGB: memoryBudgetGB,
-    requiredMemoryGB: totalRequiredGB,
-    currentlyLoadedMemoryGB: 0,
-    totalRequiredMemoryGB: totalRequiredGB,
-    remainingAfterLoadGB: remainingBudgetGB,
+    ...projectVerdict(verdict),
     message,
   };
 }
