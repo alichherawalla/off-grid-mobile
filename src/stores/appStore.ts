@@ -8,7 +8,11 @@ import {
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
   DEFAULT_SPEAKER_DRAIN_MS,
 } from '@offgrid/speech';
-import { REASONING_BUDGET_AUTO } from '@offgrid/models';
+import {
+  MOBILE_LITERT_SETTINGS_DEFAULTS,
+  MOBILE_TEXT_SETTINGS_DEFAULTS,
+  REASONING_BUDGET_AUTO,
+} from '@offgrid/models';
 import { APP_CONFIG } from '../constants';
 import {
   VoiceTurnMode,
@@ -226,12 +230,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // one idea, all opening with the same sentence. That matters beyond tidiness: `systemPrompt` is a SYNCED
   // model setting, so whichever copy a device happens to hold is the one that travels to its peers.
   systemPrompt: APP_CONFIG.defaultSystemPrompt,
-  temperature: 0.7,
-  maxTokens: 1024,
-  maxToolCalls: 25,
-  topP: 0.9,
-  repeatPenalty: 1.1,
-  contextLength: 4096,
+  ...MOBILE_TEXT_SETTINGS_DEFAULTS,
   nThreads: 0,
   nBatch: 512,
   speculativeDecoding: false,
@@ -263,9 +262,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   thinkingEnabled: false,
   reasoningBudget: REASONING_BUDGET_AUTO,
   liteRTBackend: 'gpu',
-  liteRTTemperature: 0.7,
-  liteRTTopP: 0.9,
-  liteRTMaxTokens: 4096,
+  liteRTTemperature: MOBILE_LITERT_SETTINGS_DEFAULTS.temperature,
+  liteRTTopP: MOBILE_LITERT_SETTINGS_DEFAULTS.topP,
+  liteRTMaxTokens: MOBILE_LITERT_SETTINGS_DEFAULTS.maxTokens,
 };
 
 export const selectIsLiteRT = (state: AppState): boolean =>
