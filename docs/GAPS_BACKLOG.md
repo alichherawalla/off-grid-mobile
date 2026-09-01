@@ -107,6 +107,104 @@ follow-up runs. This is stable integration evidence, but it is not physical-devi
 Kokoro is the only supported Mobile text-to-speech runtime. OuteTTS and Qwen3 TTS are removed and
 are not valid verification targets.
 
+### QA architecture closure sweep - 2026-09-01
+
+**Verdict: the package boundary is wired, but the strict zero-business-logic app boundary is still
+open.**
+
+This sweep inspected the combined working tree after the model selection, chat readiness, prompt
+enhancement, residency, library, configuration, and artifact-verification rounds. It did not change
+production code. The Shared, Mobile, and Desktop model-architecture gates pass with zero temporary
+allowlist items. Shared models, Mobile, and Desktop TypeScript gates also pass on this snapshot. A
+source scan found no `jest.mock`, `vi.mock`, or module replacement for `@offgrid/models`.
+
+The gates prove several intended boundaries:
+
+- Shared owns the canonical model catalog, including `computer_use`. Holo is absent from the text
+  rail and appears on Desktop's Computer Use tab in the rendered integration journey.
+- Mobile has one normal selection projection writer in
+  `src/services/modelServices/modelSelectionProjection.ts`; UI selection commands enter the Shared
+  selection service. Text configuration defaults are imported from Shared by both apps.
+- The app architecture checks reject known raw-engine imports and the named legacy policy files.
+- No production source refers to OuteTTS or Qwen3 TTS. Their only remaining mention is the Shared
+  README statement that they are unsupported.
+
+The following strict architecture gaps remain and prevent a **Verified** verdict:
+
+1. **Shared model tests can hang in download recovery.** The complete `@offgrid/models` test command
+   reached the download suite and then remained live. The focused test
+   `coordinator relaunch restores every queued job, isolates failures, and never resurrects
+   cancellation` exceeds a five-second test timeout because its wait at
+   `packages/models/test/download-domain.test.mjs:617` never observes the queued success as
+   `completed`. Other focused coordinator cases pass. This is a release blocker until the behavior
+   or test lifecycle is corrected without weakening artifact verification.
+2. **Mobile model import policy still lives in screen code.** `src/screens/ModelsScreen/useModelsScreen.ts:32`
+   owns ZIP staging, unzip order, backend detection, package construction, registration, and
+   activation. `src/screens/ModelsScreen/importHelpers.ts:15` owns GGUF/projector classification and
+   size-based fallback, and `TextModelsTab.tsx:108` heals model vision metadata from the UI. These
+   decisions belong in Shared model-library/import commands; Mobile should provide picker,
+   filesystem, archive, and alert ports only.
+3. **Mobile prompt context policy is not fully shared.** `src/services/imageGenerationHelpers.ts:95`
+   chooses the last ten messages, removes runtime/image/enhancement messages, selects answer versus
+   reasoning, and truncates each message to 500 characters before invoking the Shared prompt
+   service. These are prompt-input rules, not native or presentation mechanics.
+4. **Mobile reload and loaded-settings policy remains app-owned.**
+   `src/screens/ChatScreen/pendingSettings.ts:7` branches on LiteRT and duplicates the 4,096-token
+   fallback while deciding whether a reload is required. `reloadTextModel.ts:28` decides local versus
+   remote eligibility and owns the unload-then-load transaction. Shared must own both decisions;
+   Mobile may render the result and execute native commands through ports.
+5. **Desktop model UI still owns admission and model-library sequencing.**
+   `src/renderer/src/components/ModelsScreen.tsx:493` performs a fit check, asks for the memory
+   override, and branches activation by `computer_use`. The renderer must send one activation intent
+   and render a typed Shared result. `pro/renderer/components/voice/TranscriptionModels.tsx:82`
+   sequences download, activation, refresh, and progress cleanup in the component instead of one
+   model-library application command.
+6. **Desktop capture readiness is derived in the renderer.**
+   `src/renderer/src/components/PermissionGate.tsx:56` joins capture state, active model, projector
+   state, repair choice, and download behavior. Main/Shared should return one typed capture-readiness
+   projection and accept one repair intent.
+7. **Selection has exceptional writers outside the normal application command.** Desktop
+   `src/main/model-services.ts:569` clears canonical and legacy selection files directly when a
+   remote server is removed instead of calling the Shared selection service. Mobile
+   `src/services/modelServices/remoteServerController.ts:429` calls a store-level clear that resets
+   selection projections directly. These exceptional paths can bypass the normal fallback and
+   reconciliation rules.
+8. **Residency still has two names for one lifecycle concept.** Shared exports
+   `RuntimeResidencyMode` (`resident` / `on-demand`) and `ResidencyLifecycleMode`
+   (`persistent` / `operation`), and Desktop continues to expose `getResidencyMode` /
+   `setResidencyMode`. If one is only a persisted/UI codec, it must be named and isolated as that
+   codec; domain and app orchestration must use one lifecycle vocabulary.
+9. **Image settings are not yet one complete configuration SSOT.** Mobile imports Shared text
+   defaults, but `src/stores/appStore.ts:241` and two image-settings surfaces still use the literal
+   guidance default `7.5` instead of `DEFAULT_IMAGE_GUIDANCE`. The Shared default must feed storage,
+   reset, and both controls.
+10. **The Shared download package exposes overlapping status vocabularies.**
+    `downloads/status-ledger.ts`, `download-orchestration.ts`, `downloads/registry.ts`, and
+    `types.ts` define related terminal states as both `failed` and `error` and maintain separate
+    lifecycle unions. Boundary aliases are valid only through one explicit codec; application code
+    must consume one canonical state model.
+
+Focused Desktop route/UI evidence passed 10 of 11 tests. The only failure is a stale expectation in
+`ModelsScreen.computer-use.integration.test.tsx:90`: the current UI offers `< 1B`, while the test
+still asks for `Tiny (<2B)`. The rendered output itself confirms that Holo is on Computer Use and is
+not on Text. Update the test to the intended canonical size label, then rerun it; do not change the
+catalog to satisfy the old label.
+
+Status at this checkpoint:
+
+| Requirement | Code | Wired | Verified |
+|---|---|---|---|
+| Shared package purity and known architecture bans | yes | yes | static gates only |
+| Route identity and Holo Computer Use classification | yes | yes | Shared policy + rendered Desktop evidence |
+| One normal Mobile selection command | yes | yes | exceptional removal/clear paths remain |
+| One residency lifecycle vocabulary | no | partial | no |
+| Shared model configuration defaults | partial | partial | text defaults pass; image/reload defaults remain |
+| Shared model-library command ownership | partial | partial | Mobile import and Desktop Pro download/activate remain |
+| No `@offgrid/models` mocks | yes | yes | source scan passed |
+| No stale OuteTTS/Qwen3 TTS production path | yes | yes | source scan passed |
+| Full Shared model suite | no | n/a | blocked by download recovery hang |
+| Physical Mobile/Desktop model journeys | unknown | unknown | not run in this sweep |
+
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
 
 **Verdict: instrument-and-revisit.**
