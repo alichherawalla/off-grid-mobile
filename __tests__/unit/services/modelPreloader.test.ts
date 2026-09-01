@@ -12,18 +12,17 @@ jest.mock('../../../src/stores', () => ({
 const mockLoadText = jest.fn((..._a: any[]) => Promise.resolve());
 const mockLoadImage = jest.fn((..._a: any[]) => Promise.resolve());
 const mockGetActiveModels = jest.fn(() => ({ text: { isLoaded: false }, image: { isLoaded: false } }));
-jest.mock('../../harness/activeModelLifecycle', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    loadTextModel: (...a: any[]) => mockLoadText(...a),
-    loadImageModel: (...a: any[]) => mockLoadImage(...a),
-    getActiveModels: () => mockGetActiveModels(),
-  },
+jest.mock('../../../src/services/modelServices/modelLifecycleBootstrap', () => ({
+  loadTextModel: (...a: any[]) => mockLoadText(...a),
 }));
 
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: { estimateModelRam: (m: any) => (m.fileSize || m.size || 0) * 1.5 },
+jest.mock('../../../src/services/modelServices/modelState', () => ({
+  getActiveModels: () => mockGetActiveModels(),
+  selectedTextModelId: () => mockAppState.activeModelId ?? mockAppState.lastTextModelId,
+}));
+
+jest.mock('../../../src/services/modelMemory', () => ({
+  estimateTextModelMemoryMB: (m: any) => Promise.resolve((m.fileSize || m.size || 0) / (1024 * 1024)),
 }));
 
 jest.mock('../../../src/services/whisperService', () => ({
@@ -31,7 +30,7 @@ jest.mock('../../../src/services/whisperService', () => ({
 }));
 
 const mockCanLoad = jest.fn((_spec?: any) => true);
-jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
+jest.mock('../../../src/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { canLoadWithoutEviction: (...a: any[]) => mockCanLoad(...a) },
 }));
 
