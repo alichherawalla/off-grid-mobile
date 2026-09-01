@@ -122,14 +122,8 @@ export async function setActiveRemoteTextModelImpl(
           modelId,
         )
       : { ...configuredServer.selections, text: modelId };
-  if (!desktopManaged) {
-    // Generic servers keep the existing publish-first behavior. New-chat local
-    // preparation uses these IDs to avoid starting the prior local model.
-    store.setActiveRemoteTextModelId(modelId);
-    store.setActiveServerId(serverId);
-    if (configuredServer.selections?.text !== modelId) {
-      store.updateServer(serverId, { selections: confirmedModels });
-    }
+  if (!desktopManaged && configuredServer.selections?.text !== modelId) {
+    store.updateServer(serverId, { selections: confirmedModels });
   }
 
   let transport = remoteTextTransportRegistry.get(serverId);
@@ -198,8 +192,6 @@ export async function setActiveRemoteTextModelImpl(
   // provider is ready. A failed activation leaves the prior selection intact.
   if (desktopManaged) {
     store.updateServer(serverId, { selections: confirmedModels });
-    store.setActiveRemoteTextModelId(modelId);
-    store.setActiveServerId(serverId);
   }
 
   logger.log(
@@ -214,8 +206,7 @@ export async function setActiveRemoteImageModelImpl(
   modelId: string,
 ): Promise<void> {
   const store = useRemoteServerStore.getState();
-  store.setActiveRemoteMediaServerId('image', serverId);
-  store.setActiveRemoteImageModelId(modelId);
+  if (!store.getServerById(serverId)) throw new Error(`Server not found: ${serverId}`);
 
   logger.log(
     '[RemoteServerManager] Active remote image model set:',

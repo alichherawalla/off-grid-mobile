@@ -12,6 +12,12 @@ import {
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers/registry';
 import * as Keychain from 'react-native-keychain';
+import { mobileRouteId } from '../../../src/services/modelServices/mobileRoute';
+
+const mockSelectCanonicalModel = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../src/services/modelServices/modelSelectionCommandPort', () => ({
+  selectCanonicalModel: (...args: unknown[]) => mockSelectCanonicalModel(...args),
+}));
 
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
@@ -338,12 +344,9 @@ describe('remoteServerManager', () => {
         'llama2',
       );
 
-      expect(
-        store.setActiveServerId,
-      ).toHaveBeenCalledWith('server-123');
-      expect(
-        store.setActiveRemoteTextModelId,
-      ).toHaveBeenCalledWith('llama2');
+      expect(mockSelectCanonicalModel).toHaveBeenCalledWith('text', mobileRouteId({
+        source: 'remote', hostId: 'server-123', modality: 'text', modelId: 'llama2',
+      }));
     });
 
     it('should handle missing provider gracefully', async () => {
@@ -358,7 +361,7 @@ describe('remoteServerManager', () => {
 
       // Should not throw
       await expect(
-        remoteServerManager.setActiveRemoteTextModel('server-123', 'llama2'),
+        remoteServerManager.prepareRemoteTextModel('server-123', 'llama2'),
       ).resolves.not.toThrow();
     });
   });
@@ -387,35 +390,22 @@ describe('remoteServerManager', () => {
         'llava',
       );
 
-      expect(
-        store.setActiveRemoteMediaServerId,
-      ).toHaveBeenCalledWith('image', 'server-123');
-      expect(
-        store.setActiveRemoteImageModelId,
-      ).toHaveBeenCalledWith('llava');
+      expect(mockSelectCanonicalModel).toHaveBeenCalledWith('image', mobileRouteId({
+        source: 'remote', hostId: 'server-123', modality: 'image', modelId: 'llava',
+      }));
     });
   });
 
   describe('remote selection projections', () => {
-    it('clears text and image selections through their explicit ports', () => {
+    it('clears text and image selections through the canonical command port', async () => {
       const store = remoteSelectionState(null);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(store);
 
-      remoteServerManager.clearActiveRemoteTextModel();
-      remoteServerManager.clearActiveRemoteMediaModel('image');
+      await remoteServerManager.clearActiveRemoteTextModel();
+      await remoteServerManager.clearActiveRemoteMediaModel('image');
 
-      expect(
-        store.setActiveServerId,
-      ).toHaveBeenCalledWith(null);
-      expect(
-        store.setActiveRemoteTextModelId,
-      ).toHaveBeenCalledWith(null);
-      expect(
-        store.setActiveRemoteImageModelId,
-      ).toHaveBeenCalledWith(null);
-      expect(
-        store.setActiveRemoteMediaServerId,
-      ).toHaveBeenCalledWith('image', null);
+      expect(mockSelectCanonicalModel).toHaveBeenNthCalledWith(1, 'text', null);
+      expect(mockSelectCanonicalModel).toHaveBeenNthCalledWith(2, 'image', null);
     });
   });
 
@@ -750,7 +740,7 @@ describe('remoteServerManager', () => {
       );
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
 
-      await remoteServerManager.setActiveRemoteTextModel('server-1', 'llama2');
+      await remoteServerManager.prepareRemoteTextModel('server-1', 'llama2');
 
       expect(remoteTextTransportRegistry.register).toHaveBeenCalled();
     });
@@ -782,7 +772,7 @@ describe('remoteServerManager', () => {
       );
       (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(null);
 
-      await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
+      await remoteServerManager.prepareRemoteMediaModel('server-1', 'image', 'llava');
 
       expect(remoteTextTransportRegistry.register).not.toHaveBeenCalled();
     });
@@ -801,7 +791,9 @@ describe('remoteServerManager', () => {
         remoteSelectionState(null),
       );
 
-      await remoteServerManager.setActiveRemoteImageModel('server-1', 'llava');
+      await expect(
+        remoteServerManager.prepareRemoteMediaModel('server-1', 'image', 'llava'),
+      ).rejects.toThrow('Server not found');
 
       // No provider created because server not found
       expect(remoteTextTransportRegistry.register).not.toHaveBeenCalled();

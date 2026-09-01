@@ -27,6 +27,26 @@ const nodeText = (source, node) => node.getText(source).replace(/\s+/g, ' ')
 const lineOf = (source, node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1
 const keyOf = finding => `${finding.rule}|${finding.file}|${finding.detail}`
 const findings = []
+const selectionProjectionKeys = new Set([
+  'activeModelId', 'lastTextModelId', 'activeImageModelId', 'activeServerId',
+  'activeRemoteTextModelId', 'activeRemoteImageModelId',
+  'activeRemoteMediaServerIds', 'downloadedModelId', 'classifierModelId',
+])
+
+function assignedSelectionKeys(node) {
+  const keys = []
+  const inspect = candidate => {
+    if (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) {
+      const name = candidate.name && (ts.isIdentifier(candidate.name) || ts.isStringLiteralLike(candidate.name))
+        ? candidate.name.text
+        : ''
+      if (selectionProjectionKeys.has(name)) keys.push(name)
+    }
+    ts.forEachChild(candidate, inspect)
+  }
+  inspect(node)
+  return keys
+}
 
 function report(rule, file, source, node, detail) {
   findings.push({ rule, file, line: lineOf(source, node), detail })
@@ -108,10 +128,22 @@ for (const file of files) {
       const call = nodeText(source, node.expression)
       const rawName = call.split('.').at(-1)
       if (
-        /^(setActiveModelId|setActiveImageModelId)$/.test(rawName) &&
-        !/^src\/services\/modelServices\/(selectionStore|modelState)\.ts$/.test(fileName)
+        /^(setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(rawName) &&
+        fileName !== 'src/services/modelServices/modelSelectionProjection.ts'
       ) {
         report('active-model-writes-use-canonical-selection-port', fileName, source, node, `call:${rawName}`)
+      }
+      if (fileName !== 'src/services/modelServices/modelSelectionProjection.ts') {
+        const assignedKeys = node.arguments.flatMap(assignedSelectionKeys)
+        if (
+          /\.setState$/.test(call) &&
+          assignedKeys.length > 0
+        ) {
+          report('selection-projections-have-one-writer', fileName, source, node, `call:${call}:${assignedKeys.join(',')}`)
+        }
+        if (/\.updateSettings$/.test(call) && assignedKeys.includes('classifierModelId')) {
+          report('selection-projections-have-one-writer', fileName, source, node, `call:${call}`)
+        }
       }
       if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|dispatchGenerationFn|resolveTurnKind|regenerateResponseFn)$/.test(rawName)) {
         report('generation-callers-use-shared-service', fileName, source, node, `call:${rawName}`)

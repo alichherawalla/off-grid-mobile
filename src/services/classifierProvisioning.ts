@@ -11,6 +11,7 @@ import { useAppStore } from '../stores';
 import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 import { huggingFaceService } from './huggingface';
 import { startModelDownload } from './startModelDownload';
+import { selectMobileModel } from './modelServices';
 
 /** SmolLM2-135M-Instruct GGUF — ~100-145MB, runs on llama.rn. */
 const CLASSIFIER_REPO = 'bartowski/SmolLM2-135M-Instruct-GGUF';
@@ -34,7 +35,9 @@ export async function ensureDefaultClassifier(): Promise<void> {
   // Already downloaded the default (e.g. selection was cleared)? Just select it.
   const existing = store.downloadedModels.find(m => m.id.startsWith(`${CLASSIFIER_REPO}/`));
   if (existing) {
-    store.updateSettings({ classifierModelId: existing.id });
+    await selectMobileModel({
+      source: 'local', hostId: existing.engine, modality: 'classifier', modelId: existing.id,
+    });
     return;
   }
 
@@ -63,8 +66,9 @@ export async function ensureDefaultClassifier(): Promise<void> {
     await startModelDownload(CLASSIFIER_REPO, file, {
       onRegistered: (model) => {
         settled = true;
-        useAppStore.getState().updateSettings({ classifierModelId: model.id });
-        provisioning = false;
+        selectMobileModel({
+          source: 'local', hostId: model.engine, modality: 'classifier', modelId: model.id,
+        }).finally(() => { provisioning = false; }).catch(() => undefined);
       },
       onError: () => { settled = true; provisioning = false; },
     });

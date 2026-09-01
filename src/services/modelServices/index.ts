@@ -33,12 +33,14 @@ import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
 import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
+import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({
   refreshInventory: refreshMobileLLMServiceInventory,
   selectRoute: selectMobileRoute,
 });
+registerModelSelectionCommandPort({ select: selectMobileRoute });
 export const mobileGenerationService = new GenerationService(
   mobileLLMService,
   mobileGenerationResidency,

@@ -239,7 +239,7 @@ describe('remoteServerStore', () => {
       expect(servers).toHaveLength(0);
     });
 
-    it('should clear activeServerId if removed server was active', () => {
+    it('leaves selection reconciliation to the canonical selection service', () => {
       const serverId = addTestServer('Active Server', 'http://active:11434'); // NOSONAR
 
       actStoreUpdate(() => {
@@ -252,7 +252,7 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().removeServer(serverId);
       });
 
-      expect(useRemoteServerStore.getState().activeServerId).toBeNull();
+      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
     });
   });
 

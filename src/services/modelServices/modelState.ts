@@ -12,6 +12,8 @@ import type {
   ModelType,
   ResourceUsage,
 } from './modelStateTypes';
+import { selectCanonicalModel } from './modelSelectionCommandPort';
+import { mobileRouteId } from './mobileRoute';
 import {
   checkMemoryForDualModel as checkDualMemory,
   checkMemoryForModel as checkMemory,
@@ -38,10 +40,12 @@ export function selectedTextModelId(): string | null {
   });
 }
 
-export function selectTextModel(modelId: string): void {
-  const store = useAppStore.getState();
-  store.setActiveModelId(modelId);
-  store.setLastTextModelId(modelId);
+export function selectTextModel(modelId: string): Promise<void> {
+  const model = useAppStore.getState().downloadedModels.find(candidate => candidate.id === modelId);
+  if (!model) return Promise.reject(new Error('Model not found'));
+  return selectCanonicalModel('text', mobileRouteId({
+    source: 'local', hostId: model.engine, modality: 'text', modelId,
+  }));
 }
 
 export function getActiveModels(): ActiveModelInfo {

@@ -1,6 +1,9 @@
-import type {
-  ModelInventoryAdapter,
-  RuntimeModel,
+import {
+  catalogKindForArtifact,
+  isGrounderModel,
+  runtimeModalityForModelKind,
+  type ModelInventoryAdapter,
+  type RuntimeModel,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -19,8 +22,6 @@ import { liteRTService } from '../litert';
 import { WHISPER_MODELS, whisperService } from '../whisperService';
 import {
   getActiveModels,
-  resolveSelectedTextModel,
-  selectedTextModelId,
 } from './modelState';
 import {
   EMBEDDING_MODEL_FILENAME,
@@ -29,9 +30,11 @@ import {
 } from '../adapters/native/embeddingRuntimeAdapter';
 import {
   mobileExecutionAdapterId,
+  mobileRouteId,
   type MobileRouteFacts,
 } from './mobileRoute';
 import { mobileLocalVoiceInventoryAdapter } from './voiceGenerationAdapter';
+import { readMobileModelSelection } from './modelSelectionProjection';
 
 type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
 
@@ -55,6 +58,7 @@ function runtime(
 }
 
 function localTextRuntime(model: DownloadedModel): RuntimeModel {
+  const catalogKind = catalogKindForArtifact(model);
   const identity: MobileRouteFacts = {
     source: 'local',
     hostId: model.engine,
@@ -62,7 +66,7 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
     modelId: model.id,
   };
   const state = useAppStore.getState();
-  const selected = resolveSelectedTextModel()?.id === model.id;
+  const selected = readMobileModelSelection('text') === mobileRouteId(identity);
   const loaded = selected &&
     state.loadedTextModelId === model.id &&
     (model.engine === 'litert'
@@ -73,9 +77,9 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
     : { tools: false, thinking: false };
   return runtime(identity, {
     name: model.name,
-    kind: model.engine === 'llama' && (model.isVisionModel || !!model.mmProjPath)
+    kind: catalogKind ?? (model.engine === 'llama' && (model.isVisionModel || !!model.mmProjPath)
       ? 'vision'
-      : 'text',
+      : 'text'),
     capabilities: {
       textGeneration: true,
       streaming: true,
@@ -107,7 +111,8 @@ export const localLlamaInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-llama-inventory',
   async listModels() {
     return useAppStore.getState().downloadedModels
-      .filter(model => model.engine === 'llama')
+      .filter(model => model.engine === 'llama' &&
+        runtimeModalityForModelKind(catalogKindForArtifact(model) ?? 'text') === 'text')
       .map(localTextRuntime);
   },
 };
@@ -116,7 +121,8 @@ export const localLiteRTInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-litert-inventory',
   async listModels() {
     return useAppStore.getState().downloadedModels
-      .filter(model => model.engine === 'litert')
+      .filter(model => model.engine === 'litert' &&
+        runtimeModalityForModelKind(catalogKindForArtifact(model) ?? 'text') === 'text')
       .map(localTextRuntime);
   },
 };
@@ -183,10 +189,13 @@ export const localWhisperInventoryAdapter: ModelInventoryAdapter = {
 
 function remoteTextModels(server: RemoteServer): RemoteModel[] {
   const state = useRemoteServerStore.getState();
-  const discovered = state.discoveredModels[server.id] ?? [];
+  const discovered = (state.discoveredModels[server.id] ?? []).filter(
+    model => !isGrounderModel(model.name || model.id),
+  );
   const selectedId = state.activeServerId === server.id
     ? state.activeRemoteTextModelId
     : null;
+  if (selectedId && isGrounderModel(selectedId)) return discovered;
   if (!selectedId || discovered.some(model => model.id === selectedId)) {
     return discovered;
   }
@@ -326,11 +335,11 @@ export const classifierInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-classifier-inventory',
   async listModels() {
     const state = useAppStore.getState();
-    const modelId = state.settings.classifierModelId ?? selectedTextModelId();
+    const modelId = state.settings.classifierModelId ?? state.activeModelId ?? state.lastTextModelId;
     const model = modelId
       ? state.downloadedModels.find(candidate => candidate.id === modelId)
       : null;
-    if (!model) return [];
+    if (!model || catalogKindForArtifact(model) === 'computer_use') return [];
     return [runtime(
       {
         source: 'local',

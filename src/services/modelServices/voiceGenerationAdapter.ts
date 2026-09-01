@@ -12,6 +12,7 @@ import { synthesizeRemoteVoiceFile } from '../adapters/remote/voicePlayback';
 export interface MobileLocalVoicePort {
   listModels(): RuntimeModel[] | Promise<RuntimeModel[]>;
   selectedRouteId(): string | null;
+  selectRouteId?(routeId: string | null): void | Promise<void>;
   generate(
     model: RuntimeModel,
     request: GenerationRequest,
@@ -30,6 +31,11 @@ export function registerMobileLocalVoicePort(port: MobileLocalVoicePort): () => 
 
 export function selectedMobileLocalVoiceRoute(): string | null {
   return localVoicePort?.selectedRouteId() ?? null;
+}
+
+export async function selectMobileLocalVoiceRoute(routeId: string | null): Promise<void> {
+  if (routeId && !localVoicePort?.selectRouteId) throw new Error('Local voice selection is unavailable');
+  await localVoicePort?.selectRouteId?.(routeId);
 }
 
 export const mobileLocalVoiceInventoryAdapter: ModelInventoryAdapter = {

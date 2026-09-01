@@ -17,7 +17,7 @@ import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAppStore } from '../../stores/appStore';
 import { remoteTextTransportRegistry } from '../adapters/providers/registry';
 import { discoverLANServers, DiscoveredServer } from '../networkDiscovery';
-import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
+import { selectedModalitiesForRemovedServer, shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import logger from '../../utils/logger';
 import {
   storeApiKeyImpl,
@@ -33,6 +33,8 @@ import {
   remoteAuthorizationHeaders,
 } from '@offgrid/models';
 import { activateOffGridDesktopModel } from '../adapters/remote/offGridDesktopModels';
+import { selectCanonicalModel } from './modelSelectionCommandPort';
+import { mobileRouteId } from './mobileRoute';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
 const trimSlash = (url: string): string => {
@@ -143,6 +145,13 @@ class RemoteServerManager {
    * Remove a server
    */
   async removeServer(id: string): Promise<void> {
+    const selection = useRemoteServerStore.getState();
+    const modalities = selectedModalitiesForRemovedServer({
+      serverId: id,
+      activeTextServerId: selection.activeServerId,
+      activeMediaServerIds: selection.activeRemoteMediaServerIds,
+    });
+    await Promise.all(modalities.map(modality => selectCanonicalModel(modality, null)));
     remoteTextTransportRegistry.unregister(id);
     await this.removeApiKey(id);
     useRemoteServerStore.getState().removeServer(id);
@@ -207,6 +216,13 @@ class RemoteServerManager {
     serverId: string,
     modelId: string,
   ): Promise<void> {
+    return selectCanonicalModel('text', mobileRouteId({
+      source: 'remote', hostId: serverId, modality: 'text', modelId,
+    }));
+  }
+
+  /** Prepare transport and Desktop activation before the selection adapter commits. */
+  async prepareRemoteTextModel(serverId: string, modelId: string): Promise<void> {
     return setActiveRemoteTextModelImpl(serverId, modelId);
   }
 
@@ -215,14 +231,24 @@ class RemoteServerManager {
     serverId: string,
     modelId: string,
   ): Promise<void> {
-    const server = useRemoteServerStore.getState().getServerById(serverId);
-    return server?.modelManagement === 'offgrid-desktop-v1'
-      ? this.setActiveRemoteMediaModel(serverId, 'image', modelId)
-      : setActiveRemoteImageModelImpl(serverId, modelId);
+    return selectCanonicalModel('image', mobileRouteId({
+      source: 'remote', hostId: serverId, modality: 'image', modelId,
+    }));
   }
 
   /** Select one remote model for image, transcription, or voice work. */
   async setActiveRemoteMediaModel(
+    serverId: string,
+    category: Exclude<RemoteModelCategory, 'text'>,
+    modelId: string,
+  ): Promise<void> {
+    return selectCanonicalModel(category, mobileRouteId({
+      source: 'remote', hostId: serverId, modality: category, modelId,
+    }));
+  }
+
+  /** Prepare remote runtime state; canonical selection commits through LLMService afterward. */
+  async prepareRemoteMediaModel(
     serverId: string,
     category: Exclude<RemoteModelCategory, 'text'>,
     modelId: string,
@@ -244,8 +270,9 @@ class RemoteServerManager {
     store.updateServer(serverId, {
       selections: confirmedModels,
     });
-    store.setActiveRemoteMediaServerId(category, serverId);
-    if (category === 'image') store.setActiveRemoteImageModelId(modelId);
+    if (category === 'image' && server.modelManagement !== 'offgrid-desktop-v1') {
+      await setActiveRemoteImageModelImpl(serverId, modelId);
+    }
     logger.log('[RemoteServerManager] Active remote media model set:', {
       serverId,
       category,
@@ -253,18 +280,14 @@ class RemoteServerManager {
     });
   }
 
-  clearActiveRemoteTextModel(): void {
-    const store = useRemoteServerStore.getState();
-    store.setActiveServerId(null);
-    store.setActiveRemoteTextModelId(null);
+  clearActiveRemoteTextModel(): Promise<void> {
+    return selectCanonicalModel('text', null);
   }
 
   clearActiveRemoteMediaModel(
     category: Exclude<RemoteModelCategory, 'text'>,
-  ): void {
-    const store = useRemoteServerStore.getState();
-    store.setActiveRemoteMediaServerId(category, null);
-    if (category === 'image') store.setActiveRemoteImageModelId(null);
+  ): Promise<void> {
+    return selectCanonicalModel(category, null);
   }
 
   /**

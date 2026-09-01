@@ -155,12 +155,12 @@ const AutoDetectMethodToggle: React.FC = () => {
 const ClassifierModelPicker: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { downloadedModels, settings, updateSettings } = useAppStore();
+  const { downloadedModels, settings } = useAppStore();
   const [showPicker, setShowPicker] = useState(false);
   const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
 
   const handleSelectNone = () => {
-    updateSettings({ classifierModelId: null });
+    clearMobileModel('classifier').catch(() => undefined);
     setShowPicker(false);
   };
 
@@ -203,7 +203,9 @@ const ClassifierModelPicker: React.FC = () => {
           {downloadedModels.map((model) => {
             const isActive = settings.classifierModelId === model.id;
             const handleSelect = () => {
-              updateSettings({ classifierModelId: model.id });
+              selectMobileModel({
+                source: 'local', hostId: model.engine, modality: 'classifier', modelId: model.id,
+              }).catch(() => undefined);
               setShowPicker(false);
             };
             const isFast = model.id.toLowerCase().includes('smol');

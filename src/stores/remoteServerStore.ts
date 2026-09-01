@@ -52,14 +52,18 @@ interface RemoteServerState {
   removeServer: (id: string) => void;
 
   // Active server
+  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
   setActiveServerId: (id: string | null) => void;
   getActiveServer: () => RemoteServer | null;
 
   // Active remote model selection
+  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
   setActiveRemoteTextModelId: (id: string | null) => void;
+  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
   setActiveRemoteImageModelId: (id: string | null) => void;
   getActiveRemoteTextModel: () => RemoteModel | null;
   getActiveRemoteImageModel: () => RemoteModel | null;
+  /** @internal Persisted projection writer. Production callers use the canonical selection port. */
   setActiveRemoteMediaServerId: (
     category: Exclude<RemoteModelCategory, 'text'>,
     serverId: string | null,
@@ -180,14 +184,6 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       },
 
       removeServer: id => {
-        const state = get();
-        // Clear active server and model IDs if removing the active server
-        if (state.activeServerId === id) {
-          set({
-            activeServerId: null,
-            activeRemoteTextModelId: null,
-          });
-        }
         set(prev => ({
           servers: prev.servers.filter(srv => srv.id !== id),
           discoveredModels: Object.fromEntries(
@@ -196,15 +192,6 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           serverHealth: Object.fromEntries(
             Object.entries(prev.serverHealth).filter(([key]) => key !== id),
           ),
-          activeRemoteMediaServerIds: Object.fromEntries(
-            Object.entries(prev.activeRemoteMediaServerIds).filter(
-              ([, serverId]) => serverId !== id,
-          ),
-          ),
-          activeRemoteImageModelId:
-            prev.activeRemoteMediaServerIds.image === id
-              ? null
-              : prev.activeRemoteImageModelId,
         }));
         logger.log('[RemoteServer] Removed server:', id);
       },

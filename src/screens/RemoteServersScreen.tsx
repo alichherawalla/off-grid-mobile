@@ -51,7 +51,7 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } =
+  const { servers, serverHealth, testConnection, activeServerId } =
     useRemoteServerStore();
   const autoDiscover = useAppStore(
     s => s.settings.autoDiscoverRemoteModels === true,
@@ -143,7 +143,6 @@ export const RemoteServersScreen: React.FC = () => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (activeServerId === server.id) setActiveServerId(null);
             await remoteServerManager.removeServer(server.id);
           },
         },
@@ -151,7 +150,7 @@ export const RemoteServersScreen: React.FC = () => {
         ),
       );
     },
-    [activeServerId, setActiveServerId],
+    [],
   );
 
   const handleUseServer = useCallback(
@@ -171,9 +170,12 @@ export const RemoteServersScreen: React.FC = () => {
           return;
         }
       }
-      setActiveServerId(server.id);
+      setAlertState(showAlert(
+        'Select a text model first',
+        'Open this server and select the text model that you want to use.',
+      ));
     },
-    [activeServerId, setActiveServerId],
+    [activeServerId],
   );
 
   const openDesktopUrl = useCallback(() => {

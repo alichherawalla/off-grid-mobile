@@ -22,6 +22,11 @@ jest.mock('../../../src/services/startModelDownload', () => ({
   startModelDownload: (...a: any[]) => mockStartModelDownload(...a),
 }));
 
+const mockSelectMobileModel = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../src/services/modelServices', () => ({
+  selectMobileModel: (...args: unknown[]) => mockSelectMobileModel(...args),
+}));
+
 const mockGetModelFiles = jest.fn();
 jest.mock('../../../src/services/huggingface', () => ({
   huggingFaceService: { getModelFiles: (...a: any[]) => mockGetModelFiles(...a) },
@@ -55,7 +60,9 @@ describe('ensureDefaultClassifier', () => {
     mockState.downloadedModels = [{ id: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf` }];
     await load()();
     expect(mockStartModelDownload).not.toHaveBeenCalled();
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf` });
+    expect(mockSelectMobileModel).toHaveBeenCalledWith(expect.objectContaining({
+      modality: 'classifier', modelId: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf`,
+    }));
   });
 
   it('downloads the Q8_0 GGUF through the single entry point and selects it on registration', async () => {
@@ -75,7 +82,9 @@ describe('ensureDefaultClassifier', () => {
     );
     // The registered model's id selects the classifier (uses the model, not a re-derived string).
     const opts = mockStartModelDownload.mock.calls[0][2];
-    opts.onRegistered({ id: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf` });
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf` });
+    opts.onRegistered({ id: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf`, engine: 'llama' });
+    expect(mockSelectMobileModel).toHaveBeenCalledWith(expect.objectContaining({
+      modality: 'classifier', modelId: `${REPO}/SmolLM2-135M-Instruct-Q8_0.gguf`,
+    }));
   });
 });
