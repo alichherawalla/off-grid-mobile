@@ -5,16 +5,17 @@ import { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
 import {
-  SWEET_SPOT_SIZE,
-  DEFAULT_IMAGE_GUIDANCE,
-  defaultImageSteps,
-} from '../utils/imageGenAdvice';
+  classifyImageGenerationFailure,
+  imageRuntimeNeedsReload,
+  isFirstImageRuntimeRun,
+} from '@offgrid/models';
 import { Platform } from 'react-native';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { runRemoteImageGeneration } from './modelServices/remoteImageGeneration';
 import {
   generationProgressStatus,
   imagePhaseTransitionLog,
+  resolveMobileImageSettings,
 } from './imageGenerationHelpers';
 import { enhanceImagePrompt } from './imagePromptEnhancement';
 import {
@@ -186,14 +187,14 @@ class ImageGenerationService {
     const isImageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
     const loadedPath = await onnxImageGeneratorService.getLoadedModelPath();
     const loadedThreads = onnxImageGeneratorService.getLoadedThreads();
-    const needsThreadReload =
-      loadedThreads == null || loadedThreads !== opts.desiredThreads;
-    if (
-      isImageModelLoaded &&
-      loadedPath === activeImageModel.modelPath &&
-      !needsThreadReload
-    )
-      return true;
+    const needsReload = imageRuntimeNeedsReload({
+      loaded: isImageModelLoaded,
+      loadedPath,
+      modelPath: activeImageModel.modelPath,
+      loadedThreads,
+      desiredThreads: opts.desiredThreads,
+    });
+    if (!needsReload) return true;
     if (!activeImageModelId) {
       this._fail('No image model selected');
       return false;
@@ -240,20 +241,25 @@ class ImageGenerationService {
     // the single cross-platform signal (so the notice shows once on every device);
     // the OpenCL kernel-cache check is an extra Android signal in case the cache was
     // cleared after the flag was set.
-    let isFirstRun = !useAppStore
+    const wasWarmed = useAppStore
       .getState()
       .warmedImageModels.includes(activeImageModel.id);
+    let hasKernelCache: boolean | undefined;
     if (useOpenCL) {
       try {
-        const hasCache = await onnxImageGeneratorService.hasKernelCache(
+        hasKernelCache = await onnxImageGeneratorService.hasKernelCache(
           activeImageModel.modelPath,
         );
-        isFirstRun = isFirstRun || !hasCache;
       } catch (e) {
         // If check fails, don't add a false first-run signal (keep the warmed-flag result).
         logger.warn('[ImageGen] Failed to check for OpenCL kernel cache:', e);
       }
     }
+    const isFirstRun = isFirstImageRuntimeRun({
+      wasWarmed,
+      useOpenCL,
+      hasKernelCache,
+    });
 
     this.updateState({
       phase: 'generating',
@@ -319,19 +325,15 @@ class ImageGenerationService {
       });
     } catch (error: any) {
       const errorMsg = error?.message || 'Image generation failed';
-      if (errorMsg.includes('cancelled')) {
+      const failure = classifyImageGenerationFailure(error);
+      if (failure === 'cancelled') {
         this.resetState();
       } else {
         logger.error('[ImageGenerationService] Generation error:', error);
 
         // If the pipeline crashed or the model was unloaded, surface a
         // user-friendly message and allow retry (model will auto-reload).
-        const isPipelineCrash =
-          errorMsg.includes('Pipeline failed') ||
-          errorMsg.includes('unloaded') ||
-          errorMsg.includes('ERR_NO_MODEL') ||
-          errorMsg.includes('TextEncoder');
-        const userMessage = isPipelineCrash
+        const userMessage = failure === 'runtime-crash'
           ? 'Image generation failed — the model encountered an error and was unloaded. Please try again.'
           : errorMsg;
 
@@ -377,23 +379,13 @@ class ImageGenerationService {
 
     const messageId = params.conversationId ? generateId() : null;
 
-    const steps =
-      params.steps || settings.imageSteps || defaultImageSteps(Platform.OS);
-    const guidanceScale =
-      params.guidanceScale ||
-      settings.imageGuidanceScale ||
-      DEFAULT_IMAGE_GUIDANCE;
-    // Floor to 256: SD-class models render garbage (incoherent, not "smaller") below 256,
-    // so a stale sub-256 setting must never reach the pipeline. The slider min is also 256;
-    // this guards the persisted-value + programmatic paths so the user never sees garbage.
-    const imageWidth = Math.max(
-      SWEET_SPOT_SIZE,
-      settings.imageWidth || SWEET_SPOT_SIZE,
-    );
-    const imageHeight = Math.max(
-      SWEET_SPOT_SIZE,
-      settings.imageHeight || SWEET_SPOT_SIZE,
-    );
+    const imageSettings = resolveMobileImageSettings(Platform.OS, params, settings);
+    const {
+      steps,
+      guidanceScale,
+      width: imageWidth,
+      height: imageHeight,
+    } = imageSettings;
 
     this.updateState({
       phase: settings.enhanceImagePrompts ? 'enhancing' : 'loading',
@@ -440,7 +432,7 @@ class ImageGenerationService {
     const loaded = await this._ensureImageModelLoaded(
       activeImageModelId,
       activeImageModel,
-      { desiredThreads: settings.imageThreads ?? 4, override: opts?.override },
+      { desiredThreads: imageSettings.threads, override: opts?.override },
     );
     if (!loaded) return null;
     if (this.cancelRequested) {
@@ -456,7 +448,7 @@ class ImageGenerationService {
       guidanceScale,
       imageWidth,
       imageHeight,
-      useOpenCL: settings.imageUseOpenCL ?? true,
+      useOpenCL: imageSettings.useOpenCL,
     });
   }
 
@@ -505,5 +497,4 @@ class ImageGenerationService {
     });
   }
 }
-
 export const imageGenerationService = new ImageGenerationService();

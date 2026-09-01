@@ -1,8 +1,10 @@
 import { Platform } from 'react-native';
 import {
+  buildImageEnhancementMessages,
   cleanImageEnhancement,
-  imageEnhancementSystemPrompt,
+  describeImageBackend,
   imageProgressStatus,
+  resolveImageGenerationSettings,
 } from '@offgrid/models';
 import {
   isRuntimeOnlyMessage,
@@ -14,7 +16,36 @@ import { parseModelOutput } from '../utils/messageContent';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { reportModelFailure } from './modelFailureHandler';
 import { checkProPromptForImage } from './proPrompt';
-import type { ImageGenerationState } from './imageGenerationTypes';
+import type {
+  GenerateImageParams,
+  ImageGenerationState,
+} from './imageGenerationTypes';
+
+export function resolveMobileImageSettings(
+  platform: string,
+  request: GenerateImageParams,
+  settings: {
+    imageSteps?: number;
+    imageGuidanceScale?: number;
+    imageWidth?: number;
+    imageHeight?: number;
+    imageThreads?: number;
+    imageUseOpenCL?: boolean;
+  },
+) {
+  return resolveImageGenerationSettings({
+    platform,
+    request,
+    settings: {
+      steps: settings.imageSteps,
+      guidanceScale: settings.imageGuidanceScale,
+      width: settings.imageWidth,
+      height: settings.imageHeight,
+      threads: settings.imageThreads,
+      useOpenCL: settings.imageUseOpenCL,
+    },
+  });
+}
 
 export function imagePhaseTransitionLog(
   previous: ImageGenerationState['phase'],
@@ -65,20 +96,22 @@ export function buildEnhancementMessages(
   prompt: string,
   contextMessages: Message[],
 ): Message[] {
-  const hasContext = contextMessages.length > 0;
-  const systemContent = imageEnhancementSystemPrompt(hasContext);
+  const portableContext = contextMessages
+    .filter(message => message.role === 'user' || message.role === 'assistant')
+    .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }));
+  const shared = buildImageEnhancementMessages(prompt, portableContext);
   return [
     {
       id: 'system-enhance',
       role: 'system',
-      content: systemContent,
+      content: shared[0].content,
       timestamp: Date.now(),
     },
     ...contextMessages,
     {
       id: 'user-enhance',
       role: 'user',
-      content: `User Request: ${prompt}`,
+      content: shared[shared.length - 1]!.content,
       timestamp: Date.now(),
     },
   ];
@@ -176,22 +209,13 @@ export function buildImageGenMeta(
     useOpenCL: boolean;
   },
 ): GenerationMeta {
-  const backend = model.backend ?? 'mnn';
-  const isGpu =
-    Platform.OS === 'ios' ||
-    backend === 'qnn' ||
-    (backend === 'mnn' && opts.useOpenCL);
-  const gpuBackend =
-    Platform.OS === 'ios'
-      ? 'Core ML (ANE)'
-      : backend === 'qnn'
-      ? 'QNN (NPU)'
-      : isGpu
-      ? 'MNN (GPU)'
-      : 'MNN (CPU)';
+  const backend = describeImageBackend(
+    Platform.OS,
+    model.backend,
+    opts.useOpenCL,
+  );
   return {
-    gpu: isGpu,
-    gpuBackend,
+    ...backend,
     modelName: model.name,
     steps: opts.steps,
     guidanceScale: opts.guidanceScale,
