@@ -1,4 +1,5 @@
 import { Dispatch, SetStateAction } from 'react';
+import { admitChatImageAttachment } from '@offgrid/models';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
@@ -54,6 +55,7 @@ export type GenerationDeps = {
   navigation: any;
   setShowSettingsPanel?: SetState<boolean>;
   ensureModelLoaded: () => Promise<ModelReadyOutcome>;
+  forceLoadModel: () => Promise<ModelReadyOutcome>;
   ensureTextModelForChat: () => Promise<boolean>;
   setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
@@ -61,9 +63,14 @@ export type GenerationDeps = {
 };
 
 function blockedImageForNonVisionModel(deps: GenerationDeps, attachments?: MediaAttachment[]): boolean {
-  if (!attachments?.some(attachment => attachment.type === 'image')) return false;
-  if (deps.activeModelInfo?.isRemote || localModelAcceptsImages(deps.activeModel)) return false;
-  const repair = needsVisionRepair(deps.activeModel);
+  const admission = admitChatImageAttachment({
+    hasImage: !!attachments?.some(attachment => attachment.type === 'image'),
+    remote: !!deps.activeModelInfo?.isRemote,
+    localVisionReady: localModelAcceptsImages(deps.activeModel),
+    visionRepairAvailable: needsVisionRepair(deps.activeModel),
+  });
+  if (admission.allowed) return false;
+  const repair = admission.reason === 'vision-file-missing';
   deps.setAlertState(showAlert(
     repair ? 'Vision File Missing' : 'Vision Not Supported',
     repair

@@ -16,31 +16,17 @@
  */
 
 import { AlertState, showAlert } from '../../components';
-import { isModelReady } from '../../services/engines';
+import type { ChatModelReadyOutcome } from '@offgrid/models';
 import logger from '../../utils/logger';
 // The error→reason heuristic and reason→copy live in a UI-free module (so the
 // service layer can reuse them without dragging the components barrel in). Re-export
 // for the many call sites that import them from here.
-import {
-  reasonFromLoadError,
-  modelNotReadyAlert,
-  type ModelNotReadyReason,
-} from '../../services/modelFailureReasons';
+import { reasonFromLoadError, modelNotReadyAlert } from '@offgrid/models';
 
 export { reasonFromLoadError, modelNotReadyAlert };
 ;
 
-export type ModelReadyOutcome =
-  | { ok: true }
-  | {
-      ok: false;
-      reason: ModelNotReadyReason;
-      /** Underlying error text, when there is one, for the alert + the log line. */
-      detail?: string;
-      /** True when a lower layer already showed the user an alert for this
-       *  outcome (so the caller does not double-alert). */
-      alerted?: boolean;
-    };
+export type ModelReadyOutcome = ChatModelReadyOutcome;
 
 /** What the readiness resolver needs from the chat screen (structural subset of
  *  GenerationDeps), so this module owns readiness without importing the screen. */
@@ -49,7 +35,8 @@ export interface ReadinessDeps {
   activeModel: { engine?: string; filePath: string } | null | undefined;
   activeModelId: string | null;
   /** onLoadedResume: when a turn triggered the load, resume it after a "Load Anyway". */
-  ensureModelLoaded: (onLoadedResume?: () => void) => Promise<ModelReadyOutcome>;
+  ensureModelLoaded: () => Promise<ModelReadyOutcome>;
+  forceLoadModel?: () => Promise<ModelReadyOutcome>;
   setAlertState: (a: AlertState) => void;
 }
 
@@ -59,22 +46,11 @@ export interface ReadinessDeps {
  * line records the branch. Every exit is explicit — no silent early-return can
  * collapse into a generic "Failed to load model" again.
  */
-export async function ensureModelReady(deps: ReadinessDeps, onLoadedResume?: () => void): Promise<ModelReadyOutcome> {
-  if (deps.activeModelInfo?.isRemote) { logger.log('[GEN-SM] ensureModelReady → remote ok'); return { ok: true }; }
-  if (!deps.activeModel || !deps.activeModelId) { logger.log('[GEN-SM] ensureModelReady → no-model-selected'); return { ok: false, reason: 'no-model-selected' }; }
-  // ONE readiness predicate for BOTH engines (engines.isModelReady): LiteRT = engine loaded;
-  // llama = the SELECTED model's path resident. The old llama fast-path skipped the isModelLoaded
-  // check, so a path-set-but-not-resident desync generated against nothing — this closes that.
-  if (isModelReady(deps.activeModel)) { logger.log('[GEN-SM] ensureModelReady → already loaded'); return { ok: true }; }
-  // Thread onLoadedResume for BOTH engines. Without it, a "Load Anyway" force-loaded the model
-  // but never resumed the turn (the user's message sat there and they had to hit resend).
-  const outcome = await deps.ensureModelLoaded(onLoadedResume);
-  if (!outcome.ok) { logger.log(`[GEN-SM] ensureModelReady NOT ready reason=${outcome.reason} detail=${outcome.detail ?? ''} alerted=${!!outcome.alerted}`); return outcome; }
-  // Post-verify against native truth — the load reported ok but the active model must actually
-  // be resident (catches a desync where a different/no model is loaded).
-  if (!isModelReady(deps.activeModel)) { logger.log('[GEN-SM] ensureModelReady → load reported ok but native model mismatch'); return { ok: false, reason: 'load-threw', detail: 'the loaded model does not match the active selection' }; }
-  logger.log('[GEN-SM] ensureModelReady → ready');
-  return { ok: true };
+export async function ensureModelReady(deps: ReadinessDeps, _onLoadedResume?: () => void): Promise<ModelReadyOutcome> {
+  const outcome = await deps.ensureModelLoaded();
+  if (!outcome.ok) logger.log(`[GEN-SM] ensureModelReady NOT ready reason=${outcome.reason} detail=${outcome.detail ?? ''}`);
+  else logger.log('[GEN-SM] ensureModelReady → ready');
+  return outcome;
 }
 
 /**
@@ -95,13 +71,25 @@ export async function ensureReadyOrAlert(
   // turn after the forced load (the message would otherwise be silently dropped).
   const outcome = await ensureModelReady(deps, onRetry);
   if (outcome.ok) return true;
-  logger.log(`[GEN-SM] ${tag} BAIL reason=${outcome.reason} detail=${outcome.detail ?? ''} alerted=${!!outcome.alerted}`);
-  if (!outcome.alerted) {
-    const a = modelNotReadyAlert(outcome.reason, outcome.detail);
-    const buttons = outcome.reason === 'insufficient-memory' && onRetry
+  logger.log(`[GEN-SM] ${tag} BAIL reason=${outcome.reason} detail=${outcome.detail ?? ''}`);
+  const a = modelNotReadyAlert(outcome.reason, outcome.detail);
+  const buttons = outcome.forceLoadAllowed && deps.forceLoadModel
+    ? [{ text: 'Cancel', style: 'cancel' as const }, {
+        text: 'Load Anyway',
+        style: 'destructive' as const,
+        onPress: () => {
+          deps.forceLoadModel!().then(forced => {
+            if (forced.ok) onRetry?.();
+            else {
+              const failure = modelNotReadyAlert(forced.reason, forced.detail);
+              deps.setAlertState(showAlert(failure.title, failure.message));
+            }
+          }).catch(error => logger.error('[GEN-SM] Force load failed:', error));
+        },
+      }]
+    : outcome.reason === 'insufficient-memory' && onRetry
       ? [{ text: 'Cancel', style: 'cancel' as const }, { text: 'Retry', onPress: onRetry }]
       : undefined;
-    deps.setAlertState(showAlert(a.title, a.message, buttons));
-  }
+  deps.setAlertState(showAlert(a.title, a.message, buttons));
   return false;
 }

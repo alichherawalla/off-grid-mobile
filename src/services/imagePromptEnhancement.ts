@@ -1,17 +1,13 @@
+import { ImagePromptEnhancementService } from '@offgrid/models';
 import { PROMPT_ENHANCEMENT_STATUS } from '@offgrid/sync';
 import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';
 import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { selectedTextModelId } from './modelServices/modelState';
-import {
-  getActiveEngineService,
-  isRemoteTextModelActive,
-} from './engines';
+import { getActiveEngineService, isRemoteTextModelActive } from './engines';
 import { executeMobileText } from './mobileSidecarGeneration';
 import {
   buildEnhancementCardContent,
-  buildEnhancementMessages,
-  cleanEnhancedPrompt,
   getConversationContext,
   reportEnhancementSkipped,
 } from './imageGenerationHelpers';
@@ -19,135 +15,87 @@ import type { GenerateImageParams } from './imageGenerationTypes';
 
 type EnhancementStateWriter = (status: string) => void;
 
-async function resetTextEngine(): Promise<void> {
-  try {
-    await getActiveEngineService()?.stopGeneration();
-    logger.log('[ImageGen] text engine stopGeneration() called');
-  } catch (error) {
-    logger.error('[ImageGen] Failed to reset text engine:', error);
-  }
-}
-
-function finishEnhancementMessage(input: {
-  conversationId?: string;
-  tempMessageId: string | null;
-  enhancedPrompt: string;
-  originalPrompt: string;
-}): void {
-  const { conversationId, tempMessageId, enhancedPrompt, originalPrompt } = input;
-  if (!conversationId || !tempMessageId) return;
-  const chatStore = useChatStore.getState();
-  if (enhancedPrompt && enhancedPrompt !== originalPrompt) {
-    chatStore.updateMessageThinking(conversationId, tempMessageId, false);
-    chatStore.updateMessageContent(
-      conversationId,
-      tempMessageId,
-      buildEnhancementCardContent(enhancedPrompt),
-    );
-    return;
-  }
-  logger.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
-  chatStore.deleteMessage(conversationId, tempMessageId);
-}
-
-async function loadTextModel(
-  setState: EnhancementStateWriter,
-): Promise<boolean> {
-  const textModelId = selectedTextModelId();
-  if (!textModelId) {
-    logger.warn('[ImageGen] No text model available, skipping enhancement');
-    reportEnhancementSkipped('no text model is selected');
-    return false;
-  }
-  setState('Loading text model to enhance prompt...');
-  let loadError: unknown = null;
-  try {
-    await mobileResidencyIntents.ensureText(textModelId);
-  } catch (error) {
-    loadError = error;
-    logger.warn('[ImageGen] Failed to load text model for enhancement:', error);
-  }
-  if (getActiveEngineService()?.isModelLoaded()) return true;
-  reportEnhancementSkipped(
-    loadError instanceof Error
-      ? loadError.message
-      : 'the text model could not load',
-  );
-  return false;
-}
-
-function createStreamingMessage(conversationId?: string): string | null {
-  if (!conversationId) return null;
-  return useChatStore
-    .getState()
-    .addMessage(conversationId, {
-      role: 'assistant',
-      content: PROMPT_ENHANCEMENT_STATUS,
-      isThinking: true,
-    }).id;
-}
-
-function enhancementTokenWriter(
-  conversationId: string | undefined,
-  tempMessageId: string | null,
-): (token: string) => void {
-  let streamed = '';
-  let renderingAsCard = false;
-  return token => {
-    streamed += token;
-    if (!conversationId || !tempMessageId) return;
-    const chatStore = useChatStore.getState();
-    if (!renderingAsCard) {
-      renderingAsCard = true;
-      chatStore.updateMessageThinking(conversationId, tempMessageId, false);
-    }
-    chatStore.updateMessageContent(
-      conversationId,
-      tempMessageId,
-      buildEnhancementCardContent(streamed),
-    );
-  };
-}
-
+/** Mobile is a native/runtime and presentation adapter for the Shared enhancement use case. */
 export async function enhanceImagePrompt(
   params: GenerateImageParams,
   setState: EnhancementStateWriter,
 ): Promise<string> {
-  if (!useAppStore.getState().settings.enhanceImagePrompts) return params.prompt;
-  const loaded =
-    isRemoteTextModelActive() ||
-    (getActiveEngineService()?.isModelLoaded() ?? false) ||
-    (await loadTextModel(setState));
-  if (!loaded) return params.prompt;
+  const conversationId = params.conversationId;
+  let temporaryMessageId: string | null = null;
+  const service = new ImagePromptEnhancementService({
+    inspectText() {
+      return {
+        selected: !!selectedTextModelId(),
+        remote: isRemoteTextModelActive(),
+        resident: getActiveEngineService()?.isModelLoaded() ?? false,
+      };
+    },
+    async loadSelectedText() {
+      const modelId = selectedTextModelId();
+      if (!modelId) throw new Error('No text model is selected');
+      await mobileResidencyIntents.ensureText(modelId);
+    },
+    generate(messages, onText) {
+      return executeMobileText(
+        messages.map(message => ({ role: message.role, content: message.content })),
+        { onText },
+      );
+    },
+    async stopGeneration() {
+      await getActiveEngineService()?.stopGeneration();
+    },
+    onStatus(status) {
+      setState(status === 'loading-model'
+        ? 'Loading text model to enhance prompt...'
+        : PROMPT_ENHANCEMENT_STATUS);
+    },
+    onStarted() {
+      if (!conversationId) return;
+      temporaryMessageId = useChatStore.getState().addMessage(conversationId, {
+        role: 'assistant',
+        content: PROMPT_ENHANCEMENT_STATUS,
+        isThinking: true,
+      }).id;
+    },
+    onPartial(text) {
+      if (!conversationId || !temporaryMessageId) return;
+      const chat = useChatStore.getState();
+      chat.updateMessageThinking(conversationId, temporaryMessageId, false);
+      chat.updateMessageContent(
+        conversationId,
+        temporaryMessageId,
+        buildEnhancementCardContent(text),
+      );
+    },
+    onCompleted(prompt) {
+      if (!conversationId || !temporaryMessageId) return;
+      const chat = useChatStore.getState();
+      chat.updateMessageThinking(conversationId, temporaryMessageId, false);
+      chat.updateMessageContent(
+        conversationId,
+        temporaryMessageId,
+        buildEnhancementCardContent(prompt),
+      );
+    },
+    onDiscarded() {
+      if (conversationId && temporaryMessageId) {
+        useChatStore.getState().deleteMessage(conversationId, temporaryMessageId);
+      }
+    },
+    onSkipped: reportEnhancementSkipped,
+    onFailure(error) {
+      logger.warn('[ImageGen] Prompt enhancement boundary failed:', error);
+    },
+  });
 
-  setState(PROMPT_ENHANCEMENT_STATUS);
-  const context = params.conversationId
-    ? getConversationContext(params.conversationId)
-    : [];
-  const tempMessageId = createStreamingMessage(params.conversationId);
-  try {
-    const raw = await executeMobileText(
-      buildEnhancementMessages(params.prompt, context).map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-      { onText: enhancementTokenWriter(params.conversationId, tempMessageId) },
-    );
-    const enhancedPrompt = cleanEnhancedPrompt(raw) || params.prompt;
-    await resetTextEngine();
-    finishEnhancementMessage({
-      conversationId: params.conversationId,
-      tempMessageId,
-      enhancedPrompt,
-      originalPrompt: params.prompt,
-    });
-    return enhancedPrompt;
-  } catch (error) {
-    logger.error('[ImageGen] Prompt enhancement failed:', error);
-    await resetTextEngine();
-    if (params.conversationId && tempMessageId) {
-      useChatStore.getState().deleteMessage(params.conversationId, tempMessageId);
-    }
-    return params.prompt;
-  }
+  return service.enhance({
+    prompt: params.prompt,
+    enabled: useAppStore.getState().settings.enhanceImagePrompts,
+    context: conversationId
+      ? getConversationContext(conversationId).map(message => ({
+          role: message.role as 'user' | 'assistant',
+          content: message.content,
+        }))
+      : [],
+  });
 }

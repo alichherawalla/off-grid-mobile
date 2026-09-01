@@ -28,6 +28,7 @@ import {
 import { RootStackParamList } from '../../navigation/types';
 import {
   ensureModelLoadedFn,
+  forceLoadModelFn,
   ensureTextModelForChatFn,
   useChatImageModelEffects,
   useChatModelStateSync,
@@ -212,6 +213,7 @@ export const useChatScreen = () => {
     setShowSettingsPanel,
     ensureModelLoaded: async (onLoadedResume?: () => void) =>
       ensureModelLoadedFn(modelDeps, onLoadedResume),
+    forceLoadModel: () => forceLoadModelFn(modelDeps),
     ensureTextModelForChat: () =>
       ensureTextModelForChatFn({
         setShowModelSelector,

@@ -1,196 +1,57 @@
-/**
- * Unit tests for modelReadiness — the single source of truth for mapping a load
- * failure to a typed reason and a reason to user-facing alert copy.
- */
-// Native boundaries mocked as dumb flag readers; the REAL ensureModelReady + engines.isModelReady
-// run. Mock the DIRECT modules engines.ts reads ('./llm', './litert') — NOT the barrel — so the
-// stubs are the exact instances the code under test calls (a barrel-only mock would silently miss).
-jest.mock('../../../src/services/llm', () => ({
-  llmService: {
-    getLoadedModelPath: jest.fn(() => null),
-    isModelLoaded: jest.fn(() => false),
-  },
-}));
-jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
-}));
+import {
+  ensureModelReady,
+  ensureReadyOrAlert,
+  modelNotReadyAlert,
+  reasonFromLoadError,
+} from '../../../src/screens/ChatScreen/modelReadiness';
 
-import { reasonFromLoadError, modelNotReadyAlert, ensureModelReady } from '../../../src/screens/ChatScreen/modelReadiness';
-import { llmService } from '../../../src/services/llm';
-import { liteRTService } from '../../../src/services/litert';
-import { mobileLLMService, mobileRouteId } from '../../../src/services/modelServices';
-import { useAppStore } from '../../../src/stores';
-import { createDownloadedModel } from '../../utils/factories';
-
-const mockLlm = llmService as unknown as {
-  getLoadedModelPath: jest.Mock;
-  isModelLoaded: jest.Mock;
+const base = {
+  activeModelInfo: { isRemote: false },
+  activeModel: null,
+  activeModelId: null,
+  setAlertState: jest.fn(),
 };
-const mockLiteRT = liteRTService as unknown as { isModelLoaded: jest.Mock };
 
-describe('reasonFromLoadError', () => {
-  it('maps "not found" / missing-file errors to not-downloaded', () => {
-    expect(reasonFromLoadError(new Error('Model not found'))).toBe('not-downloaded');
-    expect(reasonFromLoadError(new Error('ENOENT: no such file'))).toBe('not-downloaded');
-    expect(reasonFromLoadError(new Error('mmproj file is missing'))).toBe('not-downloaded');
-  });
+describe('Mobile chat readiness projection', () => {
+  beforeEach(() => jest.clearAllMocks());
 
-  it('maps memory/OOM errors to insufficient-memory', () => {
+  it('uses the canonical Shared failure reason and copy', () => {
     expect(reasonFromLoadError(new Error('insufficient memory'))).toBe('insufficient-memory');
-    expect(reasonFromLoadError(new Error('process killed by jetsam'))).toBe('insufficient-memory');
-    expect(reasonFromLoadError(new Error('ran out of memory'))).toBe('insufficient-memory');
+    expect(modelNotReadyAlert('not-downloaded').title).toBe('Model Not Downloaded');
   });
 
-  it('falls back to load-threw for anything else', () => {
-    expect(reasonFromLoadError(new Error('llama init failed'))).toBe('load-threw');
-    expect(reasonFromLoadError('weird string')).toBe('load-threw');
-  });
-});
-
-describe('modelNotReadyAlert', () => {
-  it('gives a distinct title for each reason (no generic dead-end)', () => {
-    const titles = (['no-model-selected', 'not-downloaded', 'insufficient-memory', 'load-in-progress', 'load-threw'] as const)
-      .map(r => modelNotReadyAlert(r).title);
-    expect(new Set(titles).size).toBe(titles.length);
-  });
-
-  it('includes the underlying detail in the load-threw message when present', () => {
-    expect(modelNotReadyAlert('load-threw', 'llama init failed').message).toContain('llama init failed');
+  it('projects the exact outcome from the Shared readiness service', async () => {
+    const outcome = {
+      ok: false as const,
+      reason: 'load-threw' as const,
+      detail: 'native load failed',
+      forceLoadAllowed: false,
+    };
+    await expect(ensureModelReady({
+      ...base,
+      ensureModelLoaded: async () => outcome,
+    })).resolves.toEqual(outcome);
   });
 
-  it('uses a safe fallback message when no detail is given', () => {
-    expect(modelNotReadyAlert('load-threw').message).toBe('The model failed to load. Please try again.');
-  });
-
-  it('insufficient-memory prompts the user to close other apps (the kill-apps prompt)', () => {
-    const a = modelNotReadyAlert('insufficient-memory');
-    expect(a.message).toMatch(/close other apps/i);
-  });
-
-  it('insufficient-memory keeps the underlying detail above the close-apps guidance', () => {
-    const a = modelNotReadyAlert('insufficient-memory', 'needs ~7GB');
-    expect(a.message).toContain('needs ~7GB');
-    expect(a.message).toMatch(/close other apps/i);
-  });
-});
-
-describe('ensureModelReady — resume-after-Load-Anyway wiring (regression)', () => {
-  let unregisterInventory: (() => void) | undefined;
-
-  beforeAll(async () => {
-    unregisterInventory = mobileLLMService.registerAdapter({
-      id: 'model-readiness-native-boundary',
-      async listModels() {
-        return ['llama', 'litert'].map(providerId => ({
-          id: 'gemma-e4b',
-          name: 'Gemma',
-          kind: 'text' as const,
-          source: 'local' as const,
-          modality: 'text' as const,
-          adapterId: `mobile:local:${providerId}:text`,
-          providerId,
-          capabilities: { textGeneration: true },
-          installed: true,
-          ready: true,
-          loaded: false,
-          loading: false,
-        }));
-      },
-    });
-    await mobileLLMService.refresh();
-  });
-
-  afterAll(() => unregisterInventory?.());
-
-  async function selectRoute(engine: 'llama' | 'litert'): Promise<void> {
-    useAppStore.getState().setDownloadedModels([createDownloadedModel({
-      id: 'gemma-e4b', engine, filePath: '/models/gemma-e4b.gguf',
-    })]);
-    await mobileLLMService.select('text', mobileRouteId({
-      source: 'local', hostId: engine, modality: 'text', modelId: 'gemma-e4b',
-    }));
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockLlm.getLoadedModelPath.mockReturnValue(null); // nothing loaded → needs a load
-    mockLlm.isModelLoaded.mockReturnValue(false);
-  });
-
-  const makeDeps = (engine: string | undefined, ensureModelLoaded: any) => ({
-    activeModelInfo: { isRemote: false },
-    activeModel: { id: 'gemma-e4b', engine, filePath: '/models/gemma-e4b.gguf' },
-    activeModelId: 'gemma-e4b',
-    ensureModelLoaded,
-    setAlertState: jest.fn(),
-  });
-
-  // The bug: the llama (GGUF) branch called ensureModelLoaded() with NO argument,
-  // dropping onLoadedResume — so after a "Load Anyway" force-load the turn never
-  // resumed and the user had to hit resend. Assert the CONSEQUENCE: the resume
-  // callback actually fires (not just "ensureModelLoaded was called").
-  it('forwards onLoadedResume to the loader on the llama (GGUF) path so the turn resumes', async () => {
+  it('presents the Shared memory override and resumes only after a successful force load', async () => {
     const resume = jest.fn();
-    // Simulate the "Load Anyway" loader: it invokes the resume callback it was given.
-    const ensureModelLoaded = jest.fn(async (onResume?: () => void) => {
-      onResume?.();
-      return { ok: false, reason: 'insufficient-memory', alerted: true };
-    });
+    const setAlertState = jest.fn();
+    await ensureReadyOrAlert({
+      ...base,
+      setAlertState,
+      ensureModelLoaded: async () => ({
+        ok: false,
+        reason: 'insufficient-memory',
+        detail: 'budget refused the load',
+        forceLoadAllowed: true,
+      }),
+      forceLoadModel: async () => ({ ok: true, reloadedForVision: false }),
+    }, 'send', resume);
 
-    await ensureModelReady(makeDeps(undefined, ensureModelLoaded), resume);
-
-    // Deleting `onLoadedResume` from the llama branch (the bug) makes this fail:
-    // the loader receives undefined and the turn is silently dropped.
+    const alert = setAlertState.mock.calls[0][0];
+    expect(alert.title).toBe('Not Enough Memory');
+    alert.buttons.find((button: { text: string }) => button.text === 'Load Anyway').onPress();
+    await Promise.resolve();
     expect(resume).toHaveBeenCalledTimes(1);
-  });
-
-  it('forwards onLoadedResume on the litert path too (parity)', async () => {
-    const resume = jest.fn();
-    const ensureModelLoaded = jest.fn(async (onResume?: () => void) => {
-      onResume?.();
-      return { ok: false, reason: 'insufficient-memory', alerted: true };
-    });
-
-    await ensureModelReady(makeDeps('litert', ensureModelLoaded), resume);
-
-    expect(resume).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not attempt a load (or resume) when the llama model is already resident', async () => {
-    await selectRoute('llama');
-    mockLlm.isModelLoaded.mockReturnValue(true); // truly resident (not just a path set)
-    mockLlm.getLoadedModelPath.mockReturnValue('/models/gemma-e4b.gguf');
-    const resume = jest.fn();
-    const ensureModelLoaded = jest.fn();
-
-    const outcome = await ensureModelReady(makeDeps(undefined, ensureModelLoaded), resume);
-
-    expect(outcome).toEqual({ ok: true });
-    expect(ensureModelLoaded).not.toHaveBeenCalled();
-    expect(resume).not.toHaveBeenCalled();
-  });
-
-  it('reloads when the llama path is set but the model is NOT actually resident (desync guard)', async () => {
-    // The latent flakiness: fast-path used to trust getLoadedModelPath alone and generate
-    // against a non-resident model. Now isModelReady also requires isModelLoaded().
-    mockLlm.isModelLoaded.mockReturnValue(false);
-    mockLlm.getLoadedModelPath.mockReturnValue('/models/gemma-e4b.gguf');
-    const ensureModelLoaded = jest.fn(async () => ({ ok: false, reason: 'load-threw' as const }));
-
-    const outcome = await ensureModelReady(makeDeps(undefined, ensureModelLoaded));
-
-    expect(ensureModelLoaded).toHaveBeenCalled(); // it did NOT falsely short-circuit as ready
-    expect(outcome.ok).toBe(false);
-  });
-
-  it('does not attempt a load when the LiteRT model is already resident', async () => {
-    await selectRoute('litert');
-    mockLiteRT.isModelLoaded.mockReturnValue(true);
-    const ensureModelLoaded = jest.fn();
-
-    const outcome = await ensureModelReady(makeDeps('litert', ensureModelLoaded));
-
-    expect(outcome).toEqual({ ok: true });
-    expect(ensureModelLoaded).not.toHaveBeenCalled();
   });
 });

@@ -100,6 +100,34 @@ for (const file of files) {
     report('dead-boot-preloader-is-removed', fileName, source, source, 'file:modelPreloader')
   }
 
+  if (
+    fileName === 'src/screens/ChatScreen/useChatModelActions.ts' &&
+    /\b(?:isOverridableMemoryError|reasonFromLoadError|loadModelWithOverride|getMultimodalSupport)\b/.test(text)
+  ) {
+    report('chat-readiness-policy-is-shared', fileName, source, source, 'app-owned readiness or force-load decision')
+  }
+
+  if (
+    fileName === 'src/screens/ChatScreen/modelReadiness.ts' &&
+    /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b|\bisModelReady\b/.test(text)
+  ) {
+    report('chat-readiness-policy-is-shared', fileName, source, source, 'screen-owned readiness decision')
+  }
+
+  if (
+    fileName === 'src/services/imagePromptEnhancement.ts' &&
+    /\b(?:buildImageEnhancementMessages|cleanImageEnhancement|cleanEnhancedPrompt)\b/.test(text)
+  ) {
+    report('prompt-enhancement-orchestration-is-shared', fileName, source, source, 'app-owned enhancement policy')
+  }
+
+  if (
+    fileName === 'src/utils/visionRepair.ts' &&
+    /includes\(['"](?:vl|vision|smolvlm)['"]\)/.test(text)
+  ) {
+    report('vision-repair-policy-is-shared', fileName, source, source, 'app-owned model-name heuristic')
+  }
+
   if (/\b(?:abortPreload|preloadSelectedModels)\b/.test(text)) {
     report('dead-boot-preloader-is-removed', fileName, source, source, 'symbol:boot-preload')
   }
