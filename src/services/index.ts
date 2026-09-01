@@ -32,6 +32,7 @@ export {
   mobileLLMService,
   mobileGenerationService,
   selectMobileModel,
+  selectRemoteMobileModel,
   clearMobileModel,
   refreshMobileModelServices,
   startMobileModelServices,

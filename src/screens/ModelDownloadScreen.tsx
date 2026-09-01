@@ -17,7 +17,11 @@ import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
 import { isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { hardwareService, remoteServerManager } from '../services';
+import {
+  hardwareService,
+  remoteServerManager,
+  selectRemoteMobileModel,
+} from '../services';
 import { discoverLANServers } from '../services/networkDiscovery';
 import { RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
@@ -161,7 +165,9 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
-      if (textModel) await remoteServerManager.setActiveRemoteTextModel(server.id, textModel.id);
+      if (textModel) {
+        await selectRemoteMobileModel(server.id, 'text', textModel.id);
+      }
       setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length === 1 ? '' : 's'}. You can start chatting now.`,
         [{ text: 'Continue', onPress: () => { setAlertState(hideAlert()); navigation.replace('Main'); } }]));
     } catch (e) { setAlertState(showAlert('Connection Failed', (e as Error).message)); }

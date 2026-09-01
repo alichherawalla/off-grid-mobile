@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { remoteServerManager } from '../../services/remoteServerManager';
+import { selectRemoteMobileModel } from '../../services/modelServices';
 import { useRemoteServerStore } from '../../stores';
 import {
   RemoteServer,
@@ -236,10 +237,7 @@ export function useRemoteServerForm({
       ) => {
         if (!desktopManaged) return;
         if (selections.text && selections.text !== current.text) {
-          await remoteServerManager.setActiveRemoteTextModel(
-            serverId,
-            selections.text,
-          );
+          await selectRemoteMobileModel(serverId, 'text', selections.text);
         }
         for (const category of [
           'image',
@@ -248,11 +246,7 @@ export function useRemoteServerForm({
         ] as const) {
           const modelId = selections[category];
           if (modelId && modelId !== current[category]) {
-            await remoteServerManager.setActiveRemoteMediaModel(
-              serverId,
-              category,
-              modelId,
-            );
+            await selectRemoteMobileModel(serverId, category, modelId);
           }
         }
       };
@@ -280,10 +274,7 @@ export function useRemoteServerForm({
           textModelId.trim() &&
           useRemoteServerStore.getState().activeServerId === server.id
         ) {
-          await remoteServerManager.setActiveRemoteTextModel(
-            server.id,
-            textModelId.trim(),
-          );
+          await selectRemoteMobileModel(server.id, 'text', textModelId.trim());
         }
         onSave?.(server);
       } else {

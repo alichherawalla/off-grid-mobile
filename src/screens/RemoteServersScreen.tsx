@@ -25,6 +25,10 @@ import { Button } from '../components/Button';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
+import {
+  clearMobileModel,
+  selectRemoteMobileModel,
+} from '../services/modelServices';
 import { discoverLANServers } from '../services/networkDiscovery';
 import {
   CustomAlert,
@@ -153,13 +157,13 @@ export const RemoteServersScreen: React.FC = () => {
   const handleUseServer = useCallback(
     async (server: (typeof servers)[0]) => {
       if (activeServerId === server.id) {
-        remoteServerManager.clearActiveRemoteTextModel();
+        await clearMobileModel('text');
         return;
       }
       const textModelId = server.selections?.text;
       if (textModelId) {
         try {
-          await remoteServerManager.setActiveRemoteTextModel(server.id, textModelId);
+          await selectRemoteMobileModel(server.id, 'text', textModelId);
           return;
         } catch (error) {
           setAlertState(showAlert('Could not use this model', error instanceof Error

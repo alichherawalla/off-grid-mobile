@@ -120,6 +120,15 @@ export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> 
   await refreshMobileModelServices();
 }
 
+/** Convenience intent for UI surfaces that select a discovered remote route. */
+export function selectRemoteMobileModel(
+  serverId: string,
+  modality: MobileRouteFacts['modality'],
+  modelId: string,
+): Promise<void> {
+  return selectMobileModel({ source: 'remote', hostId: serverId, modality, modelId });
+}
+
 export async function clearMobileModel(
   modality: ActiveModelSnapshot['modality'],
 ): Promise<void> {

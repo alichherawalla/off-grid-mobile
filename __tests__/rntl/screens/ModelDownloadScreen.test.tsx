@@ -126,6 +126,7 @@ jest.mock('../../../src/services', () => ({
   },
   unloadTextModel: jest.fn().mockResolvedValue(undefined),
   selectMobileModel: jest.fn().mockResolvedValue(undefined),
+  selectRemoteMobileModel: jest.fn().mockResolvedValue(undefined),
   remoteServerManager: {
     addServer: jest.fn().mockResolvedValue({ id: 'new-server' }),
     testConnection: jest.fn().mockResolvedValue({ success: false }),
@@ -528,7 +529,12 @@ describe('ModelDownloadScreen', () => {
       await mockOnConnectServer(MOCK_SERVER);
     });
 
-    expect(mockRsm.setActiveRemoteTextModel).toHaveBeenCalledWith('srv-1', 'llama3');
+    const services = jest.requireMock('../../../src/services');
+    expect(services.selectRemoteMobileModel).toHaveBeenCalledWith(
+      'srv-1',
+      'text',
+      'llama3',
+    );
     expect(mockShowAlert).toHaveBeenCalledWith('Connected!', expect.stringContaining('My Server'), expect.any(Array));
   });
 
