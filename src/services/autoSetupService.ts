@@ -1,23 +1,24 @@
 import {
-  createAutoSetupSession as createSharedAutoSetupSession,
-  type AutoSetupCandidate,
-  type AutoSetupSession as SharedAutoSetupSession,
+  createGuidedSetupSession,
+  guidedSetupTierFromLoadingMode,
+  guidedSetupTierToLoadingMode,
+  type GuidedSetupCandidate,
+  type GuidedSetupSession,
+  type GuidedSetupTierPlan,
 } from '@offgrid/models';
 import { modelDownloadRegistry } from './modelServices/downloadRegistryBootstrap';
 import type { ModelDownload, ModelDownloadStartRequest } from './modelServices/downloadTypes';
 import { useAppStore } from '../stores';
 import {
   loadAutoSetupCompatibleCatalog,
+  type AutoSetupImagePayload,
+  type AutoSetupSttPayload,
+  type AutoSetupTextPayload,
   type AutoSetupCatalogBoundaries,
 } from './autoSetupCatalog';
-import type {
-  AutoSetupImagePayload,
-  AutoSetupSttPayload,
-  AutoSetupTextPayload,
-} from './autoSetupPlan';
 import { selectMobileModel } from './modelServices';
 
-export { autoSetupDownloadId } from '@offgrid/models';
+export { guidedSetupDownloadId as autoSetupDownloadId } from '@offgrid/models';
 
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
@@ -33,10 +34,17 @@ const productionDownloads: AutoSetupDownloadBoundaries = {
   subscribe: listener => modelDownloadRegistry.subscribe(listener),
 };
 
-export type AutoSetupSession = SharedAutoSetupSession<
+export type AutoSetupSession = GuidedSetupSession<
   AutoSetupTextPayload,
   AutoSetupImagePayload,
-  AutoSetupSttPayload
+  AutoSetupSttPayload,
+  never
+>;
+export type AutoSetupPlan = GuidedSetupTierPlan<
+  AutoSetupTextPayload,
+  AutoSetupImagePayload,
+  AutoSetupSttPayload,
+  never
 >;
 
 export interface AutoSetupSessionBoundaries {
@@ -45,15 +53,9 @@ export interface AutoSetupSessionBoundaries {
   catalogDeadlineMs?: number;
 }
 
-const TIER_TO_LOADING_MODE = {
-  lean: 'conservative',
-  balanced: 'balanced',
-  extreme: 'aggressive',
-} as const;
-
 type SetupPayload = AutoSetupTextPayload | AutoSetupImagePayload | AutoSetupSttPayload;
 
-function toDownloadRequest(item: AutoSetupCandidate<SetupPayload>): ModelDownloadStartRequest {
+function toDownloadRequest(item: GuidedSetupCandidate<SetupPayload>): ModelDownloadStartRequest {
   if (item.kind === 'text') {
     const payload = item.payload as AutoSetupTextPayload;
     return { modelType: 'text', modelId: payload.modelId, file: payload.file };
@@ -69,24 +71,22 @@ export function createAutoSetupSession(
   boundaries: AutoSetupSessionBoundaries = {},
 ): AutoSetupSession {
   const downloads = boundaries.downloads ?? productionDownloads;
-  return createSharedAutoSetupSession({
+  return createGuidedSetupSession({
     loadCatalog: () => loadAutoSetupCompatibleCatalog(boundaries.catalog),
     listDownloads: () => downloads.list(),
     startDownload: item => downloads.start(toDownloadRequest(item)),
     cancelDownload: id => downloads.cancel(id),
     subscribeDownloads: listener => downloads.subscribe(listener),
-    loadTier: () => {
-      const mode = useAppStore.getState().settings.modelLoadingMode;
-      return mode === 'conservative'
-        ? 'lean'
-        : mode === 'aggressive'
-          ? 'extreme'
-          : 'balanced';
-    },
+    loadTier: () => guidedSetupTierFromLoadingMode(
+      useAppStore.getState().settings.modelLoadingMode,
+    ),
     saveTier: tier => {
-      useAppStore.getState().updateSettings({ modelLoadingMode: TIER_TO_LOADING_MODE[tier] });
+      useAppStore.getState().updateSettings({
+        modelLoadingMode: guidedSetupTierToLoadingMode(tier),
+      });
     },
-    activateText: async item => {
+    activate: async item => {
+      if (item.kind !== 'text') return;
       const selected = useAppStore.getState().downloadedModels.find(
         model => model.id === item.id,
       );

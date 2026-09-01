@@ -7,10 +7,10 @@ import { LoadingDots } from '../components/LoadingDots';
 import { SLOTS, useSlot } from '../bootstrap/slotRegistry';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import type { RootStackParamList } from '../navigation/types';
-import type { AutoSetupPlan } from '../services/autoSetupPlan';
 import {
   autoSetupDownloadId,
   createAutoSetupSession,
+  type AutoSetupPlan,
   type AutoSetupSession,
 } from '../services/autoSetupService';
 import { useTheme, useThemedStyles } from '../theme';
