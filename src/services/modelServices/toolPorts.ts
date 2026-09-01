@@ -1,4 +1,4 @@
-import type {
+import {
   ConversationPort,
   GenerationContentPart,
   GenerationMessage,
@@ -7,17 +7,15 @@ import type {
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExecutorPort,
+  normalizeToolResult,
+  toolErrorResult,
+  toolResultModelContent,
 } from '@offgrid/models';
 import { useChatStore } from '../../stores/chatStore';
 import logger from '../../utils/logger';
 import { executeToolCall } from '../tools';
 import { mobileEffectiveToolSchemas } from '../generationToolLoop';
 import { getToolExtensions } from '../tools/extensions';
-import {
-  normalizeToolResult,
-  toolErrorResult,
-  toolResultModelContent,
-} from '../tools/toolResult';
 import type { ToolCall, ToolResult } from '../tools/types';
 
 function decodeArguments(raw: string): Record<string, unknown> {

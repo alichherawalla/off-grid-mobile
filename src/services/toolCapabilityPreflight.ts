@@ -1,5 +1,6 @@
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { providerRegistry } from './adapters/providers';
+import { toolCapabilityIssue } from '@offgrid/models';
 
 export const REMOTE_TOOLS_UNAVAILABLE =
   'This remote model cannot run tools from Chat. Select a model with tool support, or use it as the Computer Use specialist.';
@@ -12,7 +13,9 @@ export function remoteToolCapabilityIssue(
   const serverId = useRemoteServerStore.getState().activeServerId;
   if (!serverId) return undefined;
   const provider = providerRegistry.getProvider(serverId);
-  return provider && !provider.capabilities.supportsToolCalling
-    ? REMOTE_TOOLS_UNAVAILABLE
-    : undefined;
+  const issue = toolCapabilityIssue(
+    requestedToolCount,
+    provider ? { toolCalling: provider.capabilities.supportsToolCalling } : undefined,
+  );
+  return issue ? REMOTE_TOOLS_UNAVAILABLE : undefined;
 }

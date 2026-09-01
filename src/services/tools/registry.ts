@@ -1,4 +1,12 @@
 import { ToolDefinition } from './types';
+import {
+  PORTABLE_TOOL_CATALOG,
+  catalogEntryToDefinition,
+  definitionToOpenAITool,
+} from '@offgrid/models';
+
+const portableTool = (name: string): ToolDefinition =>
+  PORTABLE_TOOL_CATALOG.find(tool => tool.name === name)! as ToolDefinition;
 
 export const AVAILABLE_TOOLS: ToolDefinition[] = [
   {
@@ -16,33 +24,8 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
       },
     },
   },
-  {
-    id: 'calculator',
-    name: 'calculator',
-    displayName: 'Calculator',
-    description: 'Evaluate math expressions',
-    icon: 'hash',
-    parameters: {
-      expression: {
-        type: 'string',
-        description: 'Math expression',
-        required: true,
-      },
-    },
-  },
-  {
-    id: 'get_current_datetime',
-    name: 'get_current_datetime',
-    displayName: 'Date & Time',
-    description: 'Get current date and time',
-    icon: 'clock',
-    parameters: {
-      timezone: {
-        type: 'string',
-        description: 'IANA timezone, e.g. America/New_York',
-      },
-    },
-  },
+  portableTool('calculator'),
+  portableTool('get_current_datetime'),
   {
     id: 'get_device_info',
     name: 'get_device_info',
@@ -91,29 +74,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
 export function getToolsAsOpenAISchema(enabledToolIds: string[]) {
   return AVAILABLE_TOOLS
     .filter(tool => enabledToolIds.includes(tool.id))
-    .map(tool => ({
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: {
-          type: 'object',
-          properties: Object.fromEntries(
-            Object.entries(tool.parameters).map(([key, param]) => [
-              key,
-              {
-                type: param.type,
-                description: param.description,
-                ...(param.enum ? { enum: param.enum } : {}),
-              },
-            ]),
-          ),
-          required: Object.entries(tool.parameters)
-            .filter(([_, param]) => param.required)
-            .map(([key]) => key),
-        },
-      },
-    }));
+    .map(tool => definitionToOpenAITool(catalogEntryToDefinition(tool)));
 }
 
 export function buildToolSystemPromptHint(enabledToolIds: string[]): string {

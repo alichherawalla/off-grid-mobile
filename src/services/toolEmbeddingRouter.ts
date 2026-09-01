@@ -20,6 +20,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { embeddingService } from './rag/embedding';
 import logger from '../utils/logger';
+import { rankToolVectorCandidates } from '@offgrid/models';
 
 export interface RoutableTool {
   function: { name: string; description?: string };
@@ -81,65 +82,6 @@ function firstLine(desc: string | undefined, max = 200): string {
   return line.length > max ? line.slice(0, max) : line;
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-
-// Short/function words that shouldn't drive tool selection (they match too much).
-const STOPWORDS = new Set([
-  'the', 'and', 'for', 'you', 'your', 'can', 'get', 'are', 'was', 'with', 'that',
-  'this', 'have', 'has', 'from', 'about', 'what', 'which', 'show', 'tell', 'please',
-  'give', 'into', 'them', 'they', 'our', 'out', 'all', 'any', 'some', 'use',
-]);
-
-/** Meaningful query tokens: lowercase words ≥3 chars, minus stopwords. */
-function queryTokens(query: string): string[] {
-  const seen = new Set<string>();
-  for (const raw of query.toLowerCase().split(/[^a-z0-9]+/)) {
-    if (raw.length >= 3 && !STOPWORDS.has(raw)) seen.add(raw);
-  }
-  return [...seen];
-}
-
-/**
- * Lexical boost on top of embedding similarity. A query token appearing in the tool
- * NAME is a strong signal (provider/verb names like "notion"/"search" live there); a
- * match in the description is a weaker one. This is what makes "look at my notion
- * page" surface notion-search/notion-fetch instead of notion-get-users — pure cosine
- * can't tell them apart, the literal word "notion" can.
- */
-function lexicalBoost(tokens: string[], tool: RoutableTool): number {
-  const name = tool.function.name.toLowerCase();
-  const desc = (tool.function.description ?? '').toLowerCase();
-  let nameHits = 0;
-  let descHits = 0;
-  for (const t of tokens) {
-    if (name.includes(t)) nameHits++;
-    else if (desc.includes(t)) descHits++;
-  }
-  return Math.min(nameHits, 2) * 0.3 + Math.min(descHits, 3) * 0.1;
-}
-
-// Verbs that mark a tool as a discovery / entry-point (you call these to FIND things
-// before you can act on them). They embed poorly against natural phrasing like "get my
-// latest page", so give them a structural nudge — without one, the model gets fetch/
-// update tools but not the search/list tool it needs to start, and reports "no access".
-const DISCOVERY_VERBS = ['search', 'list', 'query', 'find', 'fetch', 'get', 'read'];
-
-function discoveryBoost(tool: RoutableTool): number {
-  const name = tool.function.name.toLowerCase();
-  return DISCOVERY_VERBS.some(v => name.includes(v)) ? 0.15 : 0;
-}
-
 async function embedTool(tool: RoutableTool, expectedDim?: number): Promise<number[]> {
   const text = `${tool.function.name}: ${firstLine(tool.function.description)}`;
   const hash = hashText(text);
@@ -172,16 +114,13 @@ export async function selectToolsByEmbeddingRaw(
   await hydrateCache();
   await embeddingService.load();
   const queryVec = await embeddingService.embed(query);
-  const tokens = queryTokens(query);
-  const scored: Array<{ name: string; score: number }> = [];
-  for (const tool of tools) {
-    const vec = await embedTool(tool, queryVec.length);
-    // Hybrid: semantic similarity + lexical (provider/verb word) + discovery boost.
-    const score = cosineSimilarity(queryVec, vec) + lexicalBoost(tokens, tool) + discoveryBoost(tool);
-    scored.push({ name: tool.function.name, score });
-  }
-  scored.sort((a, b) => b.score - a.score);
-  const selected = scored.slice(0, topK).map(s => s.name);
+  const candidates = await Promise.all(tools.map(async (tool, index) => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    vector: await embedTool(tool, queryVec.length),
+    index,
+  })));
+  const selected = rankToolVectorCandidates(query, queryVec, candidates, topK);
   logger.log(`[ToolRouter] hybrid-routed ${tools.length} → ${selected.length}: [${selected.join(', ')}]`);
   return selected;
 }

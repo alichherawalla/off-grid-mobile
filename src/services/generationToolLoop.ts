@@ -11,7 +11,7 @@ import {
   normalizeToolResult,
   toolErrorResult,
   toolResultModelContent,
-} from './tools/toolResult';
+} from '@offgrid/models';
 import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
 import { getToolExtensions } from './tools/extensions';
 import { Platform } from 'react-native';

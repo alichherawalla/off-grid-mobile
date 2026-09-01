@@ -3,6 +3,7 @@ import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../rag';
 import logger from '../../utils/logger';
+import { executePortableTool } from '@offgrid/models';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -31,9 +32,9 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       return handleWebSearch(q);
     }
     case 'calculator':
-      return handleCalculator(call.arguments.expression);
     case 'get_current_datetime':
-      return handleGetDatetime(call.arguments.timezone);
+    case 'get_datetime':
+      return executePortableTool(call.name, call.arguments) as string;
     case 'get_device_info':
       return handleGetDeviceInfo(call.arguments.info_type);
     case 'search_knowledge_base': {
@@ -151,105 +152,6 @@ function decodeHTMLEntities(text: string): string {
     .replaceAll('&apos;', "'")
     .replaceAll(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replaceAll(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
-}
-
-/**
- * Safe math expression evaluator using recursive descent parsing.
- * Supports: +, -, *, /, %, ^ (exponentiation), parentheses, decimals.
- * No dynamic code execution (no eval/new Function).
- */
-function evaluateExpression(expr: string): number {
-  let pos = 0;
-  const str = expr.replaceAll(/\s/g, '');
-
-  function parseExpr(): number {
-    let left = parseTerm();
-    while (pos < str.length && (str[pos] === '+' || str[pos] === '-')) {
-      const op = str[pos++];
-      const right = parseTerm();
-      left = op === '+' ? left + right : left - right;
-    }
-    return left;
-  }
-
-  function parseTerm(): number {
-    let left = parsePower();
-    while (pos < str.length && (str[pos] === '*' || str[pos] === '/' || str[pos] === '%')) {
-      const op = str[pos++];
-      const right = parsePower();
-      if (op === '*') left *= right;
-      else if (op === '/') left /= right;
-      else left %= right;
-    }
-    return left;
-  }
-
-  function parsePower(): number {
-    let base = parseUnary();
-    if (pos < str.length && str[pos] === '^') {
-      pos++;
-      const exp = parsePower(); // right-associative
-      base = Math.pow(base, exp);
-    }
-    return base;
-  }
-
-  function parseUnary(): number {
-    if (str[pos] === '-') { pos++; return -parseAtom(); }
-    if (str[pos] === '+') { pos++; return parseAtom(); }
-    return parseAtom();
-  }
-
-  function parseAtom(): number {
-    if (str[pos] === '(') {
-      pos++; // skip '('
-      const val = parseExpr();
-      if (str[pos] !== ')') throw new Error('Mismatched parentheses');
-      pos++; // skip ')'
-      return val;
-    }
-    const start = pos;
-    while (pos < str.length && (str[pos] >= '0' && str[pos] <= '9' || str[pos] === '.')) pos++;
-    if (pos === start) throw new Error('Unexpected character');
-    return Number(str.substring(start, pos));
-  }
-
-  const result = parseExpr();
-  if (pos < str.length) throw new Error('Unexpected character');
-  return result;
-}
-
-function handleCalculator(expression: string): string {
-  const sanitized = expression.replaceAll(/\s/g, '');
-  if (!/^[0-9+\-*/().,%^]+$/.test(sanitized)) {
-    throw new Error('Invalid expression: only numbers and basic operators (+, -, *, /, ^, %, parentheses) are allowed');
-  }
-
-  const result = evaluateExpression(sanitized);
-
-  if (typeof result !== 'number' || !Number.isFinite(result)) {
-    throw new TypeError('Expression did not evaluate to a finite number');
-  }
-
-  return `${expression} = ${result}`;
-}
-
-function handleGetDatetime(timezone?: string): string {
-  const now = new Date();
-  const options: Intl.DateTimeFormatOptions = {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'long',
-    ...(timezone ? { timeZone: timezone } : {}),
-  };
-  try {
-    const formatted = new Intl.DateTimeFormat('en-US', options).format(now);
-    const isoString = now.toISOString();
-    return `Current date and time: ${formatted}\nISO 8601: ${isoString}\nUnix timestamp: ${Math.floor(now.getTime() / 1000)}`;
-  } catch {
-    // Invalid timezone fallback
-    const formatted = now.toString();
-    return `Current date and time: ${formatted}\nNote: requested timezone "${timezone}" was invalid, showing device local time.`;
-  }
 }
 
 async function collectDeviceSection(
