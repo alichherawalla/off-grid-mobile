@@ -133,6 +133,13 @@ for (const file of files) {
   }
 
   if (
+    /^src\/services\/(?:modelServices\/bootstrap\/ragBootstrap|adapters\/rag\/mobileRagPorts)\.ts$/.test(fileName) &&
+    /(?:chunkSize\s*:\s*600|overlap\s*:\s*120|minChunkLength\s*:\s*20|dimension\s*:\s*384|topK\s*=\s*5)/.test(text)
+  ) {
+    report('rag-profile-is-shared', fileName, source, source, 'local:rag-profile-default')
+  }
+
+  if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
   ) {

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_RAG_EMBEDDING_DIMENSION,
   detectKind,
   type EmbeddingProvider,
   type ExtractionBridges,
@@ -101,7 +102,7 @@ export const mobileRagStore: VectorStore = {
 };
 
 export const mobileRagEmbeddings: EmbeddingProvider = {
-  dimension: 384,
+  dimension: DEFAULT_RAG_EMBEDDING_DIMENSION,
   async embed(text) { return (await executeMobileEmbedding([text]))[0]; },
   embedBatch: executeMobileEmbedding,
 };

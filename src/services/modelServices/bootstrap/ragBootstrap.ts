@@ -1,4 +1,5 @@
 import {
+  DEFAULT_RAG_RETRIEVAL_LIMIT,
   estimateCharBudget,
   RagService as SharedRagService,
   type IndexStage,
@@ -75,7 +76,6 @@ const sharedRag = new SharedRagService({
   embeddings: mobileRagEmbeddings,
   extraction: mobileRagExtraction,
   prepareDocument: prepareMobileRagDocument,
-  chunkOptions: { chunkSize: 600, overlap: 120, minChunkLength: 20 },
 });
 
 class MobileRagService {
@@ -198,7 +198,7 @@ function legacySearch(result: Awaited<ReturnType<SharedRagService['searchProject
 export const ragService = new MobileRagService();
 
 export const retrievalService = {
-  search: async (projectId: string, query: string, topK = 5) =>
+  search: async (projectId: string, query: string, topK = DEFAULT_RAG_RETRIEVAL_LIMIT) =>
     legacySearch(await sharedRag.searchProject(projectId, query, { topK })),
   searchWithBudget: async (params: { projectId: string; query: string; contextLength: number; topK?: number }) =>
     legacySearch(await sharedRag.searchProject(params.projectId, params.query, {
