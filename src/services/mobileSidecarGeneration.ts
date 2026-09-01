@@ -41,10 +41,14 @@ export async function executeMobileEmbedding(inputs: string[]): Promise<number[]
   return result.output.vectors;
 }
 
-export async function executeMobileClassification(input: string): Promise<'image' | 'text'> {
+export async function executeMobileClassification(
+  input: string,
+  routeId?: string,
+): Promise<'image' | 'text'> {
   await refreshMobileModelServices();
   const result = await mobileGenerationService.generate({
     operation: { type: 'classifier', input, labels: ['image', 'text'] },
+    routeId,
     allowFallback: false,
   });
   if (result.output.type !== 'classification') {

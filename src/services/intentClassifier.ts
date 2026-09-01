@@ -1,6 +1,9 @@
 import { DownloadedModel } from '../types';
 import logger from '../utils/logger';
 import { executeMobileClassification } from './mobileSidecarGeneration';
+import { loadTextModel } from './modelServices/modelLifecycleBootstrap';
+import { getActiveModels } from './modelServices/modelState';
+import { mobileRouteId } from './modelServices/mobileRoute';
 
 type Intent = 'image' | 'text';
 
@@ -270,11 +273,34 @@ class IntentClassifier {
    * Use LLM for classification when pattern matching is uncertain
    */
   private async classifyWithLLM(message: string, opts: ClassifyOptions): Promise<Intent> {
-    if (opts.classifierModel) {
-      opts.onStatusChange?.(`Loading ${opts.classifierModel.name}...`);
+    const activeTextModel = getActiveModels().text.model;
+    const currentPath = opts.currentModelPath ?? activeTextModel?.filePath ?? null;
+    const classifierModel = opts.classifierModel;
+    const needsModelSwap = !!classifierModel && currentPath !== classifierModel.filePath;
+
+    if (needsModelSwap && classifierModel) {
+      opts.onStatusChange?.(`Loading ${classifierModel.name}...`);
+      await loadTextModel(classifierModel.id);
     }
     opts.onStatusChange?.('Analyzing request...');
-    return executeMobileClassification(message);
+    try {
+      return await executeMobileClassification(
+        message,
+        classifierModel
+          ? mobileRouteId({
+              source: 'local',
+              hostId: classifierModel.engine,
+              modality: 'classifier',
+              modelId: classifierModel.id,
+            })
+          : undefined,
+      );
+    } finally {
+      if (needsModelSwap && activeTextModel?.id) {
+        opts.onStatusChange?.('Restoring text model...');
+        await loadTextModel(activeTextModel.id);
+      }
+    }
   }
 
   /**

@@ -8,14 +8,20 @@
 
 import { intentClassifier, classifyToolsNeeded } from '../../../src/services/intentClassifier';
 import { llmService } from '../../../src/services/llm';
-import { activeModelService } from '../../harness/activeModelLifecycle';
+import { loadTextModel } from '../../../src/services/modelServices/modelLifecycleBootstrap';
+import { getActiveModels } from '../../../src/services/modelServices/modelState';
+import { executeMobileClassification } from '../../../src/services/mobileSidecarGeneration';
 
 // Mock dependencies
 jest.mock('../../../src/services/llm');
-jest.mock('../../harness/activeModelLifecycle');
+jest.mock('../../../src/services/modelServices/modelLifecycleBootstrap', () => ({ loadTextModel: jest.fn() }));
+jest.mock('../../../src/services/modelServices/modelState', () => ({ getActiveModels: jest.fn() }));
+jest.mock('../../../src/services/mobileSidecarGeneration', () => ({ executeMobileClassification: jest.fn() }));
 
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
-const mockActiveModelService = activeModelService as jest.Mocked<typeof activeModelService>;
+const mockLoadTextModel = loadTextModel as jest.Mock;
+const mockGetActiveModels = getActiveModels as jest.Mock;
+const mockExecuteMobileClassification = executeMobileClassification as jest.Mock;
 
 describe('IntentClassifier', () => {
   beforeEach(() => {
@@ -25,10 +31,11 @@ describe('IntentClassifier', () => {
     // Default mock implementations
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null);
-    mockActiveModelService.getActiveModels.mockReturnValue({
+    mockGetActiveModels.mockReturnValue({
       text: { model: null, isLoaded: false, isLoading: false },
       image: { model: null, isLoaded: false, isLoading: false },
     });
+    mockExecuteMobileClassification.mockResolvedValue('text');
   });
 
   // ============================================================================
@@ -935,13 +942,7 @@ describe('IntentClassifier', () => {
 
     test('should use LLM classification when pattern is uncertain and LLM enabled', async () => {
       mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream, onComplete } = {}) => {
-          onStream?.({ content: 'YES' });
-          onComplete?.({ content: 'YES', reasoningContent: '' });
-          return 'YES';
-        }
-      );
+      mockExecuteMobileClassification.mockResolvedValue('image');
 
       const result = await intentClassifier.classifyIntent(
         'something uncertain without clear patterns',
@@ -949,18 +950,12 @@ describe('IntentClassifier', () => {
       );
 
       expect(result).toBe('image');
-      expect(mockLlmService.generateResponse).toHaveBeenCalled();
+      expect(mockExecuteMobileClassification).toHaveBeenCalled();
     });
 
     test('should return text when LLM responds NO', async () => {
       mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream, onComplete } = {}) => {
-          onStream?.({ content: 'NO' });
-          onComplete?.({ content: 'NO', reasoningContent: '' });
-          return 'NO';
-        }
-      );
+      mockExecuteMobileClassification.mockResolvedValue('text');
 
       const result = await intentClassifier.classifyIntent(
         'something uncertain without clear patterns',
@@ -972,7 +967,7 @@ describe('IntentClassifier', () => {
 
     test('should handle LLM errors gracefully', async () => {
       mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.generateResponse.mockRejectedValue(new Error('LLM error'));
+      mockExecuteMobileClassification.mockRejectedValue(new Error('LLM error'));
 
       const result = await intentClassifier.classifyIntent(
         'something uncertain',
@@ -1019,17 +1014,12 @@ describe('IntentClassifier', () => {
 
       mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/different.gguf');
       mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream } = {}) => {
-          onStream?.({ content: 'YES' });
-          return 'YES';
-        }
-      );
-      mockActiveModelService.getActiveModels.mockReturnValue({
+      mockExecuteMobileClassification.mockResolvedValue('image');
+      mockGetActiveModels.mockReturnValue({
         text: { model: { id: 'original-model' } as any, isLoaded: true, isLoading: false },
         image: { model: null, isLoaded: false, isLoading: false },
       });
-      mockActiveModelService.loadTextModel.mockResolvedValue(undefined);
+      mockLoadTextModel.mockResolvedValue(undefined);
 
       const onStatusChange = jest.fn();
 
@@ -1044,9 +1034,9 @@ describe('IntentClassifier', () => {
 
       expect(result).toBe('image');
       // Should have loaded the classifier model
-      expect(mockActiveModelService.loadTextModel).toHaveBeenCalledWith('classifier-model');
+      expect(mockLoadTextModel).toHaveBeenCalledWith('classifier-model');
       // Should always restore the original model after classifying
-      expect(mockActiveModelService.loadTextModel).toHaveBeenCalledWith('original-model');
+      expect(mockLoadTextModel).toHaveBeenCalledWith('original-model');
       expect(onStatusChange).toHaveBeenCalledWith(expect.stringContaining('Loading'));
       expect(onStatusChange).toHaveBeenCalledWith('Analyzing request...');
       expect(onStatusChange).toHaveBeenCalledWith('Restoring text model...');
@@ -1067,24 +1057,20 @@ describe('IntentClassifier', () => {
 
       mockLlmService.getLoadedModelPath.mockReturnValue('/path/to/same.gguf');
       mockLlmService.isModelLoaded.mockReturnValue(true);
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream } = {}) => {
-          onStream?.({ content: 'NO' });
-          return 'NO';
-        }
-      );
+      mockExecuteMobileClassification.mockResolvedValue('text');
 
       const result = await intentClassifier.classifyIntent(
         'something uncertain without clear patterns',
         {
           useLLM: true,
           classifierModel,
+          currentModelPath: '/path/to/same.gguf',
         }
       );
 
       expect(result).toBe('text');
       // Should NOT have swapped models
-      expect(mockActiveModelService.loadTextModel).not.toHaveBeenCalled();
+      expect(mockLoadTextModel).not.toHaveBeenCalled();
     });
   });
 
