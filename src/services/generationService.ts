@@ -4,27 +4,72 @@ import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import type { ToolResult } from './tools/types';
+import type {
+  GenerationContentPart,
+  GenerationMessage,
+  GenerationReasoning,
+  GenerationToolCall,
+} from '@offgrid/models';
 import { providerRegistry } from './adapters/providers';
 import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
 import {
   buildGenerationMetaImpl,
-  buildToolLoopHandlersImpl,
-  prepareGenerationImpl,
-  type GenerationWithToolsRequest,
+  FLUSH_INTERVAL_MS,
 } from './generationServiceHelpers';
-import {
-  generateRemoteResponseImpl,
-  generateRemoteWithToolsImpl,
-} from './modelServices/remoteGenerationCoordinator';
-import {
-  generateSharedChatResponse,
-  generateSharedToolResponse,
-} from './modelServices/sharedGenerationFacade';
+import { mobileGenerationService } from './modelServices';
+import { mobileToolPromptMessages } from './modelServices/toolPromptPolicy';
+import { mobileToolDefinitions, mobileToolResult } from './modelServices/toolPorts';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
-type StreamChunk = string | { content?: string; reasoningContent?: string };
+function attachmentPart(attachment: MediaAttachment): GenerationContentPart {
+  if (attachment.type === 'image') return { type: 'image', uri: attachment.uri, mimeType: attachment.mimeType };
+  if (attachment.type === 'audio') return { type: 'audio', uri: attachment.uri, mimeType: attachment.mimeType };
+  return { type: 'file', uri: attachment.uri, mimeType: attachment.mimeType, name: attachment.fileName };
+}
+
+function sharedMessages(messages: Message[]): GenerationMessage[] {
+  return messages.map(message => {
+    const attachments = message.attachments?.map(attachmentPart) ?? [];
+    return {
+      role: message.role,
+      content: attachments.length
+        ? [{ type: 'text' as const, text: message.content }, ...attachments]
+        : message.content,
+      name: message.toolName,
+      toolCallId: message.toolCallId,
+      toolCalls: message.toolCalls?.map((call, index) => ({
+        id: call.id ?? `${message.id}-tool-${index}`,
+        name: call.name,
+        arguments: call.arguments,
+      })),
+    };
+  });
+}
+
+function sharedReasoning(): GenerationReasoning {
+  const { thinkingEnabled, reasoningBudget } = useAppStore.getState().settings;
+  return {
+    enabled: thinkingEnabled,
+    ...(reasoningBudget !== undefined && reasoningBudget > 0 ? { budgetTokens: reasoningBudget } : {}),
+  };
+}
+
+function turnId(messages: Message[], conversationId: string, attempt: number): string {
+  return messages.at(-1)?.uuid ?? messages.at(-1)?.id ?? `${conversationId}-${attempt}`;
+}
+
+function decodedToolArguments(call: GenerationToolCall): Record<string, any> {
+  try {
+    const value: unknown = JSON.parse(call.arguments || '{}');
+    return value && !Array.isArray(value) && typeof value === 'object'
+      ? value as Record<string, any>
+      : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface QueuedMessage {
   id: string; conversationId: string; text: string;
@@ -42,6 +87,7 @@ export interface GenerationState {
   streamingContent: string;
   startTime: number | null;
   queuedMessages: QueuedMessage[];
+  routedToolNames?: string[];
 }
 
 type GenerationListener = (state: GenerationState) => void;
@@ -62,7 +108,6 @@ class GenerationService {
   wasAborted(): boolean { return this.abortRequested; }
   private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
-  private currentRemoteAbortController: AbortController | null = null;
   private currentSharedAbortController: AbortController | null = null;
   private remoteTimeToFirstToken: number | undefined;
 
@@ -114,10 +159,6 @@ class GenerationService {
     this.flushTokenBuffer();
   }
 
-  private normalizeStreamChunk(data: StreamChunk): { content?: string; reasoningContent?: string } {
-    return typeof data === 'string' ? { content: data } : data;
-  }
-
   getState(): GenerationState { return { ...this.state }; }
 
   isGeneratingFor(conversationId: string): boolean {
@@ -142,11 +183,7 @@ class GenerationService {
     checkProPromptForText(delayMs);
   }
 
-  private buildToolLoopHandlers() { return buildToolLoopHandlersImpl(this); }
   private buildGenerationMeta(): GenerationMeta { return buildGenerationMetaImpl(this); }
-  private async prepareGeneration(conversationId: string): Promise<boolean> {
-    return prepareGenerationImpl(this, conversationId);
-  }
 
   /** Generate a response for a conversation. Runs independently of UI lifecycle. */
   async generateResponse(
@@ -155,7 +192,53 @@ class GenerationService {
     onFirstToken?: () => void,
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
-    return generateSharedChatResponse(this, { conversationId, messages, onFirstToken });
+    if (this.state.isGenerating) return;
+    if (this.pendingStop) await this.pendingStop;
+    const attempt = ++this.generationAttempt;
+    const controller = new AbortController();
+    this.currentSharedAbortController = controller;
+    this.beginSharedGeneration(conversationId);
+    let firstContent = true;
+    try {
+      const result = await mobileGenerationService.generate({
+        operation: { type: 'text' },
+        messages: sharedMessages(messages),
+        reasoning: sharedReasoning(),
+        identity: { conversationId, turnId: turnId(messages, conversationId, attempt) },
+        signal: controller.signal,
+      }, {
+        chunk: chunk => {
+          if (!this.ownsSharedAttempt(controller, attempt)) return;
+          if (chunk.content) {
+            if (firstContent) {
+              firstContent = false;
+              this.remoteTimeToFirstToken = this.state.startTime
+                ? (Date.now() - this.state.startTime) / 1000
+                : undefined;
+              this.updateState({ isThinking: false });
+              onFirstToken?.();
+            }
+            this.state.streamingContent += chunk.content;
+            this.tokenBuffer += chunk.content;
+          }
+          if (chunk.reasoning) {
+            this.reasoningBuffer += chunk.reasoning;
+            this.totalReasoningLength += chunk.reasoning.length;
+          }
+          this.scheduleSharedFlush(!!(chunk.content || chunk.reasoning));
+        },
+      });
+      if (!this.ownsSharedAttempt(controller, attempt)) return;
+      this.finishSharedGeneration(conversationId, result.content);
+    } catch (error) {
+      if (!this.ownsSharedAttempt(controller, attempt)) return;
+      logger.error('[GenerationService] Shared generation error:', error);
+      this.keepShownPartialOrClear();
+      this.resetState();
+      throw error;
+    } finally {
+      if (this.currentSharedAbortController === controller) this.currentSharedAbortController = null;
+    }
   }
 
   /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
@@ -169,12 +252,100 @@ class GenerationService {
       onToolCallComplete?: (name: string, result: ToolResult) => void;
       onFirstToken?: () => void;
     },
-  ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
-    return generateSharedToolResponse(this, {
-      conversationId,
-      messages,
-      ...options,
-    });
+  ): Promise<{ interrupted: boolean } | void> {
+    if (this.state.isGenerating) return;
+    if (this.pendingStop) await this.pendingStop;
+    const attempt = ++this.generationAttempt;
+    const controller = new AbortController();
+    this.currentSharedAbortController = controller;
+    this.beginSharedGeneration(conversationId);
+    let firstContent = true;
+    try {
+      const tools = await mobileToolDefinitions(options.enabledToolIds, messages);
+      const promptMessages = mobileToolPromptMessages(messages, options.enabledToolIds, tools.length > 0);
+      this.state.routedToolNames = tools.map(tool => tool.name);
+      const configuredMax = useAppStore.getState().settings.maxToolCalls;
+      const maxToolCalls = Number.isInteger(configuredMax) && configuredMax! >= 1 && configuredMax! <= 100
+        ? configuredMax!
+        : 25;
+      const result = await mobileGenerationService.generate({
+        operation: { type: 'text' },
+        messages: sharedMessages(promptMessages),
+        reasoning: sharedReasoning(),
+        identity: {
+          conversationId,
+          turnId: turnId(messages, conversationId, attempt),
+          projectId: options.projectId,
+        },
+        tools,
+        maxToolRounds: maxToolCalls,
+        maxToolCalls,
+        signal: controller.signal,
+      }, {
+        chunk: chunk => {
+          if (!this.ownsSharedAttempt(controller, attempt)) return;
+          if (chunk.content) {
+            if (firstContent) {
+              firstContent = false;
+              this.remoteTimeToFirstToken = this.state.startTime
+                ? (Date.now() - this.state.startTime) / 1000
+                : undefined;
+              this.updateState({ isThinking: false });
+              options.onFirstToken?.();
+            }
+            this.state.streamingContent += chunk.content;
+            this.tokenBuffer += chunk.content;
+          }
+          if (chunk.reasoning) {
+            this.reasoningBuffer += chunk.reasoning;
+            this.totalReasoningLength += chunk.reasoning.length;
+          }
+          this.scheduleSharedFlush(!!(chunk.content || chunk.reasoning));
+        },
+        toolStarted: call => options.onToolCallStart?.(call.name, decodedToolArguments(call)),
+        toolCompleted: (call, result) => options.onToolCallComplete?.(call.name, mobileToolResult(result, call)),
+      });
+      if (!this.ownsSharedAttempt(controller, attempt)) return { interrupted: true };
+      this.finishSharedGeneration(conversationId, result.content);
+      return { interrupted: false };
+    } catch (error) {
+      if (!this.ownsSharedAttempt(controller, attempt)) return { interrupted: true };
+      logger.error('[GenerationService] Shared tool generation error:', error);
+      this.keepShownPartialOrClear();
+      this.resetState();
+      throw error;
+    } finally {
+      if (this.currentSharedAbortController === controller) this.currentSharedAbortController = null;
+    }
+  }
+
+  private beginSharedGeneration(conversationId: string): void {
+    this.abortRequested = false;
+    this.updateState({ isGenerating: true, isThinking: true, conversationId, streamingContent: '', startTime: Date.now() });
+    useChatStore.getState().startStreaming(conversationId);
+    this.tokenBuffer = '';
+    this.reasoningBuffer = '';
+    this.totalReasoningLength = 0;
+  }
+
+  private ownsSharedAttempt(controller: AbortController, attempt: number): boolean {
+    return !controller.signal.aborted && this.generationAttempt === attempt;
+  }
+
+  private scheduleSharedFlush(hasData: boolean): void {
+    if (hasData && !this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flushTokenBuffer(), FLUSH_INTERVAL_MS);
+    }
+  }
+
+  private finishSharedGeneration(conversationId: string, fallbackContent: string): void {
+    this.forceFlushTokens();
+    const store = useChatStore.getState();
+    if (!this.state.streamingContent && fallbackContent) store.appendToStreamingMessage(fallbackContent);
+    const generationTime = this.state.startTime ? Date.now() - this.state.startTime : undefined;
+    store.finalizeStreamingMessage(conversationId, generationTime, this.buildGenerationMeta());
+    this.checkSharePrompt();
+    this.resetState();
   }
 
   /**
@@ -215,10 +386,6 @@ class GenerationService {
       await stopAllTextEngines();
       const provider = this.getCurrentProvider();
       if (provider) provider.stopGeneration().catch(() => { });
-      if (this.currentRemoteAbortController) {
-        this.currentRemoteAbortController.abort();
-        this.currentRemoteAbortController = null;
-      }
       // Generation already reset — but a partial may still be on screen (e.g. generationSession.end ran
       // first, or LiteRT's state diverged). Keep the shown output instead of blindly clearing it.
       this.keepShownPartialOrClear();
@@ -244,10 +411,6 @@ class GenerationService {
       // Abort the provider's XHR so the server connection is closed immediately
       const provider = this.getCurrentProvider();
       if (provider) provider.stopGeneration().catch(() => { });
-      if (this.currentRemoteAbortController) {
-        this.currentRemoteAbortController.abort();
-        this.currentRemoteAbortController = null;
-      }
       return partialContent;
     }
 
@@ -262,23 +425,6 @@ class GenerationService {
     return partialContent;
   }
 
-  /** Generate a response using a remote provider */
-  async generateRemoteResponse(
-    conversationId: string,
-    messages: Message[],
-    onFirstToken?: () => void,
-  ): Promise<void> {
-    return generateRemoteResponseImpl(this, { conversationId, messages, onFirstToken });
-  }
-
-  /** Generate a response with tools using a remote provider */
-  async generateRemoteWithTools(
-    conversationId: string,
-    messages: Message[],
-    options: GenerationWithToolsRequest['options'],
-  ): Promise<void> {
-    return generateRemoteWithToolsImpl(this, { conversationId, messages, options });
-  }
 
   enqueueMessage(entry: QueuedMessage): void {
     this.state = { ...this.state, queuedMessages: [...this.state.queuedMessages, entry] };

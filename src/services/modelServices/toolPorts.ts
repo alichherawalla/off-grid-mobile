@@ -12,10 +12,17 @@ import {
   toolResultModelContent,
 } from '@offgrid/models';
 import { useChatStore } from '../../stores/chatStore';
+import { Platform } from 'react-native';
 import logger from '../../utils/logger';
 import { executeToolCall } from '../tools';
-import { mobileEffectiveToolSchemas } from '../generationToolLoop';
+import { getToolsAsOpenAISchema } from '../tools';
 import { getToolExtensions } from '../tools/extensions';
+import { getActiveEngineService, isRemoteTextModelActive } from '../engines';
+import { liteRTService } from '../litert';
+import { llmService } from '../llm';
+import { isMcpEnabled } from '../mcpContextBoost';
+import { executeMobileToolSelection } from '../mobileSidecarGeneration';
+import { selectRelevantTools } from '../litertToolSelector';
 import type { ToolCall, ToolResult } from '../tools/types';
 
 function decodeArguments(raw: string): Record<string, unknown> {
@@ -112,6 +119,37 @@ export async function mobileToolDefinitions(
     const definition = openAISchemaDefinition(schema);
     return definition ? [definition] : [];
   });
+}
+
+function lastUserQuery(messages: import('../../types').Message[]): string {
+  return [...messages].reverse().find(message => message.role === 'user' && message.content.trim())?.content.trim() ?? '';
+}
+
+async function mobileEffectiveToolSchemas(
+  messages: import('../../types').Message[],
+  enabledToolIds: string[],
+): Promise<any[]> {
+  const builtIn = getToolsAsOpenAISchema(enabledToolIds);
+  const extensions = getToolExtensions().flatMap(extension => extension.getOpenAISchemas?.() ?? []);
+  const all = [...builtIn, ...extensions];
+  if (extensions.length === 0 || all.length <= 5 || isRemoteTextModelActive()) return all;
+  const query = lastUserQuery(messages);
+  try {
+    const selected = isMcpEnabled()
+      ? await executeMobileToolSelection(query, extensions, 12)
+      : await selectRelevantTools(
+          query,
+          extensions,
+          getActiveEngineService() === liteRTService || Platform.OS !== 'ios'
+            ? undefined
+            : (system, user) => llmService.generateToolSelection(system, user),
+        );
+    if (!selected?.length) return builtIn;
+    return [...builtIn, ...extensions.filter(schema => selected.includes(schema.function.name))];
+  } catch (error) {
+    logger.warn(`[SharedTools] tool selection failed; using all tools: ${String(error)}`);
+    return all;
+  }
 }
 
 function contentText(content: string | GenerationContentPart[]): string {

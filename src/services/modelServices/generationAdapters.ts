@@ -1,5 +1,6 @@
 import {
   reasoningWireForGeneration,
+  parseToolCallsFromText,
   type GenerationAdapter,
   type GenerationChunk,
   type GenerationContentPart,
@@ -18,7 +19,7 @@ import { providerRegistry } from '../adapters/providers';
 import type { GenerationOptions, LLMProvider } from '../adapters/providers/types';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
-import { resolveToolCalls } from '../generationToolLoop';
+import { getToolExtensions } from '../tools/extensions';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
 
@@ -86,6 +87,23 @@ function providerOptions(
 
 type PendingChunk = { value?: GenerationChunk; error?: unknown; done?: boolean };
 
+function resolvedToolCalls(
+  content: string,
+  nativeCalls: Array<{ id?: string; name: string; arguments: Record<string, unknown> }>,
+) {
+  const calls = nativeCalls.length
+    ? [...nativeCalls]
+    : parseToolCallsFromText(content).map((call, index) => ({
+        id: `text-tool-${index}`,
+        name: call.name,
+        arguments: call.arguments,
+      }));
+  for (const extension of getToolExtensions()) {
+    calls.push(...extension.parseToolCalls(content));
+  }
+  return calls;
+}
+
 function providerToolArguments(value: string | Record<string, unknown>): Record<string, unknown> {
   if (typeof value !== 'string') return value;
   try {
@@ -127,12 +145,12 @@ async function* providerChunks(
         })) ?? [];
         // Keep Mobile's compatibility parser at the provider boundary. Some local
         // templates emit valid tool markup as text instead of native tool-call deltas.
-        const resolved = resolveToolCalls(result.content, nativeCalls);
-        resolved.effectiveToolCalls.forEach((call, index) => push({
+        const resolved = resolvedToolCalls(result.content, nativeCalls);
+        resolved.forEach((call, index) => push({
           value: {
             toolCallDeltas: [{
               index,
-              id: call.id,
+              id: call.id ?? `provider-tool-${index}`,
               name: call.name,
               argumentsDelta: JSON.stringify(call.arguments),
             }],
@@ -140,7 +158,7 @@ async function* providerChunks(
         }));
         push({
           value: {
-            finishReason: resolved.effectiveToolCalls.length ? 'tool_calls' : 'stop',
+            finishReason: resolved.length ? 'tool_calls' : 'stop',
           },
         });
         push({ done: true });
