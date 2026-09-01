@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { modelDownloadProjection, useDownloadStore } from '../../stores/downloadStore';
 import {
   modelLibrary,
   hardwareService,
@@ -108,7 +108,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
 
         const modelId = entry.modelId.replace('image:', '');
         if (downloadedIds.has(modelId)) {
-          useDownloadStore.getState().remove(entry.modelKey);
+          modelDownloadProjection.remove(entry.modelKey);
           continue;
         }
 

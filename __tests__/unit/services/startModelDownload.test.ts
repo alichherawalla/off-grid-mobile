@@ -18,6 +18,12 @@ const mockStore: { downloads: Record<string, { status: string }>; add: jest.Mock
 };
 jest.mock('../../../src/stores/downloadStore', () => ({
   useDownloadStore: { getState: () => mockStore },
+  modelDownloadProjection: {
+    admit: (entry: unknown) => mockStore.add(entry),
+    remove: (modelKey: string) => mockStore.remove(modelKey),
+    reportStatus: (downloadId: string, status: string, error?: unknown) =>
+      mockStore.setStatus(downloadId, status, error),
+  },
   isActiveStatus: (s: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(s),
 }));
 

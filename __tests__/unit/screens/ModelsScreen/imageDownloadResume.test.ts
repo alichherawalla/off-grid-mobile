@@ -45,6 +45,10 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
       setStatus: mockSetStatus,
     }),
   },
+  modelDownloadProjection: {
+    reportStatus: (downloadId: string, status: string, error?: unknown) =>
+      mockSetStatus(downloadId, status, error),
+  },
 }));
 
 jest.mock('../../../../src/services/imageDownloadActions', () => ({

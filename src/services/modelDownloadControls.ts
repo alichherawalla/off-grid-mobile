@@ -1,5 +1,5 @@
 import { modelDownloadRegistry } from './modelServices/downloadRegistryBootstrap';
-import { useDownloadStore } from '../stores/downloadStore';
+import { modelDownloadProjection } from '../stores/downloadStore';
 
 /** Execute retry and persist its failure before the presentation layer observes it. */
 export async function retryModelDownload(id: string, projectionId?: string): Promise<void> {
@@ -10,7 +10,7 @@ export async function retryModelDownload(id: string, projectionId?: string): Pro
       const message = error instanceof Error
         ? error.message
         : 'Retry failed. Please remove and re-download.';
-      useDownloadStore.getState().setStatus(projectionId, 'failed', { message });
+      modelDownloadProjection.reportStatus(projectionId, 'failed', { message });
     }
     throw error;
   }

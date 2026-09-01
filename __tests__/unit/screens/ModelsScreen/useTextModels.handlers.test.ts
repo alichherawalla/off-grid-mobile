@@ -58,6 +58,13 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
       }),
     },
   ),
+  modelDownloadProjection: {
+    admit: (entry: any) => {
+      if (!mockDownloads[entry.modelKey]) mockDownloads[entry.modelKey] = entry;
+    },
+    remove: (modelKey: string) => { delete mockDownloads[modelKey]; },
+    reportStatus: jest.fn(),
+  },
   isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 

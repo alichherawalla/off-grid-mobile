@@ -5,7 +5,10 @@ import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import { resolveCoreMLModelDir } from '../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../types';
-import { useDownloadStore, DownloadEntry } from '../stores/downloadStore';
+import {
+  DownloadEntry,
+  modelDownloadProjection,
+} from '../stores/downloadStore';
 import { ImageDownloadDeps, registerAndNotify, proceedWithDownload } from './imageDownloadActions';
 import { imageDescriptorFromMetadata } from './imageDescriptor';
 import { validateImageModelDir, ensureImageExtractionComplete } from '../utils/imageModelIntegrity';
@@ -84,7 +87,7 @@ async function reDownloadFromMetadata(ctx: ResumeCtx): Promise<void> {
   const { modelId, metadata, deps } = ctx;
   if (!metadata.imageModelDownloadUrl) {
     // No URL to re-fetch from. Surface a clear, honest failure rather than a stale native error.
-    useDownloadStore.getState().setStatus(ctx.entry.downloadId, 'failed', {
+    modelDownloadProjection.reportStatus(ctx.entry.downloadId, 'failed', {
       message: 'Download could not be re-downloaded. Remove it and download again.',
     });
     return;
@@ -129,7 +132,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
       // Already registered — stale native row caused a spurious processing entry.
       // Remove the download entry silently without re-alerting the user.
       logger.log(`[ImageDownload] resumeImageDownload zip - already registered, removing stale entry ${modelId}`);
-      useDownloadStore.getState().remove(makeImageModelKey(modelId));
+      modelDownloadProjection.remove(makeImageModelKey(modelId));
       return;
     }
     logger.log(`[ImageDownload] resumeImageDownload zip - model dir exists, registering ${modelId}`);
@@ -193,7 +196,7 @@ async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
   const modelDirExists = await RNFS.exists(modelDir);
   if (!modelDirExists) {
     logger.warn(`[ImageDownload] resumeImageDownload multifile - model dir missing, marking failed ${modelId}`);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
+    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: 'Download files missing. Please retry.' });
     return;
   }
   const imageModel: ONNXImageModel = {
@@ -215,7 +218,7 @@ export async function resumeImageDownload(entry: DownloadEntry, deps: ImageDownl
 
   if (!metadata?.imageDownloadType) {
     logger.warn(`[ImageDownload] resumeImageDownload no metadata for ${modelId} - marking failed`);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: 'Could not resume: missing download metadata' });
+    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: 'Could not resume: missing download metadata' });
     return;
   }
 
@@ -227,6 +230,6 @@ export async function resumeImageDownload(entry: DownloadEntry, deps: ImageDownl
     }
   } catch (error: any) {
     logger.error(`[ImageDownload] resumeImageDownload failed for ${modelId}`, error?.message);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'failed', { message: error?.message || 'Could not resume download after restart' });
+    modelDownloadProjection.reportStatus(entry.downloadId, 'failed', { message: error?.message || 'Could not resume download after restart' });
   }
 }

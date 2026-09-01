@@ -1,6 +1,10 @@
 import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 import { mmProjLocalName } from './adapters/models/library/downloadArtifactAdapter';
-import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
+import {
+  isActiveStatus,
+  modelDownloadProjection,
+  useDownloadStore,
+} from '../stores/downloadStore';
 import { useAppStore } from '../stores';
 import { makeModelKey } from '../utils/modelKey';
 import type { ModelFile, DownloadedModel } from '../types';
@@ -45,10 +49,9 @@ export async function startModelDownload(
   // slot-limited) native download. Without this, a queued download had no store entry
   // at all until a concurrency slot freed up — so the Models/onboarding screens (which
   // read the store) showed nothing, and this very guard missed a second tap while
-  // queued (letting the same model enqueue twice). The store is the single source of
-  // truth all screens read; download.ts reconciles this placeholder id to the real
-  // native downloadId via retryEntry once the start begins.
-  useDownloadStore.getState().add({
+  // queued (letting the same model enqueue twice). Shared owns admission and retry
+  // transitions; download.ts reconciles this placeholder id to the real native id.
+  modelDownloadProjection.admit({
     modelKey,
     downloadId: queuedPlaceholderId(modelKey),
     modelId,
@@ -71,7 +74,7 @@ export async function startModelDownload(
   let currentDownloadId: string | undefined = queuedPlaceholderId(modelKey);
   const fail = (err: Error) => {
     if (currentDownloadId) {
-      useDownloadStore.getState().setStatus(currentDownloadId, 'failed', { message: err.message });
+      modelDownloadProjection.reportStatus(currentDownloadId, 'failed', { message: err.message });
     }
     opts.onError?.(err);
   };
@@ -86,14 +89,14 @@ export async function startModelDownload(
       // Standard completion: register + clear the in-flight entry so the UI reads
       // "downloaded" from downloadedModels, not a lingering 100% store entry.
       useAppStore.getState().addDownloadedModel(model);
-      useDownloadStore.getState().remove(modelKey);
+      modelDownloadProjection.remove(modelKey);
       opts.onRegistered?.(model);
     }, fail);
   } catch (e) {
     // A start cancelled while still queued (no slot yet) rejects with `.cancelled` — it
     // is not an error, so drop the queued placeholder row and clean up quietly.
     if ((e as Error & { cancelled?: boolean })?.cancelled) {
-      useDownloadStore.getState().remove(modelKey);
+      modelDownloadProjection.remove(modelKey);
       return;
     }
     fail(e as Error);

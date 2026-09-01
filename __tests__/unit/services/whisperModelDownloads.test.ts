@@ -21,6 +21,12 @@ jest.mock('../../../src/stores/downloadStore', () => ({
       retryEntry: mockRetryEntry,
     }),
   },
+  modelDownloadProjection: {
+    admit: (entry: unknown) => mockAdd(entry),
+    remove: (modelKey: string) => mockRemove(modelKey),
+    retry: (modelKey: string, downloadId: string) =>
+      mockRetryEntry(modelKey, downloadId),
+  },
 }));
 
 function deferred(): {

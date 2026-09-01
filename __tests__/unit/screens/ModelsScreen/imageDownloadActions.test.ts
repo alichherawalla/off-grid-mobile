@@ -74,6 +74,17 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
     jest.fn((selector?: any) => selector ? selector(mockStoreApi) : mockStoreApi),
     { getState: () => mockStoreApi },
   ),
+  modelDownloadProjection: {
+    admit: (entry: any) => mockStoreApi.add(entry),
+    retry: (modelKey: string, downloadId: string) =>
+      mockStoreApi.retryEntry(modelKey, downloadId),
+    remove: (modelKey: string) => mockStoreApi.remove(modelKey),
+    reportProgress: (downloadId: string, bytes: number, total: number) =>
+      mockStoreApi.updateProgress(downloadId, bytes, total),
+    reportStatus: (downloadId: string, status: string, error?: unknown) =>
+      mockStoreApi.setStatus(downloadId, status, error),
+    beginProcessing: (downloadId: string) => mockStoreApi.setProcessing(downloadId),
+  },
   isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 

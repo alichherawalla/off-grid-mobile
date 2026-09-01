@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { reduceDownloadProjection } from '@offgrid/models';
+import { ModelDownloadProjectionController } from '@offgrid/models';
 import type { ModelKey } from '../utils/modelKey';
 import type { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
@@ -31,11 +31,15 @@ interface DownloadStoreState {
   remove(modelKey: ModelKey): void;
 }
 
-type Projection = Pick<DownloadStoreState, 'downloads' | 'downloadIdIndex'>;
+export const modelDownloadProjection = new ModelDownloadProjectionController<DownloadEntry>({
+  read: () => {
+    const state = useDownloadStore.getState();
+    return { downloads: state.downloads, downloadIdIndex: state.downloadIdIndex };
+  },
+  write: state => useDownloadStore.setState(state),
+});
 
 export const useDownloadStore = create<DownloadStoreState>((set) => {
-  const reduce = (event: Parameters<typeof reduceDownloadProjection<DownloadEntry>>[1]) =>
-    set(state => reduceDownloadProjection(state as Projection, event));
   return {
     downloads: {},
     downloadIdIndex: {},
@@ -46,22 +50,22 @@ export const useDownloadStore = create<DownloadStoreState>((set) => {
       else delete repairingVisionIds[modelId];
       return { repairingVisionIds };
     }),
-    setAll: entries => reduce({ type: 'replace', entries }),
-    hydrate: entries => reduce({ type: 'hydrate', entries }),
-    add: entry => reduce({ type: 'add', entry }),
+    setAll: entries => modelDownloadProjection.replace(entries),
+    hydrate: entries => modelDownloadProjection.hydrate(entries),
+    add: entry => modelDownloadProjection.admit(entry),
     setMmProjDownloadId: (modelKey, downloadId) =>
-      reduce({ type: 'attach-projector', modelKey, downloadId }),
+      modelDownloadProjection.attachProjector(modelKey, downloadId),
     updateProgress: (downloadId, bytes, total) =>
-      reduce({ type: 'progress', downloadId, bytes, total, at: Date.now() }),
+      modelDownloadProjection.reportProgress(downloadId, bytes, total, Date.now()),
     updateMmProjProgress: (downloadId, bytes) =>
-      reduce({ type: 'projector-progress', downloadId, bytes, at: Date.now() }),
+      modelDownloadProjection.reportProjectorProgress(downloadId, bytes, Date.now()),
     setStatus: (downloadId, status, error) =>
-      reduce({ type: 'status', downloadId, status, error }),
-    setProcessing: downloadId => reduce({ type: 'processing', downloadId }),
-    setCompleted: downloadId => reduce({ type: 'completed', downloadId }),
+      modelDownloadProjection.reportStatus(downloadId, status, error),
+    setProcessing: downloadId => modelDownloadProjection.beginProcessing(downloadId),
+    setCompleted: downloadId => modelDownloadProjection.complete(downloadId),
     setMmProjCompleted: (downloadId, bytes) =>
-      reduce({ type: 'projector-completed', downloadId, bytes }),
-    retryEntry: (modelKey, downloadId) => reduce({ type: 'retry', modelKey, downloadId }),
-    remove: modelKey => reduce({ type: 'remove', modelKey }),
+      modelDownloadProjection.completeProjector(downloadId, bytes),
+    retryEntry: (modelKey, downloadId) => modelDownloadProjection.retry(modelKey, downloadId),
+    remove: modelKey => modelDownloadProjection.remove(modelKey),
   };
 });

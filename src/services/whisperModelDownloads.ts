@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
-import { useDownloadStore } from '../stores/downloadStore';
+import { modelDownloadProjection } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import * as whisperModelFiles from './whisperModelFiles';
@@ -26,7 +26,7 @@ interface MissingModelDownloadInput {
 }
 
 /** Owns Whisper download queue identity and native-download cleanup. */
-export class WhisperModelDownloads {
+export class WhisperDownloadAdapter {
   private readonly operations = new DownloadOperationRegistry();
 
   private async unlinkOwnedFile(
@@ -70,7 +70,7 @@ export class WhisperModelDownloads {
       });
     } finally {
       if (this.operations.finish(owner) && owner.published) {
-        useDownloadStore.getState().remove(owner.modelKey);
+        modelDownloadProjection.remove(owner.modelKey);
       }
     }
   }
@@ -94,7 +94,7 @@ export class WhisperModelDownloads {
     // Publish the queue entry before a native concurrency slot opens. All model
     // types then use the same canonical progress store and cancellation identity.
     this.operations.markPublished(owner);
-    useDownloadStore.getState().add({
+    modelDownloadProjection.admit({
       modelKey,
       downloadId: queuedId,
       modelId: `whisper-${modelId}`,
@@ -143,7 +143,7 @@ export class WhisperModelDownloads {
     try {
       const downloadId = await downloadIdPromise;
       if (!owner.cancelRequested) {
-        useDownloadStore.getState().retryEntry(modelKey, downloadId);
+        modelDownloadProjection.retry(modelKey, downloadId);
       }
       await promise;
     } catch (error) {
@@ -184,7 +184,7 @@ export class WhisperModelDownloads {
       cancelTransfer: downloadId => backgroundDownloadService.cancelDownload(downloadId),
     });
     if (owner?.published && !this.operations.hasReplacement(owner)) {
-      useDownloadStore.getState().remove(owner.modelKey);
+      modelDownloadProjection.remove(owner.modelKey);
     }
 
     const path = whisperModelFiles.getModelPath(modelId);
@@ -194,3 +194,6 @@ export class WhisperModelDownloads {
     }
   }
 }
+
+/** Compatibility constructor for the runtime service and focused adapter tests. */
+export const WhisperModelDownloads = WhisperDownloadAdapter;

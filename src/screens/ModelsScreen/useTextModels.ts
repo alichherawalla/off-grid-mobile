@@ -5,7 +5,7 @@ import { showAlert, AlertState } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS, TRENDING_FAMILIES, MODEL_ORGS } from '../../constants';
 import { useAppStore } from '../../stores';
 import { fileExceedsBudget } from '../../services/memoryBudget';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { modelDownloadProjection, useDownloadStore } from '../../stores/downloadStore';
 import {
   hardwareService,
   huggingFaceService,
@@ -246,7 +246,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const handleCancelDownload = async (modelKey: string) => {
     const entry = useDownloadStore.getState().downloads[modelKey];
     if (!entry) return;
-    useDownloadStore.getState().remove(modelKey);
+    modelDownloadProjection.remove(modelKey);
     try {
       await modelLibrary.cancelBackgroundDownload(entry.downloadId);
       if (entry.mmProjDownloadId) {

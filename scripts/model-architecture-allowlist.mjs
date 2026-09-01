@@ -24,33 +24,6 @@ const uiEngineDebt = [
   'A thin projection or intent port replaces the concrete service import.',
 ))
 
-const downloadDebt = [
-  ['src/screens/ModelsScreen/useImageModels.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/screens/ModelsScreen/useTextModels.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/services/imageDownloadActions.ts', 'call:useDownloadStore.getState().setStatus'],
-  ['src/services/imageDownloadActions.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/services/imageDownloadActions.ts', 'call:useDownloadStore.getState().retryEntry'],
-  ['src/services/imageDownloadActions.ts', 'call:useDownloadStore.getState().add'],
-  ['src/services/imageDownloadActions.ts', 'call:useDownloadStore.getState().setProcessing'],
-  ['src/services/imageDownloadResume.ts', 'call:useDownloadStore.getState().setStatus'],
-  ['src/services/imageDownloadResume.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/services/modelDownloadControls.ts', 'call:useDownloadStore.getState().setStatus'],
-  ['src/services/startModelDownload.ts', 'call:useDownloadStore.getState().add'],
-  ['src/services/startModelDownload.ts', 'call:useDownloadStore.getState().setStatus'],
-  ['src/services/startModelDownload.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/services/whisperModelDownloads.ts', 'class:WhisperModelDownloads'],
-  ['src/services/whisperModelDownloads.ts', 'call:useDownloadStore.getState().remove'],
-  ['src/services/whisperModelDownloads.ts', 'call:useDownloadStore.getState().add'],
-  ['src/services/whisperModelDownloads.ts', 'call:useDownloadStore.getState().retryEntry'],
-].map(([file, detail]) => debt(
-  'apps-do-not-own-download-state-machines',
-  file,
-  detail,
-  'mobile-download-consolidation',
-  'This app module still writes download lifecycle state instead of projecting Shared state.',
-  'Shared ModelDownloadCoordinator owns the transition and Mobile only maps native I/O or projects state.',
-))
-
 const generationCallDebt = [
   ['src/services/adapters/providers/localProvider.ts', 'call:generateResponse'],
   ['src/services/adapters/providers/localProvider.ts', 'call:generateResponseWithTools'],
@@ -125,7 +98,6 @@ const legacyResidencyDebt = [
 export const temporaryModelArchitectureAllowlist = [
   ...uiEngineDebt,
   ...legacyResidencyDebt,
-  ...downloadDebt,
   ...generationCallDebt,
   ...rawApiDebt,
   ...providerPolicyDebt,

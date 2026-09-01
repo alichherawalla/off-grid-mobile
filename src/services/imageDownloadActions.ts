@@ -1,5 +1,5 @@
-/** Standalone async image download handlers - no hooks. All download state flows through
- *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
+/** Standalone async image download handlers. Mobile performs file/native work and sends
+ * lifecycle intent to the Shared projection controller through the stable image:<id> key. */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
@@ -8,7 +8,11 @@ import { modelLibrary, hardwareService, backgroundDownloadService } from '../ser
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import { ONNXImageModel } from '../types';
-import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
+import {
+  isActiveStatus,
+  modelDownloadProjection,
+  useDownloadStore,
+} from '../stores/downloadStore';
 import { makeImageModelKey } from '../utils/modelKey';
 import { ImageModelDescriptor, ImageDownloadDeps } from './imageModelDownloadTypes';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
@@ -100,7 +104,7 @@ async function cleanupImageModelDir(modelId: string): Promise<void> {
 
 function setMultifileFailed(syntheticId: string, deps: ImageDownloadDeps, message?: string): void {
   deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(message)));
-  useDownloadStore.getState().setStatus(syntheticId, 'failed', {
+  modelDownloadProjection.reportStatus(syntheticId, 'failed', {
     message: message || 'Multi-file download failed',
   });
 }
@@ -122,13 +126,13 @@ async function downloadSequentialFiles(opts: {
     isCancelled: () =>
       !useDownloadStore.getState().downloads[makeImageModelKey(modelInfo.id)],
     onProgress: (bytes, total) =>
-      useDownloadStore.getState().updateProgress(syntheticId, bytes, total),
+      modelDownloadProjection.reportProgress(syntheticId, bytes, total, Date.now()),
   });
 }
 
 /** Remove the entry from the store. Use after register-and-notify or on error. */
 function removeStoreEntry(modelId: string) {
-  useDownloadStore.getState().remove(makeImageModelKey(modelId));
+  modelDownloadProjection.remove(makeImageModelKey(modelId));
 }
 
 /** Build the registerable ONNXImageModel — one definition so the zip / on-disk /
@@ -172,10 +176,10 @@ function addImageEntry(opts: {
   if (existing && isActiveStatus(existing.status)) return false;
   if (existing) {
     // Failed/etc. entry from a prior attempt - reuse logical record.
-    useDownloadStore.getState().retryEntry(modelKey, downloadId);
+    modelDownloadProjection.retry(modelKey, downloadId);
     return true;
   }
-  useDownloadStore.getState().add({
+  modelDownloadProjection.admit({
     modelKey,
     downloadId,
     modelId: `image:${modelId}`,
@@ -203,7 +207,7 @@ function wireZipListeners(
     unsubComplete(); unsubError();
     try { await onCompleteWork(); } catch (e: any) {
       deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(e?.message || 'Failed to process model')));
-      useDownloadStore.getState().setStatus(downloadId, 'failed', { message: e?.message || 'Failed to process model' });
+      modelDownloadProjection.reportStatus(downloadId, 'failed', { message: e?.message || 'Failed to process model' });
     }
   });
   const unsubError = backgroundDownloadService.onError(downloadId, (ev) => {
@@ -255,7 +259,7 @@ export async function downloadHuggingFaceModel(
     }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
-    useDownloadStore.getState().setProcessing(syntheticId);
+    modelDownloadProjection.beginProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     await registerAndNotify(deps, { imageModel: buildImageModel(modelInfo, modelDir), modelName: modelInfo.name });
@@ -308,7 +312,7 @@ export async function downloadCoreMLMultiFile(
     const files = modelInfo.coremlFiles.map(f => ({ relativePath: f.relativePath, size: f.size, url: f.downloadUrl }));
     await downloadSequentialFiles({ modelInfo, runtime, syntheticId, modelDir, files });
     assertNotCancelled(modelInfo.id, runtime);
-    useDownloadStore.getState().setProcessing(syntheticId);
+    modelDownloadProjection.beginProcessing(syntheticId);
     assertNotCancelled(modelInfo.id, runtime);
     await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8').catch(() => {});
     const resolvedModelDir = await resolveCoreMLModelDir(modelDir);
@@ -318,7 +322,7 @@ export async function downloadCoreMLMultiFile(
     await cleanupImageModelDir(modelInfo.id);
     if (isCancelledError(error)) return;
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
-    useDownloadStore.getState().setStatus(syntheticId, 'failed', {
+    modelDownloadProjection.reportStatus(syntheticId, 'failed', {
       message: error?.message || 'CoreML download failed',
     });
   } finally {
@@ -387,11 +391,11 @@ export async function proceedWithDownload(
     });
     // Reconcile the queued placeholder row to the real native downloadId so progress /
     // complete / error events (routed via downloadIdIndex) reach this entry.
-    useDownloadStore.getState().retryEntry(modelKey, downloadInfo.downloadId);
+    modelDownloadProjection.retry(modelKey, downloadInfo.downloadId);
     wireZipListeners({ downloadId: downloadInfo.downloadId, modelId: modelInfo.id, deps }, async () => {
       const zipPath = `${imageModelsDir}/${fileName}`;
       try {
-        useDownloadStore.getState().setProcessing(downloadInfo.downloadId);
+        modelDownloadProjection.beginProcessing(downloadInfo.downloadId);
         if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
         const t0 = Date.now();
         await backgroundDownloadService.moveCompletedDownload(downloadInfo.downloadId, zipPath);
@@ -422,7 +426,7 @@ export async function proceedWithDownload(
       return;
     }
     // Native start failed: fail the placeholder row so the card/Manager offer retry.
-    useDownloadStore.getState().setStatus(placeholderId, 'failed', { message: error?.message || 'Download failed' });
+    modelDownloadProjection.reportStatus(placeholderId, 'failed', { message: error?.message || 'Download failed' });
     deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(error?.message)));
   }
 }
