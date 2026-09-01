@@ -45,7 +45,7 @@ describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () =>
     // The graceful surface the user sees instead of a crash: the failure card + a Load Anyway escape hatch.
     expect(view.getByTestId('model-failure-load-anyway-image')).toBeTruthy();
     expect(view.getByText('Image model: Not Enough Memory')).toBeTruthy();
-    expect(view.queryByText(/Free up space/)).not.toBeNull();
+    expect(view.queryByText(/Not enough free memory/)).not.toBeNull();
   });
 
   it('under "Load Anyway" (override), the budget gate no longer refuses — never a terminal dead-end', async () => {
