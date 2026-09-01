@@ -304,6 +304,59 @@ The following strict architecture gaps remain and prevent a **Verified** verdict
     recovery. Keep the public facades, but delegate those reasons to internal registry, inventory,
     selection, route-resolution, execution-fence, and recovery services. This is an SRP and SOLID
     cleanup inside Shared; it does not justify moving policy back into either app.
+26. **Desktop Computer Use still owns portable model routing, retry, and swap workflows.**
+    `desktop/src/main/vision/vision-task-model-strategy.ts:79-121` derives the active chat and
+    specialist projection, while `vision-task-model-strategy.ts:124-225` resolves role-specific
+    routes and chooses direct versus hybrid execution. `desktop/src/main/vision/grounder-loader.ts:97-165`
+    defines the specialist acquire, release, and chat-restore lifecycle, and
+    `grounder-loader.ts:218-270` supervises the swap transaction. Finally,
+    `desktop/src/main/vision/vision-policy-runner.ts:37-64` constructs retry turns and
+    `vision-policy-runner.ts:101-200` owns the bounded generation, reasoning fallback, response
+    validation, and corrective retry loop. Move this portable workflow into a Shared Computer Use
+    application service. Desktop may keep screen capture, raster conversion, llama-server I/O, and
+    model-family wire adapters behind Shared ports.
+27. **Desktop remote-server management is a second application control plane.**
+    `desktop/src/main/vision/remote-vision-server.ts:91-165` normalizes and migrates server state,
+    `remote-vision-server.ts:191-246` reconciles persisted server identity with canonical model
+    selection, `remote-vision-server.ts:249-328` validates, stores, refreshes, and selects every
+    configured modality, and `remote-vision-server.ts:331-379` removes or probes a server and derives
+    default selections. Move the transaction into the same Shared
+    `RemoteServerApplicationService` required by Mobile. Desktop may supply JSON/keychain
+    persistence, HTTP transport, and log ports.
+28. **The compact Desktop model picker still owns model commands and active-state reconciliation.**
+    `desktop/src/renderer/src/components/ModelPicker.tsx:65-85` builds another active-selection
+    projection. `ModelPicker.tsx:109-140` clears unload state, branches by modality, selects a model,
+    and refreshes active identities inside the component. `ModelPicker.tsx:220-230` also filters
+    model candidates in the renderer. It must send one typed Shared model-library command and render
+    the returned canonical projection. The component may keep open/close state and presentation.
+29. **Desktop model-library repair remains an app-owned transaction.**
+    `desktop/src/main/models-manager.ts:629-647` reclassifies a stale text selection and clears the
+    old selection. `models-manager.ts:658-697` reads the legacy active file, reconciles transferred
+    inventory, repairs the projector, writes the legacy projection, and reloads the engine. Shared
+    pure helpers are used, but the application transaction is still in Desktop. Put classification
+    and projector repair behind a Shared repair command; Desktop supplies catalog, filesystem,
+    legacy-projection, and engine-reload ports.
+30. **Desktop image generation still supplies portable generation defaults.**
+    `desktop/src/main/imagegen/application-service.ts:148-166` fixes enhancement temperature,
+    token limit, thinking behavior, and timeout in the app adapter, while
+    `imagegen/application-service.ts:187-193` fixes the local generation timeout. Shared owns the
+    image application service, so these must be named Shared configuration defaults or explicit
+    user settings. Desktop should only execute the enhancement and image-engine ports.
+31. **Desktop Pro still owns model-facing tool selection and request budgets.**
+    `desktop/pro/main/crm/agent.ts:39-64` ranks, caps, and selects MCP action tools per connector,
+    while `agent.ts:220-269` owns proposal and quality-gate generation parameters and parsing.
+    `desktop/pro/main/ingest-helpers.ts:46-94` derives connector arguments and ranks a read tool by
+    name. `desktop/pro/main/crm/capture-input-budget.ts:14-42` defines token and reserve constants,
+    and `capture-input-budget.ts:70-124` owns the vision-input reduction ladder. Move these portable
+    decisions into Shared tool-selection, generation-profile, and multimodal-budget services. Pro
+    may supply connector catalogs, capture material, and tool execution ports.
+32. **Desktop MCP owns a portable connector lifecycle and timeout policy.**
+    `desktop/src/main/mcp.ts:95-149` owns connector enablement, health-state transitions, and removal;
+    `mcp.ts:287-327` owns interactive discovery and cached-state transitions; and
+    `mcp.ts:329-364` owns the background discovery timeout and failure policy. Database, keychain,
+    OAuth, process, and network operations are Desktop adapters. The lifecycle states, discovery
+    transaction, timeout policy, and typed outcomes belong in a Shared MCP application service so
+    Mobile remote MCP and Desktop MCP cannot drift.
 
 Focused Desktop route/UI evidence passed 10 of 11 tests. The only failure is a stale expectation in
 `ModelsScreen.computer-use.integration.test.tsx:90`: the current UI offers `< 1B`, while the test
@@ -325,6 +378,11 @@ Status at this checkpoint:
 | Shared chat routing, RAG, and compaction workflows | partial | partial | Mobile application workflows remain |
 | Shared download command and status ownership | partial | partial | coordinator exists; Mobile lifecycle/projection policy remains |
 | Shared tool and MCP orchestration | partial | partial | app-owned routing, planning, parsing, and loop policy remains |
+| Shared Computer Use route, retry, and swap orchestration | partial | partial | Desktop strategy, runner, and loader workflows remain |
+| One Shared remote-server application service | partial | partial | Mobile and Desktop still compose separate transactions |
+| Thin Desktop model UI | no | partial | ModelsScreen, ModelPicker, PermissionGate, and Pro transcription UI still compose commands |
+| Shared model repair command ownership | partial | partial | Desktop classification and projector repair transaction remains |
+| Shared multimodal budgets and generation profiles | partial | partial | Desktop image, Pro CRM, and capture defaults remain app-owned |
 | Shared model-transfer policy | partial | partial | Mobile text manifest and image reserve policy remain |
 | One Shared public model control plane | no | partial | duplicate provider/download APIs and residency bypasses remain public |
 | Shared internal SRP and SOLID separation | partial | yes | facades still combine inventory, selection, routing, fencing, and recovery |
