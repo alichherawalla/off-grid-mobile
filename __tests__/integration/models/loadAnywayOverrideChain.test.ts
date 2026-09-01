@@ -254,8 +254,11 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(getAppState().activeModelId).toBe('big-gguf');
     expect(modelResidencyManager.hasSessionOverride('big-gguf')).toBe(true);
 
-    // Simulate the model later being evicted (RAM pressure) so a reload is a real load.
+    // Evict through the real residency owner so both native state and residency state agree.
+    // Flipping only the native mock leaves the shared resident registered and is not a valid
+    // post-migration state.
     mockLlmService.isModelLoaded.mockReturnValue(false);
+    await activeModelService.unloadTextModel(true);
     mockLlmService.loadModel.mockClear();
 
     // Second run: the session override is remembered → NO "Insufficient Memory" prompt,
