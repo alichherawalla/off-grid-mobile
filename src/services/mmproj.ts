@@ -2,7 +2,7 @@
  * Single source of truth for matching a multimodal projector (mmproj) to its model.
  *
  * There used to be THREE divergent notions of "does this projector belong to this model": a loose
- * substring matcher in modelManager (findMatchingMmProj), a strict stem matcher on the load path, and
+ * substring matcher in modelLibrary (findMatchingMmProj), a strict stem matcher on the load path, and
  * huggingface's download-time quant matcher — plus isMMProjFile defined three times. The loose and strict
  * matchers disagreed, so the startup relink kept a projector the loader rejected (E2B model ↔ E4B
  * projector), which is the root of the vision-init failures (device 2026-07-14).
@@ -56,7 +56,7 @@ export function mmProjBelongsToModel(modelFileName: string, mmProjFileName: stri
  * clean as text-only (and surfaces the "needs repair" path) instead.
  *
  * This is the ON-DISK matcher: by the time files are on disk they've been renamed to the model's own stem
- * (see modelManager download.mmProjLocalName), so a belonging projector shares the model's exact stem.
+ * (see modelLibrary download.mmProjLocalName), so a belonging projector shares the model's exact stem.
  */
 export function pickMmProjForModel(modelFileName: string, candidateNames: string[]): string | undefined {
   const modelStem = modelIdentityStem(modelFileName);

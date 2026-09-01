@@ -1,14 +1,14 @@
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../../../../utils/fileStat';
 import {
   ogamModelTransferBlocker,
   type TransferredModelManifest,
 } from '@offgrid/sync';
-import type { DownloadedModel, ModelFile } from '../../types';
+import type { DownloadedModel, ModelFile } from '../../../../types';
 import {
   buildDownloadedModel,
   determineCredibility,
   persistDownloadedModel,
-} from './storage';
+} from './modelRegistryStorageAdapter';
 
 export async function registerTransferredModelFile(
   manifest: TransferredModelManifest,

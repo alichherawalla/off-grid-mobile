@@ -3,10 +3,10 @@
  * to keep each file within the max-lines limit.
  */
 import RNFS from 'react-native-fs';
-import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../types';
-import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
-import { buildDownloadedModel, persistDownloadedModel } from './storage';
-import { sizeToBytes } from '../../utils/fileSize';
+import { DownloadedModel, ModelFile, PersistedDownloadInfo } from '../../../../types';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
+import { buildDownloadedModel, persistDownloadedModel } from './modelRegistryStorageAdapter';
+import { sizeToBytes } from '../../../../utils/fileSize';
 
 export async function getOrphanedTextFiles(
   modelsDir: string,
@@ -61,7 +61,7 @@ function isItemTracked(itemPath: string, trackedPaths: string[]): boolean {
 
 export async function getOrphanedImageDirs(
   imageModelsDir: string,
-  imageModelsGetter: () => Promise<import('../../types').ONNXImageModel[]>,
+  imageModelsGetter: () => Promise<import('../../../../types').ONNXImageModel[]>,
 ): Promise<Array<{ name: string; path: string; size: number }>> {
   const orphaned: Array<{ name: string; path: string; size: number }> = [];
   const imageDirExists = await RNFS.exists(imageModelsDir);

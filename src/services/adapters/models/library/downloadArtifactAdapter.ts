@@ -1,9 +1,9 @@
 /* eslint-disable max-lines */
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
-import { ModelFile, BackgroundDownloadInfo } from '../../types';
-import { huggingFaceService } from '../huggingface';
-import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
+import { statFile } from '../../../../utils/fileStat';
+import { ModelFile, BackgroundDownloadInfo } from '../../../../types';
+import { huggingFaceService } from '../../../huggingface';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
 import {
   DownloadProgressCallback,
   DownloadCompleteCallback,
@@ -11,10 +11,10 @@ import {
   BackgroundDownloadMetadataCallback,
   BackgroundDownloadContext,
 } from './types';
-import { buildDownloadedModel, persistDownloadedModel } from './storage';
-import logger from '../../utils/logger';
-import { useDownloadStore } from '../../stores/downloadStore';
-import { makeModelKey } from '../../utils/modelKey';
+import { buildDownloadedModel, persistDownloadedModel } from './modelRegistryStorageAdapter';
+import logger from '../../../../utils/logger';
+import { useDownloadStore } from '../../../../stores/downloadStore';
+import { makeModelKey } from '../../../../utils/modelKey';
 import { modelProjectorLocalName } from '@offgrid/models';
 
 /**
@@ -122,7 +122,7 @@ export {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
   syncCompletedBackgroundDownloads,
-} from './downloadHelpers';
+} from './downloadRecoveryAdapter';
 ;
 
 export interface PerformBackgroundDownloadOpts {

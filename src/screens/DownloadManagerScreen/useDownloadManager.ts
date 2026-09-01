@@ -8,11 +8,11 @@ import {
 import { useAppStore } from '../../stores';
 import { useDownloadStore } from '../../stores/downloadStore';
 import {
-  modelManager,
+  modelLibrary,
   hardwareService,
   backgroundDownloadService,
 } from '../../services';
-import { visionRepairMessage } from '../../services/modelManager/visionRepairMessage';
+import { visionRepairMessage } from '@offgrid/models';
 import { useVoiceDownloadItems } from './useVoiceDownloadItems';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
@@ -330,10 +330,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
       currentMmProjPath: item.mmProjPath,
       currentMmProjFileName: item.mmProjFileName,
     });
-    modelManager
+    modelLibrary
       .repairVision(model)
       .then(async outcome => {
-        setDownloadedModels(await modelManager.getDownloadedModels());
+        setDownloadedModels(await modelLibrary.getDownloadedModels());
         logger.log('[DownloadDebug] Repair vision outcome', {
           modelId: item.modelId,
           outcome: outcome.kind,

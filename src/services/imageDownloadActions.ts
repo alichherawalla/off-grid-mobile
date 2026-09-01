@@ -5,7 +5,7 @@ import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { showAlert } from '../utils/alertState';
-import { modelManager, hardwareService, backgroundDownloadService } from '../services';
+import { modelLibrary, hardwareService, backgroundDownloadService } from '../services';
 import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../utils/coreMLModelUtils';
 import { getUserFacingDownloadMessage } from '../utils/downloadErrors';
 import { ONNXImageModel } from '../types';
@@ -102,7 +102,7 @@ async function ensureDirectory(path: string): Promise<void> {
 
 async function cleanupImageModelDir(modelId: string): Promise<void> {
   try {
-    const dir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
+    const dir = `${modelLibrary.getImageModelsDirectory()}/${modelId}`;
     if (await RNFS.exists(dir)) await RNFS.unlink(dir);
   } catch {
     /* ignore cleanup errors */
@@ -191,7 +191,7 @@ export async function registerAndNotify(
   opts: { imageModel: ONNXImageModel; modelName: string },
 ) {
   const { imageModel, modelName } = opts;
-  await modelManager.addDownloadedImageModel(imageModel);
+  await modelLibrary.addDownloadedImageModel(imageModel);
   deps.addDownloadedImageModel(imageModel);
   // Auto-load the first image model unless onboarding is still active (Step 13 needs
   // activeImageModelId null).
@@ -285,7 +285,7 @@ export async function downloadHuggingFaceModel(
   if (!created) return;
   const runtime = startMultifileRuntime(modelInfo.id);
   try {
-    const imageModelsDir = modelManager.getImageModelsDirectory();
+    const imageModelsDir = modelLibrary.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
     await ensureDirectory(imageModelsDir);
     await ensureDirectory(modelDir);
@@ -343,7 +343,7 @@ export async function downloadCoreMLMultiFile(
   const runtime = startMultifileRuntime(modelInfo.id);
 
   try {
-    const imageModelsDir = modelManager.getImageModelsDirectory();
+    const imageModelsDir = modelLibrary.getImageModelsDirectory();
     const modelDir = `${imageModelsDir}/${modelInfo.id}`;
     await ensureDirectory(imageModelsDir);
     await ensureDirectory(modelDir);
@@ -401,7 +401,7 @@ export async function proceedWithDownload(
   if (existing && isActiveStatus(existing.status)) return;
 
   // Guard: if files already exist on disk, register without re-downloading.
-  const imageModelsDir = modelManager.getImageModelsDirectory();
+  const imageModelsDir = modelLibrary.getImageModelsDirectory();
   const modelDir = `${imageModelsDir}/${modelInfo.id}`;
   if (await RNFS.exists(modelDir)) {
     const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;

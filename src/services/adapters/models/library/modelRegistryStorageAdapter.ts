@@ -1,19 +1,19 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../types';
-import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
-import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
-import logger from '../../utils/logger';
-import { statFile } from '../../utils/fileStat';
-import { parseHuggingFaceUrl } from '../../utils/modelOrigin';
+import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../../../types';
+import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../../../constants';
+import { getCuratedLiteRTEntry } from '../../../curatedLiteRTRegistry';
+import logger from '../../../../utils/logger';
+import { statFile } from '../../../../utils/fileStat';
+import { parseHuggingFaceUrl } from '../../../../utils/modelOrigin';
 import {
   collapseDuplicateModelRows,
   modelPathBasename,
   resolveStoredModelPath,
 } from '@offgrid/models';
-import { reconcilePrimaryPaths } from '../adapters/models/storedPathAdapter';
-import { useAppStore } from '../../stores';
-import { isLiteRTFileName } from '../../utils/modelHelpers';
+import { reconcilePrimaryPaths } from '../storedPathAdapter';
+import { useAppStore } from '../../../../stores';
+import { isLiteRTFileName } from '../../../../utils/modelHelpers';
 
 // Re-exported because this module was the published home of these helpers before they were extracted
 // into the one place both registries share.

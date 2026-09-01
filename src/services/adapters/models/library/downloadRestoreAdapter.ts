@@ -1,14 +1,14 @@
 import RNFS from 'react-native-fs';
-import { PersistedDownloadInfo, ModelFile, BackgroundDownloadInfo } from '../../types';
-import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
+import { PersistedDownloadInfo, ModelFile, BackgroundDownloadInfo } from '../../../../types';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
 import {
   BackgroundDownloadContext,
   BackgroundDownloadMetadataCallback,
   DownloadProgressCallback,
 } from './types';
-import logger from '../../utils/logger';
-import { mmProjLocalName } from './download';
-import { isMmProjFileName } from '../downloadHydration';
+import logger from '../../../../utils/logger';
+import { mmProjLocalName } from './downloadArtifactAdapter';
+import { isMmProjFileName } from '../../../downloadHydration';
 
 export interface RestoreDownloadsOpts {
   modelsDir: string;

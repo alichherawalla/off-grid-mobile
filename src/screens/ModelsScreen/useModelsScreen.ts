@@ -8,7 +8,7 @@ import { showAlert, AlertState, initialAlertState } from '../../components/Custo
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
-import { modelManager, selectMobileModel } from '../../services';
+import { modelLibrary, selectMobileModel } from '../../services';
 import { isLiteRTAvailable } from '../../services/engines';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
@@ -31,7 +31,7 @@ type ZipImportDeps = {
 
 async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
   const { addDownloadedImageModel, activeImageModelId, selectActiveImageModel, setImportProgress, setAlertState } = deps;
-  const imageModelsDir = modelManager.getImageModelsDirectory();
+  const imageModelsDir = modelLibrary.getImageModelsDirectory();
   const modelId = `local_${fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
   const modelDir = `${imageModelsDir}/${modelId}`;
   const zipPath = `${imageModelsDir}/${modelId}.zip`;
@@ -66,7 +66,7 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
     id: modelId, name: modelName, description: 'Locally imported image model',
     modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: totalSize, backend,
   };
-  await modelManager.addDownloadedImageModel(imageModel);
+  await modelLibrary.addDownloadedImageModel(imageModel);
   addDownloadedImageModel(imageModel);
   if (!activeImageModelId) await selectActiveImageModel(imageModel);
   setImportProgress({ fraction: 1, fileName });

@@ -28,7 +28,7 @@ type NativeDownloadRow = {
  * Is this download-row filename a multimodal projector (mmproj) rather than a model weights file?
  * Delegates to the single source of truth (src/services/mmproj.ts) so "is this a projector" is defined
  * once — the previous local copy matched only 'mmproj' and missed 'projector'/'clip' names. Re-exported so
- * modelManager/restore.ts's orphaned-sidecar filter shares the exact same rule (DRY).
+ * modelLibrary/restore.ts's orphaned-sidecar filter shares the exact same rule (DRY).
  */
 export function isMmProjFileName(fileName: string): boolean {
   return isMMProjFile(fileName);

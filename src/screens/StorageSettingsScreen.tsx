@@ -14,7 +14,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import { SPACING } from '../constants';
 import { useAppStore, useChatStore } from '../stores';
 import { useDownloadStore } from '../stores/downloadStore';
-import { hardwareService, modelManager } from '../services';
+import { hardwareService, modelLibrary } from '../services';
 import { OrphanedFilesSection } from './OrphanedFilesSection';
 import { imageBackendLabel } from '../utils/imageBackend';
 import { createStyles } from './StorageSettingsScreen.styles';
@@ -44,8 +44,8 @@ export const StorageSettingsScreen: React.FC = () => {
   });
 
   const loadStorageInfo = useCallback(async () => {
-    const used = await modelManager.getStorageUsed();
-    const available = await modelManager.getAvailableStorage();
+    const used = await modelLibrary.getStorageUsed();
+    const available = await modelLibrary.getAvailableStorage();
     setStorageUsed(used + imageStorageUsed);
     setAvailableStorage(available);
   }, [imageStorageUsed]);

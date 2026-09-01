@@ -4,7 +4,7 @@ import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
-import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
+import { modelLibrary, hardwareService, backgroundDownloadService } from '../../services';
 import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
@@ -46,7 +46,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   });
 
   const loadDownloadedImageModels = useCallback(async () => {
-    const models = await modelManager.getDownloadedImageModels();
+    const models = await modelLibrary.getDownloadedImageModels();
     setDownloadedImageModels(models);
   }, [setDownloadedImageModels]);
 
@@ -74,7 +74,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
 
   useEffect(() => {
     const init = async () => {
-      const downloaded = await modelManager.getDownloadedImageModels();
+      const downloaded = await modelLibrary.getDownloadedImageModels();
       setDownloadedImageModels(downloaded);
     };
     init();
@@ -88,7 +88,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
 
     let cancelled = false;
     const resumeProcessingDownloads = async () => {
-      const latestDownloaded = await modelManager.getDownloadedImageModels();
+      const latestDownloaded = await modelLibrary.getDownloadedImageModels();
       if (cancelled) return;
       const downloadedIds = new Set(latestDownloaded.map(m => m.id));
       const deps = makeDeps();

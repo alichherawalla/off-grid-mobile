@@ -16,7 +16,7 @@
  * row) is never resumable → reconcile strands stranded in-flight as retriable error.
  */
 import { Platform } from 'react-native';
-import { modelManager } from '../../modelManager';
+import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
 import { unloadImageModel } from '../../modelServices/modelLifecycleBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useAppStore } from '../../../stores';
@@ -142,7 +142,7 @@ export const imageProvider: DownloadProvider = {
     }
     await unloadImageModel()
       .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
-    await modelManager.deleteImageModel(modelId)
+    await modelLibrary.deleteImageModel(modelId)
       .catch(err => logger.log(`[DL-SM] image:${modelId} remove: delete failed err=${msg(err)}`));
     useAppStore.getState().removeDownloadedImageModel(modelId);
   },

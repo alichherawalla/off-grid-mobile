@@ -10,7 +10,7 @@ import { llmService } from '../../llm';
 import { liteRTService } from '../../litert';
 import { unloadAllTextEngines } from '../../engines';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../../localDreamGenerator';
-import { modelManager } from '../../modelManager';
+import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
 import { hardwareService } from '../../hardware';
 import logger from '../../../utils/logger';
 import RNFS from 'react-native-fs';
@@ -67,7 +67,7 @@ export async function resolveMmProjPath(
       };
     });
     setDownloadedModels(updatedModels);
-    await modelManager.saveModelWithMmproj(modelId, mmProjFile.path);
+    await modelLibrary.saveModelWithMmproj(modelId, mmProjFile.path);
     return mmProjFile.path;
   } catch {
     return undefined;
@@ -218,7 +218,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     // Only applies when the link was already persisted before this load attempt — not
     // when resolveMmProjPath just discovered the file via directory scan.
     if (ctx.model.mmProjPath && !multimodalSupport?.vision) {
-      await modelManager.clearMmProjLink(ctx.modelId);
+      await modelLibrary.clearMmProjLink(ctx.modelId);
     }
 
     // Capture settings that require model reload

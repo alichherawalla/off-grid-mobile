@@ -1,25 +1,25 @@
 import RNFS from 'react-native-fs';
-import logger from '../../utils/logger';
-import { getMmProjFileSize } from '../../utils/modelHelpers';
-import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
-import { APP_CONFIG } from '../../constants';
-import { useAppStore } from '../../stores';
-import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
+import logger from '../../../utils/logger';
+import { getMmProjFileSize } from '../../../utils/modelHelpers';
+import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../../types';
+import { APP_CONFIG } from '../../../constants';
+import { useAppStore } from '../../../stores';
+import { coordinatedDownloads as backgroundDownloadService } from '../coordinatedDownloadBridge';
 import {
   BackgroundDownloadMetadataCallback,
   BackgroundDownloadContext,
   DownloadProgressCallback,
   DownloadCompleteCallback,
   DownloadErrorCallback,
-} from './types';
+} from '../../adapters/models/library/types';
 import {
   saveModelsList,
   saveImageModelsList,
   loadDownloadedModels,
   loadDownloadedImageModels,
-} from './storage';
+} from '../../adapters/models/library/modelRegistryStorageAdapter';
 import type { TransferredModelManifest } from '@offgrid/sync';
-import { registerTransferredModelFile } from './transferAdmission';
+import { registerTransferredModelFile } from '../../adapters/models/library/transferAdmissionAdapter';
 import {
   performBackgroundDownload,
   watchBackgroundDownload,
@@ -27,9 +27,9 @@ import {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
   mmProjLocalName,
-} from './download';
-import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from './imageSync';
-import { restoreInProgressDownloads } from './restore';
+} from '../../adapters/models/library/downloadArtifactAdapter';
+import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from '../../adapters/models/library/imageDownloadRecoveryAdapter';
+import { restoreInProgressDownloads } from '../../adapters/models/library/downloadRestoreAdapter';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
   cleanupMMProjEntries as scanCleanupMMProjEntries,
@@ -37,18 +37,21 @@ import {
   scanForUntrackedTextModels as scanUntrackedText,
   reconcileFinishedImageDownloads as reconcileImageDownloads,
   isMMProjFile,
-} from './scan';
+} from '../../adapters/models/library/modelScanAdapter';
 import {
   importLocalModel as scanImportLocalModel,
   type ImportLocalModelOpts,
-} from './importLocalModel';
-import { determineCredibility } from './storage';
-import { resolveStoredModelPath } from '@offgrid/models';
-import * as visionRepair from './visionRepairService';
-import type { RepairOpts, VisionRepairContext } from './visionRepairService';
-import { resolveOwnedDocumentPath } from '../../utils/resolveDocumentPath';
+} from '../../adapters/models/library/localModelImportAdapter';
+import { determineCredibility } from '../../adapters/models/library/modelRegistryStorageAdapter';
+import {
+  resolveStoredModelPath,
+  type VisionRepairOutcome,
+} from '@offgrid/models';
+import * as visionRepair from '../../adapters/models/library/visionRepairAdapter';
+import type { RepairOpts, VisionRepairContext } from '../../adapters/models/library/visionRepairAdapter';
+import { resolveOwnedDocumentPath } from '../../../utils/resolveDocumentPath';
 
-class ModelManager {
+class ModelLibraryBootstrap {
   private readonly modelsDir: string;
   private readonly imageModelsDir: string;
   private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null = null;
@@ -298,7 +301,7 @@ class ModelManager {
   async repairVision(
     model: DownloadedModel,
     opts?: RepairOpts,
-  ): Promise<visionRepair.VisionRepairOutcome> {
+  ): Promise<VisionRepairOutcome> {
     return visionRepair.repairVision(this.visionContext(), model, opts);
   }
 
@@ -413,4 +416,4 @@ class ModelManager {
   }
 }
 
-export const modelManager = new ModelManager();
+export const modelLibrary = new ModelLibraryBootstrap();

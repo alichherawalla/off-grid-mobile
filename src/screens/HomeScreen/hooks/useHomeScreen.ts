@@ -12,7 +12,7 @@ import {
   useRemoteServerStore,
 } from '../../../stores';
 import {
-  modelManager,
+  modelLibrary,
   hardwareService,
   getResourceUsage,
   ResourceUsage,
@@ -234,10 +234,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       const info = await hardwareService.getDeviceInfo();
       setDeviceInfo(info);
     }
-    await modelManager.linkOrphanMmProj();
-    const models = await modelManager.getDownloadedModels();
+    await modelLibrary.linkOrphanMmProj();
+    const models = await modelLibrary.getDownloadedModels();
     setDownloadedModels(models);
-    const imageModels = await modelManager.getDownloadedImageModels();
+    const imageModels = await modelLibrary.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
   };
 

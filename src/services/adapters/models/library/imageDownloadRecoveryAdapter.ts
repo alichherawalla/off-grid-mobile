@@ -1,8 +1,8 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { ONNXImageModel, PersistedDownloadInfo } from '../../types';
-import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
-import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
+import { ONNXImageModel, PersistedDownloadInfo } from '../../../../types';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../modelServices/coordinatedDownloadBridge';
+import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
 
 interface SyncCompletedImageDownloadsOpts {
   imageModelsDir: string;

@@ -1,15 +1,15 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../../../../utils/fileStat';
 import {
   DownloadedModel,
   LiteRTDownloadedModel,
   LlamaDownloadedModel,
   ModelEngine,
   ModelFile,
-} from '../../types';
-import { buildDownloadedModel, persistDownloadedModel } from './storage';
-import { copyFileWithProgress } from '../adapters/models/modelFileCopyAdapter';
-import { isLiteRTFileName } from '../../utils/modelHelpers';
+} from '../../../../types';
+import { buildDownloadedModel, persistDownloadedModel } from './modelRegistryStorageAdapter';
+import { copyFileWithProgress } from '../modelFileCopyAdapter';
+import { isLiteRTFileName } from '../../../../utils/modelHelpers';
 
 export interface ImportLocalModelOpts {
   sourceUri: string;

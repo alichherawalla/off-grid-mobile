@@ -1,13 +1,16 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
-import logger from '../../utils/logger';
-import { DownloadedModel, ModelFile } from '../../types';
-import { commitModelsList } from './storage';
-import { isMMProjFile } from './scan';
-import { canKeepMmProjLink, pickMmProjForModel } from '../mmproj';
-import { performMmProjRepairDownload } from './download';
-import { resolveVisionRepairSource } from '@offgrid/models';
-import { huggingFaceService } from '../huggingface';
+import { statFile } from '../../../../utils/fileStat';
+import logger from '../../../../utils/logger';
+import { DownloadedModel, ModelFile } from '../../../../types';
+import { commitModelsList } from './modelRegistryStorageAdapter';
+import { isMMProjFile } from './modelScanAdapter';
+import { canKeepMmProjLink, pickMmProjForModel } from '../../../mmproj';
+import { performMmProjRepairDownload } from './downloadArtifactAdapter';
+import {
+  resolveVisionRepairSource,
+  type VisionRepairOutcome,
+} from '@offgrid/models';
+import { huggingFaceService } from '../../../huggingface';
 import type { DownloadProgressCallback } from './types';
 
 /**
@@ -24,14 +27,6 @@ import type { DownloadProgressCallback } from './types';
  * something the user can act on - "unknown" tells them the copy has no upstream, which is the
  * truthful end of the line for a local import rather than an error to dress up.
  */
-export type VisionRepairOutcome =
-  | { kind: 'repaired'; repoId: string }
-  | { kind: 'linked' }
-  | { kind: 'ambiguous'; candidates: string[] }
-  | { kind: 'noProjectorPublished'; repoId: string }
-  | { kind: 'unknown' }
-  | { kind: 'unsupported' };
-
 export interface RepairOpts {
   onProgress?: DownloadProgressCallback;
   onDownloadIdReady?: (id: string) => void;

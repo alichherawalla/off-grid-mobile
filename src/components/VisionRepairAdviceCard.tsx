@@ -7,9 +7,9 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { AnimatedPressable } from './AnimatedPressable';
 import { LoadingDots } from './LoadingDots';
 import { useAppStore } from '../stores';
-import { modelManager } from '../services';
+import { modelLibrary } from '../services';
 import { needsVisionRepair } from '../utils/visionRepair';
-import { visionRepairMessage } from '../services/modelManager/visionRepairMessage';
+import { visionRepairMessage } from '@offgrid/models';
 
 /**
  * In-chat notice: the model you are talking to was built to read images and cannot right now.
@@ -51,8 +51,8 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
   const repair = async (): Promise<void> => {
     setRepairing(true);
     try {
-      const outcome = await modelManager.repairVision(activeModel);
-      setDownloadedModels(await modelManager.getDownloadedModels());
+      const outcome = await modelLibrary.repairVision(activeModel);
+      setDownloadedModels(await modelLibrary.getDownloadedModels());
       const [, body] = visionRepairMessage(outcome, activeModel.name);
       setResult(body);
       // Only a repair that actually landed is worth reloading for; the other outcomes leave the

@@ -1,7 +1,7 @@
 import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
-import { modelManager, backgroundDownloadService } from '../../services';
+import { modelLibrary, backgroundDownloadService } from '../../services';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ONNXImageModel } from '../../types';
 import { useDownloadStore, DownloadEntry } from '../../stores/downloadStore';
@@ -94,7 +94,7 @@ async function reDownloadFromMetadata(ctx: ResumeCtx): Promise<void> {
 
 async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   const { entry, modelId, metadata, deps } = ctx;
-  const imageModelsDir = modelManager.getImageModelsDirectory();
+  const imageModelsDir = modelLibrary.getImageModelsDirectory();
   const modelDir = `${imageModelsDir}/${modelId}`;
   const zipPath = `${imageModelsDir}/${entry.fileName}`;
   const isCoreml = metadata.imageModelBackend === 'coreml';
@@ -123,7 +123,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
   }
 
   if (modelDirValid) {
-    const existingModels = await modelManager.getDownloadedImageModels();
+    const existingModels = await modelLibrary.getDownloadedImageModels();
     if (existingModels.some(m => m.id === modelId)) {
       // Already registered — stale native row caused a spurious processing entry.
       // Remove the download entry silently without re-alerting the user.
@@ -188,7 +188,7 @@ async function resumeZipDownload(ctx: ResumeCtx): Promise<void> {
 
 async function resumeMultifileDownload(ctx: ResumeCtx): Promise<void> {
   const { entry, modelId, metadata, deps } = ctx;
-  const modelDir = `${modelManager.getImageModelsDirectory()}/${modelId}`;
+  const modelDir = `${modelLibrary.getImageModelsDirectory()}/${modelId}`;
   const modelDirExists = await RNFS.exists(modelDir);
   if (!modelDirExists) {
     logger.warn(`[ImageDownload] resumeImageDownload multifile - model dir missing, marking failed ${modelId}`);

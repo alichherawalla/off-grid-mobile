@@ -1,5 +1,5 @@
 /**
- * Text (GGUF) download provider. Wraps the proven text bridge — modelManager +
+ * Text (GGUF) download provider. Wraps the proven text bridge — modelLibrary +
  * backgroundDownloadService + downloadStore + appStore — under the uniform
  * contract. All calls are service-level (no UI import), so retry lives here
  * cleanly (text retry never needed an alert; only image does).
@@ -11,7 +11,7 @@
  * not a Platform.OS branch in callers.
  */
 import { Platform } from 'react-native';
-import { modelManager } from '../../modelManager';
+import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { huggingFaceService } from '../../huggingface';
 import { hardwareService } from '../../hardware';
@@ -57,17 +57,17 @@ async function restartIosTextDownload(entry: DownloadEntry): Promise<void> {
   // stuck behind the 3-download cap looked like retry did nothing). No-op if the store entry lost its
   // downloadId; the re-issue below still restores it.
   if (entry.downloadId) useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
-  const info = await modelManager.downloadModelBackground(entry.modelId, file);
+  const info = await modelLibrary.downloadModelBackground(entry.modelId, file);
   reattach(info.downloadId);
 }
 
 /** Re-attach the finalizer to a retried text download (move+register+persist on
  *  complete, mark failed on error) — the same recovery the manager used. */
 function reattach(downloadId: string): void {
-  modelManager.watchDownload(
+  modelLibrary.watchDownload(
     downloadId,
     async () => {
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
       useAppStore.getState().setDownloadedModels(models);
       const modelKey = useDownloadStore.getState().downloadIdIndex[downloadId] ?? '';
       if (modelKey) useDownloadStore.getState().remove(modelKey);
@@ -113,9 +113,9 @@ export const textProvider: DownloadProvider = {
   async cancel(id: string): Promise<void> {
     const entry = findEntry(keyOf(id));
     if (!entry) return;
-    await modelManager.cancelBackgroundDownload(entry.downloadId)
+    await modelLibrary.cancelBackgroundDownload(entry.downloadId)
       .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
-    if (entry.mmProjDownloadId) await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId)
+    if (entry.mmProjDownloadId) await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId)
       .catch(err => logger.log(`[DL-SM] ${id} cancel: mmproj native cancel failed err=${msg(err)}`));
     useDownloadStore.getState().remove(entry.modelKey);
   },
@@ -132,7 +132,7 @@ export const textProvider: DownloadProvider = {
       if (entry.mmProjDownloadId && entry.mmProjStatus === 'failed') {
         useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
         await backgroundDownloadService.retryDownload(entry.mmProjDownloadId).catch(() => {});
-        modelManager.resetMmProjForRetry(entry.downloadId);
+        modelLibrary.resetMmProjForRetry(entry.downloadId);
       }
       reattach(entry.downloadId);
     } else {
@@ -152,18 +152,18 @@ export const textProvider: DownloadProvider = {
     const key = keyOf(id);
     const entry = findEntry(key);
     if (entry) {
-      await modelManager.cancelBackgroundDownload(entry.downloadId)
+      await modelLibrary.cancelBackgroundDownload(entry.downloadId)
         .catch(err => logger.log(`[DL-SM] ${id} remove: native cancel failed err=${msg(err)}`));
       // Cancel the mmproj sidecar too (mirrors cancel()) — otherwise removing an in-flight
       // vision download orphans the mmproj transfer: it keeps occupying a concurrency slot
       // (never released) and its terminal event has no listener left.
-      if (entry.mmProjDownloadId) await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId)
+      if (entry.mmProjDownloadId) await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId)
         .catch(err => logger.log(`[DL-SM] ${id} remove: mmproj native cancel failed err=${msg(err)}`));
       useDownloadStore.getState().remove(entry.modelKey);
     }
     // Disk is the first durable owner. Do not remove the registry row when deletion fails: doing so
     // makes the UI claim success while startup discovery registers the same bytes again.
-    await modelManager.deleteModel(key);
+    await modelLibrary.deleteModel(key);
     useAppStore.getState().removeDownloadedModel(key);
   },
 

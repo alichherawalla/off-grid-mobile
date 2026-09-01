@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { modelManager } from '../../services';
+import { modelLibrary } from '../../services';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { DownloadedModel } from '../../types';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
@@ -65,7 +65,7 @@ export async function importGgufFiles(
       });
     }
 
-    const model = await modelManager.importLocalModel({
+    const model = await modelLibrary.importLocalModel({
       sourceUri: files[0].uri,
       fileName: resolvedFileName,
       sourceSize: files[0].size,
@@ -101,7 +101,7 @@ export async function importGgufFiles(
     return;
   }
 
-  const model = await modelManager.importLocalModel({
+  const model = await modelLibrary.importLocalModel({
     sourceUri: mainFile.uri,
     fileName: mainFile.name,
     sourceSize: mainFile.size,

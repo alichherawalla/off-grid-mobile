@@ -9,7 +9,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import {
   hardwareService,
   huggingFaceService,
-  modelManager,
+  modelLibrary,
   unloadTextModel,
 } from '../../services';
 import { startModelDownload } from '../../services/startModelDownload';
@@ -119,7 +119,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const { downloadedModels, setDownloadedModels, removeDownloadedModel, activeModelId } = useAppStore();
 
   const loadDownloadedModels = async () => {
-    const models = await modelManager.getDownloadedModels();
+    const models = await modelLibrary.getDownloadedModels();
     setDownloadedModels(models);
   };
 
@@ -213,7 +213,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const modelDownloadId = `${model.id}/${file.name}`;
     setRepairingVision(modelDownloadId, true);
     try {
-      await modelManager.repairMmProj(model.id, file, {});
+      await modelLibrary.repairMmProj(model.id, file, {});
       await loadDownloadedModels();
       setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
     } catch (e) {
@@ -248,9 +248,9 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     if (!entry) return;
     useDownloadStore.getState().remove(modelKey);
     try {
-      await modelManager.cancelBackgroundDownload(entry.downloadId);
+      await modelLibrary.cancelBackgroundDownload(entry.downloadId);
       if (entry.mmProjDownloadId) {
-        await modelManager.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
+        await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
       }
     } catch { /* ignore cancel errors */ }
   };
@@ -259,7 +259,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const model = downloadedModels.find(m => m.id === modelId);
     if (!model) return;
     if (activeModelId === model.id) await unloadTextModel().catch(() => {});
-    await modelManager.deleteModel(model.id);
+    await modelLibrary.deleteModel(model.id);
     removeDownloadedModel(model.id);
   };
   // Resolve a catalog file to its on-disk model by the FILE, not the composite id.

@@ -24,7 +24,7 @@ import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
 import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
-import { modelManager } from '../../services';
+import { modelLibrary } from '../../services';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
@@ -114,7 +114,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       if (!f.mmProjFile) continue;
       const rec = getDownloadedModel(selectedModel.id, f.name);
       if (rec?.engine === 'llama' && !rec.isVisionModel) {
-        modelManager.markVisionModel(rec.id).catch(() => undefined);
+        modelLibrary.markVisionModel(rec.id).catch(() => undefined);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

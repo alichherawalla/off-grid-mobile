@@ -1,4 +1,4 @@
-import { DownloadedModel, DownloadProgress, ModelFile } from '../../types';
+import { DownloadedModel, DownloadProgress, ModelFile } from '../../../../types';
 
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
 export type DownloadCompleteCallback = (model: DownloadedModel) => void;

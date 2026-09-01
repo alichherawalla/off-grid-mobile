@@ -16,7 +16,7 @@ import {
   useProExpiryRedirect,
 } from './src/navigation/useProExpiryRedirect';
 import { useTheme } from './src/theme';
-import { hardwareService, modelManager, authService, ragService, remoteServerManager } from './src/services';
+import { hardwareService, modelLibrary, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
@@ -112,13 +112,13 @@ function App() {
   } = useAuthStore();
 
   const reattachTextDownloadRecovery = useCallback(async () => {
-    const restoredIds = await modelManager.restoreInProgressDownloads();
-    modelManager.startBackgroundDownloadPolling();
+    const restoredIds = await modelLibrary.restoreInProgressDownloads();
+    modelLibrary.startBackgroundDownloadPolling();
     restoredIds.forEach((downloadId) => {
-      modelManager.watchDownload(
+      modelLibrary.watchDownload(
         downloadId,
         async () => {
-          const models = await modelManager.getDownloadedModels();
+          const models = await modelLibrary.getDownloadedModels();
           setDownloadedModels(models);
           useDownloadStore.getState().remove(
             useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
@@ -214,11 +214,11 @@ function App() {
           .filter(e => e.modelType === 'image')
           .map(e => e.modelId.replace('image:', '')),
       );
-      await modelManager.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
+      await modelLibrary.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
         logger.error('[App] Image model reconciliation failed:', error);
       });
       logger.log('[BOOT] refresh model lists');
-      const { textModels, imageModels } = await modelManager.refreshModelLists();
+      const { textModels, imageModels } = await modelLibrary.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
     })().catch((error) => {
@@ -258,19 +258,19 @@ function App() {
       setModelRecommendation(recommendation);
 
       // Initialize model manager and load downloaded models list
-      logger.log('[BOOT] modelManager.initialize');
-      await modelManager.initialize();
+      logger.log('[BOOT] model library initialize');
+      await modelLibrary.initialize();
 
       // Clean up any mmproj files that were incorrectly added as standalone models
       logger.log('[BOOT] cleanup mmproj entries');
-      await modelManager.cleanupMMProjEntries();
+      await modelLibrary.cleanupMMProjEntries();
 
       // Scan for any models that may have been downloaded externally or
       // while the app was killed. hydrateDownloadStore (called on cold start
       // and foreground resume) repopulates in-flight downloads directly
       // from the native Room DB, replacing the old metadata-callback +
       // syncBackgroundDownloads recovery path.
-      const { textModels, imageModels } = await modelManager.refreshModelLists();
+      const { textModels, imageModels } = await modelLibrary.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
 

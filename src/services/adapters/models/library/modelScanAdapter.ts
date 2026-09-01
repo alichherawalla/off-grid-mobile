@@ -1,13 +1,13 @@
 import RNFS from 'react-native-fs';
-import { statFile } from '../../utils/fileStat';
+import { statFile } from '../../../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
-import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
-import { loadDownloadedModels, saveModelsList } from './storage';
+import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../../../types';
+import { loadDownloadedModels, saveModelsList } from './modelRegistryStorageAdapter';
 import { modelPathBasename } from '@offgrid/models';
-import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
+import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
+import { ensureImageExtractionComplete } from '../../../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
-import { isMMProjFile, pickMmProjForModel } from '../mmproj';
+import { isMMProjFile, pickMmProjForModel } from '../../../mmproj';
 
 export { isMMProjFile };
 

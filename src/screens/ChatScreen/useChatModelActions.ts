@@ -9,7 +9,7 @@ import {
   getActiveModels,
   llmService,
   loadTextModel,
-  modelManager,
+  modelLibrary,
   selectedTextModelId,
   unloadTextModel,
 } from '../../services';
@@ -346,7 +346,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (!cancelled) {
-        const models = await modelManager.getDownloadedImageModels();
+        const models = await modelLibrary.getDownloadedImageModels();
         if (cancelled) return;
         // Never orphan the currently-active image model: activeImageModelId is persisted
         // but downloadedImageModels is not, so on a cold mount the disk scan is the sole

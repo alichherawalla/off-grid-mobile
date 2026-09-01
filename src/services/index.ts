@@ -1,6 +1,6 @@
 export { hardwareService } from './hardware';
 export { huggingFaceService } from './huggingface';
-export { modelManager } from './modelManager';
+export { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 export { llmService } from './llm';
 export { localDreamGeneratorService as onnxImageGeneratorService } from './localDreamGenerator';
 export { intentClassifier } from './intentClassifier';

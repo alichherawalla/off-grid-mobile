@@ -1,5 +1,5 @@
-import { modelManager } from './modelManager';
-import { mmProjLocalName } from './modelManager/download';
+import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
+import { mmProjLocalName } from './adapters/models/library/downloadArtifactAdapter';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useAppStore } from '../stores';
 import { makeModelKey } from '../utils/modelKey';
@@ -23,7 +23,7 @@ export interface StartModelDownloadOpts {
  * THE single entry point to start a model download — shared by the Models screen
  * (useTextModels) and the onboarding ModelDownloadScreen so both use the IDENTICAL
  * mechanism instead of two near-duplicate handlers:
- *   duplicate-start guard → modelManager.downloadModelBackground → watchDownload →
+ *   duplicate-start guard → modelLibrary.downloadModelBackground → watchDownload →
  *   register the model (appStore) + clear the in-flight store entry.
  * Each screen owns only its presentation, via onRegistered / onError. The underlying
  * pipeline (backgroundDownloadService, downloadStore progress, mmproj sidecar) was
@@ -80,9 +80,9 @@ export async function startModelDownload(
     // downloadModelBackground writes the row + adds the store entry synchronously
     // after start (add for new, retryEntry for an existing failed one — including the
     // queued placeholder row added above, whose id it reconciles to the real one).
-    const info = await modelManager.downloadModelBackground(modelId, file);
+    const info = await modelLibrary.downloadModelBackground(modelId, file);
     currentDownloadId = info.downloadId;
-    modelManager.watchDownload(info.downloadId, (model: DownloadedModel) => {
+    modelLibrary.watchDownload(info.downloadId, (model: DownloadedModel) => {
       // Standard completion: register + clear the in-flight entry so the UI reads
       // "downloaded" from downloadedModels, not a lingering 100% store entry.
       useAppStore.getState().addDownloadedModel(model);

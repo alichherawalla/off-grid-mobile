@@ -8,7 +8,7 @@
  * See docs/design/MODEL_ROUTING.md §5.3.
  */
 import { useAppStore } from '../stores';
-import { modelManager } from './modelManager';
+import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 import { huggingFaceService } from './huggingface';
 import { startModelDownload } from './startModelDownload';
 
@@ -38,7 +38,7 @@ export async function ensureDefaultClassifier(): Promise<void> {
     return;
   }
 
-  if (!modelManager.isBackgroundDownloadSupported?.()) return;
+  if (!modelLibrary.isBackgroundDownloadSupported?.()) return;
 
   provisioning = true;
   try {
