@@ -1,7 +1,7 @@
 import { modelDownloadService } from './modelDownloadService';
 import type { ModelDownload, ModelDownloadStartRequest } from './modelDownloadService/types';
 import { useAppStore } from '../stores';
-import { uniformDownloadId } from './modelDownloadService/uniformId';
+import { uniformDownloadId } from '@offgrid/models';
 import {
   loadAutoSetupCompatibleCatalog,
   type AutoSetupCatalogBoundaries,

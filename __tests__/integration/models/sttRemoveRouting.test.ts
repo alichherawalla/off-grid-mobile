@@ -28,7 +28,7 @@ jest.mock('../../../src/services/whisperService', () => ({
 
 import { modelDownloadService } from '../../../src/services/modelDownloadService';
 import { sttProvider } from '../../../src/services/modelDownloadService/providers/sttProvider';
-import { uniformDownloadId } from '../../../src/services/modelDownloadService/uniformId';
+import { uniformDownloadId } from '@offgrid/models';
 import { useDownloadStore, DownloadEntry } from '../../../src/stores/downloadStore';
 import { makeModelKey } from '../../../src/utils/modelKey';
 import logger from '../../../src/utils/logger';

@@ -18,8 +18,7 @@ import { hardwareService } from '../../hardware';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
-import { mapStoreStatus } from '../storeStatus';
-import { uniformDownloadId } from '../uniformId';
+import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startModelDownload } from '../../startModelDownload';
 import type { DownloadParams } from '../../backgroundDownloadTypes';
 import type { DownloadProvider, ModelDownload } from '../types';
@@ -94,7 +93,7 @@ export const textProvider: DownloadProvider = {
         id: uniformDownloadId('text', e.modelKey), modelType: 'text', name: e.fileName || e.modelId,
         sizeBytes: e.combinedTotalBytes || e.totalBytes,
         bytesDownloaded: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
-        progress: e.progress, status: mapStoreStatus(e.status),
+        progress: e.progress, status: mapDownloadStoreStatus(e.status),
         capabilities: TEXT_CAPABILITIES, error: e.errorMessage,
       });
     }

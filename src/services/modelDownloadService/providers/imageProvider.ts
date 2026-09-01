@@ -22,8 +22,7 @@ import { backgroundDownloadService } from '../../backgroundDownloadService';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
-import { mapStoreStatus } from '../storeStatus';
-import { uniformDownloadId } from '../uniformId';
+import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
 import type { DownloadProvider, ModelDownload } from '../types';
 
@@ -78,7 +77,7 @@ export const imageProvider: DownloadProvider = {
       out.push({
         id: uniformDownloadId('image', e.modelId), modelType: 'image', name: e.fileName || id,
         sizeBytes: e.combinedTotalBytes || e.totalBytes, bytesDownloaded: e.bytesDownloaded,
-        progress: e.progress, status: mapStoreStatus(e.status),
+        progress: e.progress, status: mapDownloadStoreStatus(e.status),
         capabilities: { cancel: true, retry: true, remove: true, resumable, determinateProgress: true },
         error: e.errorMessage,
       });

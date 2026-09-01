@@ -10,7 +10,7 @@ import { whisperService } from '../../services';
 import { useWhisperStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { modelDownloadService } from '../../services/modelDownloadService';
-import { isModelDownloadInProgress } from '../../services/modelDownloadService/storeStatus';
+import { isModelDownloadInProgress } from '@offgrid/models';
 import { DownloadItem, formatBytes } from './items';
 
 async function loadItems(): Promise<DownloadItem[]> {

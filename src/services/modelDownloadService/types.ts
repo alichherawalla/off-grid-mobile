@@ -16,14 +16,8 @@
  * See docs/design/MODEL_DOWNLOAD_SERVICE.md.
  */
 
-export type ModelDownloadType = 'text' | 'image' | 'stt' | 'tts';
-
-export type ModelDownloadStatus =
-  | 'queued'        // accepted, not yet transferring
-  | 'downloading'   // bytes moving
-  | 'paused'        // interrupted (e.g. waiting for network / app was killed) — resumable
-  | 'completed'     // on disk + registered in its domain store
-  | 'error';        // failed; retryable
+export type { ModelDownloadStatus, ModelDownloadType } from '@offgrid/models';
+import type { ModelDownloadStatus, ModelDownloadType } from '@offgrid/models';
 
 export type ModelDownloadStartRequest =
   | { modelType: 'text'; modelId: string; file: import('../../types').ModelFile }

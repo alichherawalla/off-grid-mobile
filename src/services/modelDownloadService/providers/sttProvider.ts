@@ -14,8 +14,7 @@ import { backgroundDownloadService } from '../../backgroundDownloadService';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
 import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';
-import { mapStoreStatus } from '../storeStatus';
-import { uniformDownloadId } from '../uniformId';
+import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import type { DownloadProvider, ModelDownload } from '../types';
 
 const STT_CAPABILITIES = {
@@ -54,7 +53,7 @@ export const sttProvider: DownloadProvider = {
       out.push({
         id: uniformDownloadId('stt', e.modelId), modelType: 'stt', name: e.fileName || bare,
         sizeBytes: e.totalBytes, bytesDownloaded: e.bytesDownloaded, progress: e.progress,
-        status: mapStoreStatus(e.status), capabilities: STT_CAPABILITIES, error: e.errorMessage,
+        status: mapDownloadStoreStatus(e.status), capabilities: STT_CAPABILITIES, error: e.errorMessage,
       });
     }
     // Completed (on disk) — skip ones that also have a live in-flight entry.

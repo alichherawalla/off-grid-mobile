@@ -13,7 +13,7 @@ import type {
   ModelDownloadStartRequest,
   ModelDownloadType,
 } from '../../../src/services/modelDownloadService/types';
-import { uniformDownloadId } from '../../../src/services/modelDownloadService/uniformId';
+import { uniformDownloadId } from '@offgrid/models';
 import { useAppStore } from '../../../src/stores';
 
 const MB = 1024 * 1024;

@@ -22,7 +22,7 @@
 import logger from '../../utils/logger';
 import { backgroundDownloadService } from '../backgroundDownloadService';
 import type { DownloadParams } from '../backgroundDownloadTypes';
-import { queuedUniformId } from './uniformId';
+import { queuedUniformId } from '@offgrid/models';
 import {
   DownloadProvider,
   ModelDownload,

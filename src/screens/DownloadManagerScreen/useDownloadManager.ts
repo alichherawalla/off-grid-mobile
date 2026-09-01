@@ -25,7 +25,7 @@ import logger from '../../utils/logger';
 import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { retryImageDownload } from './retryHandlers';
 import { modelDownloadService } from '../../services/modelDownloadService';
-import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
+import { uniformDownloadId } from '@offgrid/models';
 import { setImageDownloadOps } from '../../services/modelDownloadService/providers/imageProvider';
 import { useEffect } from 'react';
 

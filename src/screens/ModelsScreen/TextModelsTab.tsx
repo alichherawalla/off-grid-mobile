@@ -26,7 +26,7 @@ import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRT
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { modelManager } from '../../services';
 import { modelDownloadService } from '../../services/modelDownloadService';
-import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
+import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 
 function hasNonSortFilters(fs: FilterState): boolean {
