@@ -18,6 +18,7 @@ import { liteRTService } from '../litert';
 import { llmService } from '../llm';
 import { resolveToolCalls } from '../generationToolLoop';
 import { mobileExecutionAdapterId } from './mobileRoute';
+import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
 
 function textAndAttachments(
   content: GenerationMessage['content'],
@@ -298,19 +299,28 @@ export function reconcileMobileGenerationAdapters(
   models: LLMService,
   registrations: Map<string, () => void>,
 ): void {
-  const supported = new Set<string>([
-    mobileExecutionAdapterId('local', 'llama', 'text'),
-    mobileExecutionAdapterId('local', 'litert', 'text'),
-    ...models.list('text')
-      .filter(model => model.source === 'remote')
-      .map(model => model.adapterId),
+  const supported = new Map<string, RuntimeModel['modality']>([
+    [mobileExecutionAdapterId('local', 'llama', 'text'), 'text'],
+    [mobileExecutionAdapterId('local', 'litert', 'text'), 'text'],
+    ...models.list()
+      .filter(model =>
+        (model.source === 'remote' && model.modality === 'text')
+        || model.modality === 'image')
+      .map(model => [model.adapterId, model.modality] as const),
   ]);
   for (const [id, unregister] of registrations) {
     if (supported.has(id)) continue;
     unregister();
     registrations.delete(id);
   }
-  for (const id of supported) {
-    if (!registrations.has(id)) registrations.set(id, service.registerAdapter(adapter(id)));
+  for (const [id, modality] of supported) {
+    if (!registrations.has(id)) {
+      registrations.set(
+        id,
+        service.registerAdapter(
+          modality === 'image' ? mobileImageGenerationAdapter(id) : adapter(id),
+        ),
+      );
+    }
   }
 }

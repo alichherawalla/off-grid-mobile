@@ -24,6 +24,7 @@ import {
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
 import { isOverridableMemoryError } from './modelLoadErrors';
+import { executeMobileImageGeneration } from './sharedImageGeneration';
 import {
   isInFlight,
   ImageGenerationState,
@@ -58,10 +59,8 @@ class ImageGenerationService {
   private readonly listeners: Set<ImageGenerationListener> = new Set();
   private cancelRequested: boolean = false;
   private remoteRequest: AbortController | null = null;
-  /** Last generate request, so a failure card's Retry button can re-run it. */
   private _lastParams: GenerateImageParams | null = null;
 
-  /** Public snapshot: isGenerating is computed from phase, never stored. */
   getState(): ImageGenerationState {
     return { ...this.state, isGenerating: isInFlight(this.state.phase) };
   }
@@ -264,7 +263,7 @@ class ImageGenerationService {
     });
     const startTime = Date.now();
     try {
-      const result = await onnxImageGeneratorService.generateImage(
+      const result = await executeMobileImageGeneration(
         {
           prompt: enhancedPrompt,
           negativePrompt: params.negativePrompt || '',
@@ -274,31 +273,34 @@ class ImageGenerationService {
           width: imageWidth,
           height: imageHeight,
           previewInterval: params.previewInterval ?? 2,
-          useOpenCL,
         },
-        progress => {
-          if (this.cancelRequested) return;
-          const displayStep = Math.min(progress.step, steps);
-          // Once steps are advancing it IS generating — don't mislabel it "GPU
-          // optimization" (which read as if generation hadn't started). On the first run
-          // the GPU is still warming, so note that as a one-time aside, not the headline.
-          const status = generationProgressStatus(
-            displayStep,
-            steps,
-            isFirstRun,
-          );
-          this.updateState({
-            progress: { step: displayStep, totalSteps: steps },
-            status,
-          });
-        },
-        preview => {
-          if (this.cancelRequested) return;
-          const displayStep = Math.min(preview.step, steps);
-          this.updateState({
-            previewPath: `file://${preview.previewPath}?t=${Date.now()}`,
-            status: `Refining image (${displayStep}/${steps})...`,
-          });
+        {
+          setRequest: controller => {
+            this.remoteRequest = controller;
+          },
+          onProgress: (completed, _total, preview) => {
+            if (this.cancelRequested) return;
+            const displayStep = Math.min(completed, steps);
+            if (preview?.uri) {
+              this.updateState({
+                previewPath: `${preview.uri}?t=${Date.now()}`,
+                status: `Refining image (${displayStep}/${steps})...`,
+              });
+              return;
+            }
+            // Once steps are advancing it IS generating — don't mislabel it "GPU
+            // optimization" (which read as if generation hadn't started). On the first run
+            // the GPU is still warming, so note that as a one-time aside, not the headline.
+            const status = generationProgressStatus(
+              displayStep,
+              steps,
+              isFirstRun,
+            );
+            this.updateState({
+              progress: { step: displayStep, totalSteps: steps },
+              status,
+            });
+          },
         },
       );
       if (this.cancelRequested || !result?.imagePath) {
@@ -357,7 +359,7 @@ class ImageGenerationService {
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
     const remoteServer = useRemoteServerStore.getState().getActiveRemoteMediaServer('image');
     if (remoteServer?.mediaModels?.image) {
-      return runRemoteImageGeneration(params, remoteServer, {
+      return runRemoteImageGeneration(params, {
         updateState: state => this.updateState(state),
         fail: message => this._fail(message),
         isCancelled: () => this.cancelRequested,
@@ -419,8 +421,7 @@ class ImageGenerationService {
       return null;
     }
 
-    // Establish the generating state unconditionally — not only when enhancement
-    // is off. When enhancement is ON but _enhancePrompt bailed early (e.g. no text
+    // Establish generating state even when enhancement was skipped (for example, no text
     // model loaded, so enhancement was skipped), it never set isGenerating, so the
     // in-progress card never appeared. Setting it here fixes that; on the
     // enhancement-ran path this just swaps the 'Enhancing…' status for 'Preparing…'

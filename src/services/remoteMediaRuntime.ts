@@ -80,7 +80,7 @@ function requiredModel(
 export const remoteMediaRuntime = {
   async generateImage(
     server: RemoteServer,
-    input: { prompt: string; size?: string },
+    input: { prompt: string; size?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
     const payload = await request({
@@ -90,7 +90,7 @@ export const remoteMediaRuntime = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: requiredModel(server, 'image'),
+          model: input.model ?? requiredModel(server, 'image'),
           prompt: input.prompt,
           size: input.size ?? '1024x1024',
           response_format: 'b64_json',
