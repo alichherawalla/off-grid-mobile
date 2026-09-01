@@ -18,8 +18,8 @@ jest.mock('../../../src/services/litert', () => ({
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { loadModel: jest.fn(), unloadModel: jest.fn() },
 }));
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: { saveModelWithMmproj: jest.fn(), clearMmProjLink: jest.fn() },
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: { saveModelWithMmproj: jest.fn(), clearMmProjLink: jest.fn() },
 }));
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(false)),

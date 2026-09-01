@@ -14,23 +14,23 @@ jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(),
 }));
 
-jest.mock('../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+jest.mock('../../../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {
     getActiveDownloads: jest.fn(),
     moveCompletedDownload: jest.fn(),
   },
 }));
 
-jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
+jest.mock('../../../../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn(),
   downloadCoreMLTokenizerFiles: jest.fn(),
 }));
 
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { coordinatedDownloads as backgroundDownloadService } from '../../../../src/services/modelServices/coordinatedDownloadBridge';
-import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../../../src/utils/coreMLModelUtils';
-import { syncCompletedImageDownloads } from '../../../../src/services/modelManager/imageSync';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../../../../src/services/modelServices/coordinatedDownloadBridge';
+import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../../../../../src/utils/coreMLModelUtils';
+import { syncCompletedImageDownloads } from '../../../../../../src/services/adapters/models/library/imageDownloadRecoveryAdapter';
 
 const mockExists = RNFS.exists as jest.Mock;
 const mockMkdir = RNFS.mkdir as jest.Mock;

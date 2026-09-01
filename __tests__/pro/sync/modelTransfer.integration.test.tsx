@@ -53,7 +53,7 @@ import {
 } from '../../../src/navigation/screenRegistry';
 import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
-import { modelManager } from '../../../src/services/modelManager';
+import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
@@ -300,7 +300,7 @@ describe('Pro mobile model transfer journey', () => {
     // Scoped to the row. "Received" is also a direction filter on this screen, so an unscoped query
     // matches the filter chip as readily as the row and would pass even if the row said Sent.
     expect(within(activityRow(arrival)).getByText(/Received/)).toBeTruthy();
-    await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+    await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
       expect.objectContaining({
         id: `google/gemma-mobile/${fileName}`,
         name: 'Gemma Mobile',
@@ -359,7 +359,7 @@ describe('Pro mobile model transfer journey', () => {
       within(activityRow(refusal)).getByText(/Could not receive/),
     ).toBeTruthy();
     expect(ui.queryByLabelText('Retry Invalid model')).toBeNull();
-    await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(1);
+    await expect(modelLibrary.getDownloadedModels()).resolves.toHaveLength(1);
     await expect(
       modelTransferFsBoundary.exists(
         `${modelTransferFsBoundary.DocumentDirectoryPath}/models/${invalidFileName}`,

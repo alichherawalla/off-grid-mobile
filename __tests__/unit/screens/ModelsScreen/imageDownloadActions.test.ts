@@ -95,7 +95,7 @@ const mockOnError = jest.fn((_id: string, cb: Function) => { errorCallbacks.push
 const mockGetSoCInfo = jest.fn(() => Promise.resolve({ hasNPU: true, qnnVariant: '8gen2' }));
 
 jest.mock('../../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getImageModelsDirectory: () => mockGetImageModelsDirectory(),
     addDownloadedImageModel: (m: any) => mockAddDownloadedImageModel(m),
   },

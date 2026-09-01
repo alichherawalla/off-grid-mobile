@@ -117,9 +117,9 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
 
   it('drives the download store incrementally (0 -> mid -> complete), not just a terminal done', async () => {
     const cbs = captureCallbacks();
-    const { modelManager } = require('../../../src/services/modelManager');
+    const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
 
-    const repairPromise = modelManager.repairMmProj(REPO, visionFile(), {});
+    const repairPromise = modelLibrary.repairMmProj(REPO, visionFile(), {});
 
     // Give startDownload + listener registration a tick.
     await new Promise(r => setImmediate(r));
@@ -166,9 +166,9 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
 
   it('reports failure through the store when the download errors', async () => {
     const cbs = captureCallbacks();
-    const { modelManager } = require('../../../src/services/modelManager');
+    const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
 
-    const repairPromise = modelManager.repairMmProj(REPO, visionFile(), {});
+    const repairPromise = modelLibrary.repairMmProj(REPO, visionFile(), {});
     await new Promise(r => setImmediate(r));
 
     expect(useDownloadStore.getState().downloads[MODEL_KEY]).toBeDefined();

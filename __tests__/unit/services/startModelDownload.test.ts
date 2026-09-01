@@ -6,8 +6,8 @@
  */
 const mockDownloadModelBackground = jest.fn();
 const mockWatchDownload = jest.fn();
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
     downloadModelBackground: (...a: unknown[]) => mockDownloadModelBackground(...a),
     watchDownload: (...a: unknown[]) => mockWatchDownload(...a),
   },

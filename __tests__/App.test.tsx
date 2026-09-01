@@ -152,7 +152,7 @@ jest.mock('../src/services', () => ({
     getDeviceInfo: jest.fn(() => Promise.resolve({ totalMemory: 8 * 1024 * 1024 * 1024 })),
     getModelRecommendation: jest.fn(() => ({ maxParameters: 7, recommendedQuantization: 'Q4_K_M' })),
   },
-  modelManager: mockModelManager,
+  modelLibrary: mockModelManager,
   authService: {
     hasPassphrase: jest.fn(() => Promise.resolve(false)),
   },
@@ -167,7 +167,7 @@ jest.mock('../src/services', () => ({
 // NOTE: App is required INSIDE the test, not imported at top level. The jest.mock
 // factories above are hoisted above the `const mock*` definitions; a top-level
 // `import App` is hoisted too and would run those factories BEFORE the consts
-// initialize, so every mocked hook (useAppStore, modelManager, …) captured
+// initialize, so every mocked hook (useAppStore, modelLibrary, …) captured
 // `undefined` → "useAppStore is not a function" during render. Requiring App from
 // inside the test defers the factories until the consts exist.
 

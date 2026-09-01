@@ -6,9 +6,9 @@
  * forgotten and the UI would never receive completion events.
  */
 
-import { restoreInProgressDownloads } from '../../../src/services/modelManager/restore';
+import { restoreInProgressDownloads } from '../../../src/services/adapters/models/library/downloadRestoreAdapter';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
-import { BackgroundDownloadContext } from '../../../src/services/modelManager/types';
+import { BackgroundDownloadContext } from '../../../src/services/adapters/models/library/types';
 
 jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {

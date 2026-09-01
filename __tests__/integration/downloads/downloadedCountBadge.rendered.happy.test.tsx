@@ -17,7 +17,7 @@
  * `model-card-{index}-downloaded`.
  *
  * Real stack over the fs + AsyncStorage boundary: the REAL useTextModels hydration
- * (modelManager.getDownloadedModels → loadDownloadedModels → validateAndResolveModels, which really
+ * (modelLibrary.getDownloadedModels → loadDownloadedModels → validateAndResolveModels, which really
  * probes the disk) runs, the REAL recommended list matches downloaded rows by id-prefix, and the REAL
  * ModelCard renders the mark. The N is EMERGENT from the seeded boundary, not programmed.
  */

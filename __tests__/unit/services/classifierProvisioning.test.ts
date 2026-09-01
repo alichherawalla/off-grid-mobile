@@ -7,8 +7,8 @@ jest.mock('../../../src/stores', () => ({
   useAppStore: { getState: () => mockState },
 }));
 
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
     isBackgroundDownloadSupported: () => true,
   },
 }));

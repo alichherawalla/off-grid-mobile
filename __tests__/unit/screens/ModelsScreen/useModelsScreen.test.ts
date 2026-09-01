@@ -158,9 +158,9 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
   isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 
-// Mock modelManager
+// Mock modelLibrary
 jest.mock('../../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getImageModelsDirectory: jest.fn(() => '/models/images'),
     addDownloadedImageModel: jest.fn().mockResolvedValue(undefined),
     importLocalModel: jest.fn().mockResolvedValue({ id: 'model-1', name: 'Test Model' }),
@@ -326,11 +326,11 @@ describe('useModelsScreen', () => {
 
   describe('handleImportLocalModel - GGUF success path', () => {
     it('imports single GGUF file successfully (object-arg signature)', async () => {
-      const { modelManager } = require('../../../../src/services');
+      const { modelLibrary } = require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
 
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 4000 }]);
-      modelManager.importLocalModel.mockResolvedValueOnce({ id: 'gguf-1', name: 'Test GGUF Model' });
+      modelLibrary.importLocalModel.mockResolvedValueOnce({ id: 'gguf-1', name: 'Test GGUF Model' });
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
         activeImageModelId: null,
@@ -345,7 +345,7 @@ describe('useModelsScreen', () => {
       });
 
       // importLocalModel now takes an options object, not positional args
-      expect(modelManager.importLocalModel).toHaveBeenCalledWith(expect.objectContaining({
+      expect(modelLibrary.importLocalModel).toHaveBeenCalledWith(expect.objectContaining({
         sourceUri: 'file://test.gguf',
         fileName: 'test.gguf',
         sourceSize: 4000,
@@ -358,14 +358,14 @@ describe('useModelsScreen', () => {
     });
 
     it('returns early without calling pick if isImporting is already true', async () => {
-      const { modelManager } = require('../../../../src/services');
+      const { modelLibrary } = require('../../../../src/services');
       const { result } = renderHook(() => useModelsScreen());
 
       // Make importLocalModel hang so isImporting stays true after pick returns
       let resolveImport!: (v: any) => void;
       const hangingImport = new Promise(r => { resolveImport = r; });
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 100 }]);
-      modelManager.importLocalModel.mockReturnValueOnce(hangingImport);
+      modelLibrary.importLocalModel.mockReturnValueOnce(hangingImport);
 
       // Start first import — pick returns, isImporting becomes true, import hangs
       const firstImport = act(() => { result.current.handleImportLocalModel(); });
@@ -424,7 +424,7 @@ describe('useModelsScreen', () => {
 
   describe('handleImportImageModelZip', () => {
     it('imports image model zip successfully on iOS', async () => {
-      const { modelManager } = require('../../../../src/services');
+      const { modelLibrary } = require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
@@ -432,7 +432,7 @@ describe('useModelsScreen', () => {
       (Platform as any).OS = 'ios';
 
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'TestModel.zip', size: 0 }]);
-      modelManager.addDownloadedImageModel.mockResolvedValueOnce(undefined);
+      modelLibrary.addDownloadedImageModel.mockResolvedValueOnce(undefined);
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
         activeImageModelId: null,
@@ -452,7 +452,7 @@ describe('useModelsScreen', () => {
     });
 
     it('imports image model zip with CoreML mlmodelc', async () => {
-      const { modelManager } = require('../../../../src/services');
+      const { modelLibrary } = require('../../../../src/services');
       const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
@@ -460,7 +460,7 @@ describe('useModelsScreen', () => {
       mockPick.mockResolvedValueOnce([{ uri: 'file://coreml.zip', name: 'CoreMLModel.zip', size: 0 }]);
       RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mlmodelc', isDirectory: () => true }]);
       resolveCoreMLModelDir.mockResolvedValueOnce('/resolved/coreml');
-      modelManager.addDownloadedImageModel.mockResolvedValueOnce(undefined);
+      modelLibrary.addDownloadedImageModel.mockResolvedValueOnce(undefined);
 
       const { result } = renderHook(() => useModelsScreen());
 

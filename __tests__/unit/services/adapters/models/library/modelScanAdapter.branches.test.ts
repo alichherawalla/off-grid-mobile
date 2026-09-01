@@ -1,5 +1,5 @@
 /**
- * Branch-coverage tests for modelManager/scan.ts.
+ * Branch-coverage tests for modelLibrary/scan.ts.
  * Targets the recovery/reconciliation paths, import guards, mmproj linking,
  * and the recursive getDirSize helper that the existing scan.test.ts does not exercise.
  */
@@ -14,7 +14,7 @@ jest.mock('react-native-fs', () => ({
   writeFile: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('react-native-zip-archive', () => ({ unzip: jest.fn(() => Promise.resolve()) }));
-jest.mock('../../../../src/services/modelManager/storage', () => ({
+jest.mock('../../../../../../src/services/adapters/models/library/modelRegistryStorageAdapter', () => ({
   buildDownloadedModel: jest.fn(async ({ resolvedLocalPath }) => ({
     filePath: resolvedLocalPath,
     fileName: 'x.gguf',
@@ -26,15 +26,15 @@ jest.mock('../../../../src/services/modelManager/storage', () => ({
   loadDownloadedModels: jest.fn(async () => []),
   saveModelsList: jest.fn(async () => {}),
 }));
-jest.mock('../../../../src/services/adapters/models/modelFileCopyAdapter', () => ({
+jest.mock('../../../../../../src/services/adapters/models/modelFileCopyAdapter', () => ({
   copyFileWithProgress: jest.fn(async (_s: string, _d: string, opts: any) => {
     opts?.onProgress?.(1);
   }),
 }));
-jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
+jest.mock('../../../../../../src/utils/coreMLModelUtils', () => ({
   resolveCoreMLModelDir: jest.fn(async (p: string) => `${p}/coreml-resolved`),
 }));
-jest.mock('../../../../src/utils/logger', () => ({
+jest.mock('../../../../../../src/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
@@ -47,10 +47,10 @@ import {
   scanForUntrackedTextModels,
   scanForUntrackedImageModels,
   deleteOrphanedFile,
-  } from '../../../../src/services/modelManager/scan';
-import { importLocalModel } from '../../../../src/services/modelManager/importLocalModel';
-import * as storage from '../../../../src/services/modelManager/storage';
-import { copyFileWithProgress } from '../../../../src/services/adapters/models/modelFileCopyAdapter';
+  } from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
+import { importLocalModel } from '../../../../../../src/services/adapters/models/library/localModelImportAdapter';
+import * as storage from '../../../../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
+import { copyFileWithProgress } from '../../../../../../src/services/adapters/models/modelFileCopyAdapter';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 

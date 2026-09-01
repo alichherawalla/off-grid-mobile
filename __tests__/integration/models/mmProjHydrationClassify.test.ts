@@ -5,7 +5,7 @@
  * downloadHydration.isMmProjFileName only matched 'mmproj' — it MISSED the 'projector' and 'clip' names the
  * canonical isMMProjFile (introduced by #510 c815752f) also recognises. getParentRows uses that predicate as
  * the belt-and-suspenders filter that drops an ORPHANED projector sidecar row (one whose parent lost its
- * mmProjDownloadId back-link after a retry — see modelManager/restore.ts). With the divergent predicate a
+ * mmProjDownloadId back-link after a retry — see modelLibrary/restore.ts). With the divergent predicate a
  * '*-projector.gguf' / '*-clip.gguf' sidecar slips through and hydrates as a PHANTOM standalone model entry
  * in the Download Manager.
  *

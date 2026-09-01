@@ -4,7 +4,7 @@
  * must stay UI-free). Verifies list, injected-op delegation, native cancel fallback,
  * remove, and that a multi-file (no native row) interrupted download is stranded.
  */
-jest.mock('../../../src/services/modelManager', () => ({ modelManager: { deleteImageModel: jest.fn(async () => {}) } }));
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({ modelLibrary: { deleteImageModel: jest.fn(async () => {}) } }));
 jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));

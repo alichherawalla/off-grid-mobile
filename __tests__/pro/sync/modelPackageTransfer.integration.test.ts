@@ -12,7 +12,7 @@ import {
   type TransferredModelManifest,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
-import { modelManager } from '../../../src/services/modelManager';
+import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
@@ -292,13 +292,13 @@ describe('Pro mobile model package receiver', () => {
       }),
     );
 
-    const modelsDirectory = modelManager.getModelsDirectory();
+    const modelsDirectory = modelLibrary.getModelsDirectory();
     await expect(
       modelTransferFsBoundary.exists(
         `${modelsDirectory}/${visionManifest.files[0].name}`,
       ),
     ).resolves.toBe(false);
-    await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(0);
+    await expect(modelLibrary.getDownloadedModels()).resolves.toHaveLength(0);
 
     await transfers.sendFile(
       mobile.id,
@@ -321,7 +321,7 @@ describe('Pro mobile model package receiver', () => {
     // rule a download uses - not the name the sender happened to have for it. That is what keeps the
     // vision link alive, and what stops two models colliding on a shared `mmproj-F16.gguf`.
     const projectorHere = 'mobile-vision-mmproj-F16.gguf';
-    await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+    await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
       expect.objectContaining({
         id: `off-grid/mobile-vision/${visionManifest.files[0].name}`,
         name: 'Mobile Vision',
@@ -385,8 +385,8 @@ describe('Pro mobile model package receiver', () => {
         packageMetadata('coreml-image-package', coreMLManifest, 0),
       ),
     );
-    const imageRoot = `${modelManager.getImageModelsDirectory()}/mobile-coreml-image`;
-    await expect(modelManager.getDownloadedImageModels()).resolves.toEqual([
+    const imageRoot = `${modelLibrary.getImageModelsDirectory()}/mobile-coreml-image`;
+    await expect(modelLibrary.getDownloadedImageModels()).resolves.toEqual([
       expect.objectContaining({
         id: 'mobile-coreml-image',
         name: 'Mobile Core ML Image',
@@ -403,7 +403,7 @@ describe('Pro mobile model package receiver', () => {
     ).resolves.toBe(true);
     await expect(
       modelTransferFsBoundary.exists(
-        `${modelManager.getImageModelsDirectory()}/.sync-install-${
+        `${modelLibrary.getImageModelsDirectory()}/.sync-install-${
           coreMLManifest.files[0].name
         }`,
       ),
@@ -437,7 +437,7 @@ describe('Pro mobile model package receiver', () => {
     ).rejects.toThrow('not enough storage to receive and install');
     await expect(
       modelTransferFsBoundary.exists(
-        `${modelManager.getImageModelsDirectory()}/too-large-coreml-image`,
+        `${modelLibrary.getImageModelsDirectory()}/too-large-coreml-image`,
       ),
     ).resolves.toBe(false);
 
@@ -478,7 +478,7 @@ describe('Pro mobile model package receiver', () => {
     ).rejects.toThrow('missing vocab.json');
     await expect(
       modelTransferFsBoundary.exists(
-        `${modelManager.getImageModelsDirectory()}/incomplete-coreml-image`,
+        `${modelLibrary.getImageModelsDirectory()}/incomplete-coreml-image`,
       ),
     ).resolves.toBe(false);
 
@@ -542,7 +542,7 @@ describe('Pro mobile model package receiver', () => {
 
   it('stages image archives natively and removes them after a failed send', async () => {
     await connectDesktop();
-    const modelRoot = `${modelManager.getImageModelsDirectory()}/sendable-coreml`;
+    const modelRoot = `${modelLibrary.getImageModelsDirectory()}/sendable-coreml`;
     modelTransferFsBoundary.seedDir(modelRoot);
     for (const component of [
       'TextEncoder.mlmodelc',
@@ -556,7 +556,7 @@ describe('Pro mobile model package receiver', () => {
       `${modelRoot}/vocab.json`,
       '{"token":1}',
     );
-    await modelManager.addDownloadedImageModel({
+    await modelLibrary.addDownloadedImageModel({
       id: 'sendable-coreml',
       name: 'Sendable Core ML',
       description: '',

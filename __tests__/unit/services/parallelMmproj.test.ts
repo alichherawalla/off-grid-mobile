@@ -16,11 +16,11 @@ import {
   watchBackgroundDownload,
   syncCompletedBackgroundDownloads,
   mmProjLocalName,
-} from '../../../src/services/modelManager/download';
+} from '../../../src/services/adapters/models/library/downloadArtifactAdapter';
 import { mmProjBelongsToModel, pickMmProjForDownload } from '../../../src/services/mmproj';
-import { restoreInProgressDownloads } from '../../../src/services/modelManager/restore';
+import { restoreInProgressDownloads } from '../../../src/services/adapters/models/library/downloadRestoreAdapter';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
-import { BackgroundDownloadContext } from '../../../src/services/modelManager/types';
+import { BackgroundDownloadContext } from '../../../src/services/adapters/models/library/types';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
 

@@ -24,7 +24,7 @@ jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () =>
 }));
 
 jest.mock('../../../src/services', () => ({
-  modelManager: mockModelManager,
+  modelLibrary: mockModelManager,
   hardwareService: {
     getSoCInfo: jest.fn(),
   },

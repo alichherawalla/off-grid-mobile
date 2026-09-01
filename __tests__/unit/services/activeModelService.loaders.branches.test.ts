@@ -27,8 +27,8 @@ jest.mock('../../../src/services/litert', () => ({
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { loadModel: jest.fn(), unloadModel: jest.fn() },
 }));
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: { saveModelWithMmproj: jest.fn(), clearMmProjLink: jest.fn() },
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: { saveModelWithMmproj: jest.fn(), clearMmProjLink: jest.fn() },
 }));
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(() => Promise.resolve(false)),
@@ -49,7 +49,7 @@ import {
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
-import { modelManager } from '../../../src/services/modelManager';
+import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { useAppStore } from '../../../src/stores';
 import logger from '../../../src/utils/logger';
 
@@ -103,7 +103,7 @@ describe('resolveMmProjPath — store map update + persistence', () => {
       { name: 'model-mmproj-f16.gguf', path: '/p/model-mmproj-f16.gguf', isFile: () => true, size: 10 } as any,
     ]);
     mockedGetState.mockReturnValue({ downloadedModels: [{ id: 'model-1' }], setDownloadedModels: jest.fn() });
-    (modelManager.saveModelWithMmproj as jest.Mock).mockRejectedValue(new Error('save failed'));
+    (modelLibrary.saveModelWithMmproj as jest.Mock).mockRejectedValue(new Error('save failed'));
     const model = { filePath: '/models/m.gguf', isVisionModel: true } as any;
     expect(await resolveMmProjPath(model, 'model-1')).toBeUndefined();
   });
@@ -119,7 +119,7 @@ describe('doLoadTextModel — mmproj clear branch', () => {
 
     await doLoadTextModel(ctx);
 
-    expect(modelManager.clearMmProjLink).toHaveBeenCalledWith('model-1');
+    expect(modelLibrary.clearMmProjLink).toHaveBeenCalledWith('model-1');
     expect(ctx.onLoaded).toHaveBeenCalledWith('model-1');
   });
 

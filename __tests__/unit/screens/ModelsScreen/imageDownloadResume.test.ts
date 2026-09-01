@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { backgroundDownloadService, modelManager } from '../../../../src/services';
+import { backgroundDownloadService, modelLibrary } from '../../../../src/services';
 import { registerAndNotify } from '../../../../src/services/imageDownloadActions';
 import { resumeImageDownload } from '../../../../src/screens/ModelsScreen/imageDownloadResume';
 
@@ -26,7 +26,7 @@ jest.mock('../../../../src/utils/imageModelIntegrity', () => ({
 }));
 
 jest.mock('../../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getImageModelsDirectory: jest.fn(),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
   },
@@ -52,7 +52,7 @@ const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockUnzip = unzip as jest.MockedFunction<typeof unzip>;
 const mockMoveCompletedDownload = backgroundDownloadService.moveCompletedDownload as jest.MockedFunction<typeof backgroundDownloadService.moveCompletedDownload>;
 const mockRegisterAndNotify = registerAndNotify as jest.MockedFunction<typeof registerAndNotify>;
-const mockGetImageModelsDirectory = modelManager.getImageModelsDirectory as jest.MockedFunction<typeof modelManager.getImageModelsDirectory>;
+const mockGetImageModelsDirectory = modelLibrary.getImageModelsDirectory as jest.MockedFunction<typeof modelLibrary.getImageModelsDirectory>;
 
 type DirItem = RNFS.ReadDirResItemT;
 

@@ -1083,10 +1083,10 @@ describe('ActiveModelService Integration', () => {
       mockLlmService.isModelLoaded.mockReturnValue(true);
       mockLlmService.loadModel.mockResolvedValue(undefined);
 
-      // Mock modelManager.saveModelWithMmproj
-      const { modelManager } = require('../../../src/services/modelManager');
-      if (modelManager.saveModelWithMmproj) {
-        jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      // Mock modelLibrary.saveModelWithMmproj
+      const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
+      if (modelLibrary.saveModelWithMmproj) {
+        jest.spyOn(modelLibrary, 'saveModelWithMmproj').mockResolvedValue(undefined);
       }
 
       await activeModelService.loadTextModel('vision-vl-model');
@@ -1486,7 +1486,7 @@ describe('ActiveModelService Integration', () => {
   describe('loadTextModel mmproj found updates store with multiple models', () => {
     it('only updates the matching model in store', async () => {
       const RNFS = require('react-native-fs');
-      const { modelManager: mockModelManager } = require('../../../src/services/modelManager');
+      const { modelLibrary: mockModelManager } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
 
       const model1 = createDownloadedModel({
         id: 'other-model',

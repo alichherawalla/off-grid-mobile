@@ -5,13 +5,13 @@
  * download action's actual mutations are validated: a completed download registers
  * the model in appStore AND clears its in-flight downloadStore entry; the duplicate
  * guard reads the real store; a watch error flips the real entry to 'failed'. Only the
- * native boundary (modelManager.downloadModelBackground/watchDownload) is mocked.
+ * native boundary (modelLibrary.downloadModelBackground/watchDownload) is mocked.
  */
 let mockOnComplete: ((m: any) => void) | undefined;
 let mockOnError: ((e: Error) => void) | undefined;
 const mockDownloadModelBackground = jest.fn();
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
     downloadModelBackground: (...a: unknown[]) => mockDownloadModelBackground(...a),
     watchDownload: (_id: string, c: (m: any) => void, e: (err: Error) => void) => { mockOnComplete = c; mockOnError = e; },
   },

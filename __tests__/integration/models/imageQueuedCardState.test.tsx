@@ -49,7 +49,7 @@ const mockOnComplete = jest.fn((_id: string, _cb: any) => jest.fn());
 const mockOnError = jest.fn((_id: string, _cb: any) => jest.fn());
 
 jest.mock('../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getImageModelsDirectory: () => '/mock/image-models',
     addDownloadedImageModel: jest.fn(() => Promise.resolve()),
   },

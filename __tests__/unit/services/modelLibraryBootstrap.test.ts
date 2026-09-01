@@ -7,10 +7,10 @@
 
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { modelManager } from '../../../src/services/modelManager';
+import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { huggingFaceService } from '../../../src/services/huggingface';
-import { buildDownloadedModel } from '../../../src/services/modelManager/storage';
+import { buildDownloadedModel } from '../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
 import { textProvider } from '../../../src/services/adapters/downloads/textDownloadAdapter';
 import { useAppStore } from '../../../src/stores';
@@ -74,8 +74,8 @@ describe('ModelManager', () => {
     jest.resetAllMocks();
 
     // Reset private state
-    (modelManager as any).downloadJobs = new Map();
-    (modelManager as any).backgroundDownloadMetadataCallback = null;
+    (modelLibrary as any).downloadJobs = new Map();
+    (modelLibrary as any).backgroundDownloadMetadataCallback = null;
 
     // Re-establish huggingFaceService mock (resetAllMocks clears jest.mock implementations)
     (huggingFaceService.getDownloadUrl as jest.Mock).mockImplementation(
@@ -122,7 +122,7 @@ describe('ModelManager', () => {
     it('creates models directories when they do not exist', async () => {
       mockedRNFS.exists.mockResolvedValue(false);
 
-      await modelManager.initialize();
+      await modelLibrary.initialize();
 
       expect(RNFS.mkdir).toHaveBeenCalledTimes(2);
     });
@@ -130,7 +130,7 @@ describe('ModelManager', () => {
     it('does not create dirs when they already exist', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.initialize();
+      await modelLibrary.initialize();
 
       expect(RNFS.mkdir).not.toHaveBeenCalled();
     });
@@ -138,7 +138,7 @@ describe('ModelManager', () => {
     it('excludes model directories from iCloud backup on initialize', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.initialize();
+      await modelLibrary.initialize();
 
       expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledTimes(3);
       expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledWith(
@@ -160,7 +160,7 @@ describe('ModelManager', () => {
     it('returns empty array when nothing stored', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toEqual([]);
     });
@@ -172,7 +172,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('model1');
@@ -188,7 +188,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true)   // exists.gguf
         .mockResolvedValueOnce(false); // gone.gguf
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('exists');
@@ -204,7 +204,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false);
 
-      await modelManager.getDownloadedModels();
+      await modelLibrary.getDownloadedModels();
 
       // Should save updated list (only the existing model)
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
@@ -216,7 +216,7 @@ describe('ModelManager', () => {
     it('returns empty array on parse error', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('invalid json{{{');
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toEqual([]);
     });
@@ -233,7 +233,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.deleteModel('model1');
+      await modelLibrary.deleteModel('model1');
 
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/m1.gguf');
       // Storage should be updated with empty list
@@ -256,7 +256,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.deleteModel('model1');
+      await modelLibrary.deleteModel('model1');
 
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/m1.gguf');
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/mmproj.gguf');
@@ -275,7 +275,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.deleteModel('model-ios-private');
+      await modelLibrary.deleteModel('model-ios-private');
 
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/qwen.gguf');
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
@@ -294,7 +294,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
 
-      await expect(modelManager.deleteModel('model-delete-fails')).rejects.toThrow(
+      await expect(modelLibrary.deleteModel('model-delete-fails')).rejects.toThrow(
         'disk refused deletion',
       );
 
@@ -333,7 +333,7 @@ describe('ModelManager', () => {
     it('throws when model not found', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      await expect(modelManager.deleteModel('nonexistent')).rejects.toThrow('Model not found');
+      await expect(modelLibrary.deleteModel('nonexistent')).rejects.toThrow('Model not found');
     });
   });
 
@@ -348,14 +348,14 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      const path = await modelManager.getModelPath('model1');
+      const path = await modelLibrary.getModelPath('model1');
       expect(path).toBe('/models/m1.gguf');
     });
 
     it('returns null for missing model', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const path = await modelManager.getModelPath('nonexistent');
+      const path = await modelLibrary.getModelPath('nonexistent');
       expect(path).toBeNull();
     });
   });
@@ -372,7 +372,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      const used = await modelManager.getStorageUsed();
+      const used = await modelLibrary.getStorageUsed();
 
       expect(used).toBe(3200); // 1000 + 200 + 2000
     });
@@ -380,7 +380,7 @@ describe('ModelManager', () => {
     it('returns 0 when no models', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const used = await modelManager.getStorageUsed();
+      const used = await modelLibrary.getStorageUsed();
       expect(used).toBe(0);
     });
   });
@@ -395,7 +395,7 @@ describe('ModelManager', () => {
         totalSpace: 128 * 1024 * 1024 * 1024,
       }));
 
-      const available = await modelManager.getAvailableStorage();
+      const available = await modelLibrary.getAvailableStorage();
 
       expect(available).toBe(50 * 1024 * 1024 * 1024);
     });
@@ -414,7 +414,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce([]); // image models dir empty
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       expect(orphaned).toHaveLength(1);
       expect(orphaned[0].name).toBe('orphan.gguf');
@@ -430,7 +430,7 @@ describe('ModelManager', () => {
       const storedModels = [{ id: 'm1', filePath: '/models/tracked.gguf', fileSize: 5000 }];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       expect(orphaned).toHaveLength(0);
     });
@@ -440,7 +440,7 @@ describe('ModelManager', () => {
       mockedRNFS.readDir.mockResolvedValue([]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       expect(orphaned).toEqual([]);
     });
@@ -457,7 +457,7 @@ describe('ModelManager', () => {
         ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       expect(orphaned).toHaveLength(1);
       expect(orphaned[0].name).toBe('anythingv5_cpu');
@@ -471,7 +471,7 @@ describe('ModelManager', () => {
   describe('determineCredibility', () => {
     // Access private method
     const determineCredibility = (author: string) =>
-      (modelManager as any).determineCredibility(author);
+      (modelLibrary as any).determineCredibility(author);
 
     it('recognizes lmstudio-community source', () => {
       const result = determineCredibility('lmstudio-community');
@@ -513,7 +513,7 @@ describe('ModelManager', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
       await expect(
-        modelManager.downloadModelBackground('test/model', file)
+        modelLibrary.downloadModelBackground('test/model', file)
       ).rejects.toThrow('Background downloads not supported');
     });
 
@@ -524,8 +524,8 @@ describe('ModelManager', () => {
       mockedAsyncStorage.setItem.mockResolvedValue(undefined as any);
 
       const onComplete = jest.fn();
-      const result = await modelManager.downloadModelBackground('test/model', file);
-      modelManager.watchDownload(result.downloadId, onComplete);
+      const result = await modelLibrary.downloadModelBackground('test/model', file);
+      modelLibrary.watchDownload(result.downloadId, onComplete);
 
       // onComplete is now called after persistDownloadedModel resolves — flush microtasks
       await new Promise(resolve => setImmediate(resolve));
@@ -553,7 +553,7 @@ describe('ModelManager', () => {
         startedAt: Date.now(),
       } as any);
 
-      const result = await modelManager.downloadModelBackground('test/model', file);
+      const result = await modelLibrary.downloadModelBackground('test/model', file);
 
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
       expect(result.downloadId).toBe(42);
@@ -577,8 +577,8 @@ describe('ModelManager', () => {
         startedAt: Date.now(),
       } as any);
 
-      const info = await modelManager.downloadModelBackground('test/model', file);
-      modelManager.watchDownload(info.downloadId, jest.fn(), jest.fn());
+      const info = await modelLibrary.downloadModelBackground('test/model', file);
+      modelLibrary.watchDownload(info.downloadId, jest.fn(), jest.fn());
 
       expect(mockedBackgroundDownloadService.onProgress).toHaveBeenCalledWith(42, expect.any(Function));
       expect(mockedBackgroundDownloadService.onComplete).toHaveBeenCalledWith(42, expect.any(Function));
@@ -604,9 +604,9 @@ describe('ModelManager', () => {
       } as any);
 
       const metadataCallback = jest.fn();
-      modelManager.setBackgroundDownloadMetadataCallback(metadataCallback);
+      modelLibrary.setBackgroundDownloadMetadataCallback(metadataCallback);
 
-      await modelManager.downloadModelBackground('test/model', file);
+      await modelLibrary.downloadModelBackground('test/model', file);
 
       expect(metadataCallback).toHaveBeenCalledWith(42, expect.objectContaining({
         modelId: 'test/model',
@@ -650,7 +650,7 @@ describe('ModelManager', () => {
           startedAt: Date.now(),
         } as any);
 
-      await modelManager.downloadModelBackground('test/model', visionFile);
+      await modelLibrary.downloadModelBackground('test/model', visionFile);
 
       // Both main and mmproj should be started via startDownload (parallel)
       expect(RNFS.downloadFile).not.toHaveBeenCalled();
@@ -692,7 +692,7 @@ describe('ModelManager', () => {
         startedAt: Date.now(),
       } as any);
 
-      await modelManager.downloadModelBackground('offgrid/litert-recommended', curated);
+      await modelLibrary.downloadModelBackground('offgrid/litert-recommended', curated);
 
       expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalledWith(
         expect.objectContaining({ url: customUrl }),
@@ -722,9 +722,9 @@ describe('ModelManager', () => {
         mainCompleteHandled: false,
         isFinalizing: false,
       };
-      (modelManager as any).backgroundDownloadContext.set('42', ctx);
+      (modelLibrary as any).backgroundDownloadContext.set('42', ctx);
 
-      modelManager.resetMmProjForRetry('42');
+      modelLibrary.resetMmProjForRetry('42');
 
       expect(ctx.mmProjCompleted).toBe(false);
       expect(ctx.mmProjCompleteHandled).toBe(false);
@@ -741,9 +741,9 @@ describe('ModelManager', () => {
         mmProjCompleted: true,
         mmProjCompleteHandled: true,
       };
-      (modelManager as any).backgroundDownloadContext.set('99', ctx);
+      (modelLibrary as any).backgroundDownloadContext.set('99', ctx);
 
-      modelManager.resetMmProjForRetry('99');
+      modelLibrary.resetMmProjForRetry('99');
 
       expect(ctx.mmProjCompleted).toBe(true);
       expect(ctx.mmProjCompleteHandled).toBe(true);
@@ -758,7 +758,7 @@ describe('ModelManager', () => {
     it('returns empty when not supported', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      const result = await modelManager.syncBackgroundDownloads({}, jest.fn());
+      const result = await modelLibrary.syncBackgroundDownloads({}, jest.fn());
 
       expect(result).toEqual([]);
     });
@@ -781,7 +781,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const clearCb = jest.fn();
-      const result = await modelManager.syncBackgroundDownloads(
+      const result = await modelLibrary.syncBackgroundDownloads(
         {
           1: {
             modelId: 'test/model',
@@ -814,7 +814,7 @@ describe('ModelManager', () => {
       ]);
 
       const clearCb = jest.fn();
-      await modelManager.syncBackgroundDownloads(
+      await modelLibrary.syncBackgroundDownloads(
         {
           2: {
             modelId: 'test/failed',
@@ -846,7 +846,7 @@ describe('ModelManager', () => {
       ]);
 
       const clearCb = jest.fn();
-      const result = await modelManager.syncBackgroundDownloads({}, clearCb);
+      const result = await modelLibrary.syncBackgroundDownloads({}, clearCb);
 
       // No metadata for downloadId 99, so it's skipped
       expect(result).toHaveLength(0);
@@ -869,7 +869,7 @@ describe('ModelManager', () => {
       ]);
 
       const clearCb = jest.fn();
-      const result = await modelManager.syncBackgroundDownloads(
+      const result = await modelLibrary.syncBackgroundDownloads(
         {
           3: {
             modelId: 'test/running',
@@ -904,7 +904,7 @@ describe('ModelManager', () => {
       ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedTextModels();
+      const discovered = await modelLibrary.scanForUntrackedTextModels();
 
       expect(discovered).toHaveLength(1);
       expect(discovered[0].fileName).toBe('untracked-Q4_K_M.gguf');
@@ -924,7 +924,7 @@ describe('ModelManager', () => {
       ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedTextModels();
+      const discovered = await modelLibrary.scanForUntrackedTextModels();
 
       expect(discovered).toHaveLength(0);
     });
@@ -942,7 +942,7 @@ describe('ModelManager', () => {
       ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedTextModels();
+      const discovered = await modelLibrary.scanForUntrackedTextModels();
 
       expect(discovered[0].quantization).toBe('Q8_0');
     });
@@ -952,7 +952,7 @@ describe('ModelManager', () => {
       mockedRNFS.readDir.mockResolvedValue([]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedTextModels();
+      const discovered = await modelLibrary.scanForUntrackedTextModels();
 
       expect(discovered).toEqual([]);
     });
@@ -998,7 +998,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(1);
       expect(discovered[0].name).toContain('sd-turbo-mnn');
@@ -1028,7 +1028,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(1);
       expect(discovered[0].backend).toBe('qnn');
@@ -1061,7 +1061,7 @@ describe('ModelManager', () => {
         return Promise.resolve('[]');
       });
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(0);
     });
@@ -1070,7 +1070,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists.mockResolvedValue(false);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toEqual([]);
     });
@@ -1081,7 +1081,7 @@ describe('ModelManager', () => {
   // ========================================================================
   describe('resolveStoredPath', () => {
     const resolveStoredPath = (storedPath: string, currentBaseDir: string) =>
-      (modelManager as any).resolveStoredPath(storedPath, currentBaseDir);
+      (modelLibrary as any).resolveStoredPath(storedPath, currentBaseDir);
 
     it('returns re-resolved path when UUID changes', () => {
       const storedPath = '/old-uuid/Documents/models/mymodel.gguf';
@@ -1122,7 +1122,7 @@ describe('ModelManager', () => {
   // ========================================================================
   describe('isMMProjFile', () => {
     const isMMProjFile = (fileName: string) =>
-      (modelManager as any).isMMProjFile(fileName);
+      (modelLibrary as any).isMMProjFile(fileName);
 
     it('detects mmproj filenames', () => {
       expect(isMMProjFile('model-mmproj-f16.gguf')).toBe(true);
@@ -1162,7 +1162,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.readDir.mockResolvedValue([]);
 
-      const removedCount = await modelManager.cleanupMMProjEntries();
+      const removedCount = await modelLibrary.cleanupMMProjEntries();
 
       expect(removedCount).toBe(1);
       // Saved list should only contain the real model
@@ -1177,7 +1177,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.readDir.mockResolvedValue([]);
 
-      const removedCount = await modelManager.cleanupMMProjEntries();
+      const removedCount = await modelLibrary.cleanupMMProjEntries();
 
       expect(removedCount).toBe(0);
     });
@@ -1205,7 +1205,7 @@ describe('ModelManager', () => {
         } as any,
       ]);
 
-      await modelManager.cleanupMMProjEntries();
+      await modelLibrary.cleanupMMProjEntries();
 
       // The saved model list should have the mmproj linked
       const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
@@ -1227,7 +1227,7 @@ describe('ModelManager', () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.readDir.mockResolvedValue([]);
 
-      const removedCount = await modelManager.cleanupMMProjEntries();
+      const removedCount = await modelLibrary.cleanupMMProjEntries();
 
       expect(removedCount).toBe(2);
     });
@@ -1251,7 +1251,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/source.gguf',
         fileName: 'MyModel-Q4_K_M.gguf',
       });
@@ -1264,7 +1264,7 @@ describe('ModelManager', () => {
 
     it('rejects non-.gguf files', async () => {
       await expect(
-        modelManager.importLocalModel({ sourceUri: '/path/to/model.bin', fileName: 'model.bin' })
+        modelLibrary.importLocalModel({ sourceUri: '/path/to/model.bin', fileName: 'model.bin' })
       ).rejects.toThrow('Only .gguf and .litertlm files can be imported');
     });
 
@@ -1276,7 +1276,7 @@ describe('ModelManager', () => {
       mockedRNFS.stat.mockResolvedValue({ size: 1000, isFile: () => true } as any);
 
       await expect(
-        modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'existing.gguf' })
+        modelLibrary.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'existing.gguf' })
       ).rejects.toThrow('already exists');
     });
 
@@ -1289,7 +1289,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/source.gguf',
         fileName: 'llama-3.2-3B-Q8_0.gguf',
       });
@@ -1306,7 +1306,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/source.gguf',
         fileName: 'custom-model.gguf',
       });
@@ -1323,7 +1323,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      await modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'imported.gguf' });
+      await modelLibrary.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'imported.gguf' });
 
       expect(AsyncStorage.setItem).toHaveBeenCalledWith(
         MODELS_STORAGE_KEY,
@@ -1340,7 +1340,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockRejectedValue(new Error('Copy failed'));
 
       await expect(
-        modelManager.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'fail.gguf' })
+        modelLibrary.importLocalModel({ sourceUri: '/path/to/source.gguf', fileName: 'fail.gguf' })
       ).rejects.toThrow('Copy failed');
 
       // Partial file should be cleaned up
@@ -1357,7 +1357,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const onProgress = jest.fn();
-      await modelManager.importLocalModel({
+      await modelLibrary.importLocalModel({
         sourceUri: '/path/to/source.gguf',
         fileName: 'progress-model.gguf',
         onProgress,
@@ -1379,7 +1379,7 @@ describe('ModelManager', () => {
       mockedRNFS.readDir.mockResolvedValue([]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.refreshModelLists();
+      const result = await modelLibrary.refreshModelLists();
 
       expect(result).toHaveProperty('textModels');
       expect(result).toHaveProperty('imageModels');
@@ -1397,7 +1397,7 @@ describe('ModelManager', () => {
         { name: 'm1.gguf', path: '/models/m1.gguf', size: 1000, isFile: () => true, isDirectory: () => false } as any,
       ]);
 
-      const result = await modelManager.refreshModelLists();
+      const result = await modelLibrary.refreshModelLists();
 
       expect(result.textModels.length).toBeGreaterThanOrEqual(1);
     });
@@ -1417,7 +1417,7 @@ describe('ModelManager', () => {
         { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
       ] as any);
 
-      await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
+      await modelLibrary.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
       const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
         (call) => call[0] === MODELS_STORAGE_KEY
@@ -1438,7 +1438,7 @@ describe('ModelManager', () => {
         { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
       ] as any);
 
-      await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
+      await modelLibrary.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
       const savedCall = mockedAsyncStorage.setItem.mock.calls.find(
         (call) => call[0] === MODELS_STORAGE_KEY
@@ -1457,7 +1457,7 @@ describe('ModelManager', () => {
 
       // deleteOrphanedFile should not throw when file doesn't exist
       await expect(
-        modelManager.deleteOrphanedFile('/models/nonexistent.gguf')
+        modelLibrary.deleteOrphanedFile('/models/nonexistent.gguf')
       ).resolves.not.toThrow();
     });
   });
@@ -1466,7 +1466,7 @@ describe('ModelManager', () => {
     it('throws when background service is unavailable', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      await expect(modelManager.cancelBackgroundDownload('42')).rejects.toThrow(
+      await expect(modelLibrary.cancelBackgroundDownload('42')).rejects.toThrow(
         'Background downloads not supported'
       );
 
@@ -1488,7 +1488,7 @@ describe('ModelManager', () => {
       ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedTextModels();
+      const discovered = await modelLibrary.scanForUntrackedTextModels();
 
       expect(discovered).toHaveLength(0);
     });
@@ -1502,7 +1502,7 @@ describe('ModelManager', () => {
         .mockRejectedValueOnce(new Error('Permission denied')); // image models dir fails
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       // Should not throw, just return what it could read
       expect(Array.isArray(orphaned)).toBe(true);
@@ -1529,7 +1529,7 @@ describe('ModelManager', () => {
         .mockRejectedValueOnce(new Error('Permission denied'));  // mmproj
 
       // Should not throw - mmproj deletion failure is caught
-      await modelManager.deleteModel('model1');
+      await modelLibrary.deleteModel('model1');
 
       // Main file should have been unlinked
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/m1.gguf');
@@ -1553,7 +1553,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(false)  // original path fails
         .mockResolvedValueOnce(true);  // re-resolved path works
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toHaveLength(1);
       // Path should be updated
@@ -1577,7 +1577,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(false)  // mmproj original path fails
         .mockResolvedValueOnce(true);  // re-resolved mmproj path works
 
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toHaveLength(1);
       expect((models[0] as any).mmProjPath).toBeDefined();
@@ -1608,7 +1608,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(false)  // original path fails
         .mockResolvedValueOnce(true);  // re-resolved path works
 
-      const models = await modelManager.getDownloadedImageModels();
+      const models = await modelLibrary.getDownloadedImageModels();
 
       expect(models).toHaveLength(1);
     });
@@ -1624,7 +1624,7 @@ describe('ModelManager', () => {
         ]);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const orphaned = await modelManager.getOrphanedFiles();
+      const orphaned = await modelLibrary.getOrphanedFiles();
 
       expect(orphaned).toHaveLength(1);
       expect(orphaned[0].size).toBe(3000000);
@@ -1656,7 +1656,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(1);
       expect(discovered[0].backend).toBe('coreml');
@@ -1678,7 +1678,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(0);
     });
@@ -1701,7 +1701,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       // Should skip the unreadable directory
       expect(discovered).toHaveLength(0);
@@ -1723,7 +1723,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const discovered = await modelManager.scanForUntrackedImageModels();
+      const discovered = await modelLibrary.scanForUntrackedImageModels();
 
       expect(discovered).toHaveLength(0);
     });
@@ -1774,8 +1774,8 @@ describe('ModelManager', () => {
       });
 
       const onComplete = jest.fn();
-      const info = await modelManager.downloadModelBackground('test/model', visionFile);
-      modelManager.watchDownload(info.downloadId, onComplete);
+      const info = await modelLibrary.downloadModelBackground('test/model', visionFile);
+      modelLibrary.watchDownload(info.downloadId, onComplete);
 
       // Simulate mmproj completing first, then main
       mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('/models/bg-vision.gguf');
@@ -1831,8 +1831,8 @@ describe('ModelManager', () => {
       });
 
       const onError = jest.fn();
-      const info = await modelManager.downloadModelBackground('test/model', file);
-      modelManager.watchDownload(info.downloadId, undefined, onError);
+      const info = await modelLibrary.downloadModelBackground('test/model', file);
+      modelLibrary.watchDownload(info.downloadId, undefined, onError);
 
       // Simulate the error event
       if (errorCallback) {
@@ -1844,8 +1844,8 @@ describe('ModelManager', () => {
 
   describe('repairMmProj', () => {
     it('emits onDownloadIdReady with the download id from startDownload', async () => {
-      const saveSpy = jest.spyOn(modelManager, 'saveModelWithMmproj').mockResolvedValue(undefined);
-      const initSpy = jest.spyOn(modelManager, 'initialize').mockResolvedValue(undefined);
+      const saveSpy = jest.spyOn(modelLibrary, 'saveModelWithMmproj').mockResolvedValue(undefined);
+      const initSpy = jest.spyOn(modelLibrary, 'initialize').mockResolvedValue(undefined);
       try {
         mockedBackgroundDownloadService.startDownload.mockResolvedValue({ downloadId: '321' } as any);
 
@@ -1857,7 +1857,7 @@ describe('ModelManager', () => {
 
         const onDownloadIdReady = jest.fn();
         const file = createModelFileWithMmProj({ name: 'vision-model.gguf', mmProjName: 'vision-model-mmproj.gguf' });
-        const repairPromise = modelManager.repairMmProj('test/model', file, { onDownloadIdReady });
+        const repairPromise = modelLibrary.repairMmProj('test/model', file, { onDownloadIdReady });
 
         // Flush all microtasks (initialize → RNFS.exists → startDownload)
         await new Promise(resolve => setImmediate(resolve));
@@ -1882,7 +1882,7 @@ describe('ModelManager', () => {
     it('returns empty array when background downloads not supported', async () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      const result = await modelManager.getActiveBackgroundDownloads();
+      const result = await modelLibrary.getActiveBackgroundDownloads();
       expect(result).toEqual([]);
     });
 
@@ -1893,7 +1893,7 @@ describe('ModelManager', () => {
       ];
       mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue(mockDownloads as any);
 
-      const result = await modelManager.getActiveBackgroundDownloads();
+      const result = await modelLibrary.getActiveBackgroundDownloads();
       expect(result).toEqual(mockDownloads);
       expect(mockedBackgroundDownloadService.getActiveDownloads).toHaveBeenCalled();
     });
@@ -1906,14 +1906,14 @@ describe('ModelManager', () => {
     it('does nothing when background downloads not supported', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      modelManager.startBackgroundDownloadPolling();
+      modelLibrary.startBackgroundDownloadPolling();
       expect(mockedBackgroundDownloadService.startProgressPolling).not.toHaveBeenCalled();
     });
 
     it('delegates when supported', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
 
-      modelManager.startBackgroundDownloadPolling();
+      modelLibrary.startBackgroundDownloadPolling();
       expect(mockedBackgroundDownloadService.startProgressPolling).toHaveBeenCalled();
     });
   });
@@ -1922,14 +1922,14 @@ describe('ModelManager', () => {
     it('does nothing when background downloads not supported', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
 
-      modelManager.stopBackgroundDownloadPolling();
+      modelLibrary.stopBackgroundDownloadPolling();
       expect(mockedBackgroundDownloadService.stopProgressPolling).not.toHaveBeenCalled();
     });
 
     it('delegates when supported', () => {
       mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
 
-      modelManager.stopBackgroundDownloadPolling();
+      modelLibrary.stopBackgroundDownloadPolling();
       expect(mockedBackgroundDownloadService.stopProgressPolling).toHaveBeenCalled();
     });
   });
@@ -1939,7 +1939,7 @@ describe('ModelManager', () => {
   // ========================================================================
   describe('getImageModelsDirectory', () => {
     it('returns the image models directory path', () => {
-      const dir = modelManager.getImageModelsDirectory();
+      const dir = modelLibrary.getImageModelsDirectory();
       expect(dir).toContain('image_models');
     });
   });
@@ -1951,7 +1951,7 @@ describe('ModelManager', () => {
     it('throws when image model not found', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      await expect(modelManager.deleteImageModel('nonexistent')).rejects.toThrow('Image model not found');
+      await expect(modelLibrary.deleteImageModel('nonexistent')).rejects.toThrow('Image model not found');
     });
 
     it('deletes model files and updates storage', async () => {
@@ -1967,7 +1967,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify([imageModel]));
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.deleteImageModel('img-delete');
+      await modelLibrary.deleteImageModel('img-delete');
 
       // deleteImageModel now deletes the top-level model directory, not model.modelPath
       // (for CoreML models, modelPath is a nested subdir; top-level dir also has tokenizer files)
@@ -1992,7 +1992,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true)   // getDownloadedImageModels validation
         .mockResolvedValueOnce(false); // deleteImageModel file check
 
-      await modelManager.deleteImageModel('img-no-file');
+      await modelLibrary.deleteImageModel('img-no-file');
 
       expect(mockedRNFS.unlink).not.toHaveBeenCalled();
     });
@@ -2014,14 +2014,14 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify([imageModel]));
       mockedRNFS.exists.mockResolvedValue(true); // model exists on disk
 
-      const result = await modelManager.getImageModelPath('img-path');
+      const result = await modelLibrary.getImageModelPath('img-path');
       expect(result).toBe('/mock/image_models/path-model');
     });
 
     it('returns null when model not found', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.getImageModelPath('nonexistent');
+      const result = await modelLibrary.getImageModelPath('nonexistent');
       expect(result).toBeNull();
     });
   });
@@ -2038,14 +2038,14 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(models));
       mockedRNFS.exists.mockResolvedValue(true); // both models exist on disk
 
-      const result = await modelManager.getImageModelsStorageUsed();
+      const result = await modelLibrary.getImageModelsStorageUsed();
       expect(result).toBe(3000);
     });
 
     it('returns 0 when no image models', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
 
-      const result = await modelManager.getImageModelsStorageUsed();
+      const result = await modelLibrary.getImageModelsStorageUsed();
       expect(result).toBe(0);
     });
   });
@@ -2067,7 +2067,7 @@ describe('ModelManager', () => {
         backend: 'mnn' as const,
       };
 
-      await modelManager.addDownloadedImageModel(model);
+      await modelLibrary.addDownloadedImageModel(model);
 
       expect(mockedAsyncStorage.setItem).toHaveBeenCalledWith(
         '@local_llm/downloaded_image_models',
@@ -2098,7 +2098,7 @@ describe('ModelManager', () => {
         backend: 'mnn' as const,
       };
 
-      await modelManager.addDownloadedImageModel(updated);
+      await modelLibrary.addDownloadedImageModel(updated);
 
       const savedData = JSON.parse(mockedAsyncStorage.setItem.mock.calls[0][1]);
       expect(savedData).toHaveLength(1);
@@ -2114,7 +2114,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
       mockedRNFS.exists.mockResolvedValue(false);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toEqual([]);
     });
 
@@ -2139,7 +2139,7 @@ describe('ModelManager', () => {
         },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
 
       expect(result).toHaveLength(1);
       expect(result[0].fileName).toBe('llama-3.2-Q4_K_M.gguf');
@@ -2164,7 +2164,7 @@ describe('ModelManager', () => {
         },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toEqual([]);
     });
 
@@ -2186,7 +2186,7 @@ describe('ModelManager', () => {
         },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toEqual([]);
     });
 
@@ -2209,7 +2209,7 @@ describe('ModelManager', () => {
         },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toEqual([]);
     });
 
@@ -2233,7 +2233,7 @@ describe('ModelManager', () => {
         },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toHaveLength(1);
       expect(result[0].fileSize).toBe(4000000000);
     });
@@ -2247,7 +2247,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
       mockedRNFS.readDir.mockRejectedValue(new Error('Permission denied'));
 
-      const result = await modelManager.scanForUntrackedTextModels();
+      const result = await modelLibrary.scanForUntrackedTextModels();
       expect(result).toEqual([]);
     });
   });
@@ -2263,7 +2263,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(true)   // imageModelsDir
         .mockResolvedValueOnce(false); // imageModelsDir scan
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result).toEqual([]);
     });
 
@@ -2304,7 +2304,7 @@ describe('ModelManager', () => {
           },
         ] as any);
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toContain('sd');
@@ -2330,7 +2330,7 @@ describe('ModelManager', () => {
           { name: 'model.bin', path: '/mock/image_models/sd_qnn_model/model.bin', size: 1000000, isFile: () => true, isDirectory: () => false },
         ] as any);
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result[0].backend).toBe('qnn');
     });
 
@@ -2352,7 +2352,7 @@ describe('ModelManager', () => {
           { name: 'model.mlmodelc', path: '/mock/image_models/sd_coreml_v2/model.mlmodelc', size: 2000000, isFile: () => true, isDirectory: () => false },
         ] as any);
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result[0].backend).toBe('coreml');
     });
 
@@ -2370,7 +2370,7 @@ describe('ModelManager', () => {
         ] as any)
         .mockResolvedValueOnce([] as any); // empty directory
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result).toEqual([]);
     });
 
@@ -2387,7 +2387,7 @@ describe('ModelManager', () => {
         { name: 'existing', path: '/mock/image_models/existing', size: 0, isFile: () => false, isDirectory: () => true },
       ] as any);
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result).toEqual([]);
     });
 
@@ -2409,7 +2409,7 @@ describe('ModelManager', () => {
           { name: 'model.bin', path: '/mock/image_models/string_size/model.bin', size: '1500000' as any, isFile: () => true, isDirectory: () => false },
         ] as any);
 
-      const result = await modelManager.scanForUntrackedImageModels();
+      const result = await modelLibrary.scanForUntrackedImageModels();
       expect(result).toHaveLength(1);
       expect(result[0].size).toBe(1500000);
     });
@@ -2436,7 +2436,7 @@ describe('ModelManager', () => {
       const existing = [{ id: 'local_import/model.gguf', name: 'Old', author: 'Local Import', filePath: '/old/model.gguf', fileName: 'model.gguf', fileSize: 3000000000, quantization: 'Q4', downloadedAt: '' }];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(existing));
 
-      const result = await modelManager.importLocalModel({ sourceUri: '/external/model.gguf', fileName: 'model.gguf' });
+      const result = await modelLibrary.importLocalModel({ sourceUri: '/external/model.gguf', fileName: 'model.gguf' });
 
       expect(result.id).toBe('local_import/model.gguf');
     });
@@ -2449,7 +2449,7 @@ describe('ModelManager', () => {
     it('deletes file that exists', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
-      await modelManager.deleteOrphanedFile('/mock/orphan.gguf');
+      await modelLibrary.deleteOrphanedFile('/mock/orphan.gguf');
 
       expect(mockedRNFS.unlink).toHaveBeenCalledWith('/mock/orphan.gguf');
     });
@@ -2457,7 +2457,7 @@ describe('ModelManager', () => {
     it('does nothing when file does not exist', async () => {
       mockedRNFS.exists.mockResolvedValue(false);
 
-      await modelManager.deleteOrphanedFile('/mock/missing.gguf');
+      await modelLibrary.deleteOrphanedFile('/mock/missing.gguf');
 
       expect(mockedRNFS.unlink).not.toHaveBeenCalled();
     });
@@ -2467,7 +2467,7 @@ describe('ModelManager', () => {
       mockedRNFS.unlink.mockRejectedValue(new Error('Permission denied'));
 
       await expect(
-        modelManager.deleteOrphanedFile('/mock/locked.gguf')
+        modelLibrary.deleteOrphanedFile('/mock/locked.gguf')
       ).rejects.toThrow('Permission denied');
     });
   });
@@ -2479,7 +2479,7 @@ describe('ModelManager', () => {
     it('returns empty array when no stored data', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue(null);
 
-      const result = await modelManager.getDownloadedImageModels();
+      const result = await modelLibrary.getDownloadedImageModels();
       expect(result).toEqual([]);
     });
 
@@ -2495,7 +2495,7 @@ describe('ModelManager', () => {
         .mockResolvedValueOnce(false)  // missing model
         .mockResolvedValueOnce(false); // resolved path check for missing
 
-      const result = await modelManager.getDownloadedImageModels();
+      const result = await modelLibrary.getDownloadedImageModels();
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('exists');
     });
@@ -2507,9 +2507,9 @@ describe('ModelManager', () => {
   describe('setBackgroundDownloadMetadataCallback', () => {
     it('stores the callback', () => {
       const callback = jest.fn();
-      modelManager.setBackgroundDownloadMetadataCallback(callback);
+      modelLibrary.setBackgroundDownloadMetadataCallback(callback);
 
-      expect((modelManager as any).backgroundDownloadMetadataCallback).toBe(callback);
+      expect((modelLibrary as any).backgroundDownloadMetadataCallback).toBe(callback);
     });
   });
 
@@ -2533,7 +2533,7 @@ describe('ModelManager', () => {
       (mockedRNFS as any).copyFile.mockResolvedValue(undefined);
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: 'content://com.android.provider/document/model.gguf',
         fileName: 'model-Q4_K_M.gguf',
       });
@@ -2577,7 +2577,7 @@ describe('ModelManager', () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
       const onProgress = jest.fn();
-      await modelManager.importLocalModel({
+      await modelLibrary.importLocalModel({
         sourceUri: '/source/model-Q4_K_M.gguf',
         fileName: 'model-Q4_K_M.gguf',
         onProgress,
@@ -2661,7 +2661,7 @@ describe('ModelManager', () => {
     it('returns empty when imageModelsDir does not exist', async () => {
       setupInitialized();
       mockedRNFS.exists.mockResolvedValueOnce(false); // imageModelsDir scan
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
       expect(result).toEqual([]);
     });
 
@@ -2686,7 +2686,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.setItem.mockResolvedValue(undefined);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
 
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('sd_v15_mnn');
@@ -2705,7 +2705,7 @@ describe('ModelManager', () => {
         { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
       ] as any);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
       expect(result).toHaveLength(0);
     });
 
@@ -2719,7 +2719,7 @@ describe('ModelManager', () => {
         { name: 'sd_v15_mnn', path: `${IMAGE_MODELS_DIR}/sd_v15_mnn`, size: 0, isFile: () => false, isDirectory: () => true },
       ] as any);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set(['sd_v15_mnn']));
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set(['sd_v15_mnn']));
       expect(result).toHaveLength(0);
     });
 
@@ -2761,7 +2761,7 @@ describe('ModelManager', () => {
       mockedRNFS.writeFile = jest.fn().mockResolvedValue(undefined as any);
       (mockedUnzip as jest.Mock).mockResolvedValueOnce(undefined);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
 
       expect(mockedUnzip).toHaveBeenCalledWith(
         `${IMAGE_MODELS_DIR}/sd_v15_coreml.zip`,
@@ -2787,7 +2787,7 @@ describe('ModelManager', () => {
 
       mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_mnn.zip');
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
 
       expect(RNFS.unlink).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_v15_mnn`);
       expect(result).toHaveLength(0);
@@ -2806,7 +2806,7 @@ describe('ModelManager', () => {
         { name: 'old_partial_dir', path: `${IMAGE_MODELS_DIR}/old_partial_dir`, size: 0, isFile: () => false, isDirectory: () => true },
       ] as any);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
 
       expect(RNFS.unlink).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/old_partial_dir`);
       expect(result).toHaveLength(0);
@@ -2836,7 +2836,7 @@ describe('ModelManager', () => {
 
       mockedAsyncStorage.setItem.mockResolvedValue(undefined);
 
-      const result = await modelManager.reconcileFinishedImageDownloads(new Set());
+      const result = await modelLibrary.reconcileFinishedImageDownloads(new Set());
 
       expect(mockedResolveCoreML).toHaveBeenCalledWith(`${IMAGE_MODELS_DIR}/sd_coreml_v1`);
       expect(result[0].modelPath).toBe(`${IMAGE_MODELS_DIR}/sd_coreml_v1/model.mlpackage`);
@@ -2847,7 +2847,7 @@ describe('ModelManager', () => {
   describe('importLocalModel — LiteRT branches', () => {
     it('imports a .litertlm file with engine=litert and liteRTVision=false', async () => {
       setupLiteRTImportMocks();
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/gemma.litertlm',
         fileName: 'gemma-4-E2B-it.litertlm',
         engine: 'litert',
@@ -2860,7 +2860,7 @@ describe('ModelManager', () => {
 
     it('imports a .litertlm file with liteRTVision=true', async () => {
       setupLiteRTImportMocks();
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/gemma-vision.litertlm',
         fileName: 'gemma-vision.litertlm',
         engine: 'litert',
@@ -2871,7 +2871,7 @@ describe('ModelManager', () => {
 
     it('omits engine and liteRTVision when not provided', async () => {
       setupLiteRTImportMocks();
-      const result = await modelManager.importLocalModel({
+      const result = await modelLibrary.importLocalModel({
         sourceUri: '/path/to/model.gguf',
         fileName: 'model.gguf',
       });

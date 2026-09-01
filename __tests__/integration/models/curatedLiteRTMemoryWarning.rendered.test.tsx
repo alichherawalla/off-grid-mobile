@@ -75,8 +75,8 @@ jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () =>
   },
 }));
 
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
     cancelDownload: jest.fn(),
     deleteModel: jest.fn(),
     deleteImageModel: jest.fn(),

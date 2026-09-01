@@ -1,5 +1,5 @@
 /**
- * Unit tests for modelManager/scan.ts
+ * Unit tests for modelLibrary/scan.ts
  * Covers extractBaseName and findMatchingMmProj — the two pure functions
  * used by linkOrphanMmProj to detect and clear bad mmproj links.
  */
@@ -10,16 +10,16 @@ jest.mock('react-native-fs', () => ({
   unlink: jest.fn(),
   stat: jest.fn(),
 }));
-jest.mock('../../../../src/utils/logger', () => ({
+jest.mock('../../../../../../src/utils/logger', () => ({
   __esModule: true,
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
-jest.mock('../../../../src/stores', () => ({
+jest.mock('../../../../../../src/stores', () => ({
   useAppStore: { getState: jest.fn(() => ({ downloadedModels: [], setDownloadedModels: jest.fn() })) },
 }));
 
-import { extractBaseName } from '../../../../src/services/modelManager/scan';
-import { getCuratedLiteRTEntry, buildCuratedLiteRTUrl, CURATED_LITERT_ENTRIES } from '../../../../src/services/curatedLiteRTRegistry';
+import { extractBaseName } from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
+import { getCuratedLiteRTEntry, buildCuratedLiteRTUrl, CURATED_LITERT_ENTRIES } from '../../../../../../src/services/curatedLiteRTRegistry';
 
 // ---------------------------------------------------------------------------
 // curatedLiteRTRegistry

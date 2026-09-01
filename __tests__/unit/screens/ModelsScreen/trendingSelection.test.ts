@@ -38,7 +38,7 @@ jest.mock('../../../../src/services', () => ({
     getModelDetails: jest.fn(() => Promise.reject(new Error('not found'))),
     getModelFiles: jest.fn(() => Promise.resolve([])),
   },
-  modelManager: {
+  modelLibrary: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
     downloadModelBackground: jest.fn(),
     watchDownload: jest.fn(),

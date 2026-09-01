@@ -107,8 +107,8 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
   },
 }));
 
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: {
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
       linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),

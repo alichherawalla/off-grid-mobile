@@ -12,11 +12,11 @@
  * resident image model + delete the model files + remove it from the app store
  * (which also clears activeImageModelId when it was the active model — so image
  * generation is disabled after uninstall, matching case 29/38). Only genuine
- * boundaries are mocked (modelManager fs delete, native cancel, model unload).
+ * boundaries are mocked (modelLibrary fs delete, native cancel, model unload).
  * Deleting `imageProvider.remove` would fail every assertion here.
  */
-jest.mock('../../src/services/modelManager', () => ({
-  modelManager: { deleteImageModel: jest.fn(async () => {}) },
+jest.mock('../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: { deleteImageModel: jest.fn(async () => {}) },
 }));
 jest.mock('../harness/activeModelLifecycle', () => ({
   activeModelService: {
@@ -37,11 +37,11 @@ jest.mock('../../src/utils/logger', () => ({
 import { imageProvider } from '../../src/services/adapters/downloads/imageDownloadAdapter';
 import { useDownloadStore } from '../../src/stores/downloadStore';
 import { useAppStore } from '../../src/stores';
-import { modelManager } from '../../src/services/modelManager';
+import { modelLibrary } from '../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { activeModelService } from '../harness/activeModelLifecycle';
 import { coordinatedDownloads as backgroundDownloadService } from '../../src/services/modelServices/coordinatedDownloadBridge';
 
-const mockDelete = modelManager.deleteImageModel as jest.Mock;
+const mockDelete = modelLibrary.deleteImageModel as jest.Mock;
 const mockUnload = activeModelService.unloadImageModel as jest.Mock;
 const mockCancel = backgroundDownloadService.cancelDownload as jest.Mock;
 

@@ -17,7 +17,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isMMProjFile, pickMmProjForDownload, mmProjBelongsToModel } from '../../../src/services/mmproj';
-import { mmProjLocalName } from '../../../src/services/modelManager/download';
+import { mmProjLocalName } from '../../../src/services/adapters/models/library/downloadArtifactAdapter';
 import { RECOMMENDED_MODELS } from '../../../src/constants/models';
 
 const CURATED_VISION_REPOS = RECOMMENDED_MODELS.filter(m => m.type === 'vision').map(m => m.id);

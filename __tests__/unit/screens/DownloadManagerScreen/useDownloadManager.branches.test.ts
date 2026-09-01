@@ -14,7 +14,7 @@
 
 import { renderHook, act } from '@testing-library/react-native';
 import { useDownloadManager } from '../../../../src/screens/DownloadManagerScreen/useDownloadManager';
-import { visionRepairMessage } from '../../../../src/services/modelManager/visionRepairMessage';
+import { visionRepairMessage } from '@offgrid/models';
 
 // ── mocks ─────────────────────────────────────────────────────────────
 const mockUseAppStore = jest.fn();
@@ -54,7 +54,7 @@ jest.mock('../../../../src/stores/downloadStore', () => {
   return { useDownloadStore };
 });
 jest.mock('../../../../src/services', () => ({
-  get modelManager() { return mockModelManager; },
+  get modelLibrary() { return mockModelManager; },
   get hardwareService() { return mockHardwareService; },
   get huggingFaceService() { return mockHuggingFaceService; },
   get backgroundDownloadService() { return mockBackgroundDownloadService; },

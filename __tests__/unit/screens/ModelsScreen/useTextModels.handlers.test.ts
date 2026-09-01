@@ -74,7 +74,7 @@ jest.mock('../../../../src/services', () => ({
     getModelDetails: jest.fn(() => Promise.reject(new Error('not found'))),
     getModelFiles: jest.fn(() => Promise.resolve([])),
   },
-  modelManager: {
+  modelLibrary: {
     getDownloadedModels: () => mockGetDownloadedModels(),
     downloadModelBackground: jest.fn(),
     watchDownload: jest.fn(),
@@ -123,7 +123,7 @@ describe('handleCancelDownload', () => {
     const mockFile = { name: 'model.gguf', size: 1000, quantization: 'Q4_K_M', downloadUrl: 'http://x' };
     const mockModel = { id: 'org/repo', name: 'Test', author: 'org', description: '', downloads: 0, likes: 0, tags: [], lastModified: '', files: [] };
 
-    const { modelManager: mm } = jest.requireMock('../../../../src/services');
+    const { modelLibrary: mm } = jest.requireMock('../../../../src/services');
     mm.downloadModelBackground.mockResolvedValueOnce({ downloadId: 99 });
 
     await act(async () => {

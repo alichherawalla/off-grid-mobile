@@ -18,7 +18,7 @@
  * Integration boundary: fakes ONLY at the device boundary — the native DownloadManagerModule + fs + RAM
  * (installNativeBoundary), and the HuggingFace NETWORK transport (searchModels/getModelFiles). Everything
  * we own runs REAL: ModelsScreen, TextModelsTab, ModelCard, useTextModels, modelDownloadService,
- * textProvider, modelManager, backgroundDownloadService, the download store. Platform pinned to iOS.
+ * textProvider, modelLibrary, backgroundDownloadService, the download store. Platform pinned to iOS.
  */
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 

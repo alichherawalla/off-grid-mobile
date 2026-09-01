@@ -1,7 +1,7 @@
 /**
  * BATCH 6 — Model Management hardening: download finalize idempotency + retry.
  *
- * Drives the REAL watchBackgroundDownload finalizer (src/services/modelManager/
+ * Drives the REAL watchBackgroundDownload finalizer (src/services/modelServices/bootstrap/modelLibraryBootstrap/
  * download.ts) with a REAL context map. Boundaries mocked: the native download
  * bridge (moveCompletedDownload / getActiveDownloads via a stubbed
  * DownloadManagerModule), RNFS (disk), and the storage persist layer
@@ -18,9 +18,9 @@
 
 import RNFS from 'react-native-fs';
 import { coordinatedDownloads as backgroundDownloadService } from '../../src/services/modelServices/coordinatedDownloadBridge';
-import { watchBackgroundDownload } from '../../src/services/modelManager/download';
-import * as storage from '../../src/services/modelManager/storage';
-import type { BackgroundDownloadContext } from '../../src/services/modelManager/types';
+import { watchBackgroundDownload } from '../../src/services/adapters/models/library/downloadArtifactAdapter';
+import * as storage from '../../src/services/adapters/models/library/modelRegistryStorageAdapter';
+import type { BackgroundDownloadContext } from '../../src/services/adapters/models/library/types';
 import { createModelFile } from '../utils/factories';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

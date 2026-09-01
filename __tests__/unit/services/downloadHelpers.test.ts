@@ -1,7 +1,7 @@
 /**
  * Download Helpers Unit Tests
  *
- * Tests for the low-level helpers in modelManager/downloadHelpers.ts:
+ * Tests for the low-level helpers in modelLibrary/downloadHelpers.ts:
  * - getOrphanedTextFiles      — tracks both filePath and mmProjPath
  * - getOrphanedImageDirs      — CoreML nested-path detection avoids false positives
  */
@@ -10,7 +10,7 @@ import RNFS from 'react-native-fs';
 import {
   getOrphanedTextFiles,
   getOrphanedImageDirs,
-} from '../../../src/services/modelManager/downloadHelpers';
+} from '../../../src/services/adapters/models/library/downloadRecoveryAdapter';
 import { DownloadedModel, ONNXImageModel } from '../../../src/types';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

@@ -18,7 +18,7 @@ jest.mock('../../../../src/stores/downloadStore', () => {
 });
 
 jest.mock('../../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getDownloadedImageModels: (...args: any[]) => mockGetDownloadedImageModels(...args),
   },
   hardwareService: {

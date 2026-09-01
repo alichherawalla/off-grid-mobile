@@ -100,7 +100,7 @@ jest.mock('../../../src/services', () => ({
   huggingFaceService: {
     getModelFiles: jest.fn((...args: any[]) => (mockGetModelFiles as any)(...args)),
   },
-  modelManager: {
+  modelLibrary: {
     isBackgroundDownloadSupported: jest.fn(() => false),
     downloadModel: jest.fn((...args: any[]) => mockDownloadModel(...args)),
     downloadModelBackground: jest.fn((...args: any[]) => mockDownloadModelBackground(...args)),
@@ -113,17 +113,17 @@ jest.mock('../../../src/services', () => ({
   },
 }));
 
-// The shared startModelDownload action imports modelManager from the direct module,
+// The shared startModelDownload action imports modelLibrary from the direct module,
 // not the barrel — point it at the same mock so the screen's delegation is exercised.
-jest.mock('../../../src/services/modelManager', () => ({
-  modelManager: jest.requireMock('../../../src/services').modelManager,
+jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: jest.requireMock('../../../src/services').modelLibrary,
 }));
 
 jest.mock('../../../src/services/networkDiscovery', () => ({
   discoverLANServers: jest.fn().mockResolvedValue([]),
 }));
 
-const { hardwareService: mockHardwareService, modelManager: mockModelManager, huggingFaceService: mockHuggingFaceService } = jest.requireMock('../../../src/services');
+const { hardwareService: mockHardwareService, modelLibrary: mockModelManager, huggingFaceService: mockHuggingFaceService } = jest.requireMock('../../../src/services');
 
 jest.mock('../../../src/components/CustomAlert', () =>
   require('../../helpers/mockCustomAlert').customAlertMock,

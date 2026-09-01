@@ -96,7 +96,7 @@ jest.mock('../../../src/stores/downloadStore', () => {
 });
 
 jest.mock('../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     getDownloadedModels: jest.fn(() => Promise.resolve([])),
     linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
@@ -132,14 +132,14 @@ jest.mock('../../../src/services', () => ({
 }));
 
 // Get references to the mocked services after jest.mock is applied
-const { modelManager: mockModelManager, backgroundDownloadService: mockBackgroundDownloadService, hardwareService: mockHardwareService } = jest.requireMock('../../../src/services');
+const { modelLibrary: mockModelManager, backgroundDownloadService: mockBackgroundDownloadService, hardwareService: mockHardwareService } = jest.requireMock('../../../src/services');
 
 // The Download Manager is a thin View: it dispatches cancel/retry/remove INTENTS to
 // ModelDownloadService (the single owner) and never performs the mechanism itself.
 // So these tests assert the View routes the correct uniform id; the actual
 // cancel/delete/retry mechanism is covered by the per-provider unit tests
 // (textDownloadProvider/imageDownloadProvider/sttProvider). This is also why the old
-// assertions against modelManager.deleteModel etc. were stale — that work moved into
+// assertions against modelLibrary.deleteModel etc. were stale — that work moved into
 // the providers behind the service.
 const mockServiceRemove = jest.fn(async (..._a: any[]) => {});
 const mockServiceCancel = jest.fn(async (..._a: any[]) => {});

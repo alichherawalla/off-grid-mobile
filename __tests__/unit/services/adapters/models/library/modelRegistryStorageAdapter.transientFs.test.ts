@@ -13,7 +13,7 @@
  */
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadDownloadedModels } from '../../../../src/services/modelManager/storage';
+import { loadDownloadedModels } from '../../../../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;

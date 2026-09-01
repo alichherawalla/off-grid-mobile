@@ -60,14 +60,14 @@ jest.mock('react-native-fs', () => {
   };
 });
 jest.mock('react-native-zip-archive', () => ({ unzip: jest.fn(async () => '') }));
-jest.mock('../../../../src/services/modelManager/storage', () => ({
+jest.mock('../../../../../../src/services/adapters/models/library/modelRegistryStorageAdapter', () => ({
   buildDownloadedModel: jest.fn(), persistDownloadedModel: jest.fn(),
   loadDownloadedModels: jest.fn(async () => []), saveModelsList: jest.fn(),
 }));
-jest.mock('../../../../src/utils/coreMLModelUtils', () => ({ resolveCoreMLModelDir: jest.fn(async (d: string) => d) }));
+jest.mock('../../../../../../src/utils/coreMLModelUtils', () => ({ resolveCoreMLModelDir: jest.fn(async (d: string) => d) }));
 
 import RNFS from 'react-native-fs';
-import { reconcileFinishedImageDownloads } from '../../../../src/services/modelManager/scan';
+import { reconcileFinishedImageDownloads } from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
 
 const files: Map<string, { isFile: boolean; size: number; content?: string }> = (RNFS as any).__files;
 const IMG = '/img';

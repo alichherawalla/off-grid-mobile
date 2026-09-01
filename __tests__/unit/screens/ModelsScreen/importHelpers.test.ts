@@ -9,7 +9,7 @@
 
 const mockImportLocalModel = jest.fn();
 jest.mock('../../../../src/services', () => ({
-  modelManager: {
+  modelLibrary: {
     importLocalModel: (...args: any[]) => mockImportLocalModel(...args),
     getImageModelsDirectory: jest.fn(() => '/models'),
   },

@@ -129,7 +129,7 @@ jest.mock('../../../src/services', () => ({
     formatModelSize: jest.fn(() => '4.00 GB'),
     formatBytes: (...args: any[]) => (mockFormatBytes as any)(...args),
   },
-  modelManager: {
+  modelLibrary: {
     getStorageUsed: jest.fn(() => Promise.resolve(4 * 1024 * 1024 * 1024)),
     getAvailableStorage: jest.fn(() => Promise.resolve(50 * 1024 * 1024 * 1024)),
     getOrphanedFiles: (...args: any[]) => (mockGetOrphanedFiles as any)(...args),
