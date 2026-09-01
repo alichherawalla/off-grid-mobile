@@ -28,7 +28,17 @@ async function toolResultContentFor(callBody: string): Promise<string> {
   boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
   await hardwareService.refreshMemoryInfo();
   await llmService.loadModel('/models/small.gguf');
-  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama' })], activeModelId: 'llm' });
+  useAppStore.setState({
+    downloadedModels: [createDownloadedModel({
+      id: 'llm',
+      engine: 'llama',
+      filePath: '/models/small.gguf',
+      fileName: 'small.gguf',
+    })],
+    activeModelId: 'llm',
+  });
+  const { refreshMobileModelServices } = require('../../../src/services/modelServices');
+  await refreshMobileModelServices();
 
   boundary.llama!.scriptCompletion({ text: `Calculating. <tool_call>${callBody}</tool_call>` });
 

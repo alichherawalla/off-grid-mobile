@@ -22,6 +22,8 @@ describe('thinking across a tool-call turn (guard)', () => {
 
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
     useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
+    const { refreshMobileModelServices } = require('../../../src/services/modelServices');
+    await refreshMobileModelServices();
     const conversationId = useChatStore.getState().createConversation('lrt');
     useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2+2' });
 

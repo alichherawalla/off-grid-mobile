@@ -34,7 +34,12 @@ import { createDownloadedModel } from '../../utils/factories';
 // Mock heavy service modules that pull in native code or env variables
 jest.mock('../../../src/services/huggingface', () => ({ huggingFaceService: {} }));
 jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({ modelLibrary: {} }));
-jest.mock('../../../src/services/hardware', () => ({ hardwareService: {} }));
+jest.mock('../../../src/services/hardware', () => ({
+  hardwareService: {
+    getTotalMemoryGB: jest.fn(() => 12),
+    getAvailableMemoryGB: jest.fn(() => 8),
+  },
+}));
 jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: { isAvailable: jest.fn(() => false), excludeFromBackup: jest.fn(() => Promise.resolve(true)) },
 }));

@@ -16,15 +16,13 @@ import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 // Mocks
 // ─────────────────────────────────────────────
 
-jest.mock('../../harness/activeModelLifecycle', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    loadTextModel: jest.fn(),
-    unloadTextModel: jest.fn(),
-    checkMemoryForModel: jest.fn(),
-    getActiveModels: jest.fn(),
-  },
+jest.mock('../../../src/services/modelServices/modelLifecycleBootstrap', () => ({
+  loadTextModel: jest.fn(),
+  unloadTextModel: jest.fn(),
+}));
+jest.mock('../../../src/services/modelServices/modelState', () => ({
+  ...jest.requireActual('../../../src/services/modelServices/modelState'),
+  getActiveModels: jest.fn(),
 }));
 
 jest.mock('../../../src/services/llm', () => ({
@@ -46,15 +44,16 @@ jest.mock('../../../src/services/litert', () => ({
 }));
 
 // Get mock references after hoisting
-const { activeModelService } = require('../../harness/activeModelLifecycle');
+const { loadTextModel, unloadTextModel } = require('../../../src/services/modelServices/modelLifecycleBootstrap');
+const { getActiveModels } = require('../../../src/services/modelServices/modelState');
 const { llmService } = require('../../../src/services/llm');
 const { liteRTService } = require('../../../src/services/litert');
 const mockLiteRTLoaded = liteRTService.isModelLoaded as jest.Mock;
 
-const mockLoadTextModel = activeModelService.loadTextModel as jest.Mock;
-const mockUnloadTextModel = activeModelService.unloadTextModel as jest.Mock;
-const mockCheckMemoryForModel = activeModelService.checkMemoryForModel as jest.Mock;
-const mockGetActiveModels = activeModelService.getActiveModels as jest.Mock;
+const mockLoadTextModel = loadTextModel as jest.Mock;
+const mockUnloadTextModel = unloadTextModel as jest.Mock;
+const mockCheckMemoryForModel = jest.fn();
+const mockGetActiveModels = getActiveModels as jest.Mock;
 const mockGetMultimodalSupport = llmService.getMultimodalSupport as jest.Mock;
 const mockGetLoadedModelPath = llmService.getLoadedModelPath as jest.Mock;
 const mockStopGeneration = llmService.stopGeneration as jest.Mock;
