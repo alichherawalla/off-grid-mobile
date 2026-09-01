@@ -12,6 +12,7 @@ import { voiceSession } from '../../services/voiceSession';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
+import { executeMobileTranscription } from '../../services/mobileTranscription';
 
 interface UseVoiceInputParams {
   conversationId?: string | null;
@@ -200,7 +201,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
       setIsTranscribingFile(true);
       try {
         whisperReady = await ensureWhisper();
-        if (whisperReady) transcript = await whisperService.transcribeFile(path, { language: transcriptionLanguage });
+        if (whisperReady) transcript = await executeMobileTranscription(path, { language: transcriptionLanguage });
       } catch (err) { logger.error(errLabel, err); }
       setIsTranscribingFile(false);
     }
@@ -278,7 +279,7 @@ export function useVoiceInput({ conversationId, interfaceMode, onTranscript, onA
       let transcript = '';
       try {
         whisperReady = await ensureWhisper();
-        if (whisperReady) transcript = await whisperService.transcribeFile(path, { language: transcriptionLanguage });
+        if (whisperReady) transcript = await executeMobileTranscription(path, { language: transcriptionLanguage });
       } catch (transcribeErr) {
         logger.error('[Voice] File transcription error:', transcribeErr);
       }

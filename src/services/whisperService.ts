@@ -12,8 +12,6 @@ import * as whisperModelFiles from './whisperModelFiles';
 import { whisperDecodeOptions } from './whisperDecodeOptions';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { remoteMediaRuntime } from './remoteMediaRuntime';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
 // to keep this file within the max-lines budget). Behavior-neutral: every existing
@@ -35,7 +33,6 @@ class WhisperService {
   private stopFn: (() => Promise<void>) | null = null;
   private readonly realtimeStart = new RealtimeStartBarrier();
   private isReleasingContext: boolean = false;
-  private remoteTranscription: AbortController | null = null;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
   private readonly modelDownloads = new WhisperModelDownloads();
@@ -187,6 +184,7 @@ class WhisperService {
     options?: {
       language?: string;
       maxLen?: number;
+      transcribeFallback?: (filePath: string) => Promise<string>;
     },
   ): Promise<void> {
     const language = options?.language || 'en';
@@ -251,7 +249,9 @@ class WhisperService {
         try {
           const { path } = await audioRecorderService.stopRecording();
           if (cleanTranscription(realtimeText)) return realtimeText;
-          const fileText = await this.transcribeFile(path, { language });
+          const fileText = options?.transcribeFallback
+            ? await options.transcribeFallback(path)
+            : await this.transcribeFile(path, { language });
           logger.log(
             `[WhisperService] Realtime captured nothing — file transcript: "${fileText.slice(
               0,
@@ -359,14 +359,8 @@ class WhisperService {
 
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
-    const remoteTranscription = this.remoteTranscription;
-    const stoppedRemote = !!remoteTranscription;
-    if (remoteTranscription) {
-      remoteTranscription.abort();
-      this.remoteTranscription = null;
-    }
     try {
-      if (!stoppedRemote && !this.stopFn) {
+      if (!this.stopFn) {
         logger.log('[WhisperService] Stop is waiting for realtime startup');
         await this.realtimeStart.wait();
       }
@@ -374,7 +368,7 @@ class WhisperService {
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
       // both see stopFn as non-null and call it twice, causing SIGSEGV in
       // finishRealtimeTranscribeJob on the native side.
-      const fn = stoppedRemote ? null : this.stopFn;
+      const fn = this.stopFn;
       this.stopFn = null;
       if (fn) {
         // Guard: only call stop if context still exists
@@ -441,33 +435,28 @@ class WhisperService {
     return this.isTranscribing;
   }
 
-  // Transcribe a single audio file
+  /** Compatibility facade. Execution policy and route selection stay in shared GenerationService. */
   async transcribeFile(
     filePath: string,
     options?: {
       language?: string;
       onProgress?: (progress: number) => void;
+      signal?: AbortSignal;
     },
   ): Promise<string> {
-    const remoteServer = useRemoteServerStore
-      .getState()
-      .getActiveRemoteMediaServer('transcription');
-    if (remoteServer?.mediaModels?.transcription) {
-      const controller = new AbortController();
-      this.remoteTranscription = controller;
-      try {
-        return cleanTranscription(
-          await remoteMediaRuntime.transcribe(
-            remoteServer,
-            { fileUri: filePath, language: options?.language },
-            { signal: controller.signal },
-          ),
-        );
-      } finally {
-        if (this.remoteTranscription === controller)
-          this.remoteTranscription = null;
-      }
-    }
+    const { executeMobileTranscription } = await import('./mobileTranscription');
+    return executeMobileTranscription(filePath, options);
+  }
+
+  // Raw whisper.rn leaf. Callers must enter through GenerationService.
+  async transcribeFileRaw(
+    filePath: string,
+    options?: {
+      language?: string;
+      onProgress?: (progress: number) => void;
+      signal?: AbortSignal;
+    },
+  ): Promise<string> {
     if (!this.context) {
       throw new Error('No Whisper model loaded');
     }
@@ -478,12 +467,18 @@ class WhisperService {
         this.currentModelPath ?? 'unknown'
       }`,
     );
-    const { promise } = this.context.transcribe(filePath, {
+    const { promise, stop } = this.context.transcribe(filePath, {
       ...whisperDecodeOptions(language),
       onProgress: options?.onProgress,
     });
-
-    const __res = await promise;
+    const abort = () => stop();
+    options?.signal?.addEventListener('abort', abort, { once: true });
+    let __res;
+    try {
+      __res = await promise;
+    } finally {
+      options?.signal?.removeEventListener('abort', abort);
+    }
     logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
     const { result } = __res;
     return cleanTranscription(result);

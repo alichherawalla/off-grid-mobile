@@ -107,11 +107,11 @@ export const remoteMediaRuntime = {
 
   async transcribe(
     server: RemoteServer,
-    input: { fileUri: string; language?: string },
+    input: { fileUri: string; language?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<string> {
     const body = new FormData();
-    body.append('model', requiredModel(server, 'transcription'));
+    body.append('model', input.model ?? requiredModel(server, 'transcription'));
     if (input.language) body.append('language', input.language);
     body.append('file', {
       uri: input.fileUri,

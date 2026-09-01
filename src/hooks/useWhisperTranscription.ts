@@ -3,6 +3,10 @@ import { Vibration } from 'react-native';
 import { whisperService, cleanTranscription } from '../services/whisperService';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
+import {
+  cancelMobileTranscription,
+  executeMobileTranscription,
+} from '../services/mobileTranscription';
 
 /** Safely call a state setter only if the component is still mounted. */
 const useMountedRef = () => {
@@ -63,6 +67,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
   // session stayed live for minutes with whisper pinned resident (B11). The
   // mountedRef only flips a flag; it never told the native session to stop.
   useEffect(() => () => {
+    cancelMobileTranscription();
     if (whisperService.isCurrentlyTranscribing()) {
       void whisperService.forceReset();
     }
@@ -176,6 +181,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
     startNonce.current++; // supersede an in-flight start awaiting model load (no ghost recording)
     pendingResult.current = null;
     transcribingStartTime.current = null;
+    cancelMobileTranscription();
     // Also ensure recording is stopped
     if (whisperService.isCurrentlyTranscribing()) {
       whisperService.stopTranscription();
@@ -265,7 +271,12 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
             transcribingStartTime.current = null;
           }
         }
-      }, { language: transcriptionLanguage });
+      }, {
+        language: transcriptionLanguage,
+        transcribeFallback: filePath => executeMobileTranscription(filePath, {
+          language: transcriptionLanguage,
+        }),
+      });
       if (startNonce.current !== currentNonce || !mountedRef.current) return;
       // Do not tell the person to speak before both the fallback recorder and
       // whisper.rn have installed their native capture handles.
