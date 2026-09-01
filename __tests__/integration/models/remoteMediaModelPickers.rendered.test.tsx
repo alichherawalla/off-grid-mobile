@@ -12,12 +12,12 @@ describe('remote media model pickers', () => {
     return useRemoteServerStore.getState().addServer({
       name: 'Studio Mac',
       endpoint: 'http://192.168.1.50:7878', // NOSONAR - private LAN test fixture
-      providerType: 'openai-compatible',
-      mediaModels: {
+      provider: 'openai-compatible',
+      selections: {
         transcription: '/models/whisper-base.bin',
         voice: '/models/kokoro.pte',
       },
-      modelCatalog: {
+      catalog: {
         transcription: [
           { id: '/models/whisper-base.bin', name: 'Whisper Base' },
           { id: '/models/whisper-large-v3.bin', name: 'Whisper Large v3' },
@@ -44,7 +44,7 @@ describe('remote media model pickers', () => {
 
     await waitFor(() =>
       expect(
-        useRemoteServerStore.getState().getServerById(serverId)?.mediaModels
+        useRemoteServerStore.getState().getServerById(serverId)?.selections
           ?.transcription,
       ).toBe('/models/whisper-large-v3.bin'),
     );
@@ -56,7 +56,7 @@ describe('remote media model pickers', () => {
     const textServerId = useRemoteServerStore.getState().addServer({
       name: 'Text Mac',
       endpoint: 'http://192.168.1.51:7878', // NOSONAR - private LAN test fixture
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     useRemoteServerStore.getState().setActiveServerId(textServerId);
     const ui = render(<RemoteModelOptionsSection category="voice" />);
@@ -69,7 +69,7 @@ describe('remote media model pickers', () => {
       const state = useRemoteServerStore.getState();
       expect(state.activeServerId).toBe(textServerId);
       expect(state.activeRemoteMediaServerIds.voice).toBe(serverId);
-      expect(state.getServerById(serverId)?.mediaModels?.voice).toBe(
+      expect(state.getServerById(serverId)?.selections?.voice).toBe(
         '/models/orpheus.pte',
       );
     });

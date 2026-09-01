@@ -72,7 +72,7 @@ jest.mock('../../../src/services/litert', () => ({
   },
 }));
 
-jest.mock('../../../src/services/providers', () => ({
+jest.mock('../../../src/services/adapters/providers', () => ({
   providerRegistry: {
     hasProvider: jest.fn(() => false),
     getProvider: jest.fn(() => null),

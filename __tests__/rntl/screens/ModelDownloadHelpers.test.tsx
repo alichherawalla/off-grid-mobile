@@ -72,7 +72,7 @@ const mockServer: RemoteServer = {
   id: 'server-1',
   name: 'Ollama (192.168.1.10)',
   endpoint: 'http://192.168.1.10:11434',
-  providerType: 'openai-compatible',
+  provider: 'openai-compatible',
   createdAt: '2024-01-01',
 };
 
@@ -80,7 +80,7 @@ const mockLMStudioServer: RemoteServer = {
   id: 'server-2',
   name: 'LM Studio (192.168.1.20)',
   endpoint: 'http://192.168.1.20:1234',
-  providerType: 'openai-compatible',
+  provider: 'openai-compatible',
   createdAt: '2024-01-01',
 };
 

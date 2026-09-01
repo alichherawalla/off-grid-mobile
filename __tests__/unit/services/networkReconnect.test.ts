@@ -47,7 +47,7 @@ describe('network reconnect watcher', () => {
     const serverId = store.addServer({
       name: 'Desktop',
       endpoint: 'http://192.168.1.10:7878',
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     store.setActiveServerId(serverId);
 
@@ -60,8 +60,8 @@ describe('network reconnect watcher', () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
 
     expect(
-      useRemoteServerStore.getState().serverHealth[serverId]?.isHealthy,
-    ).toBe(false);
+      useRemoteServerStore.getState().serverHealth[serverId]?.status,
+    ).toBe('unhealthy');
   });
 
   it('discards an IP lookup that settles after teardown', async () => {

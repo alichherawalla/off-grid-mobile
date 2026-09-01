@@ -5,7 +5,7 @@
  * remote LLM servers like Ollama, LM Studio, etc.
  */
 
-import { OpenAICompatibleProvider, createOpenAIProvider } from '../../../../src/services/providers/openAICompatibleProvider';
+import { OpenAICompatibleProvider, createOpenAIProvider } from '../../../../src/services/adapters/providers/openAICompatibleProvider';
 import * as httpClient from '../../../../src/services/httpClient';
 
 // Mock httpClient

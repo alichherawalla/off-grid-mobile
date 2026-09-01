@@ -102,7 +102,7 @@ describe('full-screen remote server editor', () => {
     await waitFor(() =>
       expect(useRemoteServerStore.getState().servers).toHaveLength(1),
     );
-    expect(useRemoteServerStore.getState().servers[0]?.mediaModels).toEqual({
+    expect(useRemoteServerStore.getState().servers[0]?.selections).toEqual({
       text: 'Qwen3.5-0.8B-GGUF',
       image: 'flux-schnell',
       transcription: 'whisper-large-v3',
@@ -184,7 +184,7 @@ describe('full-screen remote server editor', () => {
     await waitFor(() =>
       expect(useRemoteServerStore.getState().servers).toHaveLength(1),
     );
-    expect(useRemoteServerStore.getState().servers[0]?.mediaModels).toEqual({
+    expect(useRemoteServerStore.getState().servers[0]?.selections).toEqual({
       text: '/srv/models/Llama-3.2-3B.gguf',
       image: '/srv/models/sdxl.safetensors',
       transcription: '/srv/models/whisper-large-v3.bin',

@@ -1,5 +1,5 @@
-import { OpenAICompatibleProvider } from '../../../src/services/providers/openAICompatibleProvider';
-import { providerRegistry } from '../../../src/services/providers';
+import { OpenAICompatibleProvider } from '../../../src/services/adapters/providers/openAICompatibleProvider';
+import { providerRegistry } from '../../../src/services/adapters/providers';
 import {
   REMOTE_TOOLS_UNAVAILABLE,
   remoteToolCapabilityIssue,

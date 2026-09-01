@@ -6,7 +6,7 @@
  */
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { providerRegistry } from '../../../src/services/providers/registry';
+import { providerRegistry } from '../../../src/services/adapters/providers/registry';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 
 // Mock dependencies
@@ -20,7 +20,7 @@ jest.mock('../../../src/services/llm', () => ({
   },
 }));
 
-jest.mock('../../../src/services/providers/registry', () => ({
+jest.mock('../../../src/services/adapters/providers/registry', () => ({
   providerRegistry: {
     getProvider: jest.fn(),
     getActiveProvider: jest.fn(),
@@ -80,7 +80,7 @@ describe('Unified Model Selection', () => {
       const serverId = useRemoteServerStore.getState().addServer({
         name: 'Test Ollama',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       // Add discovered models
@@ -110,7 +110,7 @@ describe('Unified Model Selection', () => {
       const serverId = useRemoteServerStore.getState().addServer({
         name: 'Test Server',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       // Set up remote selection first
@@ -130,13 +130,13 @@ describe('Unified Model Selection', () => {
       const server1Id = useRemoteServerStore.getState().addServer({
         name: 'Server 1',
         endpoint: 'http://server1:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       const server2Id = useRemoteServerStore.getState().addServer({
         name: 'Server 2',
         endpoint: 'http://server2:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       // Add models to each server
@@ -182,7 +182,7 @@ describe('Unified Model Selection', () => {
       const serverId = useRemoteServerStore.getState().addServer({
         name: 'Vision Server',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       useRemoteServerStore.getState().setDiscoveredModels(serverId, [
@@ -198,7 +198,7 @@ describe('Unified Model Selection', () => {
       await remoteServerManager.setActiveRemoteImageModel(serverId, 'llava');
 
       expect(useRemoteServerStore.getState().activeRemoteImageModelId).toBe('llava');
-      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
+      expect(useRemoteServerStore.getState().activeRemoteMediaServerIds.image).toBe(serverId);
       expect(mockLoadModel).toHaveBeenCalledWith('llava');
     });
   });
@@ -213,7 +213,7 @@ describe('Unified Model Selection', () => {
       const serverId = useRemoteServerStore.getState().addServer({
         name: 'Test Server',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       useRemoteServerStore.getState().setDiscoveredModels(serverId, [

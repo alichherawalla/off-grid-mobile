@@ -50,7 +50,7 @@ function addServer(opts: {
         id: opts.id,
         name: opts.name ?? opts.id,
         endpoint: opts.endpoint,
-        providerType: 'openai-compatible' as const,
+        provider: 'openai-compatible' as const,
         apiKey: undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -630,13 +630,13 @@ describe('remoteServerDiscovery integration', () => {
         .getState()
         .testConnection('srv-gw');
 
-      expect(result.mediaModels).toEqual({
+      expect(result.selections).toEqual({
         text: 'gemma-3',
         image: '/models/sdxl.safetensors',
         transcription: '/models/whisper-base.bin',
         voice: '/models/kokoro.pte',
       });
-      expect(result.modelCatalog).toEqual({
+      expect(result.catalog).toEqual({
         text: [{ id: 'gemma-3', name: 'gemma-3' }],
         image: [
           { id: '/models/sdxl.safetensors', name: 'Studio Image' },
@@ -648,11 +648,11 @@ describe('remoteServerDiscovery integration', () => {
         ],
       });
       expect(
-        useRemoteServerStore.getState().getServerById('srv-gw')?.mediaModels,
-      ).toEqual(result.mediaModels);
+        useRemoteServerStore.getState().getServerById('srv-gw')?.selections,
+      ).toEqual(result.selections);
       expect(
-        useRemoteServerStore.getState().getServerById('srv-gw')?.modelCatalog,
-      ).toEqual(result.modelCatalog);
+        useRemoteServerStore.getState().getServerById('srv-gw')?.catalog,
+      ).toEqual(result.catalog);
     });
 
     it('still lists models from servers that do not send kind (Ollama/LM Studio)', async () => {

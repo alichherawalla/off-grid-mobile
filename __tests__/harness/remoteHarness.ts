@@ -65,12 +65,12 @@ export function installRemoteStream(sseBody: string | string[]): { release: () =
 export async function installRemoteModel(opts: {
   name?: string;
   endpoint?: string;
-  providerType?: 'openai-compatible' | 'anthropic';
+  provider?: 'openai-compatible' | 'anthropic';
   caps?: Partial<{ supportsVision: boolean; supportsToolCalling: boolean; supportsThinking: boolean }>;
 } = {}): Promise<{ serverId: string; modelId: string }> {
    
   const { useRemoteServerStore } = require('../../src/stores');
-  const { providerRegistry } = require('../../src/services/providers');
+  const { providerRegistry } = require('../../src/services/adapters/providers');
   const { createProviderForServerImpl } = require('../../src/services/remoteServerManagerUtils');
   const { llmService } = require('../../src/services/llm');
    
@@ -82,10 +82,10 @@ export async function installRemoteModel(opts: {
   useAppStore.getState().setActiveModelId(null);
   const name = opts.name ?? 'LM Studio';
   const endpoint = opts.endpoint ?? 'http://localhost:1234';
-  const providerType = opts.providerType ?? 'openai-compatible';
+  const provider = opts.provider ?? 'openai-compatible';
   const modelId = 'remote-model';
 
-  const serverId = useRemoteServerStore.getState().addServer({ name, endpoint, providerType });
+  const serverId = useRemoteServerStore.getState().addServer({ name, endpoint, provider });
   const model = {
     id: modelId, name: 'Remote Model', serverId, lastUpdated: 't',
     capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false, ...opts.caps },
@@ -100,9 +100,9 @@ export async function installRemoteModel(opts: {
   // the active server from the store, so this is what a real remote generation runs against.
   const server = useRemoteServerStore.getState().getServerById(serverId);
   await createProviderForServerImpl(server);
-  const provider = providerRegistry.getProvider(serverId);
-  provider.updateConfig?.({ modelId });
-  provider.modelCapabilities = { ...provider.modelCapabilities, ...model.capabilities, acceptsThinkingKwarg: !!opts.caps?.supportsThinking };
+  const providerInstance = providerRegistry.getProvider(serverId);
+  providerInstance.updateConfig?.({ modelId });
+  providerInstance.modelCapabilities = { ...providerInstance.modelCapabilities, ...model.capabilities, acceptsThinkingKwarg: !!opts.caps?.supportsThinking };
   providerRegistry.setActiveProvider(serverId);
   return { serverId, modelId };
 }

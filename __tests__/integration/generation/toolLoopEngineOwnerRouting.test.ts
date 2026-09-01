@@ -24,7 +24,7 @@ import { llmService } from '../../../src/services/llm';
 import { getActiveEngineService, isRemoteTextModelActive } from '../../../src/services/engines';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { providerRegistry } from '../../../src/services/providers';
+import { providerRegistry } from '../../../src/services/adapters/providers';
 import { resetStores, setupWithConversation } from '../../utils/testHelpers';
 import { createDownloadedModel, createMessage } from '../../utils/factories';
 import type { Message } from '../../../src/types';

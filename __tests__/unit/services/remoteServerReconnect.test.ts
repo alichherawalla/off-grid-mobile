@@ -49,7 +49,7 @@ describe('remote server reconnect', () => {
     const serverId = useRemoteServerStore.getState().addServer({
       name: 'Desktop A',
       endpoint: endpointA,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
 
     const result = await remoteServerManager.scanAndReconcile();
@@ -80,7 +80,7 @@ describe('remote server reconnect', () => {
     const serverId = useRemoteServerStore.getState().addServer({
       name: 'Credentialed Desktop',
       endpoint: oldEndpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
       username: `server_${serverId}`,
@@ -109,7 +109,7 @@ describe('remote server reconnect', () => {
     const serverId = useRemoteServerStore.getState().addServer({
       name: 'Desktop with unavailable credentials',
       endpoint: oldEndpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     (Keychain.getGenericPassword as jest.Mock).mockRejectedValueOnce(
       new Error('Keychain unavailable'),
@@ -137,7 +137,7 @@ describe('remote server reconnect', () => {
     const serverId = useRemoteServerStore.getState().addServer({
       name: 'Uncredentialed Desktop',
       endpoint: oldEndpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
 
     const result = await remoteServerManager.scanAndReconcile();
@@ -160,7 +160,7 @@ describe('remote server reconnect', () => {
     const serverId = store.addServer({
       name: 'Desktop',
       endpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     store.setActiveServerId(serverId);
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: true });
@@ -168,8 +168,8 @@ describe('remote server reconnect', () => {
     await remoteServerManager.recoverActiveConnection();
 
     expect(
-      useRemoteServerStore.getState().serverHealth[serverId]?.isHealthy,
-    ).toBe(true);
+      useRemoteServerStore.getState().serverHealth[serverId]?.status,
+    ).toBe('healthy');
     expect(global.fetch).toHaveBeenCalledWith(
       'http://192.168.1.2:7878/v1/models',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

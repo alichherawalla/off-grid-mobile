@@ -160,7 +160,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     // A remote server counts as "has any model" even with zero local downloads.
     act(() => {
       useRemoteServerStore.getState().addServer({
-        name: 'LAN box', endpoint: 'http://192.168.1.9:8080', providerType: 'openai-compatible',
+        name: 'LAN box', endpoint: 'http://192.168.1.9:8080', provider: 'openai-compatible',
       });
     });
     rerender({});

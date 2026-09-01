@@ -10,13 +10,13 @@ import {
   detectToolCallingCapability,
 } from '../../../src/services/remoteServerManagerUtils';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { providerRegistry } from '../../../src/services/providers/registry';
+import { providerRegistry } from '../../../src/services/adapters/providers/registry';
 import * as Keychain from 'react-native-keychain';
 
 // Mock dependencies
 jest.mock('../../../src/stores/remoteServerStore');
-jest.mock('../../../src/services/providers/registry');
-jest.mock('../../../src/services/providers/openAICompatibleProvider', () => ({
+jest.mock('../../../src/services/adapters/providers/registry');
+jest.mock('../../../src/services/adapters/providers/openAICompatibleProvider', () => ({
   createOpenAIProvider: jest
     .fn()
     .mockReturnValue({ dispose: jest.fn().mockResolvedValue(undefined) }),
@@ -60,7 +60,7 @@ describe('remoteServerManager', () => {
       const result = await remoteServerManager.addServer({
         name: 'Test',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
 
       expect(result).toEqual(mockServer);
@@ -91,7 +91,7 @@ describe('remoteServerManager', () => {
       const result = await remoteServerManager.addServer({
         name: 'Test',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
         apiKey: 'secret-key',
       });
 
@@ -119,7 +119,7 @@ describe('remoteServerManager', () => {
         remoteServerManager.addServer({
           name: 'Test',
           endpoint: 'http://localhost:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         }),
       ).rejects.toThrow('Failed to create server');
     });

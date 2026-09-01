@@ -15,13 +15,13 @@
  */
 import { generationService } from '../../../src/services/generationService';
 import { generationSession } from '../../../src/services/generationSession';
-import { providerRegistry } from '../../../src/services/providers';
+import { providerRegistry } from '../../../src/services/adapters/providers';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { llmService } from '../../../src/services/llm';
 import { resetStores, setupWithConversation, flushPromises } from '../../utils/testHelpers';
 import { createMessage } from '../../utils/factories';
-import type { LLMProvider } from '../../../src/services/providers/types';
+import type { LLMProvider } from '../../../src/services/adapters/providers/types';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;

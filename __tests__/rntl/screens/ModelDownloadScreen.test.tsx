@@ -486,7 +486,7 @@ describe('ModelDownloadScreen', () => {
   // handleConnectServer
   // ===========================================================================
 
-  const MOCK_SERVER = { id: 'srv-1', name: 'My Server', endpoint: 'http://192.168.1.10:11434', providerType: 'openai-compatible' as const };
+  const MOCK_SERVER = { id: 'srv-1', name: 'My Server', endpoint: 'http://192.168.1.10:11434', provider: 'openai-compatible' as const };
 
   it('handleConnectServer — success with models shows connected alert and sets active model', async () => {
     const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');

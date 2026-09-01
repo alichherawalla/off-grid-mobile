@@ -116,7 +116,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
       // REAL "add a server" end state + REAL discovery — this is what runs deltaHasThinking. No caps
       // are pre-placed; supportsThinking is EMERGENT from the probe stream through the real detection.
       const serverId = useRemoteServerStore.getState().addServer({
-        name: 'LM Studio', endpoint: ENDPOINT, providerType: 'openai-compatible',
+        name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
       });
       await useRemoteServerStore.getState().discoverModels(serverId);
 
@@ -159,7 +159,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
     try {
       const serverId = useRemoteServerStore.getState().addServer({
-        name: 'LM Studio', endpoint: ENDPOINT, providerType: 'openai-compatible',
+        name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
       });
       await useRemoteServerStore.getState().discoverModels(serverId);
       await setActiveRemoteTextModelImpl(serverId, MODEL_ID);

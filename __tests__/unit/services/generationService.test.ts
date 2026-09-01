@@ -10,7 +10,7 @@ import { llmService } from '../../../src/services/llm';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { useAppStore } from '../../../src/stores/appStore';
-import { providerRegistry } from '../../../src/services/providers';
+import { providerRegistry } from '../../../src/services/adapters/providers';
 import { resetStores, setupWithActiveModel, setupWithConversation } from '../../utils/testHelpers';
 import { createMessage } from '../../utils/factories';
 
@@ -49,7 +49,7 @@ jest.mock('../../../src/utils/sharePrompt', () => ({
 }));
 
 // Mock provider registry
-jest.mock('../../../src/services/providers', () => ({
+jest.mock('../../../src/services/adapters/providers', () => ({
   providerRegistry: {
     getProvider: jest.fn(),
     getActiveProvider: jest.fn(),

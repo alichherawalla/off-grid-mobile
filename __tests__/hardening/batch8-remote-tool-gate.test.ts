@@ -20,7 +20,7 @@
  * assertion runs for real, so deleting/altering the gate would fail these tests.
  */
 
-import { OpenAICompatibleProvider } from '../../src/services/providers/openAICompatibleProvider';
+import { OpenAICompatibleProvider } from '../../src/services/adapters/providers/openAICompatibleProvider';
 import * as httpClient from '../../src/services/httpClient';
 
 // Boundary mock: the network transport only. The provider's request-building

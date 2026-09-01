@@ -41,7 +41,7 @@ function addTestServer(
     serverId = useRemoteServerStore.getState().addServer({
       name,
       endpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
   });
   return serverId;
@@ -82,9 +82,9 @@ describe('remoteServerStore', () => {
           id: 'desktop',
           name: 'Studio Mac',
           endpoint: 'http://192.168.1.50:7878', // NOSONAR - private LAN test fixture
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
           createdAt: 'now',
-          mediaModels: {
+          selections: {
             image: 'flux',
             transcription: 'whisper',
             voice: 'kokoro',
@@ -102,12 +102,36 @@ describe('remoteServerStore', () => {
     });
   });
 
+  it('migrates legacy server field names into the shared control-plane shape', () => {
+    const migrated = migrateRemoteServerState({
+      servers: [{
+        id: 'legacy',
+        name: 'Legacy Mac',
+        endpoint: 'https://desktop.example',
+        providerType: 'openai-compatible',
+        mediaModels: { text: 'chat', image: 'image' },
+        modelCatalog: { text: [{ id: 'chat', name: 'Chat' }] },
+        createdAt: 'now',
+      }],
+      activeRemoteMediaServerIds: {},
+    });
+
+    expect(migrated.servers?.[0]).toEqual(expect.objectContaining({
+      provider: 'openai-compatible',
+      selections: { text: 'chat', image: 'image' },
+      catalog: { text: [{ id: 'chat', name: 'Chat' }] },
+    }));
+    expect(migrated.servers?.[0]).not.toHaveProperty('providerType');
+    expect(migrated.servers?.[0]).not.toHaveProperty('mediaModels');
+    expect(migrated.servers?.[0]).not.toHaveProperty('modelCatalog');
+  });
+
   describe('addServer', () => {
     it('should add a new server with generated ID', () => {
       const serverData = {
         name: 'Test Server',
         endpoint: 'http://192.168.1.50:11434',
-        providerType: 'openai-compatible' as const,
+        provider: 'openai-compatible' as const,
       };
 
       let serverId: string = '';
@@ -128,7 +152,7 @@ describe('remoteServerStore', () => {
       const serverData = {
         name: 'Ollama Server',
         endpoint: 'http://localhost:11434',
-        providerType: 'openai-compatible' as const,
+        provider: 'openai-compatible' as const,
         notes: 'Local development server',
       };
 
@@ -149,7 +173,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Original Name',
           endpoint: 'http://original:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -173,12 +197,12 @@ describe('remoteServerStore', () => {
         server1Id = useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://server1:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         _server2Id = useRemoteServerStore.getState().addServer({
           name: 'Server 2',
           endpoint: 'http://server2:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -202,7 +226,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -339,7 +363,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -363,7 +387,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Bad Server',
           endpoint: 'http://bad:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -403,7 +427,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -447,12 +471,12 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://s1:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         useRemoteServerStore.getState().addServer({
           name: 'Server 2',
           endpoint: 'http://s2:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -536,7 +560,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         useRemoteServerStore.getState().setDiscoveredModels(serverId, [
           {
@@ -585,7 +609,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         useRemoteServerStore
           .getState()
@@ -620,7 +644,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         useRemoteServerStore
           .getState()
@@ -663,7 +687,7 @@ describe('remoteServerStore', () => {
         useRemoteServerStore.getState().addServer({
           name: 'Server 1',
           endpoint: 'http://s1:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
         useRemoteServerStore.getState().setActiveRemoteTextModelId('model-1');
         useRemoteServerStore.getState().setActiveRemoteImageModelId('vision-1');
@@ -741,7 +765,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -785,7 +809,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Gateway',
           endpoint: 'http://mac:7878',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
       let modelsPromise: any;
@@ -814,7 +838,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -848,7 +872,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -896,7 +920,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Test Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -905,8 +929,8 @@ describe('remoteServerStore', () => {
       });
 
       const health = useRemoteServerStore.getState().serverHealth[serverId];
-      expect(health.isHealthy).toBe(true);
-      expect(health.lastCheck).toBeDefined();
+      expect(health.status).toBe('healthy');
+      expect(health.checkedAt).toBeDefined();
     });
   });
 
@@ -926,7 +950,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'API Key Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
           apiKey: 'secret-key',
         });
       });
@@ -960,7 +984,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -1000,7 +1024,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -1025,7 +1049,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Failing Server',
           endpoint: 'http://test:11434',
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 
@@ -1052,7 +1076,7 @@ describe('remoteServerStore', () => {
       serverId = useRemoteServerStore.getState().addServer({
         name: 'Test Server',
         endpoint: 'http://test:11434', // NOSONAR
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
     });
 
@@ -1143,7 +1167,7 @@ describe('remoteServerStore', () => {
         serverId = useRemoteServerStore.getState().addServer({
           name: 'Ollama',
           endpoint: 'http://test:11434', // NOSONAR
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
         });
       });
 

@@ -16,9 +16,9 @@ const server: RemoteServer = {
   id: 'desktop-study',
   name: 'Study Mac',
   endpoint: 'http://192.168.1.30:7878/',
-  providerType: 'openai-compatible',
+  provider: 'openai-compatible',
   createdAt: '2026-08-29T00:00:00.000Z',
-  mediaModels: {
+  selections: {
     image: 'flux-schnell',
     transcription: 'whisper-large-v3',
     voice: 'kokoro',
@@ -60,7 +60,7 @@ describe('remoteMediaRuntime', () => {
       transcription: true,
       voice: true,
     });
-    expect(remoteServerCapabilities({ mediaModels: { image: '   ' } })).toEqual(
+    expect(remoteServerCapabilities({ selections: { image: '   ' } })).toEqual(
       {
       imageGeneration: false,
       transcription: false,
@@ -129,8 +129,8 @@ describe('remoteMediaRuntime', () => {
     const serverId = store.addServer({
       name: server.name,
       endpoint: server.endpoint,
-      providerType: server.providerType,
-      mediaModels: { transcription: 'whisper-large-v3' },
+      provider: server.provider,
+      selections: { transcription: 'whisper-large-v3' },
     });
     store.setActiveRemoteMediaServerId('transcription', serverId);
 
@@ -166,8 +166,8 @@ describe('remoteMediaRuntime', () => {
     const id = store.addServer({
       name: 'Studio Mac',
       endpoint: server.endpoint,
-      providerType: server.providerType,
-      mediaModels: { voice: 'kokoro' },
+      provider: server.provider,
+      selections: { voice: 'kokoro' },
     });
     store.setActiveRemoteMediaServerId('voice', id);
 

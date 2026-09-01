@@ -351,7 +351,7 @@ describe('HomeScreen', () => {
         expect(discoverySpy).not.toHaveBeenCalled();
 
         useRemoteServerStore.setState({
-          servers: [{ id: 'saved', name: 'Saved gateway', endpoint: 'http://saved.test', providerType: 'ollama' }],
+          servers: [{ id: 'saved', name: 'Saved gateway', endpoint: 'http://saved.test', provider: 'ollama' }],
         } as any);
         await act(async () => { finishHydration?.(useRemoteServerStore.getState()); });
         expect(useAppStore.getState().settings.autoDiscoverRemoteModels).toBe(true);

@@ -1,6 +1,6 @@
 import { setActiveRemoteTextModelImpl } from '../../../src/services/remoteServerManagerUtils';
-import { OpenAICompatibleProvider } from '../../../src/services/providers/openAICompatibleProvider';
-import { providerRegistry } from '../../../src/services/providers/registry';
+import { OpenAICompatibleProvider } from '../../../src/services/adapters/providers/openAICompatibleProvider';
+import { providerRegistry } from '../../../src/services/adapters/providers/registry';
 import {
   REMOTE_TOOLS_UNAVAILABLE,
   remoteToolCapabilityIssue,
@@ -22,7 +22,7 @@ describe('selected remote model tool capability', () => {
     const serverId = useRemoteServerStore.getState().addServer({
       name: 'Private Desktop',
       endpoint: 'http://192.168.1.30:7878',
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     useRemoteServerStore.getState().setDiscoveredModels(serverId, [
       {

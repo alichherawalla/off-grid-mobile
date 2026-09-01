@@ -86,7 +86,7 @@ describe('ChatInputModeToggle', () => {
   it('flips to audio when a remote voice model is active', () => {
     mockActiveRemoteVoiceServer.mockReturnValue({
       id: 'desktop',
-      mediaModels: { voice: 'kokoro' },
+      selections: { voice: 'kokoro' },
     });
     setDownloaded(false, 'chat');
     const { getByTestId } = render(<ChatInputModeToggle />);

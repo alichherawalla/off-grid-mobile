@@ -7,11 +7,11 @@ jest.mock('../../../../src/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-jest.mock('../../../../src/services/providers/localProvider', () => ({
+jest.mock('../../../../src/services/adapters/providers/localProvider', () => ({
   localProvider: { id: 'local', type: 'local', generate: jest.fn(), isModelLoaded: jest.fn() },
 }));
 
-import { providerRegistry, getProviderForServer } from '../../../../src/services/providers/registry';
+import { providerRegistry, getProviderForServer } from '../../../../src/services/adapters/providers/registry';
 
 function makeProvider(id: string) {
   return { id, type: 'remote' as any, generate: jest.fn(), isModelLoaded: jest.fn() };
@@ -78,7 +78,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('falls back to localProvider when active provider is not found', () => {
-      const { localProvider } = require('../../../../src/services/providers/localProvider');
+      const { localProvider } = require('../../../../src/services/adapters/providers/localProvider');
       // Force an inconsistent state: activeProviderId points to a missing provider
       (providerRegistry as any).activeProviderId = 'missing-provider';
       const active = providerRegistry.getActiveProvider();
@@ -150,7 +150,7 @@ describe('getProviderForServer', () => {
   });
 
   it('returns localProvider when serverId is null', () => {
-    const { localProvider } = require('../../../../src/services/providers/localProvider');
+    const { localProvider } = require('../../../../src/services/adapters/providers/localProvider');
     expect(getProviderForServer(null)).toBe(localProvider);
   });
 
@@ -161,7 +161,7 @@ describe('getProviderForServer', () => {
   });
 
   it('falls back to localProvider when server has no registered provider', () => {
-    const { localProvider } = require('../../../../src/services/providers/localProvider');
+    const { localProvider } = require('../../../../src/services/adapters/providers/localProvider');
     expect(getProviderForServer('nonexistent-server')).toBe(localProvider);
   });
 });

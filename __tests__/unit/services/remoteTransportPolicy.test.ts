@@ -4,7 +4,7 @@ import {
   isCredentialTransportDowngrade,
   remoteAuthorizationHeaders,
   validateRemoteEndpoint,
-} from '../../../src/services/remoteTransportPolicy';
+} from '@offgrid/models';
 import { fetchModelsFromServer } from '../../../src/stores/remoteServerHelpers';
 
 describe('remote transport policy', () => {
@@ -87,7 +87,7 @@ describe('remote transport policy', () => {
       id: 'desktop',
       name: 'Desktop',
       endpoint: 'http://192.168.1.30:7878',
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
       apiKey: 'secret',
       createdAt: '2026-08-30',
     });

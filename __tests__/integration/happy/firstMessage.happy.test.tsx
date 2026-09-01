@@ -68,7 +68,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     const serverId = remoteStore.addServer({
       name: 'Off Grid Desktop',
       endpoint: 'http://192.168.5.219:7878',
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
     });
     remoteStore.setDiscoveredModels(serverId, [{
       id: 'gemma-4-e4b',

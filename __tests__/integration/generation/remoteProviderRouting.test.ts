@@ -4,9 +4,9 @@
  * Tests for routing between local and remote providers in the generation service.
  */
 
-import { providerRegistry, localProvider } from '../../../src/services/providers';
+import { providerRegistry, localProvider } from '../../../src/services/adapters/providers';
 import { useRemoteServerStore } from '../../../src/stores';
-import { OpenAICompatibleProvider } from '../../../src/services/providers/openAICompatibleProvider';
+import { OpenAICompatibleProvider } from '../../../src/services/adapters/providers/openAICompatibleProvider';
 
 // Mock stores
 jest.mock('../../../src/stores', () => ({
