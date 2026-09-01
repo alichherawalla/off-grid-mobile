@@ -41,6 +41,36 @@ device, model, route, and log evidence before closing this entry.
 
 ### QA sweep evidence - 2026-09-01
 
+The follow-up platform sweep for the Shared image application, Desktop model library, and Mobile
+transcription and residency milestones has these results:
+
+- `@offgrid/models` built its ESM, CJS, and type-declaration outputs. Its architecture gate passed,
+  and all 371 package tests passed.
+- The Desktop model architecture gate passed with zero temporary items. Fourteen focused image and
+  model-library files passed 130 tests through the Electron test runner. Four focused database files
+  passed four tests through `scripts/test-db.sh`, which uses the Electron ABI. The first database
+  batch found port 8439 in use by another active Electron test process. The affected first-use test
+  passed alone after that process released the port.
+- Both Mobile model architecture gates passed. The focused transcription, download, and residency
+  batch passed 331 tests in 15 suites. One real-time recovery test exceeded its 30-second limit only
+  in the CPU-heavy 16-suite batch. It then passed alone in 2.8 seconds with
+  `--detectOpenHandles`, so this sweep found no repeatable product failure or leaked handle in that
+  journey.
+- A source scan found no `jest.mock`, `vi.mock`, or module-name replacement for
+  `@offgrid/models`. These checks therefore use the real local Shared package. Some older Mobile
+  unit files still replace Mobile services such as `llm`, `localDreamGenerator`, the download store,
+  and hardware. Those files are useful unit evidence, but they are not complete integration evidence
+  under the current testing standard. The rendered and cross-service journeys, plus final live-device
+  tests, remain the release evidence.
+
+The app boundaries in this sweep are wired as ports. Desktop image generation constructs the Shared
+`ImageGenerationApplicationService`; Desktop model management delegates download, removal,
+activation, transfer registration, and local import to Shared application services. Mobile
+transcription constructs the Shared `TranscriptionModelWorkflow`, while the Zustand store is a
+projection and Whisper remains a native/filesystem adapter. Mobile load, unload, force-load,
+co-residency, and eject decisions call Shared residency workflows. The static gates found no direct
+screen or component bypass for these milestones.
+
 The latest combined sweep passes these stable code gates and representative journeys:
 
 - Shared models TypeScript and architecture gates. The most recent full Shared package run in this
@@ -57,12 +87,10 @@ The latest combined sweep passes these stable code gates and representative jour
   ownership, chat lifecycle and visible active-model identity, tool calls, MCP, download progress,
   transcription, model control sync, and knowledge-document sync.
 
-The current Desktop image-generation work is not yet at the static gate. Desktop TypeScript reports
-that `src/main/imagegen/application-service.ts` sends a `progress` member that is not in
-`GenerationEvents`. A focused Desktop image round passed 55 tests and failed one: cancellation
-returned `true` while the main-owned job journey expected `false`. These are current product-code
-findings in concurrent work, not device or environment failures. The stable non-image Desktop round
-above is green.
+The earlier Desktop image-generation TypeScript and cancellation findings are closed by the
+follow-up sweep above. The Shared image application is now wired through the Desktop application
+port, and its focused architecture and behavior gates pass. This does not replace packaged-app or
+real-engine verification.
 
 This is still not live or release evidence. No physical iOS or Android journey, remote image server,
 Kokoro runtime, native model load/force-load/eject, native download interruption, packaged Desktop,
