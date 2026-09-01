@@ -9,8 +9,6 @@
  * row) is never resumable → reconcile strands stranded in-flight as retriable error.
  */
 import { Platform } from 'react-native';
-import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
-import { unloadImageModel } from '../../modelServices/modelLifecycleBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
@@ -29,6 +27,7 @@ import type { DownloadProvider, ModelDownload } from '../../modelServices/downlo
 import { cancelOwnedImageDownload } from './imageDownloadWorkflowAdapter';
 import { retryImageDownload } from '../../imageDownloadRetry';
 import type { AlertState } from '../../../utils/alertState';
+import { removeMobileLibraryModel } from '../../modelServices/modelLibraryCommands';
 
 /** Presentation port only. The owning provider keeps all control-flow decisions. */
 export type ImageDownloadAlertSink = (state: AlertState) => void;
@@ -150,18 +149,7 @@ export const imageProvider: DownloadProvider = {
   },
 
   async remove(id: string): Promise<void> {
-    const modelId = modelIdOf(id);
-    const entry = findEntry(modelId);
-    if (entry) {
-      await backgroundDownloadService.cancelDownload(entry.downloadId)
-        .catch(err => logger.log(`[DL-SM] image:${modelId} remove: native cancel failed err=${msg(err)}`));
-      useDownloadStore.getState().remove(entry.modelKey);
-    }
-    await unloadImageModel()
-      .catch(err => logger.log(`[DL-SM] image:${modelId} remove: unload failed err=${msg(err)}`));
-    await modelLibrary.deleteImageModel(modelId)
-      .catch(err => logger.log(`[DL-SM] image:${modelId} remove: delete failed err=${msg(err)}`));
-    useAppStore.getState().removeDownloadedImageModel(modelId);
+    await removeMobileLibraryModel('image', modelIdOf(id));
   },
 
   subscribe(onChange: () => void): () => void {

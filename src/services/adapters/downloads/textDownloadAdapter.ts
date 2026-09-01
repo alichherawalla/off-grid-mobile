@@ -22,6 +22,10 @@ import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '
 import { startModelDownload } from '../../startModelDownload';
 import type { DownloadParams } from '../../backgroundDownloadTypes';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
+import {
+  cancelMobileLibraryDownload,
+  removeMobileLibraryModel,
+} from '../../modelServices/modelLibraryCommands';
 
 const TEXT_CAPABILITIES = {
   cancel: true,
@@ -111,13 +115,7 @@ export const textProvider: DownloadProvider = {
   },
 
   async cancel(id: string): Promise<void> {
-    const entry = findEntry(keyOf(id));
-    if (!entry) return;
-    await modelLibrary.cancelBackgroundDownload(entry.downloadId)
-      .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
-    if (entry.mmProjDownloadId) await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId)
-      .catch(err => logger.log(`[DL-SM] ${id} cancel: mmproj native cancel failed err=${msg(err)}`));
-    useDownloadStore.getState().remove(entry.modelKey);
+    await cancelMobileLibraryDownload('text', keyOf(id));
   },
 
   async retry(id: string): Promise<void> {
@@ -154,24 +152,7 @@ export const textProvider: DownloadProvider = {
   },
 
   async remove(id: string): Promise<void> {
-    // keyOf(id) is the modelKey, which for a completed model IS its model.id — so both
-    // deleteModel and removeDownloadedModel receive the right identity.
-    const key = keyOf(id);
-    const entry = findEntry(key);
-    if (entry) {
-      await modelLibrary.cancelBackgroundDownload(entry.downloadId)
-        .catch(err => logger.log(`[DL-SM] ${id} remove: native cancel failed err=${msg(err)}`));
-      // Cancel the mmproj sidecar too (mirrors cancel()) — otherwise removing an in-flight
-      // vision download orphans the mmproj transfer: it keeps occupying a concurrency slot
-      // (never released) and its terminal event has no listener left.
-      if (entry.mmProjDownloadId) await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId)
-        .catch(err => logger.log(`[DL-SM] ${id} remove: mmproj native cancel failed err=${msg(err)}`));
-      useDownloadStore.getState().remove(entry.modelKey);
-    }
-    // Disk is the first durable owner. Do not remove the registry row when deletion fails: doing so
-    // makes the UI claim success while startup discovery registers the same bytes again.
-    await modelLibrary.deleteModel(key);
-    useAppStore.getState().removeDownloadedModel(key);
+    await removeMobileLibraryModel('text', keyOf(id));
   },
 
   subscribe(onChange: () => void): () => void {

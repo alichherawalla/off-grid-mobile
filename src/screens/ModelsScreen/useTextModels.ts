@@ -3,14 +3,14 @@ import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { modelDownloadProjection, useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore } from '../../stores/downloadStore';
 import {
   hardwareService,
   huggingFaceService,
   modelLibrary,
 } from '../../services';
-import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { startModelDownload } from '../../services/startModelDownload';
+import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
@@ -24,6 +24,7 @@ import {
   queryCatalogModels,
   recommendedCatalogModels,
   trendingCatalogModels,
+  uniformDownloadId,
 } from '@offgrid/models';
 
 function mapCuratedModel(m: typeof RECOMMENDED_MODELS[number], details: Record<string, ModelInfo>): ModelInfo {
@@ -57,7 +58,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
 
-  const { downloadedModels, setDownloadedModels, removeDownloadedModel, activeModelId } = useAppStore();
+  const { downloadedModels, setDownloadedModels } = useAppStore();
 
   const loadDownloadedModels = async () => {
     const models = await modelLibrary.getDownloadedModels();
@@ -185,23 +186,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   const handleCancelDownload = async (modelKey: string) => {
-    const entry = useDownloadStore.getState().downloads[modelKey];
-    if (!entry) return;
-    modelDownloadProjection.remove(modelKey);
-    try {
-      await modelLibrary.cancelBackgroundDownload(entry.downloadId);
-      if (entry.mmProjDownloadId) {
-        await modelLibrary.cancelBackgroundDownload(entry.mmProjDownloadId).catch(() => {});
-      }
-    } catch { /* ignore cancel errors */ }
+    await modelDownloadRegistry.cancel(uniformDownloadId('text', modelKey));
   };
 
   const handleDeleteModel = async (modelId: string) => {
-    const model = downloadedModels.find(m => m.id === modelId);
-    if (!model) return;
-    if (activeModelId === model.id) await mobileResidencyIntents.unloadText().catch(() => {});
-    await modelLibrary.deleteModel(model.id);
-    removeDownloadedModel(model.id);
+    if (!downloadedModels.some(model => model.id === modelId)) return;
+    await modelDownloadRegistry.remove(uniformDownloadId('text', modelId));
   };
   // Resolve a catalog file to its on-disk model by the FILE, not the composite id.
   // The download path registers `${modelId}/${fileName}`, but the restart catch-up /

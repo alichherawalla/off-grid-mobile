@@ -4,7 +4,7 @@
  * Unit tests for handler functions in useTextModels that are not covered by
  * the trending-selection or ModelsScreen integration tests:
  * - handleCancelDownload
- * - handleDeleteModel (model-not-found and active-model paths)
+ * - handleDeleteModel presentation intent
  * - runSearch error path
  * - runSearch with code type and no query (CODE_FALLBACK_QUERY)
  */
@@ -74,6 +74,15 @@ const mockCancelBackgroundDownload = jest.fn((_id: number) => Promise.resolve())
 const mockDeleteModel = jest.fn((_id: string) => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockGetDownloadedModels = jest.fn(() => Promise.resolve([]));
+const mockRegistryCancel = jest.fn((_id: string) => Promise.resolve());
+const mockRegistryRemove = jest.fn((_id: string) => Promise.resolve());
+
+jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  modelDownloadRegistry: {
+    cancel: (id: string) => mockRegistryCancel(id),
+    remove: (id: string) => mockRegistryRemove(id),
+  },
+}));
 
 jest.mock('../../../../src/services/modelServices/residencyIntents', () => ({
   mobileResidencyIntents: {
@@ -153,7 +162,7 @@ describe('handleCancelDownload', () => {
       await result.current.handleCancelDownload('org/repo/model.gguf');
     });
 
-    expect(mockCancelBackgroundDownload).toHaveBeenCalledWith(99);
+    expect(mockRegistryCancel).toHaveBeenCalledWith('text:org/repo/model.gguf');
   });
 
   it('clears downloadProgress without calling cancelBackgroundDownload when no downloadId', async () => {
@@ -164,7 +173,7 @@ describe('handleCancelDownload', () => {
       await result.current.handleCancelDownload('nonexistent/key.gguf');
     });
 
-    expect(mockCancelBackgroundDownload).not.toHaveBeenCalled();
+    expect(mockRegistryCancel).toHaveBeenCalledWith('text:nonexistent/key.gguf');
   });
 });
 
@@ -180,11 +189,10 @@ describe('handleDeleteModel', () => {
       await result.current.handleDeleteModel('org/missing-model');
     });
 
-    expect(mockDeleteModel).not.toHaveBeenCalled();
-    expect(mockUnloadTextModel).not.toHaveBeenCalled();
+    expect(mockRegistryRemove).not.toHaveBeenCalled();
   });
 
-  it('unloads the active model before deleting when it is active', async () => {
+  it('sends active deletion to the shared download control plane', async () => {
     const model = { id: 'org/active-model', name: 'Active', fileName: 'active.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
     mockStoreState.downloadedModels = [model];
     mockStoreState.activeModelId = 'org/active-model';
@@ -195,11 +203,10 @@ describe('handleDeleteModel', () => {
       await result.current.handleDeleteModel('org/active-model');
     });
 
-    expect(mockUnloadTextModel).toHaveBeenCalled();
-    expect(mockDeleteModel).toHaveBeenCalledWith('org/active-model');
+    expect(mockRegistryRemove).toHaveBeenCalledWith('text:org/active-model');
   });
 
-  it('deletes without unloading when model is not active', async () => {
+  it('sends inactive deletion to the same shared download control plane', async () => {
     const model = { id: 'org/inactive-model', name: 'Inactive', fileName: 'inactive.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
     mockStoreState.downloadedModels = [model];
     mockStoreState.activeModelId = 'org/some-other-model';
@@ -210,8 +217,7 @@ describe('handleDeleteModel', () => {
       await result.current.handleDeleteModel('org/inactive-model');
     });
 
-    expect(mockUnloadTextModel).not.toHaveBeenCalled();
-    expect(mockDeleteModel).toHaveBeenCalledWith('org/inactive-model');
+    expect(mockRegistryRemove).toHaveBeenCalledWith('text:org/inactive-model');
   });
 });
 
