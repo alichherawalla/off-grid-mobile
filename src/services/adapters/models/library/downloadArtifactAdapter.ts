@@ -17,8 +17,11 @@ import { useDownloadStore } from '../../../../stores/downloadStore';
 import { makeModelKey } from '../../../../utils/modelKey';
 import {
   combinedArtifactProgress,
+  canFinalizeDownload,
   modelProjectorLocalName,
   planTextDownload,
+  reduceFinalizationGate,
+  type FinalizationEvent,
 } from '@offgrid/models';
 
 /**
@@ -462,6 +465,20 @@ export interface WatchDownloadOpts {
   onError?: DownloadErrorCallback;
 }
 
+function applyFinalizationEvent(
+  ctx: Extract<BackgroundDownloadContext, { file: ModelFile }>,
+  event: FinalizationEvent,
+): void {
+  const next = reduceFinalizationGate({
+    primaryCompleted: ctx.mainCompleted,
+    projectorCompleted: ctx.mmProjCompleted,
+    finalizing: Boolean(ctx.isFinalizing),
+  }, event);
+  ctx.mainCompleted = next.primaryCompleted;
+  ctx.mmProjCompleted = next.projectorCompleted;
+  ctx.isFinalizing = next.finalizing;
+}
+
 export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   const { downloadId, modelsDir, backgroundDownloadContext, backgroundDownloadMetadataCallback, onComplete, onError } = opts;
   const ctx = backgroundDownloadContext.get(downloadId);
@@ -534,9 +551,8 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
     // (ctx === null) and finalization to never run after retry.
     // Reset only the main-download flags; mmproj state is left as-is and
     // restored separately via resetMmProjForRetry when the sidecar is retried.
-    ctx.mainCompleted = false;
+    applyFinalizationEvent(ctx, 'primary-failed');
     ctx.mainCompleteHandled = false;
-    ctx.isFinalizing = false;
     onError?.(error);
   };
 
@@ -573,7 +589,12 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       });
       return;
     }
-    ctx.isFinalizing = true;
+    if (!canFinalizeDownload({
+      primaryCompleted: ctx.mainCompleted,
+      projectorCompleted: ctx.mmProjCompleted,
+      finalizing: Boolean(ctx.isFinalizing),
+    })) return;
+    applyFinalizationEvent(ctx, 'finalization-started');
     logger.log('[DownloadDebug] Finalization started', {
       downloadId,
       modelId: ctx.modelId,
@@ -643,7 +664,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
       // would re-adopt + re-finalize it every foreground. Purge it so it can't loop.
       if (!movedNatively) backgroundDownloadService.purgeNativeRecord(downloadId).catch(() => {});
     } catch (error) {
-      ctx.isFinalizing = false;
+      applyFinalizationEvent(ctx, 'finalization-failed');
       logger.error('[DownloadDebug] Finalization failed', {
         downloadId,
         modelId: ctx.modelId,
@@ -660,7 +681,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
   const handleMainComplete = async () => {
     if (ctx.mainCompleteHandled) return;
     ctx.mainCompleteHandled = true;
-    ctx.mainCompleted = true;
+    applyFinalizationEvent(ctx, 'primary-completed');
     logger.log('[DownloadDebug] Main GGUF complete', {
       downloadId,
       modelId: ctx.modelId,
@@ -688,7 +709,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
         ctx.mmProjLocalPath = null;
       }
     }
-    ctx.mmProjCompleted = true;
+    applyFinalizationEvent(ctx, 'projector-completed');
     await tryFinalize();
   };
 
@@ -715,7 +736,7 @@ export function watchBackgroundDownload(opts: WatchDownloadOpts): void {
         reasonCode: event.reasonCode,
       });
       ctx.mmProjLocalPath = null;
-      ctx.mmProjCompleted = true;
+      applyFinalizationEvent(ctx, 'projector-failed');
       // Update the sidecar status in the store before tryFinalize completes
       // and removes the entry; setStatus on a sidecar id only marks
       // mmProjStatus, not the main status (see downloadStore.setStatus).
