@@ -23,21 +23,32 @@
  */
 import { installRealSqlite } from '../../harness/sqliteFake';
 
+jest.mock('../../../src/services/mobileSidecarGeneration', () => ({
+  executeMobileEmbedding: jest.fn(),
+}));
+
 /** A tiny deterministic embedding space, so ranking is the real cosine over real BLOBs. */
 const KEYWORDS = ['zenland', 'capital', 'banana', 'ledger', 'quarterly'];
 const toVec = (text: string): number[] => {
   const lower = String(text).toLowerCase();
-  return KEYWORDS.map((k) => (lower.includes(k) ? 1 : 0));
+  return KEYWORDS.map(k => (lower.includes(k) ? 1 : 0));
 };
 
 type RagModules = {
-  ragService: { indexDocument: (p: Record<string, unknown>) => Promise<unknown> };
+  ragService: {
+    indexDocument: (p: Record<string, unknown>) => Promise<unknown>;
+  };
   retrievalService: {
     searchWithBudget: (p: {
-      projectId: string; query: string; contextLength: number; topK?: number;
+      projectId: string;
+      query: string;
+      contextLength: number;
+      topK?: number;
     }) => Promise<{ chunks: Array<{ content: string }>; truncated: boolean }>;
   };
-  executeToolCall: (call: Record<string, unknown>) => Promise<{ error?: unknown; content?: string }>;
+  executeToolCall: (
+    call: Record<string, unknown>,
+  ) => Promise<{ error?: unknown; content?: string }>;
 };
 
 /** Stand up a fresh real DB with the embedding + extraction boundaries faked, and index `docs`. */
@@ -48,20 +59,24 @@ async function withIndexedDocs(
   const { ragService } = require('../../../src/services/rag');
   const { retrievalService } = require('../../../src/services/rag/retrieval');
   const { embeddingService } = require('../../../src/services/rag/embedding');
+  const {
+    executeMobileEmbedding,
+  } = require('../../../src/services/mobileSidecarGeneration');
   const { documentService } = require('../../../src/services/documentService');
   const { executeToolCall } = require('../../../src/services/tools/handlers');
 
   // The embedding MODEL is native; the vectors it returns are made deterministic so ranking is genuine.
   jest.spyOn(embeddingService, 'load').mockResolvedValue(undefined as never);
-  jest.spyOn(embeddingService, 'getDimension').mockReturnValue(KEYWORDS.length);
-  jest.spyOn(embeddingService, 'embed').mockImplementation((async (t: unknown) => toVec(String(t))) as never);
-  jest.spyOn(embeddingService, 'embedBatch').mockImplementation(
-    (async (ts: unknown) => (ts as string[]).map(toVec)) as never,
+  (executeMobileEmbedding as jest.Mock).mockImplementation(
+    async (inputs: string[]) => inputs.map(toVec),
   );
 
   const extract = jest.spyOn(documentService, 'processDocumentFromPath');
   for (const doc of docs) {
-    extract.mockResolvedValueOnce({ type: 'document', textContent: doc.text } as never);
+    extract.mockResolvedValueOnce({
+      type: 'document',
+      textContent: doc.text,
+    } as never);
     await ragService.indexDocument({
       projectId: doc.projectId,
       filePath: `/docs/${doc.fileName}`,
@@ -91,14 +106,25 @@ describe('what retrieval puts in the prompt', () => {
     // Truncated is the honest signal, and the chunks that DID come back have to fit. Returning everything
     // and letting the prompt builder overflow is how the user's own question gets pushed out of the window.
     expect(result.truncated).toBe(true);
-    const returnedChars = result.chunks.reduce((sum, c) => sum + c.content.length, 0);
+    const returnedChars = result.chunks.reduce(
+      (sum, c) => sum + c.content.length,
+      0,
+    );
     expect(returnedChars).toBeLessThan(huge.length);
   });
 
   it('returns everything when it all fits, and does not claim truncation', async () => {
     const { retrievalService } = await withIndexedDocs([
-      { projectId: 'p1', fileName: 'a.txt', text: 'Zenland capital is Quixotic City.' },
-      { projectId: 'p1', fileName: 'b.txt', text: 'The quarterly ledger balanced.' },
+      {
+        projectId: 'p1',
+        fileName: 'a.txt',
+        text: 'Zenland capital is Quixotic City.',
+      },
+      {
+        projectId: 'p1',
+        fileName: 'b.txt',
+        text: 'The quarterly ledger balanced.',
+      },
     ]);
 
     const result = await retrievalService.searchWithBudget({
@@ -113,10 +139,18 @@ describe('what retrieval puts in the prompt', () => {
     expect(result.chunks.length).toBeGreaterThan(0);
   });
 
-  it('never returns another project\'s documents', async () => {
+  it("never returns another project's documents", async () => {
     const { retrievalService } = await withIndexedDocs([
-      { projectId: 'client-a', fileName: 'a.txt', text: 'Zenland capital is Quixotic City.' },
-      { projectId: 'client-b', fileName: 'b.txt', text: 'Zenland capital is A SECRET FROM CLIENT B.' },
+      {
+        projectId: 'client-a',
+        fileName: 'a.txt',
+        text: 'Zenland capital is Quixotic City.',
+      },
+      {
+        projectId: 'client-b',
+        fileName: 'b.txt',
+        text: 'Zenland capital is A SECRET FROM CLIENT B.',
+      },
     ]);
 
     const result = await retrievalService.searchWithBudget({
@@ -128,7 +162,7 @@ describe('what retrieval puts in the prompt', () => {
     // The query matches BOTH documents on content - only the project scope keeps them apart. This is the
     // one failure in this file that is silent AND unrecoverable: the other client's text is already in the
     // prompt by the time anybody could notice.
-    const joined = result.chunks.map((c) => c.content).join(' ');
+    const joined = result.chunks.map(c => c.content).join(' ');
     expect(joined).toMatch(/Quixotic City/);
     expect(joined).not.toMatch(/SECRET FROM CLIENT B/);
   });
@@ -137,7 +171,11 @@ describe('what retrieval puts in the prompt', () => {
 describe('the search_knowledge_base tool when there is nothing to give the model', () => {
   it('says it found nothing rather than failing', async () => {
     const { executeToolCall } = await withIndexedDocs([
-      { projectId: 'p1', fileName: 'a.txt', text: 'Zenland capital is Quixotic City.' },
+      {
+        projectId: 'p1',
+        fileName: 'a.txt',
+        text: 'Zenland capital is Quixotic City.',
+      },
     ]);
 
     const result = await executeToolCall({
@@ -154,7 +192,11 @@ describe('the search_knowledge_base tool when there is nothing to give the model
 
   it('tells the model there is no knowledge base when no project is open', async () => {
     const { executeToolCall } = await withIndexedDocs([
-      { projectId: 'p1', fileName: 'a.txt', text: 'Zenland capital is Quixotic City.' },
+      {
+        projectId: 'p1',
+        fileName: 'a.txt',
+        text: 'Zenland capital is Quixotic City.',
+      },
     ]);
 
     const result = await executeToolCall({
