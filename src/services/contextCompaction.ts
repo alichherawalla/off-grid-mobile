@@ -14,6 +14,7 @@
  *   Native overhead 5%      (template, tools, and media)
  */
 import { llmService } from './llm';
+import { executeMobileText } from './mobileSidecarGeneration';
 import { CONTEXT_PROMPT_BUDGET_RATIO } from './llmHelpers';
 import { useChatStore } from '../stores/chatStore';
 import { Message } from '../types';
@@ -211,7 +212,10 @@ class ContextCompactionService {
       },
     ];
 
-    return await llmService.generateWithMaxTokens(summaryMessages, summaryTokenBudget);
+    return executeMobileText(
+      summaryMessages.map(message => ({ role: message.role, content: message.content })),
+      { maxTokens: summaryTokenBudget },
+    );
   }
 
   /** Clear persisted compaction state when a conversation is deleted */

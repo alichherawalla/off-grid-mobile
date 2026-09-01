@@ -8,6 +8,7 @@
 
 import { contextCompactionService } from '../../../src/services/contextCompaction';
 import { llmService } from '../../../src/services/llm';
+import { executeMobileText } from '../../../src/services/mobileSidecarGeneration';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { createMessage } from '../../utils/factories';
 import type { Message } from '../../../src/types';
@@ -19,8 +20,11 @@ jest.mock('../../../src/services/llm', () => ({
       Promise.resolve(Math.ceil(text.length / 4)),
     ),
     getPerformanceSettings: jest.fn().mockReturnValue({ contextLength: 2048 }),
-    generateWithMaxTokens: jest.fn().mockResolvedValue('Summary of conversation'),
   },
+}));
+
+jest.mock('../../../src/services/mobileSidecarGeneration', () => ({
+  executeMobileText: jest.fn().mockResolvedValue('Summary of conversation'),
 }));
 
 jest.mock('../../../src/stores/chatStore', () => ({
@@ -32,6 +36,7 @@ jest.mock('../../../src/stores/chatStore', () => ({
 }));
 
 const mockedLlmService = llmService as jest.Mocked<typeof llmService>;
+const mockedExecuteMobileText = executeMobileText as jest.MockedFunction<typeof executeMobileText>;
 const mockedUpdateCompactionState = jest.fn();
 
 /** Mock tokenizer: 10 tokens for 'System', customizable for other text */
@@ -57,7 +62,7 @@ beforeEach(() => {
     Promise.resolve(Math.ceil(text.length / 4)),
   );
   mockedLlmService.getPerformanceSettings.mockReturnValue({ contextLength: 2048 } as any);
-  mockedLlmService.generateWithMaxTokens.mockResolvedValue('Summary of conversation');
+  mockedExecuteMobileText.mockResolvedValue('Summary of conversation');
   mockedUpdateCompactionState.mockClear();
   (useChatStore.getState as jest.Mock).mockReturnValue({
     updateCompactionState: mockedUpdateCompactionState,
@@ -129,7 +134,7 @@ describe('compact', () => {
 
     const result = await compactWith(messages);
 
-    expect(mockedLlmService.generateWithMaxTokens).toHaveBeenCalled();
+    expect(mockedExecuteMobileText).toHaveBeenCalled();
     expect(result[0].role).toBe('system');
     expect(result[0].content).toBe('System');
     const summaryMsg = result.find(m => m.id === 'compaction-summary');
@@ -138,7 +143,7 @@ describe('compact', () => {
     expect(summaryMsg!.content).toContain('Summary of conversation');
   });
 
-  it('calls generateWithMaxTokens with bounded summary token budget', async () => {
+  it('uses the shared generation boundary with a bounded summary token budget', async () => {
     mockTokenCounts(500);
 
     const messages = [
@@ -150,8 +155,8 @@ describe('compact', () => {
 
     await compactWith(messages);
 
-    const callArgs = mockedLlmService.generateWithMaxTokens.mock.calls[0];
-    expect(callArgs[1]).toBe(Math.floor(2048 * 0.12));
+    const callArgs = mockedExecuteMobileText.mock.calls[0];
+    expect(callArgs[1]?.maxTokens).toBe(Math.floor(2048 * 0.12));
   });
 
   it('persists compaction state to chat store', async () => {
@@ -185,7 +190,7 @@ describe('compact', () => {
 
     await compactWith(messages, { previousSummary: 'Previous summary text' });
 
-    const summaryMessages = mockedLlmService.generateWithMaxTokens.mock.calls[0][0];
+    const summaryMessages = mockedExecuteMobileText.mock.calls[0][0];
     const userInput = summaryMessages.find((m: any) => m.role === 'user');
     expect(userInput).toBeDefined();
     expect(userInput!.content).toContain('Previous summary');
@@ -193,7 +198,7 @@ describe('compact', () => {
 
   it('falls back to trim-only on summarization failure', async () => {
     mockTokenCounts(500);
-    mockedLlmService.generateWithMaxTokens.mockRejectedValue(new Error('generation failed'));
+    mockedExecuteMobileText.mockRejectedValue(new Error('generation failed'));
 
     const messages = [
       createMessage({ role: 'system', content: 'System' }),
@@ -247,7 +252,7 @@ describe('compact', () => {
 
   it('falls back to char estimate when tokenizer fails', async () => {
     mockedLlmService.getTokenCount.mockRejectedValue(new Error('tokenizer unavailable'));
-    mockedLlmService.generateWithMaxTokens.mockRejectedValue(new Error('no tokenizer'));
+    mockedExecuteMobileText.mockRejectedValue(new Error('no tokenizer'));
 
     const messages = [
       createMessage({ role: 'system', content: 'System' }),

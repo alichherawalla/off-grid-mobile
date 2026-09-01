@@ -4,10 +4,10 @@ import logger from '../utils/logger';
 import { loadTextModel as admitTextModel } from './modelServices/modelLifecycleBootstrap';
 import { selectedTextModelId } from './modelServices/modelState';
 import {
-  generateStandalone,
   getActiveEngineService,
   isRemoteTextModelActive,
 } from './engines';
+import { executeMobileText } from './mobileSidecarGeneration';
 import {
   buildEnhancementCardContent,
   buildEnhancementMessages,
@@ -126,9 +126,12 @@ export async function enhanceImagePrompt(
     : [];
   const tempMessageId = createStreamingMessage(params.conversationId);
   try {
-    const raw = await generateStandalone(
-      buildEnhancementMessages(params.prompt, context),
-      enhancementTokenWriter(params.conversationId, tempMessageId),
+    const raw = await executeMobileText(
+      buildEnhancementMessages(params.prompt, context).map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+      { onText: enhancementTokenWriter(params.conversationId, tempMessageId) },
     );
     const enhancedPrompt = cleanEnhancedPrompt(raw) || params.prompt;
     await resetTextEngine();

@@ -2,7 +2,7 @@
  * T071 / DEV-B30 — prompt enhancement must NOT think.
  *
  * Device (part37 WIRE-LLAMA-PARAMS, enhancement ON + thinking ON globally): the enhancement
- * generateStandalone request went out with enable_thinking=true, so the model emitted a reasoning chain
+ * enhancement request went out with enable_thinking=true, so the model emitted a reasoning chain
  * ("Thinking Process:…") that became the image prompt — slow, non-streaming, garbage prompt. User's fix
  * spec: "enhancing prompt should not think — that turn shouldn't think." The enhancement is a utility
  * rewrite, not a reasoning task; its request must force enable_thinking=false regardless of the global
@@ -26,7 +26,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const isEnhancementRequest = (p: { messages?: Array<{ role: string; content?: string }> }) =>
-  !!p.messages?.some(m => m.role === 'system' && /image generation prompt/i.test(m.content || ''));
+  !!p.messages?.some(m => m.role === 'system' && /rewrite a short image request/i.test(m.content || ''));
 
 describe('T071 (rendered) — prompt enhancement must not think (DEV-B30)', () => {
   it('sends the enhancement request with enable_thinking !== true even when thinking is ON globally', async () => {

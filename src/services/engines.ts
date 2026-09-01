@@ -2,7 +2,7 @@ import { useAppStore, useRemoteServerStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
 import { providerRegistry } from './adapters/providers';
-import { isLiteRTModel, type DownloadedModel, type Message } from '../types';
+import { isLiteRTModel, type DownloadedModel } from '../types';
 import { predictGgufCapabilities, type PredictedGgufCapabilities } from '../utils/ggufCapabilities';
 import logger from '../utils/logger';
 
@@ -257,69 +257,4 @@ export function isRemoteTextModelActive(): boolean {
   if (!providerRegistry.hasProvider(activeServerId)) return false;
   if (llmService.isModelLoaded()) return false; // a loaded local model wins over a remote server
   return true;
-}
-
-/**
- * One-shot standalone text completion on the ACTIVE text engine — engine-agnostic.
- *
- * For NON-chat callers (image-prompt enhancement) that need a prompt→text completion
- * WITHOUT the chat streaming/turn/store machinery. The two engines have genuinely
- * different one-shot entry shapes — llama takes Message[] via generateResponse; LiteRT
- * runs on a throwaway native session (prepareConversation + generateRaw) so it never
- * pollutes a real chat's KV/history — so this is the SINGLE place that difference lives.
- * Callers depend on this seam, never on a concrete engine (the enhancement path used to
- * hardcode llmService, so a LiteRT text model reported "not loaded" and enhancement was
- * skipped even though the model was resident).
- */
-export async function generateStandalone(
-  messages: Message[],
-  onToken?: (token: string) => void,
-): Promise<string> {
-  // Remote/gateway text model active with no local engine loaded: enhancement used to
-  // fall through to the (unloaded) local llama and throw, so it was silently skipped
-  // (Q8). Route the one-shot through the active provider, streaming content so the UI
-  // can show live progress (B30b). Thinking OFF — enhancement is a utility rewrite.
-  const { activeServerId, activeRemoteTextModelId } = useRemoteServerStore.getState();
-  // A loaded LiteRT model still wins over a selected remote server (isRemoteTextModelActive only
-  // rules out a loaded LLAMA model), so keep the litert guard here.
-  const useRemote = isRemoteTextModelActive() && getActiveEngineService() !== liteRTService;
-  if (useRemote) {
-    const provider = providerRegistry.getProvider(activeServerId!)!;
-    if (activeRemoteTextModelId && provider.getLoadedModelId() !== activeRemoteTextModelId) {
-      await provider.loadModel(activeRemoteTextModelId);
-    }
-    let content = '';
-    await provider.generate(
-      messages,
-      { enableThinking: false },
-      {
-        onToken: (t: string) => { content += t; onToken?.(t); },
-        onComplete: (result) => { if (result?.content) content = result.content; },
-        onError: (err) => { throw err instanceof Error ? err : new Error(String(err)); },
-      },
-    );
-    return content;
-  }
-  if (getActiveEngineService() === liteRTService) {
-    const system = messages.find(m => m.role === 'system');
-    const lastUser = [...messages].reverse().find(m => m.role === 'user');
-    const systemPrompt = typeof system?.content === 'string' ? system.content : '';
-    const userText = typeof lastUser?.content === 'string' ? lastUser.content : '';
-    const { settings } = useAppStore.getState();
-    await liteRTService.prepareConversation('__standalone__', systemPrompt, {
-      samplerConfig: { temperature: settings.liteRTTemperature, topP: settings.liteRTTopP },
-      history: [],
-    });
-    try {
-      return await liteRTService.generateRaw(userText, undefined, { onToken: (t: string) => onToken?.(t) });
-    } finally {
-      liteRTService.invalidateConversation();
-    }
-  }
-  // llama (default engine). Stream tokens for live progress; force thinking OFF so the
-  // enhanced prompt is a clean rewrite, never a leaked reasoning chain (B30/B30b).
-  return llmService.generateResponse(messages, {
-    onStream: onToken ? (data) => { if (typeof (data as { content?: string })?.content === 'string') onToken((data as { content: string }).content); } : () => {},
-    disableThinking: true,
-  });
 }
