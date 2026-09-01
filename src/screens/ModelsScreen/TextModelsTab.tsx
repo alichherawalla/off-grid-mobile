@@ -24,7 +24,7 @@ import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
 import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '@offgrid/models';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
-import { modelLibrary } from '../../services';
+import { repairDownloadedVisionMetadata } from '../../services/modelServices/modelMetadataRepairCommand';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
@@ -110,13 +110,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
   // record that lost it (old link-cleanup bug). The Download Manager has no catalog, so this makes the
   // RECORD the single source both surfaces read — the wrench then shows consistently (device 2026-07-14).
   useEffect(() => {
-    for (const f of modelFiles) {
-      if (!f.mmProjFile) continue;
-      const rec = getDownloadedModel(selectedModel.id, f.name);
-      if (rec?.engine === 'llama' && !rec.isVisionModel) {
-        modelLibrary.markVisionModel(rec.id).catch(() => undefined);
-      }
-    }
+    repairDownloadedVisionMetadata({
+      modelId: selectedModel.id,
+      files: modelFiles,
+      resolveDownloaded: getDownloadedModel,
+    }).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel.id, modelFiles]);
 

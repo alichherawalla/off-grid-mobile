@@ -19,7 +19,11 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
-import { isLiteRTFileName } from '../../utils/modelHelpers';
+import {
+  classifyModelImport,
+  detectImportedImageBackend,
+  importedImageIdentity,
+} from '@offgrid/models';
 
 type ZipImportDeps = {
   addDownloadedImageModel: (model: ONNXImageModel) => void;
@@ -32,7 +36,8 @@ type ZipImportDeps = {
 async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
   const { addDownloadedImageModel, activeImageModelId, selectActiveImageModel, setImportProgress, setAlertState } = deps;
   const imageModelsDir = modelLibrary.getImageModelsDirectory();
-  const modelId = `local_${fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`;
+  const identity = importedImageIdentity(fileName, Date.now());
+  const modelId = identity.id;
   const modelDir = `${imageModelsDir}/${modelId}`;
   const zipPath = `${imageModelsDir}/${modelId}.zip`;
   if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
@@ -48,20 +53,17 @@ async function importImageModelZip(sourceUri: string, fileName: string, deps: Zi
   const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
   const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
   let resolvedModelDir = modelDir;
-  let backend: 'mnn' | 'qnn' | 'coreml' | undefined;
+  const backend = detectImportedImageBackend(dirContents.map(entry => ({
+    name: entry.name,
+    directory: entry.isDirectory(),
+  })));
   if (hasMLModelC || hasNestedMLModelC) {
-    backend = 'coreml';
     resolvedModelDir = await resolveCoreMLModelDir(modelDir);
-  } else {
-    const hasMNN = dirContents.some(f => f.name.endsWith('.mnn'));
-    const hasQNN = dirContents.some(f => f.name.endsWith('.bin') || f.name.includes('qnn'));
-    if (hasMNN) backend = 'mnn';
-    else if (hasQNN) backend = 'qnn';
   }
   await RNFS.unlink(zipPath).catch(() => { });
   const totalSize = await getDirectorySize(resolvedModelDir);
   setImportProgress({ fraction: 0.95, fileName });
-  const modelName = fileName.replaceAll(/\.zip$/gi, '').replaceAll(/[_-]/g, ' ');
+  const modelName = identity.name;
   const imageModel: ONNXImageModel = {
     id: modelId, name: modelName, description: 'Locally imported image model',
     modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: totalSize, backend,
@@ -126,18 +128,6 @@ export function useModelsScreen() {
 
   const isPickingRef = useRef(false);
 
-  const validateImportFiles = (resolvedFiles: Array<{ name: string; uri: string }>): string | null => {
-    const singleLitert = resolvedFiles.length === 1 && isLiteRTFileName(resolvedFiles[0].name);
-    if (singleLitert && !mobileTextEngineControl.isProviderAvailable('litert')) {
-      return 'litert_unsupported';
-    }
-    const allGguf = resolvedFiles.every(f => f.name.toLowerCase().endsWith('.gguf'));
-    const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
-    if (!allGguf && !singleZip && !singleLitert) return 'invalid_format';
-    if (resolvedFiles.length > 2) return 'too_many';
-    return null;
-  };
-
   const handleImportLocalModel = async () => {
     if (isImporting || isPickingRef.current) return;
     isPickingRef.current = true;
@@ -152,7 +142,15 @@ export function useModelsScreen() {
         name: (f.name?.trim() || decodeURIComponent(f.uri.split('/').pop() ?? '') || 'unknown').split('/').pop() || 'unknown',
       }));
 
-      const validationError = validateImportFiles(resolvedFiles);
+      const selection = classifyModelImport({
+        artifacts: resolvedFiles.map(file => ({
+          uri: file.uri,
+          name: file.name,
+          sizeBytes: file.size ?? 0,
+        })),
+        liteRTAvailable: mobileTextEngineControl.isProviderAvailable('litert'),
+      });
+      const validationError = selection.type === 'invalid' ? selection.reason : null;
       if (validationError === 'litert_unsupported') {
         setAlertState(showAlert('Not Supported', 'LiteRT models are only supported on Android.'));
         return;
@@ -171,12 +169,12 @@ export function useModelsScreen() {
         return;
       }
 
-      const firstUri = resolvedFiles[0].uri;
-      const firstFileName = resolvedFiles[0].name;
+      if (selection.type === 'invalid') return;
+      const firstUri = selection.type === 'image-archive' ? selection.archive.uri : selection.primary.uri;
+      const firstFileName = selection.type === 'image-archive' ? selection.archive.name : selection.primary.name;
       setImportProgress({ fraction: 0, fileName: firstFileName });
 
-      const singleZip = resolvedFiles.length === 1 && resolvedFiles[0].name.toLowerCase().endsWith('.zip');
-      if (singleZip) {
+      if (selection.type === 'image-archive') {
         await handleImportImageModelZip(firstUri, firstFileName);
         return;
       }

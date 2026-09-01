@@ -3,6 +3,7 @@ import { modelLibrary } from '../../services';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { DownloadedModel } from '../../types';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
+import { classifyModelImport, isModelProjectorFile } from '@offgrid/models';
 
 export type GgufFileRef = { uri: string; name: string; size: number };
 
@@ -13,26 +14,27 @@ export type GgufImportDeps = {
 };
 
 export function isMmProj(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    lower.includes('mmproj') ||
-    lower.includes('projector') ||
-    (lower.includes('clip') && lower.endsWith('.gguf'))
-  );
+  return isModelProjectorFile(name);
 }
 
 export function classifyGgufPair(
   file1: GgufFileRef,
   file2: GgufFileRef,
 ): { mainFile: GgufFileRef; mmProjFile: GgufFileRef } {
-  if (isMmProj(file1.name)) return { mainFile: file2, mmProjFile: file1 };
-  if (isMmProj(file2.name)) return { mainFile: file1, mmProjFile: file2 };
-  if (file1.size > 0 && file2.size > 0) {
-    return file1.size >= file2.size
-      ? { mainFile: file1, mmProjFile: file2 }
-      : { mainFile: file2, mmProjFile: file1 };
+  const selection = classifyModelImport({
+    artifacts: [
+      { uri: file1.uri, name: file1.name, sizeBytes: file1.size },
+      { uri: file2.uri, name: file2.name, sizeBytes: file2.size },
+    ],
+    liteRTAvailable: true,
+  });
+  if (selection.type !== 'text' || !selection.projector) {
+    return { mainFile: file1, mmProjFile: file2 };
   }
-  return { mainFile: file1, mmProjFile: file2 };
+  return {
+    mainFile: { uri: selection.primary.uri, name: selection.primary.name, size: selection.primary.sizeBytes },
+    mmProjFile: { uri: selection.projector.uri, name: selection.projector.name, size: selection.projector.sizeBytes },
+  };
 }
 
 export function getErrorMessage(error: unknown): string {
@@ -46,9 +48,17 @@ export async function importGgufFiles(
 ): Promise<void> {
   const { setAlertState, setImportProgress, addDownloadedModel } = deps;
 
-  if (files.length === 1) {
-    const resolvedFileName = files[0].name ?? 'unknown';
-    const isLitert = isLiteRTFileName(resolvedFileName);
+  const artifacts = files.map(file => ({
+    uri: file.uri,
+    name: file.name ?? 'unknown',
+    sizeBytes: file.size ?? 0,
+  }));
+  const selection = classifyModelImport({ artifacts, liteRTAvailable: true });
+  if (selection.type !== 'text') throw new Error('Invalid text model import');
+
+  if (!selection.projector) {
+    const resolvedFileName = selection.primary.name;
+    const isLitert = selection.engine === 'litert' || isLiteRTFileName(resolvedFileName);
 
     let liteRTVision = false;
     if (isLitert) {
@@ -66,9 +76,9 @@ export async function importGgufFiles(
     }
 
     const model = await modelLibrary.importLocalModel({
-      sourceUri: files[0].uri,
+      sourceUri: selection.primary.uri,
       fileName: resolvedFileName,
-      sourceSize: files[0].size,
+      sourceSize: selection.primary.sizeBytes,
       engine: isLitert ? 'litert' : undefined,
       liteRTVision: isLitert ? liteRTVision : undefined,
       onProgress: p => {
@@ -80,10 +90,8 @@ export async function importGgufFiles(
     return;
   }
 
-  const file1: GgufFileRef = { uri: files[0].uri, name: files[0].name ?? '', size: files[0].size ?? 0 };
-  const file2: GgufFileRef = { uri: files[1].uri, name: files[1].name ?? '', size: files[1].size ?? 0 };
-
-  const { mainFile, mmProjFile } = classifyGgufPair(file1, file2);
+  const mainFile = selection.primary;
+  const mmProjFile = selection.projector;
 
   const confirmed = await new Promise<boolean>(resolve => {
     Alert.alert(
@@ -104,13 +112,13 @@ export async function importGgufFiles(
   const model = await modelLibrary.importLocalModel({
     sourceUri: mainFile.uri,
     fileName: mainFile.name,
-    sourceSize: mainFile.size,
+    sourceSize: mainFile.sizeBytes,
     onProgress: p => {
       setImportProgress(p);
     },
     mmProjSourceUri: mmProjFile.uri,
     mmProjFileName: mmProjFile.name,
-    mmProjSourceSize: mmProjFile.size,
+    mmProjSourceSize: mmProjFile.sizeBytes,
   });
   addDownloadedModel(model);
   setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));
