@@ -23,6 +23,7 @@ import type {
   OpenAIStreamState,
 } from './openAICompatibleTypes';
 import { remoteAuthorizationHeaders } from '../remoteTransportPolicy';
+import { openAICompatibleCompletionPayload } from '@offgrid/models';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';
 
@@ -90,21 +91,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
     openaiMessages: OpenAIChatMessage[],
     options: GenerationOptions,
   ): Record<string, unknown> {
-    return {
+    return openAICompatibleCompletionPayload({
       model: this.config.modelId,
       messages: openaiMessages,
-      stream: true,
-      ...(options.temperature !== undefined && { temperature: options.temperature }),
+      temperature: options.temperature,
       // max_tokens intentionally omitted — the remote server owns output limits.
       // A client-side cap (default 1024) silently truncates reasoning models that
       // need a larger budget for <think> blocks (Qwen3, DeepSeek-R1, etc).
-      ...(options.topP !== undefined && { top_p: options.topP }),
-      ...(this.modelCapabilities.supportsToolCalling && options.tools && options.tools.length > 0 && {
-        tools: options.tools,
-        tool_choice: 'auto',
-      }),
-      ...options.reasoningWire,
-    };
+      topP: options.topP,
+      tools: this.modelCapabilities.supportsToolCalling ? options.tools : undefined,
+      toolChoice: 'auto',
+      reasoningWire: options.reasoningWire,
+      thinkingKwarg: this.modelCapabilities.acceptsThinkingKwarg
+        ? options.enableThinking !== false
+        : undefined,
+      stream: true,
+    });
   }
 
   async generate(

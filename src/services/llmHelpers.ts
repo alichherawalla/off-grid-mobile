@@ -1,8 +1,10 @@
 import { initLlama, LlamaContext } from 'llama.rn';
 import {
-  REASONING_BUDGET_AUTO,
+  cumulativeTextDelta,
+  isCompletionTruncated,
+  llamaRnCompletionPayload,
+  llamaRnThinkingPayload,
   reasoningMetadataFromChatTemplate,
-  thinkingBudgetPayload,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
 import RNFS from 'react-native-fs';
@@ -16,7 +18,6 @@ import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from '
 
 import { HTP_ENABLED } from '../config/featureFlags';
 
-const RESPONSE_RESERVE = 512;
 /** Prompt compaction target. Output length is the user's model-aware maxTokens setting. */
 export const CONTEXT_PROMPT_BUDGET_RATIO = 0.55;
 const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
@@ -312,24 +313,13 @@ export function llamaReasoningMetadata(
   });
 }
 export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false, reasoningBudget?: number): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek'; thinking_budget_tokens?: number } {
-  if (!enableThinking) return { enable_thinking: false, reasoning_format: 'none' };
-  // Native-first (parse-once at the runtime boundary): Gemma 4 uses its own
-  // <|channel>thought\n...<channel|> format, not DeepSeek's <think> tags. reasoning_format:'auto'
-  // lets llama.cpp detect the model's chat_format and parse reasoning + tool calls NATIVELY —
-  // populating reasoning_content/tool_calls and returning already-filtered content — instead of
-  // forcing 'none' and hand-parsing the raw channel tags ourselves. Safe by construction: finalize
-  // and resolveToolCalls only fall back to our hand-parser when the native fields are empty, so
-  // native wins when it works and the hand-parser is a pure fallback. (Non-Gemma reasoning models
-  // keep the known-good 'deepseek' path.)
-  // The thinking-budget rule (and the llama.rn wire fragment) is the shared @offgrid/models
-  // contract - desktop applies the same rule as reasoning_budget_tokens on llama-server. At the
-  // budget the engine closes the thinking block and the answer still streams.
-  return { enable_thinking: true, reasoning_format: isGemma4 ? 'auto' : 'deepseek', ...thinkingBudgetPayload(true, reasoningBudget ?? REASONING_BUDGET_AUTO) };
+  return llamaRnThinkingPayload(enableThinking, {
+    reasoningFormat: isGemma4 ? 'auto' : 'deepseek',
+    budgetTokens: reasoningBudget,
+  });
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
-  if (!nextValue) return undefined;
-  if (!previousValue) return nextValue;
-  return nextValue.startsWith(previousValue) ? nextValue.slice(previousValue.length) || undefined : nextValue;
+  return cumulativeTextDelta(nextValue, previousValue);
 }
 
 /** Reads the model's trained context length from metadata, or null if unavailable. */
@@ -435,22 +425,18 @@ export async function fitMessagesInBudget(
 // Pure GPU hardware rules live in their own module and need no engine.
 export { BYTES_PER_GB, getGpuLayersForDevice } from './llmDeviceLimits';
 export { validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext } from './llmSafetyChecks';
-const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
 }, options?: { disableCtxShift?: boolean }): Record<string, any> {
-  const requestedMaxTokens = Math.max(1, Math.floor(settings.maxTokens || RESPONSE_RESERVE));
-  return {
-    // Do not impose a second app-owned output ceiling. The setting surface already
-    // uses the model's context maximum; llama.rn owns the actual per-turn fit.
-    n_predict: requestedMaxTokens,
-    temperature: settings.temperature ?? 0.7,
-    top_k: 40,
-    top_p: settings.topP ?? 0.95,
-    penalty_repeat: settings.repeatPenalty ?? 1.1,
-    stop: STOP_TOKENS,
-    ctx_shift: options?.disableCtxShift ? false : true,
-  };
+  return llamaRnCompletionPayload(
+    {
+      maxTokens: settings.maxTokens,
+      temperature: settings.temperature,
+      topP: settings.topP,
+      repetitionPenalty: settings.repeatPenalty,
+    },
+    { disableContextShift: options?.disableCtxShift },
+  );
 }
 /**
  * Was a completion cut off at the n_predict cap (B15), vs finishing on EOS or being STOPPED? SINGLE
@@ -460,8 +446,7 @@ export function buildCompletionParams(settings: {
 export function isTruncatedResult(
   cr: { interrupted?: boolean; stopped_limit?: number | boolean; truncated?: boolean } | null | undefined,
 ): boolean {
-  if (!cr || cr.interrupted === true) return false;
-  return cr.stopped_limit === 1 || cr.stopped_limit === true || cr.truncated === true;
+  return isCompletionTruncated(cr);
 }
 export function recordGenerationStats(
   startTime: number,

@@ -1,4 +1,5 @@
 import { LlamaContext } from 'llama.rn';
+import { isNativeInferenceFailure } from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
@@ -296,15 +297,7 @@ export async function safeCompletion<T>(
     return await completionFn();
   } catch (error: any) {
     const msg = error?.message || String(error) || '';
-    const isNativeCrash =
-      msg.includes('ggml') ||
-      msg.includes('abort') ||
-      msg.includes('SIGABRT') ||
-      msg.includes('tensor') ||
-      msg.includes('alloc') ||
-      msg.includes('out of memory') ||
-      msg.includes('failed to allocate') ||
-      msg.includes('OOM');
+    const isNativeCrash = isNativeInferenceFailure(error);
     if (isNativeCrash) {
       logger.error(`[LLM] Native crash during ${label}: ${msg}`);
       // Try to recover the context by clearing KV cache
