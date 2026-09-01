@@ -6,17 +6,14 @@ import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
 import {
   classifyImageGenerationFailure,
+  imageProgressStatus,
   imageRuntimeNeedsReload,
   isFirstImageRuntimeRun,
 } from '@offgrid/models';
 import { Platform } from 'react-native';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { runRemoteImageGeneration } from './modelServices/remoteImageGeneration';
-import {
-  generationProgressStatus,
-  imagePhaseTransitionLog,
-  resolveMobileImageSettings,
-} from './imageGenerationHelpers';
+import { imagePhaseTransitionLog, resolveMobileImageSettings } from './imageGenerationHelpers';
 import { enhanceImagePrompt } from './imagePromptEnhancement';
 import {
   completedImageGenerationState,
@@ -297,7 +294,7 @@ class ImageGenerationService {
             // Once steps are advancing it IS generating — don't mislabel it "GPU
             // optimization" (which read as if generation hadn't started). On the first run
             // the GPU is still warming, so note that as a one-time aside, not the headline.
-            const status = generationProgressStatus(
+            const status = imageProgressStatus(
               displayStep,
               steps,
               isFirstRun,

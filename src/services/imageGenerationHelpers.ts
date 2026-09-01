@@ -3,7 +3,6 @@ import {
   buildImageEnhancementMessages,
   cleanImageEnhancement,
   describeImageBackend,
-  imageProgressStatus,
   resolveImageGenerationSettings,
 } from '@offgrid/models';
 import {
@@ -54,14 +53,6 @@ export function imagePhaseTransitionLog(
   const status = state.status ? ` (${state.status})` : '';
   const error = state.error ? ` error=${state.error}` : '';
   return `[IMG-SM] phase ${previous} → ${state.phase}${status}${error}`;
-}
-
-export function generationProgressStatus(
-  displayStep: number,
-  totalSteps: number,
-  isFirstRun: boolean,
-): string {
-  return imageProgressStatus(displayStep, totalSteps, isFirstRun);
 }
 
 export function reportEnhancementSkipped(reason: string): void {
