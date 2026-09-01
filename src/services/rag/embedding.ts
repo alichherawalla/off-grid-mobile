@@ -4,13 +4,13 @@ import RNFS from 'react-native-fs';
 import logger from '../../utils/logger';
 import { modelResidencyManager } from '../modelResidency';
 
-const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
+export const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
 const EMBEDDING_DIMENSION = 384;
 const EMBEDDING_CTX_SIZE = 512;
 /** Residency key for the embedding model so it's accounted for in the RAM budget. */
 const EMBEDDING_RESIDENT_KEY = 'embedding';
 /** Approx resident footprint: ~25MB Q8 weights + working set + 512-ctx KV. */
-const EMBEDDING_RESIDENT_MB = 90;
+export const EMBEDDING_RESIDENT_MB = 90;
 /** Bound the native init so a stalled load can't hold the global load lock. */
 const EMBEDDING_LOAD_TIMEOUT_MS = 30000;
 

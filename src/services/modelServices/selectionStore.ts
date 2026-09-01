@@ -1,6 +1,5 @@
 import {
   decodeModelRouteId,
-  type ModelModality,
   type ModelSelectionStore,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
@@ -10,7 +9,9 @@ import { activeModelService } from '../activeModelService';
 import { remoteServerManager } from '../remoteServerManager';
 import { mobileRouteId } from './mobileRoute';
 
-function readRemoteMedia(modality: Exclude<ModelModality, 'text'>): string | null {
+type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
+
+function readRemoteMedia(modality: MobileRemoteMediaModality): string | null {
   const state = useRemoteServerStore.getState();
   const serverId = state.activeRemoteMediaServerIds[modality];
   const server = serverId ? state.servers.find(candidate => candidate.id === serverId) : null;
@@ -43,7 +44,9 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
           })
         : null;
     }
-    const remoteMedia = readRemoteMedia(modality);
+    const remoteMedia = modality === 'image' || modality === 'transcription' || modality === 'voice'
+      ? readRemoteMedia(modality)
+      : null;
     if (remoteMedia) return remoteMedia;
     if (modality === 'image') {
       const state = useAppStore.getState();
@@ -70,6 +73,20 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
           })
         : null;
     }
+    if (modality === 'classifier') {
+      const state = useAppStore.getState();
+      const model = state.settings.classifierModelId
+        ? state.downloadedModels.find(candidate => candidate.id === state.settings.classifierModelId)
+        : null;
+      return model
+        ? mobileRouteId({
+            source: 'local',
+            hostId: model.engine,
+            modality,
+            modelId: model.id,
+          })
+        : null;
+    }
     return null;
   },
 
@@ -84,8 +101,10 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
       } else if (modality === 'transcription') {
         remoteServerManager.clearActiveRemoteMediaModel('transcription');
         useWhisperStore.setState({ downloadedModelId: null, isModelLoaded: false });
-      } else {
+      } else if (modality === 'voice') {
         remoteServerManager.clearActiveRemoteMediaModel('voice');
+      } else if (modality === 'classifier') {
+        useAppStore.getState().updateSettings({ classifierModelId: null });
       }
       return;
     }
@@ -100,12 +119,14 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
           serverId,
           route.modelId,
         );
-      } else {
+      } else if (modality === 'voice') {
         await remoteServerManager.setActiveRemoteMediaModel(
           serverId,
           modality,
           route.modelId,
         );
+      } else {
+        throw new Error(`Remote ${modality} selection is not available on Mobile`);
       }
       return;
     }
@@ -122,6 +143,8 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
         isModelLoaded: false,
         error: null,
       });
+    } else if (modality === 'classifier') {
+      useAppStore.getState().updateSettings({ classifierModelId: route.modelId });
     } else {
       throw new Error('Local voice selection is owned by the Pro voice adapter');
     }

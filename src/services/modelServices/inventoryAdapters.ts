@@ -1,6 +1,5 @@
 import type {
   ModelInventoryAdapter,
-  ModelModality,
   RuntimeModel,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
@@ -20,9 +19,16 @@ import { liteRTService } from '../litert';
 import { WHISPER_MODELS, whisperService } from '../whisperService';
 import { activeModelService } from '../activeModelService';
 import {
+  EMBEDDING_MODEL_FILENAME,
+  EMBEDDING_RESIDENT_MB,
+  embeddingService,
+} from '../rag/embedding';
+import {
   mobileExecutionAdapterId,
   type MobileRouteFacts,
 } from './mobileRoute';
+
+type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
 
 function runtime(
   identity: MobileRouteFacts,
@@ -66,6 +72,8 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
       ? 'vision'
       : 'text',
     capabilities: {
+      textGeneration: true,
+      streaming: true,
       vision: model.engine === 'litert'
         ? model.liteRTVision
         : !!model.isVisionModel || !!model.mmProjPath,
@@ -118,7 +126,7 @@ export const localImageInventoryAdapter: ModelInventoryAdapter = {
       return runtime(identity, {
         name: model.name,
         kind: 'image',
-        capabilities: {},
+        capabilities: { imageGeneration: true },
         residentSizeMB: Math.ceil(model.size / (1024 * 1024)),
         installed: true,
         ready: true,
@@ -147,7 +155,7 @@ export const localWhisperInventoryAdapter: ModelInventoryAdapter = {
       return runtime(identity, {
         name: model?.name ?? modelId,
         kind: 'transcription',
-        capabilities: { audioInput: true },
+        capabilities: { audioInput: true, transcription: true },
         residentSizeMB: model?.size,
         installed: true,
         ready: true,
@@ -199,7 +207,7 @@ function remoteMediaOptions(
 
 function remoteMediaRuntime(
   server: RemoteServer,
-  modality: Exclude<ModelModality, 'text'>,
+  modality: MobileRemoteMediaModality,
   option: { id: string; name: string },
 ): RuntimeModel {
   const identity: MobileRouteFacts = {
@@ -215,7 +223,11 @@ function remoteMediaRuntime(
   return runtime(identity, {
     name: option.name,
     kind: modality,
-    capabilities: modality === 'transcription' ? { audioInput: true } : {},
+    capabilities: modality === 'transcription'
+      ? { audioInput: true, transcription: true }
+      : modality === 'image'
+      ? { imageGeneration: true }
+      : { speechSynthesis: true },
     installed: true,
     ready: selected,
     loaded: selected,
@@ -239,6 +251,8 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
           name: model.name,
           kind: model.capabilities.supportsVision ? 'vision' : 'text',
           capabilities: {
+            textGeneration: true,
+            streaming: true,
             vision: model.capabilities.supportsVision,
             tools: model.capabilities.supportsToolCalling,
             thinking: model.capabilities.supportsThinking,
@@ -267,10 +281,70 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
   },
 };
 
+function embeddingRuntime(modality: 'embedding' | 'tool_selection'): RuntimeModel {
+  return runtime(
+    {
+      source: 'local',
+      hostId: 'llama.rn-sidecar',
+      modality,
+      modelId: EMBEDDING_MODEL_FILENAME,
+    },
+    {
+      name: 'MiniLM tool and memory index',
+      kind: modality,
+      capabilities: modality === 'embedding'
+        ? { embeddings: true }
+        : { toolSelection: true, embeddings: true },
+      residentSizeMB: EMBEDDING_RESIDENT_MB,
+      installed: true,
+      ready: true,
+      loaded: embeddingService.isLoaded(),
+    },
+  );
+}
+
+export const embeddingInventoryAdapter: ModelInventoryAdapter = {
+  id: 'mobile-local-embedding-inventory',
+  async listModels() {
+    return [embeddingRuntime('embedding'), embeddingRuntime('tool_selection')];
+  },
+};
+
+export const classifierInventoryAdapter: ModelInventoryAdapter = {
+  id: 'mobile-local-classifier-inventory',
+  async listModels() {
+    const state = useAppStore.getState();
+    const model = state.settings.classifierModelId
+      ? state.downloadedModels.find(candidate => candidate.id === state.settings.classifierModelId)
+      : null;
+    if (!model) return [];
+    return [runtime(
+      {
+        source: 'local',
+        hostId: model.engine,
+        modality: 'classifier',
+        modelId: model.id,
+      },
+      {
+        name: model.name,
+        kind: 'classifier',
+        capabilities: { classification: true, textGeneration: true },
+        residentSizeMB: Math.ceil(model.fileSize / (1024 * 1024)),
+        installed: true,
+        ready: true,
+        loaded: state.loadedTextModelId === model.id,
+        loading: state.isLoadingModel && state.activeModelId === model.id,
+      },
+    )];
+  },
+};
+
 export const mobileInventoryAdapters: ModelInventoryAdapter[] = [
   localLlamaInventoryAdapter,
   localLiteRTInventoryAdapter,
   localImageInventoryAdapter,
   localWhisperInventoryAdapter,
+  embeddingInventoryAdapter,
+  classifierInventoryAdapter,
   remoteModelInventoryAdapter,
 ];
