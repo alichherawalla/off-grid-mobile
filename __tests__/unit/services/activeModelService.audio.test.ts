@@ -5,9 +5,6 @@
  * letting Audio Mode skip Whisper STT without UI/hooks branching on engine type.
  */
 
-jest.mock('../../../src/stores', () => ({
-  useAppStore: { getState: jest.fn() },
-}));
 jest.mock('../../../src/stores/debugLogsStore', () => ({
   useDebugLogsStore: { getState: jest.fn(() => ({ addLog: jest.fn() })) },
 }));
@@ -41,14 +38,13 @@ jest.mock('../../../src/utils/logger', () => ({
 import { activeModelService } from '../../harness/activeModelLifecycle';
 import { liteRTService } from '../../../src/services/litert';
 import { llmService } from '../../../src/services/llm';
-import { useAppStore } from '../../../src/stores';
+import { useAppStore } from '../../../src/stores/appStore';
 
-const mockedGetState = useAppStore.getState as jest.Mock;
 const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
 const mockedLlm = llmService as jest.Mocked<typeof llmService>;
 
 function setActiveModel(model: any) {
-  mockedGetState.mockReturnValue({
+  useAppStore.setState({
     activeModelId: model?.id ?? null,
     downloadedModels: model ? [model] : [],
   });
