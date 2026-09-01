@@ -6,6 +6,7 @@ import { loadDownloadedModels, saveModelsList } from './modelRegistryStorageAdap
 import {
   inferMobileImageBackend,
   findRegisteredArtifact,
+  imageDirectoryRecoveryAction,
   modelPathBasename,
   parseArtifactSize,
   planRecoveredTextModel,
@@ -189,15 +190,23 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
     for (const item of items) {
       if (!item.isDirectory()) continue;
-      if (registeredIds.has(item.name)) continue;
-      if (activeModelIds.has(item.name)) continue;
-
-      // Legacy recovered_ entry: path matches but ID has recovered_<name>_<ts> prefix.
-      // Migrate to a real ID so the model shows in the UI after the appStore filter lands.
       const legacyEntry = registeredModels.find(
         m => m.modelPath === item.path && m.id.startsWith('recovered_'),
       );
-      if (legacyEntry) {
+      const registeredId = registeredIds.has(item.name);
+      const active = activeModelIds.has(item.name);
+      if (registeredId || active) continue;
+      const action = imageDirectoryRecoveryAction({
+        registeredId,
+        active,
+        registeredPath: registeredPaths.has(item.path),
+        legacyPath: Boolean(legacyEntry),
+        ready: await RNFS.exists(`${item.path}/_ready`),
+        archiveMarker: await RNFS.exists(`${item.path}/_zip_name`),
+      });
+      if (action === 'skip') continue;
+
+      if (action === 'migrate-legacy' && legacyEntry) {
         try {
           await RNFS.writeFile(`${item.path}/_ready`, '', 'utf8').catch(() => {});
           const backend = inferMobileImageBackend(item.name);
@@ -218,13 +227,7 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
         continue;
       }
 
-      // Directory is referenced by a properly-registered model — nothing to do.
-      if (registeredPaths.has(item.path)) continue;
-
-      const readyPath = `${item.path}/_ready`;
-      const hasReady = await RNFS.exists(readyPath);
-
-      if (hasReady) {
+      if (action === 'register-ready') {
         // Unzip completed but registerAndNotify was killed — register now.
         const newModel = await buildRecoveredImageModel(item, inferMobileImageBackend(item.name));
         await addImageModel(newModel);
@@ -232,17 +235,14 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
         continue;
       }
 
-      // No _ready — check if a zip exists to re-unzip (mid-unzip kill).
-      if (await RNFS.exists(`${item.path}/_zip_name`)) {
+      if (action === 'recover-archive') {
         // Non-fatal on unexpected error: leave the dir for the next startup attempt.
         const model = await recoverImageModelFromZipRemnant(item, imageModelsDir).catch(() => null);
         if (model) {
           await addImageModel(model);
           recovered.push(model);
         }
-      } else {
-        // No _ready and no _zip_name — stale artifact from a cancelled or
-        // pre-sentinel download. Delete to free space.
+      } else if (action === 'delete-stale') {
         await RNFS.unlink(item.path).catch(() => {});
       }
     }
