@@ -67,9 +67,7 @@ export async function ensureReadyOrAlert(
    *  re-reads the now-higher REAL per-process budget. */
   onRetry?: () => void,
 ): Promise<boolean> {
-  // Thread onRetry down so a "Load Anyway" on the insufficient-memory alert resumes the
-  // turn after the forced load (the message would otherwise be silently dropped).
-  const outcome = await ensureModelReady(deps, onRetry);
+  const outcome = await ensureModelReady(deps);
   if (outcome.ok) return true;
   logger.log(`[GEN-SM] ${tag} BAIL reason=${outcome.reason} detail=${outcome.detail ?? ''}`);
   const a = modelNotReadyAlert(outcome.reason, outcome.detail);
