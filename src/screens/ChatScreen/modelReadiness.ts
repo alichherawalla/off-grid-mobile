@@ -46,7 +46,7 @@ export interface ReadinessDeps {
  * line records the branch. Every exit is explicit — no silent early-return can
  * collapse into a generic "Failed to load model" again.
  */
-export async function ensureModelReady(deps: ReadinessDeps, _onLoadedResume?: () => void): Promise<ModelReadyOutcome> {
+export async function ensureModelReady(deps: ReadinessDeps): Promise<ModelReadyOutcome> {
   const outcome = await deps.ensureModelLoaded();
   if (!outcome.ok) logger.log(`[GEN-SM] ensureModelReady NOT ready reason=${outcome.reason} detail=${outcome.detail ?? ''}`);
   else logger.log('[GEN-SM] ensureModelReady → ready');

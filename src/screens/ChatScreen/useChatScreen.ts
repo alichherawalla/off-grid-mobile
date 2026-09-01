@@ -208,8 +208,7 @@ export const useChatScreen = () => {
     removeImagesByConversationId,
     navigation,
     setShowSettingsPanel,
-    ensureModelLoaded: async (onLoadedResume?: () => void) =>
-      ensureModelLoadedFn(modelDeps, onLoadedResume),
+    ensureModelLoaded: () => ensureModelLoadedFn(modelDeps),
     forceLoadModel: () => forceLoadModelFn(modelDeps),
     ensureTextModelForChat: () =>
       ensureTextModelForChatFn({

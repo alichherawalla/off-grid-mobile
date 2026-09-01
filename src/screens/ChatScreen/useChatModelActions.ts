@@ -94,10 +94,7 @@ function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'acti
 export async function initiateModelLoad(
   deps: ModelActionDeps,
   alreadyLoading: boolean,
-  /** When the load was requested to satisfy a chat turn, resume that turn after a
-   *  successful "Load Anyway". Non-generation callers (model select / reload) omit it,
-   *  so nothing is auto-resumed for them. */
-  options?: (() => void) | { force?: boolean; onLoadedResume?: () => void },
+  options?: { force?: boolean },
 ): Promise<ModelReadyOutcome> {
   const force = typeof options === 'object' && !!options.force;
   const { activeModel, activeModelId } = deps;
@@ -174,11 +171,10 @@ export async function ensureTextModelForChatFn(deps: {
 
 export async function ensureModelLoadedFn(
   deps: ModelActionDeps,
-  onLoadedResume?: () => void,
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
   if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected', forceLoadAllowed: false };
-  return initiateModelLoad(deps, false, onLoadedResume);
+  return initiateModelLoad(deps, false);
 }
 
 export async function forceLoadModelFn(deps: ModelActionDeps): Promise<ModelReadyOutcome> {
