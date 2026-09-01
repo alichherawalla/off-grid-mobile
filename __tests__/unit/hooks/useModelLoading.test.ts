@@ -10,15 +10,13 @@ import { useModelLoading } from '../../../src/screens/HomeScreen/hooks/useModelL
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+const mockSelectMobileModel = jest.fn().mockResolvedValue(undefined);
+const mockUnloadTextModel = jest.fn().mockResolvedValue(undefined);
+const mockUnloadImageModel = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../src/services', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    loadTextModel: jest.fn().mockResolvedValue(undefined),
-    unloadTextModel: jest.fn().mockResolvedValue(undefined),
-    loadImageModel: jest.fn().mockResolvedValue(undefined),
-    unloadImageModel: jest.fn().mockResolvedValue(undefined),
-  },
+  selectMobileModel: (...args: any[]) => mockSelectMobileModel(...args),
+  unloadTextModel: (...args: any[]) => mockUnloadTextModel(...args),
+  unloadImageModel: (...args: any[]) => mockUnloadImageModel(...args),
 }));
 
 jest.mock('../../../src/components', () => ({
@@ -26,24 +24,6 @@ jest.mock('../../../src/components', () => ({
     visible: true, title, message, buttons: buttons ?? [],
   })),
 }));
-
-const mockSetActiveModelId = jest.fn();
-const mockSetLastTextModelId = jest.fn();
-const mockSetActiveImageModelId = jest.fn();
-jest.mock('../../../src/stores', () => ({
-  useAppStore: {
-    getState: () => ({
-      setActiveModelId: mockSetActiveModelId,
-      setLastTextModelId: mockSetLastTextModelId,
-      setActiveImageModelId: mockSetActiveImageModelId,
-    }),
-  },
-}));
-
-const { activeModelService } = require('../../../src/services');
-const mockUnloadTextModel: jest.Mock = activeModelService.unloadTextModel;
-const mockLoadImageModel: jest.Mock = activeModelService.loadImageModel;
-const mockUnloadImageModel: jest.Mock = activeModelService.unloadImageModel;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,17 +54,21 @@ describe('useModelLoading', () => {
   });
 
   describe('handleSelectImageModel', () => {
-    it('marks the image model active without loading it', () => {
+    it('marks the image model active without loading it', async () => {
       const setters = makeSetters();
       const { result } = renderHook(() => useModelLoading(setters));
 
-      act(() => {
-        result.current.handleSelectImageModel(makeImageModel());
+      await act(async () => {
+        await result.current.handleSelectImageModel(makeImageModel());
       });
 
-      expect(mockSetActiveImageModelId).toHaveBeenCalledWith('img-1');
+      expect(mockSelectMobileModel).toHaveBeenCalledWith({
+        source: 'local',
+        hostId: 'image-runtime',
+        modality: 'image',
+        modelId: 'img-1',
+      });
       expect(setters.setPickerType).toHaveBeenCalledWith(null);
-      expect(mockLoadImageModel).not.toHaveBeenCalled();
     });
   });
 
