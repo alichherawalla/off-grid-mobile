@@ -4,7 +4,7 @@ import { liteRTService } from '../litert';
 import { getActiveEngineService } from '../engines';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { hardwareService } from '../hardware';
-import { modelResidencyManager } from '../modelResidency';
+import { modelResidencyManager } from '../modelServices/residencyBootstrap';
 import { OverridableMemoryError, ImageModelIncompleteError } from '../modelLoadErrors';
 import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
@@ -12,9 +12,9 @@ import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { estimateTextModelMemoryMB } from '../modelMemory';
 import {
-  createSelectedTextModelResolver,
-  selectedTextModelIdOf,
-} from './selectedTextModel';
+  createSelectedModelResolver,
+  selectedModelId,
+} from '@offgrid/models';
 import { activeModelSnapshot } from './snapshot';
 import type { DownloadedModel } from '../../types';
 import type {
@@ -43,7 +43,7 @@ class ActiveModelService {
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
   /** Resolves the selection against the downloaded list, tolerating a rebuilt id (see resolveModel). */
-  private readonly selectedTextModel = createSelectedTextModelResolver({
+  private readonly selectedTextModel = createSelectedModelResolver<DownloadedModel>({
     read: () => {
       const store = useAppStore.getState();
       return { models: store.downloadedModels, selectedId: store.activeModelId };
@@ -67,7 +67,11 @@ class ActiveModelService {
 
   /** The id to load for a turn (see selectedTextModelIdOf for why the order matters). */
   selectedTextModelId(): string | null {
-    return selectedTextModelIdOf(useAppStore.getState());
+    const state = useAppStore.getState();
+    return selectedModelId({
+      activeModelId: state.activeModelId,
+      lastModelId: state.lastTextModelId,
+    });
   }
 
   getActiveModels(): ActiveModelInfo {
