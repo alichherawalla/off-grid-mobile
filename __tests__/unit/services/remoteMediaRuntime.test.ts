@@ -1,7 +1,7 @@
 import { remoteMediaRuntime } from '../../../src/services/adapters/remote/mediaRuntime';
 import * as Keychain from 'react-native-keychain';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { whisperService } from '../../../src/services/whisperService';
+import { executeMobileTranscription } from '../../../src/services/mobileTranscription';
 import RNFS from 'react-native-fs';
 import {
   activeRemoteVoiceServer,
@@ -59,12 +59,14 @@ describe('remoteMediaRuntime', () => {
       imageGeneration: true,
       transcription: true,
       voice: true,
+      embeddings: false,
     });
     expect(remoteServerCapabilities({ selections: { image: '   ' } })).toEqual(
       {
-      imageGeneration: false,
-      transcription: false,
-      voice: false,
+        imageGeneration: false,
+        transcription: false,
+        voice: false,
+        embeddings: false,
       },
     );
   });
@@ -135,7 +137,7 @@ describe('remoteMediaRuntime', () => {
     store.setActiveRemoteMediaServerId('transcription', serverId);
 
     await expect(
-      whisperService.transcribeFile('file:///recording.wav'),
+      executeMobileTranscription('file:///recording.wav'),
     ).resolves.toBe('Private meeting notes');
   });
 

@@ -11,7 +11,6 @@ import { audioRecorderService } from './audioRecorderService';
 import * as whisperModelFiles from './whisperModelFiles';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
 import { WhisperModelDownloads } from './whisperModelDownloads';
-import { executeMobileTranscription } from './mobileTranscription';
 
 // Re-export the platform model catalog. Portable decode and transcript policy lives in
 // @offgrid/models.
@@ -432,18 +431,6 @@ class WhisperService {
 
   isCurrentlyTranscribing(): boolean {
     return this.isTranscribing;
-  }
-
-  /** Compatibility facade. Execution policy and route selection stay in shared GenerationService. */
-  async transcribeFile(
-    filePath: string,
-    options?: {
-      language?: string;
-      onProgress?: (progress: number) => void;
-      signal?: AbortSignal;
-    },
-  ): Promise<string> {
-    return executeMobileTranscription(filePath, options);
   }
 
   // Raw whisper.rn leaf. Callers must enter through GenerationService.
