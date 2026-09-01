@@ -111,11 +111,23 @@ class CoordinatedDownloadBridge {
   cancelQueued(key: string): boolean { const item = this.findByIdentity(key); if (!item) return false; void item.handle.cancel(); return true; }
 
   downloadFileTo(opts: { params: Pick<DownloadParams, 'url' | 'fileName' | 'modelId' | 'totalBytes' | 'modelType' | 'metadataJson' | 'modelKey'>; destPath: string; onProgress?: (bytesDownloaded: number, totalBytes: number) => void; silent?: boolean }): { downloadIdPromise: Promise<string>; promise: Promise<void> } {
-    const downloadIdPromise = this.startDownload(opts.params).then(info => { this.onProgress(info.downloadId, e => opts.onProgress?.(e.bytesDownloaded, e.totalBytes)); return info.downloadId; });
-    const promise = downloadIdPromise.then(id => new Promise<void>((resolve, reject) => {
-      this.onComplete(id, () => { this.moveCompletedDownload(id, opts.destPath).then(() => resolve(), reject); });
-      this.onError(id, event => reject(new Error(event.reason ?? 'Download failed')));
-    }));
+    const downloadIdPromise = this.startDownload(opts.params).then(info => info.downloadId);
+    const promise = downloadIdPromise.then(async id => {
+      const unsubscribe = this.onProgress(id, event =>
+        opts.onProgress?.(event.bytesDownloaded, event.totalBytes),
+      );
+      try {
+        // The shared handle owns terminal state and replays it to late consumers.
+        // Native completion can happen before startDownload resolves, so a new
+        // bridge listener is not a safe completion source.
+        const holder = this.active.get(id);
+        if (!holder) throw new Error(`Download not found: ${id}`);
+        await holder.handle.completion;
+        await this.moveCompletedDownload(id, opts.destPath);
+      } finally {
+        unsubscribe();
+      }
+    });
     return { downloadIdPromise, promise };
   }
 

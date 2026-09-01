@@ -12,6 +12,7 @@ import {
   SLOTS,
 } from '../../../src/bootstrap/slotRegistry';
 import { resetStores } from '../../utils/testHelpers';
+import { selectMobileModel } from '../../../src/services/modelServices';
 
 jest.mock('@react-native-community/slider', () => ({
   __esModule: true,
@@ -105,8 +106,17 @@ describe('model settings surface parity', () => {
     );
   });
 
-  it('shows the same selected STT model on both settings surfaces', () => {
-    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+  it('shows the same selected STT model on both settings surfaces', async () => {
+    useWhisperStore.setState({
+      downloadedModelId: 'base.en',
+      presentModelIds: ['base.en'],
+    });
+    await selectMobileModel({
+      source: 'local',
+      hostId: 'whisper.rn',
+      modality: 'transcription',
+      modelId: 'base.en',
+    });
     const chatSettings = render(
       <GenerationSettingsModal visible onClose={() => {}} />,
     );
