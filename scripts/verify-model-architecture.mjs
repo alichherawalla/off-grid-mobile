@@ -175,6 +175,27 @@ for (const file of files) {
   }
 
   if (
+    fileName === 'src/services/imageGenerationHelpers.ts' &&
+    /\.slice\(-10\)|\.slice\(0,\s*500\)|function\s+readableText\b/.test(text)
+  ) {
+    report('image-enhancement-context-policy-is-shared', fileName, source, source, 'local:context-selection-policy')
+  }
+
+  if (
+    fileName === 'pro/sync/textModelTransferAdapter.ts' &&
+    /function\s+(?:manifest|modelIdWithoutFile)\b|kind\s*:\s*files\.length/.test(text)
+  ) {
+    report('model-transfer-manifest-policy-is-shared', fileName, source, source, 'local:text-manifest-policy')
+  }
+
+  if (
+    fileName === 'pro/sync/imageModelTransferAdapter.ts' &&
+    /256\s*\*\s*1024\s*\*\s*1024|IMAGE_ARCHIVE_RESERVE_BYTES/.test(text)
+  ) {
+    report('model-transfer-reserve-policy-is-shared', fileName, source, source, 'local:image-archive-reserve')
+  }
+
+  if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
   ) {
