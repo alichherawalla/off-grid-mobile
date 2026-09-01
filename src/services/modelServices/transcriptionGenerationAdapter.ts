@@ -10,7 +10,7 @@ import {
   cleanTranscription,
 } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
-import { remoteMediaRuntime } from '../remoteMediaRuntime';
+import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
 import { whisperService } from '../whisperService';
 
 function transcriptionInput(request: GenerationRequest) {

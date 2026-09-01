@@ -12,7 +12,7 @@ import type {
   RemoteServer,
 } from '../../types';
 import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
-import { displayModelName } from '../../stores/remoteServerHelpers';
+import { displayModelName } from '../adapters/remote/serverDiscovery';
 import { providerRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';

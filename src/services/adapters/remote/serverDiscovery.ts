@@ -11,14 +11,14 @@ import {
   RemoteMediaModelIds,
   RemoteModelCatalog,
   ServerTestResult,
-} from '../types';
-import { testEndpoint, detectServerType } from '../services/httpClient';
-import logger from '../utils/logger';
+} from '../../../types';
+import { testEndpoint, detectServerType } from '../../httpClient';
+import logger from '../../../utils/logger';
 import {
   fetchModelCapabilities,
   isGenerativeModel,
-} from './remoteModelCapabilities';
-import { readOffGridDesktopModelState } from '../services/offGridDesktopModels';
+} from './modelCapabilityDiscovery';
+import { readOffGridDesktopModelState } from './offGridDesktopModels';
 import {
   declaredRemoteCapability,
   defaultRemoteSelections,

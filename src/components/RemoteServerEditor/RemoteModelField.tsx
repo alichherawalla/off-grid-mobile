@@ -7,7 +7,7 @@ import { SPACING, TYPOGRAPHY } from '../../constants';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import type { RemoteModelOption } from '../../types';
-import { displayModelName } from '../../stores/remoteServerHelpers';
+import { displayModelName } from '../../services/adapters/remote/serverDiscovery';
 
 interface Props {
   label: string;

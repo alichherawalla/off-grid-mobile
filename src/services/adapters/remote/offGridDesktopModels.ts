@@ -5,10 +5,11 @@ import type {
   RemoteModelCategory,
   RemoteModelOption,
   RemoteServer,
-} from '../types';
+} from '../../../types';
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
   remoteAuthorizationHeaders,
+  remoteModalityForKind,
 } from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -35,11 +36,7 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 function categoryForKind(kind: string): GatewayCategory {
-  if (kind === 'text' || kind === 'vision' || kind === 'chat') return 'text';
-  if (kind === 'image') return 'image';
-  if (kind === 'voice' || kind === 'speech') return 'voice';
-  if (kind === 'transcription') return 'transcription';
-  return null;
+  return kind === 'text' ? 'text' : remoteModalityForKind(kind);
 }
 
 function modelFiles(value: unknown): string[] {

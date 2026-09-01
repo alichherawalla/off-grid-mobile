@@ -21,7 +21,7 @@ import {
   testServerConnection,
   testEndpointAndGetModels,
   fetchModelsFromServer,
-} from './remoteServerHelpers';
+} from '../services/adapters/remote/serverDiscovery';
 
 interface RemoteServerState {
   /** Configured remote servers */

@@ -10,10 +10,10 @@ import {
   OpenAICompatibleProvider,
 } from './adapters/providers/openAICompatibleProvider';
 import { providerRegistry } from './adapters/providers/registry';
-import { capabilitiesUnknown } from '../stores/remoteModelCapabilities';
+import { capabilitiesUnknown } from './adapters/remote/modelCapabilityDiscovery';
 import logger from '../utils/logger';
 import { remoteAuthorizationHeaders } from '@offgrid/models';
-import { activateOffGridDesktopModel } from './offGridDesktopModels';
+import { activateOffGridDesktopModel } from './adapters/remote/offGridDesktopModels';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
 

@@ -1,5 +1,5 @@
-import { remoteServerManager } from './remoteServerManager';
-import type { RemoteMediaModelIds, RemoteServer } from '../types';
+import { remoteServerManager } from '../../remoteServerManager';
+import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
 import { resolveRemoteRoute } from '@offgrid/models';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 

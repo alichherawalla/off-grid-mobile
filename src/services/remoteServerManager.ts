@@ -33,7 +33,7 @@ import {
   canReconcileCredentialedEndpoint,
   remoteAuthorizationHeaders,
 } from '@offgrid/models';
-import { activateOffGridDesktopModel } from './offGridDesktopModels';
+import { activateOffGridDesktopModel } from './adapters/remote/offGridDesktopModels';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
 const trimSlash = (url: string): string => {

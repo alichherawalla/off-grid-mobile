@@ -6,13 +6,13 @@
  * from Ollama and LM Studio servers.
  */
 
-import logger from '../utils/logger';
+import logger from '../../../utils/logger';
 import {
   reasoningMetadataForOllama,
   reasoningMetadataFromChatTemplate,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
-import { templateEmitsReasoning, REASONING_DELIMITERS } from '../utils/messageContent';
+import { templateEmitsReasoning, REASONING_DELIMITERS } from '../../../utils/messageContent';
 
 export interface RemoteModelInfo {
   contextLength: number;

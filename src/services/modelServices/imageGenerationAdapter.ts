@@ -7,7 +7,7 @@ import type {
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { localDreamGeneratorService } from '../localDreamGenerator';
-import { remoteMediaRuntime } from '../remoteMediaRuntime';
+import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
 
 type PendingChunk = { value?: GenerationChunk; error?: unknown; done?: boolean };
 

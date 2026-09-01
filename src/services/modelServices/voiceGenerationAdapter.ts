@@ -7,7 +7,7 @@ import type {
   RuntimeModel,
 } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
-import { synthesizeRemoteVoiceFile } from '../remoteVoicePlayback';
+import { synthesizeRemoteVoiceFile } from '../adapters/remote/voicePlayback';
 
 export interface MobileLocalVoicePort {
   listModels(): RuntimeModel[] | Promise<RuntimeModel[]>;
