@@ -75,6 +75,7 @@ jest.mock('../../../src/services/modelServices', () => {
 import { ragService, retrievalService } from '../../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../../src/services/adapters/rag/ragDatabaseAdapter';
 import { cosineSimilarity } from '@offgrid/rag';
+import { decodeModelRouteId } from '@offgrid/models';
 import { documentService } from '../../../src/services/documentService';
 import { mobileGenerationService } from '../../../src/services/modelServices';
 
@@ -110,8 +111,17 @@ describe('Embedding Flow Integration', () => {
 
       // Model-facing work uses the shared typed contract; lifecycle stays behind that contract.
       expect(mockSharedGenerate).toHaveBeenCalledWith({
-        operation: { type: 'embedding', inputs: expect.any(Array) },
+        operation: {
+          type: 'embedding',
+          inputs: ['Machine learning is a subset of artificial intelligence.\n\nDeep learning uses neural networks with many layers.'],
+        },
+        routeId: expect.any(String),
         allowFallback: false,
+      });
+      expect(decodeModelRouteId(mockSharedGenerate.mock.calls[0][0].routeId)).toEqual({
+        adapterId: 'mobile:local:llama.rn-sidecar:embedding',
+        providerId: 'llama.rn-sidecar',
+        modelId: 'all-MiniLM-L6-v2-Q8_0.gguf',
       });
 
       // Verify embeddings were inserted into the database
@@ -212,7 +222,13 @@ describe('Embedding Flow Integration', () => {
       expect(total).toBe(2);
       expect(mockSharedGenerate).toHaveBeenCalledWith({
         operation: { type: 'embedding', inputs: ['Old chunk one', 'Old chunk two'] },
+        routeId: expect.any(String),
         allowFallback: false,
+      });
+      expect(decodeModelRouteId(mockSharedGenerate.mock.calls[0][0].routeId)).toEqual({
+        adapterId: 'mobile:local:llama.rn-sidecar:embedding',
+        providerId: 'llama.rn-sidecar',
+        modelId: 'all-MiniLM-L6-v2-Q8_0.gguf',
       });
 
       // Verify embeddings were stored

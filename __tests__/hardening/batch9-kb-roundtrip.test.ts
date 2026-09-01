@@ -199,7 +199,9 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
     expect(mockMemDb._rows('rag_documents')[0]).toMatchObject({ id: docId, project_id: PROJECT, name: 'solar.txt', size: 4200, enabled: 1 });
     expect(mockMemDb._rows('rag_chunks').length).toBeGreaterThan(0);
     expect(mockMemDb._rows('rag_embeddings').length).toBe(mockMemDb._rows('rag_chunks').length);
-    expect(stages).toEqual(['extracting', 'chunking', 'indexing', 'embedding', 'done']);
+    // Embeddings are computed before the atomic chunk/index write, so a failed
+    // embedding cannot leave indexed chunks without vectors.
+    expect(stages).toEqual(['extracting', 'chunking', 'embedding', 'indexing', 'done']);
 
     // Case 15/16: the real filename + size come back from the list query.
     const docs = await ragService.getDocumentsByProject(PROJECT);
