@@ -47,7 +47,7 @@ jest.mock('react-native-zeroconf', () => {
 import { McpToolExtension } from '@offgrid/pro/mcp/McpToolExtension';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { useRemoteServerStore } from '@offgrid/core/stores';
-import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/pro/mcp/schemaTrim';
+import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/models';
 import type { McpTool } from '@offgrid/pro/mcp/types';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
 
