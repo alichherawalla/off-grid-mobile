@@ -13,13 +13,13 @@ import {
   buildGenerationMetaImpl,
   buildToolLoopHandlersImpl,
   prepareGenerationImpl,
-  generateResponseImpl,
   type GenerationWithToolsRequest,
 } from './generationServiceHelpers';
 import {
   generateRemoteResponseImpl,
   generateRemoteWithToolsImpl,
 } from './generationRemoteHelpers';
+import { generateSharedChatResponse } from './modelServices/sharedGenerationFacade';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };
@@ -61,6 +61,7 @@ class GenerationService {
   private pendingStop: Promise<void> | null = null;
   private queueProcessor: QueueProcessor | null = null;
   private currentRemoteAbortController: AbortController | null = null;
+  private currentSharedAbortController: AbortController | null = null;
   private remoteTimeToFirstToken: number | undefined;
 
   // Token batching — collect tokens and flush to UI at a controlled rate
@@ -152,11 +153,7 @@ class GenerationService {
     onFirstToken?: () => void,
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
-    // Route to remote provider if active
-    if (this.isUsingRemoteProvider()) {
-      return this.generateRemoteResponse(conversationId, messages, onFirstToken);
-    }
-    return generateResponseImpl(this, { conversationId, messages, onFirstToken });
+    return generateSharedChatResponse(this, { conversationId, messages, onFirstToken });
   }
 
   /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
@@ -244,6 +241,8 @@ class GenerationService {
     // failed completion has reset `isGenerating`; Stop/Eject must still prevent its retry.
     this.abortRequested = true;
     this.generationAttempt += 1;
+    this.currentSharedAbortController?.abort();
+    this.currentSharedAbortController = null;
     if (!this.state.isGenerating) {
       // Stop generation on every engine through the registry — no engine enumeration leaked into the caller.
       await stopAllTextEngines();
