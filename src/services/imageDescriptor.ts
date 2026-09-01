@@ -1,4 +1,4 @@
-import { ImageModelDescriptor } from '../screens/ModelsScreen/types';
+import type { ImageModelDescriptor } from './imageModelDownloadTypes';
 
 /** Reconstruct an ImageModelDescriptor from a download entry's persisted metadata — the SINGLE
  *  source for "re-download this image model from what we remembered about it". Used by the iOS
