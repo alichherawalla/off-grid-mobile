@@ -1,6 +1,14 @@
 # Model Routing & Orchestration — Design Plan
 
-Status: **proposal, for review** · Owner: TBD · Last updated: 2026-06-20
+Status: **historical design proposal** · Superseded 2026-09-01
+
+The implemented control plane is in `@offgrid/models`. See
+[`shared/packages/models/README.md`](../../../shared/packages/models/README.md) and
+[`mobile/docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Names below such as
+`modelOrchestrator`, app-local `activeModelService`, `ProviderRegistry`, and direct
+`llmService.generateResponse()` describe the earlier proposal. Do not implement or restore them as
+parallel policy owners. Mobile UI sends intent; Shared chat, generation, selection, and residency
+services choose the route and lifecycle; Mobile adapters perform native I/O.
 
 ## 1. Problem
 

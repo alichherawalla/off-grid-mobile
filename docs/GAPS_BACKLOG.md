@@ -39,6 +39,52 @@ candidate head passes the full repository matrices and the following live journe
 Do not mark the full migration complete from static gates or focused suites alone. Record exact app,
 device, model, route, and log evidence before closing this entry.
 
+### QA sweep evidence - 2026-09-01
+
+The current combined working tree passes these code gates:
+
+- Shared models TypeScript and architecture gates;
+- Mobile TypeScript and both model-architecture gates, with zero temporary items;
+- Mobile dependency-cruiser: 563 modules and 2,989 dependencies, with zero violations;
+- Shared models build and 329 tests;
+- 17 of 19 selected Mobile cross-service suites: 62 of 64 tests passed.
+
+The passing Mobile journeys cover canonical local/remote model selection, Stop reaching LiteRT,
+Resend on llama.cpp and LiteRT, Edit and Resend, cancelled-image Resend, local image cancellation and
+progress, iOS image-download recovery, balanced/aggressive residency matrices, tool calls, bounded
+project RAG retrieval, voice-mode STT/tool/answer, voice-mode image Resend, state sync, knowledge-file
+sync, and mesh-residency UI truth.
+
+This is still not live or release evidence. No physical iOS or Android journey, remote image server,
+Kokoro runtime, native model load/force-load/eject, native download interruption, packaged Desktop,
+or cross-device replay was exercised in this sweep. The earlier iOS Resend freeze has rendered-test
+coverage for resend routing and cancellation, but it has not been reproduced and cleared on a
+physical iPhone with native inference and logs.
+
+Two focused checks are open and have their own entries below. Jest also reported an open asynchronous
+handle after the selected suite. Re-run that group with `--detectOpenHandles` before using it as a
+stable release gate.
+
+## Stop during a tool turn still renders a false "No response" card - 2026-09-01
+
+**Verdict: fix-the-guard.**
+
+`__tests__/integration/generation/stopMidTurnThenSend.rendered.redflow.test.tsx` fails because Stop
+leaves a visible "No response" card. The busy-service assertion passes, so the native/session unwind
+is no longer reported as busy, but the interrupted empty result still reaches the wrong empty-answer
+presentation. The acceptance case is: Stop during the delayed tool turn preserves any partial output,
+shows no busy or empty-response error, restores Send, and the immediate next turn streams normally.
+
+## Orphan-project RAG integration check still calls the deleted chat function - 2026-09-01
+
+**Verdict: migrate-the-test.**
+
+`__tests__/integration/projects/orphanChatInjectsKbTool.redflow.test.ts` fails before the journey starts
+because it calls the removed `startGenerationFn` internal seam. This does not establish a current RAG
+product regression. Migrate it through the real Shared `ChatSessionService` and rendered Mobile send
+path. Keep the intended assertion: a conversation whose project was deleted must not offer
+`search_knowledge_base`.
+
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
 
 **Verdict: instrument-and-revisit.**

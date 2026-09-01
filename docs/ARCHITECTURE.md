@@ -16,9 +16,17 @@ React Native inference engines, native storage, keychain, network, and operating
 screens and stores render shared projections and send intents. They must not choose providers,
 fallbacks, budgets, reasoning dialects, retry rules, or residency actions.
 
-Some implementation paths later in this document predate this consolidation. Where they name an
-app-local service as the policy owner, treat that service as an adapter or legacy name, not as a
-second control plane.
+The current Mobile composition uses the Shared `LLMService`, `GenerationService`,
+`ChatSessionService`, `ModelResidencyManager`, image application service, and download workflow.
+Files such as `src/services/llm.ts`, image runtime files, Whisper/Kokoro bridges, RNFS adapters, and
+background-download bridges are native transport adapters. `src/screens/ChatScreen` renders session
+events and sends commands; it is not a generation router. Zustand model/download fields are
+projections of Shared state, not independent policy owners.
+
+Some implementation paths later in this document predate this consolidation. Where they name
+`generationService`, `activeModelService`, `ProviderRegistry`, or another app-local service as the
+policy owner, that text is historical and must not be used to add a second control plane. The Shared
+package README and the architecture gates define the current boundary.
 
 ---
 
