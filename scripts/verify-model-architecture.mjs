@@ -276,6 +276,19 @@ for (const file of files) {
   }
 
   if (
+    /^src\/screens\/ModelsScreen\/(?:useModelsScreen|importHelpers|TextModelsTab)\.tsx?$/.test(fileName) &&
+    /(?:lower\.includes\(['"](?:mmproj|projector)['"]\)|endsWith\(['"]\.(?:zip|gguf|litertlm)['"]\)|modelLibrary\.markVisionModel)/.test(text)
+  ) {
+    report(
+      'model-library-import-and-repair-commands-are-shared',
+      fileName,
+      source,
+      source,
+      'screen-owned import classification or metadata repair',
+    )
+  }
+
+  if (
     fileName === 'src/screens/ModelsScreen/useImageModels.ts' &&
     /(?:resumeImageDownload|modelDownloadProjection|resumingDownloadKeysRef)/.test(text)
   ) {
