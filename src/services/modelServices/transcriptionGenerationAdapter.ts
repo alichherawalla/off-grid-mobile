@@ -9,19 +9,79 @@ import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { remoteMediaRuntime } from '../remoteMediaRuntime';
 import { cleanTranscription, whisperService } from '../whisperService';
 
-function transcriptionInput(request: GenerationRequest): {
-  fileUri: string;
-  language?: string;
-} {
+function transcriptionInput(request: GenerationRequest) {
   if (request.operation?.type !== 'transcription') {
     throw new TypeError('The transcription adapter requires a transcription operation');
   }
-  const fileUri = request.operation.audio.uri;
-  if (!fileUri) throw new TypeError('The transcription adapter requires an audio file URI');
-  return {
-    fileUri,
-    language: request.operation.language,
+  return request.operation;
+}
+
+async function* realtimeTranscriptionChunks(
+  model: RuntimeModel,
+  request: GenerationRequest,
+): AsyncIterable<GenerationChunk> {
+  const operation = transcriptionInput(request);
+  if (operation.audio.type !== 'microphone') {
+    throw new TypeError('Realtime transcription requires a microphone input');
+  }
+  if (model.source !== 'local') {
+    throw new Error('The selected remote transcription route does not support a live microphone');
+  }
+  const selectedPath = whisperService.getModelPath(model.id);
+  if (whisperService.getLoadedModelPath() !== selectedPath) {
+    throw new Error(`The selected Whisper model is not loaded: ${model.id}`);
+  }
+
+  const pending: GenerationChunk[] = [];
+  let wake: (() => void) | null = null;
+  let completed = false;
+  const push = (chunk: GenerationChunk) => {
+    pending.push(chunk);
+    const listener = wake;
+    wake = null;
+    listener?.();
   };
+  const abort = () => {
+    completed = true;
+    whisperService.forceReset().catch(() => undefined);
+    const listener = wake;
+    wake = null;
+    listener?.();
+  };
+  request.signal?.addEventListener('abort', abort, { once: true });
+  try {
+    await whisperService.startRealtimeTranscription(result => {
+      push({
+        output: {
+          type: 'transcription',
+          text: cleanTranscription(result.text),
+          language: operation.language,
+          partial: result.isCapturing,
+          processTime: result.processTime,
+          recordingTime: result.recordingTime,
+        },
+        ...(!result.isCapturing ? { finishReason: 'stop' as const } : {}),
+      });
+      if (!result.isCapturing) completed = true;
+    }, {
+      language: operation.language,
+      maxLen: operation.maxLength,
+      transcribeFallback: filePath => whisperService.transcribeFileRaw(filePath, {
+        language: operation.language,
+        signal: request.signal,
+      }),
+    });
+    push({ progress: { completed: 1, total: 1 } });
+    while (!completed || pending.length) {
+      if (!pending.length && !completed) {
+        await new Promise<void>(resolve => { wake = resolve; });
+      }
+      const chunk = pending.shift();
+      if (chunk) yield chunk;
+    }
+  } finally {
+    request.signal?.removeEventListener('abort', abort);
+  }
 }
 
 async function* transcriptionChunks(
@@ -29,6 +89,12 @@ async function* transcriptionChunks(
   request: GenerationRequest,
 ): AsyncIterable<GenerationChunk> {
   const input = transcriptionInput(request);
+  if (input.audio.type === 'microphone') {
+    yield* realtimeTranscriptionChunks(model, request);
+    return;
+  }
+  const fileUri = input.audio.uri;
+  if (!fileUri) throw new TypeError('The transcription adapter requires an audio file URI');
   let text: string;
   if (model.source === 'local') {
     const selectedPath = whisperService.getModelPath(model.id);
@@ -40,7 +106,7 @@ async function* transcriptionChunks(
     let completed = false;
     let failure: unknown;
     let transcript = '';
-    const operation = whisperService.transcribeFileRaw(input.fileUri, {
+    const operation = whisperService.transcribeFileRaw(fileUri, {
       language: input.language,
       signal: request.signal,
       onProgress: progress => {
@@ -77,7 +143,7 @@ async function* transcriptionChunks(
     text = cleanTranscription(await remoteMediaRuntime.transcribe(
       server,
       {
-        fileUri: input.fileUri,
+        fileUri,
         model: model.id,
         language: input.language === 'auto' ? undefined : input.language,
       },

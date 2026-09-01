@@ -5,7 +5,7 @@ import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
 import {
   cancelMobileTranscription,
-  executeMobileTranscription,
+  startMobileRealtimeTranscription,
 } from '../services/mobileTranscription';
 
 /** Safely call a state setter only if the component is still mounted. */
@@ -240,7 +240,7 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
 
       logger.log('[Whisper] Starting realtime transcription...');
 
-      await whisperService.startRealtimeTranscription((result) => {
+      await startMobileRealtimeTranscription((result) => {
         logger.log('[Whisper] Transcription result:', result.isCapturing, result.text?.slice(0, 50));
 
         if (isCancelled.current || !mountedRef.current) return;
@@ -273,9 +273,6 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
         }
       }, {
         language: transcriptionLanguage,
-        transcribeFallback: filePath => executeMobileTranscription(filePath, {
-          language: transcriptionLanguage,
-        }),
       });
       if (startNonce.current !== currentNonce || !mountedRef.current) return;
       // Do not tell the person to speak before both the fallback recorder and

@@ -18,13 +18,13 @@ import { WhisperModelDownloads } from './whisperModelDownloads';
 // `import { WHISPER_MODELS, cleanTranscription } from './whisperService'` keeps working.
 export { WHISPER_MODELS, cleanTranscription } from './whisperModels';
 
-interface TranscriptionResult {
+export interface RealtimeTranscriptionResult {
   text: string;
   isCapturing: boolean;
   processTime: number;
   recordingTime: number;
 }
-type TranscriptionCallback = (result: TranscriptionResult) => void;
+type TranscriptionCallback = (result: RealtimeTranscriptionResult) => void;
 
 class WhisperService {
   private context: WhisperContext | null = null;
