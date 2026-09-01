@@ -66,6 +66,30 @@ for (const file of files) {
     fileName === 'pro/ui/McpServersScreen.tsx' ||
     fileName === 'pro/audio/ui/AudioMessageBubble/index.tsx'
 
+  if (/\bresidencyMode\b/.test(text)) {
+    report('runtime-model-has-one-lifecycle-vocabulary', fileName, source, source, 'deprecated:residencyMode')
+  }
+
+  if (
+    fileName === 'src/stores/appStore.ts' &&
+    /(?:temperature:\s*0\.7|maxTokens:\s*1024|topP:\s*0\.9|repeatPenalty:\s*1\.1|liteRTMaxTokens:\s*4096)/.test(text)
+  ) {
+    report('model-configuration-defaults-are-shared', fileName, source, source, 'local:text-default')
+  }
+
+  if (
+    /^(?:src\/services\/llmSafetyChecks|src\/services\/whisperModelFiles|pro\/sync\/modelPackageSink)\.ts$/.test(fileName) &&
+    /\b(?:GGUF_MAGIC|MIN_GGUF_FILE_SIZE|MIN_MODEL_FILE_SIZE)\b|\.corruption\b|\.size\s*[<>]=?/.test(text)
+  ) {
+    report(
+      'artifact-verification-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned format, size, or corruption branch',
+    )
+  }
+
   if (fileName === 'src/services/modelServices/remoteImageGeneration.ts') {
     report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
   }
@@ -101,6 +125,13 @@ for (const file of files) {
   }
 
   if (
+    fileName === 'src/services/modelFailureReasons.ts' &&
+    /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
+  ) {
+    report('model-failure-policy-is-shared', fileName, source, source, 'local:failure-policy')
+  }
+
+  if (
     fileName === 'src/screens/ChatScreen/useChatModelActions.ts' &&
     /\b(?:isOverridableMemoryError|reasonFromLoadError|loadModelWithOverride|getMultimodalSupport)\b/.test(text)
   ) {
@@ -126,6 +157,13 @@ for (const file of files) {
     /includes\(['"](?:vl|vision|smolvlm)['"]\)/.test(text)
   ) {
     report('vision-repair-policy-is-shared', fileName, source, source, 'app-owned model-name heuristic')
+  }
+
+  if (
+    fileName === 'src/utils/downloadStatus.ts' &&
+    /(?:ACTIVE_STATUSES|return\s+status\s*===\s*['"](?:pending|running|failed)['"])/.test(text)
+  ) {
+    report('download-status-policy-is-shared', fileName, source, source, 'local:status-policy')
   }
 
   if (/\b(?:abortPreload|preloadSelectedModels)\b/.test(text)) {

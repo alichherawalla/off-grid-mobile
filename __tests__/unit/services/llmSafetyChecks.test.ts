@@ -31,22 +31,23 @@ describe('validateModelFile', () => {
 
   it('returns invalid when header is not GGUF', async () => {
     defaultNativeFileSystemBoundary.seedTextFile(
-      '/models/test.bin',
+      '/models/test.gguf',
       'NOPE',
       1_000_000,
     );
 
-    const result = await validateModelFile('/models/test.bin');
+    const result = await validateModelFile('/models/test.gguf');
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('not a GGUF file');
   });
 
-  it('returns valid when RNFS.read() throws (iOS bridging workaround)', async () => {
+  it('fails closed when the native prefix reader cannot verify the file', async () => {
     defaultNativeFileSystemBoundary.seedFile('/models/test.gguf', 1_000_000);
     mockedRNFS.read.mockRejectedValueOnce(new Error('NSInteger bridge error'));
 
     const result = await validateModelFile('/models/test.gguf');
-    expect(result).toEqual({ valid: true });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('not a valid GGUF');
   });
 
   it('returns invalid when the safe directory lookup cannot find the file', async () => {

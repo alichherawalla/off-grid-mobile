@@ -1,35 +1,19 @@
 import { LlamaContext } from 'llama.rn';
 import {
+  artifactVerificationError,
   estimateTextLoadMemory,
   isNativeInferenceFailure,
   modelMemoryFit,
   planSafeContext,
 } from '@offgrid/models';
-import RNFS from 'react-native-fs';
-import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
 import { OverridableMemoryError } from '../utils/modelLoadErrors';
+import { mobileArtifactVerification } from './adapters/models/artifactVerificationFilePort';
 
 /**
  * GGUF magic number — first 4 bytes of every valid GGUF file.
  * Used to detect corrupted or truncated model files before loading.
  */
-const GGUF_MAGIC = 'GGUF';
-
-/** Minimum plausible GGUF file size (header + at least some tensors) */
-const MIN_GGUF_FILE_SIZE = 1024; // 1 KB
-
-function decodeLittleEndianUint32(bytes: string): number | null {
-  if (bytes.length < 4) return null;
-  const byteValues = Array.from(bytes)
-    .slice(0, 4)
-    .map(char => char.charCodeAt(0));
-  return byteValues.reduce(
-    (sum, value, index) => sum + value * 256 ** index,
-    0,
-  );
-}
-
 /**
  * Validate that a model file is a plausible GGUF file.
  * Checks magic bytes and minimum file size to catch corrupted/truncated downloads.
@@ -38,59 +22,23 @@ export async function validateModelFile(
   modelPath: string,
 ): Promise<{ valid: boolean; reason?: string }> {
   try {
-    const facts = await statFile(modelPath);
-    if (!facts) {
-      return { valid: false, reason: `Model file not found at: ${modelPath}` };
-    }
-    if (!facts.isFile) {
-      return { valid: false, reason: `Model path is not a file: ${modelPath}` };
-    }
-    const fileSize = facts.size;
-    const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
     logger.log(`[LLM] Validating model: ${modelPath}`);
-    logger.log(`[LLM] Model file size: ${fileSizeMB}MB (${fileSize} bytes)`);
-    if (fileSize < MIN_GGUF_FILE_SIZE) {
-      return {
-        valid: false,
-        reason: `Model file too small (${fileSize} bytes) — likely corrupted or incomplete download`,
-      };
-    }
-    // Read first 4 bytes to check GGUF magic number.
-    // RNFS.read() has an iOS bridging bug with NSInteger arguments on
-    // react-native-fs 2.x, so we catch and skip the magic check if it fails.
-    // llama.rn will still validate the file format natively on load.
-    let header: string | undefined;
-    try {
-      header = await RNFS.read(modelPath, 4, 0, 'ascii');
-    } catch (readErr) {
-      logger.warn(
-        '[LLM] RNFS.read() failed for magic check, skipping header validation:',
-        readErr,
+    const request = {
+      path: modelPath,
+      name: modelPath.split('/').pop() || modelPath,
+      format: 'gguf' as const,
+      origin: 'runtime' as const,
+      removeInvalid: false,
+    };
+    const result = await mobileArtifactVerification.verify(request);
+    if (result.valid) {
+      logger.log(
+        `[LLM] Model file size: ${(result.sizeBytes / (1024 * 1024)).toFixed(1)}MB (${result.sizeBytes} bytes)`,
       );
+      if (result.ggufVersion) logger.log(`[LLM] GGUF version: ${result.ggufVersion}`);
+      return { valid: true };
     }
-    if (header !== undefined && !header.startsWith(GGUF_MAGIC)) {
-      return {
-        valid: false,
-        reason: `Invalid model file — not a GGUF file (header: ${header})`,
-      };
-    }
-    if (header !== undefined) {
-      logger.log(`[LLM] GGUF magic OK`);
-    }
-    // Try to read GGUF version (bytes 4-7, little-endian uint32)
-    try {
-      const versionBytes = await RNFS.read(modelPath, 4, 4, 'ascii');
-      if (versionBytes) {
-        const version = decodeLittleEndianUint32(versionBytes);
-        if (version !== null) logger.log(`[LLM] GGUF version: ${version}`);
-      }
-    } catch (_e) {
-      // Non-critical, just skip
-    }
-    // Log the model filename for easier identification
-    const filename = modelPath.split('/').pop() || modelPath;
-    logger.log(`[LLM] Model filename: ${filename}`);
-    return { valid: true };
+    return { valid: false, reason: artifactVerificationError(request, result) };
   } catch (e: any) {
     return {
       valid: false,

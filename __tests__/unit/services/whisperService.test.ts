@@ -59,19 +59,34 @@ const mockedInitWhisper = initWhisper as jest.MockedFunction<
   typeof initWhisper
 >;
 
-/** Mock RNFS to report a valid model file (exists + large enough) */
+const mockModelFilesSize = (size: number) => {
+  mockedRNFS.readDir.mockImplementation(async (directory: string) =>
+    ['model.bin', 'model1.bin', 'model2.bin', 'ggml-tiny.en.bin'].map(name => ({
+      name,
+      path: `${directory}/${name}`,
+      size,
+      isFile: () => true,
+      isDirectory: () => false,
+      mtime: new Date(),
+    })) as any,
+  );
+};
+
+/** Mock the native filesystem boundary to report a valid model file. */
 const mockValidModelFile = () => {
   mockedRNFS.exists.mockResolvedValue(true);
-  mockedRNFS.stat.mockResolvedValue({
-    size: 75 * 1024 * 1024,
-    isFile: () => true,
-  } as any);
+  mockModelFilesSize(75 * 1024 * 1024);
 };
 
 describe('WhisperService', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
+    mockedRNFS.exists.mockReset();
+    mockedRNFS.readDir.mockReset();
+    mockedRNFS.unlink.mockReset();
+    mockedRNFS.exists.mockResolvedValue(false);
+    mockedRNFS.unlink.mockResolvedValue(undefined as any);
     // Reset singleton state
     (whisperService as any).context = null;
     (whisperService as any).currentModelPath = null;
@@ -88,6 +103,7 @@ describe('WhisperService', () => {
       promise: Promise.resolve(),
     } as any);
     mockedBDS.cancelDownload.mockResolvedValue(undefined as any);
+    mockedRNFS.readDir.mockResolvedValue([]);
     // Reset the audio-session owner's mode between tests (the realtime permission
     // path now drives it instead of AudioSessionIos directly). clearMocks wipes
     // the activity mock's resolved value, so re-establish the default (success).
@@ -153,10 +169,7 @@ describe('WhisperService', () => {
         .mockResolvedValueOnce(true) // dir exists
         .mockResolvedValueOnce(false) // model not yet downloaded
         .mockResolvedValueOnce(true); // validateModelFile: file exists
-      mockedRNFS.stat.mockResolvedValueOnce({
-        size: 75 * 1024 * 1024,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(75 * 1024 * 1024);
 
       mockedBDS.downloadFileTo.mockReturnValue({
         downloadId: 1,
@@ -185,10 +198,7 @@ describe('WhisperService', () => {
         .mockResolvedValueOnce(true) // dir exists
         .mockResolvedValueOnce(false) // model doesn't exist
         .mockResolvedValueOnce(true); // validateModelFile: file exists
-      mockedRNFS.stat.mockResolvedValueOnce({
-        size: 75 * 1024 * 1024,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(75 * 1024 * 1024);
 
       let capturedOnProgress: ((b: number, t: number) => void) | undefined;
       mockedBDS.downloadFileTo.mockImplementation((opts: any) => {
@@ -234,10 +244,7 @@ describe('WhisperService', () => {
         .mockResolvedValueOnce(true) // dir exists
         .mockResolvedValueOnce(false) // model not yet downloaded
         .mockResolvedValueOnce(true); // validateModelFile: file exists
-      mockedRNFS.stat.mockResolvedValueOnce({
-        size: 75 * 1024 * 1024,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(75 * 1024 * 1024);
       mockedBDS.downloadFileTo.mockReturnValue({
         downloadId: 7,
         downloadIdPromise: Promise.resolve(7),
@@ -337,10 +344,7 @@ describe('WhisperService', () => {
 
     it('throws and deletes file when file is too small (corrupted)', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({
-        size: 1000,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(1000);
       mockedRNFS.unlink.mockResolvedValue(undefined as any);
 
       await expect(
@@ -351,10 +355,7 @@ describe('WhisperService', () => {
 
     it('passes for valid file with sufficient size', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({
-        size: 75 * 1024 * 1024,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(75 * 1024 * 1024);
 
       await expect(
         whisperService.validateModelFile('/path/model.bin'),
@@ -448,10 +449,7 @@ describe('WhisperService', () => {
 
     it('throws when model file is corrupted/too small (prevents native crash)', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({
-        size: 500,
-        isFile: () => true,
-      } as any);
+      mockModelFilesSize(500);
       mockedRNFS.unlink.mockResolvedValue(undefined as any);
 
       await expect(

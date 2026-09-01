@@ -10,6 +10,7 @@ import {
 } from '@offgrid/sync';
 import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { whisperService } from '../../../src/services/whisperService';
+import '../../../src/stores/whisperStore';
 import { MobileModelPackageSink } from '../../../pro/sync/modelPackageSink';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 
@@ -739,10 +740,9 @@ describe('a model arriving on this device', () => {
       await receiver.sink.prepare();
       await stream(receiver.sink, tooSmall);
 
-      // Note the shape of this refusal: a text model that fails its check comes back false, and this one
-      // throws, because the transcription catalog's own validator throws (and deletes the file it rejected).
-      // Both end the transfer; only this one carries a reason the user can read.
-      await expect(receiver.sink.finalize()).rejects.toThrow('too small');
+      // Shared rejects the staged artifact before promotion. The receive transaction
+      // then owns cleanup, so no invalid model reaches the transcription catalog.
+      await expect(receiver.sink.finalize()).resolves.toBe(false);
       await expect(whisperService.listDownloadedModels()).resolves.toEqual([]);
     });
 
