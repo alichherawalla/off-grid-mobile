@@ -42,11 +42,39 @@ const deterministicEmbed = (text: string): number[] => {
   return norm > 0 ? vec.map(v => v / norm) : vec;
 };
 
+jest.mock('../../../src/services/modelServices', () => {
+  const embed = (text: string): number[] => {
+    const vector = new Array(8).fill(0);
+    for (let index = 0; index < text.length; index += 1) {
+      vector[index % 8] += (text.codePointAt(index) ?? 0) / 1000;
+    }
+    const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+    return norm > 0 ? vector.map(value => value / norm) : vector;
+  };
+  return {
+    refreshMobileModelServices: jest.fn(() => Promise.resolve()),
+    mobileGenerationService: {
+      generate: jest.fn((request: { operation?: { type: string; inputs?: string[] } }) => {
+        if (request.operation?.type !== 'embedding') {
+          return Promise.reject(new Error('Expected a typed embedding operation'));
+        }
+        return Promise.resolve({
+          content: '',
+          output: {
+            type: 'embedding',
+            vectors: (request.operation.inputs ?? []).map(embed),
+          },
+          toolCalls: [],
+          attemptedModelIds: ['mobile-embedding'],
+        });
+      }),
+    },
+  };
+});
+
 jest.mock('../../../src/services/rag/embedding', () => ({
   embeddingService: {
     load: jest.fn(() => Promise.resolve()),
-    embed: jest.fn((text: string) => Promise.resolve(deterministicEmbed(text))),
-    embedBatch: jest.fn((texts: string[]) => Promise.resolve(texts.map(deterministicEmbed))),
     isLoaded: jest.fn(() => true),
     unload: jest.fn(() => Promise.resolve()),
     getDimension: jest.fn(() => 8),
@@ -58,8 +86,10 @@ import { ragDatabase } from '../../../src/services/rag/database';
 import { embeddingService } from '../../../src/services/rag/embedding';
 import { cosineSimilarity } from '@offgrid/rag';
 import { documentService } from '../../../src/services/documentService';
+import { mobileGenerationService } from '../../../src/services/modelServices';
 
 const mockDocService = documentService as jest.Mocked<typeof documentService>;
+const mockSharedGenerate = mobileGenerationService.generate as jest.Mock;
 
 describe('Embedding Flow Integration', () => {
   beforeEach(() => {
@@ -88,9 +118,12 @@ describe('Embedding Flow Integration', () => {
         fileSize: 200,
       });
 
-      // Verify embedding service was called
+      // The platform leaf loads, then model-facing work uses the shared typed contract.
       expect(embeddingService.load).toHaveBeenCalled();
-      expect(embeddingService.embedBatch).toHaveBeenCalled();
+      expect(mockSharedGenerate).toHaveBeenCalledWith({
+        operation: { type: 'embedding', inputs: expect.any(Array) },
+        allowFallback: false,
+      });
 
       // Verify embeddings were inserted into the database
       const embInserts = mockExecuteSync.mock.calls.filter(
@@ -188,7 +221,10 @@ describe('Embedding Flow Integration', () => {
       const total = await ragService.backfillEmbeddings('proj-1');
 
       expect(total).toBe(2);
-      expect(embeddingService.embedBatch).toHaveBeenCalledWith(['Old chunk one', 'Old chunk two']);
+      expect(mockSharedGenerate).toHaveBeenCalledWith({
+        operation: { type: 'embedding', inputs: ['Old chunk one', 'Old chunk two'] },
+        allowFallback: false,
+      });
 
       // Verify embeddings were stored
       const embInserts = mockExecuteSync.mock.calls.filter(
