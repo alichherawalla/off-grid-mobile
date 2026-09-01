@@ -57,7 +57,6 @@ jest.mock('../../../pro/audio/engine', () => ({
     getActiveEngineId: jest.fn(() => 'mock-tts'),
     getRegisteredIds: jest.fn(() => ['mock-tts']),
   },
-  OuteTTSEngine: class {},
 }));
 
 jest.mock('@offgrid/core/utils/logger', () => ({
@@ -93,7 +92,6 @@ const resetState = () => {
     failedVoiceId: null,
     voiceSwitchProgress: 0,
     voiceSwitchNeedsDownload: false,
-    audioCacheSizeMB: 0,
     settings: {
       interfaceMode: 'chat',
       enabled: true,
@@ -286,7 +284,7 @@ describe('ttsStore', () => {
       const { ttsRegistry } = jest.requireMock('../../../pro/audio/engine');
       ttsRegistry.getRegisteredIds.mockReturnValue(['mock-tts']);
       ttsRegistry.setActiveEngine.mockResolvedValue(mockEngine);
-      await getState().setEngine('outetts');
+      await getState().setEngine('removed-engine');
       expect(ttsRegistry.setActiveEngine).toHaveBeenCalledWith('kokoro');
       expect(getState().settings.engineId).toBe('kokoro');
     });

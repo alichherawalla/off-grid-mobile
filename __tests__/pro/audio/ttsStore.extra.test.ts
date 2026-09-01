@@ -73,14 +73,6 @@ jest.mock('../../../pro/audio/engine', () => ({
     getActiveEngineId: jest.fn(() => 'mock-tts'),
     getRegisteredIds: jest.fn(() => ['mock-tts']),
   },
-  // OuteTTSEngine is compared with `instanceof` in refreshCacheSize/clearAudioCache.
-  // A real class here means an instance is a genuine OuteTTS and the plain stub is not,
-  // so BOTH sides of the instanceof branch are exercised for real. Defined inside the
-  // factory (class decls aren't hoisted, so a top-level one is in the TDZ at mock time).
-  OuteTTSEngine: class MockOuteTTSEngine {
-    getAudioCacheSizeMB = jest.fn().mockResolvedValue(12.5);
-    clearAudioCache = jest.fn().mockResolvedValue(undefined);
-  },
 }));
 
 jest.mock('@offgrid/core/utils/logger', () => ({
@@ -91,7 +83,6 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
 import { modelResidencyManager } from '@offgrid/core/services/modelResidency';
 import { hardwareService } from '@offgrid/core/services/hardware';
-import { OuteTTSEngine } from '@offgrid/pro/audio/engine';
 
 const getState = () => useTTSStore.getState();
 
@@ -111,8 +102,7 @@ describe('ttsStore — extra branch coverage', () => {
 
   beforeEach(() => {
     mockCurrentEngine = makeEngine();
-    // Restore the registry default (some tests point getActiveEngine at an OuteTTS
-    // instance via mockReturnValue, which clearAllMocks does NOT undo).
+    // Restore the registry default because clearAllMocks does not reset implementations.
     const { ttsRegistry } = jest.requireMock('../../../pro/audio/engine');
     ttsRegistry.getActiveEngine.mockImplementation(() => mockCurrentEngine);
     useTTSStore.setState({
@@ -137,7 +127,6 @@ describe('ttsStore — extra branch coverage', () => {
       voices: [{ id: 'default', label: 'Default', metadata: {} }],
       activeVoiceId: 'default',
       isSwitchingVoice: false,
-      audioCacheSizeMB: 0,
       settings: { ...baseSettings, voiceByEngine: {}, modelDownloaded: {} },
     });
     // Plenty of free RAM so the override survival-floor (1200MB) always clears;
@@ -449,49 +438,6 @@ describe('ttsStore — extra branch coverage', () => {
     });
   });
 
-  // ── refreshCacheSize / clearAudioCache (OuteTTS-only) ────────────────────
-
-  describe('cache actions gate on OuteTTSEngine', () => {
-    it('refreshCacheSize reads the size only for an OuteTTS engine', async () => {
-      const oute = new OuteTTSEngine() as unknown as typeof mockCurrentEngine & {
-        getAudioCacheSizeMB: jest.Mock;
-      };
-      const { ttsRegistry } = jest.requireMock('../../../pro/audio/engine');
-      ttsRegistry.getActiveEngine.mockReturnValue(oute);
-
-      await getState().refreshCacheSize();
-
-      expect(oute.getAudioCacheSizeMB).toHaveBeenCalled();
-      expect(getState().audioCacheSizeMB).toBe(12.5);
-    });
-
-    it('refreshCacheSize is a no-op for a non-OuteTTS engine', async () => {
-      useTTSStore.setState({ audioCacheSizeMB: 7 });
-      // mockCurrentEngine (mock stub) is NOT an OuteTTSEngine → the instanceof is false.
-      await getState().refreshCacheSize();
-      expect(getState().audioCacheSizeMB).toBe(7); // untouched
-    });
-
-    it('clearAudioCache clears + zeroes size for an OuteTTS engine', async () => {
-      const oute = new OuteTTSEngine() as unknown as typeof mockCurrentEngine & {
-        clearAudioCache: jest.Mock;
-      };
-      const { ttsRegistry } = jest.requireMock('../../../pro/audio/engine');
-      ttsRegistry.getActiveEngine.mockReturnValue(oute);
-      useTTSStore.setState({ audioCacheSizeMB: 42 });
-
-      await getState().clearAudioCache();
-
-      expect(oute.clearAudioCache).toHaveBeenCalled();
-      expect(getState().audioCacheSizeMB).toBe(0);
-    });
-
-    it('clearAudioCache is a no-op for a non-OuteTTS engine', async () => {
-      useTTSStore.setState({ audioCacheSizeMB: 42 });
-      await getState().clearAudioCache();
-      expect(getState().audioCacheSizeMB).toBe(42); // instanceof false → untouched
-    });
-  });
 });
 
 // ── onRehydrateStorage migration ────────────────────────────────────────────
@@ -522,15 +468,13 @@ describe('ttsStore persist migration (onRehydrateStorage)', () => {
     expect(s.voiceAssetsDownloaded).toEqual({});
   });
 
-  it('migrates flat kokoroVoiceId and voiceId into voiceByEngine', () => {
+  it('migrates the flat Kokoro voice and drops the removed legacy voice', () => {
     const s = runMigration({
       engineId: 'kokoro',
       kokoroVoiceId: 'af_bella',
-      voiceId: 'legacy-oute',
+      voiceId: 'removed-legacy-voice',
     });
     expect((s.voiceByEngine as Record<string, string>).kokoro).toBe('af_bella');
-    expect((s.voiceByEngine as Record<string, string>).outetts).toBe('legacy-oute');
-    // The flat keys are deleted after mapping.
     expect(s.kokoroVoiceId).toBeUndefined();
     expect(s.voiceId).toBeUndefined();
   });

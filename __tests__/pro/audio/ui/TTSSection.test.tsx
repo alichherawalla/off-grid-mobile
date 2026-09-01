@@ -50,7 +50,6 @@ const mockTTSEngine = {
 };
 jest.mock('../../../../pro/audio/engine', () => ({
   ttsRegistry: { getActiveEngine: () => mockTTSEngine, getRegisteredIds: () => ['kokoro'] },
-  OuteTTSEngine: class {},
 }));
 
 // The residency lock/hardware are native boundaries; the mode switch's

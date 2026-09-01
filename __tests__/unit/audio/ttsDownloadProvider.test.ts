@@ -79,7 +79,7 @@ describe('ttsProvider', () => {
   });
 
   it('retry switches to the target engine first when it is not active', async () => {
-    mockTts.settings.engineId = 'outetts';
+    mockTts.settings.engineId = 'removed-engine';
     await ttsProvider.retry('tts:kokoro');
     expect(mockTts.setEngine).toHaveBeenCalledWith('kokoro');
     expect(mockTts.downloadModels).toHaveBeenCalled();

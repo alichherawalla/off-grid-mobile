@@ -61,7 +61,6 @@ jest.mock('../../../pro/audio/engine', () => ({
     getActiveEngineId: jest.fn(() => 'mock-tts'),
     getRegisteredIds: jest.fn(() => ['mock-tts']),
   },
-  OuteTTSEngine: class {},
 }));
 
 jest.mock('@offgrid/core/utils/logger', () => ({
@@ -92,7 +91,6 @@ const resetStore = () => {
     overallDownloadProgress: 1,
     voices: [{ id: '0', label: 'Default', metadata: {} }],
     activeVoiceId: '0',
-    audioCacheSizeMB: 0,
     settings: {
       interfaceMode: 'chat',
       enabled: true,
