@@ -7,7 +7,9 @@ Status: PROPOSED (for review before implementation). Branch: TBD.
 Audio playback/recording is flaky because **no single component owns the shared resources**. Three concerns are spread across many modules with no coordinator:
 
 1. **iOS `AVAudioSession`** is activated in two unrelated places — the recorder (`audioRecorderService` → `playAndRecord`) and the Kokoro bridge (`KokoroTTSBridge` → `playback`). Nobody restores the playback category after recording, and nobody deactivates. Whoever ran last decides the category, so playback is audible or silent depending on history. → "Kokoro silent on iOS", "voice notes silent".
-2. **Three independent `AudioContext`s** (`audioFilePlayer`, Kokoro per-`speak()`, OuteTTS per-play) each manage their own `resume`/`suspend`/`close`/foreground-reset. iOS tears contexts down on lock; any one can be reused dead → silent.
+2. **Independent `AudioContext`s** (`audioFilePlayer` and Kokoro per-`speak()`) each manage their own
+   `resume`/`suspend`/`close`/foreground-reset. iOS tears contexts down on lock; either can be reused
+   dead → silent. The earlier OuteTTS path was removed.
 3. **Unified playback state** (`playbackStatus`, `currentMessageId`, `currentAudioPath`, `playSessionId`) is written from 5+ sites (`ttsStore`, `ttsPlayback`, `streamingSpeech`, `ttsEngineSubscription`). Different paths clear it differently → stuck non-idle / stale path → gates built on it (the voice-note "busy" gate) mis-fire.
 
 The result: any point-change (a gate, a guard, a resume) can violate an invariant another path assumed. That is the chaos.
@@ -110,7 +112,10 @@ The live trace turned "it's flaky" into specific, reproduced failure modes. They
 
 **Phase 1 — `AudioSessionManager` (sole AVAudioSession owner). ✅ DONE.** Recorder, file player, and Kokoro bridge route through it; `record→play` restores playback; every (re)assert is logged in the trace. *Verified: TTS + voice notes audible after recording.*
 
-**Phase 2 — `AudioContextManager` (sole AudioContext-lifecycle owner).** Move the 3 contexts (file player, Kokoro 24 kHz, OuteTTS) behind one owner that does create + resume/suspend/close + the foreground-reset in ONE place. Backends acquire from it. *Verify: playback survives lock/background on every path.*
+**Phase 2 — `AudioContextManager` (sole AudioContext-lifecycle owner).** Move the current file-player
+and Kokoro 24 kHz contexts behind one owner that does create + resume/suspend/close + the
+foreground-reset in one place. Backends acquire from it. *Verify: playback survives lock/background
+on every supported path.*
 
 **Phase 3 — `AudioPlaybackService` + `PlaybackBackend` (sole state owner + serialization).** This is the heart and resolves R1/R2.
   - 3a. Introduce the service as the ONLY writer of playback state; `ttsStore` keeps its public shape but becomes a thin subscriber/projection.

@@ -1,5 +1,10 @@
 # TTS Engine Interface
 
+> **Current status (2026-09-01):** Kokoro is the only registered and supported Mobile TTS engine.
+> OuteTTS and Qwen3 TTS were removed. References to them below preserve the earlier interface design
+> record only. Do not use them as implementation or test guidance. Current shared voice and
+> residency policy belongs to `@offgrid/models`; Mobile owns the Kokoro/ExecuTorch adapter.
+
 ## Overview
 
 The TTS subsystem uses a pluggable engine interface that decouples the app from any specific TTS implementation. Engines are registered at startup, the user picks one in settings, and the store delegates all operations through the active engine.
@@ -76,15 +81,15 @@ Some engines (Kokoro) depend on React hooks. These engines return a React compon
 App.tsx → <EngineBridge /> → engine.getBridgeComponent() → <KokoroTTSBridge />
 ```
 
-The bridge mounts the hook, then pushes an imperative handle into the engine instance. Fully imperative engines (OuteTTS, Qwen3) return `null` — no bridge needed.
+The bridge mounts the hook, then pushes an imperative handle into the Kokoro engine instance.
 
 ## Registered Engines
 
 | Engine | ID | Size | Streaming | Voice Cloning | Status |
 |--------|-----|------|-----------|---------------|--------|
 | Kokoro TTS | `kokoro` | 82 MB | Yes | No | Production |
-| OuteTTS 0.3 | `outetts` | 530 MB | No | Yes | Production |
-| Qwen3-TTS 0.6B | `qwen3-tts` | ~650 MB | No | Yes | Stub (not registered) |
+| OuteTTS 0.3 | `outetts` | 530 MB | No | Yes | Removed; unsupported |
+| Qwen3-TTS 0.6B | `qwen3-tts` | ~650 MB | No | Yes | Removed; unsupported |
 
 ## Adding a New Engine
 
@@ -129,9 +134,10 @@ The orchestration layer above would wire engines together:
 - **Listen** (STT) → **Think** (LLM) → **Speak** (TTS)
 - **See** (Vision) feeds context to **Think**
 
-## Qwen3-TTS Integration Path
+## Historical Qwen3-TTS Integration Path
 
-The stub is ready at `src/engine/tts/engines/qwen3/`. Asset management, download, and lifecycle are implemented. The remaining work is the inference pipeline in `speak()`:
+This path was not completed. Its stub was removed and must not be registered or presented as a
+supported engine. The following list is retained only as historical design evidence:
 
 1. Load talker GGUF + predictor GGUF via `llama.rn` (two contexts)
 2. Load codec decoder ONNX via `onnxruntime-react-native`

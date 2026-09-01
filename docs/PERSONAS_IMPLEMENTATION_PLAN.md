@@ -1,5 +1,9 @@
 # Personas — Full Implementation Plan
 
+> **Historical planning note:** OuteTTS-specific voice fields and picker guidance in this document
+> are obsolete. OuteTTS and Qwen3 TTS are not supported. New persona voice work must use the current
+> Kokoro voice contract and the shared `@offgrid/models` voice policy.
+
 > The goal: turn Off Grid from "a local LLM app" into "a private AI secretary you can actually trust." Personas are named assistants with personality, memory, skills, and integrations. The model picker disappears. The complexity hides. The magic stays.
 
 ---

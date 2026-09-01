@@ -1,5 +1,10 @@
 # Hardware Acceleration Strategy: all accelerators, all modalities (RN mobile + Electron desktop)
 
+> **Current TTS correction (2026-09-01):** Kokoro through ExecuTorch is the supported Mobile TTS
+> runtime. OuteTTS and Qwen3 TTS were removed. Any remaining OuteTTS or Qwen3 TTS references in this
+> research record describe an earlier prototype and are not supported-product claims. The shared
+> control plane is now `@offgrid/models`, not a proposed separate inference-router package.
+
 **Status:** proposal / architecture reference (evidence-verified)
 **Owner:** mobile + desktop
 **Scope:** how the two Off Grid AI consumer apps - **Off Grid Mobile (React Native)** and **Off Grid Desktop (Electron/Node)** - run every modality (embedding, text, vision, image-gen, STT, TTS, and the heavier music/video) on every class of on-device accelerator (CPU / GPU / NPU / TPU; note Metal = Apple's GPU, not a separate class), by routing each modality to the best available execution - **on-device where a real seam exists, remote where it doesn't, flipping remote->local as models mature** - behind one shared seam. We are the switch; the router is the durable asset that rides the improvement curve. The seam is common; the engine bindings differ per platform (RN bindings on mobile, sibling Node bindings on desktop) and are chosen as capability-data, not forked code.

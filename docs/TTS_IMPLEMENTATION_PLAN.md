@@ -1,5 +1,10 @@
 # Text-to-Speech Implementation Plan
 
+> **Historical plan — not current product guidance.** This plan records the earlier OuteTTS and
+> Qwen3 TTS design. Both engines were removed and are not supported. Kokoro is the current Mobile TTS
+> engine. Shared voice and residency policy belongs to `@offgrid/models`; Mobile owns the
+> Kokoro/ExecuTorch adapter. Do not implement or test the OuteTTS fallback described below.
+
 ## Product Vision
 
 Two first-class interface modes, switchable from Chat Settings or TTS Settings:

@@ -12,6 +12,33 @@ Verdict legend:
 
 ---
 
+## Shared model-control consolidation is not release-verified - 2026-09-01
+
+**Verdict: complete live verification.**
+
+The Shared and Desktop static architecture gates pass. The Shared package also builds with its type
+declarations, and the Desktop TypeScript gate passes. The Mobile static architecture gate also
+passes with no temporary allowlist items on the current combined working tree. During this sweep it
+first caught a screen-layer import of the raw image-generation engine. The concurrent consolidation
+work moved that call behind the Mobile image-generation port and strengthened the gate. This is code
+evidence, not release evidence.
+
+The static gates check known dependency and policy patterns. They do not prove that every model
+journey works on a real app or device. The combined consolidation is not complete until one release
+candidate head passes the full repository matrices and the following live journeys:
+
+- local and remote text, vision, image, speech-to-text, and Kokoro text-to-speech;
+- streaming, reasoning on/off, tool calls, cancellation, Stop, Resend, Edit, and Regenerate;
+- selected-model identity in the UI and the actual transport, with no silent fallback;
+- download, retry, repair, transfer, load, force-load, co-residency, eviction, unload, and eject;
+- project knowledge, RAG, embedding, context compaction, memory, Replay, and voice-mode handoff;
+- remote-server discovery, capability refresh, credentials, remote tools, and remote MCP;
+- Mobile restart and the earlier Resend freeze reproduction on physical iOS and Android;
+- Desktop packaged-app verification, including Pro surfaces and local/remote engine adapters.
+
+Do not mark the full migration complete from static gates or focused suites alone. Record exact app,
+device, model, route, and log evidence before closing this entry.
+
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26
 
 **Verdict: instrument-and-revisit.**

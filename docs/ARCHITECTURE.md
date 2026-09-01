@@ -2,6 +2,24 @@
 
 > This document contains the full technical documentation for Off Grid. For a quick overview, see the [README](../README.md).
 
+## Current model-control boundary
+
+`@offgrid/models` is the shared business-logic owner for Desktop and Mobile model behavior. It owns
+catalog and inventory rules, active route selection, generation and tool-loop policy, reasoning and
+streaming policy, memory budgets, residency and eviction decisions, downloads, remote-server policy,
+and the modality contracts. See
+[`shared/packages/models/README.md`](../../shared/packages/models/README.md) for the authoritative
+boundary.
+
+Mobile services below this boundary are platform adapters and composition roots. They call
+React Native inference engines, native storage, keychain, network, and operating-system APIs. The
+screens and stores render shared projections and send intents. They must not choose providers,
+fallbacks, budgets, reasoning dialects, retry rules, or residency actions.
+
+Some implementation paths later in this document predate this consolidation. Where they name an
+app-local service as the policy owner, treat that service as an adapter or legacy name, not as a
+second control plane.
+
 ---
 
 ## Platform Support
