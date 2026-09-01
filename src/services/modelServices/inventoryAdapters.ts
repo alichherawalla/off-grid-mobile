@@ -27,6 +27,7 @@ import {
   mobileExecutionAdapterId,
   type MobileRouteFacts,
 } from './mobileRoute';
+import { mobileLocalVoiceInventoryAdapter } from './voiceGenerationAdapter';
 
 type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
 
@@ -348,6 +349,7 @@ export const mobileInventoryAdapters: ModelInventoryAdapter[] = [
   localLiteRTInventoryAdapter,
   localImageInventoryAdapter,
   localWhisperInventoryAdapter,
+  mobileLocalVoiceInventoryAdapter,
   embeddingInventoryAdapter,
   classifierInventoryAdapter,
   remoteModelInventoryAdapter,

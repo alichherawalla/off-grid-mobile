@@ -8,6 +8,7 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { activeModelService } from '../activeModelService';
 import { remoteServerManager } from '../remoteServerManager';
 import { mobileRouteId } from './mobileRoute';
+import { selectedMobileLocalVoiceRoute } from './voiceGenerationAdapter';
 
 type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
 
@@ -48,6 +49,7 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
       ? readRemoteMedia(modality)
       : null;
     if (remoteMedia) return remoteMedia;
+    if (modality === 'voice') return selectedMobileLocalVoiceRoute();
     if (modality === 'image') {
       const state = useAppStore.getState();
       const model = state.downloadedImageModels.find(

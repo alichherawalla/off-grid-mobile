@@ -132,7 +132,7 @@ export const remoteMediaRuntime = {
 
   async synthesizeVoice(
     server: RemoteServer,
-    input: { text: string; voice?: string },
+    input: { text: string; voice?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
     return request({
@@ -142,7 +142,7 @@ export const remoteMediaRuntime = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: requiredModel(server, 'voice'),
+          model: input.model ?? requiredModel(server, 'voice'),
           input: input.text,
           voice: input.voice ?? 'alloy',
           response_format: 'mp3',

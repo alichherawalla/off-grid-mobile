@@ -27,15 +27,16 @@ export function activeRemoteVoiceServer(): RemoteServer | null {
 /** Synthesize one remote voice clip into the file-backed playback seam. */
 export async function synthesizeRemoteVoiceFile(input: {
   server: RemoteServer;
+  model?: string;
   text: string;
   messageId: string;
   voice?: string;
-  signal: AbortSignal;
+  signal?: AbortSignal;
 }): Promise<string> {
-  const { server, text, messageId, voice, signal } = input;
+  const { server, model, text, messageId, voice, signal } = input;
   const result = await remoteMediaRuntime.synthesizeVoice(
     server,
-    { text, voice },
+    { text, voice, model },
     { signal },
   );
   if (result.audio.byteLength === 0)
@@ -46,7 +47,7 @@ export async function synthesizeRemoteVoiceFile(input: {
   const safeId = messageId.replace(/[^a-zA-Z0-9_-]/g, '_');
   const path = `${directory}/${safeId}.${extension}`;
   await RNFS.writeFile(path, arrayBufferToBase64(result.audio), 'base64');
-  if (signal.aborted) {
+  if (signal?.aborted) {
     await RNFS.unlink(path).catch(() => undefined);
     throw new Error('Remote request cancelled');
   }

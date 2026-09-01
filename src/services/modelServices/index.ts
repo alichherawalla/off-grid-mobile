@@ -22,6 +22,7 @@ import {
 } from './generationAdapters';
 import { mobileConversationPort, mobileToolExecutor } from './toolPorts';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
+import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 
 export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
@@ -33,8 +34,14 @@ export const mobileGenerationService = new GenerationService(
     conversations: mobileConversationPort,
   },
 );
+/** Voice has its own queue so sentence playback can run while text is still streaming. */
+export const mobileVoiceGenerationService = new GenerationService(
+  mobileLLMService,
+  mobileGenerationResidency,
+);
 const generationAdapterRegistrations = new Map<string, () => void>();
 const transcriptionAdapterRegistrations = new Map<string, () => void>();
+const voiceAdapterRegistrations = new Map<string, () => void>();
 
 let started = false;
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
@@ -55,6 +62,11 @@ export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
         mobileGenerationService,
         mobileLLMService,
         transcriptionAdapterRegistrations,
+      );
+      reconcileMobileVoiceAdapters(
+        mobileVoiceGenerationService,
+        mobileLLMService,
+        voiceAdapterRegistrations,
       );
       return models;
     });
