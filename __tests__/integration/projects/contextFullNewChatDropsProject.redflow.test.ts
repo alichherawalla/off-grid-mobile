@@ -9,7 +9,7 @@
  */
 import { installNativeBoundary, GB } from '../../harness/nativeBoundary';
 import { makeGenDeps } from '../../harness/genDeps';
-import { createProject } from '../../utils/factories';
+import { createDownloadedModel, createProject } from '../../utils/factories';
 
 describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
   it('creates the continuation chat inside the same project', async () => {
@@ -18,12 +18,17 @@ describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
     const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
-    const { useProjectStore, useChatStore } = require('../../../src/stores');
+    const { useAppStore, useProjectStore, useChatStore } = require('../../../src/stores');
      
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
     await llmService.loadModel('/models/small.gguf');
+    useAppStore.setState({
+      downloadedModels: [createDownloadedModel({ id: 'txt', engine: 'llama', filePath: '/models/small.gguf', fileName: 'small.gguf' })],
+      activeModelId: 'txt',
+    });
+    await require('../../../src/services/modelServices').refreshMobileModelServices();
 
     // A chat filed under a project.
     useProjectStore.setState({ projects: [createProject({ id: 'proj-1', name: 'Research' })] });
@@ -32,6 +37,7 @@ describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
     const { deps, captured } = makeGenDeps({ activeConversationId: convId });
 
     // Generation overflows the context window → the context-full alert is raised.
+    boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
     boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
     await startGenerationFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
 
