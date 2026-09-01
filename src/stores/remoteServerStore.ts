@@ -16,7 +16,11 @@ import {
 } from '../types';
 import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
-import type { RemoteServerHealth } from '@offgrid/models';
+import {
+  migrateRemoteServerConfiguration,
+  mergeRemoteSelections,
+  type RemoteServerHealth,
+} from '@offgrid/models';
 import {
   testServerConnection,
   testEndpointAndGetModels,
@@ -92,34 +96,20 @@ interface RemoteServerState {
 }
 
 type PersistedRemoteServerState = Partial<RemoteServerState>;
-type LegacyRemoteServer = Omit<RemoteServer, 'provider'> & {
-  provider?: RemoteServer['provider'];
-  providerType?: RemoteServer['provider'];
-  mediaModels?: RemoteServer['selections'];
-  modelCatalog?: RemoteServer['catalog'];
-};
-
 export function migrateRemoteServerState(
   persisted: unknown,
 ): PersistedRemoteServerState {
-  const raw = (persisted ?? {}) as Omit<PersistedRemoteServerState, 'servers'> & {
-    servers?: LegacyRemoteServer[];
+  const raw = (persisted ?? {}) as PersistedRemoteServerState;
+  const migrated = migrateRemoteServerConfiguration(persisted);
+  const servers = migrated.servers.map(server => ({
+    ...server,
+    createdAt: server.createdAt ?? new Date(0).toISOString(),
+  })) as RemoteServer[];
+  const state: PersistedRemoteServerState = {
+    ...raw,
+    servers,
+    activeServerId: migrated.activeServerId,
   };
-  const servers = raw.servers?.map(server => {
-    const {
-      providerType,
-      mediaModels,
-      modelCatalog,
-      ...current
-    } = server;
-    return {
-      ...current,
-      provider: current.provider ?? providerType ?? 'openai-compatible',
-      selections: current.selections ?? mediaModels,
-      catalog: current.catalog ?? modelCatalog,
-    };
-  });
-  const state: PersistedRemoteServerState = { ...raw, servers };
   if (state.activeRemoteMediaServerIds) return state;
   const activeServer = servers?.find(
     server => server.id === state.activeServerId,
@@ -350,13 +340,11 @@ export const useRemoteServerStore = create<RemoteServerState>()(
                 candidate.id === serverId
                   ? {
                     ...candidate,
-                    selections:
-                      result.modelManagement === 'offgrid-desktop-v1'
-                        ? result.selections
-                        : {
-                            ...result.selections,
-                            ...candidate.selections,
-                          },
+                    selections: mergeRemoteSelections(
+                      candidate.selections,
+                      result.selections,
+                      result.modelManagement === 'offgrid-desktop-v1',
+                    ),
                     catalog:
                       result.catalog ?? candidate.catalog,
                     modelManagement:

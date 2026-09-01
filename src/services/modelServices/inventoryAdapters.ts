@@ -37,7 +37,7 @@ import {
 import { mobileLocalVoiceInventoryAdapter } from './voiceGenerationAdapter';
 import { readMobileModelSelection } from './modelSelectionProjection';
 
-type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice';
+type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice' | 'embedding';
 
 function runtime(
   identity: MobileRouteFacts,
@@ -248,7 +248,9 @@ function remoteMediaRuntime(
       ? { audioInput: true, transcription: true }
       : modality === 'image'
       ? { imageGeneration: true }
-      : { speechSynthesis: true },
+      : modality === 'voice'
+      ? { speechSynthesis: true }
+      : { embeddings: true },
     installed: true,
     ready: selected,
     loaded: selected,
@@ -297,6 +299,9 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
         ),
         ...remoteMediaOptions(server, 'voice').map(option =>
           remoteMediaRuntime(server, 'voice', option),
+        ),
+        ...remoteMediaOptions(server, 'embedding').map(option =>
+          remoteMediaRuntime(server, 'embedding', option),
         ),
       ];
     });

@@ -17,7 +17,15 @@ import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAppStore } from '../../stores/appStore';
 import { remoteTextTransportRegistry } from '../adapters/providers/registry';
 import { discoverLANServers, DiscoveredServer } from '../networkDiscovery';
-import { selectedModalitiesForRemovedServer, shouldAutoDiscoverRemoteModels } from '@offgrid/models';
+import {
+  reconcileRemoteServerDiscovery,
+  remoteEndpointIdentity,
+  remoteRecoveryDecision,
+  isRemoteModelModality,
+  selectedModalitiesForRemovedServer,
+  selectionAfterRemoteServerRemoval,
+  shouldAutoDiscoverRemoteModels,
+} from '@offgrid/models';
 import logger from '../../utils/logger';
 import {
   storeApiKeyImpl,
@@ -36,40 +44,6 @@ import { activateOffGridDesktopModel } from '../adapters/remote/offGridDesktopMo
 import { selectCanonicalModel } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
 
-/** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
-const trimSlash = (url: string): string => {
-  let s = url.toLowerCase();
-  while (s.endsWith('/')) s = s.slice(0, -1);
-  return s;
-};
-
-/** Extract the port from an endpoint, or null if it cannot be parsed. */
-const portOf = (endpoint: string): string | null => {
-  try {
-    return new URL(endpoint).port;
-  } catch {
-    return null;
-  }
-};
-
-function uniqueSamePortServer(
-  discovered: DiscoveredServer,
-  missingExisting: RemoteServer[],
-  unmatchedDiscovered: DiscoveredServer[],
-): RemoteServer | null {
-  const port = portOf(discovered.endpoint);
-  if (!port) return null;
-  const existingOnPort = missingExisting.filter(
-    server => portOf(server.endpoint) === port,
-  );
-  const discoveredOnPort = unmatchedDiscovered.filter(
-    server => portOf(server.endpoint) === port,
-  );
-  return existingOnPort.length === 1 && discoveredOnPort.length === 1
-    ? existingOnPort[0]
-    : null;
-}
-
 class RemoteServerManager {
   /**
    * Add a new remote server
@@ -80,9 +54,9 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
 
     // Deduplicate: if a server with the same endpoint already exists, return it
-    const normalizedEndpoint = trimSlash(config.endpoint);
+    const normalizedEndpoint = remoteEndpointIdentity(config.endpoint);
     const existing = store.servers.find(
-      s => trimSlash(s.endpoint) === normalizedEndpoint,
+      s => remoteEndpointIdentity(s.endpoint) === normalizedEndpoint,
     );
     if (existing) {
       logger.log('[RemoteServerManager] Server already exists:', existing.name);
@@ -151,7 +125,39 @@ class RemoteServerManager {
       activeTextServerId: selection.activeServerId,
       activeMediaServerIds: selection.activeRemoteMediaServerIds,
     });
-    await Promise.all(modalities.map(modality => selectCanonicalModel(modality, null)));
+    const app = useAppStore.getState();
+    const lastLocal = app.downloadedModels.find(model => model.id === app.lastTextModelId);
+    const localTextFallback = lastLocal
+      ? mobileRouteId({
+          source: 'local',
+          hostId: lastLocal.engine,
+          modality: 'text',
+          modelId: lastLocal.id,
+        })
+      : null;
+    const remoteModalities = modalities.filter(
+      (modality): modality is RemoteModelCategory => isRemoteModelModality(modality),
+    );
+    await Promise.all(remoteModalities.map(modality => {
+      const mediaServerId = modality === 'text'
+        ? selection.activeServerId
+        : selection.activeRemoteMediaServerIds[modality];
+      const mediaServer = selection.servers.find(server => server.id === mediaServerId);
+      const modelId = modality === 'text'
+        ? selection.activeRemoteTextModelId
+        : mediaServer?.selections?.[modality];
+      const selectedRouteId = mediaServerId && modelId
+        ? mobileRouteId({ source: 'remote', hostId: mediaServerId, modality, modelId })
+        : null;
+      return selectCanonicalModel(
+        modality,
+        selectionAfterRemoteServerRemoval({
+          removedServerId: id,
+          selectedRouteId,
+          localFallbackRouteId: modality === 'text' ? localTextFallback : null,
+        }),
+      );
+    }));
     remoteTextTransportRegistry.unregister(id);
     await this.removeApiKey(id);
     useRemoteServerStore.getState().removeServer(id);
@@ -324,32 +330,24 @@ class RemoteServerManager {
 
     const store = useRemoteServerStore.getState();
     const existingServers = store.servers;
-    const existingEndpoints = new Set(
-      existingServers.map(s => trimSlash(s.endpoint)),
-    );
-    const discoveredEndpoints = new Set(
-      discovered.map(server => trimSlash(server.endpoint)),
-    );
-    const unmatchedDiscovered = discovered.filter(
-      server => !existingEndpoints.has(trimSlash(server.endpoint)),
-    );
-    const missingExisting = existingServers.filter(
-      server => !discoveredEndpoints.has(trimSlash(server.endpoint)),
+    const reconciliation = reconcileRemoteServerDiscovery(
+      existingServers,
+      discovered,
     );
     const moved: string[] = [];
-    const found: DiscoveredServer[] = [];
+    const found: DiscoveredServer[] = reconciliation.found.flatMap(candidate => {
+      const original = discovered.find(server => server.endpoint === candidate.endpoint);
+      return original ? [original] : [];
+    });
 
-    for (const d of unmatchedDiscovered) {
-      const samePortServer = uniqueSamePortServer(
-        d,
-        missingExisting,
-        unmatchedDiscovered,
-      );
+    for (const move of reconciliation.moves) {
+      const samePortServer = existingServers.find(server => server.id === move.serverId);
+      const d = discovered.find(server => server.endpoint === move.endpoint);
       if (
-        !samePortServer ||
+        !samePortServer || !d ||
         !(await this.reconcileMovedServer(samePortServer, d))
       ) {
-        found.push(d);
+        if (d) found.push(d);
         continue;
       }
       moved.push(samePortServer.id);
@@ -427,11 +425,17 @@ class RemoteServerManager {
       useAppStore.getState().settings,
     );
 
+    let activeHealthy = false;
     if (activeId) {
       const result = await this.testConnection(activeId).catch(() => ({
         success: false,
       }));
-      if (result.success && !autoDiscover) {
+      activeHealthy = result.success;
+      if (remoteRecoveryDecision({
+        hasActiveServer: true,
+        activeServerHealthy: activeHealthy,
+        autoDiscover,
+      }) === 'none') {
         logger.log(
           '[RemoteServerManager] Active server still reachable; no rescan needed',
         );
@@ -444,8 +448,12 @@ class RemoteServerManager {
       );
     }
 
-    const allowScan = autoDiscover || !!activeId;
-    if (!allowScan) return;
+    const recovery = remoteRecoveryDecision({
+      hasActiveServer: !!activeId,
+      activeServerHealthy: activeHealthy,
+      autoDiscover,
+    });
+    if (recovery === 'none') return;
 
     const { moved, found } = await this.scanAndReconcile();
     logger.log(

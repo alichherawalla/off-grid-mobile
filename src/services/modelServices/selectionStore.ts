@@ -11,7 +11,10 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
     if (route?.serverId) {
       if (modality === 'text') {
         await remoteServerManager.prepareRemoteTextModel(route.serverId, route.modelId);
-      } else if (modality === 'image' || modality === 'transcription' || modality === 'voice') {
+      } else if (
+        modality === 'image' || modality === 'transcription' ||
+        modality === 'voice' || modality === 'embedding'
+      ) {
         await remoteServerManager.prepareRemoteMediaModel(route.serverId, modality, route.modelId);
       } else {
         throw new Error(`Remote ${modality} selection is not supported`);

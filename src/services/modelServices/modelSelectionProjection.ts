@@ -12,7 +12,7 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { mobileRouteId } from './mobileRoute';
 import { selectMobileLocalVoiceRoute, selectedMobileLocalVoiceRoute } from './voiceGenerationAdapter';
 
-type RemoteMediaModality = 'image' | 'transcription' | 'voice';
+type RemoteMediaModality = 'image' | 'transcription' | 'voice' | 'embedding';
 
 function remoteMediaRoute(modality: RemoteMediaModality): string | null {
   const state = useRemoteServerStore.getState();
@@ -77,6 +77,7 @@ export function readMobileModelSelection(modality: ModelModality): string | null
     case 'image': return readImageSelection();
     case 'transcription': return readTranscriptionSelection();
     case 'voice': return remoteMediaRoute('voice') ?? selectedMobileLocalVoiceRoute();
+    case 'embedding': return remoteMediaRoute('embedding');
     case 'classifier': return readClassifierSelection();
     default: return null;
   }
@@ -135,6 +136,19 @@ async function writeVoiceSelection(route: DecodedRoute | null, canonicalId: stri
   }
 }
 
+function writeRemoteMediaSelection(
+  modality: 'embedding',
+  route: DecodedRoute | null,
+): void {
+  if (!route?.serverId) return clearRemoteMedia(modality);
+  useRemoteServerStore.setState(state => ({
+    activeRemoteMediaServerIds: {
+      ...state.activeRemoteMediaServerIds,
+      [modality]: route.serverId,
+    },
+  }));
+}
+
 /** The only raw writer for persisted Mobile selection projections. */
 export async function writeMobileModelSelection(modality: ModelModality, canonicalId: string | null): Promise<void> {
   const route = canonicalId ? decodeModelRouteId(canonicalId) : null;
@@ -144,6 +158,7 @@ export async function writeMobileModelSelection(modality: ModelModality, canonic
     case 'image': writeImageSelection(route); break;
     case 'transcription': writeTranscriptionSelection(route); break;
     case 'voice': await writeVoiceSelection(route, canonicalId); break;
+    case 'embedding': writeRemoteMediaSelection('embedding', route); break;
     case 'classifier':
       useAppStore.getState().updateSettings({ classifierModelId: route?.modelId ?? null });
       break;

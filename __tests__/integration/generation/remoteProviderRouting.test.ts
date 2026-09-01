@@ -17,6 +17,7 @@ import { createDownloadedModel } from '../../utils/factories';
 import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { setupWithConversation } from '../../utils/testHelpers';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
 
 function remoteTransport(id: string): TextStreamTransport {
   return {
@@ -131,12 +132,34 @@ describe('canonical Mobile text route authority', () => {
     remoteTextTransportRegistry.register(serverId, remoteTransport(serverId));
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
-    remote.removeServer(serverId);
-    remoteTextTransportRegistry.unregister(serverId);
+    await remoteServerManager.removeServer(serverId);
     await refreshMobileModelServices();
 
     expect(activeMobileModel('text').model).toMatchObject({ id: local.id, source: 'local' });
     expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
     expect(isRemoteTextModelActive()).toBe(false);
+  });
+
+  it('selects and clears a remote embedding route through the same server control plane', async () => {
+    const remote = useRemoteServerStore.getState();
+    const serverId = remote.addServer({
+      name: 'Embedding server',
+      endpoint: 'https://embeddings.example.test/v1',
+      provider: 'openai-compatible',
+      selections: { embedding: 'embed-small' },
+      catalog: { embedding: [{ id: 'embed-small', name: 'Embed Small' }] },
+    });
+    await refreshMobileModelServices();
+
+    await selectMobileModel({
+      source: 'remote', hostId: serverId, modality: 'embedding', modelId: 'embed-small',
+    });
+    expect(activeMobileModel('embedding').model).toMatchObject({
+      id: 'embed-small', source: 'remote', serverId,
+    });
+
+    await remoteServerManager.removeServer(serverId);
+    await refreshMobileModelServices();
+    expect(activeMobileModel('embedding').model).toBeNull();
   });
 });

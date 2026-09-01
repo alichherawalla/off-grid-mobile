@@ -16,6 +16,8 @@ import {
   resolveRemoteCapabilityEvidence,
   UNKNOWN_REMOTE_MODEL_CAPABILITIES,
   type RemoteModelCapabilityInfo,
+  RemoteCapabilityCache,
+  remoteCapabilityCacheKey,
 } from '@offgrid/models';
 export type RemoteModelInfo = RemoteModelCapabilityInfo;
 
@@ -196,18 +198,18 @@ export async function fetchLlamaCppProps(
  * in-flight promise collapses them to one call per server per discovery pass.
  * Cleared when the request settles so a later refresh re-probes the live server.
  */
-const propsInFlight = new Map<string, Promise<RemoteModelInfo | null>>();
+const propsInFlight = new RemoteCapabilityCache<RemoteModelInfo | null>(32);
 
 /** De-duplicated wrapper around fetchLlamaCppProps — one /props call per endpoint. */
 export function fetchLlamaCppPropsCached(endpoint: string): Promise<RemoteModelInfo | null> {
   // Deliberate in-flight-promise cache: return the pending promise un-awaited so concurrent
   // callers share one fetch. Explicit presence check (not a truthiness/await smell) so the
   // Promise-in-conditional rule (S6544) doesn't misread it as a forgotten await.
-  const existing = propsInFlight.get(endpoint);
-  if (existing !== undefined) return existing;
-  const p = fetchLlamaCppProps(endpoint).finally(() => propsInFlight.delete(endpoint));
-  propsInFlight.set(endpoint, p);
-  return p;
+  const key = remoteCapabilityCacheKey({
+    provider: 'llama.cpp', endpoint, modelId: '*',
+  });
+  const pending = propsInFlight.getOrLoad(key, () => fetchLlamaCppProps(endpoint));
+  return pending.finally(() => propsInFlight.invalidate(key));
 }
 
 /**
