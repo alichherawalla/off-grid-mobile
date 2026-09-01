@@ -144,8 +144,8 @@ const { modelManager: mockModelManager, backgroundDownloadService: mockBackgroun
 const mockServiceRemove = jest.fn(async (..._a: any[]) => {});
 const mockServiceCancel = jest.fn(async (..._a: any[]) => {});
 const mockServiceRetry = jest.fn(async (..._a: any[]) => {});
-jest.mock('../../../src/services/modelDownloadService', () => ({
-  modelDownloadService: {
+jest.mock('../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  modelDownloadRegistry: {
     remove: (...a: any[]) => mockServiceRemove(...a),
     cancel: (...a: any[]) => mockServiceCancel(...a),
     retry: (...a: any[]) => mockServiceRetry(...a),

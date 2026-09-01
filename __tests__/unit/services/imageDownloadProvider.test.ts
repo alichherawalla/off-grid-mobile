@@ -12,7 +12,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({ background
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
 import { Platform } from 'react-native';
-import { imageProvider, setImageDownloadOps } from '../../../src/services/modelDownloadService/providers/imageProvider';
+import { imageProvider, setImageDownloadOps } from '../../../src/services/adapters/downloads/imageDownloadAdapter';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { useAppStore } from '../../../src/stores';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';

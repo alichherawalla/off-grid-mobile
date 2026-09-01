@@ -103,7 +103,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
     useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     makeModelKey = require('../../../src/utils/modelKey').makeModelKey;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
      
 
@@ -174,7 +174,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
     const useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     makeModelKey = require('../../../src/utils/modelKey').makeModelKey;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
     const { backgroundDownloadService } = require('../../../src/services/backgroundDownloadService');
     const { loadQueuedDownloads } = require('../../../src/services/queuedDownloadPersistence');
@@ -219,7 +219,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
      
     const useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
      
 
@@ -268,7 +268,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
     useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     makeModelKey = require('../../../src/utils/modelKey').makeModelKey;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
      
 
@@ -294,7 +294,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
      
     const useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
     const { saveQueuedDownloads } = require('../../../src/services/queuedDownloadPersistence');
      
@@ -327,7 +327,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
      
     const useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
     const { saveQueuedDownloads } = require('../../../src/services/queuedDownloadPersistence');
      
@@ -355,7 +355,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
      
     const useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
      
 
@@ -392,7 +392,7 @@ describe('queued downloads survive an app kill (red-flow)', () => {
       useDownloadStore = require('../../../src/stores/downloadStore').useDownloadStore;
       makeModelKey = require('../../../src/utils/modelKey').makeModelKey;
       const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-      const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+      const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
       const { restoreQueuedDownloads } = require('../../../src/services/restoreQueuedDownloads');
        
       return (async () => {

@@ -59,10 +59,10 @@ jest.mock('../../../../src/services', () => ({
   get huggingFaceService() { return mockHuggingFaceService; },
   get backgroundDownloadService() { return mockBackgroundDownloadService; },
 }));
-jest.mock('../../../../src/services/modelDownloadService', () => ({
-  get modelDownloadService() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: (fn: any) => mockSubscribe(fn) }; },
+jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  get modelDownloadRegistry() { return { retry: (id: string) => mockMDS.retry(id), cancel: (id: string) => mockMDS.cancel(id), remove: (id: string) => mockMDS.remove(id), subscribe: (fn: any) => mockSubscribe(fn) }; },
 }));
-jest.mock('../../../../src/services/modelDownloadService/providers/imageProvider', () => ({
+jest.mock('../../../../src/services/adapters/downloads/imageDownloadAdapter', () => ({
   setImageDownloadOps: (...a: any[]) => mockSetImageDownloadOps(...a),
 }));
 jest.mock('../../../../src/services/imageDownloadActions', () => ({

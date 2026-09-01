@@ -12,7 +12,7 @@ import { backgroundDownloadService } from '../../../src/services/backgroundDownl
 import { huggingFaceService } from '../../../src/services/huggingface';
 import { buildDownloadedModel } from '../../../src/services/modelManager/storage';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
-import { textProvider } from '../../../src/services/modelDownloadService/providers/textProvider';
+import { textProvider } from '../../../src/services/adapters/downloads/textDownloadAdapter';
 import { useAppStore } from '../../../src/stores';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;

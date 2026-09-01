@@ -15,7 +15,7 @@ import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore'
 import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';
 import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
-import type { DownloadProvider, ModelDownload } from '../types';
+import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
 
 const STT_CAPABILITIES = {
   cancel: true,

@@ -14,7 +14,7 @@ describe('V3 — interrupted STT download lost on relaunch (red-flow)', () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
      
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
-    const { sttProvider } = require('../../../src/services/modelDownloadService/providers/sttProvider');
+    const { sttProvider } = require('../../../src/services/adapters/downloads/transcriptionDownloadAdapter');
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
      
 

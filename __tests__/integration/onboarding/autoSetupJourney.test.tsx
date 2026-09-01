@@ -6,13 +6,13 @@ import {
   createAutoSetupSession,
   type AutoSetupDownloadBoundaries,
 } from '../../../src/services/autoSetupService';
-import { modelDownloadService } from '../../../src/services/modelDownloadService';
+import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
 import type {
   DownloadProvider,
   ModelDownload,
   ModelDownloadStartRequest,
   ModelDownloadType,
-} from '../../../src/services/modelDownloadService/types';
+} from '../../../src/services/modelServices/downloadTypes';
 import { uniformDownloadId } from '@offgrid/models';
 import { useAppStore } from '../../../src/stores';
 

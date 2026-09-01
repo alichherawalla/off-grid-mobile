@@ -51,7 +51,7 @@ describe('iOS text retry re-issues a rehydrated failed download that lost its do
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
      
 

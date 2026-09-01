@@ -26,7 +26,7 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
     const { makeImageModelKey } = require('../../../src/utils/modelKey');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
     // The download service has no providers until the app registers them at startup — without this
     // modelDownloadService.retry() finds no owning provider and silently refuses (status stays failed).
     registerCoreDownloadProviders();

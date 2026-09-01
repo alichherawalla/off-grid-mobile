@@ -24,7 +24,7 @@ import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores
 import logger from '../../../utils/logger';
 import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
-import type { DownloadProvider, ModelDownload } from '../types';
+import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
 
 /**
  * Alert-coupled image ops the Download Manager injects:

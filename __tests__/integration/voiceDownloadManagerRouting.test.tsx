@@ -19,7 +19,7 @@
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { BareResourceFetcher } from 'react-native-executorch-bare-resource-fetcher';
 import { KokoroEngine } from '../../pro/audio/engine/tts/engines/kokoro/KokoroEngine';
-import { modelDownloadService } from '../../src/services/modelDownloadService';
+import { modelDownloadRegistry as modelDownloadService } from '../../src/services/modelServices/downloadRegistryBootstrap';
 
 const fetchResources = (BareResourceFetcher as any).fetch as jest.Mock;
 const listDownloadedFiles = BareResourceFetcher.listDownloadedFiles as jest.Mock;

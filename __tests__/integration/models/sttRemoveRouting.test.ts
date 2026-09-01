@@ -26,8 +26,8 @@ jest.mock('../../../src/services/whisperService', () => ({
   },
 }));
 
-import { modelDownloadService } from '../../../src/services/modelDownloadService';
-import { sttProvider } from '../../../src/services/modelDownloadService/providers/sttProvider';
+import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
+import { sttProvider } from '../../../src/services/adapters/downloads/transcriptionDownloadAdapter';
 import { uniformDownloadId } from '@offgrid/models';
 import { useDownloadStore, DownloadEntry } from '../../../src/stores/downloadStore';
 import { makeModelKey } from '../../../src/utils/modelKey';
@@ -45,7 +45,7 @@ const sttEntry = (over: Partial<DownloadEntry> = {}): DownloadEntry => ({
 });
 
 beforeEach(() => {
-  modelDownloadService._reset();
+  modelDownloadService.dispose();
   modelDownloadService.register(sttProvider);
   useDownloadStore.setState({ downloads: { [KEY]: sttEntry() }, downloadIdIndex: { 'dl-stt-1': KEY } });
   mockCancelDownload.mockClear();

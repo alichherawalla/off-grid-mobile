@@ -1,5 +1,5 @@
-import { modelDownloadService } from './modelDownloadService';
-import type { ModelDownload, ModelDownloadStartRequest } from './modelDownloadService/types';
+import { modelDownloadRegistry } from './modelServices/downloadRegistryBootstrap';
+import type { ModelDownload, ModelDownloadStartRequest } from './modelServices/downloadTypes';
 import { useAppStore } from '../stores';
 import { uniformDownloadId } from '@offgrid/models';
 import {
@@ -20,10 +20,10 @@ export interface AutoSetupDownloadBoundaries {
 }
 
 const productionDownloadBoundaries: AutoSetupDownloadBoundaries = {
-  start: request => modelDownloadService.start(request),
-  list: () => modelDownloadService.list(),
-  cancel: id => modelDownloadService.cancel(id),
-  subscribe: listener => modelDownloadService.subscribe(listener),
+  start: request => modelDownloadRegistry.start(request),
+  list: () => modelDownloadRegistry.list(),
+  cancel: id => modelDownloadRegistry.cancel(id),
+  subscribe: listener => modelDownloadRegistry.subscribe(listener),
 };
 
 type AutoSetupItemPhase =
@@ -371,7 +371,7 @@ export function createAutoSetupSession(
       operation += 1;
       unsubscribeDownloads();
       // Leaving Auto Setup must not cancel model downloads. Their lifecycle belongs
-      // to modelDownloadService, so Download Manager can keep showing and controlling
+      // to modelDownloadRegistry, so Download Manager can keep showing and controlling
       // the same work after this screen is gone.
       activeIds.clear();
       listeners.clear();

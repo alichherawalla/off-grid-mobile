@@ -8,14 +8,14 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 const mockList = jest.fn();
 const mockSubscribe = jest.fn();
 let notify: () => void = () => {};
-jest.mock('../../../src/services/modelDownloadService', () => ({
-  modelDownloadService: {
+jest.mock('../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  modelDownloadRegistry: {
     list: (...a: any[]) => mockList(...a),
     subscribe: (cb: () => void) => mockSubscribe(cb),
   },
 }));
 
-import { useModelDownloads } from '../../../src/services/modelDownloadService/useModelDownloads';
+import { useModelDownloads } from '../../../src/hooks/useModelDownloads';
 
 beforeEach(() => {
   jest.clearAllMocks();

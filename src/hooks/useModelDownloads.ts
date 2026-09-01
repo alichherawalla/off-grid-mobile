@@ -10,8 +10,8 @@
  * disk on every byte; the re-list still runs within ~200ms of any change.
  */
 import { useEffect, useState } from 'react';
-import { modelDownloadService } from './index';
-import type { ModelDownload } from './types';
+import { modelDownloadRegistry } from '../services/modelServices/downloadRegistryBootstrap';
+import type { ModelDownload } from '../services/modelServices/downloadTypes';
 
 const COALESCE_MS = 200;
 
@@ -23,7 +23,7 @@ export function useModelDownloads(): ModelDownload[] {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const refresh = () => {
-      modelDownloadService.list().then(list => { if (alive) setDownloads(list); }).catch(() => {});
+      modelDownloadRegistry.list().then(list => { if (alive) setDownloads(list); }).catch(() => {});
     };
     const scheduleRefresh = () => {
       if (timer) return; // already a refresh pending — coalesce
@@ -31,7 +31,7 @@ export function useModelDownloads(): ModelDownload[] {
     };
 
     refresh(); // initial
-    const unsub = modelDownloadService.subscribe(scheduleRefresh);
+    const unsub = modelDownloadRegistry.subscribe(scheduleRefresh);
     return () => {
       alive = false;
       if (timer) clearTimeout(timer);

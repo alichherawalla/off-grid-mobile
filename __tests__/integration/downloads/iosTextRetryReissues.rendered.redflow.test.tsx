@@ -44,7 +44,7 @@ describe('iOS text retry (rendered, red-flow)', () => {
     const { render, waitFor, fireEvent } = requireRTL();
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
      
     // The service routes retry() to the owning provider — register it (app boot does this; a bare
     // screen render does not, which is why retry was silently REFUSED: not found).
@@ -74,7 +74,7 @@ describe('iOS text retry (rendered, red-flow)', () => {
     const { render, waitFor, fireEvent } = requireRTL();
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelServices/downloadBootstrap');
      
     // The service routes retry() to the owning provider — register it (app boot does this; a bare
     // screen render does not, which is why retry was silently REFUSED: not found).

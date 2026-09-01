@@ -8,7 +8,7 @@
  * Delete still routes through the pro delete hook.
  */
 import { renderHook, waitFor, act } from '@testing-library/react-native';
-import type { ModelDownload } from '../../../../src/services/modelDownloadService/types';
+import type { ModelDownload } from '../../../../src/services/modelServices/downloadTypes';
 
 const mockListDownloadedModels = jest.fn((..._a: any[]) => Promise.resolve([] as any[]));
 const mockDeleteModel = jest.fn((..._a: any[]) => Promise.resolve());
@@ -42,8 +42,8 @@ jest.mock('../../../../src/services/whisperService', () => ({
 }));
 
 let mockServiceList: ModelDownload[] = [];
-jest.mock('../../../../src/services/modelDownloadService', () => ({
-  modelDownloadService: {
+jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
+  modelDownloadRegistry: {
     list: jest.fn(async () => mockServiceList),
     subscribe: jest.fn(() => () => {}),
   },

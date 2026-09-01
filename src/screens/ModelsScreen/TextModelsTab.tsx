@@ -25,7 +25,7 @@ import { formatNumber, getTextModelCompatibility } from './utils';
 import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '../../services/curatedLiteRTRegistry';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { modelManager } from '../../services';
-import { modelDownloadService } from '../../services/modelDownloadService';
+import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 
@@ -159,7 +159,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
     const storeEntry = storeDownloads[s.downloadKey];
-    // Retry routes through the single owner (modelDownloadService → textProvider): Android resumes the
+    // Retry routes through the single owner (modelDownloadRegistry → textProvider): Android resumes the
     // native row, iOS re-issues from the entry's metadata. The provider owns the platform decision AND
     // the lost-downloadId case (a rehydrated app-killed entry can have no downloadId), so the failed
     // card must render its Retry regardless of downloadId — gating on it here made iOS retry unreachable.
@@ -168,7 +168,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         errorMessage: s.errorMessage,
         bytesDownloaded: storeEntry.bytesDownloaded,
         totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
-        onRetry: () => { modelDownloadService.retry(uniformDownloadId('text', s.downloadKey)).catch(() => {}); },
+        onRetry: () => { modelDownloadRegistry.retry(uniformDownloadId('text', s.downloadKey)).catch(() => {}); },
         onRemove: () => handleCancelDownload(s.downloadKey),
       }
       : undefined;

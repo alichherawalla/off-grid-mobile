@@ -33,7 +33,7 @@ import {
   stopMobileModelServices,
 } from './src/services/modelServices';
 import { startNetworkReconnectWatcher, stopNetworkReconnectWatcher } from './src/services/networkReconnect';
-import { registerCoreDownloadProviders } from './src/services/modelDownloadService/registerProviders';
+import { registerCoreDownloadProviders } from './src/services/modelServices/downloadBootstrap';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useSlot, SLOTS } from './src/bootstrap/slotRegistry';

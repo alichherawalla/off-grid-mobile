@@ -4,9 +4,9 @@
  * ops (refuse, never a dead op), id→provider routing, and subscribe aggregation.
  */
 import logger from '../../../src/utils/logger';
-import { modelDownloadService } from '../../../src/services/modelDownloadService';
+import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
-import type { DownloadProvider, ModelDownload, ModelDownloadType } from '../../../src/services/modelDownloadService/types';
+import type { DownloadProvider, ModelDownload, ModelDownloadType } from '../../../src/services/modelServices/downloadTypes';
 
 // The queue of not-yet-started downloads is owned by backgroundDownloadService; the
 // service maps a uniform id onto it to cancel a "Queued" row that no provider lists.
@@ -48,7 +48,7 @@ const dl = (id: string, modelType: ModelDownloadType, over: Partial<ModelDownloa
 });
 
 beforeEach(() => {
-  modelDownloadService._reset();
+  modelDownloadService.dispose();
   (logger.log as jest.Mock).mockClear();
   mockBg.getQueuedItems.mockReset().mockReturnValue([]);
   mockBg.cancelQueued.mockReset().mockReturnValue(false);

@@ -15,7 +15,7 @@
  * re-persist. The persisted queue is CLEARED as items are re-issued so a second relaunch can't
  * double-issue.
  */
-import { modelDownloadService } from './modelDownloadService';
+import { modelDownloadRegistry } from './modelServices/downloadRegistryBootstrap';
 import { loadQueuedDownloads, saveQueuedDownloads } from './queuedDownloadPersistence';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useAppStore } from '../stores';
@@ -61,7 +61,10 @@ export async function restoreQueuedDownloads(): Promise<void> {
     // found=1). The reissue path publishes the `pending` store row synchronously and re-enqueues
     // through the queue owner (which re-persists the waiting tail durably), so fire-and-forget
     // is both visible in the Download Manager immediately and kill-safe again.
-    modelDownloadService.reissue(params).catch((e) => {
+    modelDownloadRegistry.reissue({
+      ...params,
+      modelType: params.modelType ?? 'text',
+    }).catch((e) => {
       logger.log(`[DL-SM] restoreQueuedDownloads reissue failed key=${key} err=${e instanceof Error ? e.message : String(e)}`);
     });
   }

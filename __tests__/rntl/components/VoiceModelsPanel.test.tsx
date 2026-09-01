@@ -46,7 +46,7 @@ jest.mock('../../../pro/audio/engine', () => ({
 
 // The panel reads download state from the SAME service the Download Manager does.
 let mockDownloads: any[] = [];
-jest.mock('@offgrid/core/services/modelDownloadService/useModelDownloads', () => ({
+jest.mock('@offgrid/core/hooks/useModelDownloads', () => ({
   useModelDownloads: () => mockDownloads,
 }));
 const ttsDl = (status: string, progress = status === 'completed' ? 1 : 0) =>

@@ -34,7 +34,7 @@ jest.mock('../../src/utils/logger', () => ({
   __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-import { imageProvider } from '../../src/services/modelDownloadService/providers/imageProvider';
+import { imageProvider } from '../../src/services/adapters/downloads/imageDownloadAdapter';
 import { useDownloadStore } from '../../src/stores/downloadStore';
 import { useAppStore } from '../../src/stores';
 import { modelManager } from '../../src/services/modelManager';

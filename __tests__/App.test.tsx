@@ -122,7 +122,7 @@ jest.mock('../src/stores', () => ({
 jest.mock('../src/services/downloadHydration', () => ({
   hydrateDownloadStore: jest.fn(() => Promise.resolve()),
 }));
-jest.mock('../src/services/modelDownloadService/registerProviders', () => ({
+jest.mock('../src/services/modelServices/downloadBootstrap', () => ({
   registerCoreDownloadProviders: jest.fn(),
 }));
 jest.mock('../src/services/proLicenseService', () => ({

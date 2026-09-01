@@ -9,7 +9,7 @@ import { AlertState, showAlert } from '../../components/CustomAlert';
 import { whisperService } from '../../services';
 import { useWhisperStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { modelDownloadService } from '../../services/modelDownloadService';
+import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { isModelDownloadInProgress } from '@offgrid/models';
 import { DownloadItem, formatBytes } from './items';
 
@@ -37,7 +37,7 @@ async function loadItems(): Promise<DownloadItem[]> {
     // defaulting, so a flaky/stale executorch disk probe made it show "completed 82MB"
     // while the panel (service) correctly showed it downloading 0% — the mismatch.
     // Reading the one projection makes divergence impossible.
-    const tts = (await modelDownloadService.list()).filter(d => d.modelType === 'tts');
+    const tts = (await modelDownloadRegistry.list()).filter(d => d.modelType === 'tts');
     for (const d of tts) {
       const engineId = d.id.replace(/^tts:/, '');
       if (d.status === 'completed') {
@@ -57,7 +57,7 @@ async function loadItems(): Promise<DownloadItem[]> {
         // A failed Kokoro fetch. Surface it as a failed active item so the
         // Download Manager shows it with a Retry button (executorch resumes from
         // its cache); the Retry action routes back through
-        // modelDownloadService.retry() → ttsProvider.retry() → downloadAssets().
+        // modelDownloadRegistry.retry() → ttsProvider.retry() → downloadAssets().
         // Prefer the engine's own message: when d.error is present, leave
         // reasonCode undefined so getDownloadStatusLabel shows that text rather
         // than the canned message a known code maps to. Retry still renders
@@ -115,7 +115,7 @@ export function useVoiceDownloadItems(onAlertClose: () => void): VoiceDownloadIt
   // Stay in lockstep with the Voice panel: both observe ModelDownloadService, so a
   // TTS phase change (download start/finish/delete) refreshes this list the same way
   // it updates the panel — no stale "completed" snapshot can linger.
-  useEffect(() => modelDownloadService.subscribe(() => { refreshVoiceItems(); }), [refreshVoiceItems]);
+  useEffect(() => modelDownloadRegistry.subscribe(() => { refreshVoiceItems(); }), [refreshVoiceItems]);
 
   // Kokoro's download has no store to subscribe to (it's executorch's own fetcher),
   // so while a voice model is actively downloading, poll to advance its progress

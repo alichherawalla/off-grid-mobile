@@ -21,7 +21,7 @@ import logger from '../../../utils/logger';
 import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startModelDownload } from '../../startModelDownload';
 import type { DownloadParams } from '../../backgroundDownloadTypes';
-import type { DownloadProvider, ModelDownload } from '../types';
+import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
 
 const TEXT_CAPABILITIES = {
   cancel: true,

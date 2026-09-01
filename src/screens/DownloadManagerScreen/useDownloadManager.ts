@@ -24,9 +24,9 @@ import {
 import logger from '../../utils/logger';
 import { cancelSyntheticImageDownload } from '../../services/imageDownloadActions';
 import { retryImageDownload } from './retryHandlers';
-import { modelDownloadService } from '../../services/modelDownloadService';
+import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
-import { setImageDownloadOps } from '../../services/modelDownloadService/providers/imageProvider';
+import { setImageDownloadOps } from '../../services/adapters/downloads/imageDownloadAdapter';
 import { useEffect } from 'react';
 
 export interface UseDownloadManagerResult {
@@ -71,7 +71,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     refresh();
     // The service owns the queue and notifies on every control op (incl. cancelling a
     // queued start), so a cancel drops the "Queued" row immediately, not on the poll.
-    const unsubscribe = modelDownloadService.subscribe(refresh);
+    const unsubscribe = modelDownloadRegistry.subscribe(refresh);
     const t = setInterval(reconcileAndRefresh, 1000);
     return () => {
       unsubscribe();
@@ -188,7 +188,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       // Single owner: the service cancels the in-flight download (routing to the
       // owning provider — image uses the injected ops above) and logs [DL-SM].
-      await modelDownloadService.cancel(idOf(item));
+      await modelDownloadRegistry.cancel(idOf(item));
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
@@ -202,7 +202,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       // Single owner: the service routes retry to the owning provider (image uses
       // the injected retry above; text/stt are service-level) and logs [DL-SM].
-      await modelDownloadService.retry(idOf(item));
+      await modelDownloadRegistry.retry(idOf(item));
     } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
       const errorMessage =
@@ -238,7 +238,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       // Single owner: provider.remove unloads (n/a for text) + deletes + drops it
       // from the store, and logs [DL-SM].
-      await modelDownloadService.remove(uniformDownloadId('text', model.id));
+      await modelDownloadRegistry.remove(uniformDownloadId('text', model.id));
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete model:', error);
       setAlertState(showAlert('Error', 'Failed to delete model'));
@@ -250,7 +250,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     try {
       // Single owner: provider.remove unloads the image model + deletes + drops it
       // from the store, and logs [DL-SM].
-      await modelDownloadService.remove(uniformDownloadId('image', model.id));
+      await modelDownloadRegistry.remove(uniformDownloadId('image', model.id));
     } catch (error) {
       logger.error('[DownloadManager] Failed to delete image model:', error);
       setAlertState(showAlert('Error', 'Failed to delete image model'));

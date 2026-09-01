@@ -16,7 +16,7 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
 }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
-import { sttProvider } from '../../../src/services/modelDownloadService/providers/sttProvider';
+import { sttProvider } from '../../../src/services/adapters/downloads/transcriptionDownloadAdapter';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { whisperService } from '../../../src/services/whisperService';
 import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
