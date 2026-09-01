@@ -12,6 +12,8 @@ import {
   MOBILE_LITERT_SETTINGS_DEFAULTS,
   MOBILE_TEXT_SETTINGS_DEFAULTS,
   REASONING_BUDGET_AUTO,
+  isExcludedTextModel,
+  isSuspiciousRecoveredImageModel,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../constants';
 import {
@@ -33,10 +35,6 @@ import {
   mobileModelSettingPatch,
 } from '../services/sync/mutation';
 import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
-import {
-  isExcludedTextModel,
-  isSuspiciousRecoveredImageModel,
-} from '../utils/modelSelectorFilters';
 import { migratePersistedState } from './appStoreMigrations';
 import { defaultImageSteps, SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 

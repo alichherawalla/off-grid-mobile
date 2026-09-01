@@ -128,6 +128,10 @@ for (const file of files) {
     report('text-engine-policy-is-shared', fileName, source, source, 'obsolete:parallel-engine-facade')
   }
 
+  if (fileName === 'src/utils/modelSelectorFilters.ts') {
+    report('catalog-filter-policy-is-shared', fileName, source, source, 'obsolete:catalog-filter-projection')
+  }
+
   if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)

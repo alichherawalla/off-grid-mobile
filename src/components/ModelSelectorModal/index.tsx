@@ -35,7 +35,7 @@ import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
   isUnsupportedJetsamImageModel,
-} from '../../utils/modelSelectorFilters';
+} from '@offgrid/models';
 import logger from '../../utils/logger';
 
 type TabType = 'text' | 'image';
