@@ -135,7 +135,7 @@ jest.mock('../src/hooks/useDownloads', () => ({
   useDownloadListeners: jest.fn(),
 }));
 jest.mock('../src/services/loadPolicySync', () => ({
-  startLoadPolicySync: jest.fn(() => jest.fn()),
+  createLoadPolicySync: jest.fn(() => ({ start: jest.fn(), dispose: jest.fn() })),
 }));
 jest.mock('../src/services/networkReconnect', () => ({
   startNetworkReconnectWatcher: mockStartNetworkReconnectWatcher,

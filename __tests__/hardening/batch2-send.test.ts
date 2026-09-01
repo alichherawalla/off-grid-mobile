@@ -6,8 +6,6 @@
  */
 import { handleSendFn } from '../../src/screens/ChatScreen/useChatGenerationActions';
 
-jest.mock('../../src/services/modelPreloader', () => ({ abortPreload: jest.fn() }));
-
 describe('send UI boundary', () => {
   it('alerts and creates no conversation when no model is active', async () => {
     const setAlertState = jest.fn();

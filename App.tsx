@@ -27,7 +27,7 @@ import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
-import { startLoadPolicySync } from './src/services/loadPolicySync';
+import { createLoadPolicySync } from './src/services/loadPolicySync';
 import {
   refreshMobileModelServices,
   startMobileModelServices,
@@ -89,7 +89,6 @@ function App() {
     stopStartupProbe = null;
     stopDebugLogFile();
   }, []);
-
   useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
@@ -102,7 +101,6 @@ function App() {
   const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
   const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
   const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
-
   const { colors, isDark } = useTheme();
 
   const {
@@ -231,7 +229,7 @@ function App() {
     setDownloadedImageModels,
   ]);
 
-  const initializeApp = useCallback(async (generation: number) => {
+  const initializeApp = useCallback(async (generation: number, loadPolicySync: ReturnType<typeof createLoadPolicySync>) => {
     try {
       // Ensure persisted download metadata is loaded before restore logic reads it.
       logger.log('[BOOT] app store hydrate');
@@ -240,7 +238,7 @@ function App() {
       // Project the persisted "aggressive model loading" setting onto the residency
       // manager (single owner of the runtime load policy) now that settings are
       // hydrated, and keep it in sync for the app's lifetime.
-      startLoadPolicySync();
+      loadPolicySync.start();
 
       // Download-state recovery runs OFF the boot gate (fire-and-forget, order preserved
       // inside recoverDownloadState below): with many WorkManager downloads mid-flight the
@@ -328,13 +326,13 @@ function App() {
       // empty — without this scan a freshly launched app shows an already-installed
       // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
       // forget; the Models screen also refreshes on focus.
-      void transcriptionModelIntents.reconcileDisk();
+      transcriptionModelIntents.reconcileDisk().catch(error => {
+        logger.error('[App] Whisper disk reconciliation failed:', error);
+      });
 
-      // Models are intentionally NOT warmed at boot — a native model load is heavy
+      // Models are intentionally NOT warmed at boot. A native model load is heavy
       // and contends with startup, leaving the whole app sluggish in that window.
-      // They load lazily instead: the text model on chat entry / before the first
-      // generation (useChatScreen + ensureModelLoaded), TTS/STT when those features
-      // are first used. This keeps app launch responsive.
+      // Text, TTS, and STT load on demand. This keeps app launch responsive.
     } catch (error) {
       logger.error('[App] Error initializing app:', error);
       setIsInitializing(false);
@@ -351,12 +349,14 @@ function App() {
   ]);
 
   useEffect(() => {
+    const loadPolicySync = createLoadPolicySync();
     const generation = ++startupGeneration.current;
-    initializeApp(generation);
+    initializeApp(generation, loadPolicySync);
     return () => {
       startupGeneration.current += 1;
       stopNetworkReconnectWatcher();
       stopMobileModelServices();
+      loadPolicySync.dispose();
     };
   }, [initializeApp]);
 

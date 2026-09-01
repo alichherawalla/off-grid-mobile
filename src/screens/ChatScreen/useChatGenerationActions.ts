@@ -2,7 +2,6 @@ import { Dispatch, SetStateAction } from 'react';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
-import { abortPreload } from '../../services/modelPreloader';
 import { localModelAcceptsImages } from '../../services/engines';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { reportModelFailure } from '../../services/modelFailureHandler';
@@ -154,7 +153,6 @@ export type SendCall = {
 };
 
 export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promise<void> {
-  abortPreload();
   if (!deps.hasActiveModel) {
     deps.setAlertState(showAlert('No Model Selected', 'Please select a model first.'));
     return;

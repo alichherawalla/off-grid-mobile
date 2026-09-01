@@ -13,7 +13,7 @@
  * effective policy actually changes.
  */
 import { loadPolicyFromSettings } from '@offgrid/models';
-import { startLoadPolicySync } from '../../../src/services/loadPolicySync';
+import { createLoadPolicySync, startLoadPolicySync } from '../../../src/services/loadPolicySync';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { useAppStore } from '../../../src/stores';
 
@@ -98,11 +98,11 @@ describe('startLoadPolicySync', () => {
     expect(modelResidencyManager.getLoadPolicy()).toBe('balanced');
   });
 
-  it('is a singleton — calling twice does NOT stack subscriptions (leak guard)', () => {
-    const first = startLoadPolicySync();
-    const second = startLoadPolicySync();
-    expect(second).toBe(first); // same live unsubscribe returned, not a new subscription
-    unsubscribe = first;
+  it('one explicit coordinator starts idempotently and never stacks subscriptions', () => {
+    const coordinator = createLoadPolicySync();
+    coordinator.start();
+    coordinator.start();
+    unsubscribe = () => coordinator.dispose();
 
     const spy = jest.spyOn(modelResidencyManager, 'setLoadPolicy');
     // One mode change → setLoadPolicy fires exactly once, not once-per-start.
