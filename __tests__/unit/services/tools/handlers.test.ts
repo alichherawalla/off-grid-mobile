@@ -21,7 +21,7 @@ jest.mock('../../../../src/utils/logger', () => ({
 }));
 
 const mockRagSearchProject = jest.fn();
-jest.mock('../../../../src/services/rag', () => ({
+jest.mock('../../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
   ragService: {
     searchProject: (...args: any[]) => mockRagSearchProject(...args),
   },

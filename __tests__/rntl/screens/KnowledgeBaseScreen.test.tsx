@@ -28,7 +28,7 @@ const mockIndexDocument = jest.fn<Promise<number>, [any]>(() => Promise.resolve(
 const mockDeleteDocument = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
 const mockToggleDocument = jest.fn<Promise<void>, [number, boolean]>(() => Promise.resolve());
 
-jest.mock('../../../src/services/rag', () => ({
+jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
   ragService: {
     getDocumentsByProject: (projectId: string) => mockGetDocumentsByProject(projectId),
     indexDocument: (params: any) => mockIndexDocument(params),

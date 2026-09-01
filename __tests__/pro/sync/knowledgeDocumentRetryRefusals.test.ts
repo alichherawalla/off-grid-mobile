@@ -60,7 +60,7 @@ type Harness = {
 /** Index a real document into a real knowledge base, and return the handles the cases need. */
 async function indexedDocument(): Promise<Harness> {
   installRealSqlite();
-  const { ragService } = require('../../../src/services/rag');
+  const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
   const { documentService } = require('../../../src/services/documentService');
   const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
   const {

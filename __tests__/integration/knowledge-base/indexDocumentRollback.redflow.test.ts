@@ -18,7 +18,7 @@ describe('PR#452 — KB indexDocument leaves a dead entry on embed failure (red-
   it('rolls back the document (no silent non-searchable entry) when embedding fails', async () => {
     installRealSqlite();
      
-    const { ragService } = require('../../../src/services/rag');
+    const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
     const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
     const { documentService } = require('../../../src/services/documentService');
      

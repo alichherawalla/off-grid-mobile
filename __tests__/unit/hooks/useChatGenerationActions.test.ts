@@ -89,7 +89,7 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
     deleteGeneratedImage: jest.fn(),
   },
 }));
-jest.mock('../../../src/services/rag', () => ({
+jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
   ragService: {
     searchProject: jest.fn(() => Promise.resolve({ chunks: [], truncated: false })),
     getDocumentsByProject: jest.fn(() => Promise.resolve([])),
@@ -137,8 +137,8 @@ const mockDeleteGeneratedImage = localDreamGeneratorService.deleteGeneratedImage
 const { liteRTService } = require('../../../src/services/litert');
 const mockLiteRTLoaded = liteRTService.isModelLoaded as jest.Mock;
 
-const { ragService } = require('../../../src/services/rag');
-const { retrievalService } = require('../../../src/services/rag');
+const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
+const { retrievalService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
 const mockSearchProject = ragService.searchProject as jest.Mock;
 const mockGetDocsByProject = ragService.getDocumentsByProject as jest.Mock;
 const mockFormatForPrompt = retrievalService.formatForPrompt as jest.Mock;

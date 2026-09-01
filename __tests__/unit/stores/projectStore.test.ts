@@ -11,7 +11,7 @@
  */
 
 const mockDeleteProjectDocuments = jest.fn<Promise<void>, [string]>(() => Promise.resolve());
-jest.mock('../../../src/services/rag', () => ({
+jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
   ragService: { deleteProjectDocuments: (id: string) => mockDeleteProjectDocuments(id) },
 }));
 

@@ -6,13 +6,6 @@ jest.mock('../../../../src/services/adapters/rag/ragDatabaseAdapter', () => ({
   },
 }));
 
-jest.mock('../../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
-  embeddingService: {
-    isLoaded: jest.fn(() => false),
-    load: jest.fn(() => Promise.resolve()),
-  },
-}));
-
 jest.mock('../../../../src/services/mobileSidecarGeneration', () => ({
   executeMobileEmbedding: jest.fn(),
 }));
@@ -22,14 +15,12 @@ jest.mock('../../../../src/utils/logger', () => ({
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-import { retrievalService } from '../../../../src/services/rag/retrieval';
+import { retrievalService } from '../../../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../../../src/services/adapters/rag/ragDatabaseAdapter';
-import { embeddingService } from '../../../../src/services/adapters/native/embeddingRuntimeAdapter';
 import { executeMobileEmbedding } from '../../../../src/services/mobileSidecarGeneration';
 
 const mockGetEmbeddings = ragDatabase.getEmbeddingsByProject as jest.Mock;
 const mockGetChunks = ragDatabase.getChunksByProject as jest.Mock;
-const mockIsLoaded = embeddingService.isLoaded as jest.Mock;
 const mockExecuteMobileEmbedding = executeMobileEmbedding as jest.Mock;
 
 describe('RetrievalService', () => {
@@ -56,7 +47,6 @@ describe('RetrievalService', () => {
     });
 
     it('performs semantic search when embeddings exist', async () => {
-      mockIsLoaded.mockReturnValue(true);
       mockExecuteMobileEmbedding.mockResolvedValue([[1, 0, 0]]);
 
       mockGetEmbeddings.mockReturnValue([
@@ -83,8 +73,7 @@ describe('RetrievalService', () => {
       expect(result.chunks[0].content).toBe('similar');
     });
 
-    it('loads embedding model if not loaded', async () => {
-      mockIsLoaded.mockReturnValue(false);
+    it('routes query embedding through the typed shared generation operation', async () => {
       mockExecuteMobileEmbedding.mockResolvedValue([[1, 0]]);
 
       mockGetEmbeddings.mockReturnValue([
@@ -99,36 +88,10 @@ describe('RetrievalService', () => {
       ]);
 
       await retrievalService.search('proj1', 'test');
-      expect(embeddingService.load).toHaveBeenCalled();
-    });
-
-    it('falls back to chunks if embedding load fails', async () => {
-      mockIsLoaded.mockReturnValue(false);
-      (embeddingService.load as jest.Mock).mockRejectedValue(
-        new Error('load failed'),
-      );
-
-      mockGetEmbeddings.mockReturnValue([
-        {
-          chunk_rowid: 1,
-          doc_id: 1,
-          name: 'doc.txt',
-          content: 'text',
-          position: 0,
-          embedding: [1, 0],
-        },
-      ]);
-      const fallback = [
-        { doc_id: 1, name: 'doc.txt', content: 'text', position: 0, score: 0 },
-      ];
-      mockGetChunks.mockReturnValue(fallback);
-
-      const result = await retrievalService.search('proj1', 'test');
-      expect(result.chunks).toEqual(fallback);
+      expect(mockExecuteMobileEmbedding).toHaveBeenCalledWith(['test']);
     });
 
     it('falls back to chunks if embed call fails', async () => {
-      mockIsLoaded.mockReturnValue(true);
       mockExecuteMobileEmbedding.mockRejectedValue(new Error('embed failed'));
 
       mockGetEmbeddings.mockReturnValue([

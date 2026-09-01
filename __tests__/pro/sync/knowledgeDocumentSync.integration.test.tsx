@@ -100,7 +100,7 @@ describe('Pro mobile knowledge document sync journey', () => {
     } = require('../../../src/bootstrap/hookRegistry');
     const { useAppStore } = require('../../../src/stores/appStore');
     const { useChatStore } = require('../../../src/stores/chatStore');
-    const { ragService } = require('../../../src/services/rag');
+    const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
     const { buildSyncEngine } = require('../../../src/services/sync/engine');
     const {
       knowledgeDocumentSyncService,

@@ -42,7 +42,7 @@ export type { ImageGenerationState } from './imageGenerationService';
 export { documentService } from './documentService';
 export { buildToolSystemPromptHint } from './tools';
 export { contextCompactionService } from './contextCompaction';
-export { ragService, retrievalService } from './rag';
+export { ragService, retrievalService } from './modelServices/bootstrap/ragBootstrap';
 // Providers
 // HTTP Client
 // Remote Server Manager

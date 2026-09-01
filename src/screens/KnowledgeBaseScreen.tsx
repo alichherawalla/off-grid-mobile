@@ -19,8 +19,8 @@ import logger from '../utils/logger';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './KnowledgeBaseScreen.styles';
 import { useProjectStore } from '../stores';
-import { ragService } from '../services/rag';
-import type { RagDocument } from '../services/rag';
+import { ragService } from '../services/modelServices/bootstrap/ragBootstrap';
+import type { RagDocument } from '../services/modelServices/bootstrap/ragBootstrap';
 import { RootStackParamList } from '../navigation/types';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 

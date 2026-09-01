@@ -56,8 +56,8 @@ async function withIndexedDocs(
   docs: Array<{ projectId: string; fileName: string; text: string }>,
 ): Promise<RagModules> {
   installRealSqlite();
-  const { ragService } = require('../../../src/services/rag');
-  const { retrievalService } = require('../../../src/services/rag/retrieval');
+  const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
+  const { retrievalService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
   const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
   const {
     executeMobileEmbedding,

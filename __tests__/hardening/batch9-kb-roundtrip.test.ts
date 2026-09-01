@@ -155,7 +155,7 @@ jest.mock('../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
   },
 }));
 
-import { ragService } from '../../src/services/rag';
+import { ragService } from '../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../src/services/adapters/rag/ragDatabaseAdapter';
 import { documentService } from '../../src/services/documentService';
 
@@ -219,7 +219,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
   // journey). So we substitute ONLY that decode boundary with the already-decoded
   // number[] embeddings a real device returns, and let the REAL retrieval rank them.
   it('retrieval ranks the closer doc first by real cosine similarity (case 14)', async () => {
-    const { retrievalService } = require('../../src/services/rag/retrieval');
+    const { retrievalService } = require('../../src/services/modelServices/bootstrap/ragBootstrap');
     // Two docs already stored with their real embedding vectors (as a device returns
     // from getEmbeddingsByProject). "solar" doc is [1,0,0,.1]; "battery" is [0,1,0,.1].
     jest.spyOn(ragDatabase, 'getEmbeddingsByProject').mockReturnValue([

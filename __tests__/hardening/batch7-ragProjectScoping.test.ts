@@ -71,7 +71,7 @@ jest.mock('../../src/utils/logger', () => ({
   default: { log: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
-import { retrievalService } from '../../src/services/rag/retrieval';
+import { retrievalService } from '../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../src/services/adapters/rag/ragDatabaseAdapter';
 
 const mockGetEmbeddings = ragDatabase.getEmbeddingsByProject as jest.Mock;

@@ -19,8 +19,8 @@ import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
 import { Button } from '../components/Button';
 import { showAlert, AlertState } from '../components/CustomAlert';
 import { PasteNoteSheet } from '../components/knowledge/PasteNoteSheet';
-import { ragService } from '../services/rag';
-import type { RagDocument } from '../services/rag';
+import { ragService } from '../services/modelServices/bootstrap/ragBootstrap';
+import type { RagDocument } from '../services/modelServices/bootstrap/ragBootstrap';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 
 const formatFileSize = (bytes: number): string => {

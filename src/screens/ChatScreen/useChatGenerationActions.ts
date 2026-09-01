@@ -558,7 +558,7 @@ async function injectRagContext(
   try {
     const docs = await ragService.getDocumentsByProject(projectId);
     const enabledDocs = docs.filter(
-      (d: import('../../services/rag').RagDocument) => d.enabled,
+      (d: import('../../services/modelServices/bootstrap/ragBootstrap').RagDocument) => d.enabled,
     );
     if (enabledDocs.length === 0) return prompt;
     // Warm up embedding model in background (non-blocking)
@@ -568,7 +568,7 @@ async function injectRagContext(
         .catch(err => logger.error('[RAG] Embedding warmup failed', err));
     }
     const docList = enabledDocs
-      .map((d: import('../../services/rag').RagDocument) => `- ${d.name}`)
+      .map((d: import('../../services/modelServices/bootstrap/ragBootstrap').RagDocument) => `- ${d.name}`)
       .join('\n');
     let kbPrompt = `\n\nYou have a knowledge base with these documents:\n${docList}`;
     kbPrompt +=

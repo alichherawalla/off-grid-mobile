@@ -72,18 +72,8 @@ jest.mock('../../../src/services/modelServices', () => {
   };
 });
 
-jest.mock('../../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
-  embeddingService: {
-    load: jest.fn(() => Promise.resolve()),
-    isLoaded: jest.fn(() => true),
-    unload: jest.fn(() => Promise.resolve()),
-    getDimension: jest.fn(() => 8),
-  },
-}));
-
-import { ragService, retrievalService } from '../../../src/services/rag';
+import { ragService, retrievalService } from '../../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../../src/services/adapters/rag/ragDatabaseAdapter';
-import { embeddingService } from '../../../src/services/adapters/native/embeddingRuntimeAdapter';
 import { cosineSimilarity } from '@offgrid/rag';
 import { documentService } from '../../../src/services/documentService';
 import { mobileGenerationService } from '../../../src/services/modelServices';
@@ -118,8 +108,7 @@ describe('Embedding Flow Integration', () => {
         fileSize: 200,
       });
 
-      // The platform leaf loads, then model-facing work uses the shared typed contract.
-      expect(embeddingService.load).toHaveBeenCalled();
+      // Model-facing work uses the shared typed contract; lifecycle stays behind that contract.
       expect(mockSharedGenerate).toHaveBeenCalledWith({
         operation: { type: 'embedding', inputs: expect.any(Array) },
         allowFallback: false,

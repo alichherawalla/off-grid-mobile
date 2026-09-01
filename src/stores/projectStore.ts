@@ -4,7 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project } from '../types';
 import { generateId } from '../utils/generateId';
-import { ragService } from '../services/rag';
+import { ragService } from '../services/modelServices/bootstrap/ragBootstrap';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
 import {

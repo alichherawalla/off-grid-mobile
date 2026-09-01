@@ -15,7 +15,7 @@ describe('search_knowledge_base — real RAG round-trip (guard)', () => {
   it('returns the indexed document content when the model searches the knowledge base', async () => {
     installRealSqlite();
      
-    const { ragService } = require('../../../src/services/rag');
+    const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
     const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
     const { documentService } = require('../../../src/services/documentService');
     const { executeToolCall } = require('../../../src/services/tools/handlers');

@@ -12,7 +12,7 @@ const mockFetch = jest.fn();
 
 // Mock RAG service for search_knowledge_base tests
 const mockSearchProject = jest.fn();
-jest.mock('../../../src/services/rag', () => ({
+jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
   ragService: { searchProject: (...args: any[]) => mockSearchProject(...args) },
 }));
 
