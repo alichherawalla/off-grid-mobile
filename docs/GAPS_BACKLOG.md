@@ -117,6 +117,8 @@ enhancement, residency, library, configuration, and artifact-verification rounds
 production code. The Shared, Mobile, and Desktop model-architecture gates pass with zero temporary
 allowlist items. Shared models, Mobile, and Desktop TypeScript gates also pass on this snapshot. A
 source scan found no `jest.mock`, `vi.mock`, or module replacement for `@offgrid/models`.
+The earlier recovery hang was fixed without weakening verification; the complete Shared package now
+builds its declarations and passes all 432 tests.
 
 The gates prove several intended boundaries:
 
@@ -131,58 +133,177 @@ The gates prove several intended boundaries:
 
 The following strict architecture gaps remain and prevent a **Verified** verdict:
 
-1. **Shared model tests can hang in download recovery.** The complete `@offgrid/models` test command
-   reached the download suite and then remained live. The focused test
-   `coordinator relaunch restores every queued job, isolates failures, and never resurrects
-   cancellation` exceeds a five-second test timeout because its wait at
-   `packages/models/test/download-domain.test.mjs:617` never observes the queued success as
-   `completed`. Other focused coordinator cases pass. This is a release blocker until the behavior
-   or test lifecycle is corrected without weakening artifact verification.
-2. **Mobile model import policy still lives in screen code.** `src/screens/ModelsScreen/useModelsScreen.ts:32`
+1. **Mobile model import policy still lives in screen code.** `src/screens/ModelsScreen/useModelsScreen.ts:32`
    owns ZIP staging, unzip order, backend detection, package construction, registration, and
    activation. `src/screens/ModelsScreen/importHelpers.ts:15` owns GGUF/projector classification and
    size-based fallback, and `TextModelsTab.tsx:108` heals model vision metadata from the UI. These
    decisions belong in Shared model-library/import commands; Mobile should provide picker,
    filesystem, archive, and alert ports only.
-3. **Mobile prompt context policy is not fully shared.** `src/services/imageGenerationHelpers.ts:95`
+2. **Mobile prompt context policy is not fully shared.** `src/services/imageGenerationHelpers.ts:95`
    chooses the last ten messages, removes runtime/image/enhancement messages, selects answer versus
    reasoning, and truncates each message to 500 characters before invoking the Shared prompt
    service. These are prompt-input rules, not native or presentation mechanics.
-4. **Mobile reload and loaded-settings policy remains app-owned.**
+3. **Mobile reload and loaded-settings policy remains app-owned.**
    `src/screens/ChatScreen/pendingSettings.ts:7` branches on LiteRT and duplicates the 4,096-token
    fallback while deciding whether a reload is required. `reloadTextModel.ts:28` decides local versus
    remote eligibility and owns the unload-then-load transaction. Shared must own both decisions;
    Mobile may render the result and execute native commands through ports.
-5. **Desktop model UI still owns admission and model-library sequencing.**
+4. **Desktop model UI still owns admission and model-library sequencing.**
    `src/renderer/src/components/ModelsScreen.tsx:493` performs a fit check, asks for the memory
    override, and branches activation by `computer_use`. The renderer must send one activation intent
    and render a typed Shared result. `pro/renderer/components/voice/TranscriptionModels.tsx:82`
    sequences download, activation, refresh, and progress cleanup in the component instead of one
    model-library application command.
-6. **Desktop capture readiness is derived in the renderer.**
+5. **Desktop capture readiness is derived in the renderer.**
    `src/renderer/src/components/PermissionGate.tsx:56` joins capture state, active model, projector
    state, repair choice, and download behavior. Main/Shared should return one typed capture-readiness
    projection and accept one repair intent.
-7. **Selection has exceptional writers outside the normal application command.** Desktop
+6. **Selection has exceptional writers outside the normal application command.** Desktop
    `src/main/model-services.ts:569` clears canonical and legacy selection files directly when a
    remote server is removed instead of calling the Shared selection service. Mobile
    `src/services/modelServices/remoteServerController.ts:429` calls a store-level clear that resets
    selection projections directly. These exceptional paths can bypass the normal fallback and
    reconciliation rules.
-8. **Residency still has two names for one lifecycle concept.** Shared exports
+7. **Residency still has two names for one lifecycle concept.** Shared exports
    `RuntimeResidencyMode` (`resident` / `on-demand`) and `ResidencyLifecycleMode`
    (`persistent` / `operation`), and Desktop continues to expose `getResidencyMode` /
    `setResidencyMode`. If one is only a persisted/UI codec, it must be named and isolated as that
    codec; domain and app orchestration must use one lifecycle vocabulary.
-9. **Image settings are not yet one complete configuration SSOT.** Mobile imports Shared text
+8. **Image settings are not yet one complete configuration SSOT.** Mobile imports Shared text
    defaults, but `src/stores/appStore.ts:241` and two image-settings surfaces still use the literal
    guidance default `7.5` instead of `DEFAULT_IMAGE_GUIDANCE`. The Shared default must feed storage,
    reset, and both controls.
-10. **The Shared download package exposes overlapping status vocabularies.**
+9. **The Shared download package exposes overlapping status vocabularies.**
     `downloads/status-ledger.ts`, `download-orchestration.ts`, `downloads/registry.ts`, and
     `types.ts` define related terminal states as both `failed` and `error` and maintain separate
     lifecycle unions. Boundary aliases are valid only through one explicit codec; application code
     must consume one canonical state model.
+10. **Mobile still owns the native text-load application state machine.**
+    `src/services/llm.ts:69-109` performs file admission, setting resolution, memory observation,
+    RAM correction, and context downgrade. `src/services/llm.ts:138-209` owns swap locking, unload,
+    GPU/HTP/OpenCL selection, and fallback. `src/services/llmHelpers.ts:24-35` defines runtime
+    defaults and mmap policy, while `src/services/llmHelpers.ts:86-218` defines load plans, platform
+    timeouts, and GPU-to-CPU retry. These are model-domain decisions and states. Shared needs one
+    native-text runtime application service with observation, native-init, release, and capability
+    ports. Mobile must only execute those ports and publish the result.
+11. **Mobile still owns model lifecycle transactions.**
+    `src/services/modelServices/modelLifecycleBootstrap.ts:37-97` constructs text, image, and
+    transcription resident identities and costs. `modelLifecycleBootstrap.ts:107-209` sequences
+    admission, native load/unload, force reload, route selection, observers, and inventory refresh.
+    The remaining unload and eject paths in the same module also clear selection and residency.
+    Shared helpers are used, but Mobile still composes the state machine. Move the transaction into
+    a Shared `ModelLifecycleApplicationService`; keep store, native engine, and inventory adapters in
+    Mobile.
+12. **Mobile chat routing, RAG augmentation, and compaction remain app-owned workflows.**
+    `src/screens/ChatScreen/mobileChatSession.ts:141-199` joins route availability, image-mode policy,
+    classifier provisioning, failure fallback, route repair, and vision detection.
+    `mobileChatSession.ts:201-243` selects system prompts, document scope, retrieval query, and
+    compaction context. `src/services/contextCompaction.ts:29-145` owns compaction state, token
+    fallback, KV clearing, summary generation, trim fallback, persistence, and result projection.
+    Shared pure helpers are not enough: Shared needs chat-operation, context/RAG, and compaction
+    application services with inventory, retrieval, generation, cache, and persistence ports.
+13. **Mobile download command ownership is incomplete.**
+    `src/services/modelServices/coordinatedDownloadBridge.ts:20-23` translates model kinds and
+    lifecycle states, while `coordinatedDownloadBridge.ts:58-121` constructs manifests, creates
+    operation identities, decides completed/active state, moves artifacts, and reconciles two
+    inventories. `src/services/whisperModelDownloads.ts:41-195` owns Whisper admission,
+    cancellation, publication, validation failure cleanup, and delete races.
+    `src/services/downloadEventProjection.ts:10-53` decides terminal and processing transitions by
+    modality. Shared needs one download application service and one public state codec. Mobile may
+    supply background-transfer, filesystem, backup-exclusion, notification, and UI projection
+    ports only.
+14. **Tool and MCP orchestration is split across the apps.**
+    Mobile `src/services/modelServices/toolPorts.ts:70-115` sets routing modes, schema budget,
+    selection limit, and fallback behavior. `pro/mcp/mcpService.ts:218-266` selects MCP owners and
+    constructs the remote-tool prompt, and its following parser path duplicates tool-call parsing.
+    Desktop `src/main/tools.ts:580-690` selects tools, sets routing and loop policy, and executes the
+    generation/tool loop. `src/main/tools/planner.ts:40-73` owns repair attempts and generation
+    limits, while `src/main/tools/planner-logic.ts` owns the plan contract. Shared needs one tool
+    orchestration and planning service. Apps may provide tool catalogs, connector execution, and
+    native or network generation ports.
+15. **RAG profiles are duplicated even though RAG has a Shared package.**
+    Mobile `src/services/modelServices/bootstrap/ragBootstrap.ts:78` and Desktop
+    `src/main/rag/index.ts:132` repeat the `600 / 120 / 20` chunk profile. Mobile
+    `src/services/adapters/rag/mobileRagPorts.ts:104` and Desktop `src/main/rag/index.ts:29` repeat
+    the 384-dimension embedding contract, and Mobile also repeats Shared's default retrieval count.
+    Export one named Shared RAG profile and embedding contract. App files should contain database,
+    filesystem, and embedding-engine adapters only.
+16. **Text-model sync uses different manifest policy on each app.**
+    Desktop model transfer uses Shared `projectTransferredModelManifest`, but Mobile
+    `pro/sync/textModelTransferAdapter.ts:19-63` constructs text/vision manifests and source metadata
+    locally. Mobile image transfer also owns a 256 MB archive-reserve policy in
+    `pro/sync/imageModelTransferAdapter.ts:18`. Both apps must use the same Shared manifest and disk
+    reserve policy; their adapters may read files, free disk space, and transfer bytes.
+17. **The architecture gates do not enforce the claimed boundary.**
+    Both app gates match a list of known filenames and symbols. They pass with zero allowlist items
+    while the load, lifecycle, compaction, routing, download, tool, RAG, and sync policy above still
+    exists in app code. Add a zone-based gate: UI, hooks, stores, Pro code, and services may import
+    Shared facade commands and DTOs, while pure decisions, domain defaults, timers, retry ladders,
+    and application state machines are forbidden outside explicit adapter directories.
+18. **Current integration tests do not prove the real app boundary.**
+    The scan found no mock of `@offgrid/models`, which is good. However, tests named integration
+    still replace app-owned model services, for example
+    `__tests__/integration/generation/remoteFailureClearsLoading.test.ts:27`,
+    `__tests__/hardening/batch6-model-lifecycle.test.ts:29-32`, and
+    `__tests__/integration/models/sttResidency.test.ts:28,48`. Desktop
+    `src/main/__tests__/mcp-remote-task.integration.test.ts:5-9` also replaces generation and RAG
+    services. Keep boundary fakes for native/network systems, but add real composition tests that use
+    Shared services and the actual app adapters. These tests do not replace physical-device and
+    packaged-app verification.
+19. **Mobile has a second memory advisory and configuration layer.**
+    `src/services/modelServices/modelMemoryAdvisory.ts:29-68` reads device memory and engine state to
+    recompute budgets and model costs. `modelMemoryAdvisory.ts:80-169` rebuilds residency from legacy
+    loaded IDs and produces another admission verdict. The Shared advisory functions are called,
+    but Mobile still prepares a parallel state projection instead of consuming the
+    `ModelResidencyManager` snapshot. `src/services/localDreamGenerator.ts:131-142` and
+    `localDreamGenerator.ts:248-257` also repeat image defaults, while `src/services/litert.ts:92`,
+    `litert.ts:107-110`, and `litert.ts:480` repeat the 4,096-token default. Move all defaults and
+    advisory input construction to Shared. Native adapters must receive complete explicit settings
+    and publish observed memory and loaded state.
+20. **Several Mobile UI and hook paths still compose model commands.**
+    `src/screens/ChatsListScreen.tsx:92-129` performs select-then-load and unload-then-clear
+    transactions. `src/components/ModelSelectorModal/index.tsx:200-236` repeats the same image
+    workflow. `src/screens/HomeScreen/hooks/useRemoteModelHandlers.ts:25-59` unloads a local model
+    before remote selection. `src/screens/ChatScreen/useChatModelActions.ts:93-221` owns readiness,
+    force-load, retry presentation, and resume sequencing, while
+    `useChatModelActions.ts:277-299` reconciles downloaded image inventory in a hook. These surfaces
+    must call one Shared select/prepare, unload, force-load, or reconcile command and render its typed
+    result. Presentation copy and loading animation remain in Mobile.
+21. **Remote-server application policy is still Mobile-owned.**
+    `src/services/modelServices/remoteServerController.ts:51-126` owns deduplication, credential
+    sequencing, provider registration, and deletion. `remoteServerController.ts:218-249` owns remote
+    activation and selection projection, while `remoteServerController.ts:270-424` owns discovery,
+    moved-endpoint reconciliation, health recovery, and reselection. Shared pure decisions are used,
+    but the application transaction is still in Mobile. Move this workflow into a Shared
+    `RemoteServerApplicationService`; Mobile supplies keychain, LAN discovery, transport registry,
+    persistence, and logging ports.
+22. **Classifier execution still contains portable prompt and result policy in a native adapter.**
+    `src/services/modelServices/sidecarGenerationAdapter.ts:25-53` constructs the image-intent prompt,
+    truncates input to 200 characters, parses `YES`, supplies label defaults, and maps confidence.
+    The adapter must execute an explicit Shared classifier request and return raw output. Shared must
+    own the prompt, parse, labels, and score projection.
+23. **Project chat creation can still record a different identity than generation uses.**
+    `src/screens/ProjectChatsScreen.tsx:160-180` reads legacy local selection and falls back to the
+    first downloaded model. A valid remote-only setup can be reported as no model, or the
+    conversation can record a local model while Shared generation uses a remote route. Create
+    project chats from the canonical active-route snapshot returned by Shared.
+24. **Shared still exposes duplicate and bypassable control planes.**
+    `shared/packages/models/src/types.ts:11-20` and
+    `shared/packages/models/src/runtime/metadata.ts:1-10` define the same modality union twice.
+    `runtime/residency-manager.ts:58-105` and `runtime/residency-manager.ts:162-165` publicly expose
+    deprecated manual locking, registration, release, and admission pieces beside atomic acquire.
+    `providers.ts:24-198` defines an unused provider execution and active-selection registry beside
+    `LLMService` and `GenerationService`, and `download.ts:7-87` defines an unused download owner
+    beside `ModelDownloadCoordinator`. Remove or make these migration surfaces internal. One
+    canonical modality, selection owner, residency transaction, generation port, and download owner
+    must be public.
+25. **Shared facades still mix independent responsibilities.**
+    `shared/packages/models/src/llm-service.ts:212-371` owns adapter registration, health,
+    mutable inventory, persisted selection, and fallback routing. `generation/service.ts:135-220`
+    owns adapter registration, queueing, timeout/abort fencing, lifecycle events, routing, and
+    recovery. Keep the public facades, but delegate those reasons to internal registry, inventory,
+    selection, route-resolution, execution-fence, and recovery services. This is an SRP and SOLID
+    cleanup inside Shared; it does not justify moving policy back into either app.
 
 Focused Desktop route/UI evidence passed 10 of 11 tests. The only failure is a stale expectation in
 `ModelsScreen.computer-use.integration.test.tsx:90`: the current UI offers `< 1B`, while the test
@@ -200,9 +321,17 @@ Status at this checkpoint:
 | One residency lifecycle vocabulary | no | partial | no |
 | Shared model configuration defaults | partial | partial | text defaults pass; image/reload defaults remain |
 | Shared model-library command ownership | partial | partial | Mobile import and Desktop Pro download/activate remain |
+| Shared native loading and lifecycle state machines | partial | partial | Mobile load/lifecycle workflows remain; Desktop remediation is in progress |
+| Shared chat routing, RAG, and compaction workflows | partial | partial | Mobile application workflows remain |
+| Shared download command and status ownership | partial | partial | coordinator exists; Mobile lifecycle/projection policy remains |
+| Shared tool and MCP orchestration | partial | partial | app-owned routing, planning, parsing, and loop policy remains |
+| Shared model-transfer policy | partial | partial | Mobile text manifest and image reserve policy remain |
+| One Shared public model control plane | no | partial | duplicate provider/download APIs and residency bypasses remain public |
+| Shared internal SRP and SOLID separation | partial | yes | facades still combine inventory, selection, routing, fencing, and recovery |
+| Strict architecture gate coverage | no | no | current named-symbol gates miss confirmed violations |
 | No `@offgrid/models` mocks | yes | yes | source scan passed |
 | No stale OuteTTS/Qwen3 TTS production path | yes | yes | source scan passed |
-| Full Shared model suite | no | n/a | blocked by download recovery hang |
+| Full Shared model suite | yes | yes | build, declarations, architecture, 432/432 tests pass |
 | Physical Mobile/Desktop model journeys | unknown | unknown | not run in this sweep |
 
 ## Active Kokoro voice-model download cannot stop at Pro expiry - 2026-08-26

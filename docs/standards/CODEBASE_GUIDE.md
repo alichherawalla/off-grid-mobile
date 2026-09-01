@@ -898,6 +898,12 @@ On-device function calling for compatible models.
 
 ### Remote LLM Providers (`src/services/providers/`)
 
+> **Migration note (2026-09-01):** This section describes the legacy Mobile provider control
+> plane. New code must use the canonical route from `@offgrid/models` `LLMService` and execute it
+> through `GenerationService`. Mobile provider code is a transport lookup/stream adapter only. It
+> must not own active selection or silently substitute a local provider. The strict closure gaps are
+> listed in `docs/GAPS_BACKLOG.md`.
+
 A provider abstraction that allows `generationService` to route text generation to either a local GGUF model or a remote OpenAI-compatible server transparently.
 
 **`LLMProvider` interface** (all providers implement):
