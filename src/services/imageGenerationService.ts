@@ -463,7 +463,12 @@ class ImageGenerationService {
   async cancelGeneration(): Promise<void> {
     if (!isInFlight(this.state.phase)) return;
     this.cancelRequested = true;
-    this.remoteRequest?.abort();
+    // Once execution has a request controller, its AbortSignal is the single
+    // cancellation owner. The local shared adapter maps that signal to the
+    // native engine, while the remote adapter maps it to HTTP cancellation.
+    // Calling the native engine here as well cancels one local request twice.
+    const activeRequest = this.remoteRequest;
+    activeRequest?.abort();
     // Publish the terminal while conversation identity is still present. Sync subscribers run
     // synchronously, so every peer can remove its live image card before native cancellation waits.
     this.updateState({
@@ -474,7 +479,11 @@ class ImageGenerationService {
       error: null,
     });
     try {
-      await onnxImageGeneratorService.cancelGeneration();
+      // Loading and prompt enhancement happen before a request controller
+      // exists. Keep the direct native stop for those phases only.
+      if (!activeRequest) {
+        await onnxImageGeneratorService.cancelGeneration();
+      }
     } catch {
       /* Ignore */
     } finally {
