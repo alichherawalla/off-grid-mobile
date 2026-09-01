@@ -5,6 +5,8 @@ import {
   normalizeGenerationDelta,
   reasoningWireFragment,
   resolveReasoningPlan,
+  MobileTextLoadAdmissionService,
+  planMobileTextAccelerator,
   type ReasoningWireFragment,
 } from '@offgrid/models';
 import { Platform } from 'react-native';
@@ -18,11 +20,11 @@ import {
   initMultimodal, checkContextMultimodal, recordGenerationStats,
   ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, supportsNativeThinking,
-  getGpuLayersForDevice, BYTES_PER_GB,
-  validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
+  BYTES_PER_GB,
+  validateModelFile, safeCompletion,
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
-import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
+import { awaitMemoryReclaim } from './memoryBudget';
 import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
@@ -66,11 +68,8 @@ class LLMService {
   }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
   private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
-  private async validateAndPrepareModel(modelPath: string, override: boolean = false): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
+  private async validateAndPrepareModel(modelPath: string, override: boolean = false): Promise<{ fileSize: number; memCheck: { safe: boolean; estimatedMB: number; availableMB: number }; params: ReturnType<typeof buildModelParams> }> {
     logger.log(`[LLM] validateAndPrepareModel: ${modelPath}`);
-    if (!await RNFS.exists(modelPath)) throw new Error(`Model file not found at: ${modelPath}`);
-    const validation = await validateModelFile(modelPath);
-    if (!validation.valid) throw new Error(`Cannot load model: ${validation.reason}`);
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
@@ -78,33 +77,25 @@ class LLMService {
     const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
-    const fileSize = (await statFile(modelPath))?.size ?? 0;
-    // Use the EFFECTIVE cache type, not the raw setting: OpenCL/HTP coerce the KV cache
-    // to f16 (see buildModelParams), so keying off settings.cacheType alone would let the
-    // guard use the cheaper quantized estimate and approve a context that then OOMs.
-    const quantizedCache = !params.usesF16Cache;
-    // Feed the pre-load gate the SAME reclaim-aware available RAM the residency gate uses (the single owner,
-    // effectiveAvailableMB) so the two can never disagree. On Android the raw os_proc snapshot under-counts a
-    // foreground load (the LMK hands background apps' physical pages to us), so a raw gate REFUSED a model
-    // residency ADMITTED — 12GB Android Aggressive, device qwythos. iOS returns raw unchanged (no reclaim —
-    // jetsam kills us), so iOS is untouched. Policy comes from the residency manager (the authoritative owner).
-    const getMem = async (): Promise<{ available: number; total: number; used: number }> => {
-      const raw = await hardwareService.getAppMemoryUsage();
-      const availableMB = effectiveAvailableMB(raw.available / (1024 * 1024), raw.total / (1024 * 1024), {
-        platform: Platform.OS,
-        policy: modelResidencyManager.getLoadPolicy(),
-      });
-      return { ...raw, available: availableMB * 1024 * 1024 };
-    };
-    let memCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: params.ctxLen, getAvailableMemory: getMem, quantizedCache });
-    if (!memCheck.safe) {
-      // Don't just warn and load into a near-certain native allocator crash (the iOS
-      // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
-      // to the largest size that fits; only block when the weights alone can't fit.
-      const downgrade = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
-      params.ctxLen = downgrade.ctxLen;
-      memCheck = downgrade.memCheck;
-    }
+    const admission = await new MobileTextLoadAdmissionService({
+      exists: path => RNFS.exists(path),
+      validate: path => validateModelFile(path),
+      size: async path => (await statFile(path))?.size ?? 0,
+      memory: async () => {
+        const snapshot = await hardwareService.getAppMemoryUsage();
+        return { availableBytes: snapshot.available, totalBytes: snapshot.total };
+      },
+      report: (event, detail) => logger.log(`[LLM][ADMISSION] ${event}`, detail ?? ''),
+    }).admit({
+      modelPath,
+      requestedContextLength: params.ctxLen,
+      quantizedCache: !params.usesF16Cache,
+      platform: Platform.OS === 'android' ? 'android' : 'ios',
+      loadPolicy: modelResidencyManager.getLoadPolicy(),
+      override,
+    });
+    const { fileSize, memory: memCheck } = admission;
+    params.ctxLen = admission.contextLength;
     logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
   }
@@ -167,45 +158,39 @@ class LLMService {
   }
   private async initConfiguredContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number; attemptedGpuLayers: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
-    // Pass model size + free RAM so iOS Metal offload is capped to what fits (the
-    // uncapped 99-layer offload was overflowing Metal → SIGSEGV on memory-tight devices).
-    let safeGpuLayers = getGpuLayersForDevice(deviceInfo.totalMemory, params.nGpuLayers, {
+    const settings = useAppStore.getState().settings;
+    const selected = settings?.inferenceBackend ??
+      (Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU);
+    const openClCapability = Platform.OS === 'android' && selected === INFERENCE_BACKENDS.OPENCL
+      ? await hardwareService.getOpenCLCapability()
+      : undefined;
+    const accelerator = planMobileTextAccelerator({
+      platform: Platform.OS === 'android' ? 'android' : 'ios',
+      inferenceBackend: selected === INFERENCE_BACKENDS.HTP
+        ? 'htp'
+        : selected === INFERENCE_BACKENDS.OPENCL ? 'opencl' : 'cpu',
+      totalMemoryBytes: deviceInfo.totalMemory,
+      availableMemoryBytes: deviceInfo.availableMemory,
       modelBytes: params.fileSize,
-      availableBytes: deviceInfo.availableMemory,
+      requestedLayers: params.nGpuLayers,
+      openClSupported: openClCapability?.supported,
     });
-    if (safeGpuLayers !== params.nGpuLayers) logger.log(`[LLM] GPU layers capped (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${safeGpuLayers}`);
-    let resolvedBaseParams: object = params.baseParams;
-    if (Platform.OS === 'android') {
-      const settings = useAppStore.getState().settings;
-      const backend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
-      if (backend === INFERENCE_BACKENDS.HTP) {
-        // HTP routes to the Hexagon NPU — not subject to Adreno GPU layer caps,
-        // but we still respect the RAM-based safeGpuLayers floor (0 on ≤4GB devices).
-        safeGpuLayers = safeGpuLayers > 0 ? (settings?.gpuLayers ?? 99) : 0;
-        resolvedBaseParams = { ...params.baseParams, devices: ['HTP0'] };
-        const socInfo = await hardwareService.getSoCInfo();
-        logger.log(`[LLM] HTP backend — offloading ${safeGpuLayers} layers to NPU (${socInfo.qnnVariant ?? 'unknown'})`);
-      } else if (backend === INFERENCE_BACKENDS.OPENCL) {
-        const capability = await hardwareService.getOpenCLCapability();
-        if (!capability.supported) {
-          logger.warn(`[LLM] OpenCL requested but not supported (${capability.reason}), falling back to CPU`);
-          safeGpuLayers = 0;
-        } else {
-          // Respect the Adreno-specific RAM cap — safeGpuLayers already has it applied.
-          logger.log(`[LLM] OpenCL backend — offloading ${safeGpuLayers} layers to GPU`);
-        }
-      } else {
-        safeGpuLayers = 0;
-        logger.log('[LLM] CPU backend selected');
-      }
+    if (accelerator.gpuLayers !== params.nGpuLayers) {
+      logger.log(`[LLM] Accelerator layers resolved (${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM, ${Platform.OS}): ${params.nGpuLayers} → ${accelerator.gpuLayers} (${accelerator.reason})`);
     }
-    // The model metadata and the user's setting own context length. Do not impose a
-    // second RAM-tier ceiling here. validateAndPrepareModel already checks this exact
-    // model + cache + requested context against live memory and reduces only when it
-    // does not fit.
+    if (openClCapability && !openClCapability.supported) {
+      logger.warn(`[LLM] OpenCL unavailable (${openClCapability.reason}); Shared selected CPU`);
+    }
+    if (accelerator.backend === 'htp') {
+      const socInfo = await hardwareService.getSoCInfo();
+      logger.log(`[LLM] HTP backend — offloading ${accelerator.gpuLayers} layers (${socInfo.qnnVariant ?? 'unknown'})`);
+    }
+    const resolvedBaseParams = accelerator.devices
+      ? { ...params.baseParams, devices: accelerator.devices }
+      : params.baseParams;
     return {
-      ...await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers),
-      attemptedGpuLayers: safeGpuLayers,
+      ...await initContextWithFallback(resolvedBaseParams, params.ctxLen, accelerator.gpuLayers),
+      attemptedGpuLayers: accelerator.gpuLayers,
     };
   }
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */

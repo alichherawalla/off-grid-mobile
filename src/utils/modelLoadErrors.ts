@@ -7,24 +7,10 @@
  * decide whether to offer the override button. The message still matches the
  * insufficient-memory reason mapping so existing classification keeps working.
  */
-export class OverridableMemoryError extends Error {
-  /** Discriminant so the UI can offer "Load Anyway" without message sniffing. */
-  readonly overridable = true as const;
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'OverridableMemoryError';
-    // Restore the prototype chain (TS + transpiled ES5 subclassed Error).
-    Object.setPrototypeOf(this, OverridableMemoryError.prototype);
-  }
-}
-
-export function isOverridableMemoryError(err: unknown): err is OverridableMemoryError {
-  return (
-    err instanceof OverridableMemoryError ||
-    (typeof err === 'object' && err !== null && (err as { overridable?: unknown }).overridable === true)
-  );
-}
+export {
+  OverridableModelMemoryError as OverridableMemoryError,
+  isOverridableModelMemoryError as isOverridableMemoryError,
+} from '@offgrid/models';
 
 /**
  * The downloaded image model is missing required files (a partial/corrupt extraction),

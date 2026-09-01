@@ -1,147 +1,43 @@
-/**
- * Context Compaction Service
- *
- * When a conversation exceeds the LLM's context window, this service
- * summarizes older messages via the model, then keeps only the summary
- * plus recent messages. The summary is persisted so reopening a
- * compacted conversation doesn't reload the full history.
- *
- * Token budget (of total context window):
- *   System prompt  ~5-10%   (varies)
- *   Summary        12%      (SUMMARY_BUDGET_RATIO)
- *   Recent msgs    ~35-40%  (fills remaining prompt budget)
- *   Generation     40%      (reserved for response)
- *   Native overhead 5%      (template, tools, and media)
- */
+/** Mobile ports for the shared context-compaction application service. */
+import { ContextCompactionService } from '@offgrid/models';
 import { llmService } from './llm';
 import { executeMobileText } from './mobileSidecarGeneration';
-import {
-  CHARS_PER_TOKEN_ESTIMATE,
-  compactedConversation,
-  isContextCapacityError,
-  planContextCompaction,
-  SUMMARIZER_SYSTEM_PROMPT,
-} from '@offgrid/models';
 import { useChatStore } from '../stores/chatStore';
-import { Message } from '../types';
+import type { Message } from '../types';
 import logger from '../utils/logger';
 
-class ContextCompactionService {
-  private _isCompacting = false;
-  private readonly compactingListeners = new Set<(v: boolean) => void>();
+const sharedCompaction = new ContextCompactionService<Message>({
+  clearContext: () => llmService.clearKVCache(true),
+  contextLength: () => llmService.getPerformanceSettings().contextLength || 2048,
+  countTokens: text => llmService.getTokenCount(text),
+  summarize: (messages, maxTokens) => executeMobileText([...messages], { maxTokens }),
+  persist: (conversationId, summary, cutoffMessageId) => {
+    useChatStore.getState().updateCompactionState(conversationId, summary, cutoffMessageId);
+  },
+  systemMessage: content => ({ id: 'system', role: 'system', content, timestamp: 0 }),
+  summaryMessage: content => ({
+    id: 'compaction-summary',
+    role: 'assistant',
+    content: `[Previous conversation summary]\n${content}`,
+    timestamp: 0,
+  }),
+  report: (event, detail) => {
+    if (event === 'summary-failed') logger.warn('[ContextCompaction] Summarization failed, using trim-only:', detail);
+    else logger.log(`[ContextCompaction] ${event}`, detail ?? '');
+  },
+});
 
-  get isCompacting(): boolean { return this._isCompacting; }
-
-  subscribeCompacting(listener: (v: boolean) => void): () => void {
-    this.compactingListeners.add(listener);
-    listener(this._isCompacting);
-    return () => this.compactingListeners.delete(listener);
-  }
-
-  private setCompacting(v: boolean): void {
-    this._isCompacting = v;
-    this.compactingListeners.forEach(fn => fn(v));
-  }
-
-  /** Allow external services (e.g. LiteRT) to surface compaction state in the UI. */
-  signalCompacting(v: boolean): void {
-    this.setCompacting(v);
-  }
-
-  isContextFullError(error: unknown): boolean {
-    return isContextCapacityError(error);
-  }
-
-  /** Count tokens for a string; falls back to char estimate if tokenizer unavailable */
-  private async countTokens(text: string): Promise<number> {
-    try {
-      return await llmService.getTokenCount(text);
-    } catch {
-      return Math.ceil(text.length / CHARS_PER_TOKEN_ESTIMATE);
-    }
-  }
-
-  /**
-   * Compact messages to fit within the model's context window.
-   *
-   * 1. Splits messages into "recent" (fits in RECENT_BUDGET_RATIO) and "old"
-   * 2. Summarizes old messages via the LLM with a hard token cap
-   * 3. Persists summary + cutoff ID to the chat store
-   * 4. Returns [system, summarySystem, ...recentMessages]
-   *
-   * Falls back to trim-only if summarization fails.
-   */
-  async compact(
-    opts: { conversationId: string; systemPrompt: string; allMessages: Message[]; previousSummary?: string },
-  ): Promise<Message[]> {
-    const { conversationId, systemPrompt, allMessages, previousSummary } = opts;
-    this.setCompacting(true);
-    try {
-      await llmService.clearKVCache(true);
-
-      const ctxLength = llmService.getPerformanceSettings().contextLength || 2048;
-      const plan = await planContextCompaction({
-        messages: allMessages,
-        systemPrompt,
-        previousSummary,
-        contextLength: ctxLength,
-        countTokens: text => this.countTokens(text),
-      });
-      const { oldMessages, recentMessages, summaryTokenBudget } = plan;
-      logger.log(`[ContextCompaction] ${allMessages.length} messages, ctx=${ctxLength}, summaryBudget=${summaryTokenBudget}`);
-
-      // If there are no old messages, no compaction needed
-      if (oldMessages.length === 0) {
-        logger.log('[ContextCompaction] No old messages to summarize');
-        return [
-          { id: 'system', role: 'system', content: systemPrompt, timestamp: 0 },
-          ...recentMessages,
-        ];
-      }
-
-      // Try to summarize old messages via LLM
-      let summary: string | undefined;
-      try {
-        summary = await executeMobileText([
-          { role: 'system', content: SUMMARIZER_SYSTEM_PROMPT },
-          { role: 'user', content: plan.summaryInput },
-        ], { maxTokens: summaryTokenBudget });
-      } catch (e) {
-        logger.warn('[ContextCompaction] Summarization failed, falling back to trim-only:', e);
-      }
-
-      // Determine cutoff: the last old message ID
-      const cutoffMessageId = plan.cutoffMessageId;
-
-      // Persist compaction state
-      if (summary && cutoffMessageId) {
-        useChatStore.getState().updateCompactionState(conversationId, summary, cutoffMessageId);
-      }
-
-      // Build result
-      const result = compactedConversation<Message>({
-        systemMessage: { id: 'system', role: 'system', content: systemPrompt, timestamp: 0 },
-        recentMessages,
-        summary,
-        summaryMessage: content => ({
-          id: 'compaction-summary',
-          role: 'assistant',
-          content: `[Previous conversation summary]\n${content}`,
-          timestamp: 0,
-        }),
-      });
-
-      logger.log(`[ContextCompaction] Compacted: ${allMessages.length} → ${recentMessages.length} messages + summary (${summary ? summary.length : 0} chars)`);
-      return result;
-    } finally {
-      this.setCompacting(false);
-    }
-  }
-
-  /** Clear persisted compaction state when a conversation is deleted */
-  clearSummary(conversationId: string): void {
-    useChatStore.getState().updateCompactionState(conversationId, undefined, undefined);
-  }
-}
-
-export const contextCompactionService = new ContextCompactionService();
+/** Compatibility facade. It contains ports only; Shared owns all workflow and state. */
+export const contextCompactionService = {
+  get isCompacting(): boolean { return sharedCompaction.isCompacting; },
+  subscribeCompacting: (listener: (active: boolean) => void) => sharedCompaction.subscribe(listener),
+  signalCompacting: (active: boolean) => sharedCompaction.setExternalCompacting(active),
+  isContextFullError: (error: unknown) => sharedCompaction.isCapacityError(error),
+  compact: (input: {
+    conversationId: string;
+    systemPrompt: string;
+    allMessages: Message[];
+    previousSummary?: string;
+  }) => sharedCompaction.compact(input),
+  clearSummary: (conversationId: string) => sharedCompaction.clear(conversationId),
+};
