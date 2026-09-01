@@ -1,15 +1,18 @@
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ModelCredibility, ModelOrigin, ONNXImageModel } from '../../../../types';
-import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../../../constants';
 import { getCuratedLiteRTEntry } from '../../../curatedLiteRTRegistry';
 import logger from '../../../../utils/logger';
 import { statFile } from '../../../../utils/fileStat';
 import { parseHuggingFaceUrl } from '../../../../utils/modelOrigin';
 import {
-  collapseDuplicateModelRows,
+  describeModelCredibility,
+  finalizeHydratedRegistry,
   modelPathBasename,
+  parseRegistryRows,
+  projectorRegistryMetadata,
   resolveStoredModelPath,
+  upsertRegistryRow,
 } from '@offgrid/models';
 import { reconcilePrimaryPaths } from '../storedPathAdapter';
 import { useAppStore } from '../../../../stores';
@@ -21,38 +24,7 @@ const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
 
 export function determineCredibility(author: string): ModelCredibility {
-  if (LMSTUDIO_AUTHORS.includes(author)) {
-    return {
-      source: 'lmstudio',
-      isOfficial: false,
-      isVerifiedQuantizer: true,
-      verifiedBy: 'LM Studio',
-    };
-  }
-
-  if (OFFICIAL_MODEL_AUTHORS[author]) {
-    return {
-      source: 'official',
-      isOfficial: true,
-      isVerifiedQuantizer: false,
-      verifiedBy: OFFICIAL_MODEL_AUTHORS[author],
-    };
-  }
-
-  if (VERIFIED_QUANTIZERS[author]) {
-    return {
-      source: 'verified-quantizer',
-      isOfficial: false,
-      isVerifiedQuantizer: true,
-      verifiedBy: VERIFIED_QUANTIZERS[author],
-    };
-  }
-
-  return {
-    source: 'community',
-    isOfficial: false,
-    isVerifiedQuantizer: false,
-  };
+  return describeModelCredibility(author);
 }
 
 export async function saveModelsList(models: DownloadedModel[]): Promise<void> {
@@ -130,7 +102,8 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
     // already-downloaded curated models whose row was written before liteRTVision
     // was being set correctly. Locally-imported .litertlm files aren't in the
     // registry and keep whatever flag they were saved with.
-    models = (JSON.parse(stored) as any[]).map((m): DownloadedModel => {
+    models = parseRegistryRows(stored, (value): DownloadedModel => {
+      const m = value as any;
       if (m.engine === 'litert') {
         const curated = getCuratedLiteRTEntry(m.fileName);
         const liteRTVision = curated?.liteRTVision ?? m.liteRTVision ?? false;
@@ -151,16 +124,18 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   }
 
   const { validModels, pathsUpdated } = await validateAndResolveModels(models, modelsDir);
-  const { models: deduped, collapsed } = collapseDuplicateModelRows(
-    validModels,
-    model => model.fileName,
-  );
+  const hydrated = finalizeHydratedRegistry({
+    originalCount: models.length,
+    validRows: validModels,
+    pathsUpdated,
+    keyOf: model => model.fileName,
+  });
 
-  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
-    await saveModelsList(deduped);
+  if (hydrated.shouldPersist) {
+    await saveModelsList(hydrated.rows);
   }
 
-  return deduped;
+  return hydrated.rows;
 }
 
 export async function loadDownloadedImageModels(imageModelsDir: string): Promise<ONNXImageModel[]> {
@@ -169,7 +144,7 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
 
   let models: ONNXImageModel[];
   try {
-    models = JSON.parse(stored) as ONNXImageModel[];
+    models = parseRegistryRows(stored, value => value as ONNXImageModel);
   } catch (error) {
     // Corrupt AsyncStorage should not prevent the app from loading other state.
     logger.error('[ModelManagerStorage] Failed to parse downloaded image models JSON', {
@@ -191,16 +166,18 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
   const validModels = models.filter((_, i) => verdicts[i].keep);
   // Repairs a registry that already grew duplicates under the old `Date.now()` ids, exactly as the
   // text registry does one function above.
-  const { models: deduped, collapsed } = collapseDuplicateModelRows(
-    validModels,
-    model => modelPathBasename(model.modelPath) || undefined,
-  );
+  const hydrated = finalizeHydratedRegistry({
+    originalCount: models.length,
+    validRows: validModels,
+    pathsUpdated,
+    keyOf: model => modelPathBasename(model.modelPath) || undefined,
+  });
 
-  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
-    await saveImageModelsList(deduped);
+  if (hydrated.shouldPersist) {
+    await saveImageModelsList(hydrated.rows);
   }
 
-  return deduped;
+  return hydrated.rows;
 }
 
 export interface BuildModelOpts {
@@ -234,21 +211,6 @@ async function resolveMmProjFileSize(
 }
 
 /**
- * mmProjFileName is written even when mmProjPath is absent (e.g. sidecar download failed).
- * This sentinel lets needsVisionRepair detect the gap without any name-based heuristic:
- *   model.mmProjFileName is set  →  model was supposed to have vision
- *   model.mmProjPath is absent   →  file is missing, show "Repair Vision"
- */
-function resolveMmProjFileName(
-  mmProjPath: string | undefined,
-  mmProjFile: ModelFile['mmProjFile'],
-  expectedMmProjFileName: string | undefined,
-): string | undefined {
-  if (mmProjPath) return mmProjFile?.name ?? mmProjPath.split('/').pop();
-  return expectedMmProjFileName ?? mmProjFile?.name;
-}
-
-/**
  * Registry wins for curated LiteRT artifacts: the display name comes from a single source of truth
  * keyed by fileName. Falls back to the file's own name for locally-imported .litertlm files, then to
  * the modelId basename for everything else.
@@ -275,7 +237,12 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
   const isLiteRT = isLiteRTFileName(file.name);
   const mmProjFile = file.mmProjFile;
   const mmProjFileSize = await resolveMmProjFileSize(mmProjPath, mmProjFile);
-  const mmProjFileName = resolveMmProjFileName(mmProjPath, mmProjFile, expectedMmProjFileName);
+  const projector = projectorRegistryMetadata({
+    projectorPath: mmProjPath,
+    projectorSourceName: mmProjFile?.name,
+    expectedProjectorName: expectedMmProjFileName,
+    projectorSize: mmProjFileSize,
+  });
 
   const curatedLiteRT = isLiteRT ? getCuratedLiteRTEntry(file.name) : undefined;
   const derivedName = resolveDisplayName(modelId, file, curatedLiteRT?.displayName);
@@ -315,9 +282,9 @@ export async function buildDownloadedModel(opts: BuildModelOpts): Promise<Downlo
     ...commonFields,
     engine: 'llama',
     isVisionModel: !!mmProjPath,
-    mmProjPath,
-    mmProjFileName,
-    mmProjFileSize,
+    mmProjPath: projector.projectorPath,
+    mmProjFileName: projector.projectorName,
+    mmProjFileSize: projector.projectorSize,
   };
   return llamaModel;
 }
@@ -327,11 +294,5 @@ export async function persistDownloadedModel(
   modelsDir: string,
 ): Promise<void> {
   const models = await loadDownloadedModels(modelsDir);
-  const existingIndex = models.findIndex(m => m.id === model.id);
-  if (existingIndex >= 0) {
-    models[existingIndex] = model;
-  } else {
-    models.push(model);
-  }
-  await saveModelsList(models);
+  await saveModelsList(upsertRegistryRow(models, model, value => value.id));
 }
