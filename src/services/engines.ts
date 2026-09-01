@@ -88,9 +88,7 @@ export function invalidateActiveConversation(): void {
 export function isModelReady(model: { id?: string; engine?: string; filePath?: string } | null | undefined): boolean {
   const active = activeMobileRoute('text').model;
   if (!model || !active || active.source !== 'local' || active.id !== model.id) return false;
-  return active.providerId === 'litert'
-    ? liteRTService.isModelLoaded()
-    : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
+  return active.ready;
 }
 
 /**

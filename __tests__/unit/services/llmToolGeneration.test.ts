@@ -27,8 +27,6 @@ function createMockDeps(overrides: Partial<ToolGenerationDeps> = {}): ToolGenera
       completion: jest.fn(async (_params: any, _cb?: any) => ({})),
     },
     isGenerating: false,
-    isThinkingEnabled: false,
-    isGemma4Model: false,
     disableCtxShift: false,
     manageContextWindow: jest.fn(async (msgs: Message[]) => msgs),
     // Async, matching the real converter: it drops images whose file is gone before building.
@@ -122,9 +120,12 @@ describe('generateWithToolsImpl', () => {
 
     it('uses llama.rn auto reasoning format when thinking is enabled', async () => {
       const completion = jest.fn(async (_params: any, _cb: any) => ({}));
-      const deps = createMockDeps({ context: { completion }, isThinkingEnabled: true });
+      const deps = createMockDeps({ context: { completion } });
 
-      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], {
+        tools: SAMPLE_TOOLS,
+        reasoningWire: { enable_thinking: true, reasoning_format: 'deepseek' },
+      });
 
       const callArgs = completion.mock.calls[0][0];
       expect(callArgs.enable_thinking).toBe(true);
@@ -136,24 +137,30 @@ describe('generateWithToolsImpl', () => {
       // let llama.cpp detect the chat_format and populate reasoning_content/tool_calls itself. Our
       // hand-parse fallback only runs when those come back empty, so this is safe.
       const completion = jest.fn(async (_params: any, _cb: any) => ({}));
-      const deps = createMockDeps({ context: { completion }, isThinkingEnabled: true, isGemma4Model: true });
+      const deps = createMockDeps({ context: { completion } });
 
-      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], {
+        tools: SAMPLE_TOOLS,
+        reasoningWire: { enable_thinking: true, reasoning_format: 'auto' },
+      });
 
       const callArgs = completion.mock.calls[0][0];
       expect(callArgs.enable_thinking).toBe(true);
       expect(callArgs.reasoning_format).toBe('auto');
     });
 
-    it('disables llama.rn reasoning extraction when thinking is off', async () => {
+    it('uses the Shared disabled-thinking wire unchanged', async () => {
       const completion = jest.fn(async (_params: any, _cb: any) => ({}));
-      const deps = createMockDeps({ context: { completion }, isThinkingEnabled: false });
+      const deps = createMockDeps({ context: { completion } });
 
-      await generateWithToolsImpl(deps, [createUserMessage('Hello')], { tools: SAMPLE_TOOLS });
+      await generateWithToolsImpl(deps, [createUserMessage('Hello')], {
+        tools: SAMPLE_TOOLS,
+        reasoningWire: { enable_thinking: false },
+      });
 
       const callArgs = completion.mock.calls[0][0];
       expect(callArgs.enable_thinking).toBe(false);
-      expect(callArgs.reasoning_format).toBe('none');
+      expect(callArgs.reasoning_format).toBeUndefined();
     });
 
     it('disables ctx_shift when disableCtxShift is true (Android GPU SIGSEGV fix)', async () => {

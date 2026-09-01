@@ -1,5 +1,5 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
-import type { ReasoningWireFragment } from '@offgrid/models';
+import { normalizeGenerationDelta, reasoningWireFragment, resolveReasoningPlan, type ReasoningWireFragment } from '@offgrid/models';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
@@ -8,9 +8,9 @@ import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores/appStore';
 import {
   initContextWithFallback, captureGpuInfo, logContextMetadata, getModelMaxContext,
-  initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
-  hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
-  buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
+  initMultimodal, checkContextMultimodal, recordGenerationStats,
+  ensureSessionCacheDir, getSessionPath, buildModelParams,
+  buildCompletionParams, supportsNativeThinking,
   getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
@@ -50,7 +50,6 @@ class LLMService {
    *  >0 with activeGpuLayers 0 means the load silently downgraded to CPU — the fallback-notice verdict. */
   private requestedGpuLayers: number = 0;
   private sessionCacheDir: string = `${RNFS.CachesDirectoryPath}/llm-sessions`;
-  /** Serializes loadModel / unloadModel / reloadWithSettings to prevent concurrent native context init. */
   private contextMutexPromise: Promise<void> = Promise.resolve();
   private acquireContextMutex(): { release: () => void; ready: Promise<void> } {
     let release: () => void = () => {};
@@ -58,7 +57,6 @@ class LLMService {
     this.contextMutexPromise = new Promise<void>(resolve => { release = resolve; });
     return { release, ready: prev.catch(() => {}) };
   }
-  private hashString(value: string): string { return hashString(value); }
   private ensureSessionCacheDir(): Promise<void> { return ensureSessionCacheDir(this.sessionCacheDir); }
   private getSessionPath(promptHash: string): string { return getSessionPath(this.sessionCacheDir, promptHash); }
   private async validateAndPrepareModel(modelPath: string, override: boolean = false): Promise<{ fileSize: number; memCheck: Awaited<ReturnType<typeof checkMemoryForModel>>; params: ReturnType<typeof buildModelParams> }> {
@@ -69,8 +67,6 @@ class LLMService {
     const settings = useAppStore.getState().settings;
     logger.log(`[LLM] User settings: threads=${settings.nThreads}, batch=${settings.nBatch}, ctx=${settings.contextLength}, gpu=${settings.enableGpu}, flashAttn=${settings.flashAttn}, cache=${settings.cacheType}`);
     const recommendedThreads = await hardwareService.getRecommendedThreadCount();
-    // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
-    // Any explicit user choice (1–12) is respected as-is.
     const effectiveNThreads = settings.nThreads === 0 ? recommendedThreads : settings.nThreads;
     const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
@@ -238,8 +234,7 @@ class LLMService {
   getReasoningMetadata() { return llamaReasoningMetadata(this.context); }
   isThinkingEnabled(): boolean { return this.thinkingSupported && useAppStore.getState().settings.thinkingEnabled; }
   isGemma4Model(): boolean {
-    const path = this.currentModelPath?.toLowerCase() ?? '';
-    return path.includes('gemma-4') || path.includes('gemma4');
+    return this.getReasoningMetadata()?.reasoningFormat === 'auto';
   }
   /** Disable ctx_shift on Android when GPU layers are active — the OpenCL backend SIGSEGVs on the ggml set op used by KV cache shifting. */
   private shouldDisableCtxShift(): boolean { return Platform.OS === 'android' && this.activeGpuLayers > 0; }
@@ -296,7 +291,9 @@ class LLMService {
       const __wire: Array<Record<string, unknown>> = []; // [WIRE] capture raw per-token shape from-device
       // Utility callers can still force thinking off; shared chat callers supply reasoningWire.
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...(opts.reasoningWire ?? buildThinkingCompletionParams(thinkingOn, this.isGemma4Model(), settings.reasoningBudget)) };
+      const fallbackWire = reasoningWireFragment(resolveReasoningPlan(
+        { enabled: thinkingOn, budgetTokens: settings.reasoningBudget }, this.getReasoningMetadata()));
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...(opts.reasoningWire ?? fallbackWire) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
@@ -304,8 +301,10 @@ class LLMService {
         if (!this.isGenerating || !data.token) return;
         if (!firstReceived) { firstReceived = true; firstTokenMs = Date.now() - startTime; logger.log(`[LLM][THINKING] First token raw data — token: ${JSON.stringify(data.token)}, content: ${JSON.stringify(data.content)}, reasoning_content: ${JSON.stringify(data.reasoning_content)}`); }
         tokenCount++;
-        const content = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
-        const reasoningContent = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
+        const normalized = normalizeGenerationDelta(
+          data, { content: streamedContentSoFar, reasoning: streamedReasoningSoFar });
+        const content = normalized.content;
+        const reasoningContent = normalized.reasoning;
         if (data.content) streamedContentSoFar = data.content;
         else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
         if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
@@ -330,10 +329,12 @@ class LLMService {
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
   async generateResponseWithTools(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback; reasoningWire?: ReasoningWireFragment }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
+    const settings = useAppStore.getState().settings;
+    const fallbackWire = reasoningWireFragment(resolveReasoningPlan(
+      { enabled: this.isThinkingEnabled(), budgetTokens: settings.reasoningBudget },
+      this.getReasoningMetadata()));
     const work = generateWithToolsImpl({
       context: this.context, isGenerating: this.isGenerating,
-      isThinkingEnabled: this.isThinkingEnabled(),
-      isGemma4Model: this.isGemma4Model(),
       disableCtxShift: this.shouldDisableCtxShift(),
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: async msgs =>
@@ -342,7 +343,7 @@ class LLMService {
       setIsGenerating: (v) => { this.isGenerating = v; },
     }, messages, {
       tools: options.tools,
-      reasoningWire: options.reasoningWire,
+      reasoningWire: options.reasoningWire ?? fallbackWire,
       onStream: options.onStream,
       onComplete: options.onComplete
         ? ((onComplete) => (fullResponse: string, reasoningContent: string) => onComplete({ content: fullResponse, reasoningContent }))(options.onComplete) : undefined,

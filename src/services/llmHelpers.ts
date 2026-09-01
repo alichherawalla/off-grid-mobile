@@ -1,10 +1,10 @@
 import { initLlama, LlamaContext } from 'llama.rn';
 import {
   cumulativeTextDelta,
+  chatTemplateSupportsReasoning,
   isCompletionTruncated,
   llamaRnCompletionPayload,
-  llamaRnThinkingPayload,
-  reasoningMetadataFromChatTemplate,
+  llamaRnReasoningMetadata,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
 import RNFS from 'react-native-fs';
@@ -13,7 +13,6 @@ import { APP_CONFIG } from '../constants';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
-import { templateEmitsReasoning } from '../utils/messageContent';
 import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
 
 import { HTP_ENABLED } from '../config/featureFlags';
@@ -292,7 +291,7 @@ export function supportsNativeThinking(context: LlamaContext | null): boolean {
     // both jinja-supported and OD7 jinja-unsupported reasoning models: both carry the template here.
     const metadata = (context as any)?.model?.metadata;
     const template = metadata?.['tokenizer.chat_template'] ?? metadata?.chat_template;
-    return templateEmitsReasoning(typeof template === 'string' ? template : undefined);
+    return chatTemplateSupportsReasoning(typeof template === 'string' ? template : undefined);
   } catch {
     return false;
   }
@@ -306,17 +305,7 @@ export function llamaReasoningMetadata(
   const metadata = (context as any)?.model?.metadata;
   const template = metadata?.['tokenizer.chat_template'] ?? metadata?.chat_template;
   if (typeof template !== 'string') return undefined;
-  const reasoningFormat = template.includes('<|channel>') ? 'auto' : 'deepseek';
-  return reasoningMetadataFromChatTemplate('llama-rn', template, {
-    supportsTokenBudget: true,
-    reasoningFormat,
-  });
-}
-export function buildThinkingCompletionParams(enableThinking: boolean, isGemma4: boolean = false, reasoningBudget?: number): { enable_thinking: boolean; reasoning_format: 'none' | 'auto' | 'deepseek'; thinking_budget_tokens?: number } {
-  return llamaRnThinkingPayload(enableThinking, {
-    reasoningFormat: isGemma4 ? 'auto' : 'deepseek',
-    budgetTokens: reasoningBudget,
-  });
+  return llamaRnReasoningMetadata(template);
 }
 export function getStreamingDelta(nextValue: string | undefined, previousValue: string): string | undefined {
   return cumulativeTextDelta(nextValue, previousValue);

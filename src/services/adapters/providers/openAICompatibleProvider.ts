@@ -47,7 +47,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     this.config = config;
     this.modelCapabilities = {
       supportsVision: false,
-      supportsToolCalling: true, // Assume true for OpenAI-compatible
+      supportsToolCalling: false,
       supportsThinking: false,
       acceptsThinkingKwarg: false, // set from discovery (/props or LM Studio probe)
     };
@@ -100,9 +100,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
       tools: this.modelCapabilities.supportsToolCalling ? options.tools : undefined,
       toolChoice: 'auto',
       reasoningWire: options.reasoningWire,
-      thinkingKwarg: this.modelCapabilities.acceptsThinkingKwarg
-        ? options.enableThinking !== false
-        : undefined,
       stream: true,
     });
   }

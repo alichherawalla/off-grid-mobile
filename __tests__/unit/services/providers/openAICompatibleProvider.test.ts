@@ -70,7 +70,7 @@ describe('OpenAICompatibleProvider', () => {
       const caps = provider.capabilities;
 
       expect(caps.supportsVision).toBe(false);
-      expect(caps.supportsToolCalling).toBe(true);
+      expect(caps.supportsToolCalling).toBe(false);
       expect(caps.supportsThinking).toBe(false);
     });
 
@@ -100,7 +100,7 @@ describe('OpenAICompatibleProvider', () => {
 
       expect(provider.capabilities.supportsVision).toBe(true);
       expect(provider.capabilities.supportsThinking).toBe(true);
-      expect(provider.capabilities.supportsToolCalling).toBe(true);
+      expect(provider.capabilities.supportsToolCalling).toBe(false);
     });
 
     it('updateCapabilities() can set supportsVision back to false', () => {
@@ -363,8 +363,7 @@ describe('OpenAICompatibleProvider', () => {
     });
   });
 
-  describe('generate — enable_thinking kwarg gating (capability-driven)', () => {
-    // The gate is a DISCOVERED capability (acceptsThinkingKwarg), not the port.
+  describe('generate — Shared reasoning wire projection', () => {
     const runGenerate = async (opts: {
       acceptsThinkingKwarg?: boolean;
       enableThinking?: boolean;
@@ -385,25 +384,28 @@ describe('OpenAICompatibleProvider', () => {
       });
       await p.generate(
         [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
-        { enableThinking: opts.enableThinking },
+        {
+          enableThinking: opts.enableThinking,
+          reasoningWire: opts.acceptsThinkingKwarg
+            ? { chat_template_kwargs: { enable_thinking: opts.enableThinking !== false } }
+            : undefined,
+        },
         { onToken: jest.fn(), onComplete: jest.fn(), onError: jest.fn() },
       );
       return (mock.mock.calls[0][1].body as Record<string, unknown>);
     };
 
-    it('sends enable_thinking:true when the server advertised acceptsThinkingKwarg', async () => {
+    it('passes the enabled Shared reasoning wire', async () => {
       const body = await runGenerate({ acceptsThinkingKwarg: true, enableThinking: true });
       expect(body.chat_template_kwargs).toEqual({ enable_thinking: true });
     });
 
-    it('sends enable_thinking:false (thinking off) when the capability is present', async () => {
+    it('passes the disabled Shared reasoning wire', async () => {
       const body = await runGenerate({ acceptsThinkingKwarg: true, enableThinking: false });
       expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
     });
 
-    it('omits chat_template_kwargs entirely when the server did not advertise the capability', async () => {
-      // A server on ANY port that never reported acceptsThinkingKwarg must not get
-      // the field — unknown fields can be rejected. No port check involved.
+    it('omits chat_template_kwargs when Shared did not supply it', async () => {
       const body = await runGenerate({ acceptsThinkingKwarg: false, enableThinking: true });
       expect(body.chat_template_kwargs).toBeUndefined();
     });

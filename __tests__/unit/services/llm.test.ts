@@ -661,7 +661,7 @@ describe('LLMService', () => {
       expect(tokens).toEqual([{ content: 'Hello', reasoningContent: undefined }]);
     });
 
-    it('disables llama.rn thinking params when the toggle is off', async () => {
+    it('does not send reasoning controls when the model template did not prove support', async () => {
       const ctx = await setupLoadedModel({
         isJinjaSupported: jest.fn(() => true),
       });
@@ -676,8 +676,8 @@ describe('LLMService', () => {
       await llmService.generateResponse([createUserMessage('Hello')]);
 
       const callArgs = ctx.completion.mock.calls[0]![0]!;
-      expect(callArgs.enable_thinking).toBe(false);
-      expect(callArgs.reasoning_format).toBe('none');
+      expect(callArgs.enable_thinking).toBeUndefined();
+      expect(callArgs.reasoning_format).toBeUndefined();
     });
 
     it('emits reasoning deltas when llama.rn streams cumulative reasoning_content', async () => {
@@ -1171,23 +1171,6 @@ describe('LLMService', () => {
         createUserMessage('Hello'),
       ];
       await expect(llmService.generateResponse(messages)).resolves.toBeDefined();
-    });
-  });
-
-  // ========================================================================
-  // hashString
-  // ========================================================================
-  describe('hashString', () => {
-    it('returns consistent hash for same input', () => {
-      const hash1 = (llmService as any).hashString('test string');
-      const hash2 = (llmService as any).hashString('test string');
-      expect(hash1).toBe(hash2);
-    });
-
-    it('returns different hashes for different inputs', () => {
-      const hash1 = (llmService as any).hashString('string1');
-      const hash2 = (llmService as any).hashString('string2');
-      expect(hash1).not.toBe(hash2);
     });
   });
 

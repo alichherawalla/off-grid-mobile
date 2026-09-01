@@ -4,13 +4,18 @@
  */
 
 import { useAppStore } from '../stores/appStore';
-import type { ReasoningWireFragment } from '@offgrid/models';
+import {
+  IncrementalTaggedBlockFilter,
+  normalizeGenerationDelta,
+  normalizeNativeToolCall,
+  type ReasoningWireFragment,
+} from '@offgrid/models';
 import type { Message } from '../types';
 import type { ToolCall } from './tools/types';
-import { recordGenerationStats, buildCompletionParams, buildThinkingCompletionParams, safeCompletion, isTruncatedResult, getStreamingDelta } from './llmHelpers';
+import { recordGenerationStats, buildCompletionParams, safeCompletion, isTruncatedResult } from './llmHelpers';
 import type { StreamToken } from './llmStreamTypes';
 import logger from '../utils/logger';
-import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS, maxPartialTagSuffix } from '../utils/messageContent';
+import { TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS } from '../utils/messageContent';
 
 type ToolStreamCallback = (data: StreamToken) => void;
 type ToolCompleteCallback = (fullResponse: string, reasoningContent: string) => void;
@@ -26,69 +31,9 @@ type ToolCompleteCallback = (fullResponse: string, reasoningContent: string) => 
  * that the stored-content stripper also uses — so the live filter and the stripper cannot
  * disagree about which formats are tool markup (DR7). Exported for direct testing.
  */
-export class ToolCallTokenFilter {
-  private inBlock = false;
-  private buffer = '';
-
-  process(token: string): string {
-    this.buffer += token;
-    return this.flush();
-  }
-
-  private flush(): string {
-    let output = '';
-
-    while (this.buffer.length > 0) {
-      if (this.inBlock) {
-        // Inside a tool block: end it at the NEAREST closer of any form.
-        const closeIdx = this.earliestIndex(TOOL_CALL_CLOSERS);
-        if (closeIdx === -1) {
-          const partial = maxPartialTagSuffix(this.buffer, TOOL_CALL_CLOSERS);
-          this.buffer = partial > 0 ? this.buffer.slice(this.buffer.length - partial) : '';
-          break;
-        }
-        this.buffer = this.buffer.slice(closeIdx + this.matchedLengthAt(TOOL_CALL_CLOSERS, closeIdx));
-        this.inBlock = false;
-      } else {
-        // Outside: enter a block at the EARLIEST opener of any form.
-        const openIdx = this.earliestIndex(TOOL_CALL_OPENERS);
-        if (openIdx === -1) {
-          const partial = maxPartialTagSuffix(this.buffer, TOOL_CALL_OPENERS);
-          if (partial > 0) {
-            output += this.buffer.slice(0, this.buffer.length - partial);
-            this.buffer = this.buffer.slice(this.buffer.length - partial);
-          } else {
-            output += this.buffer;
-            this.buffer = '';
-          }
-          break;
-        }
-        output += this.buffer.slice(0, openIdx);
-        this.buffer = this.buffer.slice(openIdx + this.matchedLengthAt(TOOL_CALL_OPENERS, openIdx));
-        this.inBlock = true;
-      }
-    }
-
-    return output;
-  }
-
-  /** Earliest index at which ANY of the tags occurs in the buffer, or -1. */
-  private earliestIndex(tags: string[]): number {
-    let best = -1;
-    for (const tag of tags) {
-      const idx = this.buffer.indexOf(tag);
-      if (idx !== -1 && (best === -1 || idx < best)) best = idx;
-    }
-    return best;
-  }
-
-  /** Length of whichever tag actually matches at idx (closers/openers can overlap in prefix). */
-  private matchedLengthAt(tags: string[], idx: number): number {
-    let len = 0;
-    for (const tag of tags) {
-      if (this.buffer.startsWith(tag, idx) && tag.length > len) len = tag.length;
-    }
-    return len;
+export class ToolCallTokenFilter extends IncrementalTaggedBlockFilter {
+  constructor() {
+    super(TOOL_CALL_OPENERS, TOOL_CALL_CLOSERS);
   }
 }
 
@@ -100,33 +45,14 @@ export class ToolCallTokenFilter {
  * We try strict JSON first (unchanged for the common case), then retry once with curly double quotes
  * normalized to straight. Zero-IO; exercised through generateWithToolsImpl in tests.
  */
-function parseToolArguments(raw: string): Record<string, unknown> {
-  const tryParse = (s: string): Record<string, unknown> | undefined => {
-    try {
-      const v = JSON.parse(s || '{}');
-      return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  // Normalize only the JSON string DELIMITERS (curly → straight double quotes); leave content alone.
-  return tryParse(raw) ?? tryParse(raw.replace(/[“”]/g, '"')) ?? {};
-}
-
 function parseToolCall(tc: any): ToolCall {
-  const fn = tc.function || {};
-  let args = fn.arguments || {};
-  if (typeof args === 'string') {
-    args = parseToolArguments(args);
-  }
-  return { id: tc.id, name: fn.name || '', arguments: args };
+  const normalized = normalizeNativeToolCall(tc);
+  return { id: normalized.id, name: normalized.name, arguments: normalized.arguments };
 }
 
 export interface ToolGenerationDeps {
   context: any;
   isGenerating: boolean;
-  isThinkingEnabled: boolean;
-  isGemma4Model: boolean;
   disableCtxShift: boolean;
   manageContextWindow: (messages: Message[], extraReserve?: number) => Promise<Message[]>;
   /** Async because it also drops images whose file is gone — see LLMService.convertToOAIMessages. */
@@ -163,14 +89,14 @@ export async function generateWithToolsImpl(
     let firstReceived = false;
     const collectedToolCalls: ToolCall[] = [];
     // Gemma 4 emits <|tool_call>...<tool_call|> tokens in the stream; filter them out.
-    const toolCallFilter = deps.isGemma4Model ? new ToolCallTokenFilter() : null;
+    const toolCallFilter = new ToolCallTokenFilter();
 
     const completionParams = {
       messages: oaiMessages,
       ...buildCompletionParams(settings, { disableCtxShift: deps.disableCtxShift }),
       tools: options.tools,
       tool_choice: 'auto',
-      ...(options.reasoningWire ?? buildThinkingCompletionParams(deps.isThinkingEnabled, deps.isGemma4Model, settings.reasoningBudget)),
+      ...(options.reasoningWire ?? {}),
     };
     logger.log('[LLM-Tools] === INPUT ===');
     logger.log(JSON.stringify(completionParams, null, 2));
@@ -189,14 +115,18 @@ export async function generateWithToolsImpl(
       // into content. Route each to its own channel so the thinking block renders and the raw
       // <|channel> markers (data.token) never leak into the answer. (The tool path previously appended
       // data.token verbatim, so gemma's reasoning + its <|channel> delimiters landed in the reply.)
-      const contentPiece = getStreamingDelta(data.content ?? (!data.reasoning_content ? data.token : undefined), streamedContentSoFar);
-      const reasoningPiece = getStreamingDelta(data.reasoning_content || undefined, streamedReasoningSoFar);
+      const normalized = normalizeGenerationDelta(data, {
+        content: streamedContentSoFar,
+        reasoning: streamedReasoningSoFar,
+      });
+      const contentPiece = normalized.content;
+      const reasoningPiece = normalized.reasoning;
       if (data.content) streamedContentSoFar = data.content;
       else if (!data.reasoning_content && data.token) streamedContentSoFar += data.token;
       if (data.reasoning_content) streamedReasoningSoFar = data.reasoning_content;
       if (reasoningPiece) { fullReasoning += reasoningPiece; options.onStream?.({ reasoningContent: reasoningPiece }); }
       if (contentPiece) {
-        const visible = toolCallFilter ? toolCallFilter.process(contentPiece) : contentPiece;
+        const visible = toolCallFilter.process(contentPiece);
         fullResponse += visible;
         if (visible) options.onStream?.({ content: visible });
       }
