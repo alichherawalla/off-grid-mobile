@@ -38,10 +38,19 @@ jest.mock('@react-navigation/native', () => {
 
 const mockAppState = {
   downloadedModels: [],
-  settings: {},
-  deviceInfo: { deviceModel: 'Test Device', availableMemory: 8000000000 },
+  downloadedImageModels: [],
+  activeModelId: null,
+  activeImageModelId: null,
+  settings: { inferenceBackend: 'auto' },
+  onboardingChecklist: { triedImageGen: false },
+  deviceInfo: { deviceModel: 'Test Device', totalMemory: 8000000000, availableMemory: 8000000000 },
   setDeviceInfo: jest.fn(),
   setModelRecommendation: jest.fn(),
+  setDownloadedModels: jest.fn(),
+  removeDownloadedModel: jest.fn(),
+  setDownloadedImageModels: jest.fn(),
+  addDownloadedImageModel: jest.fn(),
+  setActiveImageModelId: jest.fn(),
   downloadProgress: {} as Record<string, any>,
   setDownloadProgress: jest.fn(),
   addDownloadedModel: jest.fn(),
@@ -91,21 +100,32 @@ jest.mock('../../../src/services/modelCatalogFiles', () => ({
 }));
 
 jest.mock('../../../src/services', () => ({
+  WHISPER_MODELS: [],
   hardwareService: {
     getDeviceInfo: jest.fn(() => Promise.resolve({ deviceModel: 'Test Device', availableMemory: 8000000000 })),
-    getModelRecommendation: jest.fn(() => ({ tier: 'medium' })),
+    getModelRecommendation: jest.fn(() => ({ tier: 'medium', maxParameters: 8 })),
     getTotalMemoryGB: jest.fn(() => 8),
     formatBytes: jest.fn((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`),
+    getImageModelRecommendation: jest.fn().mockResolvedValue({ recommendedBackend: 'all' }),
+    getSoCInfo: jest.fn().mockResolvedValue({ hasNPU: false }),
+    getModelTotalSize: jest.fn((model: any) => model.fileSize ?? 0),
+    formatModelSize: jest.fn(() => '4.0GB'),
   },
   huggingFaceService: {
     getModelFiles: jest.fn((...args: any[]) => (mockGetModelFiles as any)(...args)),
+    getModelDetails: jest.fn(async (id: string) => ({ id, name: id, files: [] })),
+    searchModels: jest.fn().mockResolvedValue([]),
   },
   modelLibrary: {
     isBackgroundDownloadSupported: jest.fn(() => false),
     downloadModel: jest.fn((...args: any[]) => mockDownloadModel(...args)),
     downloadModelBackground: jest.fn((...args: any[]) => mockDownloadModelBackground(...args)),
     watchDownload: jest.fn(),
+    getDownloadedModels: jest.fn().mockResolvedValue([]),
+    getDownloadedImageModels: jest.fn().mockResolvedValue([]),
   },
+  unloadTextModel: jest.fn().mockResolvedValue(undefined),
+  selectMobileModel: jest.fn().mockResolvedValue(undefined),
   remoteServerManager: {
     addServer: jest.fn().mockResolvedValue({ id: 'new-server' }),
     testConnection: jest.fn().mockResolvedValue({ success: false }),
@@ -267,7 +287,7 @@ describe('ModelDownloadScreen', () => {
     mockDownloadModel.mockResolvedValue(undefined);
     mockDownloadModelBackground.mockResolvedValue(undefined);
     mockHardwareService.getDeviceInfo.mockResolvedValue({ deviceModel: 'Test Device', availableMemory: 8000000000 });
-    mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'medium' });
+    mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'medium', maxParameters: 8 });
     mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
     mockHardwareService.formatBytes.mockImplementation((bytes: number) => `${(bytes / 1e9).toFixed(1)}GB`);
     mockModelManager.isBackgroundDownloadSupported.mockReturnValue(true);
@@ -304,7 +324,7 @@ describe('ModelDownloadScreen', () => {
 
     expect(result.getByTestId('model-download-screen')).toBeTruthy();
     expect(result.getByText('Advanced Setup')).toBeTruthy();
-    expect(result.getByText(/Connect to a model server/)).toBeTruthy();
+    expect(result.getByText('Run a model from your network or on this device.')).toBeTruthy();
   });
 
   it('renders device info card after loading', async () => {
@@ -326,11 +346,12 @@ describe('ModelDownloadScreen', () => {
     expect(result.getByText('Network Models')).toBeTruthy();
   });
 
-  it('renders "Download to Your Device" section title', async () => {
+  it('renders the current on-device model section', async () => {
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    expect(result.getByText('Download to Your Device')).toBeTruthy();
+    expect(result.getByText('On This Device')).toBeTruthy();
+    expect(result.getByTestId('embedded-models-screen')).toBeTruthy();
   });
 
   // ===========================================================================
@@ -354,16 +375,16 @@ describe('ModelDownloadScreen', () => {
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    expect(result.getByTestId('recommended-model-0')).toBeTruthy();
+    expect(result.getByTestId('model-card-0')).toBeTruthy();
   });
 
-  it('shows warning card when no compatible models', async () => {
-    mockHardwareService.getTotalMemoryGB.mockReturnValue(1);
+  it('shows the current empty recommendation state when no curated model fits', async () => {
+    mockHardwareService.getModelRecommendation.mockReturnValue({ tier: 'limited', maxParameters: 0 });
 
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    expect(result.getByText('Limited Compatibility')).toBeTruthy();
+    expect(result.getByText('No recommended models available.')).toBeTruthy();
   });
 
   it('download button triggers handleDownload via background download', async () => {
@@ -372,7 +393,7 @@ describe('ModelDownloadScreen', () => {
 
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
 
-    const downloadBtn = await result.findByTestId('recommended-model-0-download');
+    const downloadBtn = await result.findByTestId('model-card-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
@@ -388,7 +409,7 @@ describe('ModelDownloadScreen', () => {
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    const downloadBtn = await result.findByTestId('recommended-model-0-download', {}, { timeout: 5000 });
+    const downloadBtn = await result.findByTestId('model-card-0-download', {}, { timeout: 5000 });
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
@@ -411,7 +432,7 @@ describe('ModelDownloadScreen', () => {
     });
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = result.getByTestId('model-card-0-download');
     await act(async () => { fireEvent.press(downloadBtn); });
     await act(async () => { capturedOnComplete?.(completedModel); });
     return { result, completedModel };
@@ -441,7 +462,7 @@ describe('ModelDownloadScreen', () => {
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = result.getByTestId('model-card-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
@@ -461,7 +482,7 @@ describe('ModelDownloadScreen', () => {
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
 
-    const downloadBtn = result.getByTestId('recommended-model-0-download');
+    const downloadBtn = result.getByTestId('model-card-0-download');
     await act(async () => {
       fireEvent.press(downloadBtn);
     });
@@ -494,7 +515,9 @@ describe('ModelDownloadScreen', () => {
       { id: 'llama3', capabilities: { supportsVision: false } },
       { id: 'llava', capabilities: { supportsVision: true } },
     ];
-    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: mockModels });
+    // The screen performs one health check on mount before the explicit connect.
+    // Both calls observe the same server response.
+    mockRsm.testConnection.mockResolvedValue({ success: true, models: mockModels });
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
@@ -511,7 +534,7 @@ describe('ModelDownloadScreen', () => {
 
   it('handleConnectServer — success with no models shows "No Models Found" alert', async () => {
     const { remoteServerManager: mockRsm } = jest.requireMock('../../../src/services');
-    mockRsm.testConnection.mockResolvedValueOnce({ success: true, models: [] });
+    mockRsm.testConnection.mockResolvedValue({ success: true, models: [] });
     mockRemoteServerState.servers = [MOCK_SERVER];
     mockRemoteServerState.discoveredModels = {};
 
@@ -598,8 +621,8 @@ describe('ModelDownloadScreen', () => {
       const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
-      expect(result.getByTestId('litert-model-0')).toBeTruthy();
-      expect(result.getByTestId('litert-model-1')).toBeTruthy();
+      expect(result.getByTestId('onboarding-litert-model-0')).toBeTruthy();
+      expect(result.getByTestId('onboarding-litert-model-1')).toBeTruthy();
     });
 
     it('does NOT render LiteRT cards on iOS', async () => {
@@ -607,7 +630,7 @@ describe('ModelDownloadScreen', () => {
       const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
-      expect(result.queryByTestId('litert-model-0')).toBeNull();
+      expect(result.queryByTestId('onboarding-litert-model-0')).toBeNull();
     });
 
     // DELETED (mockist, #510): 'filters out LiteRT models that exceed RAM headroom' jest.mocked our own
@@ -624,7 +647,7 @@ describe('ModelDownloadScreen', () => {
       const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
       await flushPromises();
 
-      await act(async () => { fireEvent.press(result.getByTestId('litert-model-0-download')); });
+      await act(async () => { fireEvent.press(result.getByTestId('onboarding-litert-model-0-download')); });
 
       expect(mockDownloadModelBackground).toHaveBeenCalledWith(
         LITERT_PARENT_ID,
