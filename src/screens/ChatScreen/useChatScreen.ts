@@ -173,9 +173,6 @@ export const useChatScreen = () => {
           model => model.id === activeImageSnapshot.model?.id,
         )
       : undefined;
-  const activeLocalImageModelId = activeImageSnapshot.model?.source === 'local'
-    ? activeImageSnapshot.model.id
-    : null;
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
   const isStreamingForThisConversation = isStreamingActiveConversation(
@@ -258,9 +255,6 @@ export const useChatScreen = () => {
 
   useChatImageModelEffects({
     setDownloadedImageModels,
-    settings,
-    activeImageModelId: activeLocalImageModelId,
-    downloadedModels,
   });
   useChatModelStateSync({
     activeModelInfo,

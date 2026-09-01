@@ -12,7 +12,7 @@ import {
 } from '../../services';
 import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { selectMobileModel } from '../../services/modelServices';
-import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
+import { activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
@@ -145,25 +145,30 @@ export async function ensureTextModelForChatFn(deps: {
   setLoadingModel: (m: DownloadedModel | null) => void;
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
-  // The SELECTION first, remembered choice second - from the service, which owns that order. Reading
-  // lastTextModelId alone loaded the previously-picked model and left the selected one on screen.
   const modelId = selectedTextModelId();
-  if (!modelId) {
-    deps.setShowModelSelector(true);
-    return false;
-  }
-  deps.setLoadingModel(
-    useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null,
-  );
-  deps.setIsModelLoading(true);
+  const model = useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null;
+  let started = false;
+  const service = mobileChatModelReadiness({
+    activeModel: model,
+    activeModelId: modelId,
+    remote: false,
+    beforeLoad: () => {
+      started = true;
+      deps.setLoadingModel(model);
+      deps.setIsModelLoading(true);
+    },
+  });
   try {
-    await mobileResidencyIntents.ensureText(modelId);
-    return true;
-  } catch {
-    return false;
+    const outcome = await service.ensureReady();
+    if (!outcome.ok && outcome.reason === 'no-model-selected') {
+      deps.setShowModelSelector(true);
+    }
+    return outcome.ok;
   } finally {
-    deps.setIsModelLoading(false);
-    deps.setLoadingModel(null);
+    if (started) {
+      deps.setIsModelLoading(false);
+      deps.setLoadingModel(null);
+    }
   }
 }
 
@@ -273,12 +278,9 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
 
 type ImageModelEffectsDeps = {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
-  settings: { imageGenerationMode: string; autoDetectMethod: string; classifierModelId: string | null | undefined };
-  activeImageModelId: string | null;
-  downloadedModels: DownloadedModel[];
 };
 export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
-  const { setDownloadedImageModels, settings, activeImageModelId, downloadedModels } = deps;
+  const { setDownloadedImageModels } = deps;
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -300,26 +302,6 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     return () => { cancelled = true; clearTimeout(timer); };
 
   }, []);
-  useEffect(() => {
-    let cancelled = false;
-    const preload = async () => {
-      if (
-        settings.imageGenerationMode === 'auto' && settings.autoDetectMethod === 'llm' &&
-        settings.classifierModelId && activeImageModelId
-      ) {
-        const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
-        if (classifierModel?.filePath && !llmService.getLoadedModelPath()) {
-          try {
-            if (!cancelled) await mobileResidencyIntents.ensureText(settings.classifierModelId);
-          }
-          catch (error) { if (!cancelled) logger.warn('[ChatScreen] Failed to preload classifier model:', error); }
-        }
-      }
-    };
-    preload();
-    return () => { cancelled = true; };
-
-  }, [settings.imageGenerationMode, settings.autoDetectMethod, settings.classifierModelId, activeImageModelId]);
 }
 
 type ModelStateSyncDeps = {
@@ -345,8 +327,7 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
       !prepareSelectedModel ||
       activeModelInfo.isRemote ||
       !activeModel ||
-      !activeModelId ||
-      isModelReady(activeModel)
+      !activeModelId
     ) return;
     initiateModelLoad(deps.modelDeps, false)
       .then(outcome => presentModelLoadOutcome(deps.modelDeps, outcome))
