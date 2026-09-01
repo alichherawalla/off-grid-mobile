@@ -29,7 +29,6 @@ import {
   clearMobileModel,
   selectRemoteMobileModel,
 } from '../services/modelServices';
-import { discoverLANServers } from '../services/networkDiscovery';
 import {
   CustomAlert,
   AlertState,
@@ -51,7 +50,7 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, testConnection, activeServerId } =
+  const { servers, serverHealth, activeServerId } =
     useRemoteServerStore();
   const autoDiscover = useAppStore(
     s => s.settings.autoDiscoverRemoteModels === true,
@@ -65,7 +64,7 @@ export const RemoteServersScreen: React.FC = () => {
   // Auto-check all server statuses when screen opens
   useEffect(() => {
     servers.forEach(server => {
-      testConnection(server.id).catch(() => { });
+      remoteServerManager.testConnection(server.id).catch(() => { });
     });
 
   // Status refresh belongs to this screen-open event, not every health projection update.
@@ -75,7 +74,7 @@ export const RemoteServersScreen: React.FC = () => {
   const handleTestServer = useCallback(async (serverId: string) => {
     setTestingId(serverId);
     try {
-      const result = await testConnection(serverId);
+      const result = await remoteServerManager.testConnection(serverId);
       // The row's own status line already says Connected or Offline, so a success needs no
       // dialog to dismiss. Only a failure earns one, because it carries the reason.
       if (!result.success) {
@@ -86,22 +85,18 @@ export const RemoteServersScreen: React.FC = () => {
     } finally {
       setTestingId(null);
     }
-  }, [testConnection]);
+  }, []);
 
   const handleScanNetwork = useCallback(async () => {
     setIsScanning(true);
     setScanNote(null);
     try {
-      const discovered = await discoverLANServers();
-      const existingEndpoints = new Set(servers.map(s => s.endpoint));
-      const newServers = discovered.filter(
-        d => !existingEndpoints.has(d.endpoint),
-      );
+      const { found: newServers } = await remoteServerManager.scanAndReconcile();
       if (newServers.length === 0) {
         // Say what was actually tried. "No servers found" leaves the user with nothing to act
         // on; the ports do, because that is what has to be listening on the other machine.
         setScanNote(
-          discovered.length > 0
+          servers.length > 0
             ? 'Everything on this network is already in your list.'
             : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.',
         );

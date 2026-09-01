@@ -1,6 +1,8 @@
 import { AppState } from 'react-native';
 import { getIpAddress } from 'react-native-device-info';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import '../../../src/services/modelServices';
 import {
   startNetworkReconnectWatcher,
   stopNetworkReconnectWatcher,
@@ -15,11 +17,11 @@ describe('network reconnect watcher', () => {
   let appStateListener: ((state: 'active' | 'background') => void) | undefined;
   const originalFetch = global.fetch;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.useFakeTimers();
     stopNetworkReconnectWatcher();
     jest.clearAllMocks();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     global.fetch = jest.fn(() => Promise.reject(new Error('server offline')));
     jest
       .spyOn(AppState, 'addEventListener')
@@ -33,9 +35,9 @@ describe('network reconnect watcher', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     stopNetworkReconnectWatcher();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     global.fetch = originalFetch;
     jest.useRealTimers();
     jest.restoreAllMocks();
@@ -43,13 +45,18 @@ describe('network reconnect watcher', () => {
 
   it('validates the active connection after a same-IP foreground rejoin', async () => {
     (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.20');
-    const store = useRemoteServerStore.getState();
-    const serverId = store.addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Desktop',
       endpoint: 'http://192.168.1.10:7878',
       provider: 'openai-compatible',
-    });
-    useRemoteServerStore.setState({ activeServerId: serverId });
+      selections: { text: 'gemma' },
+      catalog: { text: [{ id: 'gemma', name: 'Gemma' }] },
+    })).id;
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+      id: 'gemma', name: 'Gemma', serverId, lastUpdated: new Date(0).toISOString(),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma');
 
     startNetworkReconnectWatcher();
     await Promise.resolve();

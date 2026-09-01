@@ -2,14 +2,15 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { RemoteModelOptionsSection } from '../../../src/components/models/RemoteModelOptionsSection';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
 
 describe('remote media model pickers', () => {
-  beforeEach(() => {
-    useRemoteServerStore.getState().clearAllServers();
+  beforeEach(async () => {
+    await remoteServerManager.clearAllServers();
   });
 
-  function addGateway(): string {
-    return useRemoteServerStore.getState().addServer({
+  async function addGateway(): Promise<string> {
+    return (await remoteServerManager.addServer({
       name: 'Studio Mac',
       endpoint: 'http://192.168.1.50:7878', // NOSONAR - private LAN test fixture
       provider: 'openai-compatible',
@@ -27,11 +28,11 @@ describe('remote media model pickers', () => {
           { id: '/models/orpheus.pte', name: 'Orpheus' },
         ],
       },
-    });
+    })).id;
   }
 
   it('changes the active transcription model and shows human names', async () => {
-    const serverId = addGateway();
+    const serverId = await addGateway();
     const ui = render(<RemoteModelOptionsSection category="transcription" />);
 
     expect(ui.getByText('Whisper Large v3')).toBeTruthy();
@@ -52,13 +53,20 @@ describe('remote media model pickers', () => {
   });
 
   it('changes the active voice model without changing the raw server model ID', async () => {
-    const serverId = addGateway();
-    const textServerId = useRemoteServerStore.getState().addServer({
+    const serverId = await addGateway();
+    const textServerId = (await remoteServerManager.addServer({
       name: 'Text Mac',
       endpoint: 'http://192.168.1.51:7878', // NOSONAR - private LAN test fixture
       provider: 'openai-compatible',
-    });
-    useRemoteServerStore.setState({ activeServerId: textServerId });
+      selections: { text: 'text-model' },
+      catalog: { text: [{ id: 'text-model', name: 'Text Model' }] },
+    })).id;
+    useRemoteServerStore.getState().setDiscoveredModels(textServerId, [{
+      id: 'text-model', name: 'Text Model', serverId: textServerId,
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+      lastUpdated: new Date(0).toISOString(),
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(textServerId, 'text-model');
     const ui = render(<RemoteModelOptionsSection category="voice" />);
 
     fireEvent.press(

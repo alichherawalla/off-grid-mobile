@@ -23,6 +23,7 @@ import { resetStores, setupWithConversation, flushPromises } from '../../utils/t
 import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
 import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
 import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
@@ -55,11 +56,11 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
   });
 
   it('leaves isGenerating / isThinking / isStreaming / session all false after a remote error', async () => {
-    const serverId = useRemoteServerStore.getState().addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Failing server',
       endpoint: 'http://remote.invalid',
       provider: 'openai-compatible',
-    });
+    })).id;
     useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
       id: 'remote-model', name: 'Remote model', serverId,
       capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },

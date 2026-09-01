@@ -22,7 +22,6 @@ import {
   remoteServerManager,
   selectRemoteMobileModel,
 } from '../services';
-import { discoverLANServers } from '../services/networkDiscovery';
 import { RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { NetworkSection } from './ModelDownloadHelpers';
@@ -116,12 +115,9 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const handleScanNetwork = useCallback(async () => {
     setIsScanning(true);
     try {
-      const discovered = await discoverLANServers();
-      const store = useRemoteServerStore.getState();
-      const existing = new Set(store.servers.map(s => s.endpoint.replace(/\/$/, '')));
+      const { found } = await remoteServerManager.scanAndReconcile();
       let added = 0;
-      for (const d of discovered) {
-        if (existing.has(d.endpoint.replace(/\/$/, ''))) continue;
+      for (const d of found) {
         await remoteServerManager.addServer({ name: d.name, endpoint: d.endpoint, provider: 'openai-compatible' });
         added += 1;
       }

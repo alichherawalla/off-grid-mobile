@@ -1,6 +1,8 @@
 import { remoteMediaRuntime } from '../../../src/services/adapters/remote/mediaRuntime';
 import * as Keychain from 'react-native-keychain';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import '../../../src/services/modelServices';
 import { executeMobileTranscription } from '../../../src/services/mobileTranscription';
 import RNFS from 'react-native-fs';
 import {
@@ -40,7 +42,7 @@ describe('remoteMediaRuntime', () => {
   const originalFetch = global.fetch;
 
   beforeEach(async () => {
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     jest.spyOn(Keychain, 'getGenericPassword').mockResolvedValue({
       service: `ai.offgridmobile.servers.${server.id}`,
       storage: 'AES_GCM',
@@ -127,16 +129,15 @@ describe('remoteMediaRuntime', () => {
     global.fetch = jest.fn(async () =>
       jsonResponse({ text: 'Private meeting notes' }),
     ) as typeof fetch;
-    const store = useRemoteServerStore.getState();
-    const serverId = store.addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: server.name,
       endpoint: server.endpoint,
       provider: server.provider,
       selections: { transcription: 'whisper-large-v3' },
-    });
-    useRemoteServerStore.setState({
-      activeRemoteMediaServerIds: { transcription: serverId },
-    });
+    })).id;
+    await remoteServerManager.setActiveRemoteMediaModel(
+      serverId, 'transcription', 'whisper-large-v3',
+    );
 
     await expect(
       executeMobileTranscription('file:///recording.wav'),
@@ -166,14 +167,13 @@ describe('remoteMediaRuntime', () => {
       arrayBuffer: async () => audio,
         } as unknown as Response),
     ) as typeof fetch;
-    const store = useRemoteServerStore.getState();
-    const id = store.addServer({
+    const id = (await remoteServerManager.addServer({
       name: 'Studio Mac',
       endpoint: server.endpoint,
       provider: server.provider,
       selections: { voice: 'kokoro' },
-    });
-    useRemoteServerStore.setState({ activeRemoteMediaServerIds: { voice: id } });
+    })).id;
+    await remoteServerManager.setActiveRemoteMediaModel(id, 'voice', 'kokoro');
 
     const active = activeRemoteVoiceServer();
     expect(active?.name).toBe('Studio Mac');

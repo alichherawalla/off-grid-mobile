@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert } from '../../../components';
 import { remoteServerManager } from '../../../services';
-import { discoverLANServers } from '../../../services/networkDiscovery';
+import type { DiscoveredRemoteServer } from '@offgrid/models';
 import { useAppStore } from '../../../stores/appStore';
 import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import type { HomeScreenNavigationProp } from './types';
@@ -14,7 +14,7 @@ interface LANDiscoveryParams {
 
 export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParams) {
   const addNewServersAndNotify = useCallback(async (
-    newServersToAdd: Awaited<ReturnType<typeof discoverLANServers>>
+    newServersToAdd: DiscoveredRemoteServer[]
   ) => {
     for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);

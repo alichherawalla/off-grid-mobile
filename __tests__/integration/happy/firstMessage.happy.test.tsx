@@ -62,14 +62,15 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
   it('new chat keeps a remote model choice while discovery metadata refreshes', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
     const { useRemoteServerStore } = require('../../../src/stores');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
 
     const remoteStore = useRemoteServerStore.getState();
-    const serverId = remoteStore.addServer({
+    const saved = await remoteServerManager.addServer({
       name: 'Off Grid Desktop',
       endpoint: 'http://192.168.5.219:7878',
       provider: 'openai-compatible',
     });
+    const serverId = saved.id;
     remoteStore.setDiscoveredModels(serverId, [{
       id: 'gemma-4-e4b',
       name: 'Gemma 4 E4B',
@@ -80,7 +81,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
         acceptsThinkingKwarg: false,
       },
     }]);
-    await setActiveRemoteTextModelImpl(serverId, 'gemma-4-e4b');
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma-4-e4b');
 
     // Device-shaped race: provider selection is complete, but the background
     // discovery refresh temporarily has no metadata for the chosen model.

@@ -3,6 +3,7 @@ import * as Keychain from 'react-native-keychain';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import '../../../src/services/modelServices';
 
 jest.mock('react-native-device-info', () => ({
   getIpAddress: jest.fn(),
@@ -18,17 +19,17 @@ const modelList = () =>
 describe('remote server reconnect', () => {
   const originalFetch = global.fetch;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
     (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.30');
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.restoreAllMocks();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
     global.fetch = originalFetch;
   });
@@ -46,11 +47,11 @@ describe('remote server reconnect', () => {
       }
       return Promise.reject(new Error('no server'));
     });
-    const serverId = useRemoteServerStore.getState().addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Desktop A',
       endpoint: endpointA,
       provider: 'openai-compatible',
-    });
+    })).id;
 
     const result = await remoteServerManager.scanAndReconcile();
 
@@ -77,11 +78,11 @@ describe('remote server reconnect', () => {
         ? Promise.resolve(modelList())
         : Promise.reject(new Error('no server')),
     );
-    const serverId = useRemoteServerStore.getState().addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Credentialed Desktop',
       endpoint: oldEndpoint,
       provider: 'openai-compatible',
-    });
+    })).id;
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
       username: `server_${serverId}`,
       password: 'secret', // NOSONAR - test boundary value, not a real credential
@@ -106,11 +107,11 @@ describe('remote server reconnect', () => {
         ? Promise.resolve(modelList())
         : Promise.reject(new Error('no server')),
     );
-    const serverId = useRemoteServerStore.getState().addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Desktop with unavailable credentials',
       endpoint: oldEndpoint,
       provider: 'openai-compatible',
-    });
+    })).id;
     (Keychain.getGenericPassword as jest.Mock).mockRejectedValueOnce(
       new Error('Keychain unavailable'),
     );
@@ -134,11 +135,11 @@ describe('remote server reconnect', () => {
         ? Promise.resolve(modelList())
         : Promise.reject(new Error('no server')),
     );
-    const serverId = useRemoteServerStore.getState().addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Uncredentialed Desktop',
       endpoint: oldEndpoint,
       provider: 'openai-compatible',
-    });
+    })).id;
 
     const result = await remoteServerManager.scanAndReconcile();
 
@@ -156,13 +157,18 @@ describe('remote server reconnect', () => {
       if (url === `${endpoint}/v1/models`) return Promise.resolve(modelList());
       return Promise.reject(new Error('no server'));
     });
-    const store = useRemoteServerStore.getState();
-    const serverId = store.addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Desktop',
       endpoint,
       provider: 'openai-compatible',
-    });
-    useRemoteServerStore.setState({ activeServerId: serverId });
+      selections: { text: 'gemma' },
+      catalog: { text: [{ id: 'gemma', name: 'Gemma' }] },
+    })).id;
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+      id: 'gemma', name: 'Gemma', serverId, lastUpdated: new Date(0).toISOString(),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma');
     useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: true });
 
     await remoteServerManager.recoverActiveConnection();

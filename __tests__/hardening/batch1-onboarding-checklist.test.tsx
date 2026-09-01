@@ -38,6 +38,7 @@ import {
   refreshMobileModelServices,
 } from '../../src/services/modelServices';
 import { mobileModelSelectionService } from '../../src/services/modelServices/modelSelectionApplication';
+import { remoteServerManager } from '../../src/services/remoteServerManager';
 
 const stepById = (steps: any[], id: string) => steps.find((s) => s.id === id);
 
@@ -174,11 +175,10 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(false);
 
     // A remote server counts as "has any model" even with zero local downloads.
-    let serverId = '';
+    const serverId = (await remoteServerManager.addServer({
+      name: 'LAN box', endpoint: 'http://192.168.1.9:8080', provider: 'openai-compatible',
+    })).id;
     act(() => {
-      serverId = useRemoteServerStore.getState().addServer({
-        name: 'LAN box', endpoint: 'http://192.168.1.9:8080', provider: 'openai-compatible',
-      });
       useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
         id: 'remote/qwen', name: 'Qwen', serverId,
         capabilities: {

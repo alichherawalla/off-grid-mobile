@@ -7,6 +7,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { RemoteServerEditorScreen } from '../../../src/screens/RemoteServerEditorScreen';
 import { RemoteServersScreen } from '../../../src/screens/RemoteServersScreen';
 import { useRemoteServerStore } from '../../../src/stores';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import {
   gatewayModelList,
   installLanProbe,
@@ -28,10 +29,10 @@ const MAC = '192.168.1.30:7878';
 describe('full-screen remote server editor', () => {
   let lan: LanProbeHandle;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockRoute.params = undefined;
     mockGoBack.mockClear();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.isEmulator = jest.fn(async () => false);
     DeviceInfo.getIpAddress = jest.fn(async () => '192.168.1.10');

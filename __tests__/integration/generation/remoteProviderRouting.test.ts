@@ -33,7 +33,7 @@ describe('canonical Mobile text route authority', () => {
 
   beforeEach(async () => {
     remoteTextTransportRegistry.clear();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
     const app = useAppStore.getState();
     for (const model of app.downloadedModels) app.removeDownloadedModel(model.id);
     app.addDownloadedModel(local);
@@ -43,7 +43,7 @@ describe('canonical Mobile text route authority', () => {
   afterEach(async () => {
     await clearMobileModel('text');
     remoteTextTransportRegistry.clear();
-    useRemoteServerStore.getState().clearAllServers();
+    await remoteServerManager.clearAllServers();
   });
 
   it('uses the canonical local route for status, capability, and execution identity', () => {
@@ -59,7 +59,7 @@ describe('canonical Mobile text route authority', () => {
 
   it('keeps remote UI capability and execution identity on the same canonical route', async () => {
     const remote = useRemoteServerStore.getState();
-    const serverId = remote.addServer({ name: 'Remote server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' });
+    const serverId = (await remoteServerManager.addServer({ name: 'Remote server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'remote-model';
     remote.setDiscoveredModels(serverId, [{
       id: modelId,
@@ -84,7 +84,7 @@ describe('canonical Mobile text route authority', () => {
 
   it('fails closed when the selected remote provider becomes unavailable', async () => {
     const remote = useRemoteServerStore.getState();
-    const serverId = remote.addServer({ name: 'Unavailable server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' });
+    const serverId = (await remoteServerManager.addServer({ name: 'Unavailable server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'unavailable-model';
     remote.setDiscoveredModels(serverId, [{
       id: modelId,
@@ -116,7 +116,7 @@ describe('canonical Mobile text route authority', () => {
 
   it('returns to the persisted local route only after the remote server is removed', async () => {
     const remote = useRemoteServerStore.getState();
-    const serverId = remote.addServer({ name: 'Removed server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' });
+    const serverId = (await remoteServerManager.addServer({ name: 'Removed server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'removed-model';
     remote.setDiscoveredModels(serverId, [{
       id: modelId,
@@ -138,13 +138,13 @@ describe('canonical Mobile text route authority', () => {
 
   it('selects and clears a remote embedding route through the same server control plane', async () => {
     const remote = useRemoteServerStore.getState();
-    const serverId = remote.addServer({
+    const serverId = (await remoteServerManager.addServer({
       name: 'Embedding server',
       endpoint: 'https://embeddings.example.test/v1',
       provider: 'openai-compatible',
       selections: { embedding: 'embed-small' },
       catalog: { embedding: [{ id: 'embed-small', name: 'Embed Small' }] },
-    });
+    })).id;
     await refreshMobileModelServices();
 
     await selectMobileModel({
