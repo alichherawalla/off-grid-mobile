@@ -15,6 +15,7 @@ import type {
 } from '../../../src/services/modelServices/downloadTypes';
 import { uniformDownloadId } from '@offgrid/models';
 import { useAppStore } from '../../../src/stores';
+import { createDownloadedModel } from '../../utils/factories';
 
 const MB = 1024 * 1024;
 const parameterCount = (modelId: string): number => {
@@ -63,7 +64,15 @@ class NativeDownloadBoundary implements DownloadProvider {
 
   start(request: ModelDownloadStartRequest): Promise<void> {
     if (request.modelType === 'text') {
-      return this.begin(`${request.modelId}/${request.file.name}`, request.file.name, request.file.size);
+      const id = `${request.modelId}/${request.file.name}`;
+      useAppStore.getState().addDownloadedModel(createDownloadedModel({
+        id,
+        name: request.modelId,
+        fileName: request.file.name,
+        fileSize: request.file.size,
+        engine: 'llama',
+      }));
+      return this.begin(id, request.file.name, request.file.size);
     }
     if (request.modelType === 'image') {
       return this.begin(request.model.id, request.model.name, request.model.size);
@@ -102,6 +111,11 @@ class NativeDownloadBoundary implements DownloadProvider {
   }
   async retry(): Promise<void> {}
   async remove(): Promise<void> {
+    if (this.modelType === 'text') {
+      for (const download of this.downloads) {
+        useAppStore.getState().removeDownloadedModel(download.id.replace(/^text:/, ''));
+      }
+    }
     this.downloads = [];
     this.listeners.forEach(listener => listener());
   }
@@ -233,10 +247,12 @@ describe('Auto Setup release journey', () => {
     ).toEqual(expect.arrayContaining(['text', 'image', 'stt']));
 
     fireEvent.press(ui.getByTestId('auto-setup-continue'));
-    expect(useAppStore.getState().activeModelId).toContain(
-      'unsloth/Qwen3.5-9B-GGUF',
-    );
-    expect(navigation.replace).toHaveBeenCalledWith('Main');
+    await waitFor(() => {
+      expect(useAppStore.getState().activeModelId).toContain(
+        'unsloth/Qwen3.5-9B-GGUF',
+      );
+      expect(navigation.replace).toHaveBeenCalledWith('Main');
+    });
   });
 
   it('keeps manual model and remote server setup in Advanced Setup', async () => {

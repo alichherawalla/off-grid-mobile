@@ -13,6 +13,7 @@ import {
   selectedTextModelId,
   unloadTextModel,
 } from '../../services';
+import { selectMobileModel } from '../../services/modelServices';
 import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
@@ -299,6 +300,12 @@ export async function handleModelSelectFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
+  await selectMobileModel({
+    source: 'local',
+    hostId: model.engine,
+    modality: 'text',
+    modelId: model.id,
+  });
   if (llmService.getLoadedModelPath() === model.filePath) {
     deps.setShowModelSelector(false);
     return;

@@ -5,11 +5,13 @@ import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { estimateTextModelMemoryMB } from '../modelMemory';
-import { remoteServerManager } from '../remoteServerManager';
 import { whisperService, WHISPER_MODELS } from '../whisperService';
 import { mobileRouteId } from './mobileRoute';
 import { modelResidencyManager } from './residencyBootstrap';
-import { refreshMobileLLMServiceInventory } from './mobileLLMService';
+import {
+  refreshMobileLLMServiceInventory,
+  selectMobileRoute,
+} from './mobileLLMService';
 
 interface LoadOptions {
   override?: boolean;
@@ -220,7 +222,7 @@ export async function unloadTextModel(keepSelection = false): Promise<boolean> {
     () => nativeModelLifecycle.unloadTextModel(true),
   );
   if (!keepSelection) {
-    store.setActiveModelId(null);
+    await selectMobileRoute('text', null);
     store.setTextModelEvicted(false);
   }
   await refreshMobileLLMServiceInventory();
@@ -240,7 +242,7 @@ export async function unloadImageModel(keepSelection = false): Promise<boolean> 
     key,
     () => nativeModelLifecycle.unloadImageModel(true),
   );
-  if (!keepSelection) store.setActiveImageModelId(null);
+  if (!keepSelection) await selectMobileRoute('image', null);
   return true;
 }
 
@@ -285,16 +287,26 @@ export async function unloadAllModels(
 
 export async function ejectAllModels(): Promise<{ count: number }> {
   const remote = useRemoteServerStore.getState();
-  const hasRemote = !!(
-    remote.activeRemoteTextModelId || remote.activeRemoteImageModelId
-  );
+  const remoteModalities: ModelModality[] = [];
+  if (remote.activeRemoteTextModelId) remoteModalities.push('text');
+  if (
+    remote.activeRemoteImageModelId ||
+    remote.activeRemoteMediaServerIds.image
+  ) remoteModalities.push('image');
+  if (remote.activeRemoteMediaServerIds.transcription) {
+    remoteModalities.push('transcription');
+  }
+  if (remote.activeRemoteMediaServerIds.voice) remoteModalities.push('voice');
+  const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
   const local = await unloadAllModels(true);
   let count = Number(local.textUnloaded) + Number(local.imageUnloaded);
   const sidecars = await modelResidencyManager.evictAll();
   count += sidecars.length;
   if (hasRemote) {
-    remoteServerManager.clearActiveRemoteModel();
+    await Promise.all(
+      remoteModalities.map(modality => selectMobileRoute(modality, null)),
+    );
     count += 1;
   }
   logger.log(`[MODEL-SM] ejectAll → done count=${count}`);

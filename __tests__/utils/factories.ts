@@ -533,7 +533,7 @@ export const makeImageDownloadDeps = (
 ): ImageDownloadDeps => ({
   addDownloadedImageModel: jest.fn(),
   activeImageModelId: null,
-  setActiveImageModelId: jest.fn(),
+  selectActiveImageModel: jest.fn(async () => undefined),
   setAlertState: jest.fn(),
   triedImageGen: false,
   ...overrides,

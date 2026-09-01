@@ -398,12 +398,13 @@ describe('remoteServerManager', () => {
     });
   });
 
-  describe('clearActiveRemoteModel', () => {
-    it('should clear all remote selections', () => {
+  describe('remote selection projections', () => {
+    it('clears text and image selections through their explicit ports', () => {
       const store = remoteSelectionState(null);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(store);
 
-      remoteServerManager.clearActiveRemoteModel();
+      remoteServerManager.clearActiveRemoteTextModel();
+      remoteServerManager.clearActiveRemoteMediaModel('image');
 
       expect(
         store.setActiveServerId,
@@ -414,6 +415,9 @@ describe('remoteServerManager', () => {
       expect(
         store.setActiveRemoteImageModelId,
       ).toHaveBeenCalledWith(null);
+      expect(
+        store.setActiveRemoteMediaServerId,
+      ).toHaveBeenCalledWith('image', null);
     });
   });
 

@@ -24,6 +24,9 @@ jest.mock('../../../src/services/litert', () => ({
     getActiveBackend: jest.fn(() => 'cpu'), warmup: jest.fn(),
   },
 }));
+jest.mock('../../../src/services/modelServices/mobileLLMService', () => ({
+  activeMobileRoute: jest.fn(() => ({ model: null })),
+}));
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { loadModel: jest.fn(), unloadModel: jest.fn() },
 }));
@@ -240,7 +243,7 @@ describe('doLoadImageModel branches', () => {
     expect(mockedImage.unloadModel).toHaveBeenCalled();
     expect(ctx.onError).toHaveBeenCalled(); // reset path
     expect(ctx.onLoaded).toHaveBeenCalledWith('img-1', 4);
-    expect(ctx.store.setActiveImageModelId).toHaveBeenCalledWith('img-1');
+    expect(ctx.store.setActiveImageModelId).not.toHaveBeenCalled();
   });
 
   it('unloads when needsThreadReload even if same id', async () => {

@@ -84,7 +84,7 @@ function adapter(id: string): GenerationAdapter {
       if (model.modality === 'embedding' || model.modality === 'tool_selection') {
         await embeddingService.load();
       } else if (model.modality === 'classifier') {
-        await nativeModelLifecycle.loadTextModel(model.id, 120_000, false, true);
+        await nativeModelLifecycle.loadTextModel(model.id, 120_000, false);
       }
     },
     async unload(model) {

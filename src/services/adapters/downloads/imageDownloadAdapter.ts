@@ -24,6 +24,8 @@ import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores
 import logger from '../../../utils/logger';
 import { mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
+import { mobileRouteId } from '../../modelServices/mobileRoute';
+import { selectMobileRoute } from '../../modelServices/mobileLLMService';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
 
 /**
@@ -57,7 +59,15 @@ export const imageProvider: DownloadProvider = {
     await startImageModelDownload(request.model, {
       addDownloadedImageModel: app.addDownloadedImageModel,
       activeImageModelId: app.activeImageModelId,
-      setActiveImageModelId: app.setActiveImageModelId,
+      selectActiveImageModel: model => selectMobileRoute(
+        'image',
+        mobileRouteId({
+          source: 'local',
+          hostId: model.backend ?? 'image-runtime',
+          modality: 'image',
+          modelId: model.id,
+        }),
+      ),
       setAlertState: () => undefined,
       triedImageGen: app.onboardingChecklist.triedImageGen,
     });

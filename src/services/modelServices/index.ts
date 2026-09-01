@@ -20,6 +20,7 @@ import {
 import {
   mobileLLMService,
   refreshMobileLLMServiceInventory,
+  selectMobileRoute,
 } from './mobileLLMService';
 import {
   mobileGenerationResidency,
@@ -115,8 +116,7 @@ export function activeMobileModel(modality: ActiveModelSnapshot['modality']): Ac
 
 /** Refresh first so a newly downloaded or discovered route can be selected immediately. */
 export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> {
-  await refreshMobileModelServices();
-  await mobileLLMService.select(facts.modality, mobileRouteId(facts));
+  await selectMobileRoute(facts.modality, mobileRouteId(facts));
   await refreshMobileModelServices();
 }
 
@@ -132,7 +132,7 @@ export function selectRemoteMobileModel(
 export async function clearMobileModel(
   modality: ActiveModelSnapshot['modality'],
 ): Promise<void> {
-  await mobileLLMService.select(modality, null);
+  await selectMobileRoute(modality, null);
   await refreshMobileModelServices();
 }
 

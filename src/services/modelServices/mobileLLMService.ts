@@ -18,6 +18,16 @@ export function refreshMobileLLMServiceInventory() {
   return refreshChain;
 }
 
+/** Canonical Mobile selection transaction for callers below the app-service facade. */
+export async function selectMobileRoute(
+  modality: ModelModality,
+  canonicalId: string | null,
+): Promise<void> {
+  await refreshMobileLLMServiceInventory();
+  await mobileLLMService.select(modality, canonicalId);
+  await refreshMobileLLMServiceInventory();
+}
+
 export function activeMobileRoute(modality: ModelModality): ActiveModelSnapshot {
   return mobileLLMService.active(modality);
 }

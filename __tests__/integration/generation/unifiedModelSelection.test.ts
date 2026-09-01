@@ -113,7 +113,7 @@ describe('Unified Model Selection', () => {
       useRemoteServerStore.getState().setActiveRemoteTextModelId('llama2');
 
       // Clear selection
-      remoteServerManager.clearActiveRemoteModel();
+      remoteServerManager.clearActiveRemoteTextModel();
 
       // Verify state was cleared
       expect(useRemoteServerStore.getState().activeServerId).toBeNull();

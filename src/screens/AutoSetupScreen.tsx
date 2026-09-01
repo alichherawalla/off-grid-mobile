@@ -169,8 +169,8 @@ export const AutoSetupScreen: React.FC<Props> = ({
                   {isComplete ? (
                     <Button
                       title="Continue"
-                      onPress={() => {
-                        session.complete();
+                      onPress={async () => {
+                        await session.complete();
                         navigation.replace('Main');
                       }}
                       testID="auto-setup-continue"

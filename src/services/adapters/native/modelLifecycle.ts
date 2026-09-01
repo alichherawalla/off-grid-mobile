@@ -70,11 +70,9 @@ class NativeModelLifecycle {
     modelId: string,
     timeoutMs = 120_000,
     override = false,
-    preserveSelection = false,
   ): Promise<void> {
     const store = useAppStore.getState();
     if (this.textIsCurrent(modelId)) {
-      if (!preserveSelection && store.activeModelId !== modelId) store.setActiveModelId(modelId);
       return;
     }
     const model = store.downloadedModels.find(candidate => candidate.id === modelId);
@@ -87,7 +85,6 @@ class NativeModelLifecycle {
       store,
       timeoutMs,
       override,
-      preserveSelection,
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;
@@ -121,7 +118,6 @@ class NativeModelLifecycle {
       if (keepSelection) {
         if (isLoaded) store.setTextModelEvicted(true);
       } else {
-        store.setActiveModelId(null);
         store.setTextModelEvicted(false);
       }
     } finally {
@@ -140,7 +136,6 @@ class NativeModelLifecycle {
       this.loadedImageModelThreads !== imageThreads;
     if (this.loadedImageModelId === modelId &&
       await imageEngine.isModelLoaded() && !needsThreadReload) {
-      if (store.activeImageModelId !== modelId) store.setActiveImageModelId(modelId);
       return;
     }
     if (model.backend === 'mnn' || model.backend === 'qnn') {
@@ -183,7 +178,7 @@ class NativeModelLifecycle {
       this.loadedImageModelThreads !== (useAppStore.getState().settings?.imageThreads ?? 4);
   }
 
-  async unloadImageModel(keepSelection = false): Promise<void> {
+  async unloadImageModel(_keepSelection = false): Promise<void> {
     if (this.imageLoadPromise) await this.imageLoadPromise;
     const store = useAppStore.getState();
     const isLoaded = await imageEngine.isModelLoaded();
@@ -194,7 +189,6 @@ class NativeModelLifecycle {
       if (isLoaded) await imageEngine.unloadModel();
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
-      if (!keepSelection) store.setActiveImageModelId(null);
     } finally {
       this.loading.image = false;
       this.changed();

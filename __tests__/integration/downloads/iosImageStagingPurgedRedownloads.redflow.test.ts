@@ -98,7 +98,7 @@ describe.each(['ios', 'android'] as const)(
       const deps = {
         addDownloadedImageModel: appState.addDownloadedImageModel,
         activeImageModelId: appState.activeImageModelId,
-        setActiveImageModelId: appState.setActiveImageModelId,
+        selectActiveImageModel: async () => undefined,
         setAlertState: () => {},
         triedImageGen: false,
       };

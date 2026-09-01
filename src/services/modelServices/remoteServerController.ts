@@ -254,20 +254,6 @@ class RemoteServerManager {
     });
   }
 
-  /**
-   * Clear active remote model (switch back to local)
-   */
-  clearActiveRemoteModel(): void {
-    const store = useRemoteServerStore.getState();
-    store.setActiveServerId(null);
-    store.setActiveRemoteTextModelId(null);
-    store.setActiveRemoteImageModelId(null);
-    store.setActiveRemoteMediaServerId('image', null);
-    store.setActiveRemoteMediaServerId('transcription', null);
-    store.setActiveRemoteMediaServerId('voice', null);
-    logger.log('[RemoteServerManager] Cleared active remote model');
-  }
-
   clearActiveRemoteTextModel(): void {
     const store = useRemoteServerStore.getState();
     store.setActiveServerId(null);

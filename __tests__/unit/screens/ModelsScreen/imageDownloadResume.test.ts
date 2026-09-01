@@ -100,7 +100,7 @@ function makeDeps() {
   return {
     addDownloadedImageModel: jest.fn(),
     activeImageModelId: null,
-    setActiveImageModelId: jest.fn(),
+    selectActiveImageModel: jest.fn(async () => undefined),
     setAlertState: jest.fn(),
     triedImageGen: true,
   };

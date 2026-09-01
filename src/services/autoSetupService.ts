@@ -11,6 +11,7 @@ import {
   type AutoSetupPlan,
   type AutoSetupTier,
 } from './autoSetupPlan';
+import { selectMobileModel } from './modelServices';
 
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
@@ -55,7 +56,7 @@ export interface AutoSetupSession {
   load(): Promise<void>;
   selectTier(tier: AutoSetupTier): void;
   start(): Promise<void>;
-  complete(): void;
+  complete(): Promise<void>;
   dispose(): void;
 }
 
@@ -359,10 +360,21 @@ export function createAutoSetupSession(
       });
     },
     start,
-    complete() {
+    async complete() {
       const plan = selectedPlan();
       if (plan && state.phase === 'completed') {
-        useAppStore.getState().setActiveModelId(plan.items[0].id);
+        const selected = useAppStore.getState().downloadedModels.find(
+          model => model.id === plan.items[0].id,
+        );
+        if (!selected) {
+          throw new Error('The downloaded text model is not available');
+        }
+        await selectMobileModel({
+          source: 'local',
+          hostId: selected.engine,
+          modality: 'text',
+          modelId: selected.id,
+        });
       }
     },
     dispose() {

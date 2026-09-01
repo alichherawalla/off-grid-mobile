@@ -4,7 +4,12 @@ import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { makeImageModelKey } from '../../utils/modelKey';
-import { modelLibrary, hardwareService, backgroundDownloadService } from '../../services';
+import {
+  modelLibrary,
+  hardwareService,
+  backgroundDownloadService,
+  selectMobileModel,
+} from '../../services';
 import { fetchAvailableModels, HFImageModel, guessStyle } from '../../services/huggingFaceModelBrowser';
 import { fetchAvailableCoreMLModels } from '../../services/coreMLModelBrowser';
 import { ImageModelRecommendation } from '../../types';
@@ -31,7 +36,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
 
   const {
     downloadedImageModels, setDownloadedImageModels, addDownloadedImageModel,
-    activeImageModelId, setActiveImageModelId,
+    activeImageModelId,
     onboardingChecklist,
   } = useAppStore();
   const downloads = useDownloadStore((s) => s.downloads);
@@ -40,7 +45,12 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const makeDeps = (): ImageDownloadDeps => ({
     addDownloadedImageModel,
     activeImageModelId,
-    setActiveImageModelId,
+    selectActiveImageModel: model => selectMobileModel({
+      source: 'local',
+      hostId: model.backend ?? 'image-runtime',
+      modality: 'image',
+      modelId: model.id,
+    }),
     setAlertState,
     triedImageGen: onboardingChecklist.triedImageGen,
   });

@@ -87,8 +87,6 @@ export interface TextLoadContext {
   /** User forced this load ("Load Anyway"/continue) — skip the conservative native
    *  memory gate so the loader's own fallbacks try instead of a hard block. */
   override?: boolean;
-  /** A sidecar can use the text engine without replacing the user's selected text route. */
-  preserveSelection?: boolean;
   onLoaded: (modelId: string) => void;
   onError: () => void;
   onFinally: () => void;
@@ -167,10 +165,8 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
     });
 
     ctx.onLoaded(ctx.modelId);
-    if (!ctx.preserveSelection) ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    if (!ctx.preserveSelection) ctx.store.setActiveModelId(null);
     throw error;
   } finally {
     ctx.onFinally();
@@ -241,10 +237,8 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
     ctx.store.setLoadedSettings(reloadSettings);
 
     ctx.onLoaded(ctx.modelId);
-    if (!ctx.preserveSelection) ctx.store.setActiveModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
-    if (!ctx.preserveSelection) ctx.store.setActiveModelId(null);
     throw error;
   } finally {
     ctx.onFinally();
@@ -308,7 +302,6 @@ export async function doLoadImageModel(ctx: ImageLoadContext): Promise<void> {
     }
 
     ctx.onLoaded(ctx.modelId, ctx.imageThreads);
-    ctx.store.setActiveImageModelId(ctx.modelId);
   } catch (error) {
     ctx.onError();
     throw error;

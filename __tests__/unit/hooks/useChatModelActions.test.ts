@@ -20,6 +20,9 @@ jest.mock('../../../src/services/modelServices/modelLifecycleBootstrap', () => (
   loadTextModel: jest.fn(),
   unloadTextModel: jest.fn(),
 }));
+jest.mock('../../../src/services/modelServices', () => ({
+  selectMobileModel: jest.fn(async () => undefined),
+}));
 jest.mock('../../../src/services/modelServices/modelState', () => ({
   ...jest.requireActual('../../../src/services/modelServices/modelState'),
   getActiveModels: jest.fn(),

@@ -146,7 +146,7 @@ describe('image download recovery integration', () => {
     const deps = {
       addDownloadedImageModel: jest.fn(),
       activeImageModelId: null,
-      setActiveImageModelId: jest.fn(),
+      selectActiveImageModel: jest.fn(async () => undefined),
       setAlertState: jest.fn(),
       triedImageGen: true,
     };

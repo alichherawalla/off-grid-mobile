@@ -19,7 +19,10 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     requireRTL();
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
-    const { refreshMobileModelServices } = require('../../../src/services/modelServices');
+    const {
+      refreshMobileModelServices,
+      selectMobileModel,
+    } = require('../../../src/services/modelServices');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { isModelReady } = require('../../../src/services/engines');
     const { hardwareService } = require('../../../src/services/hardware');
@@ -33,6 +36,12 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     await refreshMobileModelServices();
 
     // Load — becomes ready + resident.
+    await selectMobileModel({
+      source: 'local',
+      hostId: model.engine,
+      modality: 'text',
+      modelId: model.id,
+    });
     await activeModelService.loadTextModel('llm');
     expect(isModelReady(model)).toBe(true);
     expect(isResidentType(modelResidencyManager, 'text')).toBe(true);

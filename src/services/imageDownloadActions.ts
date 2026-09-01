@@ -195,7 +195,9 @@ export async function registerAndNotify(
   deps.addDownloadedImageModel(imageModel);
   // Auto-load the first image model unless onboarding is still active (Step 13 needs
   // activeImageModelId null).
-  if (!deps.activeImageModelId && deps.triedImageGen) deps.setActiveImageModelId(imageModel.id);
+  if (!deps.activeImageModelId && deps.triedImageGen) {
+    await deps.selectActiveImageModel(imageModel);
+  }
   removeStoreEntry(imageModel.id);
   deps.setAlertState(showAlert('Success', `${modelName} downloaded successfully!`));
 }

@@ -15,6 +15,9 @@ jest.mock('../../../src/services/llm', () => ({
 jest.mock('../../../src/services/litert', () => ({
   liteRTService: { loadModel: jest.fn(), unloadModel: jest.fn(), getActiveBackend: jest.fn(() => 'cpu') },
 }));
+jest.mock('../../../src/services/modelServices/mobileLLMService', () => ({
+  activeMobileRoute: jest.fn(() => ({ model: null })),
+}));
 jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { loadModel: jest.fn(), unloadModel: jest.fn() },
 }));

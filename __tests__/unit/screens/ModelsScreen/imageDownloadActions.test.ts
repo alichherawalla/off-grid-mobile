@@ -192,6 +192,9 @@ describe('imageDownloadActions', () => {
     expect(mockStoreApi.setProcessing).toHaveBeenCalled();
     expect(mockAddDownloadedImageModel).toHaveBeenCalled();
     expect(deps.addDownloadedImageModel).toHaveBeenCalled();
+    expect(deps.selectActiveImageModel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'test-hf-model', backend: 'mnn' }),
+    );
     expect(mockStoreApi.remove).toHaveBeenCalledWith('image:test-hf-model');
     expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
   });

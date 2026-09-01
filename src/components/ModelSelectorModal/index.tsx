@@ -68,6 +68,13 @@ function savedTextModels(
   );
 }
 
+const selectLocalImageModel = (model: ONNXImageModel) => selectMobileModel({
+  source: 'local',
+  hostId: model.backend ?? 'image-runtime',
+  modality: 'image',
+  modelId: model.id,
+});
+
 interface ModelSelectorModalProps {
   visible: boolean;
   onClose: () => void;
@@ -120,7 +127,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const activeImageRoute = useActiveMobileModel('image').model;
   const activeRemoteTextModelId = remoteModelId(activeTextRoute);
   const activeRemoteImageModelId = remoteModelId(activeImageRoute);
-
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   // The image model currently being LOADED (the row the user just tapped) — distinct from
@@ -195,6 +201,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
+    await selectLocalImageModel(model);
     // Shared inline Load-Anyway flow so a memory-blocked image load offers the
     // override here too, instead of a dead-end "Failed to Load".
     await loadModelWithOverride(

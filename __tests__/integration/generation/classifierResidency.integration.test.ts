@@ -114,7 +114,6 @@ describe('Mobile classifier residency integration', () => {
       'classifier.gguf',
       120_000,
       false,
-      true,
     );
     expect(residency.getResidents()).toEqual([]);
   });

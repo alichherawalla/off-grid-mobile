@@ -11,10 +11,13 @@
 import { AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { DownloadEntry } from '../../stores/downloadStore';
-import { backgroundDownloadService } from '../../services';
+import { backgroundDownloadService, selectMobileModel } from '../../services';
 import { DownloadItem } from './items';
 import logger from '../../utils/logger';
-import { proceedWithDownload } from '../../services/imageDownloadActions';
+import {
+  proceedWithDownload,
+  type ImageDownloadDeps,
+} from '../../services/imageDownloadActions';
 import { imageDescriptorFromMetadata } from '../ModelsScreen/imageDescriptor';
 import { resumeImageDownload } from '../ModelsScreen/imageDownloadResume';
 
@@ -35,7 +38,12 @@ async function resumeImageFinalization(
   await resumeImageDownload(entry, {
     addDownloadedImageModel: appState.addDownloadedImageModel,
     activeImageModelId: appState.activeImageModelId,
-    setActiveImageModelId: appState.setActiveImageModelId,
+    selectActiveImageModel: model => selectMobileModel({
+      source: 'local',
+      hostId: model.backend ?? 'image-runtime',
+      modality: 'image',
+      modelId: model.id,
+    }),
     setAlertState,
     triedImageGen: appState.onboardingChecklist.triedImageGen,
   });
@@ -54,10 +62,15 @@ async function retryIosImageDownload(entry: DownloadEntry, setAlertState: (s: Al
   await backgroundDownloadService.cancelDownload(entry.downloadId).catch(() => {});
   const modelId = entry.modelId.replace('image:', '');
   const appState = useAppStore.getState();
-  const deps = {
+  const deps: ImageDownloadDeps = {
     addDownloadedImageModel: appState.addDownloadedImageModel,
     activeImageModelId: appState.activeImageModelId,
-    setActiveImageModelId: appState.setActiveImageModelId,
+    selectActiveImageModel: model => selectMobileModel({
+      source: 'local',
+      hostId: model.backend ?? 'image-runtime',
+      modality: 'image',
+      modelId: model.id,
+    }),
     setAlertState,
     triedImageGen: appState.onboardingChecklist.triedImageGen,
   };

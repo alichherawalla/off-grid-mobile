@@ -23,7 +23,8 @@ import {
   loadImageModel,
   loadTextModel,
   onnxImageGeneratorService,
-  remoteServerManager,
+  clearMobileModel,
+  selectMobileModel,
   unloadImageModel,
   unloadTextModel,
 } from '../services';
@@ -73,7 +74,15 @@ export const ChatsListScreen: React.FC = () => {
     // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
     // here just like the chat screen (was a dead-end "Failed to load model").
     await loadModelWithOverride(
-      (opts) => loadTextModel(model.id, undefined, opts),
+      async (opts) => {
+        await selectMobileModel({
+          source: 'local',
+          hostId: model.engine,
+          modality: 'text',
+          modelId: model.id,
+        });
+        await loadTextModel(model.id, undefined, opts);
+      },
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
@@ -85,7 +94,15 @@ export const ChatsListScreen: React.FC = () => {
 
   const handleSelectImageModel = async (model: any) => {
     await loadModelWithOverride(
-      (opts) => loadImageModel(model.id, undefined, opts),
+      async (opts) => {
+        await selectMobileModel({
+          source: 'local',
+          hostId: model.backend ?? 'image-runtime',
+          modality: 'image',
+          modelId: model.id,
+        });
+        await loadImageModel(model.id, undefined, opts);
+      },
       {
         setAlertState,
         onAttemptStart: () => setIsModelLoading(true),
@@ -98,10 +115,10 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadTextModel = async () => {
     setIsModelLoading(true);
     try {
-      remoteServerManager.clearActiveRemoteModel();
       if (llmService.isModelLoaded()) {
         await unloadTextModel();
       }
+      await clearMobileModel('text');
     } finally {
       setIsModelLoading(false);
     }
@@ -111,6 +128,7 @@ export const ChatsListScreen: React.FC = () => {
     setIsModelLoading(true);
     try {
       await unloadImageModel();
+      await clearMobileModel('image');
     } finally {
       setIsModelLoading(false);
     }
