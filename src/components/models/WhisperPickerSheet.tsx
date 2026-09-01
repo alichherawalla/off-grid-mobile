@@ -7,7 +7,7 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
+import { mobileTranscriptionRuntime, transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
@@ -33,10 +33,9 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
     : null;
   const isModelLoading = useWhisperStore(s => s.isModelLoading);
   const presentModelIds = useWhisperStore(s => s.presentModelIds);
-  const downloadModel = useWhisperStore(s => s.downloadModel);
-  const selectModel = useWhisperStore(s => s.selectModel);
-  const deleteModelById = useWhisperStore(s => s.deleteModelById);
-  const refreshPresentModels = useWhisperStore(s => s.refreshPresentModels);
+  const downloadModel = (modelId: string) => transcriptionModelIntents.downloadModel(modelId);
+  const selectModel = (modelId: string) => transcriptionModelIntents.selectModel(modelId);
+  const deleteModelById = (modelId: string) => transcriptionModelIntents.deleteModel(modelId);
 
   // In-flight download state from the SINGLE owner the Transcription tab also reads, so the picker
   // and the tab can never disagree (the picker used to read only whisperStore.downloadProgressById
@@ -44,8 +43,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { stateFor, anyDownloading } = useSttDownloadState();
 
   useEffect(() => {
-    if (visible && !anyDownloading) refreshPresentModels();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (visible && !anyDownloading) transcriptionModelIntents.reconcileDisk();
   }, [visible, anyDownloading]);
 
   return (

@@ -18,13 +18,22 @@ const tinyCard = `transcription-model-card-${WHISPER_MODELS.findIndex(model => m
 const smallCard = `transcription-model-card-${WHISPER_MODELS.findIndex(model => model.id === 'small')}`;
 
 const mockWhisperActions = {
-  downloadModel: jest.fn(async () => {}),
-  selectModel: jest.fn(async () => {}),
+  downloadModel: jest.fn(async (_modelId?: string) => {}),
+  selectModel: jest.fn(async (_modelId?: string) => {}),
   deleteModel: jest.fn(),
-  deleteModelById: jest.fn(async () => {}),
+  deleteModelById: jest.fn(async (_modelId?: string) => {}),
   refreshPresentModels: jest.fn(async () => {}),
   clearError: jest.fn(),
 };
+jest.mock('../../../src/services/modelServices/transcriptionRuntimePort', () => ({
+  registerTranscriptionModelProjection: jest.fn(),
+  transcriptionModelIntents: {
+    downloadModel: (modelId: string) => mockWhisperActions.downloadModel(modelId),
+    selectModel: (modelId: string) => mockWhisperActions.selectModel(modelId),
+    deleteModel: (modelId: string) => mockWhisperActions.deleteModelById(modelId),
+    reconcileDisk: () => mockWhisperActions.refreshPresentModels(),
+  },
+}));
 let mockWhisperState: any;
 jest.mock('../../../src/stores', () => ({
   useWhisperStore: () => mockWhisperState,

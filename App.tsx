@@ -18,7 +18,8 @@ import {
 import { useTheme } from './src/theme';
 import { hardwareService, modelLibrary, authService, ragService, remoteServerManager } from './src/services';
 import logger from './src/utils/logger';
-import { useAppStore, useAuthStore, useRemoteServerStore, useWhisperStore } from './src/stores';
+import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
+import { transcriptionModelIntents } from './src/services/modelServices/transcriptionRuntimePort';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { initDebugLogFile, appendDebugLine, stopDebugLogFile } from './src/utils/debugLogFile';
 import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
@@ -327,7 +328,7 @@ function App() {
       // empty — without this scan a freshly launched app shows an already-installed
       // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
       // forget; the Models screen also refreshes on focus.
-      useWhisperStore.getState().refreshPresentModels();
+      void transcriptionModelIntents.reconcileDisk();
 
       // Models are intentionally NOT warmed at boot — a native model load is heavy
       // and contends with startup, leaving the whole app sluggish in that window.

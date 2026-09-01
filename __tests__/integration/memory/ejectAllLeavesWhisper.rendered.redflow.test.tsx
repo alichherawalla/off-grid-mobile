@@ -32,7 +32,7 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
     const { activeModelService } = require('../../harness/activeModelLifecycle');
-    const { useWhisperStore } = require('../../../src/stores/whisperStore');
+    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
      
 
     const ui = render(
@@ -62,7 +62,7 @@ describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed
     // preload both call whisperStore.loadModel(). Drive that same REAL load to reach the resident precondition.
     // (Arrival-heavy exception — this test's focus is ejectAll freeing the sidecar, not the load path, which
     // is exactly why it also drives activeModelService.ejectAll directly below.)
-    await act(async () => { await useWhisperStore.getState().loadModel(); await new Promise((r) => setTimeout(r, 0)); });
+    await act(async () => { await transcriptionModelIntents.loadModel(); await new Promise((r) => setTimeout(r, 0)); });
 
     // Precondition: whisper is resident (so the post-eject check is meaningful).
     await waitFor(() => { expect(ui.getByTestId('probe-residents').props.children).toContain('transcription'); });

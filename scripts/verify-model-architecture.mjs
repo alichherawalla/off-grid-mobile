@@ -75,6 +75,24 @@ for (const file of files) {
     report('remote-discovery-policy-is-shared', fileName, source, source, 'literal:endpoint-order')
   }
 
+  if (
+    fileName === 'src/stores/whisperStore.ts' &&
+    /\b(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)\s*:/.test(text)
+  ) {
+    report('transcription-workflow-is-shared', fileName, source, source, 'store:actionable-workflow')
+  }
+
+  if (
+    fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
+    /\bpending(?:Text|Image|Transcription)ModelId\b/.test(text)
+  ) {
+    report('residency-workflow-is-shared', fileName, source, source, 'module-global:pending-model-id')
+  }
+
+  if (/useWhisperStore\.getState\(\)\.(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)/.test(text)) {
+    report('transcription-workflow-is-shared', fileName, source, source, 'call:whisper-store-workflow')
+  }
+
   const visit = node => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text

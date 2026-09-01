@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore, useAppStore, useRemoteServerStore } from '../../stores';
 import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
-import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
+import { mobileTranscriptionRuntime, transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 import { supportsAudioInput } from '../../services/modelServices/modelState';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { recordingController } from '../../services/recordingController';
@@ -65,7 +65,7 @@ function createWhisperReadiness(
     isSelectedModelLoaded: () => !!downloadedModelId &&
       mobileTranscriptionRuntime.isSelectedModelLoaded(downloadedModelId),
     hasDownloadedModel: () => !!downloadedModelId,
-    loadWhisper: () => useWhisperStore.getState().loadModel(),
+    loadWhisper: () => transcriptionModelIntents.loadModel(),
     freeGenerationModels: () => mobileResidencyIntents.unloadAll(true).then(() => {}),
   });
 }

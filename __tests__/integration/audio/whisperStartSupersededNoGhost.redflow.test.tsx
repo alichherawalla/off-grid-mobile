@@ -25,11 +25,12 @@ describe('realtime dictation: releasing the mic during model load starts NO ghos
   it('aborts the superseded start — no realtime session after release-during-load', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', whisper: true });
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
+    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
 
     // Whisper downloaded-not-loaded, so the mic press must load it (the async gap the race lives in).
     const docs = h.boundary.fs!.DocumentDirectoryPath;
     h.boundary.fs!.seedFile(`${docs}/whisper-models/ggml-tiny.en.bin`, 75 * 1024 * 1024);
-    await useWhisperStore.getState().refreshPresentModels();
+    await transcriptionModelIntents.reconcileDisk();
     useWhisperStore.setState({ downloadedModelId: 'tiny.en', isModelLoaded: false });
 
     h.render();

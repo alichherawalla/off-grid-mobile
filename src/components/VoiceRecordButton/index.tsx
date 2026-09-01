@@ -32,6 +32,7 @@ import {
 } from './states';
 import { deriveVoiceButtonState } from './derive';
 import { useWhisperStore } from '../../stores';
+import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 import logger from '../../utils/logger';
 import {
   buildVoiceRecordGesture,
@@ -120,7 +121,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const downloadModel = useWhisperStore(s => s.downloadModel);
+  const downloadModel = (modelId: string) => transcriptionModelIntents.downloadModel(modelId);
   const downloadProgressById = useWhisperStore(s => s.downloadProgressById);
   // The ONE derivation of what the mic renders (see derive.ts): a background STT
   // download is never the busy spinner — that is reserved for a tap-triggered

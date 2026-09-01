@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AlertState, showAlert } from '../../components/CustomAlert';
 import { whisperService } from '../../services';
 import { useWhisperStore } from '../../stores';
+import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { isModelDownloadInProgress } from '@offgrid/models';
@@ -84,7 +85,7 @@ async function deleteItem(item: DownloadItem): Promise<void> {
     // Route through whisperStore (not whisperService directly) so the deletion
     // updates presentModelIds/downloadedModelId — otherwise the Home banner and
     // Models screen keep showing the deleted model as present/active.
-    await useWhisperStore.getState().deleteModelById(item.modelId);
+    await transcriptionModelIntents.deleteModel(item.modelId);
   } else {
     const pending = callHook<Promise<void>>(HOOKS.downloadsDeleteVoiceModel, item.modelId);
     if (pending) await pending.catch(() => {});

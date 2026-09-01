@@ -49,6 +49,7 @@ jest.mock('../../../src/services/hardware');
 const mockHardware = hardwareService as jest.Mocked<typeof hardwareService>;
 
 import { useWhisperStore } from '../../../src/stores/whisperStore';
+import { transcriptionModelIntents } from '../../../src/services/modelServices/transcriptionRuntimePort';
 import { whisperService } from '../../../src/services/whisperService';
 
 const mockWhisper = whisperService as jest.Mocked<typeof whisperService>;
@@ -92,7 +93,7 @@ describe('STT residency — single-model invariant', () => {
   });
 
   it('loads whisper when nothing else is resident', async () => {
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
 
     expect(mockWhisper.loadModel).toHaveBeenCalledTimes(1);
     expect(isWhisperResident()).toBe(true);
@@ -105,7 +106,7 @@ describe('STT residency — single-model invariant', () => {
     // makeRoomFor returns fits=false. The store must honor that and stay out.
     registerTextModel(8537);
 
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
 
     // The invariant: exactly ONE model resident — the text model, not both.
     expect(mockWhisper.loadModel).not.toHaveBeenCalled();
@@ -119,7 +120,7 @@ describe('STT residency — single-model invariant', () => {
 
   it('a text load evicts a resident whisper, and whisper does not fight its way back', async () => {
     // 1. Whisper resident (user recorded a voice note).
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
     const residentKey = whisperResidentKey();
     expect(residentKey).toBeTruthy();
 
@@ -138,7 +139,7 @@ describe('STT residency — single-model invariant', () => {
     // 3. The reactive auto-load effect (or any retry) tries to bring whisper back
     //    while the text model owns memory. It must NOT succeed — otherwise we're
     //    back to whisper+text co-resident.
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
 
     expect(isWhisperResident()).toBe(false);
     expect(modelResidencyManager.isResident('text')).toBe(true);
@@ -147,13 +148,13 @@ describe('STT residency — single-model invariant', () => {
 
   it('after the text model unloads, whisper can load again', async () => {
     registerTextModel(8537);
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
     expect(isWhisperResident()).toBe(false);
 
     // Text model goes away (turn finished / model switched).
     modelResidencyManager.release('text');
 
-    await useWhisperStore.getState().loadModel();
+    await transcriptionModelIntents.loadModel();
     expect(isWhisperResident()).toBe(true);
     expect(useWhisperStore.getState().isModelLoaded).toBe(true);
   });

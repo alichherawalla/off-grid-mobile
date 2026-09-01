@@ -525,12 +525,13 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         TranscriptionModelsTab,
       } = require('../../src/screens/ModelsScreen/TranscriptionModelsTab');
       const { useWhisperStore } = require('../../src/stores/whisperStore');
+      const { transcriptionModelIntents } = require('../../src/services/modelServices/transcriptionRuntimePort');
 
       boundary.fs!.seedFile(
         `${docs}/whisper-models/ggml-${modelId}.bin`,
         75 * 1024 * 1024,
       );
-      await useWhisperStore.getState().refreshPresentModels(); // real disk scan → present
+      await transcriptionModelIntents.reconcileDisk(); // real disk scan → present
       const t = rtl.render(React.createElement(TranscriptionModelsTab, {}));
       await rtl.waitFor(
         () => {

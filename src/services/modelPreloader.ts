@@ -11,6 +11,7 @@
  * sequentially (one native load at a time) so the UI stays responsive.
  */
 import { useAppStore, useWhisperStore } from '../stores';
+import { transcriptionModelIntents } from './modelServices/transcriptionRuntimePort';
 import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { getActiveModels, selectedTextModelId } from './modelServices/modelState';
 import { mobileChatGenerationProjection } from './chatGenerationProjection';
@@ -60,7 +61,7 @@ async function preloadStt(): Promise<void> {
   const whisper = useWhisperStore.getState();
   if (!whisper.downloadedModelId || whisper.isModelLoaded) return;
   if (!mobileResidencyIntents.canPreloadTranscription(whisper.downloadedModelId)) return;
-  await whisper.loadModel();
+  await transcriptionModelIntents.loadModel(whisper.downloadedModelId);
 }
 
 /** Warm selected models in priority order. Safe to call once at app launch. */

@@ -30,6 +30,7 @@ describe('chat-mode STT is dictation-to-the-input-box on every engine (LiteRT to
     const { useAppStore } = require('../../../src/stores');
     const { useUiModeStore } = require('../../../src/stores/uiModeStore');
     const { useWhisperStore } = require('../../../src/stores');
+    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
      
 
     // A direct-audio-capable LiteRT model is active and loaded WITH audio support.
@@ -38,7 +39,7 @@ describe('chat-mode STT is dictation-to-the-input-box on every engine (LiteRT to
     // Whisper IS available: the model file is on disk (real leaf) + selected, so ensureWhisper() can load it
     // and transcribeFile can run. The recorded note transcribes to this text.
     boundary.fs!.seedFile(`${RNFS.DocumentDirectoryPath}/whisper-models/ggml-base.en.bin`, 75 * 1024 * 1024);
-    await useWhisperStore.getState().refreshPresentModels();
+    await transcriptionModelIntents.reconcileDisk();
     useWhisperStore.setState({ downloadedModelId: 'base.en' });
     boundary.whisper!.setFileTranscript('draw a dog');
     useUiModeStore.setState({ interfaceMode: 'text' as never }); // CHAT mode, not the audio interface

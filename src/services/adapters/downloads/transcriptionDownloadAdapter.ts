@@ -12,7 +12,7 @@
 import { whisperService } from '../../whisperService';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
-import { useWhisperStore } from '../../../stores/whisperStore';
+import { transcriptionModelIntents } from '../../modelServices/transcriptionRuntimePort';
 import logger from '../../../utils/logger';
 import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';
@@ -41,7 +41,7 @@ export const sttProvider: DownloadProvider = {
 
   async start(request): Promise<void> {
     if (request.modelType !== 'stt') throw new Error('Invalid STT download request');
-    await useWhisperStore.getState().downloadModel(request.modelId);
+    await transcriptionModelIntents.downloadModel(request.modelId);
   },
 
   async list(): Promise<ModelDownload[]> {

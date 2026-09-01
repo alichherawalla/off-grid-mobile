@@ -29,6 +29,7 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', pro: true, whisper: true });
      
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
+    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
      
 
@@ -36,7 +37,7 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
     // NO resident load — so the voice turn's first load attempt runs for real (and blocks on the tight budget).
     const docs = h.boundary.fs!.DocumentDirectoryPath;
     h.boundary.fs!.seedFile(`${docs}/whisper-models/ggml-tiny.en.bin`, 75 * 1024 * 1024);
-    await useWhisperStore.getState().refreshPresentModels();
+    await transcriptionModelIntents.reconcileDisk();
     useWhisperStore.setState({ downloadedModelId: 'tiny.en', isModelLoaded: false });
 
     // Pin the budget tight: the resident text model fills it, so the whisper sidecar cannot co-reside →

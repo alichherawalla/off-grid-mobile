@@ -17,6 +17,7 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
 import { useWhisperStore } from '../../../src/stores/whisperStore';
+import { transcriptionModelIntents } from '../../../src/services/modelServices/transcriptionRuntimePort';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
 import { syncService } from '../../../pro/sync/syncService';
@@ -162,7 +163,7 @@ describe('Pro mobile model package receiver', () => {
         return target;
       },
     );
-    await useWhisperStore.getState().refreshPresentModels();
+    await transcriptionModelIntents.reconcileDisk();
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });

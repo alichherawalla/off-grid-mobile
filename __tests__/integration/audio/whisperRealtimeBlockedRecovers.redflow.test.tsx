@@ -40,13 +40,14 @@ describe('realtime hold-to-talk dictation recovers when whisper load is blocked 
   it('frees the generation model, loads whisper, and the transcript lands in the composer', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android', whisper: true });
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
+    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with
     // NO resident load — so the realtime turn's first load attempt runs for real (and blocks on the tight budget).
     const docs = h.boundary.fs!.DocumentDirectoryPath;
     h.boundary.fs!.seedFile(`${docs}/whisper-models/ggml-tiny.en.bin`, 75 * 1024 * 1024);
-    await useWhisperStore.getState().refreshPresentModels();
+    await transcriptionModelIntents.reconcileDisk();
     useWhisperStore.setState({ downloadedModelId: 'tiny.en', isModelLoaded: false });
 
     // Pin the budget tight: the resident text model fills it, so the whisper sidecar cannot co-reside →

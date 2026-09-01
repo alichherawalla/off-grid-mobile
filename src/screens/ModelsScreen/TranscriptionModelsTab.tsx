@@ -35,6 +35,7 @@ import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOp
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 import { selectMobileModel } from '../../services/modelServices';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
+import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
@@ -141,10 +142,6 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
 
   const {
     presentModelIds,
-    downloadModel,
-    selectModel,
-    deleteModelById,
-    refreshPresentModels,
     error: whisperError,
     clearError,
   } = useWhisperStore();
@@ -159,8 +156,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
   useEffect(() => {
-    if (!anyDownloading) refreshPresentModels();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!anyDownloading) transcriptionModelIntents.reconcileDisk();
   }, [anyDownloading]);
 
   // Re-derive from disk whenever the Models screen regains focus (e.g. returning
@@ -168,8 +164,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // truth, so this keeps the list in sync without any cross-screen wiring.
   useFocusEffect(
     useCallback(() => {
-      if (!anyDownloading) refreshPresentModels();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!anyDownloading) transcriptionModelIntents.reconcileDisk();
     }, [anyDownloading]),
   );
 
@@ -178,7 +173,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     // The store owns downloadingId (set/cleared in downloadModel), so a download
     // started here — or from the chat voice button — shows progress on this tab.
       try {
-        await downloadModel(id);
+        await transcriptionModelIntents.downloadModel(id);
         await selectMobileModel({
           source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
         });
@@ -186,13 +181,13 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         logger.error('[Transcription] download failed:', err);
       }
     },
-    [downloadModel],
+    [],
   );
 
   const handleSelect = useCallback(
     async (id: string) => {
       try {
-        await selectModel(id);
+        await transcriptionModelIntents.selectModel(id);
         await selectMobileModel({
           source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
         });
@@ -200,7 +195,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         logger.error('[Transcription] select failed:', err);
       }
     },
-    [selectModel],
+    [],
   );
 
   const handleDelete = useCallback(
@@ -216,14 +211,14 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
               style: 'destructive',
               onPress: () => {
                 setAlertState(hideAlert());
-                deleteModelById(id);
+                transcriptionModelIntents.deleteModel(id);
               },
             },
           ],
         ),
       );
     },
-    [deleteModelById],
+    [],
   );
 
   const renderWhisperCard = (
