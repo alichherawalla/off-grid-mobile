@@ -359,7 +359,7 @@ export const classifierInventoryAdapter: ModelInventoryAdapter = {
         capabilities: { classification: true, textGeneration: true },
         residentSizeMB: Math.ceil(model.fileSize / (1024 * 1024)),
         residencyKey: 'mobile:text-engine',
-        residencyMode: 'operation',
+        residencyLifecycle: 'operation',
         installed: true,
         ready: true,
         loaded: state.loadedTextModelId === model.id,
