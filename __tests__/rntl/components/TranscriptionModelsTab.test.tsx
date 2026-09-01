@@ -33,6 +33,16 @@ jest.mock('../../../src/stores', () => ({
   useWhisperStore: () => mockWhisperState,
 }));
 
+jest.mock('../../../src/hooks/useActiveMobileModel', () => ({
+  useActiveMobileModel: (modality: string) => ({
+    modality,
+    routeId: mockWhisperState?.downloadedModelId ?? null,
+    model: mockWhisperState?.downloadedModelId
+      ? { id: mockWhisperState.downloadedModelId, source: 'local' }
+      : null,
+  }),
+}));
+
 jest.mock('../../../src/components', () => {
   const { Text, TouchableOpacity } = require('react-native');
   return {
