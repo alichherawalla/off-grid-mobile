@@ -359,9 +359,25 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   };
 
   const onboardingLiteRTCards = onboarding && Platform.OS === 'android'
-    ? buildCuratedLiteRTFiles().map((file, index) => {
+    ? buildCuratedLiteRTFiles()
+      .filter(file =>
+        !fileExceedsBudget(file.size, ramGB) ||
+        curatedLiteRTDownloadWarning(file.name, file.size, ramGB) !== null,
+      )
+      .map((file, index) => {
         const entry = getCuratedLiteRTEntry(file.name);
         const model = { ...LITERT_RECOMMENDED_MODEL, name: entry?.displayName ?? file.name };
+        const startDownload = () => {
+          handleDownload(model, file).catch(() => undefined);
+        };
+        const guardedDownload = buildFileDownloadHandler({
+          s: { downloaded: false, progress: null, hasFailed: false },
+          fileName: file.name,
+          sizeBytes: file.size,
+          ramGB,
+          proceedDownload: startDownload,
+          setAlertState,
+        });
         return (
           <ModelCard
             key={file.name}
@@ -371,8 +387,8 @@ export const TextModelsTab: React.FC<Props> = (props) => {
             recommended={{ pillLabel: 'Recommended' }}
             supportsAcceleration
             testID={`onboarding-litert-model-${index}`}
-            onPress={() => { handleDownload(model, file); }}
-            onDownload={() => { handleDownload(model, file); }}
+            onPress={guardedDownload}
+            onDownload={guardedDownload}
           />
         );
       })
