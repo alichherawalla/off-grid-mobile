@@ -27,7 +27,6 @@ export {
 } from './modelServices/modelState';
 export type { ResourceUsage } from './modelServices/modelStateTypes';
 export { generationService } from './generationService';
-export type { QueuedMessage } from './generationService';
 export {
   mobileLLMService,
   mobileGenerationService,

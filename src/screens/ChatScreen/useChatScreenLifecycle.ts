@@ -1,6 +1,4 @@
 import {
-  MutableRefObject,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -10,22 +8,13 @@ import type { NavigationProp } from '@react-navigation/native';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
   contextCompactionService,
-  generationService,
   imageGenerationService,
   ImageGenerationState,
-  QueuedMessage,
 } from '../../services';
 import { generationSession } from '../../services/generationSession';
+import { useChatStore } from '../../stores';
 import type { RootStackParamList } from '../../navigation/types';
-import {
-  dispatchGenerationFn,
-  GenerationDeps,
-} from './useChatGenerationActions';
-
-type StartGeneration = (
-  conversationId: string,
-  text: string,
-) => Promise<void>;
+import { mobileChatSession } from './mobileChatSession';
 
 /** A missing stream never belongs to a missing conversation. */
 export function isStreamingActiveConversation(
@@ -70,8 +59,6 @@ export function useChatAudioLifecycle(
 }
 
 export function useChatRuntimeSubscriptions(
-  generationDepsRef: MutableRefObject<GenerationDeps | null>,
-  startGenerationRef: MutableRefObject<StartGeneration | null>,
 ): {
   imageGenState: ImageGenerationState;
   isCompacting: boolean;
@@ -96,38 +83,18 @@ export function useChatRuntimeSubscriptions(
     };
   }, []);
 
-  useEffect(
-    () =>
-      generationService.subscribe(state => {
-        setQueueCount(state.queuedMessages.length);
-        setQueuedTexts(
-          state.queuedMessages.map((message: QueuedMessage) => message.text),
-        );
-      }),
-    [],
-  );
-
-  const handleQueuedSend = useCallback(
-    async (item: QueuedMessage) => {
-      if (!generationDepsRef.current || !startGenerationRef.current) return;
-      await dispatchGenerationFn(
-        generationDepsRef.current,
-        {
-          text: item.text,
-          attachments: item.attachments,
-          conversationId: item.conversationId,
-          imageMode: item.imageMode,
-        },
-        startGenerationRef.current,
-      );
-    },
-    [generationDepsRef, startGenerationRef],
-  );
-
   useEffect(() => {
-    generationService.setQueueProcessor(handleQueuedSend);
-    return () => generationService.setQueueProcessor(null);
-  }, [handleQueuedSend]);
+    return mobileChatSession.subscribeQueue(projection => {
+      const queued = projection.entries.filter(entry => entry.status === 'queued');
+      setQueueCount(queued.length);
+      setQueuedTexts(queued.map(entry => {
+        const message = useChatStore.getState()
+          .getConversationMessages(entry.conversationId)
+          .find(candidate => candidate.id === entry.turnId);
+        return message?.content ?? '';
+      }));
+    });
+  }, []);
 
   return { imageGenState, isCompacting, queueCount, queuedTexts };
 }

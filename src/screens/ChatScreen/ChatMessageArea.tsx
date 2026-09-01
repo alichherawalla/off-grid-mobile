@@ -20,7 +20,7 @@ import {
   VisionRepairAdviceCard,
 } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
-import { generationService } from '../../services';
+import { mobileChatSession } from './mobileChatSession';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
 import { getPlaceholderText, useChatScreen } from './useChatScreen';
 import { createStyles } from './styles';
@@ -382,7 +382,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           onOpenSettings={() => chat.setShowSettingsPanel(true)}
           queueCount={chat.queueCount}
           queuedTexts={chat.queuedTexts}
-          onClearQueue={() => generationService.clearQueue()}
+          onClearQueue={() => mobileChatSession.clearQueued()}
           placeholder={getPlaceholderText({
             hasModel: chat.hasActiveModel,
             isModelLoading: chat.isModelLoading,

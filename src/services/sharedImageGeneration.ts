@@ -9,6 +9,7 @@ import {
 
 export interface SharedImageGenerationInput {
   prompt: string;
+  routeId?: string;
   negativePrompt?: string;
   steps: number;
   guidanceScale: number;
@@ -33,12 +34,14 @@ export async function executeMobileImageGeneration(
   options: SharedImageGenerationOptions,
 ): Promise<GeneratedImage> {
   await refreshMobileModelServices();
+  const { routeId, ...operation } = input;
   const controller = new AbortController();
   options.setRequest(controller);
   try {
     const result = await mobileGenerationService.generate(
       {
-        operation: { type: 'image', ...input },
+        operation: { type: 'image', ...operation },
+        routeId,
         allowFallback: false,
         signal: controller.signal,
         timeoutMs: 10 * 60_000,

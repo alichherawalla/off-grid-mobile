@@ -1,19 +1,26 @@
 import {
   ChatSessionService,
   type ChatSessionEvent,
+  type ChatQueueProjection,
   type ChatSessionRepositoryPort,
   type ChatTurn,
   type GenerationContentPart,
   type GenerationMessage,
   type GenerationOperation,
+  type GenerationRequest,
+  type GenerationResult,
+  runtimeModelRouteId,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationService } from '../../services/generationService';
+import { imageGenerationService } from '../../services/imageGenerationService';
 import { contextCompactionService } from '../../services/contextCompaction';
 import { ragService, retrievalService } from '../../services';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
+import { mobileLLMService } from '../../services/modelServices/mobileLLMService';
+import { refreshMobileModelServices } from '../../services/modelServices';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useAppStore, useChatStore, useProjectStore } from '../../stores';
 import type { MediaAttachment, Message } from '../../types';
@@ -82,7 +89,10 @@ function persistedTurns(conversationId: string): ChatTurn[] {
     const replies = conversation.messages.slice(index + 1);
     const nextUser = replies.findIndex(message => message.role === 'user');
     const segment = nextUser < 0 ? replies : replies.slice(0, nextUser);
-    const assistant = [...segment].reverse().find(message => message.role === 'assistant');
+    const responseMessages = segment
+      .filter(message => message.role === 'assistant' || message.role === 'tool')
+      .map(generationMessage);
+    const assistant = [...responseMessages].reverse().find(message => message.role === 'assistant');
     const operation: GenerationOperation = user.turnKind === 'image'
       ? { type: 'image', prompt: user.content }
       : user.attachments?.some(attachment => attachment.type === 'image')
@@ -93,7 +103,8 @@ function persistedTurns(conversationId: string): ChatTurn[] {
       conversationId,
       projectId: conversation.projectId,
       userMessage: generationMessage(user),
-      assistantMessage: assistant ? generationMessage(assistant) : undefined,
+      assistantMessage: assistant,
+      responseMessages: responseMessages.length ? responseMessages : undefined,
       status: assistant ? 'completed' : 'queued',
       request: { operation, request: {} },
     });
@@ -119,10 +130,28 @@ class MobileChatTurnRepository implements ChatSessionRepositoryPort {
   invalidate(conversationId: string): void {
     this.sessions.delete(conversationId);
   }
+
+  /** Seed durable history without the new row before ChatSessionService appends it. */
+  prepareNew(conversationId: string, turnId: string): Message | null {
+    const conversation = useChatStore.getState().conversations.find(
+      candidate => candidate.id === conversationId,
+    );
+    const message = conversation?.messages.find(candidate => candidate.id === turnId) ?? null;
+    if (!message) return null;
+    if (!this.sessions.has(conversationId)) {
+      this.sessions.set(
+        conversationId,
+        persistedTurns(conversationId).filter(turn => turn.id !== turnId),
+      );
+    }
+    return message;
+  }
 }
 
 const repository = new MobileChatTurnRepository();
 let activeTurnId: string | null = null;
+let queue: ChatQueueProjection = { entries: [], runningCount: 0, queuedCount: 0 };
+const queueListeners = new Set<(projection: ChatQueueProjection) => void>();
 
 async function ragMessages(
   conversationId: string,
@@ -181,6 +210,11 @@ async function ragMessages(
 }
 
 function publishSessionEvent(event: ChatSessionEvent): void {
+  if (event.type === 'queue_changed') {
+    queue = event.queue;
+    queueListeners.forEach(listener => listener(queue));
+    return;
+  }
   if (event.type === 'started') {
     activeTurnId = event.turn.id;
     return;
@@ -191,8 +225,61 @@ function publishSessionEvent(event: ChatSessionEvent): void {
   ) activeTurnId = null;
 }
 
+async function generateForSession(
+  request: GenerationRequest,
+  events: Parameters<typeof generationService.generateForChatSession>[1] = {},
+): Promise<GenerationResult> {
+  if (request.operation?.type !== 'image') {
+    return generationService.generateForChatSession(request, events);
+  }
+  const identity = request.identity;
+  if (!identity?.conversationId) throw new Error('Image generation requires a conversation identity');
+  await refreshMobileModelServices();
+  const abort = () => { imageGenerationService.cancelGeneration().catch(() => undefined); };
+  request.signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const generated = await imageGenerationService.generateImage({
+      prompt: request.operation.prompt,
+      routeId: request.routeId,
+      negativePrompt: request.operation.negativePrompt,
+      steps: request.operation.steps,
+      guidanceScale: request.operation.guidanceScale,
+      seed: request.operation.seed,
+      previewInterval: request.operation.previewInterval,
+      conversationId: identity.conversationId,
+    });
+    if (!generated) throw new Error('Image generation returned no image');
+    const model = (request.routeId ? mobileLLMService.get(request.routeId) : null)
+      ?? activeMobileRoute('image').model;
+    if (!model) throw new Error('The selected image model is unavailable');
+    const routeId = model.routeId ?? runtimeModelRouteId(model);
+    return {
+      model,
+      output: {
+        type: 'image',
+        images: [{
+          id: generated.id,
+          mimeType: 'image/png',
+          uri: `file://${generated.imagePath}`,
+          width: generated.width,
+          height: generated.height,
+          seed: generated.seed,
+        }],
+      },
+      content: '',
+      reasoning: '',
+      toolCalls: [],
+      finishReason: 'stop',
+      attemptedModelIds: [model.id],
+      attemptedRouteIds: [routeId],
+    };
+  } finally {
+    request.signal?.removeEventListener('abort', abort);
+  }
+}
+
 const service = new ChatSessionService(
-  { generate: (request, events) => generationService.generateForChatSession(request, events) },
+  { generate: generateForSession },
   repository,
   {
     rag: {
@@ -243,8 +330,24 @@ const service = new ChatSessionService(
 export const mobileChatSession = {
   /** Execute a user row that Mobile has already persisted. */
   async sendPersisted(conversationId: string, turnId: string): Promise<ChatTurn> {
-    repository.invalidate(conversationId);
-    return service.resend({ conversationId, turnId });
+    const conversation = useChatStore.getState().conversations.find(
+      candidate => candidate.id === conversationId,
+    );
+    const message = repository.prepareNew(conversationId, turnId);
+    if (!message || message.role !== 'user') throw new Error(`Chat turn not found: ${turnId}`);
+    const operation: GenerationOperation = message.turnKind === 'image'
+      ? { type: 'image', prompt: message.content }
+      : message.attachments?.some(attachment => attachment.type === 'image')
+        ? { type: 'vision' }
+        : { type: 'text' };
+    return service.send({
+      conversationId,
+      turnId,
+      projectId: conversation?.projectId,
+      userMessage: generationMessage(message),
+      operation,
+      allowFallback: false,
+    });
   },
 
   async regenerate(conversationId: string, turnId: string): Promise<ChatTurn> {
@@ -263,6 +366,22 @@ export const mobileChatSession = {
 
   stop(): boolean {
     return activeTurnId ? service.stop(activeTurnId) : false;
+  },
+
+  stopConversation(conversationId: string): number {
+    return service.stopConversation(conversationId);
+  },
+
+  clearQueued(): void {
+    for (const entry of queue.entries) {
+      if (entry.status === 'queued') service.stop(entry.turnId, 'Queue cleared');
+    }
+  },
+
+  subscribeQueue(listener: (projection: ChatQueueProjection) => void): () => void {
+    queueListeners.add(listener);
+    listener(queue);
+    return () => queueListeners.delete(listener);
   },
 
   invalidate(conversationId: string): void {

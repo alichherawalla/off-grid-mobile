@@ -109,32 +109,20 @@ function decodedToolArguments(call: GenerationToolCall): Record<string, any> {
   }
 }
 
-export interface QueuedMessage {
-  id: string; conversationId: string; text: string;
-  attachments?: MediaAttachment[]; messageText: string;
-  /** The modality the user forced for THIS send (force/disabled/auto). Carried through the queue so a
-   *  message the user explicitly forced to image mode is dispatched as image on drain — never re-decided
-   *  at 'auto' by resolveTurnKind (#510: a queued force-image send generated as text). */
-  imageMode?: 'auto' | 'force' | 'disabled';
-}
-
 export interface GenerationState {
   isGenerating: boolean;
   isThinking: boolean;
   conversationId: string | null;
   streamingContent: string;
   startTime: number | null;
-  queuedMessages: QueuedMessage[];
   routedToolNames?: string[];
 }
 
 type GenerationListener = (state: GenerationState) => void;
-type QueueProcessor = (item: QueuedMessage) => Promise<void>;
-
 class GenerationService {
   private state: GenerationState = {
     isGenerating: false, isThinking: false, conversationId: null,
-    streamingContent: '', startTime: null, queuedMessages: [],
+    streamingContent: '', startTime: null,
   };
 
   private listeners: Set<GenerationListener> = new Set();
@@ -145,7 +133,6 @@ class GenerationService {
    *  "no response" retry prompt when the empty result was an intentional abort. */
   wasAborted(): boolean { return this.abortRequested; }
   private pendingStop: Promise<void> | null = null;
-  private queueProcessor: QueueProcessor | null = null;
   private currentSharedAbortController: AbortController | null = null;
   private remoteTimeToFirstToken: number | undefined;
 
@@ -495,43 +482,7 @@ class GenerationService {
 
     return partialContent;
   }
-  enqueueMessage(entry: QueuedMessage): void {
-    this.state = { ...this.state, queuedMessages: [...this.state.queuedMessages, entry] };
-    this.notifyListeners();
-  }
-
-  removeFromQueue(id: string): void {
-    this.state = { ...this.state, queuedMessages: this.state.queuedMessages.filter(m => m.id !== id) };
-    this.notifyListeners();
-  }
-
-  clearQueue(): void { this.state = { ...this.state, queuedMessages: [] }; this.notifyListeners(); }
-
-  setQueueProcessor(processor: QueueProcessor | null): void { this.queueProcessor = processor; }
-
-  /** Release messages queued behind an image generation. */
-  drainQueue(): void {
-    if (this.state.isGenerating) return;
-    this.processNextInQueue();
-  }
-
-  private processNextInQueue(): void {
-    if (this.state.queuedMessages.length === 0 || !this.queueProcessor) return;
-    const all = this.state.queuedMessages;
-    this.state = { ...this.state, queuedMessages: [] };
-    this.notifyListeners();
-    const combined: QueuedMessage = all.length === 1 ? all[0] : {
-      id: all[0].id, conversationId: all[0].conversationId,
-      text: all.map(m => m.text).join('\n\n'),
-      attachments: all.flatMap(m => m.attachments || []),
-      messageText: all.map(m => m.messageText).join('\n\n'),
-      imageMode: all.some(m => m.imageMode === 'force') ? 'force' : all[0].imageMode,
-    };
-    this.queueProcessor(combined).catch(e => { logger.error('[GenerationService] Queue processor error:', e); });
-  }
-
   private resetState(): void {
-    const hasQueuedItems = this.state.queuedMessages.length > 0;
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
@@ -547,9 +498,6 @@ class GenerationService {
       streamingContent: '',
       startTime: null,
     });
-    if (hasQueuedItems) {
-      setTimeout(() => this.processNextInQueue(), 100);
-    }
   }
 }
 

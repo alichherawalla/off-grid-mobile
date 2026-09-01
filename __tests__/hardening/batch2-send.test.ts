@@ -2,7 +2,7 @@
  * Batch 2 hardening — Core Chat / Text Generation (send path)
  *
  * Drives the REAL handleSendFn (src/screens/ChatScreen/useChatGenerationActions.ts)
- * against the REAL chatStore and the REAL generationService queue. The only mocked
+ * against the REAL chatStore. The only mocked
  * things are genuine boundaries:
  *   - modelPreloader.abortPreload        (background native warm-up)
  *   - modelResidency.reclaimSttForGeneration (native memory reclaim)
@@ -14,8 +14,8 @@
  *   5  — submitting with no active conversation creates a NEW chat + sets it active,
  *        and the user message lands in that new conversation.
  *   10 — a very long (600+ char) message is stored intact and generation begins.
- *   14 — sending a new message while a generation is in flight enqueues it (interrupt/
- *        serialize) instead of starting a second concurrent generation.
+ *   14 — a second send is persisted intact before the Shared chat-session owner
+ *        accepts it for serialized execution.
  *   35 — the "new chat" entry point (Home spotlight / New button navigates to Chat with
  *        no conversationId, which resets active to null) ALWAYS produces a brand-new
  *        conversation, never reusing the most-recently-viewed one.
@@ -36,7 +36,6 @@ jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
 }));
 
 import { handleSendFn, GenerationDeps } from '../../src/screens/ChatScreen/useChatGenerationActions';
-import { generationService } from '../../src/services/generationService';
 import { useChatStore } from '../../src/stores/chatStore';
 import { resetStores, getChatState } from '../utils/testHelpers';
 
@@ -85,9 +84,6 @@ function makeSendDeps(startGeneration: jest.Mock, overrides: Partial<GenerationD
 describe('batch2 handleSendFn — new chat, long message, interrupt/queue', () => {
   beforeEach(async () => {
     resetStores();
-    // clear any leftover generation state / queue between tests
-    await generationService.stopGeneration().catch(() => {});
-    generationService.clearQueue();
     jest.restoreAllMocks();
     jest.clearAllMocks();
   });
@@ -174,23 +170,10 @@ describe('batch2 handleSendFn — new chat, long message, interrupt/queue', () =
     expect(startGeneration).toHaveBeenCalledTimes(1);
   });
 
-  // Case 14: sending mid-generation enqueues the new message instead of launching a
-  // second concurrent generation. getState() is a query boundary we control to place
-  // the service in the "already generating" state; enqueueMessage runs for real.
-  it('case14: enqueues the new message (does not start a 2nd generation) while one is in flight', async () => {
+  // Case 14: the Mobile boundary persists the intent before handing it to the Shared
+  // session. Shared package contract tests own FIFO and queued cancellation behavior.
+  it('case14: persists a second message before handing it to the session owner', async () => {
     const convId = useChatStore.getState().createConversation('text-model-1');
-
-    // Put the real service in the generating state (query boundary).
-    jest.spyOn(generationService, 'getState').mockReturnValue({
-      isGenerating: true,
-      isThinking: false,
-      conversationId: convId,
-      streamingContent: 'a long story about a pirate',
-      startTime: Date.now(),
-      queuedMessages: [],
-    });
-    const enqueueSpy = jest.spyOn(generationService, 'enqueueMessage');
-
     const startGeneration = jest.fn(() => Promise.resolve());
     const deps = makeSendDeps(startGeneration, { activeConversationId: convId });
 
@@ -201,14 +184,13 @@ describe('batch2 handleSendFn — new chat, long message, interrupt/queue', () =
       setDebugInfo: jest.fn(),
     });
 
-    // The new message was queued for serialized handling...
-    expect(enqueueSpy).toHaveBeenCalledTimes(1);
-    expect(enqueueSpy.mock.calls[0][0]).toMatchObject({
-      conversationId: convId,
-      text: 'Actually, just say hi.',
+    const conversation = getChatState().conversations.find(item => item.id === convId);
+    expect(conversation?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: 'Actually, just say hi.',
+      turnKind: 'text',
     });
-    // ...and NO second generation was dispatched (startGeneration untouched).
-    expect(startGeneration).not.toHaveBeenCalled();
+    expect(startGeneration).toHaveBeenCalledWith(convId, 'Actually, just say hi.');
   });
 
   // Case 9-adjacent guard: send with no active model alerts and does not generate.

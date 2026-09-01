@@ -49,6 +49,8 @@ export type ImageGenerationListener = (state: ImageGenerationState) => void;
 
 export interface GenerateImageParams {
   prompt: string;
+  /** Canonical route captured by ChatSessionService for deterministic replay. */
+  routeId?: string;
   conversationId?: string;
   negativePrompt?: string;
   steps?: number;

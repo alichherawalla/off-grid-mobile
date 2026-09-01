@@ -334,6 +334,7 @@ export async function shouldRouteToImageGenerationFn(
 export type ImageGenCall = {
   prompt: string;
   conversationId: string;
+  turnId?: string;
   skipUserMessage?: boolean;
   attachments?: MediaAttachment[]; // kept on the user message (e.g. a voice note)
 };
@@ -348,7 +349,7 @@ export async function handleImageGenerationFn(
   >,
   call: ImageGenCall,
 ): Promise<void> {
-  const { prompt, conversationId, skipUserMessage = false, attachments } = call;
+  const { prompt, conversationId, turnId, skipUserMessage = false, attachments } = call;
   if (!deps.activeImageModel) {
     deps.setAlertState(showAlert('Error', 'No image model loaded.'));
     return;
@@ -364,30 +365,22 @@ export async function handleImageGenerationFn(
       turnKind: 'image',
     });
   }
-  // Do NOT thread steps/guidanceScale from deps.settings — that is a React render snapshot, one
-  // change stale (the off-by-one the user hit: change steps → next gen still used the old value).
-  // The service reads imageSteps/imageGuidanceScale FRESH from useAppStore.getState() at gen time,
-  // exactly as it already does for width/height (which is why size applied immediately and these
-  // didn't). Passing nothing here makes all four tunables read from the one fresh source.
-  const result = await imageGenerationService.generateImage({
-    prompt,
-    conversationId,
-    previewInterval: 2,
-  });
-  if (
-    !result &&
-    deps.imageGenState.error &&
-    !deps.imageGenState.error.includes('cancelled')
-  ) {
-    deps.setAlertState(
-      showAlert(
+  const persistedTurnId = turnId ?? [...useChatStore.getState().getConversationMessages(conversationId)]
+    .reverse()
+    .find(message => message.role === 'user')?.id;
+  if (!persistedTurnId) throw new Error('Image turn was not persisted');
+  try {
+    if (skipUserMessage) await mobileChatSession.regenerate(conversationId, persistedTurnId);
+    else await mobileChatSession.sendPersisted(conversationId, persistedTurnId);
+  } catch (error) {
+    const currentError = imageGenerationService.getState().error;
+    if (!currentError?.includes('cancelled')) {
+      deps.setAlertState(showAlert(
         'Error',
-        `Image generation failed: ${deps.imageGenState.error}`,
-      ),
-    );
+        `Image generation failed: ${currentError ?? (error instanceof Error ? error.message : String(error))}`,
+      ));
+    }
   }
-  // Image gen finishes outside generationService — release any queued messages.
-  generationService.drainQueue();
 }
 export type StartGenerationCall = {
   setDebugInfo: SetState<any>;
@@ -511,9 +504,6 @@ export async function startGenerationFn(
   }
   generationSession.end();
 }
-let _msgIdSeq = 0;
-const nextMsgId = () => `${Date.now()}-${(++_msgIdSeq).toString(36)}`;
-
 /** The outcome of the shared post-decision dispatch: either the turn is fully HANDLED here (an image was
  *  generated, or the text route bailed because no text model could be provisioned), or the caller must run
  *  its own text executor with the (possibly image-fallback-augmented) messageText. */
@@ -540,6 +530,7 @@ async function dispatchResolvedTurn(
     /** Attachments carried on the user message (kept on the image user message, e.g. a voice note). */
     attachments?: MediaAttachment[];
     conversationId: string;
+    turnId?: string;
     /** True on resend: the user message already exists in history, so the image path must not re-add it. */
     imageSkipsUserMessage: boolean;
     /** Called when the text route needs a text model (image-only device) but none could be provisioned —
@@ -553,6 +544,7 @@ async function dispatchResolvedTurn(
     await handleImageGenerationFn(deps, {
       prompt: opts.text,
       conversationId: opts.conversationId,
+      turnId: opts.turnId,
       attachments: opts.attachments,
       skipUserMessage: opts.imageSkipsUserMessage,
     });
@@ -666,24 +658,6 @@ export async function handleSendFn(
     );
     deps.setActiveConversation(targetConversationId);
   }
-  // Cross-modality serialization: queue if any generation is running (routed later).
-  if (
-    generationService.getState().isGenerating ||
-    imageGenerationService.getState().isGenerating
-  ) {
-    const messageText = appendAttachmentText(text, attachments);
-    // Carry the user's forced modality through the queue so a queued force-image send is dispatched as
-    // image on drain — not re-decided at 'auto' by resolveTurnKind (#510).
-    generationService.enqueueMessage({
-      id: nextMsgId(),
-      conversationId: targetConversationId,
-      text,
-      attachments,
-      messageText,
-      imageMode,
-    });
-    return;
-  }
   await dispatchGenerationFn(
     deps,
     { text, attachments, conversationId: targetConversationId, imageMode },
@@ -695,16 +669,12 @@ export async function handleStopFn(
 ): Promise<void> {
   generationSession.end('stopped');
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise
-  mobileChatSession.stop();
-  // The image X is also the remote stop signal. Start both cancellations now; waiting for the text
-  // engine first leaves every paired device showing image progress while that stop call drains.
-  const stops: Promise<unknown>[] = [generationService.stopGeneration()];
-  if (deps.isGeneratingImage)
-    stops.push(imageGenerationService.cancelGeneration());
-  try {
-    await Promise.all(stops);
-  } catch (e) {
-    logger.error('Error stopping generation:', e);
+  if (!mobileChatSession.stop() && deps.isGeneratingImage) {
+    try {
+      await imageGenerationService.cancelGeneration();
+    } catch (error) {
+      logger.error('Error stopping image generation:', error);
+    }
   }
 }
 export async function executeDeleteConversationFn(
@@ -725,7 +695,7 @@ export async function executeDeleteConversationFn(
   // Through the OWNER: llmService is llama only, so deleting a conversation mid-reply left a LiteRT or
   // remote stream running - writing tokens into a conversation that no longer exists.
   if (deps.isStreaming) {
-    await generationService.stopGeneration();
+    mobileChatSession.stopConversation(deps.activeConversationId);
     deps.clearStreamingMessage();
   }
   for (const id of deps.removeImagesByConversationId(deps.activeConversationId))
@@ -783,6 +753,7 @@ export async function regenerateResponseFn(
     text: userMessage.content,
     attachments: userMessage.attachments,
     conversationId: targetConversationId,
+    turnId: userMessage.id,
     imageSkipsUserMessage: true,
     onTextModelUnavailable: () => {
       deps.setPendingMessage?.(userMessage.content, userMessage.attachments);

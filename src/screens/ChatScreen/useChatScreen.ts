@@ -54,6 +54,19 @@ export { computePendingSettings } from './pendingSettings';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
+function selectedImageModel(
+  input: {
+    downloaded: ReturnType<typeof useAppStore.getState>['downloadedImageModels'];
+    localId: string | null;
+    discovered: ReturnType<typeof useRemoteServerStore.getState>['discoveredModels'];
+    remoteServerId: string | undefined;
+    remoteId: string | null;
+  },
+) {
+  return input.downloaded.find(model => model.id === input.localId)
+    ?? input.discovered[input.remoteServerId ?? '']?.find(model => model.id === input.remoteId);
+}
+
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<ChatScreenRouteProp>();
@@ -101,7 +114,7 @@ export const useChatScreen = () => {
   const genDepsRef = useRef<GenerationDeps | null>(null);
   useChatAudioLifecycle(navigation);
   const { imageGenState, isCompacting, queueCount, queuedTexts } =
-    useChatRuntimeSubscriptions(genDepsRef, startGenerationRef);
+    useChatRuntimeSubscriptions();
 
   const {
     activeModelId,
@@ -119,9 +132,9 @@ export const useChatScreen = () => {
 
   // Remote model state - use proper selectors for reactivity
   const activeServerId = useRemoteServerStore(s => s.activeServerId);
-  const activeRemoteTextModelId = useRemoteServerStore(
-    s => s.activeRemoteTextModelId,
-  );
+  const activeRemoteTextModelId = useRemoteServerStore(s => s.activeRemoteTextModelId);
+  const activeRemoteImageModelId = useRemoteServerStore(s => s.activeRemoteImageModelId);
+  const activeRemoteImageServerId = useRemoteServerStore(s => s.activeRemoteMediaServerIds.image);
   const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
 
   const {
@@ -162,7 +175,7 @@ export const useChatScreen = () => {
     ? (activeModelInfo.model as RemoteModel | null)
     : null;
   const hasTextModel = activeModelInfo.modelId !== null;
-  const hasActiveModel = hasTextModel || !!activeImageModelId;
+  const hasActiveModel = hasTextModel || !!activeImageModelId || !!activeRemoteImageModelId;
   const activeModelName = activeModelInfo.modelName;
   const availableDownloadedTextModels = useMemo(
     () =>
@@ -190,9 +203,9 @@ export const useChatScreen = () => {
   const activeProject = effectiveProjectId
     ? getProject(effectiveProjectId)
     : null;
-  const activeImageModel = downloadedImageModels.find(
-    m => m.id === activeImageModelId,
-  );
+  const activeImageModel = selectedImageModel({ downloaded: downloadedImageModels,
+    localId: activeImageModelId, discovered: discoveredModels,
+    remoteServerId: activeRemoteImageServerId, remoteId: activeRemoteImageModelId });
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
   const isStreamingForThisConversation = isStreamingActiveConversation(

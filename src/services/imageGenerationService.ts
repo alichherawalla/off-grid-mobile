@@ -23,6 +23,7 @@ import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
 import { isOverridableMemoryError } from './modelLoadErrors';
 import { executeMobileImageGeneration } from './sharedImageGeneration';
+import { mobileLLMService } from './modelServices/mobileLLMService';
 import {
   isInFlight,
   ImageGenerationState,
@@ -269,6 +270,7 @@ class ImageGenerationService {
       const result = await executeMobileImageGeneration(
         {
           prompt: enhancedPrompt,
+          routeId: params.routeId,
           negativePrompt: params.negativePrompt || '',
           steps,
           guidanceScale,
@@ -344,10 +346,7 @@ class ImageGenerationService {
    * Generate an image. Runs independently of UI lifecycle.
    * If conversationId is provided, the result will be added as a chat message.
    */
-  async generateImage(
-    params: GenerateImageParams,
-    opts?: { override?: boolean },
-  ): Promise<GeneratedImage | null> {
+  async generateImage(params: GenerateImageParams, opts?: { override?: boolean }): Promise<GeneratedImage | null> {
     if (isInFlight(this.state.phase)) {
       logger.log(
         '[ImageGenerationService] Already generating, ignoring request',
@@ -356,8 +355,9 @@ class ImageGenerationService {
     }
     this.cancelRequested = false;
     this._lastParams = params; // so a failure card's Retry can re-run this exact request
+    const requestedRoute = params.routeId ? mobileLLMService.get(params.routeId) : null;
     const remoteServer = useRemoteServerStore.getState().getActiveRemoteMediaServer('image');
-    if (remoteServer?.selections?.image) {
+    if (requestedRoute?.source === 'remote' || remoteServer?.selections?.image) {
       return runRemoteImageGeneration(params, {
         updateState: state => this.updateState(state),
         fail: message => this._fail(message),
@@ -369,8 +369,11 @@ class ImageGenerationService {
     }
     const { settings, activeImageModelId, downloadedImageModels } =
       useAppStore.getState();
+    const requestedImageModelId = requestedRoute?.source === 'local'
+      ? requestedRoute.id
+      : activeImageModelId;
     const activeImageModel = downloadedImageModels.find(
-      m => m.id === activeImageModelId,
+      m => m.id === requestedImageModelId,
     );
     if (!activeImageModel) return this._fail('No image model selected');
 
@@ -427,7 +430,7 @@ class ImageGenerationService {
     });
 
     const loaded = await this._ensureImageModelLoaded(
-      activeImageModelId,
+      requestedImageModelId,
       activeImageModel,
       { desiredThreads: imageSettings.threads, override: opts?.override },
     );

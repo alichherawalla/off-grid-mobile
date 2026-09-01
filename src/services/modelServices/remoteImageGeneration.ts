@@ -14,6 +14,7 @@ import {
   saveImageGenerationResult,
 } from '../imageGenerationResult';
 import { executeMobileImageGeneration } from '../sharedImageGeneration';
+import { mobileLLMService } from './mobileLLMService';
 
 interface RemoteImageGenerationDeps {
   updateState: (state: Partial<ImageGenerationState>) => void;
@@ -27,8 +28,14 @@ export async function runRemoteImageGeneration(
   params: GenerateImageParams,
   deps: RemoteImageGenerationDeps,
 ): Promise<GeneratedImage | null> {
-  const server = useRemoteServerStore.getState().getActiveRemoteMediaServer('image');
-  const modelId = server?.selections?.image;
+  const requestedRoute = params.routeId ? mobileLLMService.get(params.routeId) : null;
+  const store = useRemoteServerStore.getState();
+  const server = requestedRoute?.source === 'remote'
+    ? store.servers.find(candidate => candidate.id === requestedRoute.serverId)
+    : store.getActiveRemoteMediaServer('image');
+  const modelId = requestedRoute?.source === 'remote'
+    ? requestedRoute.id
+    : server?.selections?.image;
   if (!server || !modelId) return deps.fail('No remote image model is configured');
   const settings = useAppStore.getState().settings;
   const width = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);
@@ -54,6 +61,7 @@ export async function runRemoteImageGeneration(
     const result = await executeMobileImageGeneration(
       {
         prompt: params.prompt,
+        routeId: params.routeId,
         negativePrompt: params.negativePrompt,
         width,
         height,
