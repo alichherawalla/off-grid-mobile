@@ -94,6 +94,20 @@ for (const file of files) {
     report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
   }
 
+  if (
+    fileName === 'src/stores/remoteServerStore.ts' &&
+    /\b(?:addServer|updateServer|removeServer|discoverModels|testConnection|clearAllServers)\s*:/.test(text)
+  ) {
+    report('remote-server-workflow-is-shared', fileName, source, source, 'store:actionable-workflow')
+  }
+
+  if (
+    /^src\/(?:components|hooks|screens)\//.test(fileName) &&
+    /services\/networkDiscovery/.test(text)
+  ) {
+    report('remote-server-workflow-is-shared', fileName, source, source, 'ui:direct-lan-discovery')
+  }
+
   if (/^src\/services\/(?:llmToolGeneration|litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight)\.ts$/.test(fileName)) {
     report('mobile-tool-routing-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
   }
