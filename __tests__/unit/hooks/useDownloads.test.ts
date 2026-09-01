@@ -8,8 +8,8 @@ let onAnyProgressCb: ProgressCb | null = null;
 let onAnyCompleteCb: CompleteCb | null = null;
 let onAnyErrorCb: ErrorCb | null = null;
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(() => true),
     onAnyProgress: jest.fn(),
     onAnyComplete: jest.fn(),
@@ -96,7 +96,7 @@ describe('useDownloads', () => {
     Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
     mockGetState.mockReturnValue(makeStoreState());
 
-    const { backgroundDownloadService: svc } = jest.requireMock('../../../src/services/backgroundDownloadService');
+    const { coordinatedDownloads: svc } = jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge');
     mockCancelDownload = svc.cancelDownload as jest.Mock;
     mockCancelDownload.mockResolvedValue(undefined);
     (svc.onAnyProgress as jest.Mock).mockImplementation((cb: ProgressCb) => { onAnyProgressCb = cb; return mockUnsubProgress; });
@@ -105,7 +105,7 @@ describe('useDownloads', () => {
   });
 
   it('subscribes to all three event channels on mount', () => {
-    const { backgroundDownloadService: svc } = jest.requireMock('../../../src/services/backgroundDownloadService');
+    const { coordinatedDownloads: svc } = jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge');
     renderHook(() => useDownloadListeners());
     expect(svc.onAnyProgress).toHaveBeenCalled();
     expect(svc.onAnyComplete).toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('useDownloads', () => {
   });
 
   it('skips subscription when service is unavailable', () => {
-    const { backgroundDownloadService: svc } = jest.requireMock('../../../src/services/backgroundDownloadService');
+    const { coordinatedDownloads: svc } = jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge');
     (svc.isAvailable as jest.Mock).mockReturnValueOnce(false);
     renderHook(() => useDownloadListeners());
     expect(svc.onAnyProgress).not.toHaveBeenCalled();

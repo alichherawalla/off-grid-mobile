@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { backgroundDownloadService } from '../services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../services/modelServices/coordinatedDownloadBridge';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { toUserMessage } from '../utils/downloadErrors';
 import { ModelKey } from '../utils/modelKey';

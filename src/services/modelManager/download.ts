@@ -3,7 +3,7 @@ import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import { ModelFile, BackgroundDownloadInfo } from '../../types';
 import { huggingFaceService } from '../huggingface';
-import { backgroundDownloadService } from '../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
 import {
   DownloadProgressCallback,
   DownloadCompleteCallback,

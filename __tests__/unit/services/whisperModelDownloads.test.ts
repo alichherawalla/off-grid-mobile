@@ -1,10 +1,10 @@
 import RNFS from 'react-native-fs';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { WhisperModelDownloads } from '../../../src/services/whisperModelDownloads';
 import * as whisperModelFiles from '../../../src/services/whisperModelFiles';
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     downloadFileTo: jest.fn(),
     cancelDownload: jest.fn(async () => {}),
   },

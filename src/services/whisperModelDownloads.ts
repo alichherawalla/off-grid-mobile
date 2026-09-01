@@ -2,7 +2,7 @@ import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
-import { backgroundDownloadService } from './backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import * as whisperModelFiles from './whisperModelFiles';
 import { WHISPER_MODELS } from './whisperModels';
 

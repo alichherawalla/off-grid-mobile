@@ -7,11 +7,11 @@
  */
 
 import { restoreInProgressDownloads } from '../../../src/services/modelManager/restore';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { BackgroundDownloadContext } from '../../../src/services/modelManager/types';
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(() => true),
     getActiveDownloads: jest.fn(() => Promise.resolve([])),
     onProgress: jest.fn(() => jest.fn()),

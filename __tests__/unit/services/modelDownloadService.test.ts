@@ -5,13 +5,13 @@
  */
 import logger from '../../../src/utils/logger';
 import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import type { DownloadProvider, ModelDownload, ModelDownloadType } from '../../../src/services/modelServices/downloadTypes';
 
 // The queue of not-yet-started downloads is owned by backgroundDownloadService; the
 // service maps a uniform id onto it to cancel a "Queued" row that no provider lists.
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     getQueuedItems: jest.fn(() => []),
     cancelQueued: jest.fn(() => false),
   },

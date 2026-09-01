@@ -19,7 +19,7 @@ import {
 } from '../../../src/services/modelManager/download';
 import { mmProjBelongsToModel, pickMmProjForDownload } from '../../../src/services/mmproj';
 import { restoreInProgressDownloads } from '../../../src/services/modelManager/restore';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { BackgroundDownloadContext } from '../../../src/services/modelManager/types';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
@@ -35,8 +35,8 @@ jest.mock('../../../src/services/huggingface', () => ({
   },
 }));
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(() => true),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(() => Promise.resolve()),

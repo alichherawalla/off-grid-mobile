@@ -8,8 +8,8 @@
 import { hydrateDownloadStore } from '../../../src/services/downloadHydration';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(),
     getActiveDownloads: jest.fn(),
   },
@@ -22,7 +22,7 @@ jest.mock('../../../src/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-const { backgroundDownloadService } = jest.requireMock('../../../src/services/backgroundDownloadService');
+const { coordinatedDownloads: backgroundDownloadService } = jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge');
 import logger from '../../../src/utils/logger';
 
 beforeEach(() => {

@@ -8,14 +8,14 @@ jest.mock('../../../src/services/modelManager', () => ({ modelManager: { deleteI
 jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));
-jest.mock('../../../src/services/backgroundDownloadService', () => ({ backgroundDownloadService: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn() } }));
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({ coordinatedDownloads: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn() } }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
 import { Platform } from 'react-native';
 import { imageProvider, setImageDownloadOps } from '../../../src/services/adapters/downloads/imageDownloadAdapter';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { useAppStore } from '../../../src/stores';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 
 const mockBg = backgroundDownloadService as unknown as { cancelDownload: jest.Mock; retryDownload: jest.Mock; startProgressPolling: jest.Mock };
 const setPlatform = (os: 'ios' | 'android') => { (Platform as any).OS = os; };

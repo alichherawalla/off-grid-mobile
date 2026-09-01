@@ -140,8 +140,8 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
   },
 }));
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     queryDownload: jest.fn(() => Promise.resolve(null)),
     cancelDownload: jest.fn(() => Promise.resolve()),
     startDownload: jest.fn(() => Promise.resolve(1)),

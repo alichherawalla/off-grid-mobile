@@ -10,8 +10,8 @@ const mockCancelDownload = jest.fn(async (..._a: any[]) => {});
 const mockListDownloaded = jest.fn(async (..._a: any[]) => [] as any[]);
 const mockDeleteModel = jest.fn(async (..._a: any[]) => {});
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     cancelDownload: (...a: any[]) => mockCancelDownload(...a),
     // The service consults the queue owner on a not-found cancel/remove; mirror the
     // real contract (empty queue here) so dispatch refuses cleanly instead of throwing.

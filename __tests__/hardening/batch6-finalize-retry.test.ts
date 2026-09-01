@@ -17,7 +17,7 @@
  */
 
 import RNFS from 'react-native-fs';
-import { backgroundDownloadService } from '../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../src/services/modelServices/coordinatedDownloadBridge';
 import { watchBackgroundDownload } from '../../src/services/modelManager/download';
 import * as storage from '../../src/services/modelManager/storage';
 import type { BackgroundDownloadContext } from '../../src/services/modelManager/types';

@@ -3,14 +3,14 @@ import { hydrateDownloadStore, isMmProjFileName } from '../../../src/services/do
 import { saveActiveDownloads } from '../../../src/services/activeDownloadPersistence';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(),
     getActiveDownloads: jest.fn(),
   },
 }));
 
-const { backgroundDownloadService } = jest.requireMock('../../../src/services/backgroundDownloadService');
+const { coordinatedDownloads: backgroundDownloadService } = jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge');
 
 beforeEach(async () => {
   jest.clearAllMocks();

@@ -4,7 +4,7 @@ import { getMmProjFileSize } from '../../utils/modelHelpers';
 import { DownloadedModel, ModelFile, BackgroundDownloadInfo, ONNXImageModel, PersistedDownloadInfo } from '../../types';
 import { APP_CONFIG } from '../../constants';
 import { useAppStore } from '../../stores';
-import { backgroundDownloadService } from '../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
 import {
   BackgroundDownloadMetadataCallback,
   BackgroundDownloadContext,

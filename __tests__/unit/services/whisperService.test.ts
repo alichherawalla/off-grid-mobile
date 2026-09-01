@@ -12,7 +12,7 @@ import {
   whisperService,
   WHISPER_MODELS,
 } from '../../../src/services/whisperService';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { audioSessionManager } from '../../../src/services/audioSessionManager';
 import { audioRecorderService } from '../../../src/services/audioRecorderService';
 import { AudioManager } from 'react-native-audio-api';
@@ -23,8 +23,8 @@ const mockSetAudioSessionOptions =
 const mockSetAudioSessionActivity =
   AudioManager.setAudioSessionActivity as jest.Mock;
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     isAvailable: jest.fn(() => true),
     downloadFileTo: jest.fn(),
     cancelDownload: jest.fn(() => Promise.resolve()),

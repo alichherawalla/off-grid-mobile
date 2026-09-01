@@ -10,7 +10,7 @@
  * than a phantom "downloading".
  */
 import { whisperService } from '../../whisperService';
-import { backgroundDownloadService } from '../../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
 import { useWhisperStore } from '../../../stores/whisperStore';
 import logger from '../../../utils/logger';

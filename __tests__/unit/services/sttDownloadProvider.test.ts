@@ -11,15 +11,15 @@ jest.mock('../../../src/services/whisperService', () => ({
     deleteModel: jest.fn(async () => {}),
   },
 }));
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: { cancelDownload: jest.fn(async () => {}) },
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: { cancelDownload: jest.fn(async () => {}) },
 }));
 jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 
 import { sttProvider } from '../../../src/services/adapters/downloads/transcriptionDownloadAdapter';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { whisperService } from '../../../src/services/whisperService';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 
 const mockWhisper = whisperService as unknown as { listDownloadedModels: jest.Mock; downloadModel: jest.Mock; deleteModel: jest.Mock };
 const mockBg = backgroundDownloadService as unknown as { cancelDownload: jest.Mock };

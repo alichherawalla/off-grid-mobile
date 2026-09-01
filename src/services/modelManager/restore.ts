@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { PersistedDownloadInfo, ModelFile, BackgroundDownloadInfo } from '../../types';
-import { backgroundDownloadService } from '../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../modelServices/coordinatedDownloadBridge';
 import {
   BackgroundDownloadContext,
   BackgroundDownloadMetadataCallback,

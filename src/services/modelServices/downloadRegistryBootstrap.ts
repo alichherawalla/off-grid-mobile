@@ -1,6 +1,6 @@
 import { ModelDownloadRegistry, queuedUniformId } from '@offgrid/models';
 import logger from '../../utils/logger';
-import { backgroundDownloadService } from '../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from './coordinatedDownloadBridge';
 import type {
   ModelDownloadStartRequest,
   ModelDownloadReissueRequest,

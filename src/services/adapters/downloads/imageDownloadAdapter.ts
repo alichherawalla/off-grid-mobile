@@ -18,7 +18,7 @@
 import { Platform } from 'react-native';
 import { modelManager } from '../../modelManager';
 import { unloadImageModel } from '../../modelServices/modelLifecycleBootstrap';
-import { backgroundDownloadService } from '../../backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useAppStore } from '../../../stores';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';

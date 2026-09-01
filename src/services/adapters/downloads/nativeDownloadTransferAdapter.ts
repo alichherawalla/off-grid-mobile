@@ -1,4 +1,5 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
+import RNFS from 'react-native-fs';
 import type { DownloadTransferPort } from '@offgrid/models';
 
 const native = NativeModules.DownloadManagerModule;
@@ -33,6 +34,8 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
       try { native.requestNotificationPermission(); } catch { /* permission is optional */ }
     }
     const fileName = input.destination.split('/').pop() ?? input.id;
+    const parent = input.destination.slice(0, Math.max(0, input.destination.lastIndexOf('/')));
+    if (parent) await RNFS.mkdir(parent);
     const result = await native.startDownload({
       url: input.url,
       fileName,
@@ -67,6 +70,20 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     await native.cancelDownload(transferId).catch(() => undefined);
   }
 
+  async excludeFromBackup(path: string): Promise<boolean> {
+    if (!native || typeof native.excludePathFromBackup !== 'function') return false;
+    return native.excludePathFromBackup(path).catch(() => false);
+  }
+
+  async isBatteryOptimizationIgnored(): Promise<boolean> {
+    if (!native || Platform.OS !== 'android') return true;
+    return native.isBatteryOptimizationIgnored?.().catch(() => true) ?? true;
+  }
+
+  requestBatteryOptimizationIgnore(): void {
+    if (native && Platform.OS === 'android') native.requestBatteryOptimizationIgnore?.();
+  }
+
   dispose(): void {
     for (const subscription of this.subscriptions) subscription.remove();
     this.subscriptions.length = 0;
@@ -80,11 +97,14 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     onProgress: (progress: { bytesDownloaded: number; totalBytes: number }) => void,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
       const cleanup = () => {
         this.listeners.delete(transferId);
         signal.removeEventListener('abort', abort);
       };
       const abort = () => {
+        if (settled) return;
+        settled = true;
         void this.cancel(transferId);
         cleanup();
         reject(new Error('Download cancelled'));
@@ -95,16 +115,25 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
           totalBytes: event.totalBytes,
         }),
         complete: () => {
+          if (settled) return;
+          settled = true;
           cleanup();
           Promise.resolve(native.moveCompletedDownload(transferId, destination)).then(() => resolve(), reject);
         },
         error: event => {
+          if (settled) return;
+          settled = true;
           cleanup();
           reject(new Error(event.reason ?? 'Download failed'));
         },
       });
       signal.addEventListener('abort', abort, { once: true });
       native.startProgressPolling();
+      Promise.resolve(native.getActiveDownloads()).then((rows: Array<{ downloadId?: string; id?: string; status?: string }> = []) => {
+        const row = rows.find(item => String(item.downloadId ?? item.id) === transferId);
+        if (row?.status === 'completed') this.listeners.get(transferId)?.complete({ downloadId: transferId });
+        else if (row?.status === 'failed') this.listeners.get(transferId)?.error({ downloadId: transferId, reason: 'Download failed' });
+      }).catch(() => undefined);
     });
   }
 

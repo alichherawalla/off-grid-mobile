@@ -6,7 +6,7 @@ export { localDreamGeneratorService as onnxImageGeneratorService } from './local
 export { intentClassifier } from './intentClassifier';
 export { authService } from './authService';
 export { whisperService, WHISPER_MODELS } from './whisperService';
-export { backgroundDownloadService } from './backgroundDownloadService';
+export { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 export {
   ejectAllModels,
   loadImageModel,

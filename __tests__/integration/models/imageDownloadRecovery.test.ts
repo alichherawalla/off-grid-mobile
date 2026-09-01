@@ -19,8 +19,8 @@ jest.mock('../../../src/utils/imageModelIntegrity', () => ({
   ensureImageExtractionComplete: jest.fn(async () => {}),
 }));
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: mockBackgroundDownloadService,
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: mockBackgroundDownloadService,
 }));
 
 jest.mock('../../../src/services', () => ({

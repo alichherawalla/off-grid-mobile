@@ -65,8 +65,8 @@ jest.mock('../../../src/services/huggingface', () => ({
 
 // Native download boundary — never runs native code. We assert on the RENDERED sheet,
 // not on this seam, so it is a dumb stub.
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
+jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
     queryDownload: jest.fn(() => Promise.resolve(null)),
     cancelDownload: jest.fn(() => Promise.resolve()),
     startDownload: jest.fn(() => Promise.resolve(1)),

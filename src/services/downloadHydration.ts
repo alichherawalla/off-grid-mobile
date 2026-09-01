@@ -1,4 +1,4 @@
-import { backgroundDownloadService } from './backgroundDownloadService';
+import { coordinatedDownloads as backgroundDownloadService } from './modelServices/coordinatedDownloadBridge';
 import { useDownloadStore, DownloadEntry, DownloadStatus, ModelType, isActiveStatus } from '../stores/downloadStore';
 import { makeModelKey, ModelKey } from '../utils/modelKey';
 import { BackgroundDownloadStatus } from '../types';
