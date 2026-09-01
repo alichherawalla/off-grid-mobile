@@ -73,13 +73,13 @@ export async function installRemoteModel(opts: {
   const { providerRegistry } = require('../../src/services/adapters/providers');
   const { createProviderForServerImpl } = require('../../src/services/adapters/remote/serverRuntime');
   const { llmService } = require('../../src/services/llm');
+  const { clearMobileModel, selectMobileModel } = require('../../src/services/modelServices');
    
   // A remote model is only USED when no local model is loaded/selected: generationService prefers a loaded
   // local model, and the dispatch keys off appStore.activeModelId. On device, selecting a remote model
   // clears the local selection and no local model is loaded — mirror that so the send routes remote.
   await llmService.unloadModel();
-  const { useAppStore } = require('../../src/stores');
-  useAppStore.getState().setActiveModelId(null);
+  await clearMobileModel('text');
   const name = opts.name ?? 'LM Studio';
   const endpoint = opts.endpoint ?? 'http://localhost:1234';
   const provider = opts.provider ?? 'openai-compatible';
@@ -92,17 +92,13 @@ export async function installRemoteModel(opts: {
   };
   const store = useRemoteServerStore.getState();
   store.setDiscoveredModels(serverId, [model]);
-  store.setActiveServerId(serverId);
-  store.setActiveRemoteTextModelId(modelId);
 
-  // Register the provider the SAME way the connect flow does (build from the server + register), then set
-  // the selected model on it (what picking a remote model does). generationService.getCurrentProvider reads
-  // the active server from the store, so this is what a real remote generation runs against.
+  // Register the provider the SAME way the connect flow does, then select through the shared route owner.
   const server = useRemoteServerStore.getState().getServerById(serverId);
   await createProviderForServerImpl(server);
   const providerInstance = providerRegistry.getProvider(serverId);
   providerInstance.updateConfig?.({ modelId });
   providerInstance.modelCapabilities = { ...providerInstance.modelCapabilities, ...model.capabilities, acceptsThinkingKwarg: !!opts.caps?.supportsThinking };
-  providerRegistry.setActiveProvider(serverId);
+  await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
   return { serverId, modelId };
 }

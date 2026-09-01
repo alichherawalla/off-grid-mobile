@@ -23,8 +23,6 @@ jest.mock('../../../src/services/llm', () => ({
 jest.mock('../../../src/services/adapters/providers/registry', () => ({
   providerRegistry: {
     getProvider: jest.fn(),
-    getActiveProvider: jest.fn(),
-    setActiveProvider: jest.fn(),
   },
   getProviderForServer: jest.fn(),
 }));
@@ -74,7 +72,6 @@ describe('Unified Model Selection', () => {
       };
 
       (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
 
       // Add a server
       const serverId = useRemoteServerStore.getState().addServer({
@@ -101,8 +98,6 @@ describe('Unified Model Selection', () => {
       expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('llama2');
 
-      // Verify provider was updated
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith(serverId);
       expect(mockLoadModel).toHaveBeenCalledWith('llama2');
     });
 
@@ -123,7 +118,6 @@ describe('Unified Model Selection', () => {
       // Verify state was cleared
       expect(useRemoteServerStore.getState().activeServerId).toBeNull();
       expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBeNull();
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('local');
     });
 
     it('should handle multiple servers with different models', async () => {

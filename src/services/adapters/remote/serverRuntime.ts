@@ -184,7 +184,6 @@ export async function setActiveRemoteTextModelImpl(
         discoveredModel.capabilities.acceptsThinkingKwarg,
       );
     }
-    providerRegistry.setActiveProvider(serverId);
     logger.log(
       '[RemoteServerManager] Provider ready:',
       await provider.isReady(),

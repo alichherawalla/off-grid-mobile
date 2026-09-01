@@ -203,15 +203,6 @@ class RemoteServerManager {
     return store.discoverModels(id, apiKey || undefined);
   }
 
-  /**
-   * Set the active server (null for local)
-   */
-  setActiveServer(id: string | null): void {
-    useRemoteServerStore.getState().setActiveServerId(id);
-    providerRegistry.setActiveProvider(id ?? 'local');
-    logger.log('[RemoteServerManager] Active server set to:', id || 'local');
-  }
-
   /** Set the active remote text model */
   async setActiveRemoteTextModel(
     serverId: string,
@@ -274,7 +265,6 @@ class RemoteServerManager {
     store.setActiveRemoteMediaServerId('image', null);
     store.setActiveRemoteMediaServerId('transcription', null);
     store.setActiveRemoteMediaServerId('voice', null);
-    providerRegistry.setActiveProvider('local');
     logger.log('[RemoteServerManager] Cleared active remote model');
   }
 
@@ -282,7 +272,6 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
     store.setActiveServerId(null);
     store.setActiveRemoteTextModelId(null);
-    providerRegistry.setActiveProvider('local');
   }
 
   clearActiveRemoteMediaModel(
@@ -291,11 +280,6 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
     store.setActiveRemoteMediaServerId(category, null);
     if (category === 'image') store.setActiveRemoteImageModelId(null);
-  }
-
-  /** Get the active server */
-  getActiveServer(): RemoteServer | null {
-    return useRemoteServerStore.getState().getActiveServer();
   }
 
   /**

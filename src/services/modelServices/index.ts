@@ -1,6 +1,5 @@
 import {
   GenerationService,
-  LLMService,
   type ActiveModelSnapshot,
   type RuntimeModel,
 } from '@offgrid/models';
@@ -18,7 +17,10 @@ import {
   mobileRouteId,
   type MobileRouteFacts,
 } from './mobileRoute';
-import { mobileModelSelectionStore } from './selectionStore';
+import {
+  mobileLLMService,
+  refreshMobileLLMServiceInventory,
+} from './mobileLLMService';
 import {
   mobileGenerationResidency,
   reconcileMobileGenerationAdapters,
@@ -29,7 +31,6 @@ import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 
-export const mobileLLMService = new LLMService(mobileModelSelectionStore);
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 export const mobileGenerationService = new GenerationService(
   mobileLLMService,
@@ -57,7 +58,7 @@ const cleanups: Array<() => void> = [];
 export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
   refreshChain = refreshChain
     .catch(() => [])
-    .then(() => mobileLLMService.refresh())
+    .then(() => refreshMobileLLMServiceInventory())
     .then(models => {
       reconcileMobileGenerationAdapters(
         mobileGenerationService,
@@ -144,4 +145,5 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId, mobileRouteFacts } from './mobileRoute';
+export { mobileLLMService } from './mobileLLMService';
 export type { MobileRouteFacts } from './mobileRoute';

@@ -326,7 +326,6 @@ describe('remoteServerManager', () => {
       };
 
       (providerRegistry.getProvider as jest.Mock).mockReturnValue(mockProvider);
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
       const store = remoteSelectionState({
         id: 'server-123',
         name: 'Test',
@@ -345,9 +344,6 @@ describe('remoteServerManager', () => {
       expect(
         store.setActiveRemoteTextModelId,
       ).toHaveBeenCalledWith('llama2');
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith(
-        'server-123',
-      );
       expect(mockLoadModel).toHaveBeenCalledWith('llama2');
     });
 
@@ -403,8 +399,7 @@ describe('remoteServerManager', () => {
   });
 
   describe('clearActiveRemoteModel', () => {
-    it('should clear all remote selections and switch to local provider', () => {
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
+    it('should clear all remote selections', () => {
       const store = remoteSelectionState(null);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(store);
 
@@ -419,7 +414,6 @@ describe('remoteServerManager', () => {
       expect(
         store.setActiveRemoteImageModelId,
       ).toHaveBeenCalledWith(null);
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('local');
     });
   });
 
@@ -562,62 +556,6 @@ describe('remoteServerManager', () => {
       const result = remoteServerManager.getServers();
 
       expect(result).toEqual(mockServers);
-    });
-  });
-
-  describe('getActiveServer', () => {
-    it('should return active server from store', () => {
-      const mockServer = { id: 'server-1', name: 'Active Server' };
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        getActiveServer: jest.fn().mockReturnValue(mockServer),
-      });
-
-      const result = remoteServerManager.getActiveServer();
-
-      expect(result).toEqual(mockServer);
-    });
-
-    it('should return null when no active server', () => {
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        getActiveServer: jest.fn().mockReturnValue(null),
-      });
-
-      const result = remoteServerManager.getActiveServer();
-
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('setActiveServer', () => {
-    it('should set active server and provider', () => {
-      const _mockSetActiveProvider = jest.fn();
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        setActiveServerId: jest.fn(),
-      });
-
-      remoteServerManager.setActiveServer('server-1');
-
-      expect(
-        useRemoteServerStore.getState().setActiveServerId,
-      ).toHaveBeenCalledWith('server-1');
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith(
-        'server-1',
-      );
-    });
-
-    it('should set to local when id is null', () => {
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        setActiveServerId: jest.fn(),
-      });
-
-      remoteServerManager.setActiveServer(null);
-
-      expect(
-        useRemoteServerStore.getState().setActiveServerId,
-      ).toHaveBeenCalledWith(null);
-      expect(providerRegistry.setActiveProvider).toHaveBeenCalledWith('local');
     });
   });
 
@@ -805,7 +743,6 @@ describe('remoteServerManager', () => {
       (providerRegistry.registerProvider as jest.Mock).mockReturnValue(
         undefined,
       );
-      (providerRegistry.setActiveProvider as jest.Mock).mockReturnValue(true);
       (useRemoteServerStore.getState as jest.Mock).mockReturnValue(
         remoteSelectionState(mockServer),
       );

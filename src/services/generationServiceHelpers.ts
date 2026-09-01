@@ -1,9 +1,10 @@
 import type { GenerationMeta } from '../types';
-import { useAppStore, useRemoteServerStore } from '../stores';
+import { useAppStore } from '../stores';
 import { getActiveEngineService } from './engines';
 import { effectiveCacheType } from './llmHelpers';
 import { liteRTService } from './litert';
 import { llmService } from './llm';
+import { activeMobileRoute } from './modelServices/mobileLLMService';
 
 export const FLUSH_INTERVAL_MS = 50;
 
@@ -35,21 +36,21 @@ function liteRTMeta(service: any, modelName: string | undefined): GenerationMeta
 
 export function buildGenerationMetaImpl(service: any): GenerationMeta {
   let meta: GenerationMeta;
-  if (service.isUsingRemoteProvider()) {
-    const activeServer = useRemoteServerStore.getState().getActiveServer();
+  const active = activeMobileRoute('text').model;
+  if (active?.source === 'remote') {
     const tokenCount = Math.ceil((service.state.streamingContent.length + service.totalReasoningLength) / 4);
     const duration = service.state.startTime ? (Date.now() - service.state.startTime) / 1000 : 0;
     meta = {
       gpu: false,
       gpuBackend: 'Remote',
-      modelName: activeServer?.name || 'Remote Model',
+      modelName: active.name,
       tokenCount,
       tokensPerSecond: duration > 0 ? tokenCount / duration : undefined,
       timeToFirstToken: service.remoteTimeToFirstToken,
     };
   } else {
-    const { downloadedModels, activeModelId, settings } = useAppStore.getState();
-    const modelName = downloadedModels.find((model: any) => model.id === activeModelId)?.name;
+    const { settings } = useAppStore.getState();
+    const modelName = active?.name;
     if (getActiveEngineService() === liteRTService) {
       meta = liteRTMeta(service, modelName);
     } else {

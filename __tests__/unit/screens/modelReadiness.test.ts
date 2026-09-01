@@ -18,6 +18,9 @@ jest.mock('../../../src/services/litert', () => ({
 import { reasonFromLoadError, modelNotReadyAlert, ensureModelReady } from '../../../src/screens/ChatScreen/modelReadiness';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
+import { mobileLLMService, mobileRouteId } from '../../../src/services/modelServices';
+import { useAppStore } from '../../../src/stores';
+import { createDownloadedModel } from '../../utils/factories';
 
 const mockLlm = llmService as unknown as {
   getLoadedModelPath: jest.Mock;
@@ -72,6 +75,42 @@ describe('modelNotReadyAlert', () => {
 });
 
 describe('ensureModelReady — resume-after-Load-Anyway wiring (regression)', () => {
+  let unregisterInventory: (() => void) | undefined;
+
+  beforeAll(async () => {
+    unregisterInventory = mobileLLMService.registerAdapter({
+      id: 'model-readiness-native-boundary',
+      async listModels() {
+        return ['llama', 'litert'].map(providerId => ({
+          id: 'gemma-e4b',
+          name: 'Gemma',
+          kind: 'text' as const,
+          source: 'local' as const,
+          modality: 'text' as const,
+          adapterId: `mobile:local:${providerId}:text`,
+          providerId,
+          capabilities: { textGeneration: true },
+          installed: true,
+          ready: true,
+          loaded: false,
+          loading: false,
+        }));
+      },
+    });
+    await mobileLLMService.refresh();
+  });
+
+  afterAll(() => unregisterInventory?.());
+
+  async function selectRoute(engine: 'llama' | 'litert'): Promise<void> {
+    useAppStore.getState().setDownloadedModels([createDownloadedModel({
+      id: 'gemma-e4b', engine, filePath: '/models/gemma-e4b.gguf',
+    })]);
+    await mobileLLMService.select('text', mobileRouteId({
+      source: 'local', hostId: engine, modality: 'text', modelId: 'gemma-e4b',
+    }));
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockLlm.getLoadedModelPath.mockReturnValue(null); // nothing loaded → needs a load
@@ -80,7 +119,7 @@ describe('ensureModelReady — resume-after-Load-Anyway wiring (regression)', ()
 
   const makeDeps = (engine: string | undefined, ensureModelLoaded: any) => ({
     activeModelInfo: { isRemote: false },
-    activeModel: { engine, filePath: '/models/gemma-e4b.gguf' },
+    activeModel: { id: 'gemma-e4b', engine, filePath: '/models/gemma-e4b.gguf' },
     activeModelId: 'gemma-e4b',
     ensureModelLoaded,
     setAlertState: jest.fn(),
@@ -118,6 +157,7 @@ describe('ensureModelReady — resume-after-Load-Anyway wiring (regression)', ()
   });
 
   it('does not attempt a load (or resume) when the llama model is already resident', async () => {
+    await selectRoute('llama');
     mockLlm.isModelLoaded.mockReturnValue(true); // truly resident (not just a path set)
     mockLlm.getLoadedModelPath.mockReturnValue('/models/gemma-e4b.gguf');
     const resume = jest.fn();
@@ -144,6 +184,7 @@ describe('ensureModelReady — resume-after-Load-Anyway wiring (regression)', ()
   });
 
   it('does not attempt a load when the LiteRT model is already resident', async () => {
+    await selectRoute('litert');
     mockLiteRT.isModelLoaded.mockReturnValue(true);
     const ensureModelLoaded = jest.fn();
 

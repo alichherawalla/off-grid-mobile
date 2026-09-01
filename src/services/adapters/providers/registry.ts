@@ -9,12 +9,8 @@ import type { LLMProvider } from './types';
 import { localProvider } from './localProvider';
 import logger from '../../../utils/logger';
 
-type ProviderChangeListener = (providerId: string | null) => void;
-
 class ProviderRegistry {
   private providers: Map<string, LLMProvider> = new Map();
-  private activeProviderId: string = 'local';
-  private listeners: Set<ProviderChangeListener> = new Set();
 
   constructor() {
     // Register the local provider by default
@@ -41,54 +37,13 @@ class ProviderRegistry {
     this.providers.delete(id);
     logger.log('[ProviderRegistry] Unregistered provider:', id);
 
-    // If this was the active provider, switch back to local
-    if (this.activeProviderId === id) {
-      this.activeProviderId = 'local';
-      this.notifyListeners();
-    }
   }
 
-  /**
-   * Get a provider by ID
-   */
+  /** Get a provider by its exact registered ID. */
   getProvider(id: string): LLMProvider | undefined {
     const provider = this.providers.get(id);
     logger.log('[ProviderRegistry] getProvider:', id, 'found:', !!provider, 'providerIds:', this.getProviderIds());
     return provider;
-  }
-
-  /**
-   * Get the currently active provider
-   */
-  getActiveProvider(): LLMProvider {
-    const provider = this.providers.get(this.activeProviderId);
-    if (!provider) {
-      logger.warn('[ProviderRegistry] Active provider not found, falling back to local');
-      return localProvider;
-    }
-    return provider;
-  }
-
-  /**
-   * Get the active provider ID
-   */
-  getActiveProviderId(): string {
-    return this.activeProviderId;
-  }
-
-  /**
-   * Set the active provider by ID
-   */
-  setActiveProvider(id: string): boolean {
-    if (!this.providers.has(id)) {
-      logger.warn('[ProviderRegistry] Provider not found:', id);
-      return false;
-    }
-
-    this.activeProviderId = id;
-    this.notifyListeners();
-    logger.log('[ProviderRegistry] Active provider set to:', id);
-    return true;
   }
 
   /**
@@ -106,22 +61,6 @@ class ProviderRegistry {
   }
 
   /**
-   * Subscribe to provider changes
-   */
-  subscribe(listener: ProviderChangeListener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  /**
-   * Notify listeners of provider change
-   */
-  private notifyListeners(): void {
-    const providerId = this.activeProviderId === 'local' ? null : this.activeProviderId;
-    this.listeners.forEach(listener => listener(providerId));
-  }
-
-  /**
    * Clear all providers except local
    */
   clear(): void {
@@ -131,8 +70,6 @@ class ProviderRegistry {
     if (localProv) {
       this.providers.set('local', localProv);
     }
-    this.activeProviderId = 'local';
-    this.notifyListeners();
   }
 }
 
@@ -142,18 +79,8 @@ export const providerRegistry = new ProviderRegistry();
 /**
  * Get provider for server ID
  *
- * Creates or returns an existing provider for a remote server.
- * Returns local provider for null/undefined.
+ * Return only the provider registered for this exact remote server identity.
  */
-export function getProviderForServer(serverId: string | null): LLMProvider {
-  if (!serverId) {
-    return localProvider;
-  }
-
-  const provider = providerRegistry.getProvider(serverId);
-  if (!provider) {
-    logger.warn('[ProviderRegistry] No provider for server:', serverId, 'falling back to local');
-    return localProvider;
-  }
-  return provider;
+export function getProviderForServer(serverId: string): LLMProvider | undefined {
+  return providerRegistry.getProvider(serverId);
 }

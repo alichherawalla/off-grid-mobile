@@ -6,8 +6,10 @@ import { hardwareService } from '../hardware';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { estimateTextModelMemoryMB } from '../modelMemory';
 import { remoteServerManager } from '../remoteServerManager';
+import { whisperService, WHISPER_MODELS } from '../whisperService';
 import { mobileRouteId } from './mobileRoute';
 import { modelResidencyManager } from './residencyBootstrap';
+import { refreshMobileLLMServiceInventory } from './mobileLLMService';
 
 interface LoadOptions {
   override?: boolean;
@@ -15,6 +17,14 @@ interface LoadOptions {
 
 let pendingTextModelId: string | null = null;
 let pendingImageModelId: string | null = null;
+let pendingTranscriptionModelId: string | null = null;
+
+export type TranscriptionLoadResult = 'loaded' | 'blocked' | 'error';
+
+interface TranscriptionLifecycleObserver {
+  onLoaded?(): void;
+  onUnloaded?(): void;
+}
 
 function existingResidentKey(
   modality: ModelModality,
@@ -70,6 +80,29 @@ async function imageSpec(modelId: string): Promise<ResidentSpec> {
   };
 }
 
+function transcriptionSpec(modelId: string): ResidentSpec {
+  const model = WHISPER_MODELS.find(candidate => candidate.id === modelId);
+  if (!model) throw new Error(`Unknown transcription model: ${modelId}`);
+  const routeId = mobileRouteId({
+    source: 'local',
+    hostId: 'whisper.rn',
+    modality: 'transcription',
+    modelId,
+  });
+  return {
+    key: existingResidentKey(
+      'transcription',
+      modelId,
+      `transcription:${routeId}`,
+    ),
+    type: 'transcription',
+    modelId,
+    sizeMB: model.size,
+    residencyKey: 'mobile:transcription-engine',
+    lifecycle: 'persistent',
+  };
+}
+
 function refusedLoad(override: boolean | undefined): Error {
   return override
     ? new Error(
@@ -97,8 +130,9 @@ export async function loadTextModel(
       unload: () => nativeModelLifecycle.unloadTextModel(true),
     },
     { override: options?.override },
-  ).finally(() => {
+  ).finally(async () => {
     if (pendingTextModelId === modelId) pendingTextModelId = null;
+    await refreshMobileLLMServiceInventory();
   });
   if (!decision.fits) throw refusedLoad(options?.override);
 }
@@ -131,6 +165,47 @@ export async function loadImageModel(
   if (!decision.fits) throw refusedLoad(options?.override);
 }
 
+/**
+ * Load the selected local transcription model through the shared atomic
+ * admission and residency lifecycle. Native Whisper remains an I/O adapter.
+ */
+export async function loadTranscriptionModel(
+  modelId: string,
+  observer: TranscriptionLifecycleObserver = {},
+): Promise<TranscriptionLoadResult> {
+  pendingTranscriptionModelId = modelId;
+  try {
+    const spec = transcriptionSpec(modelId);
+    const modelPath = whisperService.getModelPath(modelId);
+    const lease = await modelResidencyManager.acquire(
+      spec,
+      {
+        load: async () => {
+          await whisperService.loadModel(modelPath);
+          observer.onLoaded?.();
+        },
+        unload: async () => {
+          await whisperService.unloadModel();
+          observer.onUnloaded?.();
+        },
+      },
+    );
+    if (!lease.acquired) return 'blocked';
+    await lease.release();
+    const loaded = whisperService.getLoadedModelPath() === modelPath;
+    if (loaded) observer.onLoaded?.();
+    return loaded ? 'loaded' : 'error';
+  } catch (error) {
+    logger.error('[TranscriptionLifecycle] Failed to load model', error);
+    throw error;
+  } finally {
+    if (pendingTranscriptionModelId === modelId) {
+      pendingTranscriptionModelId = null;
+    }
+    await refreshMobileLLMServiceInventory();
+  }
+}
+
 export async function unloadTextModel(keepSelection = false): Promise<boolean> {
   const store = useAppStore.getState();
   const modelId = nativeModelLifecycle.getState().loadedTextModelId ??
@@ -148,6 +223,7 @@ export async function unloadTextModel(keepSelection = false): Promise<boolean> {
     store.setActiveModelId(null);
     store.setTextModelEvicted(false);
   }
+  await refreshMobileLLMServiceInventory();
   return true;
 }
 
@@ -166,6 +242,27 @@ export async function unloadImageModel(keepSelection = false): Promise<boolean> 
   );
   if (!keepSelection) store.setActiveImageModelId(null);
   return true;
+}
+
+export async function unloadTranscriptionModel(
+  modelId?: string | null,
+  observer: TranscriptionLifecycleObserver = {},
+): Promise<boolean> {
+  const selectedModelId = modelId ?? pendingTranscriptionModelId;
+  const resident = selectedModelId
+    ? transcriptionSpec(selectedModelId)
+    : modelResidencyManager.getResidents().find(
+        candidate => candidate.type === 'transcription',
+      );
+  if (!resident && !whisperService.isModelLoaded()) return false;
+  const key = resident?.key ?? 'transcription';
+  const unloaded = await modelResidencyManager.unload(key, async () => {
+    await whisperService.unloadModel();
+    observer.onUnloaded?.();
+  });
+  observer.onUnloaded?.();
+  await refreshMobileLLMServiceInventory();
+  return unloaded;
 }
 
 export async function unloadAllModels(

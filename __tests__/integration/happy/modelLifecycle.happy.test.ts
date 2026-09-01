@@ -19,6 +19,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     requireRTL();
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
+    const { refreshMobileModelServices } = require('../../../src/services/modelServices');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { isModelReady } = require('../../../src/services/engines');
     const { hardwareService } = require('../../../src/services/hardware');
@@ -29,6 +30,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     await hardwareService.refreshMemoryInfo();
     const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
     useAppStore.setState({ downloadedModels: [model], activeModelId: null });
+    await refreshMobileModelServices();
 
     // Load — becomes ready + resident.
     await activeModelService.loadTextModel('llm');

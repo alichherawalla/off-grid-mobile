@@ -33,7 +33,7 @@ export function needsVisionRepair(
   catalogFile?: ModelFile,
 ): boolean {
   if (!model) return false;
-  // "Can it see right now" has ONE owner - the same predictor deriveEngineCapabilities falls back
+  // "Can it see right now" has ONE owner - the shared runtime inventory uses this predictor
   // to, which reads the projector rather than the name. Re-testing mmProjPath here would be a
   // second copy of that rule, and the two would eventually disagree about the same model.
   if (predictGgufCapabilities(model).vision) return false;

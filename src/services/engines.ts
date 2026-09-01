@@ -1,10 +1,10 @@
-import { useAppStore, useRemoteServerStore } from '../stores';
+import { useAppStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
-import { providerRegistry } from './adapters/providers';
 import { isLiteRTModel, type DownloadedModel } from '../types';
-import { predictGgufCapabilities, type PredictedGgufCapabilities } from '../utils/ggufCapabilities';
+import type { RuntimeModel } from '@offgrid/models';
 import logger from '../utils/logger';
+import { activeMobileRoute } from './modelServices/mobileLLMService';
 
 /** Every text-generation engine, defined ONCE here so callers never hardcode the concrete set. */
 const TEXT_ENGINES = [liteRTService, llmService];
@@ -17,61 +17,14 @@ export interface EngineCapabilities {
   thinking: boolean;
 }
 
-/** Runtime inputs for deriveEngineCapabilities — passed explicitly so the rule is pure/testable. */
-/** A remote model's declared capabilities (single named type so callers don't index CapabilityInputs). */
-export type RemoteCaps = { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } | null;
-
-export interface CapabilityInputs {
-  /** A remote (gateway) model is active — its declared capabilities win. */
-  isRemote: boolean;
-  remoteCaps?: RemoteCaps;
-  /** The active LOCAL model's engine ('litert' | 'llama' | ...) and LiteRT capability flags. */
-  engine?: string;
-  liteRTVision?: boolean;
-  liteRTAudio?: boolean;
-  /** Whether the LiteRT engine currently has a model resident (its tools/thinking need it loaded). */
-  liteRTLoaded: boolean;
-  /** The llama engine's live capabilities (only meaningful when loaded). */
-  llama: { loaded: boolean; vision: boolean; audio: boolean; tools: boolean; thinking: boolean };
-  /** Static PREDICTION for a llama model that is selected but not loaded (models load lazily on
-   *  first send). Without it the Tools/Thinking affordances were hidden for a just-selected
-   *  Gemma 4 until the first send loaded it (device 2026-07-13). Loaded live caps win. */
-  llamaPredicted?: PredictedGgufCapabilities;
-}
-
-/**
- * THE single source for "what can the active text model do" — the exact rule previously
- * re-derived in useChatModelStateSync / useChatModelActions / useChatGenerationActions et al.
- * Precedence: remote (declared caps) → LiteRT (vision/audio from the model FLAG, no load needed;
- * tools/thinking only once the engine is loaded) → llama (all from the loaded engine) → none.
- * Pure and zero-IO so callers keep their own reactive inputs; adding an engine is a branch here (OCP).
- */
-export function deriveEngineCapabilities(i: CapabilityInputs): EngineCapabilities {
-  if (i.isRemote) {
-    return {
-      vision: i.remoteCaps?.supportsVision ?? false,
-      tools: i.remoteCaps?.supportsToolCalling ?? false,
-      thinking: i.remoteCaps?.supportsThinking ?? false,
-      audio: false, // remote audio capability is not tracked today
-    };
-  }
-  if (i.engine === 'litert') {
-    return {
-      vision: !!i.liteRTVision, // from the model flag — shown before load (matches state-sync)
-      audio: !!i.liteRTAudio,
-      tools: i.liteRTLoaded, // native tool calling, but only once the engine is resident
-      thinking: i.liteRTLoaded,
-    };
-  }
-  // llama (and any future engine): the LOADED engine's template-derived capabilities are
-  // authoritative; before the lazy load, fall back to the static name/mmproj PREDICTION so a
-  // just-selected model shows its real affordances (unknown names predict false — no change).
-  return {
-    vision: i.llama.loaded ? i.llama.vision : (i.llamaPredicted?.vision ?? false),
-    audio: i.llama.loaded ? i.llama.audio : false,
-    tools: i.llama.loaded ? i.llama.tools : (i.llamaPredicted?.tools ?? false),
-    thinking: i.llama.loaded ? i.llama.thinking : (i.llamaPredicted?.thinking ?? false),
-  };
+/** Thin presentation projection of capabilities already owned by the shared runtime model. */
+export function engineCapabilitiesFromRuntime(model: RuntimeModel | null): EngineCapabilities {
+  return model ? {
+    vision: !!model.capabilities.vision,
+    audio: !!model.capabilities.audioInput,
+    tools: !!model.capabilities.tools,
+    thinking: !!model.capabilities.thinking,
+  } : { vision: false, audio: false, tools: false, thinking: false };
 }
 
 /**
@@ -96,12 +49,12 @@ export async function unloadAllTextEngines(): Promise<void> {
  * uniform through this one call.
  */
 export async function stopAllTextEngines(): Promise<void> {
-  for (const engine of TEXT_ENGINES) {
-    try {
-      await engine.stopGeneration();
-    } catch {
-      /* best-effort: a stale/idle engine may reject; keep going */
-    }
+  const engine = getActiveEngineService();
+  if (!engine) return;
+  try {
+    await engine.stopGeneration();
+  } catch {
+    /* best-effort: a stale/idle engine may reject */
   }
 }
 
@@ -132,9 +85,10 @@ export function invalidateActiveConversation(): void {
  * loaded (a different llama model resident is NOT ready). Callers pass their own model and use
  * this instead of branching on engine === 'litert' for readiness.
  */
-export function isModelReady(model: { engine?: string; filePath?: string } | null | undefined): boolean {
-  if (!model) return false;
-  return model.engine === 'litert'
+export function isModelReady(model: { id?: string; engine?: string; filePath?: string } | null | undefined): boolean {
+  const active = activeMobileRoute('text').model;
+  if (!model || !active || active.source !== 'local' || active.id !== model.id) return false;
+  return active.providerId === 'litert'
     ? liteRTService.isModelLoaded()
     : llmService.isModelLoaded() && llmService.getLoadedModelPath() === model.filePath;
 }
@@ -163,40 +117,29 @@ export function backendFallbackNotice(model: { engine?: string } | null | undefi
 
 /**
  * Live capabilities of the ACTIVE text model (remote OR local), read from the running services
- * and fed through the one pure rule (deriveEngineCapabilities). The imperative counterpart to the
+ * and read from the canonical shared runtime model. The imperative counterpart to the
  * pure fn: every caller (generation routing, UI capability flags) uses THIS instead of poking
  * llmService / liteRTService directly or branching on engine === 'litert' — so a concrete engine
  * service never has to be imported into a screen (DIP). Adding a backend = extend
- * deriveEngineCapabilities, not the callers (OCP).
+ * shared runtime inventory, not the callers (OCP).
  * `thinking` here is CAPABILITY (does the model support it — drives the UI toggle), not "enabled
  * this turn"; the per-turn enablement lives in wantsLeadingThinkToken.
  */
-export function activeTextCapabilities(i: {
+export function activeTextCapabilities(_i: {
   isRemote: boolean;
-  remoteCaps?: RemoteCaps;
+  remoteCaps?: unknown;
   model: DownloadedModel | null | undefined;
 }): EngineCapabilities {
-  const litert = i.model && isLiteRTModel(i.model) ? i.model : null;
-  return deriveEngineCapabilities({
-    isRemote: i.isRemote,
-    remoteCaps: i.remoteCaps,
-    engine: i.model?.engine,
-    liteRTVision: litert ? litert.liteRTVision : undefined,
-    liteRTAudio: litert ? litert.liteRTAudio : undefined,
-    liteRTLoaded: liteRTService.isModelLoaded(),
-    llama: {
-      loaded: llmService.isModelLoaded(),
-      vision: llmService.getMultimodalSupport()?.vision ?? false,
-      audio: false,
-      tools: llmService.supportsToolCalling(),
-      thinking: llmService.supportsThinking(),
-    },
-    llamaPredicted: i.model?.engine === 'llama' ? predictGgufCapabilities(i.model) : undefined,
-  });
+  const active = activeMobileRoute('text').model;
+  return engineCapabilitiesFromRuntime(active);
 }
 
 /** Local-only convenience for the generation routing path (no remote); reads .tools/.vision. */
 export function activeLocalTextCapabilities(model: DownloadedModel | null | undefined): EngineCapabilities {
+  const active = activeMobileRoute('text').model;
+  if (!model || !active || active.source !== 'local' || active.id !== model.id) {
+    return { vision: false, audio: false, tools: false, thinking: false };
+  }
   return activeTextCapabilities({ isRemote: false, model });
 }
 
@@ -216,13 +159,14 @@ export function wantsLeadingThinkToken(
   model: DownloadedModel | null | undefined,
   opts: { isRemote: boolean },
 ): boolean {
-  if (opts.isRemote) return false;
+  const active = activeMobileRoute('text').model;
+  if (opts.isRemote || !active || active.source !== 'local' || active.id !== model?.id) return false;
   // Read the thinking setting FRESH from the store here — NOT from a value threaded in by the caller.
   // The caller's copy comes from a React render snapshot (genDeps.settings) that lags by one render on a
   // resend, which made the `<|think|>` activation follow the PREVIOUS toggle state → thinking was off-by-one
   // (device 2026-07-14). Both engines now decide from the live value, so a toggle applies to the next turn.
   const thinkingEnabled = useAppStore.getState().settings.thinkingEnabled;
-  return !!model && isLiteRTModel(model) && liteRTService.isModelLoaded()
+  return active.providerId === 'litert' && liteRTService.isModelLoaded()
     ? thinkingEnabled
     : llmService.isGemma4Model() && llmService.isThinkingEnabled();
 }
@@ -234,10 +178,9 @@ export function wantsLeadingThinkToken(
  * operations keep the explicit branch — it should be visible at the call site.
  */
 export function getActiveEngineService(): typeof llmService | typeof liteRTService | null {
-  const { downloadedModels, activeModelId } = useAppStore.getState();
-  const model = downloadedModels.find(m => m.id === activeModelId);
-  if (!model) return null;
-  return model.engine === 'litert' ? liteRTService : llmService;
+  const model = activeMobileRoute('text').model;
+  if (!model || model.source !== 'local') return null;
+  return model.providerId === 'litert' ? liteRTService : llmService;
 }
 
 /**
@@ -252,9 +195,5 @@ export function getActiveEngineService(): typeof llmService | typeof liteRTServi
  * caller's readiness check.
  */
 export function isRemoteTextModelActive(): boolean {
-  const { activeServerId } = useRemoteServerStore.getState();
-  if (!activeServerId) return false;
-  if (!providerRegistry.hasProvider(activeServerId)) return false;
-  if (llmService.isModelLoaded()) return false; // a loaded local model wins over a remote server
-  return true;
+  return activeMobileRoute('text').model?.source === 'remote';
 }
