@@ -137,6 +137,27 @@ for (const file of files) {
   ) {
     report('transcription-workflow-is-shared', fileName, source, source, 'store:actionable-workflow')
   }
+  if (
+    /^(?:src\/screens\/ChatsListScreen|src\/components\/ModelSelectorModal\/index|src\/screens\/HomeScreen\/hooks\/useRemoteModelHandlers)\.tsx?$/.test(fileName) &&
+    /\b(?:selectMobileModel|clearMobileModel|mobileResidencyIntents)\b/.test(text)
+  ) {
+    report('ui-model-commands-are-shared', fileName, source, source, 'ui:direct-selection-or-residency-command')
+  }
+
+  if (
+    fileName === 'src/screens/ChatScreen/mobileChatSession.ts' &&
+    /\b(?:imageIntentDecision|appendProjectKnowledge|composeChatContext)\b/.test(text)
+  ) {
+    report('chat-orchestration-is-shared', fileName, source, source, 'screen:direct-chat-policy')
+  }
+
+  if (
+    fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
+    !/\bModelLifecycleApplicationService\b/.test(text)
+  ) {
+    report('model-lifecycle-transaction-is-shared', fileName, source, source, 'adapter:missing-shared-application-service')
+  }
+
 
   if (
     fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
