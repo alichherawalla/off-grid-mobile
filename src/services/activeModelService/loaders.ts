@@ -12,7 +12,7 @@ import { unloadAllTextEngines } from '../engines';
 import { localDreamGeneratorService as onnxImageGeneratorService } from '../localDreamGenerator';
 import { modelManager } from '../modelManager';
 import { hardwareService } from '../hardware';
-import { modelResidencyManager } from '../modelResidency';
+import { modelResidencyManager } from '../modelServices/residencyBootstrap';
 import logger from '../../utils/logger';
 import RNFS from 'react-native-fs';
 import {

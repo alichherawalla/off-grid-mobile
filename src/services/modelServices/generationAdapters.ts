@@ -13,7 +13,7 @@ import {
 } from '@offgrid/models';
 import type { MediaAttachment, Message } from '../../types';
 import { activeModelService } from '../activeModelService';
-import { modelResidencyManager } from '../modelResidency';
+import { modelResidencyManager } from './residencyBootstrap';
 import { providerRegistry } from '../providers';
 import type { GenerationOptions, LLMProvider } from '../providers/types';
 import { liteRTService } from '../litert';
