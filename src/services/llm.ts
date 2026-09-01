@@ -1,5 +1,12 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
-import { nativeToolCallingSupported, normalizeGenerationDelta, reasoningWireFragment, resolveReasoningPlan, type ReasoningWireFragment } from '@offgrid/models';
+import {
+  mobileNativeRuntimeDefaults,
+  nativeToolCallingSupported,
+  normalizeGenerationDelta,
+  reasoningWireFragment,
+  resolveReasoningPlan,
+  type ReasoningWireFragment,
+} from '@offgrid/models';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
@@ -36,7 +43,9 @@ class LLMService {
   private multimodalSupport: MultimodalSupport | null = null;
   private multimodalInitialized: boolean = false;
   private performanceStats: LLMPerformanceStats = { lastTokensPerSecond: 0, lastDecodeTokensPerSecond: 0, lastTimeToFirstToken: 0, lastGenerationTime: 0, lastTokenCount: 0 };
-  private currentSettings: LLMPerformanceSettings = { nThreads: Platform.OS === 'android' ? 6 : 4, nBatch: 512, contextLength: 2048 };
+  private currentSettings: LLMPerformanceSettings = mobileNativeRuntimeDefaults(
+    Platform.OS === 'android' ? 'android' : 'ios',
+  );
   private gpuEnabled: boolean = false;
   private gpuReason: string = '';
   private gpuDevices: string[] = [];
