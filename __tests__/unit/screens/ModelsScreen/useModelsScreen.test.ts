@@ -159,12 +159,14 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
 }));
 
 // Mock modelLibrary
+const mockSelectMobileModel = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../../src/services', () => ({
   modelLibrary: {
     getImageModelsDirectory: jest.fn(() => '/models/images'),
     addDownloadedImageModel: jest.fn().mockResolvedValue(undefined),
     importLocalModel: jest.fn().mockResolvedValue({ id: 'model-1', name: 'Test Model' }),
   },
+  selectMobileModel: (...args: any[]) => mockSelectMobileModel(...args),
 }));
 
 // Mock utils
@@ -517,12 +519,11 @@ describe('useModelsScreen', () => {
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
-      const mockSetActiveImageModelId = jest.fn();
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
         activeImageModelId: null,
-        setActiveImageModelId: mockSetActiveImageModelId,
+        setActiveImageModelId: jest.fn(),
         addDownloadedImageModel: jest.fn(),
       });
       RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
@@ -533,7 +534,10 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(mockSetActiveImageModelId).toHaveBeenCalled();
+      expect(mockSelectMobileModel).toHaveBeenCalledWith(expect.objectContaining({
+        source: 'local',
+        modality: 'image',
+      }));
     });
 
     it('does not set active image model id when one is already active', async () => {
@@ -557,7 +561,7 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(mockSetActiveImageModelId).not.toHaveBeenCalled();
+      expect(mockSelectMobileModel).not.toHaveBeenCalled();
     });
   });
 
