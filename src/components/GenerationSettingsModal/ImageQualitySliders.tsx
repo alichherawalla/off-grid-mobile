@@ -5,6 +5,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import {
+  DEFAULT_IMAGE_GUIDANCE,
   defaultImageSteps,
   MAX_IMAGE_STEPS,
   SWEET_SPOT_SIZE,
@@ -69,7 +70,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
         testID="guidance-scale"
         label="Guidance Scale"
         description="Higher = follows prompt more strictly (5-15 range)"
-        value={settings.imageGuidanceScale || 7.5}
+        value={settings.imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />

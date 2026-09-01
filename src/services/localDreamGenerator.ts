@@ -1,4 +1,5 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { DEFAULT_IMAGE_GUIDANCE } from '@offgrid/models';
 import {
   ImageGenerationParams,
   ImageGenerationProgress,
@@ -133,7 +134,7 @@ class LocalDreamGeneratorService {
       prompt,
       negativePrompt: params.negativePrompt || '',
       steps: params.steps || 8,
-      guidanceScale: params.guidanceScale || 7.5,
+      guidanceScale: params.guidanceScale || DEFAULT_IMAGE_GUIDANCE,
       seed: params.seed ?? generateRandomSeed(),
       width: params.width || 512,
       height: params.height || 512,
@@ -249,7 +250,7 @@ class LocalDreamGeneratorService {
     if (!this.isAvailable()) {
       return {
         DEFAULT_STEPS: 20,
-        DEFAULT_GUIDANCE_SCALE: 7.5,
+        DEFAULT_GUIDANCE_SCALE: DEFAULT_IMAGE_GUIDANCE,
         DEFAULT_WIDTH: 512,
         DEFAULT_HEIGHT: 512,
         SUPPORTED_WIDTHS: [128, 192, 256, 320, 384, 448, 512],

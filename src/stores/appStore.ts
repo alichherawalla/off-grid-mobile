@@ -9,6 +9,7 @@ import {
   DEFAULT_SPEAKER_DRAIN_MS,
 } from '@offgrid/speech';
 import {
+  DEFAULT_IMAGE_GUIDANCE,
   MOBILE_LITERT_SETTINGS_DEFAULTS,
   MOBILE_TEXT_SETTINGS_DEFAULTS,
   REASONING_BUDGET_AUTO,
@@ -236,7 +237,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
   imageSteps: defaultImageSteps(Platform.OS),
-  imageGuidanceScale: 7.5,
+  imageGuidanceScale: DEFAULT_IMAGE_GUIDANCE,
   imageThreads: 4,
   imageWidth: SWEET_SPOT_SIZE,
   imageHeight: SWEET_SPOT_SIZE,

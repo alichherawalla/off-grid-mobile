@@ -140,6 +140,41 @@ for (const file of files) {
   }
 
   if (
+    /^(?:src\/stores\/appStore|src\/services\/localDreamGenerator|src\/components\/GenerationSettingsModal\/ImageQualitySliders)\.tsx?$/.test(fileName) &&
+    /(?:guidanceScale|imageGuidanceScale)[^\n]{0,30}(?:\|\||:)\s*7\.5/.test(text)
+  ) {
+    report('image-settings-defaults-are-shared', fileName, source, source, 'local:image-guidance-default')
+  }
+
+  if (
+    fileName === 'src/services/llm.ts' &&
+    /\b(?:effectiveAvailableMB|resolveSafeContext|checkMemoryForModel|getGpuLayersForDevice)\b|backend\s*===\s*INFERENCE_BACKENDS\.(?:HTP|OPENCL)/.test(text)
+  ) {
+    report('mobile-text-load-policy-is-shared', fileName, source, source, 'local:text-load-policy')
+  }
+
+  if (
+    fileName === 'src/services/llmHelpers.ts' &&
+    /\b(?:GPU_INIT_TIMEOUT_MS|HTP_INIT_TIMEOUT_MS|GPU_INIT_TIMEOUT_MS_IOS|gpuInitTimeoutMs|tryGpuInit|withTimeout)\b|Attempt\s+[123]\/3/.test(text)
+  ) {
+    report('mobile-native-load-fallback-is-shared', fileName, source, source, 'local:native-load-fallback')
+  }
+
+  if (
+    fileName === 'src/services/contextCompaction.ts' &&
+    /class\s+ContextCompactionService|\b(?:planContextCompaction|compactedConversation|SUMMARIZER_SYSTEM_PROMPT|oldMessages|summaryTokenBudget)\b/.test(text)
+  ) {
+    report('context-compaction-workflow-is-shared', fileName, source, source, 'local:compaction-workflow')
+  }
+
+  if (
+    fileName === 'src/services/llmSafetyChecks.ts' &&
+    /\b(?:estimateTextLoadMemory|modelMemoryFit|planSafeContext|checkMemoryForModel|resolveSafeContext)\b/.test(text)
+  ) {
+    report('mobile-load-admission-is-shared', fileName, source, source, 'local:load-admission')
+  }
+
+  if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
   ) {
