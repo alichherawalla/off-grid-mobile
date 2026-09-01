@@ -1,6 +1,6 @@
 import type { GenerationMeta } from '../types';
 import { useAppStore } from '../stores';
-import { getActiveEngineService } from './engines';
+import { mobileTextEngineControl } from './modelServices/textEngineControl';
 import { effectiveCacheType } from './llmHelpers';
 import { liteRTService } from './litert';
 import { llmService } from './llm';
@@ -51,7 +51,7 @@ export function buildGenerationMetaImpl(service: any): GenerationMeta {
   } else {
     const { settings } = useAppStore.getState();
     const modelName = active?.name;
-    if (getActiveEngineService() === liteRTService) {
+    if (mobileTextEngineControl.activeLocalProviderId() === 'litert') {
       meta = liteRTMeta(service, modelName);
     } else {
       const { gpu, gpuBackend, gpuLayers } = llmService.getGpuInfo() ?? {};

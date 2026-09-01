@@ -24,6 +24,7 @@ import { modelInputAudioUris, modelInputImageUris } from '../modelMedia';
 import { getToolExtensions } from '../tools/extensions';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
+import { mobileTextEngineControl } from './textEngineControl';
 
 function textAndAttachments(
   content: GenerationMessage['content'],
@@ -240,7 +241,10 @@ async function* liteRTChunks(
   const abort = () => liteRTService.stopGeneration().catch(() => undefined);
   request.signal?.addEventListener('abort', abort, { once: true });
   const operation = liteRTService.generateRaw(
-    current?.content ?? '',
+    mobileTextEngineControl.preparePrompt(
+      current?.content ?? '',
+      request.reasoning?.enabled === true,
+    ),
     {
       imageUris: modelInputImageUris(current?.attachments),
       audioUris: modelInputAudioUris(current?.attachments),
@@ -356,7 +360,7 @@ function adapter(id: string): GenerationAdapter {
       }
       if (localRuntime === 'llama-rn') {
         if (request.identity?.conversationId) {
-          await llmService.prepareConversationBoundary(request.identity.conversationId);
+          await mobileTextEngineControl.prepareActiveConversation(request.identity.conversationId);
         }
         yield* providerChunks(llamaTextTransport, model.id, request, reasoningWire);
         return;
@@ -372,8 +376,7 @@ function adapter(id: string): GenerationAdapter {
 
 /** Remove an ephemeral shared-generation prompt from either native text runtime. */
 export async function clearMobileEphemeralTextState(): Promise<void> {
-  liteRTService.invalidateConversation();
-  await llmService.clearKVCache(true);
+  await mobileTextEngineControl.invalidateAllConversations();
 }
 
 /** Stop the remote I/O boundary selected by Shared LLMService. */

@@ -8,7 +8,7 @@
  * ASSERTS THE RESIDENCY MANAGER'S ACCOUNTING (modelResidencyManager.getResidents()) — the single-heavy-text
  * invariant is an accounting rule (per the §4 gesture-less-invariant carve-out). This is the FIX for a prior
  * FALSE GREEN: the old test asserted engine booleans (liteRTService/llmService.isModelLoaded), which the
- * REDUNDANT unloadAllTextEngines() satisfies even if the residency SWAP is deleted — so the residency
+ * direct native unloads can pass even if the residency SWAP is deleted — so the residency
  * accounting could go stale/co-resident and the test stayed green. getResidents() reflects the accounting,
  * which only updates when the swap's register runs — so a swap regression is caught.
  *

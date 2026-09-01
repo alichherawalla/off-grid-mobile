@@ -3,7 +3,7 @@ import { admitChatImageAttachment } from '@offgrid/models';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
-import { localModelAcceptsImages } from '../../services/engines';
+import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { reportModelFailure } from '../../services/modelFailureHandler';
 import { useChatStore } from '../../stores';
@@ -66,7 +66,7 @@ function blockedImageForNonVisionModel(deps: GenerationDeps, attachments?: Media
   const admission = admitChatImageAttachment({
     hasImage: !!attachments?.some(attachment => attachment.type === 'image'),
     remote: !!deps.activeModelInfo?.isRemote,
-    localVisionReady: localModelAcceptsImages(deps.activeModel),
+    localVisionReady: mobileTextEngineControl.acceptsImage(deps.activeModel?.id),
     visionRepairAvailable: needsVisionRepair(deps.activeModel),
   });
   if (admission.allowed) return false;

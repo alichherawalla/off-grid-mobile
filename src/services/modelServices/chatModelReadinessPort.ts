@@ -5,7 +5,7 @@ import {
 import type { DownloadedModel } from '../../types';
 import { isLiteRTModel } from '../../types';
 import { getActiveModels } from './modelState';
-import { isModelReady, activeLocalTextCapabilities } from '../engines';
+import { mobileTextEngineControl } from './textEngineControl';
 import { isOverridableMemoryError } from '../../utils/modelLoadErrors';
 import { mobileResidencyIntents } from './residencyIntents';
 
@@ -25,10 +25,10 @@ export function mobileChatModelReadiness(
     return {
       remote: input.remote,
       selected: input.remote || !!(model && input.activeModelId),
-      resident: input.remote || isModelReady(model),
+      resident: input.remote || mobileTextEngineControl.isReady(model?.id),
       loading: getActiveModels().text.isLoading,
       expectsVision: !!model && !isLiteRTModel(model) && !!model.mmProjPath,
-      visionReady: !!model && activeLocalTextCapabilities(model).vision,
+      visionReady: !!model && mobileTextEngineControl.capabilities(model.id).vision,
     };
   };
 

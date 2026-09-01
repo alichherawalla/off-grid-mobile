@@ -17,7 +17,7 @@ import logger from '../../utils/logger';
 import { executeToolCall } from '../tools';
 import { getToolsAsOpenAISchema } from '../tools';
 import { getToolExtensions } from '../tools/extensions';
-import { isRemoteTextModelActive } from '../engines';
+import { mobileTextEngineControl } from './textEngineControl';
 import { isMcpEnabled } from '../mcpContextBoost';
 import { executeMobileText } from '../mobileSidecarGeneration';
 import {
@@ -91,7 +91,7 @@ export async function mobileToolDefinitions(
     })),
     builtInTools,
     externalTools,
-    remoteModel: isRemoteTextModelActive(),
+    remoteModel: mobileTextEngineControl.isRemoteActive(),
     embeddingRouting: isMcpEnabled(),
     modelRouting: true,
     selectionLimit: 12,

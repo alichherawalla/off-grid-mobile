@@ -124,6 +124,10 @@ for (const file of files) {
     report('dead-boot-preloader-is-removed', fileName, source, source, 'file:modelPreloader')
   }
 
+  if (fileName === 'src/services/engines.ts') {
+    report('text-engine-policy-is-shared', fileName, source, source, 'obsolete:parallel-engine-facade')
+  }
+
   if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
@@ -277,6 +281,9 @@ for (const file of files) {
 
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text
+      if (/services\/engines$/.test(specifier)) {
+        report('text-engine-policy-is-shared', fileName, source, node, `import:${specifier}`)
+      }
       if (isUi && /(services\/litert(?:\.|$)|llama|whisperService|localDreamGenerator|imageGenerationService|adapters\/providers)/i.test(specifier)) {
         report('ui-does-not-import-raw-model-engine', fileName, source, node, `import:${specifier}`)
       }

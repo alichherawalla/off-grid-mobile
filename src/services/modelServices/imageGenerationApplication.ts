@@ -9,7 +9,7 @@ import { useAppStore } from '../../stores/appStore';
 import type { GeneratedImage } from '../../types';
 import { generateId } from '../../utils/generateId';
 import { isOverridableMemoryError } from '../../utils/modelLoadErrors';
-import { getActiveEngineService } from '../engines';
+import { mobileTextEngineControl } from './textEngineControl';
 import { enhanceImagePrompt } from '../imagePromptEnhancement';
 import { saveImageGenerationResult } from '../imageGenerationResult';
 import type { ActiveImageModel } from '../imageGenerationTypes';
@@ -143,7 +143,7 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
       if (executing) return;
       await Promise.allSettled([
         localDreamGeneratorService.cancelGeneration(),
-        getActiveEngineService()?.stopGeneration() ?? Promise.resolve(),
+        mobileTextEngineControl.stopActive(),
       ]);
     },
     async ejectForRetry() {

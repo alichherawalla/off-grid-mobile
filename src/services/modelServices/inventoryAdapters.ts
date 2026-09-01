@@ -86,12 +86,12 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
       streaming: true,
       vision: model.engine === 'litert'
         ? model.liteRTVision
-        : !!model.isVisionModel || !!model.mmProjPath,
+        : !!model.mmProjPath,
       audioInput: model.engine === 'litert' && !!model.liteRTAudio,
       // Mobile provides the portable tool loop for every local text route. The
       // catalog flag describes native template evidence, not route capability.
       tools: true,
-      thinking: predicted.thinking,
+      thinking: model.engine === 'litert' ? true : predicted.thinking,
     },
     reasoning: model.engine === 'llama' && loaded
       ? llmService.getReasoningMetadata()

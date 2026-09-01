@@ -12,7 +12,7 @@ import {
 } from '../../services';
 import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { selectMobileModel } from '../../services/modelServices';
-import { activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
+import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import logger from '../../utils/logger';
@@ -22,10 +22,9 @@ import { mobileChatSession } from './mobileChatSession';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-/** Vision support for a just-loaded local model, via the single engine-registry reader
- *  (engines.activeLocalTextCapabilities) — so these post-load sites don't branch on the engine. */
+/** Vision support for a just-loaded local model from Shared's canonical route projection. */
 function loadedModelVision(model: DownloadedModel): boolean {
-  return activeLocalTextCapabilities(model).vision;
+  return mobileTextEngineControl.capabilities(model.id).vision;
 }
 
 type ActiveModelInfo = {
@@ -79,10 +78,10 @@ function addSystemMsg(
  * Surface a silent backend downgrade after a successful load — NOT gated on showGenerationDetails:
  * a user who explicitly selected GPU and got CPU must see it without any debug setting (the
  * device-reported "Backend=GPU but the turn ran on CPU" class). The verdict is owned by the
- * engine layer (engines.backendFallbackNotice); this only renders it.
+ * Shared control plane through the native runtime port; this only renders it.
  */
 function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'activeConversationId' | 'addMessage'>) {
-  const notice = backendFallbackNotice(deps.activeModel);
+  const notice = mobileTextEngineControl.backendFallbackNotice(deps.activeModel?.id);
   if (!notice || !deps.activeConversationId) return;
   deps.addMessage(deps.activeConversationId, {
     role: 'assistant',
@@ -297,7 +296,7 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
     }, 0);
     return () => { cancelled = true; clearTimeout(timer); };
 
-  }, []);
+  }, [setDownloadedImageModels]);
 }
 
 type ModelStateSyncDeps = {
@@ -333,21 +332,13 @@ export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
   }, [prepareSelectedModel, activeModelInfo.isRemote, activeModelId, activeModel?.filePath]);
 
   useEffect(() => {
-    // Single capability rule (engines.activeTextCapabilities); vision keys on activeModelInfo.isRemote.
-    setSupportsVision(activeTextCapabilities({
-      isRemote: activeModelInfo.isRemote,
-      remoteCaps: activeRemoteModel?.capabilities,
-      model: activeModel,
-    }).vision);
-  }, [activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading]);
+    // Shared projects the canonical route capabilities for every runtime.
+    setSupportsVision(mobileTextEngineControl.capabilities(activeModelId).vision);
+  }, [activeModelId, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading, setSupportsVision]);
   useEffect(() => {
     // Use the same canonical route source for tool and thinking capabilities.
-    const caps = activeTextCapabilities({
-      isRemote: activeModelInfo.isRemote,
-      remoteCaps: activeRemoteModel?.capabilities,
-      model: activeModel,
-    });
+    const caps = mobileTextEngineControl.capabilities(activeModelId);
     setSupportsToolCalling(caps.tools);
     setSupportsThinking(caps.thinking);
-  }, [activeModelId, activeModel?.engine, isModelLoading, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking]);
+  }, [activeModelId, activeModel?.engine, isModelLoading, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking, setSupportsThinking, setSupportsToolCalling]);
 }

@@ -4,7 +4,7 @@ import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';
 import { mobileResidencyIntents } from './modelServices/residencyIntents';
 import { selectedTextModelId } from './modelServices/modelState';
-import { getActiveEngineService, isRemoteTextModelActive } from './engines';
+import { mobileTextEngineControl } from './modelServices/textEngineControl';
 import { executeMobileText } from './mobileSidecarGeneration';
 import {
   buildEnhancementCardContent,
@@ -26,8 +26,8 @@ export async function enhanceImagePrompt(
     inspectText() {
       return {
         selected: !!selectedTextModelId(),
-        remote: isRemoteTextModelActive(),
-        resident: getActiveEngineService()?.isModelLoaded() ?? false,
+        remote: mobileTextEngineControl.isRemoteActive(),
+        resident: mobileTextEngineControl.isReady(),
       };
     },
     async loadSelectedText() {
@@ -42,7 +42,7 @@ export async function enhanceImagePrompt(
       );
     },
     async stopGeneration() {
-      await getActiveEngineService()?.stopGeneration();
+      await mobileTextEngineControl.stopActive();
     },
     onStatus(status) {
       setState(status === 'loading-model'

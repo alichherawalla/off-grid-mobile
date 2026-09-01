@@ -24,7 +24,7 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
       selectMobileModel,
     } = require('../../../src/services/modelServices');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
-    const { isModelReady } = require('../../../src/services/engines');
+    const { mobileTextEngineControl } = require('../../../src/services/modelServices/textEngineControl');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
      
@@ -43,12 +43,12 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
       modelId: model.id,
     });
     await activeModelService.loadTextModel('llm');
-    expect(isModelReady(model)).toBe(true);
+    expect(mobileTextEngineControl.isReady(model.id)).toBe(true);
     expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
 
     // Unload — no longer ready/resident.
     await activeModelService.unloadTextModel();
-    expect(isModelReady(model)).toBe(false);
+    expect(mobileTextEngineControl.isReady(model.id)).toBe(false);
     expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
 
     // Delete — removed from the library.

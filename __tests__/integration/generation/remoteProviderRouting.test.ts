@@ -7,11 +7,7 @@ import {
   refreshMobileModelServices,
   selectMobileModel,
 } from '../../../src/services/modelServices';
-import {
-  activeTextCapabilities,
-  getActiveEngineService,
-  isRemoteTextModelActive,
-} from '../../../src/services/engines';
+import { mobileTextEngineControl } from '../../../src/services/modelServices/textEngineControl';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 import { createDownloadedModel } from '../../utils/factories';
 import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
@@ -54,9 +50,9 @@ describe('canonical Mobile text route authority', () => {
     const active = activeMobileModel('text');
     expect(active.model).toMatchObject({ id: local.id, source: 'local', providerId: 'llama' });
     expect(remoteTextTransportRegistry.ids()).toEqual([]);
-    expect(getActiveEngineService()).not.toBeNull();
-    expect(isRemoteTextModelActive()).toBe(false);
-    expect(activeTextCapabilities({ isRemote: false, model: local })).toEqual({
+    expect(mobileTextEngineControl.activeLocalProviderId()).toBe('llama');
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(false);
+    expect(mobileTextEngineControl.capabilities(local.id)).toEqual({
       vision: false, audio: false, tools: true, thinking: false,
     });
   });
@@ -79,9 +75,9 @@ describe('canonical Mobile text route authority', () => {
 
     expect(activeMobileModel('text').model).toMatchObject({ id: modelId, source: 'remote', serverId });
     expect(remoteTextTransportRegistry.get(serverId)).toBe(transport);
-    expect(getActiveEngineService()).toBeNull();
-    expect(isRemoteTextModelActive()).toBe(true);
-    expect(activeTextCapabilities({ isRemote: false, model: local })).toEqual({
+    expect(mobileTextEngineControl.activeLocalProviderId()).toBeNull();
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
+    expect(mobileTextEngineControl.capabilities(modelId)).toEqual({
       vision: true, audio: false, tools: true, thinking: true,
     });
   });
@@ -107,7 +103,7 @@ describe('canonical Mobile text route authority', () => {
     expect(active.selectedId).not.toBeNull();
     expect(active.model).toMatchObject({ id: modelId, source: 'remote', ready: false });
     expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
-    expect(isRemoteTextModelActive()).toBe(true);
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
     expect(mobileLLMService.resolveRoute({ modality: 'text', routeId: active.selectedId!, allowFallback: false }))
       .toMatchObject({ selected: null, candidates: [], requested: { ready: false } });
     const conversationId = setupWithConversation({ modelId });
@@ -137,7 +133,7 @@ describe('canonical Mobile text route authority', () => {
 
     expect(activeMobileModel('text').model).toMatchObject({ id: local.id, source: 'local' });
     expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
-    expect(isRemoteTextModelActive()).toBe(false);
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(false);
   });
 
   it('selects and clears a remote embedding route through the same server control plane', async () => {
