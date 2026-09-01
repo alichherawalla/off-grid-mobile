@@ -63,7 +63,7 @@ function savedTextModels(
         supportsThinking: false,
       },
       details: { serverName: option.serverName },
-      lastUpdated: server.lastHealthCheck ?? server.createdAt,
+      lastUpdated: server.createdAt,
     },
   );
 }
@@ -166,7 +166,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // Group remote models by server for TextTab — exclude servers known to be offline
   const remoteTextModels = useMemo(() => {
     return servers
-      .filter(server => serverHealth[server.id]?.isHealthy !== false)
+      .filter(server => serverHealth[server.id]?.status !== 'unhealthy')
       .map(server => ({
         serverId: server.id,
         serverName: server.name,
@@ -177,7 +177,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 
   const remoteImageModels = useMemo(() => {
     return servers
-      .filter(server => serverHealth[server.id]?.isHealthy !== false)
+      .filter(server => serverHealth[server.id]?.status !== 'unhealthy')
       .map(server => ({
         serverId: server.id,
         serverName: server.name,
@@ -187,7 +187,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
           serverId: option.serverId,
           capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
           details: { serverName: option.serverName },
-          lastUpdated: server.lastHealthCheck ?? server.createdAt,
+          lastUpdated: server.createdAt,
         })),
       }))
       .filter(group => group.models.length > 0);

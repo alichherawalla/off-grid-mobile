@@ -28,7 +28,7 @@ export async function runRemoteImageGeneration(
   deps: RemoteImageGenerationDeps,
 ): Promise<GeneratedImage | null> {
   const server = useRemoteServerStore.getState().getActiveRemoteMediaServer('image');
-  const modelId = server?.mediaModels?.image;
+  const modelId = server?.selections?.image;
   if (!server || !modelId) return deps.fail('No remote image model is configured');
   const settings = useAppStore.getState().settings;
   const width = Math.max(SWEET_SPOT_SIZE, settings.imageWidth || SWEET_SPOT_SIZE);

@@ -5,7 +5,7 @@
  * Handles model discovery, streaming generation, vision, and tool calling.
  */
 
-import { Message } from '../../types';
+import { Message } from '../../../types';
 import type {
   LLMProvider,
   ProviderType,
@@ -13,16 +13,16 @@ import type {
   GenerationOptions,
   StreamCallbacks,
 } from './types';
-import { createStreamingRequest, parseOpenAIMessage } from '../httpClient';
+import { createStreamingRequest, parseOpenAIMessage } from '../../httpClient';
 import { ThinkTagParser, processDelta, generateOllamaChatImpl } from './openAICompatibleStream';
 import { buildOpenAIMessagesImpl } from './openAIMessageBuilder';
-import logger from '../../utils/logger';
+import logger from '../../../utils/logger';
 import type {
   OpenAIChatMessage,
   OpenAIConfig,
   OpenAIStreamState,
 } from './openAICompatibleTypes';
-import { remoteAuthorizationHeaders } from '../remoteTransportPolicy';
+import { remoteAuthorizationHeaders } from '@offgrid/models';
 import { openAICompatibleCompletionPayload } from '@offgrid/models';
 
 export type { OpenAIChatMessage, OpenAIConfig } from './openAICompatibleTypes';

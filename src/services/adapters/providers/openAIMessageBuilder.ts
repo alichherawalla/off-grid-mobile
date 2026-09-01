@@ -2,13 +2,13 @@
  * OpenAI-Compatible Provider — message builder
  * Converts app Message[] to OpenAI chat message format
  */
-import type { Message } from '../../types';
+import type { Message } from '../../../types';
 import type { GenerationOptions, ProviderCapabilities } from './types';
 import type { OpenAIChatMessage, OpenAIContentPart, OpenAIToolCall } from './openAICompatibleTypes';
-import { imageToBase64DataUrl } from '../httpClient';
-import { useAppStore } from '../../stores/appStore';
-import logger from '../../utils/logger';
-import { generateId } from '../../utils/generateId';
+import { imageToBase64DataUrl } from '../../httpClient';
+import { useAppStore } from '../../../stores/appStore';
+import logger from '../../../utils/logger';
+import { generateId } from '../../../utils/generateId';
 
 /** Build multimodal content array for a vision-capable user message */
 async function buildVisionContent(

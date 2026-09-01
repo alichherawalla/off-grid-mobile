@@ -30,20 +30,20 @@ function applyDiscoveredModelIds(
   setters: ModelIdSetters,
 ): void {
   if (result.modelManagement === 'offgrid-desktop-v1') {
-    setters.text(result.mediaModels?.text ?? '');
-    setters.image(result.mediaModels?.image ?? '');
-    setters.transcription(result.mediaModels?.transcription ?? '');
-    setters.voice(result.mediaModels?.voice ?? '');
+    setters.text(result.selections?.text ?? '');
+    setters.image(result.selections?.image ?? '');
+    setters.transcription(result.selections?.transcription ?? '');
+    setters.voice(result.selections?.voice ?? '');
     return;
   }
   setters.text(
-    current => current || result.mediaModels?.text || result.models?.[0]?.id || '',
+    current => current || result.selections?.text || result.models?.[0]?.id || '',
   );
-  setters.image(current => current || result.mediaModels?.image || '');
+  setters.image(current => current || result.selections?.image || '');
   setters.transcription(
-    current => current || result.mediaModels?.transcription || '',
+    current => current || result.selections?.transcription || '',
   );
-  setters.voice(current => current || result.mediaModels?.voice || '');
+  setters.voice(current => current || result.selections?.voice || '');
 }
 
 export function useRemoteServerForm({
@@ -67,12 +67,12 @@ export function useRemoteServerForm({
     message: string;
   } | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<RemoteModel[]>([]);
-  const [modelCatalog, setModelCatalog] = useState<RemoteModelCatalog>({});
+  const [catalog, setModelCatalog] = useState<RemoteModelCatalog>({});
   const [modelManagement, setModelManagement] = useState<
     RemoteServer['modelManagement']
   >(server?.modelManagement);
   const [confirmedMediaModels, setConfirmedMediaModels] =
-    useState<RemoteMediaModelIds>(server?.mediaModels ?? {});
+    useState<RemoteMediaModelIds>(server?.selections ?? {});
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Initialize form when editing existing server
@@ -82,10 +82,10 @@ export function useRemoteServerForm({
       setName(server.name);
       setEndpoint(server.endpoint);
       setNotes(server.notes || '');
-      setTextModelId(server.mediaModels?.text || '');
-      setImageModelId(server.mediaModels?.image || '');
-      setTranscriptionModelId(server.mediaModels?.transcription || '');
-      setVoiceModelId(server.mediaModels?.voice || '');
+      setTextModelId(server.selections?.text || '');
+      setImageModelId(server.selections?.image || '');
+      setTranscriptionModelId(server.selections?.transcription || '');
+      setVoiceModelId(server.selections?.voice || '');
       // Load existing API key from keychain so user can see it's set
       remoteServerManager
         .getApiKey(server.id)
@@ -109,9 +109,9 @@ export function useRemoteServerForm({
     setErrors({});
     setTestResult(null);
     setDiscoveredModels([]);
-    setModelCatalog(server?.modelCatalog ?? {});
+    setModelCatalog(server?.catalog ?? {});
     setModelManagement(server?.modelManagement);
-    setConfirmedMediaModels(server?.mediaModels ?? {});
+    setConfirmedMediaModels(server?.selections ?? {});
     return () => {
       cancelled = true;
     };
@@ -139,7 +139,7 @@ export function useRemoteServerForm({
   const applySuccessfulConnection = useCallback((result: ServerTestResult) => {
     const modelCount =
       (result.models?.length ?? 0) +
-      Object.values(result.modelCatalog ?? {}).reduce(
+      Object.values(result.catalog ?? {}).reduce(
         (count, models) => count + (models?.length ?? 0),
         0,
       );
@@ -152,9 +152,9 @@ export function useRemoteServerForm({
       }`,
     });
     setDiscoveredModels(result.models ?? []);
-    setModelCatalog(result.modelCatalog ?? {});
+    setModelCatalog(result.catalog ?? {});
     setModelManagement(result.modelManagement);
-    setConfirmedMediaModels(result.mediaModels ?? {});
+    setConfirmedMediaModels(result.selections ?? {});
     applyDiscoveredModelIds(result, {
       text: setTextModelId,
       image: setImageModelId,
@@ -221,7 +221,7 @@ export function useRemoteServerForm({
 
   const saveServer = useCallback(async () => {
     try {
-      const mediaModels = {
+      const selections = {
         ...(textModelId.trim() ? { text: textModelId.trim() } : {}),
         ...(imageModelId.trim() ? { image: imageModelId.trim() } : {}),
         ...(transcriptionModelId.trim()
@@ -235,10 +235,10 @@ export function useRemoteServerForm({
         current: RemoteMediaModelIds,
       ) => {
         if (!desktopManaged) return;
-        if (mediaModels.text && mediaModels.text !== current.text) {
+        if (selections.text && selections.text !== current.text) {
           await remoteServerManager.setActiveRemoteTextModel(
             serverId,
-            mediaModels.text,
+            selections.text,
           );
         }
         for (const category of [
@@ -246,7 +246,7 @@ export function useRemoteServerForm({
           'transcription',
           'voice',
         ] as const) {
-          const modelId = mediaModels[category];
+          const modelId = selections[category];
           if (modelId && modelId !== current[category]) {
             await remoteServerManager.setActiveRemoteMediaModel(
               serverId,
@@ -262,8 +262,8 @@ export function useRemoteServerForm({
           endpoint,
           notes,
           apiKey,
-          mediaModels: desktopManaged ? server.mediaModels : mediaModels,
-          modelCatalog,
+          selections: desktopManaged ? server.selections : selections,
+          catalog,
           modelManagement,
         });
         if (discoveredModels.length > 0) {
@@ -274,7 +274,7 @@ export function useRemoteServerForm({
               discoveredModels.map(model => ({ ...model, serverId: server.id })),
             );
         }
-        await activateDesktopSelections(server.id, server.mediaModels ?? {});
+        await activateDesktopSelections(server.id, server.selections ?? {});
         if (
           !desktopManaged &&
           textModelId.trim() &&
@@ -290,11 +290,11 @@ export function useRemoteServerForm({
         const newServer = await remoteServerManager.addServer({
           name,
           endpoint,
-          providerType: 'openai-compatible',
+          provider: 'openai-compatible',
           notes: notes || undefined,
           apiKey: apiKey || undefined,
-          mediaModels: desktopManaged ? confirmedMediaModels : mediaModels,
-          modelCatalog,
+          selections: desktopManaged ? confirmedMediaModels : selections,
+          catalog,
           modelManagement,
         });
         if (discoveredModels.length > 0) {
@@ -337,7 +337,7 @@ export function useRemoteServerForm({
     imageModelId,
     transcriptionModelId,
     voiceModelId,
-    modelCatalog,
+    catalog,
     modelManagement,
     confirmedMediaModels,
     discoveredModels,
@@ -385,7 +385,7 @@ export function useRemoteServerForm({
     isTesting,
     testResult,
     discoveredModels,
-    modelCatalog,
+    catalog,
     modelManagement,
     handleTestConnection,
     handleSave,

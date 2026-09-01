@@ -7,7 +7,7 @@
 
 import type { LLMProvider } from './types';
 import { localProvider } from './localProvider';
-import logger from '../../utils/logger';
+import logger from '../../../utils/logger';
 
 type ProviderChangeListener = (providerId: string | null) => void;
 

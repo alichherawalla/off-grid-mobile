@@ -9,7 +9,7 @@ import type {
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
   remoteAuthorizationHeaders,
-} from './remoteTransportPolicy';
+} from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 

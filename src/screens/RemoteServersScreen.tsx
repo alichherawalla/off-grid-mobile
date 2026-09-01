@@ -108,7 +108,7 @@ export const RemoteServersScreen: React.FC = () => {
           remoteServerManager.addServer({
             name: d.name,
             endpoint: d.endpoint,
-            providerType: 'openai-compatible',
+            provider: 'openai-compatible',
           }),
         ),
       );
@@ -156,7 +156,7 @@ export const RemoteServersScreen: React.FC = () => {
         remoteServerManager.clearActiveRemoteTextModel();
         return;
       }
-      const textModelId = server.mediaModels?.text;
+      const textModelId = server.selections?.text;
       if (textModelId) {
         try {
           await remoteServerManager.setActiveRemoteTextModel(server.id, textModelId);
@@ -274,15 +274,15 @@ export const RemoteServersScreen: React.FC = () => {
               const health = serverHealth[server.id];
 
               let statusColor = styles.statusDotUnknown;
-              if (health?.isHealthy === true)
+              if (health?.status === 'healthy')
                 statusColor = styles.statusDotActive;
-              else if (health?.isHealthy === false)
+              else if (health?.status === 'unhealthy')
                 statusColor = styles.statusDotInactive;
 
               let statusText = 'Not checked yet';
               if (isTesting) statusText = 'Checking';
-              else if (health?.isHealthy === true) statusText = 'Connected';
-              else if (health?.isHealthy === false)
+              else if (health?.status === 'healthy') statusText = 'Connected';
+              else if (health?.status === 'unhealthy')
                 statusText = 'Not answering';
 
               return (

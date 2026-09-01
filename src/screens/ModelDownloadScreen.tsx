@@ -118,7 +118,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
       let added = 0;
       for (const d of discovered) {
         if (existing.has(d.endpoint.replace(/\/$/, ''))) continue;
-        await remoteServerManager.addServer({ name: d.name, endpoint: d.endpoint, providerType: 'openai-compatible' });
+        await remoteServerManager.addServer({ name: d.name, endpoint: d.endpoint, provider: 'openai-compatible' });
         added += 1;
       }
       const { ran, reachable } = await refreshServerHealth();

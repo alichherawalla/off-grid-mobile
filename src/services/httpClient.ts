@@ -7,7 +7,7 @@
 
 import logger from '../utils/logger';
 import { createSSELineProcessor } from './httpClientSSE';
-import { isCredentialTransportDowngrade } from './remoteTransportPolicy';
+import { isCredentialTransportDowngrade } from '@offgrid/models';
 
 export {
   parseOpenAIMessage,

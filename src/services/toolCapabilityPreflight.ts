@@ -1,5 +1,5 @@
 import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { providerRegistry } from './providers';
+import { providerRegistry } from './adapters/providers';
 
 export const REMOTE_TOOLS_UNAVAILABLE =
   'This remote model cannot run tools from Chat. Select a model with tool support, or use it as the Computer Use specialist.';

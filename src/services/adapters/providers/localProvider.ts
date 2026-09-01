@@ -5,8 +5,8 @@
  * This allows the generation service to use local and remote providers uniformly.
  */
 
-import { Message, GenerationMeta } from '../../types';
-import { llmService } from '../llm';
+import { Message, GenerationMeta } from '../../../types';
+import { llmService } from '../../llm';
 import type {
   LLMProvider,
   ProviderType,
@@ -14,7 +14,7 @@ import type {
   GenerationOptions,
   StreamCallbacks,
 } from './types';
-import logger from '../../utils/logger';
+import logger from '../../../utils/logger';
 
 /** Local provider capabilities - dynamically determined from llmService */
 function getLocalCapabilities(): ProviderCapabilities {

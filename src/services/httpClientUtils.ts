@@ -6,7 +6,7 @@ import { isTailscaleIPv4 } from '../utils/network';
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
   remoteAuthorizationHeaders,
-} from './remoteTransportPolicy';
+} from '@offgrid/models';
 
 function mimeTypeFromExtension(ext: string | undefined): string {
   if (ext === 'png') return 'image/png';

@@ -5,7 +5,7 @@
 // and only the shared preparation, meta and tool-loop wiring is common to both.
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { runToolLoop } from './generationToolLoop';
-import type { GenerationOptions, CompletionResult } from './providers/types';
+import type { GenerationOptions, CompletionResult } from './adapters/providers/types';
 import logger from '../utils/logger';
 import {
   FLUSH_INTERVAL_MS,

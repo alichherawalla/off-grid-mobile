@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedPressable } from '../AnimatedPressable';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { selectMobileModel } from '../../services/modelServices';
-import { remoteServerModelOptions } from '../../services/remoteModelSelection';
+import { remoteServerModelOptions } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useTheme, useThemedStyles } from '../../theme';

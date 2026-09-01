@@ -2,9 +2,9 @@
  * OpenAI-Compatible Provider — streaming utilities
  * ThinkTagParser, processDelta, generateOllamaChatImpl
  */
-import { createNDJSONStreamingRequest } from '../httpClient';
-import logger from '../../utils/logger';
-import { REASONING_DELIMITERS, partialTagSuffix, maxPartialTagSuffix } from '../../utils/messageContent';
+import { createNDJSONStreamingRequest } from '../../httpClient';
+import logger from '../../../utils/logger';
+import { REASONING_DELIMITERS, partialTagSuffix, maxPartialTagSuffix } from '../../../utils/messageContent';
 import type { StreamCallbacks } from './types';
 import type {
   OpenAIChatMessage,

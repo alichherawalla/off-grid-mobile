@@ -6,7 +6,7 @@
  */
 
 import type { ReasoningWireFragment } from '@offgrid/models';
-import { Message, GenerationMeta } from '../../types';
+import { Message, GenerationMeta } from '../../../types';
 
 /** Provider types */
 export type ProviderType = 'local' | 'openai-compatible' | 'anthropic';

@@ -3,7 +3,7 @@ import { showAlert, hideAlert } from '../../../components';
 import { remoteServerManager } from '../../../services';
 import { discoverLANServers } from '../../../services/networkDiscovery';
 import { useAppStore } from '../../../stores/appStore';
-import { shouldAutoDiscoverRemoteModels } from '../../../utils/remoteAutoDiscovery';
+import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import type { HomeScreenNavigationProp } from './types';
 import logger from '../../../utils/logger';
 
@@ -21,7 +21,7 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
       const added = await remoteServerManager.addServer({
         name: server.name,
         endpoint: server.endpoint,
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
       remoteServerManager.testConnection(added.id).catch(() => { });
     }

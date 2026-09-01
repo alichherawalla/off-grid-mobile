@@ -1,5 +1,5 @@
 /**
- * LLM Providers
+ * Platform LLM provider adapters
  *
  * Exports for all provider implementations.
  */

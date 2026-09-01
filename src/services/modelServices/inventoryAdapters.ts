@@ -13,7 +13,7 @@ import type {
 } from '../../types';
 import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 import { displayModelName } from '../../stores/remoteServerHelpers';
-import { providerRegistry } from '../providers';
+import { providerRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { WHISPER_MODELS, whisperService } from '../whisperService';
@@ -207,8 +207,8 @@ function remoteMediaOptions(
   server: RemoteServer,
   category: Exclude<RemoteModelCategory, 'text'>,
 ): Array<{ id: string; name: string }> {
-  const catalog = server.modelCatalog?.[category] ?? [];
-  const configured = server.mediaModels?.[category]?.trim();
+  const catalog = server.catalog?.[category] ?? [];
+  const configured = server.selections?.[category]?.trim();
   if (!configured || catalog.some(model => model.id === configured)) return catalog;
   return [...catalog, { id: configured, name: displayModelName(configured) }];
 }
@@ -227,7 +227,7 @@ function remoteMediaRuntime(
   const selectedServerId =
     useRemoteServerStore.getState().activeRemoteMediaServerIds[modality];
   const selected =
-    selectedServerId === server.id && server.mediaModels?.[modality] === option.id;
+    selectedServerId === server.id && server.selections?.[modality] === option.id;
   return runtime(identity, {
     name: option.name,
     kind: modality,
@@ -269,7 +269,7 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
           installed: true,
           ready: !!provider,
           loaded: provider?.getLoadedModelId() === model.id,
-          error: state.serverHealth[server.id]?.isHealthy === false
+          error: state.serverHealth[server.id]?.status === 'unhealthy'
             ? 'Remote server is unavailable'
             : undefined,
         });

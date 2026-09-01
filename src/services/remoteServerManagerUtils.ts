@@ -8,11 +8,11 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import {
   createOpenAIProvider,
   OpenAICompatibleProvider,
-} from './providers/openAICompatibleProvider';
-import { providerRegistry } from './providers/registry';
+} from './adapters/providers/openAICompatibleProvider';
+import { providerRegistry } from './adapters/providers/registry';
 import { capabilitiesUnknown } from '../stores/remoteModelCapabilities';
 import logger from '../utils/logger';
-import { remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import { remoteAuthorizationHeaders } from '@offgrid/models';
 import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
@@ -64,12 +64,10 @@ export async function removeApiKeyImpl(serverId: string): Promise<void> {
 // Capability detectors (pure)
 // ---------------------------------------------------------------------------
 
-// The pure capability detectors live in utils/remoteCapabilityDetect so the store layer can import
-// them without depending on this (store-touching) service — that was a cycle. Re-exported here.
 export {
-  detectVisionCapability,
-  detectToolCallingCapability,
-} from '../utils/remoteCapabilityDetect';
+  detectRemoteVisionCapability as detectVisionCapability,
+  detectRemoteToolCallingCapability as detectToolCallingCapability,
+} from '@offgrid/models';
 
 // ---------------------------------------------------------------------------
 // Provider creation
@@ -122,14 +120,14 @@ export async function setActiveRemoteTextModelImpl(
           'text',
           modelId,
         )
-      : { ...configuredServer.mediaModels, text: modelId };
+      : { ...configuredServer.selections, text: modelId };
   if (!desktopManaged) {
     // Generic servers keep the existing publish-first behavior. New-chat local
     // preparation uses these IDs to avoid starting the prior local model.
     store.setActiveRemoteTextModelId(modelId);
     store.setActiveServerId(serverId);
-    if (configuredServer.mediaModels?.text !== modelId) {
-      store.updateServer(serverId, { mediaModels: confirmedModels });
+    if (configuredServer.selections?.text !== modelId) {
+      store.updateServer(serverId, { selections: confirmedModels });
     }
   }
 
@@ -204,7 +202,7 @@ export async function setActiveRemoteTextModelImpl(
   // Commit Mobile state only after Desktop has confirmed activation and the
   // provider is ready. A failed activation leaves the prior selection intact.
   if (desktopManaged) {
-    store.updateServer(serverId, { mediaModels: confirmedModels });
+    store.updateServer(serverId, { selections: confirmedModels });
     store.setActiveRemoteTextModelId(modelId);
     store.setActiveServerId(serverId);
   }

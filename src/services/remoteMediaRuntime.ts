@@ -1,6 +1,7 @@
 import { remoteServerManager } from './remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../types';
-import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import { resolveRemoteRoute } from '@offgrid/models';
+import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
@@ -71,9 +72,14 @@ function requiredModel(
   server: RemoteServer,
   kind: keyof RemoteMediaModelIds,
 ): string {
-  const model = server.mediaModels?.[kind]?.trim();
-  if (!model) throw new Error(`No remote ${kind} model is configured`);
-  return model;
+  const resolved = resolveRemoteRoute(
+    server,
+    kind,
+    { status: 'unknown' },
+    { strict: true },
+  );
+  if (!resolved.ready) throw new Error(`No remote ${kind} model is configured`);
+  return resolved.route.modelId;
 }
 
 /** Thin OpenAI-compatible adapters. The server record owns every endpoint and model choice. */

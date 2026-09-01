@@ -15,10 +15,10 @@ import {
 } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useAppStore } from '../stores/appStore';
-import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
-import { providerRegistry } from './providers/registry';
+import { OpenAICompatibleProvider } from './adapters/providers/openAICompatibleProvider';
+import { providerRegistry } from './adapters/providers/registry';
 import { discoverLANServers, DiscoveredServer } from './networkDiscovery';
-import { shouldAutoDiscoverRemoteModels } from '../utils/remoteAutoDiscovery';
+import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import logger from '../utils/logger';
 import {
   storeApiKeyImpl,
@@ -32,7 +32,7 @@ import {
 import {
   canReconcileCredentialedEndpoint,
   remoteAuthorizationHeaders,
-} from './remoteTransportPolicy';
+} from '@offgrid/models';
 import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
@@ -250,9 +250,9 @@ class RemoteServerManager {
             category,
             modelId,
           )
-        : { ...server.mediaModels, [category]: modelId };
+        : { ...server.selections, [category]: modelId };
     store.updateServer(serverId, {
-      mediaModels: confirmedModels,
+      selections: confirmedModels,
     });
     store.setActiveRemoteMediaServerId(category, serverId);
     if (category === 'image') store.setActiveRemoteImageModelId(modelId);

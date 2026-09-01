@@ -50,5 +50,5 @@ export { remoteServerManager } from './remoteServerManager';
 export {
   remoteServerModelOptions,
   selectedRemoteModelName,
-} from './remoteModelSelection';
-export type { RemoteServerModelOption } from './remoteModelSelection';
+} from '@offgrid/models';
+export type { RemoteServerModelOption } from '@offgrid/models';

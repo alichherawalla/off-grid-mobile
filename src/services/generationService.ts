@@ -4,7 +4,7 @@ import { getActiveEngineService, stopAllTextEngines } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import type { ToolResult } from './tools/types';
-import { providerRegistry } from './providers';
+import { providerRegistry } from './adapters/providers';
 import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';

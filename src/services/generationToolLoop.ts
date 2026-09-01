@@ -18,9 +18,9 @@ import { Platform } from 'react-native';
 import { selectRelevantTools } from './litertToolSelector';
 import { isMcpEnabled } from './mcpContextBoost';
 import { executeMobileToolSelection } from './mobileSidecarGeneration';
-import { providerRegistry } from './providers';
+import { providerRegistry } from './adapters/providers';
 import { getActiveEngineService, isRemoteTextModelActive } from './engines';
-import type { GenerationOptions, CompletionResult } from './providers/types';
+import type { GenerationOptions, CompletionResult } from './adapters/providers/types';
 import logger from '../utils/logger';
 import {
   XML_TOOL_CALL_FUNCTION_MARKER,

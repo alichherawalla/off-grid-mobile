@@ -1,7 +1,7 @@
 import { useAppStore, useRemoteServerStore } from '../stores';
 import { llmService } from './llm';
 import { liteRTService } from './litert';
-import { providerRegistry } from './providers';
+import { providerRegistry } from './adapters/providers';
 import { isLiteRTModel, type DownloadedModel, type Message } from '../types';
 import { predictGgufCapabilities, type PredictedGgufCapabilities } from '../utils/ggufCapabilities';
 import logger from '../utils/logger';

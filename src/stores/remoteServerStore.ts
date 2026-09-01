@@ -16,6 +16,7 @@ import {
 } from '../types';
 import logger from '../utils/logger';
 import { generateId } from '../utils/generateId';
+import type { RemoteServerHealth } from '@offgrid/models';
 import {
   testServerConnection,
   testEndpointAndGetModels,
@@ -30,7 +31,7 @@ interface RemoteServerState {
   /** Models discovered per server */
   discoveredModels: Record<string, RemoteModel[]>;
   /** Server health status */
-  serverHealth: Record<string, { isHealthy: boolean; lastCheck: string }>;
+  serverHealth: Record<string, RemoteServerHealth>;
   /** Loading states */
   isLoading: boolean;
   testingServerId: string | null;
@@ -87,26 +88,49 @@ interface RemoteServerState {
 }
 
 type PersistedRemoteServerState = Partial<RemoteServerState>;
+type LegacyRemoteServer = Omit<RemoteServer, 'provider'> & {
+  provider?: RemoteServer['provider'];
+  providerType?: RemoteServer['provider'];
+  mediaModels?: RemoteServer['selections'];
+  modelCatalog?: RemoteServer['catalog'];
+};
 
 export function migrateRemoteServerState(
   persisted: unknown,
 ): PersistedRemoteServerState {
-  const state = (persisted ?? {}) as PersistedRemoteServerState;
+  const raw = (persisted ?? {}) as Omit<PersistedRemoteServerState, 'servers'> & {
+    servers?: LegacyRemoteServer[];
+  };
+  const servers = raw.servers?.map(server => {
+    const {
+      providerType,
+      mediaModels,
+      modelCatalog,
+      ...current
+    } = server;
+    return {
+      ...current,
+      provider: current.provider ?? providerType ?? 'openai-compatible',
+      selections: current.selections ?? mediaModels,
+      catalog: current.catalog ?? modelCatalog,
+    };
+  });
+  const state: PersistedRemoteServerState = { ...raw, servers };
   if (state.activeRemoteMediaServerIds) return state;
-  const activeServer = state.servers?.find(
+  const activeServer = servers?.find(
     server => server.id === state.activeServerId,
   );
   if (!activeServer) return { ...state, activeRemoteMediaServerIds: {} };
   return {
     ...state,
     activeRemoteMediaServerIds: {
-      ...(state.activeRemoteImageModelId && activeServer.mediaModels?.image
+      ...(state.activeRemoteImageModelId && activeServer.selections?.image
         ? { image: activeServer.id }
         : {}),
-      ...(activeServer.mediaModels?.transcription
+      ...(activeServer.selections?.transcription
         ? { transcription: activeServer.id }
         : {}),
-      ...(activeServer.mediaModels?.voice ? { voice: activeServer.id } : {}),
+      ...(activeServer.selections?.voice ? { voice: activeServer.id } : {}),
     },
   };
 }
@@ -313,8 +337,10 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             serverHealth: {
               ...state.serverHealth,
               [serverId]: {
-                isHealthy: result.success,
-                lastCheck: new Date().toISOString(),
+                status: result.success ? 'healthy' : 'unhealthy',
+                checkedAt: new Date().toISOString(),
+                latencyMs: result.latency,
+                error: result.error,
               },
             },
             isLoading: false,
@@ -331,21 +357,21 @@ export const useRemoteServerStore = create<RemoteServerState>()(
             }));
           }
 
-          if (result.success && result.mediaModels) {
+          if (result.success && result.selections) {
             set(state => ({
               servers: state.servers.map(candidate =>
                 candidate.id === serverId
                   ? {
                     ...candidate,
-                    mediaModels:
+                    selections:
                       result.modelManagement === 'offgrid-desktop-v1'
-                        ? result.mediaModels
+                        ? result.selections
                         : {
-                            ...result.mediaModels,
-                            ...candidate.mediaModels,
+                            ...result.selections,
+                            ...candidate.selections,
                           },
-                    modelCatalog:
-                      result.modelCatalog ?? candidate.modelCatalog,
+                    catalog:
+                      result.catalog ?? candidate.catalog,
                     modelManagement:
                       result.modelManagement ?? candidate.modelManagement,
                     updatedAt: new Date().toISOString(),
@@ -385,8 +411,8 @@ export const useRemoteServerStore = create<RemoteServerState>()(
           serverHealth: {
             ...state.serverHealth,
             [serverId]: {
-              isHealthy,
-              lastCheck: new Date().toISOString(),
+              status: isHealthy ? 'healthy' : 'unhealthy',
+              checkedAt: new Date().toISOString(),
             },
           },
         }));
@@ -418,7 +444,7 @@ export const useRemoteServerStore = create<RemoteServerState>()(
     }),
     {
       name: 'remote-servers',
-      version: 2,
+      version: 3,
       migrate: migrateRemoteServerState,
       storage: createJSONStorage(() => AsyncStorage),
       partialize: state => ({

@@ -21,7 +21,7 @@ export function activeRemoteVoiceServer(): RemoteServer | null {
   const server = useRemoteServerStore
     .getState()
     .getActiveRemoteMediaServer('voice');
-  return server?.mediaModels?.voice ? server : null;
+  return server?.selections?.voice ? server : null;
 }
 
 /** Synthesize one remote voice clip into the file-backed playback seam. */

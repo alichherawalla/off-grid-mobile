@@ -14,8 +14,8 @@ import {
 import type { MediaAttachment, Message } from '../../types';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';
-import { providerRegistry } from '../providers';
-import type { GenerationOptions, LLMProvider } from '../providers/types';
+import { providerRegistry } from '../adapters/providers';
+import type { GenerationOptions, LLMProvider } from '../adapters/providers/types';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
 import { resolveToolCalls } from '../generationToolLoop';

@@ -10,7 +10,6 @@ import {
   RemoteModel,
   RemoteMediaModelIds,
   RemoteModelCatalog,
-  RemoteModelCategory,
   ServerTestResult,
 } from '../types';
 import { testEndpoint, detectServerType } from '../services/httpClient';
@@ -19,16 +18,19 @@ import {
   fetchModelCapabilities,
   isGenerativeModel,
 } from './remoteModelCapabilities';
-import {
-  detectVisionCapability,
-  detectToolCallingCapability,
-} from '../utils/remoteCapabilityDetect';
-import {
-  REMOTE_FETCH_REDIRECT_POLICY,
-  remoteAuthorizationHeaders,
-} from '../services/remoteTransportPolicy';
 import { readOffGridDesktopModelState } from '../services/offGridDesktopModels';
-import { reasoningMetadataFromOpenRouter, type OpenRouterPublishedReasoning } from '@offgrid/models';
+import {
+  declaredRemoteCapability,
+  defaultRemoteSelections,
+  detectRemoteToolCallingCapability as detectToolCallingCapability,
+  detectRemoteVisionCapability as detectVisionCapability,
+  displayRemoteModelName,
+  REMOTE_FETCH_REDIRECT_POLICY,
+  reasoningMetadataFromOpenRouter,
+  remoteModalityForKind,
+  remoteAuthorizationHeaders,
+  type OpenRouterPublishedReasoning,
+} from '@offgrid/models';
 
 /** Timeout for model discovery fetches (non-critical, background operation) */
 const DISCOVERY_FETCH_TIMEOUT_MS = 5000;
@@ -59,21 +61,7 @@ async function fetchForDiscovery(
   }
 }
 
-const gatewayCategory = (kind: unknown): RemoteModelCategory | null => {
-  if (kind === 'chat' || kind === 'vision') return 'text';
-  if (kind === 'image') return 'image';
-  if (kind === 'transcription') return 'transcription';
-  if (kind === 'speech') return 'voice';
-  return null;
-};
-
-function declaredCapability(
-  capabilities: unknown,
-  capability: 'vision' | 'tools',
-): boolean | undefined {
-  if (!Array.isArray(capabilities)) return undefined;
-  return capabilities.includes(capability);
-}
+const gatewayCategory = remoteModalityForKind;
 
 /** Read OpenRouter reasoning metadata only when the model record publishes its native object. */
 function openRouterReasoning(value: unknown) {
@@ -135,11 +123,7 @@ async function fetchGatewayModelCatalog(
 }
 
 function defaultModelIds(catalog: RemoteModelCatalog): RemoteMediaModelIds {
-  return Object.fromEntries(
-    Object.entries(catalog)
-      .filter(([, models]) => models?.[0])
-      .map(([category, models]) => [category, models![0].id]),
-  ) as RemoteMediaModelIds;
+  return defaultRemoteSelections(catalog);
 }
 
 /**
@@ -159,8 +143,6 @@ function isTextModel(model: {
   return isGenerativeModel(model.id ?? model.name ?? '');
 }
 
-const MODEL_FILE_EXT = /\.(gguf|bin|safetensors|task|litertlm|pte)$/i;
-
 /**
  * Human-readable label for a remote model. Some gateways report the model id as a
  * full file path (e.g. "/Users/admin/.offgrid/models/Qwen3.5-9B-Q4_K_M.gguf"),
@@ -174,25 +156,7 @@ const MODEL_FILE_EXT = /\.(gguf|bin|safetensors|task|litertlm|pte)$/i;
  * meaningful namespace and could collapse distinct models to the same label, so
  * it's returned unchanged.
  */
-export function displayModelName(id: string): string {
-  if (id.startsWith('remote-vision:')) {
-    const modelSeparator = id.indexOf(':', 'remote-vision:'.length);
-    if (modelSeparator !== -1) {
-      try {
-        return decodeURIComponent(id.slice(modelSeparator + 1));
-      } catch {
-        // Keep the stable raw id when a third-party gateway sends bad encoding.
-      }
-    }
-  }
-  const looksLikePath =
-    id.startsWith('/') ||
-    /^[A-Za-z]:[\\/]/.test(id) ||
-    id.includes('\\') ||
-    MODEL_FILE_EXT.test(id);
-  const base = looksLikePath ? id.split(/[\\/]/).pop() || id : id;
-  return base.replace(MODEL_FILE_EXT, '');
-}
+export const displayModelName = displayRemoteModelName;
 
 export async function testServerConnection(
   server: RemoteServer,
@@ -218,8 +182,8 @@ export async function testServerConnection(
         success: true,
         latency: testResult.latency,
         models: desktopState.textModels,
-        mediaModels: desktopState.active,
-        modelCatalog: desktopState.catalog,
+        selections: desktopState.active,
+        catalog: desktopState.catalog,
         modelManagement: 'offgrid-desktop-v1',
         serverInfo: { name: 'off-grid-desktop' },
       };
@@ -233,7 +197,7 @@ export async function testServerConnection(
     }
 
     // Generic OpenAI-compatible servers keep their /v1/models discovery path.
-    const [models, modelCatalog] = await Promise.all([
+    const [models, catalog] = await Promise.all([
       fetchModelsFromServer(server),
       fetchGatewayModelCatalog(server),
     ]);
@@ -249,8 +213,8 @@ export async function testServerConnection(
       success: true,
       latency: testResult.latency,
       models,
-      mediaModels: defaultModelIds(modelCatalog),
-      modelCatalog,
+      selections: defaultModelIds(catalog),
+      catalog,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,
@@ -284,7 +248,7 @@ export async function testEndpointAndGetModels(
       id: 'temp',
       name: 'temp',
       endpoint,
-      providerType: 'openai-compatible',
+      provider: 'openai-compatible',
       createdAt: new Date().toISOString(),
       apiKey,
     };
@@ -294,15 +258,15 @@ export async function testEndpointAndGetModels(
         success: true,
         latency: testResult.latency,
         models: desktopState.textModels,
-        mediaModels: desktopState.active,
-        modelCatalog: desktopState.catalog,
+        selections: desktopState.active,
+        catalog: desktopState.catalog,
         modelManagement: 'offgrid-desktop-v1',
         serverInfo: { name: 'off-grid-desktop' },
       };
     }
 
     // Generic OpenAI-compatible servers keep their /v1/models discovery path.
-    const [models, modelCatalog] = await Promise.all([
+    const [models, catalog] = await Promise.all([
       fetchModelsFromServer(tempServer),
       fetchGatewayModelCatalog(tempServer),
     ]);
@@ -312,8 +276,8 @@ export async function testEndpointAndGetModels(
       success: true,
       latency: testResult.latency,
       models,
-      mediaModels: defaultModelIds(modelCatalog),
-      modelCatalog,
+      selections: defaultModelIds(catalog),
+      catalog,
       serverInfo: {
         name: serverType?.type,
         version: serverType?.version,
@@ -389,10 +353,10 @@ export async function fetchModelsFromServer(
             // the attached image client-side (the model then behaved text-only).
               supportsVision:
                 model.kind === 'vision' ||
-                (declaredCapability(model.capabilities, 'vision') ??
+                (declaredRemoteCapability(model.capabilities, 'vision') ??
                   modelInfos[i].supportsVision),
               supportsToolCalling:
-                declaredCapability(model.capabilities, 'tools') ??
+                declaredRemoteCapability(model.capabilities, 'tools') ??
                 modelInfos[i].supportsToolCalling ??
                 detectToolCallingCapability(model.id),
             supportsThinking: openRouterReasoning(model.reasoning) !== undefined || (modelInfos[i].supportsThinking ?? false),

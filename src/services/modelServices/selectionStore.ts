@@ -20,7 +20,7 @@ function readRemoteMedia(modality: MobileRemoteMediaModality): string | null {
   const state = useRemoteServerStore.getState();
   const serverId = state.activeRemoteMediaServerIds[modality];
   const server = serverId ? state.servers.find(candidate => candidate.id === serverId) : null;
-  const modelId = server?.mediaModels?.[modality]?.trim();
+  const modelId = server?.selections?.[modality]?.trim();
   return serverId && modelId
     ? mobileRouteId({ source: 'remote', hostId: serverId, modality, modelId })
     : null;
@@ -126,14 +126,18 @@ export const mobileModelSelectionStore: ModelSelectionStore = {
           serverId,
           route.modelId,
         );
-      } else if (modality === 'voice') {
+      } else if (
+        modality === 'image' ||
+        modality === 'transcription' ||
+        modality === 'voice'
+      ) {
         await remoteServerManager.setActiveRemoteMediaModel(
           serverId,
           modality,
           route.modelId,
         );
       } else {
-        throw new Error(`Remote ${modality} selection is not available on Mobile`);
+        throw new Error(`Remote ${modality} selection is not supported`);
       }
       return;
     }
