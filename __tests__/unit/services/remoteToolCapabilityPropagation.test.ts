@@ -1,4 +1,4 @@
-import { setActiveRemoteTextModelImpl } from '../../../src/services/remoteServerManagerUtils';
+import { setActiveRemoteTextModelImpl } from '../../../src/services/adapters/remote/serverRuntime';
 import { OpenAICompatibleProvider } from '../../../src/services/adapters/providers/openAICompatibleProvider';
 import { providerRegistry } from '../../../src/services/adapters/providers/registry';
 import {

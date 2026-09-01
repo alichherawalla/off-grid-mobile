@@ -71,7 +71,7 @@ export async function installRemoteModel(opts: {
    
   const { useRemoteServerStore } = require('../../src/stores');
   const { providerRegistry } = require('../../src/services/adapters/providers');
-  const { createProviderForServerImpl } = require('../../src/services/remoteServerManagerUtils');
+  const { createProviderForServerImpl } = require('../../src/services/adapters/remote/serverRuntime');
   const { llmService } = require('../../src/services/llm');
    
   // A remote model is only USED when no local model is loaded/selected: generationService prefers a loaded

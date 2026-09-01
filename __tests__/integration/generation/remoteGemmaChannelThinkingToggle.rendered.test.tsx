@@ -105,7 +105,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
 
     // Route remote: no local model loaded/selected (mirrors selecting a remote model on device).
     await llmService.unloadModel();
@@ -151,7 +151,7 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
 
     await llmService.unloadModel();
     useAppStore.getState().setActiveModelId(null);

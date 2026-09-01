@@ -17,7 +17,7 @@ import {
 import {
   generateRemoteWithToolsImpl,
   generateRemoteResponseImpl,
-} from '../../../src/services/generationRemoteHelpers';
+} from '../../../src/services/modelServices/remoteGenerationCoordinator';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: {

@@ -62,7 +62,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
   it('new chat keeps a remote model choice while discovery metadata refreshes', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
     const { useRemoteServerStore } = require('../../../src/stores');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+    const { setActiveRemoteTextModelImpl } = require('../../../src/services/adapters/remote/serverRuntime');
 
     const remoteStore = useRemoteServerStore.getState();
     const serverId = remoteStore.addServer({

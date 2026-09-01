@@ -8,7 +8,7 @@ import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import {
   detectVisionCapability,
   detectToolCallingCapability,
-} from '../../../src/services/remoteServerManagerUtils';
+} from '../../../src/services/adapters/remote/serverRuntime';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { providerRegistry } from '../../../src/services/adapters/providers/registry';
 import * as Keychain from 'react-native-keychain';
