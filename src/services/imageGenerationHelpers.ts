@@ -3,6 +3,7 @@ import {
   buildImageEnhancementMessages,
   cleanImageEnhancement,
   describeImageBackend,
+  selectImageEnhancementContext,
 } from '@offgrid/models';
 import {
   isRuntimeOnlyMessage,
@@ -97,48 +98,24 @@ export function getConversationContext(conversationId: string): Message[] {
     .getState()
     .conversations.find(c => c.id === conversationId);
   if (!conversation?.messages) return [];
-  return conversation.messages
-    .slice(-10)
-    .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-    .map(msg => ({
-      id: `ctx-${msg.id}`,
-      role: msg.role,
-      content: readableText(msg),
-      timestamp: msg.timestamp,
-    }))
-    .filter(msg => msg.content.length > 0);
-}
-
-/**
- * What this message says, with every marker the renderer owns removed.
- *
- * An empty string means "this is not conversation". Two assistant messages are written by the APP
- * rather than by a model - this feature's own card, and the caption under a finished image - and
- * both were being fed back in as though a model had said them. Four of the last six messages were
- * ours, so imitation beat instruction and the model answered with a caption. The user's own turn
- * ("Draw a fox") states the request, and it is kept, so nothing about the conversation is lost.
- */
-function readableText(message: Message): string {
-  if (message.role !== 'assistant') return message.content.slice(0, 500);
-  // Runtime notices are device state, not conversation. Use the same classifier that protects the
-  // sync log, so prompt enhancement cannot teach the model to imitate "Model loaded: ..." as its
-  // answer.
-  if (
-    isRuntimeOnlyMessage({
+  return selectImageEnhancementContext(conversation.messages.map(message => {
+    const parsed = parseModelOutput(message.content, message.reasoningContent);
+    return {
+      id: `ctx-${message.id}`,
       role: message.role,
       content: message.content,
-      notice: message.isSystemInfo,
-    })
-  )
-    return '';
-  // `resolution` is written by the image generator alone: this is the caption under a picture.
-  if (message.generationMeta?.resolution) return '';
-  const { answer, reasoning, reasoningLabel } = parseModelOutput(
-    message.content,
-    message.reasoningContent,
-  );
-  if (reasoningLabel === PROMPT_ENHANCEMENT_REASONING_LABEL) return '';
-  return (answer || reasoning || '').slice(0, 500);
+      timestamp: message.timestamp,
+      answer: parsed.answer,
+      reasoning: parsed.reasoning,
+      runtimeOnly: isRuntimeOnlyMessage({
+        role: message.role,
+        content: message.content,
+        notice: message.isSystemInfo,
+      }),
+      generatedImage: Boolean(message.generationMeta?.resolution),
+      promptEnhancement: parsed.reasoningLabel === PROMPT_ENHANCEMENT_REASONING_LABEL,
+    };
+  })) as Message[];
 }
 
 export function cleanEnhancedPrompt(raw: string): string {
