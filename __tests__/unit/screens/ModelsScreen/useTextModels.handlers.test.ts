@@ -89,8 +89,8 @@ jest.mock('../../../../src/services', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    unloadTextModel: () => mockUnloadTextModel(),
   },
+  unloadTextModel: () => mockUnloadTextModel(),
 }));
 
 // ── Alert ─────────────────────────────────────────────────────────────
