@@ -10,24 +10,7 @@ jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () =>
   },
 }));
 
-const mockAdd = jest.fn();
-const mockRemove = jest.fn();
-const mockRetryEntry = jest.fn();
-jest.mock('../../../src/stores/downloadStore', () => ({
-  useDownloadStore: {
-    getState: () => ({
-      add: mockAdd,
-      remove: mockRemove,
-      retryEntry: mockRetryEntry,
-    }),
-  },
-  modelDownloadProjection: {
-    admit: (entry: unknown) => mockAdd(entry),
-    remove: (modelKey: string) => mockRemove(modelKey),
-    retry: (modelKey: string, downloadId: string) =>
-      mockRetryEntry(modelKey, downloadId),
-  },
-}));
+import { useDownloadStore } from '../../../src/stores/downloadStore';
 
 function deferred(): {
   promise: Promise<void>;
@@ -58,7 +41,10 @@ function deferredDownloadId(): {
 }
 
 describe('WhisperModelDownloads concurrent ownership', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useDownloadStore.getState().setAll([]);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   it('cancels the deleted model without disturbing another active download', async () => {
@@ -164,7 +150,8 @@ describe('WhisperModelDownloads concurrent ownership', () => {
       'queued:whisper-tiny.en/ggml-tiny.en.bin',
     );
     await expect(downloading).rejects.toMatchObject({ cancelled: true });
-    expect(mockRemove).toHaveBeenCalledWith('whisper-tiny.en/ggml-tiny.en.bin');
+    expect(useDownloadStore.getState().downloads['whisper-tiny.en/ggml-tiny.en.bin'])
+      .toBeUndefined();
   });
 
   it('keeps replacement ownership when an older queued delete settles', async () => {
@@ -204,7 +191,8 @@ describe('WhisperModelDownloads concurrent ownership', () => {
 
     olderFile.resolve();
     await older;
-    expect(mockRemove).not.toHaveBeenCalled();
+    expect(useDownloadStore.getState().downloads['whisper-tiny.en/ggml-tiny.en.bin'])
+      .toBeDefined();
 
     await downloads.deleteModel('tiny.en');
     expect(backgroundDownloadService.cancelDownload).toHaveBeenCalledWith(

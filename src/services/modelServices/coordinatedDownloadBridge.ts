@@ -1,7 +1,14 @@
 import { Alert, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import type { ModelArtifactDownloadEvent, ModelArtifactManifest, ModelDownloadHandle, ModelKind } from '@offgrid/models';
-import type { BackgroundDownloadInfo, BackgroundDownloadStatus } from '../../types';
+import {
+  ModelDownloadApplicationService,
+  projectArtifactDownloadEvent,
+  publicRequestForManifest,
+  type ModelArtifactDownloadEvent,
+  type ModelArtifactManifest,
+  type ModelDownloadHandle,
+} from '@offgrid/models';
+import type { BackgroundDownloadInfo } from '../../types';
 import type { DownloadCompleteCallback, DownloadErrorCallback, DownloadParams, DownloadProgressCallback } from '../backgroundDownloadTypes';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { nativeDownloadTransferAdapter } from '../adapters/downloads/nativeDownloadTransferAdapter';
@@ -17,10 +24,18 @@ export interface CoordinatedManifestHandle {
   handle: ModelDownloadHandle;
 }
 
-const kindFor = (type?: string): ModelKind => type === 'image' ? 'image' : type === 'stt' ? 'transcription' : type === 'tts' ? 'voice' : 'text';
-const downloadTypeForKind = (kind: ModelKind): DownloadParams['modelType'] =>
-  kind === 'image' ? 'image' : kind === 'transcription' ? 'stt' : kind === 'voice' ? 'tts' : 'text';
-const statusFor = (phase: string): BackgroundDownloadStatus => phase === 'completed' ? 'completed' : ['failed', 'cancelled', 'interrupted'].includes(phase) ? 'failed' : phase === 'downloading' ? 'running' : 'pending';
+export const downloadApplication = new ModelDownloadApplicationService();
+
+const files = {
+  pathFor: (localName: string) => `${RNFS.DocumentDirectoryPath}/${localName}`,
+  exists: (path: string) => RNFS.exists(path),
+  ensureParent: async (path: string) => {
+    const parent = path.slice(0, path.lastIndexOf('/'));
+    if (parent) await RNFS.mkdir(parent);
+  },
+  remove: (path: string) => RNFS.unlink(path),
+  move: (source: string, target: string) => RNFS.moveFile(source, target),
+};
 
 class CoordinatedDownloadBridge {
   private readonly active = new Map<string, ActiveHandle>();
@@ -35,16 +50,10 @@ class CoordinatedDownloadBridge {
 
   /** Start one Shared-owned operation that may contain several related artifacts. */
   startManifest(manifest: ModelArtifactManifest): CoordinatedManifestHandle {
-    const primary = manifest.artifacts.find(artifact => artifact.role === 'primary') ?? manifest.artifacts[0];
-    if (!primary) throw new Error('Download manifest has no artifacts');
+    const request = publicRequestForManifest(manifest);
     const handle = mobileModelDownloadCoordinator.enqueueWithHandle(manifest);
     const params: DownloadParams = {
-      url: primary.url,
-      fileName: primary.name,
-      modelId: manifest.modelId,
-      modelKey: manifest.id,
-      modelType: downloadTypeForKind(manifest.kind),
-      totalBytes: manifest.artifacts.reduce((sum, artifact) => sum + (artifact.sizeBytes ?? 0), 0),
+      ...request,
     };
     const holder: ActiveHandle = {
       manifest, handle, params, logicalId: manifest.id, unsubscribe: () => undefined,
@@ -56,13 +65,8 @@ class CoordinatedDownloadBridge {
   }
 
   async startDownload(params: DownloadParams): Promise<BackgroundDownloadInfo> {
-    const identity = params.modelKey ?? `${params.modelId}/${params.fileName}`;
-    const id = `mobile:${params.modelType ?? 'text'}:${identity}`;
-    const localName = `offgrid-download-staging/${encodeURIComponent(id)}/${params.fileName}`;
-    const manifest: ModelArtifactManifest = { id, modelId: params.modelId, kind: kindFor(params.modelType), revision: 'mobile', artifacts: [{
-      id: `${id}:artifact`, name: params.fileName, localName, url: params.url, sizeBytes: params.totalBytes,
-      sha256: params.sha256, role: params.isSidecar ? 'mmproj' : 'primary', required: true,
-    }] };
+    const operation = downloadApplication.operation({ ...params, namespace: 'mobile' });
+    const { id, manifest } = operation;
     const handle = mobileModelDownloadCoordinator.enqueueWithHandle(manifest);
     const holder: ActiveHandle = { manifest, handle, params, unsubscribe: () => undefined };
     holder.unsubscribe = handle.subscribe(event => this.routeEvent(holder, event));
@@ -90,35 +94,23 @@ class CoordinatedDownloadBridge {
   async moveCompletedDownload(downloadId: string, targetPath: string): Promise<string> {
     const holder = this.active.get(downloadId);
     if (!holder) { if (await RNFS.exists(targetPath)) return targetPath; throw new Error(`Download not found: ${downloadId}`); }
-    await holder.handle.completion;
-    const source = `${RNFS.DocumentDirectoryPath}/${holder.manifest.artifacts[0].localName}`;
-    if (source !== targetPath && await RNFS.exists(source)) {
-      const parent = targetPath.slice(0, targetPath.lastIndexOf('/')); if (parent) await RNFS.mkdir(parent);
-      if (await RNFS.exists(targetPath)) await RNFS.unlink(targetPath);
-      await RNFS.moveFile(source, targetPath);
-    }
-    return targetPath;
+    return downloadApplication.moveCompletedArtifact({
+      manifest: holder.manifest,
+      completion: holder.handle.completion,
+      targetPath,
+      files,
+    });
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
-    const coordinated = mobileModelDownloadCoordinator.list().map(record => {
-      const artifact = record.artifacts.find(item => record.manifest.artifacts.find(definition => definition.id === item.artifactId)?.role === 'primary') ?? record.artifacts[0];
-      const definition = record.manifest.artifacts.find(item => item.id === artifact?.artifactId) ?? record.manifest.artifacts[0];
-      const logical = this.active.get(record.manifest.id)?.logicalId;
-      return { downloadId: logical ?? artifact?.transferId ?? `queued:${record.manifest.id}`, fileName: definition?.name ?? '',
-        modelId: record.manifest.modelId, status: statusFor(record.phase), bytesDownloaded: record.artifacts.reduce((sum, item) => sum + item.bytesDownloaded, 0),
-        totalBytes: record.artifacts.reduce((sum, item) => sum + item.totalBytes, 0), startedAt: record.createdAt,
-        modelKey: record.manifest.id, modelType: record.manifest.kind === 'transcription' ? 'stt' : record.manifest.kind };
-    });
-    const coordinatedIds = new Set(coordinated.map(row => row.downloadId));
-    const durableNativeRows = await nativeDownloadTransferAdapter.listActiveDownloads();
-    return [
-      ...coordinated,
-      ...durableNativeRows.filter(row => {
-        const id = String(row.downloadId ?? row.id ?? '');
-        return id.length > 0 && !coordinatedIds.has(id);
-      }),
-    ] as BackgroundDownloadInfo[];
+    const logicalIds = new Map([...this.active.values()]
+      .filter(holder => holder.logicalId)
+      .map(holder => [holder.manifest.id, holder.logicalId!]));
+    return downloadApplication.inventory(
+      mobileModelDownloadCoordinator.list(),
+      await nativeDownloadTransferAdapter.listActiveDownloads(),
+      logicalIds,
+    ) as BackgroundDownloadInfo[];
   }
 
   onProgress(id: string, listener: DownloadProgressCallback): () => void { return this.add(this.progress, id, listener); }
@@ -175,33 +167,29 @@ class CoordinatedDownloadBridge {
   cleanup(): void {}
 
   private routeEvent(holder: ActiveHandle, event: ModelArtifactDownloadEvent): void {
-    if (event.type === 'admitted') {
-      holder.transferId = event.transferId;
-      if (!holder.logicalId) this.active.set(event.transferId, holder);
-      return;
+    const projected = projectArtifactDownloadEvent({
+      manifest: holder.manifest,
+      request: holder.params,
+      event,
+      transferId: holder.transferId,
+      logicalId: holder.logicalId,
+      pathFor: files.pathFor,
+    });
+    if (projected.transferId) {
+      holder.transferId = projected.transferId;
+      if (!holder.logicalId) this.active.set(projected.transferId, holder);
     }
-    const definition = event.artifactId
-      ? holder.manifest.artifacts.find(artifact => artifact.id === event.artifactId)
-      : undefined;
-    const id = holder.logicalId
-      ? definition?.role === 'mmproj' ? `${holder.logicalId}:projector` : holder.logicalId
-      : holder.transferId;
-    if (!id) return;
-    if (event.type === 'progress') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
-        status: 'running',
-        bytesDownloaded: event.bytesDownloaded, totalBytes: event.totalBytes,
-        progress: event.totalBytes > 0 ? event.bytesDownloaded / event.totalBytes : 0 } as ProgressEvent;
-      this.emit(this.progress.get(id), value); this.emit(this.allProgress, value);
-    } else if (event.type === 'completed') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
-        localUri: definition ? `${RNFS.DocumentDirectoryPath}/${definition.localName}` : undefined } as CompleteEvent;
-      this.emit(this.complete.get(id), value); this.emit(this.allComplete, value);
-    } else if (event.type === 'failed' || event.type === 'cancelled') {
-      const value = { downloadId: id, modelId: holder.params.modelId, fileName: definition?.name ?? holder.params.fileName,
-        status: 'failed', reason: event.type === 'failed' ? event.error : 'Download cancelled',
-        reasonCode: event.type === 'cancelled' ? 'user_cancelled' : undefined } as ErrorEvent;
-      this.emit(this.errors.get(id), value); this.emit(this.allErrors, value);
+    const value = projected.event;
+    if (!value) return;
+    if (value.status === 'completed') {
+      this.emit(this.complete.get(value.downloadId), value as CompleteEvent);
+      this.emit(this.allComplete, value as CompleteEvent);
+    } else if (value.status === 'failed') {
+      this.emit(this.errors.get(value.downloadId), value as ErrorEvent);
+      this.emit(this.allErrors, value as ErrorEvent);
+    } else {
+      this.emit(this.progress.get(value.downloadId), value as ProgressEvent);
+      this.emit(this.allProgress, value as ProgressEvent);
     }
   }
   private findByIdentity(value: string): ActiveHandle | undefined { return [...this.active.values()].find(item => item.params.modelKey === value || item.manifest.id === value); }
