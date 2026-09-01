@@ -10,7 +10,7 @@ import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
-import { textOverheadMultiplier } from './types';
+import { estimateTextModelMemoryMB } from '../modelMemory';
 import {
   createSelectedTextModelResolver,
   selectedTextModelIdOf,
@@ -168,10 +168,7 @@ class ActiveModelService {
     if (!model) {
       throw new Error('Model not found');
     }
-    // Use estimated runtime RAM (file size + overhead), not just file size,
-    // so the residency budget reflects the model's real memory footprint.
-    // GPU-aware overhead: a GPU/NPU backend adds working buffers in system RAM the flat CPU 1.5× misses.
-    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend)) || 0) / (1024 * 1024));
+    const textSizeMB = await estimateTextModelMemoryMB(model, store.settings);
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';

@@ -12,7 +12,7 @@
  */
 import { useAppStore, useWhisperStore } from '../stores';
 import { activeModelService } from './activeModelService';
-import { hardwareService } from './hardware';
+import { estimateTextModelMemoryMB } from './modelMemory';
 import { WHISPER_MODELS } from './whisperService';
 import { modelResidencyManager } from './modelResidency';
 import { generationService } from './generationService';
@@ -40,8 +40,6 @@ function isGenerationActive(): boolean {
   );
 }
 
-const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
-
 async function preloadText(): Promise<void> {
   const { downloadedModels } = useAppStore.getState();
   // Same owner, same answer as chat and image generation.
@@ -49,7 +47,7 @@ async function preloadText(): Promise<void> {
   if (!id || activeModelService.getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
-  const sizeMB = toMB(hardwareService.estimateModelRam(model));
+  const sizeMB = await estimateTextModelMemoryMB(model, useAppStore.getState().settings);
   if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
   await activeModelService.loadTextModel(id);
 }
