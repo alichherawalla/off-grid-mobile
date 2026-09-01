@@ -9,7 +9,7 @@ Audio playback/recording is flaky because **no single component owns the shared 
 1. **iOS `AVAudioSession`** is activated in two unrelated places — the recorder (`audioRecorderService` → `playAndRecord`) and the Kokoro bridge (`KokoroTTSBridge` → `playback`). Nobody restores the playback category after recording, and nobody deactivates. Whoever ran last decides the category, so playback is audible or silent depending on history. → "Kokoro silent on iOS", "voice notes silent".
 2. **Independent `AudioContext`s** (`audioFilePlayer` and Kokoro per-`speak()`) each manage their own
    `resume`/`suspend`/`close`/foreground-reset. iOS tears contexts down on lock; either can be reused
-   dead → silent. The earlier OuteTTS path was removed.
+   dead → silent.
 3. **Unified playback state** (`playbackStatus`, `currentMessageId`, `currentAudioPath`, `playSessionId`) is written from 5+ sites (`ttsStore`, `ttsPlayback`, `streamingSpeech`, `ttsEngineSubscription`). Different paths clear it differently → stuck non-idle / stale path → gates built on it (the voice-note "busy" gate) mis-fire.
 
 The result: any point-change (a gate, a guard, a resume) can violate an invariant another path assumed. That is the chaos.

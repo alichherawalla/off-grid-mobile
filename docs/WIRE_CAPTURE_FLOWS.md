@@ -55,7 +55,7 @@ First: enable the **calculator tool** once (it persists). Then for **each** text
 ## Stage F — small-model blocks (fast; any order)
 11. **STT**  → `[WIRE-STT]` — record a voice note (let it transcribe) AND a **silent/short** clip (captures the no-speech marker).
 12. **TTS**  → `[WIRE-TTS]` — tap **Speak** on any assistant reply and verify the registered
-    Kokoro engine. OuteTTS and Qwen3 TTS are removed and are not valid capture targets.
+    Kokoro engine.
 13. **RAG**  → `[WIRE-EMBED]`, `[WIRE-PDF]` — create a project, add a **PDF** to its knowledge base, chat a question answerable from it.
     - *Why:* real embedding dimensionality + native PDF→text shape.
 

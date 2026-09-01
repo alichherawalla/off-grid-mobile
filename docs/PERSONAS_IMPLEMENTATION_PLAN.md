@@ -1,8 +1,7 @@
 # Personas — Full Implementation Plan
 
-> **Historical planning note:** OuteTTS-specific voice fields and picker guidance in this document
-> are obsolete. OuteTTS and Qwen3 TTS are not supported. New persona voice work must use the current
-> Kokoro voice contract and the shared `@offgrid/models` voice policy.
+> Persona voice work uses the current Kokoro voice contract and the shared `@offgrid/models` voice
+> policy.
 
 > The goal: turn Off Grid from "a local LLM app" into "a private AI secretary you can actually trust." Personas are named assistants with personality, memory, skills, and integrations. The model picker disappears. The complexity hides. The magic stays.
 
@@ -97,7 +96,7 @@ export interface PersonaModelOverrides {
 
 export interface PersonaVoice {
   interfaceMode: 'chat' | 'audio';   // 'chat' = text bubbles + play button; 'audio' = waveform bubbles by default
-  ttsVoiceId: string;                // OuteTTS speaker profile id (e.g. '0')
+  ttsVoiceId: string;                // registered Kokoro voice id (for example, 'af_heart')
   sttLanguage: string;               // 'en', 'es', etc.
   speakingRate: number;              // 0.5–2.0, default 1.0
 }
@@ -684,7 +683,7 @@ Toggle cards, each with an icon, label, and inline download CTA if model missing
 #### Voice Settings (shown when Voice is ON)
 - Interface Mode: segmented control — `Chat` (text bubbles + play button) / `Audio` (waveform bubbles, always-on)
   - If device RAM < 6GB: Audio option greyed out with "Requires 6GB+ RAM"
-- Voice: picker from available OuteTTS speaker profiles
+- Voice: picker from available Kokoro voices
 - Speaking rate: slider 0.5–2.0x
 - Speaking language: picker (STT language for Whisper)
 
@@ -945,7 +944,8 @@ export async function migrateProjectsToPersonas(): Promise<void> {
 
 ## TTS Integration
 
-TTS plugs into the `voice` capability via `ttsService` and `ttsStore`. See `docs/TTS_IMPLEMENTATION_PLAN.md` for full service/store implementation.
+TTS plugs into the `voice` capability through the shared voice policy and the Mobile Pro Kokoro
+adapter. See `docs/TTS_ENGINE_INTERFACE.md` for the current boundary.
 
 ### How persona voice settings wire into TTS
 
@@ -1029,7 +1029,7 @@ export interface Message {
 13. `CapabilityBar` component in chat
 14. `CapabilityDownloadPrompt` sheet
 15. Wire capability switching (text ↔ image gen ↔ vision)
-16. TTS integration — requires TTS_IMPLEMENTATION_PLAN to be executed first, then:
+16. TTS integration — use the shared voice policy and Mobile Pro Kokoro adapter, then:
     - Add `usePersonaVoiceSync` hook to sync persona voice settings into `ttsStore` on persona activation
     - Chat Mode: add `TTSButton` to text bubble action row
     - Audio Mode: render `AudioMessageBubble` for assistant messages; trigger `generateAndSave` after streaming completes

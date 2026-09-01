@@ -1,9 +1,7 @@
 # Hardware Acceleration Strategy: all accelerators, all modalities (RN mobile + Electron desktop)
 
-> **Current TTS correction (2026-09-01):** Kokoro through ExecuTorch is the supported Mobile TTS
-> runtime. OuteTTS and Qwen3 TTS were removed. Any remaining OuteTTS or Qwen3 TTS references in this
-> research record describe an earlier prototype and are not supported-product claims. The shared
-> control plane is now `@offgrid/models`, not a proposed separate inference-router package.
+> **Current TTS architecture (2026-09-01):** Kokoro through ExecuTorch is the supported Mobile TTS
+> runtime. The shared control plane is `@offgrid/models`, not a separate inference-router package.
 
 **Status:** proposal / architecture reference (evidence-verified)
 **Owner:** mobile + desktop
@@ -64,7 +62,7 @@ These are load-bearing and evidence-verified. The architecture follows from them
 | **vLLM** (remote) | n/a (server) | optional BYO-server tier | Cloud TPU / GPU |
 
 **Ground truth - what is already wired (verified in code, 2026-07-06):**
-- **llama.rn** = text/VLM (GGUF) **and** the OuteTTS + Qwen3 TTS engines (`pro/audio/engine/tts/engines/{outetts,qwen3}` run on llama.rn). CPU/GPU.
+- **llama.rn** = text/VLM (GGUF). CPU/GPU.
 - **react-native-executorch `^0.8.1`** = **already a dependency**, powering **Kokoro TTS** (`pro/audio/engine/tts/engines/kokoro`, `useTextToSpeech` + `KOKORO_MEDIUM`). On iOS this already routes through CoreML (ANE-capable). Its embeddings/STT/vision hooks exist in the package but are not yet imported - extending to them is a small lift, iOS-NPU-only.
 - **whisper.rn** = STT. **CoreMLDiffusionModule.swift** (iOS) + **LocalDreamModule.kt** (Android) = image-gen. The `ONNXImageModel` type / `onnxImageGeneratorService` name refers to the source model *format*; the runtimes are CoreML/LocalDream, **not** ONNX Runtime.
 - **onnxruntime-react-native is NOT in the app** - it is the one net-new engine this plan proposes, for fixed-shape breadth + the Android Hexagon path executorch cannot provide.
@@ -105,7 +103,7 @@ Legend: **primary** path in bold; *(exists)* already wired; `+add` new adoption;
 | **Vision** | ONNX / LiteRT | LiteRT (Metal) | **ONNX CoreML EP -> ANE** `+add` / LiteRT CoreML `+add` |
 | **Image generation** | CoreML CPU | CoreML GPU *(exists)* | **CoreML -> ANE** *(exists, `preferGpu=false`)* |
 | **STT (Whisper)** | whisper.rn *(exists)* | whisper.rn Metal *(exists)* | **executorch Whisper CoreML -> ANE** `+extend` / ONNX CoreML EP alt |
-| **TTS (Kokoro / Oute / Qwen3)** | llama.rn (Oute/Qwen3) *(exists)* | TTS registry | **Kokoro -> executorch CoreML -> ANE** *(exists)* |
+| **TTS (Kokoro)** | executorch CPU fallback *(exists)* | TTS registry | **Kokoro -> executorch CoreML -> ANE** *(exists)* |
 
 ### Android (Snapdragon / MediaTek / Tensor / Exynos: NPU = Hexagon etc.; "TPU" = Pixel Tensor, via Tensor ML SDK on Pixel 10)
 
@@ -116,7 +114,7 @@ Legend: **primary** path in bold; *(exists)* already wired; `+add` new adoption;
 | **Vision** | LiteRT *(exists)* | LiteRT (Adreno) *(exists)* | **LiteRT QNN -> Hexagon** *(exists)* | Pixel 10 · Tensor SDK (Beta)* |
 | **Image generation** | LocalDream CPU | **LocalDream MNN (GPU)** *(exists)* | **LocalDream QNN -> Hexagon** *(exists)* | Pixel 10 · Tensor SDK (Beta)* |
 | **STT (Whisper)** | whisper.rn *(exists)* | whisper.rn | **ONNX Whisper QNN EP -> Hexagon** `+add` (heavy) / LiteRT QNN alt — else `CPU-only` | Pixel 10 · Tensor SDK (Beta)* |
-| **TTS (Kokoro/Oute/Qwen3)** | Kokoro=executorch, Oute/Qwen3=llama.rn *(exists)* | TTS registry | **ONNX Kokoro/Piper QNN EP -> Hexagon** `+add` (heavy) — else `CPU-only` (executorch/llama.rn) | Pixel 10 · Tensor SDK (Beta)* |
+| **TTS (Kokoro)** | executorch *(exists)* | TTS registry | **ONNX Kokoro/Piper QNN EP -> Hexagon** `+add` (heavy) — else `CPU-only` (executorch) | Pixel 10 · Tensor SDK (Beta)* |
 
 \* **Google Tensor "TPU" (updated 2026):** now reachable by third parties via the **Google Tensor ML SDK (Beta), integrated with LiteRT** - but **Pixel 10 family only** (older Tensor G2/G3/G4 remain closed), Beta/access-gated, with per-model TPU compilation + Play Feature Delivery / AI Packs plumbing. Modelled as a **Tensor delegate under the LiteRT adapter**, alongside the QNN (Hexagon) delegate - same capability-as-data and same "measure it landed" telemetry. Same risk/effort profile as the Android Hexagon workstream; shares its plumbing. Fall back to GPU/CPU on all other Pixels/devices. We do not claim coverage beyond what a device actually exposes.
 
@@ -143,7 +141,7 @@ So: **not literally every cell is a free win, and that is the honest truth.** Th
 
 ## 6. The central architectural fork (decided)
 
-Grounded in what is already wired (executorch powers Kokoro TTS; llama.rn powers text + OuteTTS/Qwen3; whisper.rn STT; CoreML/LocalDream image-gen), the fixed-shape-NPU options are:
+Grounded in what is already wired (executorch powers Kokoro TTS; llama.rn powers text; whisper.rn STT; CoreML/LocalDream image-gen), the fixed-shape-NPU options are:
 
 - **react-native-executorch (already in app).** iOS ANE only - Android is CPU (QNN not compiled in, no models, not on roadmap; verified Section 9). Great for the **iOS ANE** win, useless for Android NPU.
 - **LiteRT (already in app, `cpu/gpu/npu`).** Reaches ANE (iOS CoreML delegate) and Hexagon (Android QNN delegate); official Google+Qualcomm path (64/72 canonical models NPU-delegated). TFLite format - narrower zoo.
@@ -230,7 +228,7 @@ The existing remote `LLMProvider` registry already models this. A self-hosted vL
 
 **Google Tensor ML SDK - the Pixel TPU path (verified 2026):** graduated from Experimental Access to **Beta**, integrated with LiteRT; convert/compile PyTorch or TFLite models to Tensor-optimized binaries, 100+ precompiled models (incl. Gemma 3 1B). **Pixel 10 family only** (Pixel 10 / 10 Pro / 10 Pro XL / Fold); older Tensor G2/G3/G4 have no third-party TPU access (open, unfulfilled request). Delivery via Play Feature Delivery (TPU driver/compiler libs) + AI Packs (compiled models). Historically the Pixel TPU was reserved for Google's own features + Gemini Nano/AICore - this is the first real third-party door, and it is narrow + Beta. Fits our plan as a Tensor delegate under the LiteRT adapter.
 
-**Already-wired ground truth (verified in code):** `react-native-executorch@^0.8.1` powers Kokoro TTS (iOS CoreML/ANE-capable); llama.rn powers text + OuteTTS + Qwen3 TTS; whisper.rn = STT; CoreMLDiffusionModule (iOS) + LocalDreamModule (Android) = image-gen. `onnxruntime-react-native` is NOT present (the one net-new engine). OuteTTS is llama.rn, not ONNX.
+**Already-wired ground truth (verified in code):** `react-native-executorch@^0.8.1` powers Kokoro TTS (iOS CoreML/ANE-capable); llama.rn powers text; whisper.rn = STT; CoreMLDiffusionModule (iOS) + LocalDreamModule (Android) = image-gen. `onnxruntime-react-native` is NOT present (the one net-new engine).
 
 ---
 
@@ -259,4 +257,4 @@ The existing remote `LLMProvider` registry already models this. A self-hosted vL
 
 ## 12. One-paragraph summary
 
-We are a React Native app, so every runtime must have an RN binding - which disqualifies NexaSDK outright and relegates Cactus to a benchmark. We support the most models horizontally with **two breadth engines**: **GGUF via llama.rn** for text/VLM on CPU/GPU (widest text zoo; also runs OuteTTS + Qwen3 TTS today; NPU does not help LLM decode), and **ONNX via onnxruntime-react-native** for the fixed-shape modalities (widest fixed-shape zoo: embeddings, Whisper, Kokoro, Piper, vision). NPU/TPU depth is added only for the fixed-shape five, reached through adapters behind one router: on iOS the ANE is a **drop-in** (executorch - already wired for Kokoro TTS - and ONNX CoreML EP, both verified); on Android the Hexagon NPU is **real but heavy** (ONNX QNN EP or LiteRT QNN, each needing a native-rebuild flag + a per-SoC context binary - inherent to Qualcomm QNN, not a runtime quirk), with honest CPU/GPU fallback where no per-SoC binary exists. Image-gen stays on the already-wired CoreML (iOS ANE) + LocalDream-QNN (Android Hexagon). "TPU" on device folds into the NPU strategy - the Pixel Tensor TPU is now reachable via the Tensor ML SDK (Beta) under LiteRT, but only on the Pixel 10 family, so it is a narrow Tensor-delegate that shares the heavy Android-NPU plumbing; Cloud TPU is an optional remote tier via the existing provider registry. The router selects the runtime per (modality, device) from capability-data and **measures** whether execution actually landed on the NPU rather than assuming it - because ANE and QNN dispatch are best-effort. Completeness is honest (Section 5a): CPU + GPU solved for all six modalities; NPU solved for the fixed-shape five wherever a converted model exists; text-on-NPU is a deliberate never. We build no conversion pipeline and no external SDK, so NPU coverage is bounded by upstream exports - the accepted price of reuse - and the only asset that compounds is the on-device routing telemetry, collected for free.
+We are a React Native app, so every runtime must have an RN binding - which disqualifies NexaSDK outright and relegates Cactus to a benchmark. We support the most models horizontally with **two breadth engines**: **GGUF via llama.rn** for text/VLM on CPU/GPU (widest text zoo; NPU does not help LLM decode), and **ONNX via onnxruntime-react-native** for the fixed-shape modalities (widest fixed-shape zoo: embeddings, Whisper, Kokoro, Piper, vision). NPU/TPU depth is added only for the fixed-shape five, reached through adapters behind one router: on iOS the ANE is a **drop-in** (executorch - already wired for Kokoro TTS - and ONNX CoreML EP, both verified); on Android the Hexagon NPU is **real but heavy** (ONNX QNN EP or LiteRT QNN, each needing a native-rebuild flag + a per-SoC context binary - inherent to Qualcomm QNN, not a runtime quirk), with honest CPU/GPU fallback where no per-SoC binary exists. Image-gen stays on the already-wired CoreML (iOS ANE) + LocalDream-QNN (Android Hexagon). "TPU" on device folds into the NPU strategy - the Pixel Tensor TPU is now reachable via the Tensor ML SDK (Beta) under LiteRT, but only on the Pixel 10 family, so it is a narrow Tensor-delegate that shares the heavy Android-NPU plumbing; Cloud TPU is an optional remote tier via the existing provider registry. The router selects the runtime per (modality, device) from capability-data and **measures** whether execution actually landed on the NPU rather than assuming it - because ANE and QNN dispatch are best-effort. Completeness is honest (Section 5a): CPU + GPU solved for all six modalities; NPU solved for the fixed-shape five wherever a converted model exists; text-on-NPU is a deliberate never. We build no conversion pipeline and no external SDK, so NPU coverage is bounded by upstream exports - the accepted price of reuse - and the only asset that compounds is the on-device routing telemetry, collected for free.
