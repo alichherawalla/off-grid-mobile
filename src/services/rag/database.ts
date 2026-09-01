@@ -1,6 +1,6 @@
 import { open } from '@op-engineering/op-sqlite';
 import type { DB } from '@op-engineering/op-sqlite';
-import type { Chunk } from './chunking';
+import type { Chunk } from '@offgrid/rag';
 import logger from '../../utils/logger';
 import { generateId } from '../../utils/generateId';
 

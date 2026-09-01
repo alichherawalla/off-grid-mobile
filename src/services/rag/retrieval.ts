@@ -1,7 +1,7 @@
 import { ragDatabase, RagSearchResult } from './database';
 import { embeddingService } from './embedding';
 import { executeMobileEmbedding } from '../mobileSidecarGeneration';
-import { cosineSimilarity } from './vectorMath';
+import { cosineSimilarity } from '@offgrid/rag';
 import logger from '../../utils/logger';
 
 /** Strip HTML-like tags without regex backtracking risk. */

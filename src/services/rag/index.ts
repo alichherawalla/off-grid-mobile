@@ -1,5 +1,5 @@
 import { ragDatabase } from './database';
-import { chunkDocument } from './chunking';
+import { chunkText } from '@offgrid/rag';
 import { retrievalService } from './retrieval';
 import { embeddingService } from './embedding';
 import { executeMobileEmbedding } from '../mobileSidecarGeneration';
@@ -70,7 +70,7 @@ class RagService {
     }
 
     onProgress?.({ stage: 'chunking', message: 'Splitting into chunks...' });
-    const chunks = chunkDocument(attachment.textContent);
+    const chunks = chunkText(attachment.textContent);
     if (chunks.length === 0) {
       throw new Error('Document produced no indexable content');
     }

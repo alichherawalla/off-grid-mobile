@@ -56,7 +56,7 @@ jest.mock('../../../src/services/rag/embedding', () => ({
 import { ragService, retrievalService } from '../../../src/services/rag';
 import { ragDatabase } from '../../../src/services/rag/database';
 import { embeddingService } from '../../../src/services/rag/embedding';
-import { cosineSimilarity } from '../../../src/services/rag/vectorMath';
+import { cosineSimilarity } from '@offgrid/rag';
 import { documentService } from '../../../src/services/documentService';
 
 const mockDocService = documentService as jest.Mocked<typeof documentService>;
