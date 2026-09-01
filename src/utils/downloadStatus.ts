@@ -7,6 +7,12 @@
  */
 import { ModelKey } from './modelKey';
 import type { ProgressRateSample } from '@offgrid/ui';
+import {
+  isActiveDownloadStatus,
+  isFailedDownloadStatus,
+  isQueuedDownloadStatus,
+  isTransferringDownloadStatus,
+} from '@offgrid/models';
 
 export type DownloadStatus =
   | 'pending'
@@ -52,12 +58,8 @@ export interface DownloadEntry {
  * Use this to guard against duplicate starts (rapid double-tap) so we never
  * have two parallel native downloads racing on the same logical file.
  */
-const ACTIVE_STATUSES = new Set<DownloadStatus>([
-  'pending', 'running', 'retrying', 'waiting_for_network', 'processing',
-]);
-
 export function isActiveStatus(status: DownloadStatus): boolean {
-  return ACTIVE_STATUSES.has(status);
+  return isActiveDownloadStatus(status);
 }
 
 /**
@@ -67,7 +69,7 @@ export function isActiveStatus(status: DownloadStatus): boolean {
  * on the icon badge, so a stuck download had no signal to open the manager.
  */
 export function isFailedStatus(status: DownloadStatus): boolean {
-  return status === 'failed';
+  return isFailedDownloadStatus(status);
 }
 
 /**
@@ -79,9 +81,9 @@ export function isFailedStatus(status: DownloadStatus): boolean {
  * inline in a view; call these so the classification can't drift per-surface.
  */
 export function isQueuedStatus(status: DownloadStatus): boolean {
-  return status === 'pending';
+  return isQueuedDownloadStatus(status);
 }
 
 export function isDownloadingStatus(status: DownloadStatus): boolean {
-  return isActiveStatus(status) && status !== 'pending';
+  return isTransferringDownloadStatus(status);
 }
