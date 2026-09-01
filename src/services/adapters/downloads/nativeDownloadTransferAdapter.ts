@@ -65,6 +65,20 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     });
   }
 
+  /**
+   * Return the native system's durable transfer rows.
+   *
+   * The shared coordinator owns downloads started in this JS process. The native
+   * system remains the source of truth after a process restart, before those
+   * handles can be reconstructed. The Mobile composition layer uses this narrow
+   * projection to reconcile both sets without moving platform row shapes into
+   * shared policy.
+   */
+  async listActiveDownloads(): Promise<Array<Record<string, unknown>>> {
+    if (!native || typeof native.getActiveDownloads !== 'function') return [];
+    return (await native.getActiveDownloads()) ?? [];
+  }
+
   async cancel(transferId: string): Promise<void> {
     if (!native) return;
     await native.cancelDownload(transferId).catch(() => undefined);

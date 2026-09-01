@@ -72,13 +72,22 @@ class CoordinatedDownloadBridge {
   }
 
   async getActiveDownloads(): Promise<BackgroundDownloadInfo[]> {
-    return mobileModelDownloadCoordinator.list().map(record => {
+    const coordinated = mobileModelDownloadCoordinator.list().map(record => {
       const artifact = record.artifacts[0]; const definition = record.manifest.artifacts[0];
       return { downloadId: artifact?.transferId ?? `queued:${record.manifest.id}`, fileName: definition?.name ?? '',
         modelId: record.manifest.modelId, status: statusFor(record.phase), bytesDownloaded: artifact?.bytesDownloaded ?? 0,
         totalBytes: artifact?.totalBytes ?? definition?.sizeBytes ?? 0, startedAt: record.createdAt,
         modelKey: record.manifest.id, modelType: record.manifest.kind === 'transcription' ? 'stt' : record.manifest.kind };
     });
+    const coordinatedIds = new Set(coordinated.map(row => row.downloadId));
+    const durableNativeRows = await nativeDownloadTransferAdapter.listActiveDownloads();
+    return [
+      ...coordinated,
+      ...durableNativeRows.filter(row => {
+        const id = String(row.downloadId ?? row.id ?? '');
+        return id.length > 0 && !coordinatedIds.has(id);
+      }),
+    ] as BackgroundDownloadInfo[];
   }
 
   onProgress(id: string, listener: DownloadProgressCallback): () => void { return this.add(this.progress, id, listener); }
