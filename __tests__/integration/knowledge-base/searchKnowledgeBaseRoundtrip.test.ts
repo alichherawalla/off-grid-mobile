@@ -12,7 +12,10 @@ describe('search_knowledge_base — real RAG round-trip (guard)', () => {
   it('returns the indexed document content when the model searches the knowledge base', async () => {
     const boundary = installNativeBoundary({ fs: true, llama: true });
     doMockRealSqlite();
-     
+
+    // Start the real composition root so RAG reaches the native embedding fake
+    // through the same Shared GenerationService port as production.
+    require('../../../src/services/modelServices');
     const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
     const { executeToolCall } = require('../../../src/services/tools/handlers');
     const RNFS = require('react-native-fs');

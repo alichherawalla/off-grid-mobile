@@ -356,8 +356,7 @@ const service = new ChatSessionService(
         const admittedToolIds = enabledToolIds.filter(toolId => isMemoryToolAllowed(toolId, {
           projectActive: !!identity.projectId && !!useProjectStore.getState().getProject(identity.projectId), allMemory: true,
         }));
-        const active = activeMobileRoute('text').model;
-        if (!admittedToolIds.length || !active?.capabilities.tools) return {};
+        if (!admittedToolIds.length) return {};
         const messages = useChatStore.getState()
           .getConversationMessages(identity.conversationId)
           .filter(message => !message.isSystemInfo);

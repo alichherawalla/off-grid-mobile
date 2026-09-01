@@ -1,10 +1,8 @@
 import type { GenerationMessage } from '@offgrid/models';
-import type { RoutableTool } from './toolEmbeddingRouter';
 type SidecarExecutionPort = {
   text(messages: GenerationMessage[], options: { maxTokens?: number; onText?: (text: string) => void }): Promise<string>;
   embedding(inputs: string[]): Promise<number[][]>;
   classification(input: string, routeId?: string): Promise<'image' | 'text'>;
-  toolSelection(input: string, tools: RoutableTool[], limit: number): Promise<string[]>;
 };
 
 let port: SidecarExecutionPort | null = null;
@@ -36,12 +34,4 @@ export async function executeMobileClassification(
   routeId?: string,
 ): Promise<'image' | 'text'> {
   return executionPort().classification(input, routeId);
-}
-
-export async function executeMobileToolSelection(
-  input: string,
-  tools: RoutableTool[],
-  limit: number,
-): Promise<string[]> {
-  return executionPort().toolSelection(input, tools, limit);
 }

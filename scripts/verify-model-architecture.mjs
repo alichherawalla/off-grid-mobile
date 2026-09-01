@@ -63,6 +63,10 @@ for (const file of files) {
     report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
   }
 
+  if (/^src\/services\/(?:llmToolGeneration|litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight)\.ts$/.test(fileName)) {
+    report('mobile-tool-routing-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
+  }
+
   const visit = node => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const specifier = node.moduleSpecifier.text
@@ -94,6 +98,12 @@ for (const file of files) {
         /(remoteServerStore|localDreamGenerator|imagePromptEnhancement|residencyIntents|sharedImageGeneration)/.test(specifier)
       ) {
         report('mobile-image-lifecycle-is-shared', fileName, source, node, `import:${specifier}`)
+      }
+      if (
+        fileName !== 'src/services/modelServices/toolPorts.ts' &&
+        /(?:litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight|llmToolGeneration)/.test(specifier)
+      ) {
+        report('mobile-tool-routing-is-shared', fileName, source, node, `import:${specifier}`)
       }
       if (
         fileName !== 'src/services/modelServices/imageGenerationApplication.ts' &&
@@ -174,6 +184,14 @@ for (const file of files) {
       /^(?:ensureImageModelLoaded|runGenerationAndSave|enhanceImageGenerationPrompt|resolveImageGenerationRoute|retryImageGeneration|forceLoadImageModel)$/.test(node.name.getText(source))
     ) {
       report('mobile-image-lifecycle-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+    }
+
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
+      node.name &&
+      /^(?:generateWithToolsImpl|selectRelevantTools|selectToolsByEmbedding|remoteToolCapabilityIssue)$/.test(node.name.getText(source))
+    ) {
+      report('mobile-tool-routing-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
     }
 
     if (

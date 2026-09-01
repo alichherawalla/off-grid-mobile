@@ -7,10 +7,6 @@ import type {
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { llmService } from '../llm';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
-import {
-  selectToolsByEmbeddingRaw,
-  type RoutableTool,
-} from '../toolEmbeddingRouter';
 
 function operation(request: GenerationRequest) {
   if (!request.operation) throw new TypeError('A sidecar operation is required');
@@ -57,38 +53,18 @@ async function* classifierChunks(request: GenerationRequest): AsyncIterable<Gene
   };
 }
 
-async function* toolSelectionChunks(request: GenerationRequest): AsyncIterable<GenerationChunk> {
-  const input = operation(request);
-  if (input.type !== 'tool_selection') throw new TypeError('A tool-selection operation is required');
-  const tools: RoutableTool[] = (request.tools ?? []).map(tool => ({
-    function: { name: tool.name, description: tool.description },
-  }));
-  const names = await selectToolsByEmbeddingRaw(input.input, tools, input.limit);
-  yield {
-    output: {
-      type: 'tool_selection',
-      toolCalls: names.map((name, index) => ({
-        id: `selected-tool-${index}`,
-        name,
-        arguments: '',
-      })),
-    },
-    finishReason: 'stop',
-  };
-}
-
 function adapter(id: string): GenerationAdapter {
   return {
     id,
     async load(model) {
-      if (model.modality === 'embedding' || model.modality === 'tool_selection') {
+      if (model.modality === 'embedding') {
         await embeddingService.load();
       } else if (model.modality === 'classifier') {
         await nativeModelLifecycle.loadTextModel(model.id, 120_000, false);
       }
     },
     async unload(model) {
-      if (model.modality === 'embedding' || model.modality === 'tool_selection') {
+      if (model.modality === 'embedding') {
         await embeddingService.unload();
       } else if (model.modality === 'classifier') {
         await nativeModelLifecycle.unloadTextModel(true);
@@ -97,7 +73,6 @@ function adapter(id: string): GenerationAdapter {
     generate(model, request) {
       if (model.modality === 'embedding') return embeddingChunks(request);
       if (model.modality === 'classifier') return classifierChunks(request);
-      if (model.modality === 'tool_selection') return toolSelectionChunks(request);
       throw new Error(`Unsupported Mobile sidecar modality: ${model.modality}`);
     },
   };
@@ -108,7 +83,7 @@ export function reconcileMobileSidecarAdapters(
   models: LLMService,
   registrations: Map<string, () => void>,
 ): void {
-  const modalities = new Set(['embedding', 'classifier', 'tool_selection']);
+  const modalities = new Set(['embedding', 'classifier']);
   const supported = new Set(models.list()
     .filter(model => modalities.has(model.modality))
     .map(model => model.adapterId));

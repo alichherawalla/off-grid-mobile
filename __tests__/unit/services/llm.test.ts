@@ -2244,50 +2244,6 @@ describe('LLMService', () => {
   });
 
   // ========================================================================
-  // runNativeToolCompletion — uses context.completion with tools
-  // ========================================================================
-  describe('runNativeToolCompletion', () => {
-    it('returns fullResponse and empty toolCalls on successful completion', async () => {
-      mockedRNFS.exists.mockResolvedValue(true);
-      const ctx = createMockLlamaContext();
-      mockedInitLlama.mockResolvedValue(ctx as any);
-      await llmService.loadModel('/models/test.gguf');
-
-      const result = await llmService.runNativeToolCompletion(
-        [{ id: '1', role: 'user', content: 'Use a tool', timestamp: 0 }],
-        { tools: [{ type: 'function', function: { name: 'web_search' } }] },
-      );
-
-      expect(result).toHaveProperty('fullResponse');
-      expect(result).toHaveProperty('toolCalls');
-      expect(Array.isArray(result.toolCalls)).toBe(true);
-    });
-
-    it('sets and clears activeCompletionPromise during generation', async () => {
-      mockedRNFS.exists.mockResolvedValue(true);
-      const ctx = createMockLlamaContext();
-      mockedInitLlama.mockResolvedValue(ctx as any);
-      await llmService.loadModel('/models/test.gguf');
-
-      let promiseDuringGeneration: any = 'not-set';
-      (ctx as any).completion.mockImplementation(async (..._args: any[]) => {
-        promiseDuringGeneration = (llmService as any).activeCompletionPromise;
-        return { text: 'response', tokens_predicted: 5, timings: {} };
-      });
-
-      await llmService.runNativeToolCompletion(
-        [{ id: '1', role: 'user', content: 'Hi', timestamp: 0 }],
-        { tools: [] },
-      );
-
-      // activeCompletionPromise should be null after completion
-      expect((llmService as any).activeCompletionPromise).toBeNull();
-      // During generation it should have been set
-      expect(promiseDuringGeneration).not.toBe('not-set');
-    });
-  });
-
-  // ========================================================================
   // stopGeneration — drains activeCompletionPromise when set
   // ========================================================================
   describe('stopGeneration — drains activeCompletionPromise', () => {

@@ -20,8 +20,6 @@ import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { dropMissingImageAttachments, modelImageAttachments } from './llmImageInput';
-import { generateWithToolsImpl } from './llmToolGeneration';
-import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { resolveSpeculative } from './mtpDetection';
@@ -327,29 +325,6 @@ class LLMService {
     })();
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
     try { return await completionWork; } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
-  }
-  async runNativeToolCompletion(messages: Message[], options: { tools: any[]; onStream?: StreamCallback; onComplete?: CompleteCallback; reasoningWire?: ReasoningWireFragment }): Promise<{ fullResponse: string; toolCalls: ToolCall[]; interrupted?: boolean }> {
-    const settings = useAppStore.getState().settings;
-    const fallbackWire = reasoningWireFragment(resolveReasoningPlan(
-      { enabled: this.isThinkingEnabled(), budgetTokens: settings.reasoningBudget },
-      this.getReasoningMetadata()));
-    const work = generateWithToolsImpl({
-      context: this.context, isGenerating: this.isGenerating,
-      disableCtxShift: this.shouldDisableCtxShift(),
-      manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
-      convertToOAIMessages: async msgs =>
-        this.convertToOAIMessages(await this.dropMissingImageAttachments(msgs)),
-      setPerformanceStats: (s) => { this.performanceStats = s; },
-      setIsGenerating: (v) => { this.isGenerating = v; },
-    }, messages, {
-      tools: options.tools,
-      reasoningWire: options.reasoningWire ?? fallbackWire,
-      onStream: options.onStream,
-      onComplete: options.onComplete
-        ? ((onComplete) => (fullResponse: string, reasoningContent: string) => onComplete({ content: fullResponse, reasoningContent }))(options.onComplete) : undefined,
-    });
-    this.activeCompletionPromise = work.then(() => { }, () => { });
-    try { return await work; } finally { this.activeCompletionPromise = null; }
   }
   /** No-op pass-through — lets llama.rn's native ctx_shift handle overflow for KV cache reuse. */
   private async manageContextWindow(messages: Message[], _extraReserve = 0): Promise<Message[]> {

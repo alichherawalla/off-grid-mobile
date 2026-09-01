@@ -7,8 +7,11 @@ import {
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExecutorPort,
-  selectToolRoutingStrategy,
+  ToolRoutingService,
+  openAIToolToDefinition,
+  toolSchemaTokenBudget,
 } from '@offgrid/models';
+import { useAppStore } from '../../stores/appStore';
 import { useChatStore } from '../../stores/chatStore';
 import logger from '../../utils/logger';
 import { executeToolCall } from '../tools';
@@ -16,8 +19,11 @@ import { getToolsAsOpenAISchema } from '../tools';
 import { getToolExtensions } from '../tools/extensions';
 import { isRemoteTextModelActive } from '../engines';
 import { isMcpEnabled } from '../mcpContextBoost';
-import { executeMobileText, executeMobileToolSelection } from '../mobileSidecarGeneration';
-import { selectRelevantTools } from '../litertToolSelector';
+import { executeMobileText } from '../mobileSidecarGeneration';
+import {
+  mobileToolEmbeddingCache,
+  mobileToolEmbeddingPort,
+} from '../adapters/native/toolEmbeddingAdapter';
 import { clearMobileEphemeralTextState } from './generationAdapters';
 import type { ToolCall, ToolResult } from '../tools/types';
 
@@ -55,32 +61,46 @@ export const mobileToolExecutor: ToolExecutorPort = {
   },
 };
 
-function openAISchemaDefinition(schema: any): GenerationToolDefinition | null {
-  const fn = schema?.function;
-  if (!fn?.name || typeof fn.name !== 'string') return null;
-  return {
-    name: fn.name,
-    description: typeof fn.description === 'string' ? fn.description : undefined,
-    inputSchema: fn.parameters && typeof fn.parameters === 'object'
-      ? fn.parameters
-      : { type: 'object', properties: {} },
-  };
-}
+const toolRoutingService = new ToolRoutingService({
+  embedding: mobileToolEmbeddingPort,
+  embeddingCache: mobileToolEmbeddingCache,
+  modelSelection: generateToolRoutingText,
+});
 
 /** Build one shared schema projection from Mobile's raw tool registries. */
 export async function mobileToolDefinitions(
   enabledToolIds: string[],
   messages: import('../../types').Message[],
 ): Promise<GenerationToolDefinition[]> {
-  const schemas = await mobileEffectiveToolSchemas(messages, enabledToolIds);
-  return schemas.flatMap(schema => {
-    const definition = openAISchemaDefinition(schema);
-    return definition ? [definition] : [];
+  const builtInTools = getToolsAsOpenAISchema(enabledToolIds)
+    .flatMap(schema => {
+      const definition = openAIToolToDefinition(schema);
+      return definition ? [definition] : [];
+    });
+  const externalTools = getToolExtensions()
+    .flatMap(extension => extension.getOpenAISchemas?.() ?? [])
+    .flatMap(schema => {
+      const definition = openAIToolToDefinition(schema);
+      return definition ? [definition] : [];
+    });
+  const settings = useAppStore.getState().settings;
+  const result = await toolRoutingService.select({
+    messages: messages.map(message => ({
+      role: message.role,
+      content: message.content,
+    })),
+    builtInTools,
+    externalTools,
+    remoteModel: isRemoteTextModelActive(),
+    embeddingRouting: isMcpEnabled(),
+    modelRouting: true,
+    selectionLimit: 12,
+    schemaTokenLimit: toolSchemaTokenBudget(settings.contextLength),
   });
-}
-
-function lastUserQuery(messages: import('../../types').Message[]): string {
-  return [...messages].reverse().find(message => message.role === 'user' && message.content.trim())?.content.trim() ?? '';
+  if (result.fallbackReason) {
+    logger.warn(`[SharedTools] ${result.strategy} selection failed (${result.fallbackReason}); using all tools`);
+  }
+  return result.tools;
 }
 
 async function generateToolRoutingText(system: string, user: string): Promise<string> {
@@ -91,35 +111,6 @@ async function generateToolRoutingText(system: string, user: string): Promise<st
     ], { maxTokens: 64 });
   } finally {
     await clearMobileEphemeralTextState();
-  }
-}
-
-async function mobileEffectiveToolSchemas(
-  messages: import('../../types').Message[],
-  enabledToolIds: string[],
-): Promise<any[]> {
-  const builtIn = getToolsAsOpenAISchema(enabledToolIds);
-  const extensions = getToolExtensions().flatMap(extension => extension.getOpenAISchemas?.() ?? []);
-  const all = [...builtIn, ...extensions];
-  const useEmbedding = isMcpEnabled();
-  const strategy = selectToolRoutingStrategy({
-    externalToolCount: extensions.length,
-    totalToolCount: all.length,
-    remoteModel: isRemoteTextModelActive(),
-    embeddingRouting: useEmbedding,
-    modelRouting: true,
-  });
-  if (strategy === 'all') return all;
-  const query = lastUserQuery(messages);
-  try {
-    const selected = strategy === 'embedding'
-      ? await executeMobileToolSelection(query, extensions, 12)
-      : await selectRelevantTools(query, extensions, generateToolRoutingText);
-    if (!selected?.length) return builtIn;
-    return [...builtIn, ...extensions.filter(schema => selected.includes(schema.function.name))];
-  } catch (error) {
-    logger.warn(`[SharedTools] tool selection failed; using all tools: ${String(error)}`);
-    return all;
   }
 }
 

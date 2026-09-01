@@ -13,7 +13,7 @@ export interface ParsedContent {
 
 /**
  * THE single source of truth for the Gemma-native tool-call delimiter grammar. Both the
- * live streaming suppressor (ToolCallTokenFilter in llmToolGeneration) and the stored-content
+ * Shared live streaming suppressor and the stored-content
  * stripper (below) derive from THIS set, so a format the parser accepts cannot be one the
  * stripper/filter miss. DR7 was exactly that drift: the parser accepted `<tool_call:` but the
  * filter/stripper only knew `<|tool_call>`, so the colon form leaked as visible text. A block

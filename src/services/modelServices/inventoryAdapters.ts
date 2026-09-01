@@ -302,7 +302,7 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
   },
 };
 
-function embeddingRuntime(modality: 'embedding' | 'tool_selection'): RuntimeModel {
+function embeddingRuntime(modality: 'embedding'): RuntimeModel {
   return runtime(
     {
       source: 'local',
@@ -327,7 +327,7 @@ function embeddingRuntime(modality: 'embedding' | 'tool_selection'): RuntimeMode
 export const embeddingInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-embedding-inventory',
   async listModels() {
-    return [embeddingRuntime('embedding'), embeddingRuntime('tool_selection')];
+    return [embeddingRuntime('embedding')];
   },
 };
 
