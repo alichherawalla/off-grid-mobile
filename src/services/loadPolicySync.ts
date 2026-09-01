@@ -17,17 +17,10 @@ import { useAppStore } from '../stores';
 import { modelResidencyManager } from './modelServices/residencyBootstrap';
 import { activeModelService } from './activeModelService';
 import { LoadPolicy } from './memoryBudget';
+import { loadPolicyFromSettings } from '@offgrid/models';
 
 /** The one setting→policy mapping. Prefer the explicit 3-mode setting; fall back to
  *  the legacy aggressiveModelLoading boolean so pre-migration installs still work. */
-export function loadPolicyFromSettings(settings: {
-  modelLoadingMode?: LoadPolicy;
-  aggressiveModelLoading?: boolean;
-}): LoadPolicy {
-  if (settings.modelLoadingMode) return settings.modelLoadingMode;
-  return settings.aggressiveModelLoading ? 'aggressive' : 'balanced';
-}
-
 /**
  * Push the current setting into the manager and keep it in sync on every change.
  * SINGLETON: safe to call more than once — App's boot effect can re-run (its

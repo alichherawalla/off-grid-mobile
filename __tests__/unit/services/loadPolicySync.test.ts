@@ -12,7 +12,8 @@
  * sync diffs on the RESULTING LoadPolicy, so setLoadPolicy runs only when the
  * effective policy actually changes.
  */
-import { loadPolicyFromSettings, startLoadPolicySync } from '../../../src/services/loadPolicySync';
+import { loadPolicyFromSettings } from '@offgrid/models';
+import { startLoadPolicySync } from '../../../src/services/loadPolicySync';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { useAppStore } from '../../../src/stores';
 
