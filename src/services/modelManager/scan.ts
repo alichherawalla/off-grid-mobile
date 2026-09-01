@@ -3,7 +3,7 @@ import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
 import { loadDownloadedModels, saveModelsList } from './storage';
-import { basenameOf } from './reconcileStoredPaths';
+import { modelPathBasename } from '@offgrid/models';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
@@ -281,7 +281,7 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
    * directory we already own "untracked" and adopts a second row for it. A directory name is unique
    * within the models dir, so it is the identity that survives a container move.
    */
-  const registeredDirNames = new Set(registeredModels.map(m => basenameOf(m.modelPath)));
+  const registeredDirNames = new Set(registeredModels.map(m => modelPathBasename(m.modelPath)));
 
   const dirExists = await RNFS.exists(imageModelsDir);
   if (!dirExists) return discoveredModels;

@@ -6,15 +6,17 @@ import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
 import { statFile } from '../../utils/fileStat';
 import { parseHuggingFaceUrl } from '../../utils/modelOrigin';
-import { collapseDuplicateFileRows, collapseDuplicateImageRows } from './collapseDuplicateFileRows';
-import { reconcilePrimaryPaths, resolveStoredPath } from './reconcileStoredPaths';
+import {
+  collapseDuplicateModelRows,
+  modelPathBasename,
+  resolveStoredModelPath,
+} from '@offgrid/models';
+import { reconcilePrimaryPaths } from './reconcileStoredPaths';
 import { useAppStore } from '../../stores';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 // Re-exported because this module was the published home of these helpers before they were extracted
 // into the one place both registries share.
-export { resolveStoredPath };
-
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
 
@@ -84,7 +86,7 @@ async function tryResolveMmProjPath(
   if (model.engine !== 'llama' || !model.mmProjPath) return false;
   const mmExists = await RNFS.exists(model.mmProjPath);
   if (mmExists) return false;
-  const resolvedMm = resolveStoredPath(model.mmProjPath, modelsDir);
+  const resolvedMm = resolveStoredModelPath(model.mmProjPath, modelsDir);
   if (!resolvedMm || resolvedMm === model.mmProjPath) return false;
   const mmResolvedExists = await RNFS.exists(resolvedMm);
   if (mmResolvedExists) {
@@ -149,7 +151,10 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   }
 
   const { validModels, pathsUpdated } = await validateAndResolveModels(models, modelsDir);
-  const { models: deduped, collapsed } = collapseDuplicateFileRows(validModels);
+  const { models: deduped, collapsed } = collapseDuplicateModelRows(
+    validModels,
+    model => model.fileName,
+  );
 
   if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
     await saveModelsList(deduped);
@@ -186,7 +191,10 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
   const validModels = models.filter((_, i) => verdicts[i].keep);
   // Repairs a registry that already grew duplicates under the old `Date.now()` ids, exactly as the
   // text registry does one function above.
-  const { models: deduped, collapsed } = collapseDuplicateImageRows(validModels);
+  const { models: deduped, collapsed } = collapseDuplicateModelRows(
+    validModels,
+    model => modelPathBasename(model.modelPath) || undefined,
+  );
 
   if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
     await saveImageModelsList(deduped);

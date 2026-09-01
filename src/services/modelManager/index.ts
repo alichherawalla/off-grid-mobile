@@ -42,7 +42,8 @@ import {
   importLocalModel as scanImportLocalModel,
   type ImportLocalModelOpts,
 } from './importLocalModel';
-import { resolveStoredPath, determineCredibility } from './storage';
+import { determineCredibility } from './storage';
+import { resolveStoredModelPath } from '@offgrid/models';
 import * as visionRepair from './visionRepairService';
 import type { RepairOpts, VisionRepairContext } from './visionRepairService';
 import { resolveOwnedDocumentPath } from '../../utils/resolveDocumentPath';
@@ -58,7 +59,7 @@ class ModelManager {
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
   }
 
-  private resolveStoredPath(p: string, d: string) { return resolveStoredPath(p, d); }
+  private resolveStoredPath(p: string, d: string) { return resolveStoredModelPath(p, d); }
   private determineCredibility(a: string) { return determineCredibility(a); }
   private isMMProjFile(f: string) { return isMMProjFile(f); }
 

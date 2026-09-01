@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import logger from '../../utils/logger';
+import { modelPathBasename, resolveStoredModelPath } from '@offgrid/models';
 
 /**
  * ONE answer to "is this stored model still on disk, and where?".
@@ -12,10 +13,6 @@ import logger from '../../utils/logger';
  */
 
 /** The last path segment. The only place this arithmetic is written. */
-export function basenameOf(path: string): string {
-  return path.substring(path.lastIndexOf('/') + 1);
-}
-
 /**
  * Rebase a path recorded under a previous container onto the current base directory.
  *
@@ -23,18 +20,6 @@ export function basenameOf(path: string): string {
  * on every reinstall — so a path saved yesterday names nothing today even though the file is right
  * where it was left. Returns null when the stored path has no segment in common to rebase from.
  */
-export function resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
-  const marker = `/${basenameOf(currentBaseDir)}/`;
-  const markerIndex = storedPath.indexOf(marker);
-
-  if (markerIndex === -1) return null;
-
-  const relativePart = storedPath.substring(markerIndex + marker.length);
-  if (!relativePart) return null;
-
-  return `${currentBaseDir}/${relativePart}`;
-}
-
 /**
  * Existence probe that NEVER conflates a transient filesystem error with "file absent".
  *
@@ -85,7 +70,7 @@ export async function reconcilePrimaryPaths<T>(
   const rebased = await Promise.all(
     models.map(async (model, i) => {
       if (direct[i].exists) return null;
-      const resolved = resolveStoredPath(getPath(model), baseDir);
+      const resolved = resolveStoredModelPath(getPath(model), baseDir);
       if (!resolved || resolved === getPath(model)) return null;
       const { exists, verifiable } = await probeExists(resolved);
       if (exists) setPath(model, resolved);
