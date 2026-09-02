@@ -2,27 +2,19 @@ import {
   decodeModelRouteId,
   type ModelSelectionStore,
 } from '@offgrid/models';
-import { remoteServerManager } from '../remoteServerManager';
 import { mobileModelSelectionService } from './modelSelectionApplication';
 
-/** Shared LLMService calls this single persisted-selection adapter. */
+/**
+ * Shared LLMService calls this single persisted-selection adapter. It is a pure write: the Mac's own
+ * selection is the Mac's to change, and only an explicit pick in this app's UI (selectMobileModel)
+ * asks it to. A write here used to activate the route on the paired Desktop as a side effect, so
+ * every hydrate, refresh, or recovery that re-wrote the phone's selection silently moved the Mac's.
+ */
 export const mobileModelSelectionStore: ModelSelectionStore = {
   read: modality => mobileModelSelectionService.read(modality),
   async write(modality, canonicalId) {
     const route = canonicalId ? decodeModelRouteId(canonicalId) : null;
     if (canonicalId && !route) throw new Error('The selected model route is invalid');
-    if (route?.serverId) {
-      if (modality === 'text') {
-        await remoteServerManager.prepareRemoteTextModel(route.serverId, route.modelId);
-      } else if (
-        modality === 'image' || modality === 'transcription' ||
-        modality === 'voice' || modality === 'embedding'
-      ) {
-        await remoteServerManager.prepareRemoteMediaModel(route.serverId, modality, route.modelId);
-      } else {
-        throw new Error(`Remote ${modality} selection is not supported`);
-      }
-    }
     await mobileModelSelectionService.write(modality, canonicalId);
   },
 };

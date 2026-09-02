@@ -36,6 +36,7 @@ import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 import { mobileModelSelectionService } from './modelSelectionApplication';
 import { reportModelFailure } from '../modelFailureHandler';
+import { remoteServerManager } from '../remoteServerManager';
 import logger from '../../utils/logger';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
@@ -165,8 +166,21 @@ export function activeMobileModel(modality: ActiveModelSnapshot['modality']): Ac
   return mobileLLMService.active(modality);
 }
 
-/** Refresh first so a newly downloaded or discovered route can be selected immediately. */
+/** The user picked a model. For a remote route, ask that server to activate it FIRST (the one
+ * place the phone may change a paired Mac's selection), then record the phone's own selection. */
 export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> {
+  if (facts.source === 'remote') {
+    if (facts.modality === 'text') {
+      await remoteServerManager.prepareRemoteTextModel(facts.hostId, facts.modelId);
+    } else if (
+      facts.modality === 'image' || facts.modality === 'transcription' ||
+      facts.modality === 'voice' || facts.modality === 'embedding'
+    ) {
+      await remoteServerManager.prepareRemoteMediaModel(facts.hostId, facts.modality, facts.modelId);
+    } else {
+      throw new Error(`Remote ${facts.modality} selection is not supported`);
+    }
+  }
   await selectMobileRoute(facts.modality, mobileRouteId(facts));
   await refreshMobileModelServices();
 }
