@@ -176,7 +176,7 @@ export const mobileRemoteServerApplication = new RemoteServerApplicationService(
       }
       return result;
     },
-    scan: onFound => discoverLANServers(undefined, onFound),
+    scan: (onFound, onProgress) => discoverLANServers(undefined, onFound, onProgress),
     activateManaged(...args) {
       return activateManagedRemote({
         server: args[0],

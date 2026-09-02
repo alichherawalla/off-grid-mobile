@@ -12,7 +12,7 @@ import {
   remoteLanScanKinds,
   type RemoteLanProviderKind,
 } from '@offgrid/models';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -53,9 +53,19 @@ type NavigationProp = NativeStackNavigationProp<
   'RemoteServers'
 >;
 
+/** Say what was actually tried: the ports are what has to be listening on the other machine. */
+function scanEmptyNote(savedCount: number): string {
+  return savedCount > 0
+    ? 'Everything on this network is already in your list.'
+    : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.';
+}
+
 /** Which server kinds a scan looks for. Shared owns the default and the filter; this only renders. */
 const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme }) => {
-  const scanKinds = useAppStore(s => remoteLanScanKinds(s.settings));
+  // Select the stored value, never a fresh array: a selector that returns a new array every render
+  // re-renders for ever under useSyncExternalStore and takes the app down.
+  const storedKinds = useAppStore(s => s.settings.remoteScanKinds);
+  const scanKinds = useMemo(() => remoteLanScanKinds({ remoteScanKinds: storedKinds }), [storedKinds]);
   const updateSettings = useAppStore(s => s.updateSettings);
   const toggle = (kind: RemoteLanProviderKind, on: boolean) => {
     const next = REMOTE_LAN_PROVIDER_KINDS.filter(candidate =>
@@ -84,6 +94,70 @@ const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme 
   );
 };
 
+/** The scan action: each server joins the list as it answers; the note reads found-so-far and percent. */
+function useScanNetwork({
+  servers,
+  scanKindLabels,
+  setIsScanning,
+  setScanNote,
+}: {
+  servers: readonly unknown[];
+  scanKindLabels: readonly string[];
+  setIsScanning: (value: boolean) => void;
+  setScanNote: (value: string | null) => void;
+}) {
+  return useCallback(async () => {
+    setIsScanning(true);
+    setScanNote(null);
+    try {
+      // Paired devices first: a Mac you paired over sync is a server without any scan.
+      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired)?.catch(() => undefined);
+      // Each server joins the list the moment it answers; the scan keeps going behind it.
+      let addedSoFar = 0;
+      let percent = 0;
+      const note = () =>
+        setScanNote(
+          `${addedSoFar ? `Found ${addedSoFar} so far. ` : ''}Looking for ${scanKindLabels.join(', ')}… ${percent}%`,
+        );
+      note();
+      const { found: newServers } = await remoteServerManager.scanAndReconcile(
+        async found => {
+          const server = await remoteServerManager.addServer({
+            name: found.name,
+            endpoint: found.endpoint,
+            provider: 'openai-compatible',
+          });
+          remoteServerManager.testConnection(server.id).catch(() => {});
+          addedSoFar += 1;
+          note();
+        },
+        (done, total) => {
+          const next = total ? Math.floor((done / total) * 100) : 0;
+          if (next !== percent) {
+            percent = next;
+            note();
+          }
+        },
+      );
+      if (newServers.length === 0) {
+        // Say what was actually tried. "No servers found" leaves the user with nothing to act
+        // on; the ports do, because that is what has to be listening on the other machine.
+        setScanNote(scanEmptyNote(servers.length));
+        return;
+      }
+      setScanNote(
+        `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
+      );
+    } catch (error) {
+      setScanNote(
+        error instanceof Error ? error.message : 'The scan could not finish.',
+      );
+    } finally {
+      setIsScanning(false);
+    }
+  }, [servers, scanKindLabels, setIsScanning, setScanNote]);
+}
+
 export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
@@ -94,6 +168,11 @@ export const RemoteServersScreen: React.FC = () => {
     s => s.settings.autoDiscoverRemoteModels === true,
   );
   const updateSettings = useAppStore(s => s.updateSettings);
+  const storedScanKinds = useAppStore(s => s.settings.remoteScanKinds);
+  const scanKindLabels = useMemo(
+    () => remoteLanScanKinds({ remoteScanKinds: storedScanKinds }).map(kind => REMOTE_LAN_PROVIDER_LABELS[kind]),
+    [storedScanKinds],
+  );
 
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -126,47 +205,7 @@ export const RemoteServersScreen: React.FC = () => {
     }
   }, []);
 
-  const handleScanNetwork = useCallback(async () => {
-    setIsScanning(true);
-    setScanNote(null);
-    try {
-      // Paired devices first: a Mac you paired over sync is a server without any scan.
-      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired)?.catch(() => undefined);
-      // Each server joins the list the moment it answers; the scan keeps going behind it.
-      let addedSoFar = 0;
-      const { found: newServers } = await remoteServerManager.scanAndReconcile(
-        async found => {
-          const server = await remoteServerManager.addServer({
-            name: found.name,
-            endpoint: found.endpoint,
-            provider: 'openai-compatible',
-          });
-          remoteServerManager.testConnection(server.id).catch(() => {});
-          addedSoFar += 1;
-          setScanNote(`Found ${addedSoFar} so far, still scanning…`);
-        },
-      );
-      if (newServers.length === 0) {
-        // Say what was actually tried. "No servers found" leaves the user with nothing to act
-        // on; the ports do, because that is what has to be listening on the other machine.
-        setScanNote(
-          servers.length > 0
-            ? 'Everything on this network is already in your list.'
-            : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.',
-        );
-        return;
-      }
-      setScanNote(
-        `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
-      );
-    } catch (error) {
-      setScanNote(
-        error instanceof Error ? error.message : 'The scan could not finish.',
-      );
-    } finally {
-      setIsScanning(false);
-    }
-  }, [servers]);
+  const handleScanNetwork = useScanNetwork({ servers, scanKindLabels, setIsScanning, setScanNote });
 
   const handleDeleteServer = useCallback(
     (server: (typeof servers)[0]) => {

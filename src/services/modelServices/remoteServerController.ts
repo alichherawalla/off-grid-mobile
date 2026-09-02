@@ -85,11 +85,12 @@ class RemoteServerManager {
 
   async scanAndReconcile(
     onFound?: (server: { endpoint: string; name: string }) => void,
+    onProgress?: (done: number, total: number) => void,
   ): Promise<{
     moved: string[];
     found: Array<{ endpoint: string; name: string; type: 'gateway' }>;
   }> {
-    const result = await mobileRemoteServerApplication.reconcile({ onFound });
+    const result = await mobileRemoteServerApplication.reconcile({ onFound, onProgress });
     return { ...result, found: result.found.map(server => ({ ...server, type: 'gateway' })) };
   }
   async recoverActiveConnection(): Promise<void> {

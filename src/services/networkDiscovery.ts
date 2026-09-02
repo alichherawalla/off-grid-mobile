@@ -34,9 +34,10 @@ const discovery = new RemoteLanDiscoveryApplicationService({
 export function discoverLANServers(
   onLog?: (message: string) => void,
   onFound?: (server: DiscoveredServer) => void,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<DiscoveredServer[]> {
   return discovery.discover(message => {
     logger.warn('[Discovery]', message);
     onLog?.(message);
-  }, onFound, { kinds: remoteLanScanKinds(useAppStore.getState().settings) });
+  }, onFound, { kinds: remoteLanScanKinds(useAppStore.getState().settings), onProgress });
 }
