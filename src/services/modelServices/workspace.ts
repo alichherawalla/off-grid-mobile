@@ -1,0 +1,85 @@
+import {
+  createModelWorkspace,
+  type ConversationPort,
+  type RemoteServerApplicationPorts,
+  type ToolExecutorPort,
+} from '@offgrid/models';
+import { generateId } from '../../utils/generateId';
+import { mobileModelSelectionStore } from './selectionStore';
+import { modelResidencyManager } from './residencyBootstrap';
+
+// Tool and conversation ports are resolved at call time: their modules reach back into this
+// composition (text engine, generation adapters), and a module-level import would form a cycle.
+const lazyTools: ToolExecutorPort = {
+  prepare: (call, context) => toolPorts().mobileToolExecutor.prepare?.(call, context) ?? call,
+  execute: (call, context) => toolPorts().mobileToolExecutor.execute(call, context),
+};
+const lazyConversations: ConversationPort = {
+  append: (identity, message) => toolPorts().mobileConversationPort.append(identity, message),
+};
+function toolPorts(): typeof import('./toolPorts') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./toolPorts') as typeof import('./toolPorts');
+}
+
+// Remote-server I/O reaches transports and stores that in turn reach this composition, so it is
+// resolved at call time as well. Every member delegates; nothing is decided here.
+type RemotePorts = Omit<RemoteServerApplicationPorts, 'select'>;
+function remotePorts(): RemotePorts {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require('./remoteServerApplication') as typeof import('./remoteServerApplication'))
+    .mobileRemoteServerPorts;
+}
+const lazyRemote: RemotePorts = {
+  configuration: {
+    read: () => remotePorts().configuration.read(),
+    write: value => remotePorts().configuration.write(value),
+  },
+  credentials: {
+    read: id => remotePorts().credentials.read(id),
+    write: (id, value) => remotePorts().credentials.write(id, value),
+    remove: id => remotePorts().credentials.remove(id),
+  },
+  providers: {
+    register: (server, credential) => remotePorts().providers.register(server, credential),
+    update: (server, credential) =>
+      remotePorts().providers.update?.(server, credential) ??
+      remotePorts().providers.register(server, credential),
+    unregister: id => remotePorts().providers.unregister(id),
+  },
+  clearSelections: id => remotePorts().clearSelections(id),
+  discover: (server, credential) => {
+    const discover = remotePorts().discover;
+    if (!discover) throw new Error('Remote discovery is not available.');
+    return discover(server, credential);
+  },
+  projectDiscovery: (id, result) => remotePorts().projectDiscovery?.(id, result),
+  test: (server, credential) => {
+    const test = remotePorts().test;
+    if (!test) throw new Error('Remote health checks are not available.');
+    return test(server, credential);
+  },
+  scan: (onFound, onProgress) => {
+    const scan = remotePorts().scan;
+    if (!scan) throw new Error('LAN scan is not available.');
+    return scan(onFound, onProgress);
+  },
+  activateManaged: (...args) => {
+    const activate = remotePorts().activateManaged;
+    if (!activate) throw new Error('Managed activation is not available.');
+    return activate(...args);
+  },
+};
+
+/** The ONE shared facade Mobile composes its model layer from. Everything here is a port. */
+export const mobileWorkspace = createModelWorkspace({
+  selection: mobileModelSelectionStore,
+  // Residency is built first (module order); the workspace adopts it rather than owning a second.
+  residencyManager: modelResidencyManager,
+  generation: { tools: lazyTools, conversations: lazyConversations },
+  remote: lazyRemote,
+  remoteServerId: generateId,
+});
+
+/** Remote-server application, owned by the workspace. */
+export const mobileRemoteServerApplication = mobileWorkspace.servers;

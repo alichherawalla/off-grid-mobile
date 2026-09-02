@@ -1,13 +1,12 @@
 import {
-  RemoteServerApplicationService,
   mergeRemoteSelections,
+  type RemoteServerApplicationPorts,
   type PersistedRemoteServer,
   type RemoteModelModality,
   type RemoteServerConfiguration,
 } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAppStore } from '../../stores/appStore';
-import { generateId } from '../../utils/generateId';
 import { remoteTextTransportRegistry } from '../adapters/providers/registry';
 import { discoverLANServers } from '../networkDiscovery';
 import {
@@ -21,11 +20,7 @@ import {
   storeApiKeyImpl,
 } from '../adapters/remote/serverRuntime';
 import { activateOffGridDesktopModel } from '../adapters/remote/offGridDesktopModels';
-import {
-  removeCanonicalServerSelections,
-  selectCanonicalModel,
-} from './modelSelectionCommandPort';
-import { mobileRouteId } from './mobileRoute';
+import { removeCanonicalServerSelections } from './modelSelectionCommandPort';
 import type { RemoteModel, RemoteServer } from '../../types';
 
 function readConfiguration(): RemoteServerConfiguration {
@@ -104,9 +99,13 @@ function activateManagedRemote({
   );
 }
 
-/** Mobile composition: all decisions live in Shared; this file only connects platform I/O. */
-export const mobileRemoteServerApplication = new RemoteServerApplicationService(
-  {
+/**
+ * Mobile's remote-server I/O, handed to the shared ModelWorkspace. Selection is NOT a port here:
+ * the workspace resolves a server's model to this device's route and writes it through the one
+ * selection authority. `clearSelections` stays a port until the per-source candidate projection
+ * moves into shared.
+ */
+export const mobileRemoteServerPorts: Omit<RemoteServerApplicationPorts, 'select'> = {
     configuration: { read: readConfiguration, write: writeConfiguration },
     credentials: {
       read: getApiKeyImpl,
@@ -117,16 +116,6 @@ export const mobileRemoteServerApplication = new RemoteServerApplicationService(
       register: (server, credential) => createProviderForServerImpl(server, credential),
       update: (server, credential) => createProviderForServerImpl(server, credential),
       unregister(serverId) { remoteTextTransportRegistry.unregister(serverId); },
-    },
-    async select(modality, route) {
-      await selectCanonicalModel(
-        modality,
-        route
-          ? mobileRouteId({
-              source: 'remote', hostId: route.serverId, modality, modelId: route.modelId,
-            })
-          : null,
-      );
     },
     clearSelections: removeCanonicalServerSelections,
     async discover(server, credential) {
@@ -185,9 +174,7 @@ export const mobileRemoteServerApplication = new RemoteServerApplicationService(
         credential: args[3],
       });
     },
-  },
-  generateId,
-);
+};
 
 export function shouldRecoverRemoteServers(): boolean {
   return Boolean(useAppStore.getState().settings.autoDiscoverRemoteModels);

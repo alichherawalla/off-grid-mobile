@@ -1,4 +1,4 @@
-jest.mock('@offgrid/core/services/modelServices/remoteServerApplication', () => ({
+jest.mock('@offgrid/core/services/modelServices/workspace', () => ({
   mobileRemoteServerApplication: { adoptPairedDevices: jest.fn(async () => ({ save: [], remove: [] })) },
 }));
 jest.mock('../../../pro/sync/manualMeshEndpoint', () => ({ manualMeshEndpointStore: { get: (id: string) => (id === 'mac' ? { deviceId: 'mac', host: '100.64.0.9' } : undefined) } }));
@@ -22,7 +22,7 @@ jest.mock('../../../pro/sync/syncStore', () => {
 });
 
 import { initPairedGatewayAdoption } from '../../../pro/sync/pairedGatewayAdoption';
-import { mobileRemoteServerApplication } from '@offgrid/core/services/modelServices/remoteServerApplication';
+import { mobileRemoteServerApplication } from '@offgrid/core/services/modelServices/workspace';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 
 const adopt = mobileRemoteServerApplication.adoptPairedDevices as jest.Mock;

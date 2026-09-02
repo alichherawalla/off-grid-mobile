@@ -26,7 +26,7 @@ import {
   mobileGenerationResidency,
   reconcileMobileGenerationAdapters,
 } from './generationAdapters';
-import { mobileConversationPort, mobileToolExecutor } from './toolPorts';
+import { mobileWorkspace } from './workspace';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
@@ -54,14 +54,7 @@ registerModelSelectionCommandPort({
     );
   },
 });
-export const mobileGenerationService = new GenerationService(
-  mobileLLMService,
-  mobileGenerationResidency,
-  {
-    tools: mobileToolExecutor,
-    conversations: mobileConversationPort,
-  },
-);
+export const mobileGenerationService = mobileWorkspace.generation;
 /** Voice has its own queue so sentence playback can run while text is still streaming. */
 export const mobileVoiceGenerationService = new GenerationService(
   mobileLLMService,

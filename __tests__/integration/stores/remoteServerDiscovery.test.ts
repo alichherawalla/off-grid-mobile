@@ -15,7 +15,7 @@ jest.mock('../../../src/utils/logger', () => ({
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
-import { mobileRemoteServerApplication } from '../../../src/services/modelServices/remoteServerApplication';
+import { mobileRemoteServerApplication } from '../../../src/services/modelServices/workspace';
 
 // ---------------------------------------------------------------------------
 // Helpers

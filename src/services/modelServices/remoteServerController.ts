@@ -3,7 +3,8 @@ import { testEndpointAndGetModels } from '../adapters/remote/serverDiscovery';
 import { getApiKeyImpl, storeApiKeyImpl } from '../adapters/remote/serverRuntime';
 import { selectCanonicalModel } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
-import { mobileRemoteServerApplication, shouldRecoverRemoteServers } from './remoteServerApplication';
+import { shouldRecoverRemoteServers } from './remoteServerApplication';
+import { mobileRemoteServerApplication } from './workspace';
 
 /** Thin Mobile facade. Shared owns every remote-server decision and transaction. */
 class RemoteServerManager {
