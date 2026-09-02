@@ -121,7 +121,7 @@ The emotional arc for all content: **Recognition -> Return -> Freedom**. Name wh
 - Only build new when nothing fits - and say so in the PR description.
 
 <!-- BEGIN GENERATED: shared/CLAUDE.md#debugging-source-of-truth -->
-> **Generated from `shared/CLAUDE.md` - do not edit this section here.**
+> **Generated from `shared/rules.md` - do not edit this section here.**
 > Run `node scripts/mirror-doctrine.mjs` in `shared/` after changing the canonical copy.
 > `--check` fails the build when a mirror drifts, so these cannot silently disagree.
 
