@@ -2048,3 +2048,10 @@ Desktop's admission message ends with "or use Run anyway", but the gateway's
 `/v1/images/generations` does not read `allowUnsafeMemoryOverride`, so a phone cannot force the load
 or free Desktop's memory. Fix in shared first: the remote image request carries the override flag,
 the gateway honours it, and the phone's turn offers "Run anyway on <Mac>" only for a remote refusal.
+
+## Mobile forgot the remote model choices after a relaunch (RESOLVED in code 2026-09-02: shared `planPairedDeviceAdoption` removes an adopted server only when the device is unpaired; device log showed `[PairedGateway] saved=- removed=paired:<mac>` at boot; test 'a paired desktop without a dialable address yet keeps its saved server')
+
+At boot the paired Mac had no dialable address yet (roster row `lan=0.0.0.0 private=- route=-`).
+The adoption plan treated "no address" as "not wanted" and removed the adopted server, which
+dropped the text, image, and speech selections pointing at it. Choices made before the fix are
+gone once; they stay after it.
