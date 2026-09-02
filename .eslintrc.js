@@ -33,6 +33,22 @@ module.exports = {
     'no-shadow': 'off',
     '@typescript-eslint/no-shadow': 'error',
 
+    // Hexagonal boundary (warn ratchet, see shared/docs/MODEL_FACADE_PLAN.md): compose the model
+    // layer from `@offgrid/models/workspace` (+ constants from `@offgrid/models/catalog`). Value
+    // imports from the package root are the second pipeline being removed. Types stay free.
+    '@typescript-eslint/no-restricted-imports': [
+      'warn',
+      {
+        paths: [
+          {
+            name: '@offgrid/models',
+            message:
+              'Compose from @offgrid/models/workspace (or constants from @offgrid/models/catalog). Business logic lives in shared; this app is a port.',
+            allowTypeImports: true,
+          },
+        ],
+      },
+    ],
     // Code quality (built-in)
     'no-empty': 'error',
     'no-else-return': 'error',
