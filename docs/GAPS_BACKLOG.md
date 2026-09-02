@@ -1997,3 +1997,23 @@ the migration is verified complete.
 All 23 cases throw "Invalid attempt to spread non-iterable instance" inside the hook. Fails on
 the code from the start of the day (ea263c08), so it predates today's home changes. Likely a mock
 that returns undefined where the hook spreads a list. Fix the seam, then the test.
+
+## Silent fallback from a remote model to a tiny local one (open, 2026-09-02)
+
+Desktop's Qwen 3.5 2B returned 502 mid-turn; shared fell back to the only loaded local text model,
+SmolLM2 135M, which wrote a rambling answer. The turn kept the "Waiting for Qwen 3.5 2B" label and
+never said which model answered. A fallback that changes the model must be visible in the chat and
+in the turn's meta line.
+
+## Streaming speech gives up when the voice engine is still loading (open, 2026-09-02)
+
+`speakCompletedTurn ready=false streaming=false → speak full message`: a turn that started while
+Kokoro was still loading spoke the whole answer at the end instead of sentence by sentence. Streaming
+should wait for the engine, not fall back.
+
+## Cannot change Desktop's selected model from the phone (open, 2026-09-02)
+
+Selecting a Desktop model via OGAD returned "Desktop did not confirm the selected model." while
+Desktop was restarting its model server under a burst of activations. Activations are now joined in
+shared; verify the flow end to end. Follow-up: a device paired over sync should auto-register as a
+remote server, so the two connections are one.
