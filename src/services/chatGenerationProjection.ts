@@ -4,7 +4,7 @@ import { useAppStore, useChatStore } from '../stores';
 import type { GenerationMeta } from '../types';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
-import { buildGenerationMetaImpl } from './generationServiceHelpers';
+import { buildGenerationMetaImpl, FLUSH_INTERVAL_MS } from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 
@@ -31,6 +31,10 @@ class MobileGenerationProjection {
   private readonly listeners = new Set<GenerationListener>();
   private totalReasoningLength = 0;
   private remoteTimeToFirstToken: number | undefined;
+  // Token batching — collect tokens and flush to the store at a controlled rate
+  private tokenBuffer = '';
+  private reasoningBuffer = '';
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   getState(): GenerationState { return { ...this.state }; }
 
@@ -67,7 +71,6 @@ class MobileGenerationProjection {
 
   private partial(turn: ChatTurn, content: string, reasoning: string): void {
     if (this.state.conversationId !== turn.conversationId) return;
-    const store = useChatStore.getState();
     const previousContent = this.state.streamingContent;
     const contentDelta = content.startsWith(previousContent)
       ? content.slice(previousContent.length)
@@ -77,14 +80,18 @@ class MobileGenerationProjection {
       if (!previousContent && this.state.startTime) {
         this.remoteTimeToFirstToken = (Date.now() - this.state.startTime) / 1000;
       }
-      store.appendToStreamingMessage(contentDelta);
+      this.tokenBuffer += contentDelta;
     }
-    if (reasoningDelta) store.appendToStreamingReasoningContent(reasoningDelta);
+    if (reasoningDelta) this.reasoningBuffer += reasoningDelta;
+    if ((contentDelta || reasoningDelta) && !this.flushTimer) {
+      this.flushTimer = setTimeout(() => this.flushTokenBuffer(), FLUSH_INTERVAL_MS);
+    }
     this.totalReasoningLength = reasoning.length;
     this.update({ streamingContent: content, isThinking: !content.length });
   }
 
   private toolStarted(name: string): void {
+    this.forceFlushTokens();
     useChatStore.getState().resetStreamingSegment();
     // Shared reports turn-level cumulative reasoning across tool rounds. Keep
     // the consumed length when the visible segment resets, so the next round
@@ -95,6 +102,7 @@ class MobileGenerationProjection {
 
   private complete(turn: ChatTurn): void {
     if (turn.request.operation.type === 'image') return;
+    this.forceFlushTokens();
     const store = useChatStore.getState();
     const content = turn.partial?.content || turn.result?.content || '';
     if (!this.state.streamingContent && content) store.appendToStreamingMessage(content);
@@ -105,6 +113,7 @@ class MobileGenerationProjection {
 
   private stop(turn: ChatTurn): void {
     if (turn.request.operation.type === 'image') return;
+    this.forceFlushTokens();
     const store = useChatStore.getState();
     const partial = turn.partial?.content ?? store.streamingMessage;
     if (partial && !store.streamingMessage) store.appendToStreamingMessage(partial);
@@ -117,6 +126,7 @@ class MobileGenerationProjection {
 
   private fail(turn: ChatTurn): void {
     if (turn.request.operation.type === 'image') return;
+    this.forceFlushTokens();
     const store = useChatStore.getState();
     if (store.streamingForConversationId) {
       store.finalizeStreamingMessage(turn.conversationId, this.elapsed(), this.meta());
@@ -138,7 +148,34 @@ class MobileGenerationProjection {
     checkProPromptForText(SHARE_PROMPT_DELAY_MS);
   }
 
+  private flushTokenBuffer(): void {
+    const store = useChatStore.getState();
+    if (this.tokenBuffer) {
+      store.appendToStreamingMessage(this.tokenBuffer);
+      this.tokenBuffer = '';
+    }
+    if (this.reasoningBuffer) {
+      store.appendToStreamingReasoningContent(this.reasoningBuffer);
+      this.reasoningBuffer = '';
+    }
+    this.flushTimer = null;
+  }
+
+  private forceFlushTokens(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.flushTokenBuffer();
+  }
+
   private reset(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.tokenBuffer = '';
+    this.reasoningBuffer = '';
     this.totalReasoningLength = 0;
     this.remoteTimeToFirstToken = undefined;
     this.update({ isGenerating: false, isThinking: false, conversationId: null,
