@@ -57,6 +57,15 @@ inspector accepts `Runtime.evaluate` (`curl localhost:8081/json/list` for the so
 
 **Merge strategy: ALWAYS a merge commit. NEVER squash (and never rebase-merge).** When merging a PR, use `gh pr merge --merge` (or the "Create a merge commit" button) so the full commit history is preserved on `main`. Do not squash under any circumstances - the small, meaningful per-concern commits are the record and must survive the merge. This applies to both the core repo and the `pro` submodule.
 
+## Hexagonal architecture (standing rule, 2026-09-02)
+
+For ALL packages in `shared`: every business rule lives in the shared `@offgrid/*` package. Desktop and
+mobile are dumb components or consumers - I/O adapters, composition roots, and UI. Nothing else. Before
+writing a rule in an app, ask "is this a decision or I/O?": a decision goes to shared with a node test,
+the app keeps only the port. A rule found in an app file is a defect to move, not a style choice.
+
+Every change follows FPT (first-principles thinking), SSOT, SOLID, DRY, SRP, and Clean architecture.
+
 ## Required Development Order
 
 Use this order. Do not start a later gate while an earlier gate is open.
