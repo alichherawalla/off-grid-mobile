@@ -17,6 +17,8 @@ export interface SharedImageGenerationInput {
   width: number;
   height: number;
   previewInterval: number;
+  /** Explicit approval for a load above the server's or device's memory comfort limit. */
+  allowUnsafeMemoryOverride?: boolean;
 }
 
 interface SharedImageGenerationOptions {

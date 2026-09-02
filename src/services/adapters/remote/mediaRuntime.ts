@@ -89,7 +89,7 @@ function requiredModel(
 export const remoteMediaRuntime = {
   async generateImage(
     server: RemoteServer,
-    input: { prompt: string; size?: string; model?: string },
+    input: { prompt: string; size?: string; model?: string; allowUnsafeMemoryOverride?: boolean },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
     const payload = await request({
@@ -103,6 +103,7 @@ export const remoteMediaRuntime = {
           prompt: input.prompt,
           size: input.size ?? '1024x1024',
           response_format: 'b64_json',
+          ...(input.allowUnsafeMemoryOverride ? { allow_unsafe_memory_override: true } : {}),
         }),
       },
       signal: options.signal,

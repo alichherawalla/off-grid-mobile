@@ -129,6 +129,7 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
             width: input.settings.width,
             height: input.settings.height,
             previewInterval: input.settings.previewInterval,
+            allowUnsafeMemoryOverride: input.force || input.request.allowUnsafeMemoryOverride === true,
           },
           {
             signal: input.signal,
@@ -182,6 +183,8 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
       reportModelFailure('image', failure.cause, {
         message: failure.message,
         onRetry: actions.retry,
+        memoryPressure: failure.retryAfterEject,
+        overridable: failure.forceLoadAllowed,
         onLoadAnyway: failure.forceLoadAllowed ? actions.forceLoad : undefined,
       });
     },
