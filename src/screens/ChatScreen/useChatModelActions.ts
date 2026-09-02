@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useEffect } from 'react';
 import { AlertState, showAlert } from '../../components';
-import { modelLibrary, selectedTextModelId } from '../../services';
+import { modelLibrary } from '../../services';
 import {
   mobileModelCommands,
   selectLocalTextModelOnDemand,
@@ -10,6 +10,7 @@ import { useAppStore, useChatStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import { ModelReadyOutcome } from './modelReadiness';
 import { mobileChatModelReadiness } from '../../services/modelServices/chatModelReadinessPort';
+import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { mobileChatSession } from './mobileChatSession';
 import logger from '../../utils/logger';
 
@@ -167,14 +168,19 @@ export async function ensureTextModelForChatFn(deps: {
   setLoadingModel: (m: DownloadedModel | null) => void;
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
-  const modelId = selectedTextModelId();
+  // The shared selection is the one owner of the text route. A remote route needs no local
+  // load; a local one is loaded by id. The old local-only id lagged behind a remote switch and
+  // loaded a stale small model beside the remote one.
+  const active = activeMobileRoute('text').model;
+  const remote = active?.source === 'remote';
+  const modelId = active?.source === 'local' ? active.id : null;
   const model =
     useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null;
   let started = false;
   const service = mobileChatModelReadiness({
     activeModel: model,
     activeModelId: modelId,
-    remote: false,
+    remote,
     beforeLoad: () => {
       started = true;
       deps.setLoadingModel(model);

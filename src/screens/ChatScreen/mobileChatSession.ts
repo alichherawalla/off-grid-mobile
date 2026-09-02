@@ -82,11 +82,11 @@ export function projectClassifierFailure(
 const operationService = new ChatOperationApplicationService({
   inspect() {
     const state = useAppStore.getState();
-    return {
+    const facts = {
       imageEnabled: true,
       imageGenerationRunning: mobileImageChatGeneration.isGenerating(),
       imageRoutingMode:
-        state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+        state.settings.imageGenerationMode === 'manual' ? ('manual' as const) : ('auto' as const),
       imageRouteAvailable: !!activeMobileRoute('image').model,
       textRouteAvailable: !!activeMobileRoute('text').model,
       modelAutoDetection: state.settings.autoDetectMethod === 'llm',
@@ -96,6 +96,9 @@ const operationService = new ChatOperationApplicationService({
           model => model.id === state.settings.classifierModelId,
         ),
     };
+    // [ROUTE-SM] trace (kept): the facts behind every text/image routing decision.
+    logger.log(`[ROUTE-SM] facts ${JSON.stringify(facts)}`);
+    return facts;
   },
   provisionClassifier: () => {
     ensureDefaultClassifier().catch(error =>
@@ -125,7 +128,6 @@ const operationService = new ChatOperationApplicationService({
 async function resolveMobileChatOperation(input: {
   userMessage: GenerationMessage;
   requestedOperation?: GenerationOperation;
-  recordedOperation?: GenerationOperation;
   signal: AbortSignal;
   identity: { turnId: string };
 }): Promise<GenerationOperation> {
@@ -137,7 +139,6 @@ async function resolveMobileChatOperation(input: {
     text: generationMessageText(input.userMessage),
     hasImage,
     requestedOperation: input.requestedOperation,
-    recordedOperation: input.recordedOperation,
     imageMode: options?.imageMode,
     onClassifying: options?.onClassifying,
     onClassifierStatus: options?.onClassifierStatus,
@@ -354,14 +355,10 @@ export const mobileChatSession = {
     const message = repository.prepareNew(conversationId, turnId);
     if (!message || message.role !== 'user')
       throw new Error(`Chat turn not found: ${turnId}`);
+    // Only an explicit choice travels with the send. The kind of an earlier run does not: the
+    // shared operation policy classifies every run, so a resend is drawn once an image route can.
     const recordedOperation: GenerationOperation | undefined =
-      message.turnKind === 'image'
-        ? { type: 'image', prompt: message.content }
-        : message.turnKind === 'text'
-        ? message.attachments?.some(attachment => attachment.type === 'image')
-          ? { type: 'vision' }
-          : { type: 'text' }
-        : options.imageMode === 'force'
+      options.imageMode === 'force'
         ? { type: 'image', prompt: message.content }
         : options.imageMode === 'disabled'
         ? { type: 'text' }
@@ -401,6 +398,7 @@ export const mobileChatSession = {
         conversationId,
         turnId,
         operation,
+        allowFallback: false,
         request: chatRequestDefaults(),
       });
     } finally {

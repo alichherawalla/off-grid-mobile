@@ -1,3 +1,4 @@
+import { remoteErrorBodyMessage } from '@offgrid/models';
 /**
  * HTTP Client for Remote LLM Servers
  *
@@ -218,7 +219,7 @@ export async function createStreamingRequest(
           );
           reject(
             new Error(
-              `HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`,
+              remoteErrorBodyMessage(xhr.responseText ?? '', xhr.status),
             ),
           );
         }
@@ -439,6 +440,6 @@ function completeNDJSONRequest({
     }`,
   );
   reject(
-    new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`),
+    new Error(remoteErrorBodyMessage(xhr.responseText ?? '', xhr.status)),
   );
 }

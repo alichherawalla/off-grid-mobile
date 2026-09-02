@@ -3,7 +3,6 @@ import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
 import { remoteMediaEndpoint, resolveRemoteRoute, remoteErrorBodyMessage } from '@offgrid/models';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 
-const REQUEST_TIMEOUT_MS = 60_000;
 
 export interface RemoteImageResult {
   base64?: string;
@@ -41,7 +40,6 @@ async function request<T>(
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(abort, REQUEST_TIMEOUT_MS);
   try {
     const apiKey = await remoteServerManager.getApiKey(server.id);
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
@@ -59,14 +57,13 @@ async function request<T>(
       const detail = await response.text().catch(() => '');
       throw new Error(remoteErrorBodyMessage(detail, response.status));
     }
-    // Keep timeout and caller cancellation attached until the response body is
+    // Keep caller cancellation attached until the response body is
     // consumed. A successful header is not a completed image/audio transfer.
     return await consume(response);
   } catch (error) {
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
     throw error;
   } finally {
-    clearTimeout(timeout);
     signal?.removeEventListener('abort', abort);
   }
 }

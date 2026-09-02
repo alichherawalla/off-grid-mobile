@@ -1058,7 +1058,7 @@ describe('httpClient', () => {
       mockXHR.readyState = 4;
       if (onReadyStateChange) onReadyStateChange();
 
-      await expect(promise).rejects.toThrow('HTTP 500');
+      await expect(promise).rejects.toThrow('Internal Server Error');
     });
 
     it('should reject on network error', async () => {
@@ -1400,7 +1400,7 @@ describe('httpClient', () => {
       mockXHR.readyState = 4;
       mockXHR.status = 500;
       mockXHR.onreadystatechange?.();
-      await expect(promise).rejects.toThrow('HTTP 500');
+      await expect(promise).rejects.toThrow('Internal Server Error');
     });
 
     it('rejects on network error', async () => {
