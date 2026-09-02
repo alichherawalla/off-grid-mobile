@@ -14,6 +14,7 @@ import {
   type GenerationRequest,
   type GenerationResult,
   runtimeModelRouteId,
+  generationMessageText,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -39,8 +40,6 @@ import { reportModelFailure } from '../../services/modelFailureHandler';
 import {
   generationMessage,
   MobileChatTurnRepository,
-  committedRoundMessage,
-  generationMessageText as messageText,
 } from './mobileChatTurnRepository';
 
 
@@ -135,7 +134,7 @@ async function resolveMobileChatOperation(input: {
     Array.isArray(input.userMessage.content) &&
     input.userMessage.content.some(part => part.type === 'image');
   return operationService.resolve({
-    text: messageText(input.userMessage),
+    text: generationMessageText(input.userMessage),
     hasImage,
     requestedOperation: input.requestedOperation,
     recordedOperation: input.recordedOperation,
@@ -319,35 +318,7 @@ const service = new ChatSessionService(
         contextCompactionService.isContextFullError(error),
     },
     compaction: {
-      compact: async ({ identity, messages, responseMessages }) => {
-        const system = messages.find(message => message.role === 'system');
-        // The store holds history up to this turn's user row. This turn's committed rounds
-        // (tool calls, tool results, streamed text) exist only in the session, so they join here.
-        const mobileMessages = [
-          ...useChatStore
-            .getState()
-            .getConversationMessages(identity.conversationId)
-            .filter(message => !message.isSystemInfo),
-          ...responseMessages.map((message, index) =>
-            committedRoundMessage(identity.conversationId, message, index),
-          ),
-        ];
-        const conversation = useChatStore
-          .getState()
-          .conversations.find(
-            candidate => candidate.id === identity.conversationId,
-          );
-        const compacted = await contextCompactionService.compact({
-          conversationId: identity.conversationId,
-          systemPrompt: system
-            ? messageText(system)
-            : APP_CONFIG.defaultSystemPrompt,
-          allMessages: mobileMessages,
-          previousSummary: conversation?.compactionSummary,
-          protectedTailCount: responseMessages.length,
-        });
-        return compacted.map(generationMessage);
-      },
+      compact: context => contextCompactionService.compactChat(context),
     },
     events: { publish: publishSessionEvent },
   },

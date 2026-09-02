@@ -17,7 +17,8 @@ jest.mock('../../../src/stores', () => {
 jest.mock('../../../src/utils/sharePrompt', () => ({ maybeScheduleSharePrompt: jest.fn() }));
 jest.mock('../../../src/services/proPrompt', () => ({ checkProPromptForText: jest.fn() }));
 
-import { COMPACTION_TOOL_NAME, compactionNoticeText, mobileChatGenerationProjection } from '../../../src/services/chatGenerationProjection';
+import { compactionNoticeText } from '@offgrid/models';
+import { COMPACTION_TOOL_NAME, mobileChatGenerationProjection } from '../../../src/services/chatGenerationProjection';
 import { useChatStore } from '../../../src/stores';
 
 const turn = { id: 't', conversationId: 'c', request: { operation: { type: 'text' } } } as any;
@@ -45,7 +46,5 @@ describe('compaction is forward-looking on screen', () => {
       content: compactionNoticeText(80, 31),
       isSystemInfo: true,
     });
-    expect(compactionNoticeText(80, 31)).toContain('49 earlier messages');
-    expect(compactionNoticeText(2, 1)).toContain('1 earlier message were');
   });
 });

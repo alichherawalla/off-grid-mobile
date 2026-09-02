@@ -16,35 +16,6 @@ export function generationMessage(message: Message): GenerationMessage {
   });
 }
 
-export function generationMessageText(message: GenerationMessage): string {
-  if (typeof message.content === 'string') return message.content;
-  return message.content
-    .filter(part => part.type === 'text')
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .join('\n');
-}
-
-/** A round the session committed during the running turn, shaped for the Mobile compaction planner. */
-export function committedRoundMessage(
-  conversationId: string,
-  message: GenerationMessage,
-  index: number,
-): Message {
-  return {
-    id: `${conversationId}-round-${index}`,
-    role: message.role,
-    content: generationMessageText(message),
-    timestamp: Date.now(),
-    toolCallId: message.toolCallId,
-    toolName: message.name,
-    toolCalls: message.toolCalls?.map(call => ({
-      id: call.id,
-      name: call.name,
-      arguments: call.arguments,
-    })),
-  };
-}
-
 /** Reconstruct Shared turn records from the durable Mobile conversation projection. */
 function persistedTurns(conversationId: string): ChatTurn[] {
   const conversation = useChatStore

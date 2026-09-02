@@ -1,12 +1,17 @@
 /** Mobile ports for the shared context-compaction application service. */
-import { ContextCompactionService } from '@offgrid/models';
+import {
+  ContextCompactionService,
+  type ChatCompactionContext,
+  type CompactableGenerationMessage,
+  type GenerationMessage,
+} from '@offgrid/models';
 import { llmService } from './llm';
 import { executeMobileText } from './mobileSidecarGeneration';
 import { useChatStore } from '../stores/chatStore';
-import type { Message } from '../types';
+import { APP_CONFIG } from '../constants';
 import logger from '../utils/logger';
 
-const sharedCompaction = new ContextCompactionService<Message>({
+const sharedCompaction = new ContextCompactionService<CompactableGenerationMessage>({
   clearContext: () => llmService.clearKVCache(true),
   contextLength: () => llmService.getPerformanceSettings().contextLength || 2048,
   countTokens: text => llmService.getTokenCount(text),
@@ -14,12 +19,11 @@ const sharedCompaction = new ContextCompactionService<Message>({
   persist: (conversationId, summary, cutoffMessageId) => {
     useChatStore.getState().updateCompactionState(conversationId, summary, cutoffMessageId);
   },
-  systemMessage: content => ({ id: 'system', role: 'system', content, timestamp: 0 }),
+  systemMessage: content => ({ id: 'system', role: 'system', content }),
   summaryMessage: content => ({
     id: 'compaction-summary',
     role: 'assistant',
     content: `[Previous conversation summary]\n${content}`,
-    timestamp: 0,
   }),
   report: (event, detail) => {
     if (event === 'summary-failed') logger.warn('[ContextCompaction] Summarization failed, using trim-only:', detail);
@@ -33,12 +37,14 @@ export const contextCompactionService = {
   subscribeCompacting: (listener: (active: boolean) => void) => sharedCompaction.subscribe(listener),
   signalCompacting: (active: boolean) => sharedCompaction.setExternalCompacting(active),
   isContextFullError: (error: unknown) => sharedCompaction.isCapacityError(error),
-  compact: (input: {
-    conversationId: string;
-    systemPrompt: string;
-    allMessages: Message[];
-    previousSummary?: string;
-    protectedTailCount?: number;
-  }) => sharedCompaction.compact(input),
+  /** Compact the exact prompt that overflowed; the previous summary comes from the conversation. */
+  compactChat: (context: ChatCompactionContext): Promise<GenerationMessage[]> =>
+    sharedCompaction.compactChat(context, {
+      previousSummary: useChatStore
+        .getState()
+        .conversations.find(candidate => candidate.id === context.identity.conversationId)
+        ?.compactionSummary,
+      defaultSystemPrompt: APP_CONFIG.defaultSystemPrompt,
+    }),
   clearSummary: (conversationId: string) => sharedCompaction.clear(conversationId),
 };

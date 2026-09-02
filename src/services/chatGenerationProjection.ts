@@ -1,5 +1,5 @@
 /** Mobile projection of the Shared ChatSessionService lifecycle. */
-import type { ChatSessionEvent, ChatTurn } from '@offgrid/models';
+import { compactionNoticeText, type ChatSessionEvent, type ChatTurn } from '@offgrid/models';
 import { useAppStore, useChatStore } from '../stores';
 import type { GenerationMeta } from '../types';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
@@ -7,12 +7,8 @@ import { checkProPromptForText } from './proPrompt';
 import { buildGenerationMetaImpl, FLUSH_INTERVAL_MS } from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
-/** Compaction is silent otherwise; you should know the model made room and that nothing here was removed. */
+/** Compaction is silent otherwise; the row below says the model made room and that nothing here was removed. */
 export const COMPACTION_TOOL_NAME = 'context_compaction';
-export function compactionNoticeText(before: number, after: number): string {
-  const summarized = Math.max(0, before - after);
-  return `Made room to keep going. ${summarized} earlier message${summarized === 1 ? '' : 's'} were summarized for the model; the last ${after} stay word for word. Nothing here was removed.`;
-}
 
 interface GenerationState {
   isGenerating: boolean;
