@@ -134,13 +134,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setModelsManagerOpen(false);
   };
 
+  // One sheet per model type. From the summary card it opens at once; from inside the manager it
+  // waits for the manager to finish dismissing (two modals mid-transition wedge iOS).
+  const presentModelSheet = (type: ModelRowType) => {
+    if (type === 'text') setPickerType('text');
+    else if (type === 'image') setPickerType('image');
+    else if (type === 'speech') setWhisperOpen(true);
+    else setVoiceOpen(true);
+  };
   const openModelRow = (type: ModelRowType) => {
-    closeManagerThen(() => {
-      if (type === 'text') setPickerType('text');
-      else if (type === 'image') setPickerType('image');
-      else if (type === 'speech') setWhisperOpen(true);
-      else setVoiceOpen(true);
-    });
+    closeManagerThen(() => presentModelSheet(type));
   };
 
   const runPendingAfterClose = () => {
@@ -195,6 +198,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               counts={modelCounts}
               isLoading={loadingState.isLoading}
               onPress={() => setModelsManagerOpen(true)}
+              onPressType={presentModelSheet}
             />
           </AnimatedEntry>
 
