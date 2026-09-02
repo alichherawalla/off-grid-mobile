@@ -43,14 +43,17 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     expect(h.boundary.llama!.calls.clearCache).toContain(true);
   });
 
-  it('new chat starts the selected model load and shows the real loading state', async () => {
+  it('new chat defers the selected model load until the first message', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
     h.boundary.llama!.scriptMultimodalHold();
     h.render();
 
+    expect(h.boundary.llama!.multimodalHoldActive()).toBe(false);
+    expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+
+    await h.send('start the model', { text: 'Ready.' });
     await h.rtl.waitFor(() => {
       expect(h.boundary.llama!.multimodalHoldActive()).toBe(true);
-      expect(h.view!.queryByText(/Loading Test Model/)).not.toBeNull();
     });
 
     h.boundary.llama!.releaseMultimodalHold();

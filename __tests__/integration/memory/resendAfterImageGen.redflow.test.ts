@@ -9,7 +9,7 @@
  * modelResidencyManager over the RAM-sensor stub (deviceMemory harness) with the device repro.
  */
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
-import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
+import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';
 
 afterEach(() => resetDeviceMemory());
 
@@ -17,12 +17,19 @@ describe('M11 — resend after image-gen (co-reside under balanced)', () => {
   it('reloads the clean text model alongside the resident image model (co-reside, no swap)', async () => {
     setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
     // Image gen just ran → the image model is dirty-resident.
-    makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true });
+    const imageLease = await modelResidencyManager.acquire(
+      { key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true },
+      { load: async () => undefined, unload: async () => undefined },
+    );
+    await imageLease.release();
 
     // User resends a text turn → the clean text model reloads.
-    const { fits, evicted } = await modelResidencyManager.makeRoomFor({
-      key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: false,
-    });
+    const textLease = await modelResidencyManager.acquire(
+      { key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: false },
+      { load: async () => undefined, unload: async () => undefined },
+    );
+    await textLease.release();
+    const { fits, evicted } = textLease;
 
     // Correct (balanced default): the clean text pages in around the dirty image; both fit the
     // budget, so the image is NOT swapped out. If they exceeded the budget the planner would evict

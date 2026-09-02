@@ -38,7 +38,7 @@ describe('mapNativeStatus arms', () => {
     ]);
     await hydrateDownloadStore();
     const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('failed');
+    expect(entry.status).toBe('downloading');
   });
 
   it("maps 'waiting_for_network' through unchanged", async () => {
@@ -47,7 +47,7 @@ describe('mapNativeStatus arms', () => {
     ]);
     await hydrateDownloadStore();
     const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('waiting_for_network');
+    expect(entry.status).toBe('paused');
   });
 
   it('maps an unknown native status to the default "pending"', async () => {
@@ -56,7 +56,7 @@ describe('mapNativeStatus arms', () => {
     ]);
     await hydrateDownloadStore();
     const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('pending');
+    expect(entry.status).toBe('failed');
   });
 });
 

@@ -5,23 +5,25 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
-import { SystemBars } from 'react-native-edge-to-edge';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
-import { AppNavigator } from './src/navigation';
-import {
-  appNavigationRef,
-  useProExpiryRedirect,
-} from './src/navigation/useProExpiryRedirect';
+import { LogBox } from 'react-native';
+import { useProExpiryRedirect } from './src/navigation/useProExpiryRedirect';
 import { useTheme } from './src/theme';
-import { hardwareService, modelLibrary, authService, ragService, remoteServerManager } from './src/services';
+import {
+  hardwareService,
+  modelLibrary,
+  authService,
+  ragService,
+  remoteServerManager,
+} from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { transcriptionModelIntents } from './src/services/modelServices/transcriptionRuntimePort';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
-import { initDebugLogFile, appendDebugLine, stopDebugLogFile } from './src/utils/debugLogFile';
+import {
+  initDebugLogFile,
+  appendDebugLine,
+  stopDebugLogFile,
+} from './src/utils/debugLogFile';
 import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
 import { hydrateDownloadStore } from './src/services/downloadHydration';
@@ -33,15 +35,23 @@ import {
   startMobileModelServices,
   stopMobileModelServices,
 } from './src/services/modelServices';
-import { startNetworkReconnectWatcher, stopNetworkReconnectWatcher } from './src/services/networkReconnect';
+import {
+  startNetworkReconnectWatcher,
+  stopNetworkReconnectWatcher,
+} from './src/services/networkReconnect';
 import { registerCoreDownloadProviders } from './src/services/modelServices/downloadBootstrap';
+import { reconcileImageDownloadsAtBootstrap } from './src/services/modelServices/imageDownloadRecoveryApplication';
 import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useSlot, SLOTS } from './src/bootstrap/slotRegistry';
-import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import {
+  InitializingSurface,
+  LockedSurface,
+  MainSurface,
+} from './src/bootstrap/AppSurfaces';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -52,19 +62,33 @@ if (__DEV__) {
   const fmt = (a: unknown): string => {
     if (a instanceof Error) return `${a.name}: ${a.message}`;
     if (typeof a === 'string') return a;
-    try { return JSON.stringify(a); } catch { return String(a); }
+    try {
+      return JSON.stringify(a);
+    } catch {
+      return String(a);
+    }
   };
   const base = { log: logger.log, warn: logger.warn, error: logger.error };
-  const tap = (level: 'log' | 'warn' | 'error') => (...args: unknown[]) => {
-    base[level](...args);
-    const message = args.map(fmt).join(' ');
-    try {
-      useDebugLogsStore.getState().addLog({ timestamp: Date.now(), level, message });
-    } catch { /* never break logging */ }
-    // Persist to the on-device file sink so traces can be pulled over the cable
-    // (RN 0.83 console logs don't reach Metro stdout or syslog). See debugLogFile.ts.
-    try { appendDebugLine(level, message); } catch { /* never break logging */ }
-  };
+  const tap =
+    (level: 'log' | 'warn' | 'error') =>
+    (...args: unknown[]) => {
+      base[level](...args);
+      const message = args.map(fmt).join(' ');
+      try {
+        useDebugLogsStore
+          .getState()
+          .addLog({ timestamp: Date.now(), level, message });
+      } catch {
+        /* never break logging */
+      }
+      // Persist to the on-device file sink so traces can be pulled over the cable
+      // (RN 0.83 console logs don't reach Metro stdout or syslog). See debugLogFile.ts.
+      try {
+        appendDebugLine(level, message);
+      } catch {
+        /* never break logging */
+      }
+    };
   logger.log = tap('log');
   logger.warn = tap('warn');
   logger.error = tap('error');
@@ -84,11 +108,14 @@ const ensureRemoteServerStoreHydrated = async () => {
 };
 
 function App() {
-  useEffect(() => () => {
-    stopStartupProbe?.();
-    stopStartupProbe = null;
-    stopDebugLogFile();
-  }, []);
+  useEffect(
+    () => () => {
+      stopStartupProbe?.();
+      stopStartupProbe = null;
+      stopDebugLogFile();
+    },
+    [],
+  );
   useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
@@ -97,10 +124,10 @@ function App() {
   const applyPendingProRedirect = useProExpiryRedirect();
   const [isInitializing, setIsInitializing] = useState(true);
   const startupGeneration = useRef(0);
-  const setDeviceInfo = useAppStore((s) => s.setDeviceInfo);
-  const setModelRecommendation = useAppStore((s) => s.setModelRecommendation);
-  const setDownloadedModels = useAppStore((s) => s.setDownloadedModels);
-  const setDownloadedImageModels = useAppStore((s) => s.setDownloadedImageModels);
+  const setDeviceInfo = useAppStore(s => s.setDeviceInfo);
+  const setModelRecommendation = useAppStore(s => s.setModelRecommendation);
+  const setDownloadedModels = useAppStore(s => s.setDownloadedModels);
+  const setDownloadedImageModels = useAppStore(s => s.setDownloadedImageModels);
   const { colors, isDark } = useTheme();
 
   const {
@@ -113,19 +140,23 @@ function App() {
   const reattachTextDownloadRecovery = useCallback(async () => {
     const restoredIds = await modelLibrary.restoreInProgressDownloads();
     modelLibrary.startBackgroundDownloadPolling();
-    restoredIds.forEach((downloadId) => {
+    restoredIds.forEach(downloadId => {
       modelLibrary.watchDownload(
         downloadId,
         async () => {
           const models = await modelLibrary.getDownloadedModels();
           setDownloadedModels(models);
-          useDownloadStore.getState().remove(
-            useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
-          );
+          useDownloadStore
+            .getState()
+            .remove(
+              useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
+            );
         },
         (error: Error) => {
           logger.error('[App] Restored text download failed:', error);
-          useDownloadStore.getState().setStatus(downloadId, 'failed', { message: error.message });
+          useDownloadStore
+            .getState()
+            .setStatus(downloadId, 'failed', { message: error.message });
         },
       );
     });
@@ -148,12 +179,18 @@ function App() {
       // persisted queue here would DOUBLE-issue starts that are still waiting in memory.
       // Restore is a cold-start-only concern (the queue owner is gone only after a kill).
       hydrateDownloadStore()
-        .catch((error) => {
-          logger.error('[App] Failed to hydrate download store on foreground:', error);
+        .catch(error => {
+          logger.error(
+            '[App] Failed to hydrate download store on foreground:',
+            error,
+          );
         })
         .finally(() => {
-          reattachTextDownloadRecovery().catch((error) => {
-            logger.error('[App] Failed to restore text downloads on foreground:', error);
+          reattachTextDownloadRecovery().catch(error => {
+            logger.error(
+              '[App] Failed to restore text downloads on foreground:',
+              error,
+            );
           });
         });
     }, [reattachTextDownloadRecovery]),
@@ -180,8 +217,11 @@ function App() {
       // hydrate, so a download started this run is durably recorded and can be stranded as a
       // failed/retriable card — not vanish — if the app is hard-killed mid-transfer (iOS URLSession).
       initActiveDownloadPersistence();
-      await hydrateDownloadStore().catch((error) => {
-        logger.error('[App] Failed to hydrate download store during startup:', error);
+      await hydrateDownloadStore().catch(error => {
+        logger.error(
+          '[App] Failed to hydrate download store during startup:',
+          error,
+        );
       });
       await reattachTextDownloadRecovery();
 
@@ -201,8 +241,18 @@ function App() {
       // real start (re-creating the pending row + watch); items auto-start as slots free. Runs AFTER
       // provider registration (restore dispatches to the providers) and hydrate (so it dedupes against
       // any native row that DID start). Fire-and-forget: a failure must not abort launch.
-      await restoreQueuedDownloads().catch((error) => {
-        logger.error('[App] Failed to restore queued downloads during startup:', error);
+      await restoreQueuedDownloads().catch(error => {
+        logger.error(
+          '[App] Failed to restore queued downloads during startup:',
+          error,
+        );
+      });
+
+      await reconcileImageDownloadsAtBootstrap().catch(error => {
+        logger.error(
+          '[App] Failed to resume image downloads during startup:',
+          error,
+        );
       });
 
       // Reconcile image model directories that finished extracting on disk but whose AsyncStorage
@@ -213,14 +263,17 @@ function App() {
           .filter(e => e.modelType === 'image')
           .map(e => e.modelId.replace('image:', '')),
       );
-      await modelLibrary.reconcileFinishedImageDownloads(activeImageModelIds).catch((error) => {
-        logger.error('[App] Image model reconciliation failed:', error);
-      });
+      await modelLibrary
+        .reconcileFinishedImageDownloads(activeImageModelIds)
+        .catch(error => {
+          logger.error('[App] Image model reconciliation failed:', error);
+        });
       logger.log('[BOOT] refresh model lists');
-      const { textModels, imageModels } = await modelLibrary.refreshModelLists();
+      const { textModels, imageModels } =
+        await modelLibrary.refreshModelLists();
       setDownloadedModels(textModels);
       setDownloadedImageModels(imageModels);
-    })().catch((error) => {
+    })().catch(error => {
       logger.error('[App] Download-state recovery failed:', error);
     });
   }, [
@@ -229,124 +282,143 @@ function App() {
     setDownloadedImageModels,
   ]);
 
-  const initializeApp = useCallback(async (generation: number, loadPolicySync: ReturnType<typeof createLoadPolicySync>) => {
-    try {
-      // Ensure persisted download metadata is loaded before restore logic reads it.
-      logger.log('[BOOT] app store hydrate');
-      await ensureAppStoreHydrated();
+  const initializeApp = useCallback(
+    async (
+      generation: number,
+      loadPolicySync: ReturnType<typeof createLoadPolicySync>,
+    ) => {
+      try {
+        // Ensure persisted download metadata is loaded before restore logic reads it.
+        logger.log('[BOOT] app store hydrate');
+        await ensureAppStoreHydrated();
 
-      // Project the persisted "aggressive model loading" setting onto the residency
-      // manager (single owner of the runtime load policy) now that settings are
-      // hydrated, and keep it in sync for the app's lifetime.
-      loadPolicySync.start();
+        // Project the persisted "aggressive model loading" setting onto the residency
+        // manager (single owner of the runtime load policy) now that settings are
+        // hydrated, and keep it in sync for the app's lifetime.
+        loadPolicySync.start();
 
-      // Download-state recovery runs OFF the boot gate (fire-and-forget, order preserved
-      // inside recoverDownloadState below): with many WorkManager downloads mid-flight the
-      // native Room DB read (getActiveDownloads) sat ~9.5s behind write-lock contention
-      // (device 2026-07-13, 9 active downloads) and the WHOLE app was hostage to it. The
-      // download rows/badges are reactive projections — they fill in when recovery lands.
-      recoverDownloadState();
+        // Download-state recovery runs OFF the boot gate (fire-and-forget, order preserved
+        // inside recoverDownloadState below): with many WorkManager downloads mid-flight the
+        // native Room DB read (getActiveDownloads) sat ~9.5s behind write-lock contention
+        // (device 2026-07-13, 9 active downloads) and the WHOLE app was hostage to it. The
+        // download rows/badges are reactive projections — they fill in when recovery lands.
+        recoverDownloadState();
 
-      // Phase 1: Quick initialization - get app ready to show UI
-      // Initialize hardware detection
-      logger.log('[BOOT] device info');
-      const deviceInfo = await hardwareService.getDeviceInfo();
-      setDeviceInfo(deviceInfo);
+        // Phase 1: Quick initialization - get app ready to show UI
+        // Initialize hardware detection
+        logger.log('[BOOT] device info');
+        const deviceInfo = await hardwareService.getDeviceInfo();
+        setDeviceInfo(deviceInfo);
 
-      const recommendation = hardwareService.getModelRecommendation();
-      setModelRecommendation(recommendation);
+        const recommendation = hardwareService.getModelRecommendation();
+        setModelRecommendation(recommendation);
 
-      // Initialize model manager and load downloaded models list
-      logger.log('[BOOT] model library initialize');
-      await modelLibrary.initialize();
+        // Initialize model manager and load downloaded models list
+        logger.log('[BOOT] model library initialize');
+        await modelLibrary.initialize();
 
-      // Clean up any mmproj files that were incorrectly added as standalone models
-      logger.log('[BOOT] cleanup mmproj entries');
-      await modelLibrary.cleanupMMProjEntries();
+        // Clean up any mmproj files that were incorrectly added as standalone models
+        logger.log('[BOOT] cleanup mmproj entries');
+        await modelLibrary.cleanupMMProjEntries();
 
-      // Scan for any models that may have been downloaded externally or
-      // while the app was killed. hydrateDownloadStore (called on cold start
-      // and foreground resume) repopulates in-flight downloads directly
-      // from the native Room DB, replacing the old metadata-callback +
-      // syncBackgroundDownloads recovery path.
-      const { textModels, imageModels } = await modelLibrary.refreshModelLists();
-      setDownloadedModels(textModels);
-      setDownloadedImageModels(imageModels);
+        // Scan for any models that may have been downloaded externally or
+        // while the app was killed. hydrateDownloadStore (called on cold start
+        // and foreground resume) repopulates in-flight downloads directly
+        // from the native Room DB, replacing the old metadata-callback +
+        // syncBackgroundDownloads recovery path.
+        const { textModels, imageModels } =
+          await modelLibrary.refreshModelLists();
+        setDownloadedModels(textModels);
+        setDownloadedImageModels(imageModels);
 
-      // Ensure remote server store is hydrated before initializing providers,
-      // so getServers() / activeServerId reads see persisted data.
-      logger.log('[BOOT] remote server hydrate');
-      await ensureRemoteServerStoreHydrated();
-      startMobileModelServices();
-      await refreshMobileModelServices();
+        // Ensure remote server store is hydrated before initializing providers,
+        // so getServers() / activeServerId reads see persisted data.
+        logger.log('[BOOT] remote server hydrate');
+        await ensureRemoteServerStoreHydrated();
+        startMobileModelServices();
+        await refreshMobileModelServices();
 
-      // Initialize remote server providers in the background — don't block
-      // the home screen while fetching models from potentially unreachable servers.
-      remoteServerManager
-        .initializeProviders()
-        .catch((err) => {
-          logger.error('[App] Failed to initialize remote server providers:', err);
-        })
-        .finally(() => {
-          refreshMobileModelServices().catch(err => logger.error('[App] Model refresh failed:', err));
-          if (generation !== startupGeneration.current) return;
-          // Recovery and provider initialization both update the registry and remote-server store.
-          // Start recovery only after initialization releases those owners. A failed initialization
-          // must still start the watcher so a later network recovery can repair the connection.
-          startNetworkReconnectWatcher();
+        // Initialize remote server providers in the background — don't block
+        // the home screen while fetching models from potentially unreachable servers.
+        remoteServerManager
+          .initializeProviders()
+          .catch(err => {
+            logger.error(
+              '[App] Failed to initialize remote server providers:',
+              err,
+            );
+          })
+          .finally(() => {
+            refreshMobileModelServices().catch(err =>
+              logger.error('[App] Model refresh failed:', err),
+            );
+            if (generation !== startupGeneration.current) return;
+            // Recovery and provider initialization both update the registry and remote-server store.
+            // Start recovery only after initialization releases those owners. A failed initialization
+            // must still start the watcher so a later network recovery can repair the connection.
+            startNetworkReconnectWatcher();
+          });
+
+        // Check if passphrase is set and lock app if needed
+        logger.log('[BOOT] auth passphrase check');
+        const hasPassphrase = await authService.hasPassphrase();
+        if (hasPassphrase && authEnabled) {
+          setLocked(true);
+        }
+
+        // Initialize RAG database tables
+        ragService
+          .ensureReady()
+          .catch(err =>
+            logger.error('Failed to initialize RAG service on startup', err),
+          );
+
+        try {
+          // Register the private Pro entitlement provider before the first status
+          // read, then activate only the capabilities that entitlement permits.
+          // loadProFeatures separately projects cached credential access from a
+          // Debug developer unlock; Sync reconciliation owns device admission.
+          logger.log('[BOOT] load pro features');
+          await loadProFeatures();
+        } catch (proError) {
+          logger.error(
+            '[App] Pro feature load failed, continuing without Pro:',
+            proError,
+          );
+        }
+
+        // Show the UI immediately
+        logger.log('[BOOT] startup complete');
+        setIsInitializing(false);
+
+        // Reconcile downloaded Whisper models against disk at startup. presentModelIds
+        // isn't persisted (the filesystem is the source of truth), so it rehydrates
+        // empty — without this scan a freshly launched app shows an already-installed
+        // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
+        // forget; the Models screen also refreshes on focus.
+        transcriptionModelIntents.reconcileDisk().catch(error => {
+          logger.error('[App] Whisper disk reconciliation failed:', error);
         });
 
-      // Check if passphrase is set and lock app if needed
-      logger.log('[BOOT] auth passphrase check');
-      const hasPassphrase = await authService.hasPassphrase();
-      if (hasPassphrase && authEnabled) {
-        setLocked(true);
+        // Models are intentionally NOT warmed at boot. A native model load is heavy
+        // and contends with startup, leaving the whole app sluggish in that window.
+        // Text, TTS, and STT load on demand. This keeps app launch responsive.
+      } catch (error) {
+        logger.error('[App] Error initializing app:', error);
+        setIsInitializing(false);
       }
-
-      // Initialize RAG database tables
-      ragService.ensureReady().catch((err) => logger.error('Failed to initialize RAG service on startup', err));
-
-      try {
-        // Register the private Pro entitlement provider before the first status
-        // read, then activate only the capabilities that entitlement permits.
-        // loadProFeatures separately projects cached credential access from a
-        // Debug developer unlock; Sync reconciliation owns device admission.
-        logger.log('[BOOT] load pro features');
-        await loadProFeatures();
-      } catch (proError) {
-        logger.error('[App] Pro feature load failed, continuing without Pro:', proError);
-      }
-
-      // Show the UI immediately
-      logger.log('[BOOT] startup complete');
-      setIsInitializing(false);
-
-      // Reconcile downloaded Whisper models against disk at startup. presentModelIds
-      // isn't persisted (the filesystem is the source of truth), so it rehydrates
-      // empty — without this scan a freshly launched app shows an already-installed
-      // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
-      // forget; the Models screen also refreshes on focus.
-      transcriptionModelIntents.reconcileDisk().catch(error => {
-        logger.error('[App] Whisper disk reconciliation failed:', error);
-      });
-
-      // Models are intentionally NOT warmed at boot. A native model load is heavy
-      // and contends with startup, leaving the whole app sluggish in that window.
-      // Text, TTS, and STT load on demand. This keeps app launch responsive.
-    } catch (error) {
-      logger.error('[App] Error initializing app:', error);
-      setIsInitializing(false);
-    }
-  }, [
-    authEnabled,
-    ensureAppStoreHydrated,
-    recoverDownloadState,
-    setDeviceInfo,
-    setDownloadedImageModels,
-    setDownloadedModels,
-    setLocked,
-    setModelRecommendation,
-  ]);
+    },
+    [
+      authEnabled,
+      ensureAppStoreHydrated,
+      recoverDownloadState,
+      setDeviceInfo,
+      setDownloadedImageModels,
+      setDownloadedModels,
+      setLocked,
+      setModelRecommendation,
+    ],
+  );
 
   useEffect(() => {
     const loadPolicySync = createLoadPolicySync();
@@ -360,90 +432,31 @@ function App() {
     };
   }, [initializeApp]);
 
-  const handleUnlock = useCallback(() => {
-    setLocked(false);
-  }, [setLocked]);
+  const handleUnlock = useCallback(() => setLocked(false), [setLocked]);
 
   if (isInitializing) {
-    return (
-      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]}>
-        <SafeAreaProvider>
-          <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
-            <SystemBars style={isDark ? 'light' : 'dark'} />
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
-    );
+    return <InitializingSurface colors={colors} isDark={isDark} />;
   }
 
-  // Show lock screen if auth is enabled and app is locked
   if (authEnabled && isLocked) {
     return (
-      <GestureHandlerRootView style={[styles.flex, { backgroundColor: colors.background }]} testID="app-locked">
-        <SafeAreaProvider>
-          <SystemBars style={isDark ? 'light' : 'dark'} />
-          <LockScreen onUnlock={handleUnlock} />
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+      <LockedSurface
+        colors={colors}
+        isDark={isDark}
+        onUnlock={handleUnlock}
+      />
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.flex}>
-      <SafeAreaProvider>
-        <SystemBars style={isDark ? 'light' : 'dark'} />
-        {AppRoot ? <AppRoot /> : null}
-        <NavigationContainer
-          ref={appNavigationRef}
-          onReady={applyPendingProRedirect}
-          theme={{
-            dark: isDark,
-            colors: {
-              primary: colors.primary,
-              background: colors.background,
-              card: colors.surface,
-              text: colors.text,
-              border: colors.border,
-              notification: colors.primary,
-            },
-            fonts: {
-              regular: {
-                fontFamily: 'System',
-                fontWeight: '400',
-              },
-              medium: {
-                fontFamily: 'System',
-                fontWeight: '500',
-              },
-              bold: {
-                fontFamily: 'System',
-                fontWeight: '700',
-              },
-              heavy: {
-                fontFamily: 'System',
-                fontWeight: '900',
-              },
-            },
-          }}
-        >
-          <AppNavigator />
-        </NavigationContainer>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <MainSurface
+      AppRoot={AppRoot}
+      colors={colors}
+      isDark={isDark}
+      onNavigationReady={applyPendingProRedirect}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
 
 // KeyboardProvider drives react-native-keyboard-controller's edge-to-edge-aware
 // keyboard avoidance (used by ChatScreen). It must sit above every screen, so

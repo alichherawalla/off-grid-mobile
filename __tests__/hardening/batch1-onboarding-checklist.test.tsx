@@ -66,7 +66,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     const { result, rerender } = renderHook(() => useOnboardingSteps());
 
     // Step 1: Download a Model → active step becomes "loadedModel" (case 18).
-    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
+    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel({ id: 'm-1' })); });
     await act(refreshMobileModelServices);
     expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(true);
     expect(result.current.completedCount).toBe(1);
@@ -124,7 +124,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     expect(stepById(result.current.steps, 'triedImageGen').completed).toBe(false);
 
     // Loading a TEXT model enables the step (disabled is keyed off activeModelId).
-    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
+    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel({ id: 'm-1' })); });
     await act(async () => {
       await refreshMobileModelServices();
       await mobileModelSelectionService.write('text', mobileRouteId({
@@ -170,7 +170,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
   //    download/activeModelId required. These are the hook's `|| remoteServers` and
   //    `|| activeRemoteTextModelId` branches. ─────────────────────────────────
   it('downloadedModel/loadedModel also complete via remote server + remote active model', async () => {
-    const { result, rerender } = renderHook(() => useOnboardingSteps());
+    const { result } = renderHook(() => useOnboardingSteps());
     expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(false);
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(false);
 

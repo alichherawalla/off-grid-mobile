@@ -36,6 +36,7 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
      
     await activeModelService.loadImageModel('sd');
     await h.setupWhisperModel();
+    await h.loadSelectedWhisperOnDemand();
 
     // Precondition (real): image + whisper are in memory.
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();

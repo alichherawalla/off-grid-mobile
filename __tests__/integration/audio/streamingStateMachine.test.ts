@@ -54,6 +54,7 @@ import {
   stopStreamingSpeechForTurn,
 } from '../../../pro/audio/streamingSpeech';
 import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
+import { bindVoiceProjection } from '../../../pro/audio/ttsControlService';
 
 const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
 const flush = () => new Promise<void>((r) => setImmediate(r));
@@ -95,6 +96,9 @@ beforeEach(async () => {
     const p = typeof partial === 'function' ? partial(state) : partial;
     state = { ...state, ...p };
   });
+  // This suite replaces ttsStore, so its module-level composition does not run.
+  // Bind the fake projection to the real Shared voice application service.
+  bindVoiceProjection({ set: store.setState, get: store.getState });
   resetStreamingSpeech();
   await flush();
   events = [];

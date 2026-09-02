@@ -48,6 +48,15 @@ jest.mock('../../../pro/audio/ttsStore', () => ({
   useTTSStore: { getState: jest.fn(), setState: jest.fn() },
 }));
 
+// Keep the real streaming coordinator and its slow native boundary while the
+// canonical shared voice route is represented by this boundary adapter.
+jest.mock('../../../pro/audio/voiceGeneration', () => ({
+  generateVoice: jest.fn(async (text: string, messageId: string) => {
+    await mockEngine.speak(text, { messageId });
+    return { output: { type: 'voice', text }, finishReason: 'stop' };
+  }),
+}));
+
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
   feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive,

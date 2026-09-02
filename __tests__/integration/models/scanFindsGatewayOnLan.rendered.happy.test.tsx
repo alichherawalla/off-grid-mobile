@@ -72,7 +72,7 @@ describe('scanning a network that has an Off Grid AI Desktop on it', () => {
 
     // AFTER — the server the user actually has is in the list, at the address they can check.
     await waitFor(
-      () => { expect(ui.queryByText(`http://${MAC_IP}:${GATEWAY_PORT}`)).not.toBeNull(); },
+      () => { expect(ui.queryByText(`http://${MAC_IP}:${GATEWAY_PORT}/v1`)).not.toBeNull(); },
       { timeout: 8000 },
     );
 
@@ -89,7 +89,7 @@ describe('scanning a network that has an Off Grid AI Desktop on it', () => {
     fireEvent.press(ui.getByText('Scan network'));
 
     await waitFor(
-      () => { expect(ui.queryByText(`http://${MAC_IP}:${GATEWAY_PORT}`)).not.toBeNull(); },
+      () => { expect(ui.queryByText(`http://${MAC_IP}:${GATEWAY_PORT}/v1`)).not.toBeNull(); },
       { timeout: 8000 },
     );
 

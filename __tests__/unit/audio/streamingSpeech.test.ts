@@ -20,6 +20,15 @@ jest.mock('../../../pro/audio/ttsStore', () => ({
   useTTSStore: { getState: jest.fn(), setState: jest.fn() },
 }));
 
+// This coordinator test owns segmentation and queueing. Route the canonical
+// shared voice operation to the controllable native boundary used by the test.
+jest.mock('../../../pro/audio/voiceGeneration', () => ({
+  generateVoice: jest.fn(async (text: string, messageId: string) => {
+    await mockEngine.speak(text, { messageId });
+    return { output: { type: 'voice', text }, finishReason: 'stop' };
+  }),
+}));
+
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
   feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive,

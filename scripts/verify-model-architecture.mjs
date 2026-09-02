@@ -1,96 +1,188 @@
 #!/usr/bin/env node
 
-import fs from 'node:fs'
-import path from 'node:path'
-import process from 'node:process'
-import ts from 'typescript'
-import { temporaryModelArchitectureAllowlist } from './model-architecture-allowlist.mjs'
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import ts from 'typescript';
+import { temporaryModelArchitectureAllowlist } from './model-architecture-allowlist.mjs';
 
-const repoRoot = path.resolve(import.meta.dirname, '..')
+const repoRoot = path.resolve(import.meta.dirname, '..');
 
-function sourceFiles(directory) {
+function sourceFiles(directory, includeTests = false) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
-    if (entry.name === '__tests__' || entry.name === 'node_modules') return []
-    const absolute = path.join(directory, entry.name)
-    if (entry.isDirectory()) return sourceFiles(absolute)
-    return /\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\.[jt]sx?$/.test(entry.name)
+    if (entry.name === '__tests__' || entry.name === 'node_modules') return [];
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) return sourceFiles(absolute, includeTests);
+    return /\.[cm]?[jt]sx?$/.test(entry.name) &&
+      (includeTests || !/\.(test|spec)\.[jt]sx?$/.test(entry.name))
       ? [absolute]
-      : []
-  })
+      : [];
+  });
 }
 
 const files = [path.join(repoRoot, 'src'), path.join(repoRoot, 'pro')]
   .filter(fs.existsSync)
-  .flatMap(sourceFiles)
-const relative = file => path.relative(repoRoot, file).replaceAll(path.sep, '/')
-const nodeText = (source, node) => node.getText(source).replace(/\s+/g, ' ')
-const lineOf = (source, node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1
-const keyOf = finding => `${finding.rule}|${finding.file}|${finding.detail}`
-const findings = []
+  .flatMap(sourceFiles);
+if (fs.existsSync(path.join(repoRoot, 'App.tsx'))) {
+  files.push(path.join(repoRoot, 'App.tsx'));
+}
+const testFiles = [
+  path.join(repoRoot, '__tests__'),
+  path.join(repoRoot, 'pro', '__tests__'),
+]
+  .filter(fs.existsSync)
+  .flatMap(directory => sourceFiles(directory, true));
+const relative = file =>
+  path.relative(repoRoot, file).replaceAll(path.sep, '/');
+const nodeText = (source, node) => node.getText(source).replace(/\s+/g, ' ');
+const lineOf = (source, node) =>
+  source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+const keyOf = finding => `${finding.rule}|${finding.file}|${finding.detail}`;
+const findings = [];
 const selectionProjectionKeys = new Set([
-  'activeModelId', 'lastTextModelId', 'activeImageModelId', 'activeServerId',
-  'activeRemoteTextModelId', 'activeRemoteImageModelId',
-  'activeRemoteMediaServerIds', 'downloadedModelId', 'classifierModelId',
-])
+  'activeModelId',
+  'lastTextModelId',
+  'activeImageModelId',
+  'activeServerId',
+  'activeRemoteTextModelId',
+  'activeRemoteImageModelId',
+  'activeRemoteMediaServerIds',
+  'downloadedModelId',
+  'classifierModelId',
+]);
 
 function assignedSelectionKeys(node) {
-  const keys = []
+  const keys = [];
   const inspect = candidate => {
-    if (ts.isPropertyAssignment(candidate) || ts.isShorthandPropertyAssignment(candidate)) {
-      const name = candidate.name && (ts.isIdentifier(candidate.name) || ts.isStringLiteralLike(candidate.name))
-        ? candidate.name.text
-        : ''
-      if (selectionProjectionKeys.has(name)) keys.push(name)
+    if (
+      ts.isPropertyAssignment(candidate) ||
+      ts.isShorthandPropertyAssignment(candidate)
+    ) {
+      const name =
+        candidate.name &&
+        (ts.isIdentifier(candidate.name) ||
+          ts.isStringLiteralLike(candidate.name))
+          ? candidate.name.text
+          : '';
+      if (selectionProjectionKeys.has(name)) keys.push(name);
     }
-    ts.forEachChild(candidate, inspect)
-  }
-  inspect(node)
-  return keys
+    ts.forEachChild(candidate, inspect);
+  };
+  inspect(node);
+  return keys;
 }
 
 function report(rule, file, source, node, detail) {
-  findings.push({ rule, file, line: lineOf(source, node), detail })
+  findings.push({ rule, file, line: lineOf(source, node), detail });
 }
 
 for (const file of files) {
-  const text = fs.readFileSync(file, 'utf8')
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
-  const fileName = relative(file)
-  const isUi = /^src\/(components|hooks|screens)\//.test(fileName)
-  const isAdapter = /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(fileName)
+  const text = fs.readFileSync(file, 'utf8');
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const fileName = relative(file);
+  const isUi = /^src\/(components|hooks|screens)\//.test(fileName);
+  const isAdapter =
+    /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(
+      fileName,
+    );
   const canonicalSelectionReadSurface =
     fileName === 'src/components/checklist/useOnboardingSteps.ts' ||
     fileName === 'src/hooks/useEjectAllModels.ts' ||
     fileName === 'src/screens/ProjectDetailScreen.tsx' ||
     fileName === 'src/screens/ChatScreen/useChatScreen.ts' ||
     fileName === 'pro/ui/McpServersScreen.tsx' ||
-    fileName === 'pro/audio/ui/AudioMessageBubble/index.tsx'
+    fileName === 'pro/audio/ui/AudioMessageBubble/index.tsx';
+
+  if (
+    fileName === 'src/services/localDreamGenerator.ts' &&
+    (!/\bprojectNativeImageGeneration\s*\(/.test(text) ||
+      !/\bprojectNativeGeneratedImageResult\s*\(/.test(text) ||
+      /(?:steps|guidanceScale|width|height|previewInterval|useOpenCL)\s*:\s*[^,\n]*(?:\|\||\?\?)\s*(?:true|false|\d+(?:\.\d+)?)/.test(
+        text,
+      ))
+  ) {
+    report(
+      'local-image-adapter-has-no-generation-policy',
+      fileName,
+      source,
+      source,
+      'localDreamGenerator must consume Shared native request and result projections',
+    );
+  }
+
+  if (
+    fileName === 'App.tsx' &&
+    !/\breconcileImageDownloadsAtBootstrap\s*\(/.test(text)
+  ) {
+    report(
+      'image-download-recovery-starts-at-bootstrap',
+      fileName,
+      source,
+      source,
+      'bootstrap does not resume image downloads',
+    );
+  }
 
   if (
     fileName === 'pro/mcp/mcpService.ts' &&
-    /\bconnectionGenerations\b|JSON\.parse\s*\(\s*match|new\s+RegExp\s*\(|\btoolOwners\s*\[/.test(text)
+    /\bconnectionGenerations\b|JSON\.parse\s*\(\s*match|new\s+RegExp\s*\(|\btoolOwners\s*\[/.test(
+      text,
+    )
   ) {
-    report('mobile-mcp-policy-is-shared', fileName, source, source, 'local:lifecycle-parser-or-owner-policy')
+    report(
+      'mobile-mcp-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:lifecycle-parser-or-owner-policy',
+    );
   }
 
-  if (fileName === 'src/services/modelServices/toolPorts.ts' && /selectionLimit\s*:\s*\d+/.test(text)) {
-    report('mobile-tool-selection-limit-is-shared', fileName, source, source, 'local:selection-limit')
+  if (
+    fileName === 'src/services/modelServices/toolPorts.ts' &&
+    /selectionLimit\s*:\s*\d+/.test(text)
+  ) {
+    report(
+      'mobile-tool-selection-limit-is-shared',
+      fileName,
+      source,
+      source,
+      'local:selection-limit',
+    );
   }
 
   if (/\bresidencyMode\b/.test(text)) {
-    report('runtime-model-has-one-lifecycle-vocabulary', fileName, source, source, 'deprecated:residencyMode')
+    report(
+      'runtime-model-has-one-lifecycle-vocabulary',
+      fileName,
+      source,
+      source,
+      'deprecated:residencyMode',
+    );
   }
 
   if (
     fileName === 'src/stores/appStore.ts' &&
-    /(?:temperature:\s*0\.7|maxTokens:\s*1024|topP:\s*0\.9|repeatPenalty:\s*1\.1|liteRTMaxTokens:\s*4096)/.test(text)
+    /(?:temperature:\s*0\.7|maxTokens:\s*1024|topP:\s*0\.9|repeatPenalty:\s*1\.1|liteRTMaxTokens:\s*4096)/.test(
+      text,
+    )
   ) {
-    report('model-configuration-defaults-are-shared', fileName, source, source, 'local:text-default')
+    report(
+      'model-configuration-defaults-are-shared',
+      fileName,
+      source,
+      source,
+      'local:text-default',
+    );
   }
 
   if (
-    /^(?:src\/services\/llmSafetyChecks|src\/services\/whisperModelFiles|pro\/sync\/modelPackageSink)\.ts$/.test(fileName) &&
-    /\b(?:GGUF_MAGIC|MIN_GGUF_FILE_SIZE|MIN_MODEL_FILE_SIZE)\b|\.corruption\b|\.size\s*[<>]=?/.test(text)
+    /^(?:src\/services\/llmSafetyChecks|src\/services\/whisperModelFiles|pro\/sync\/modelPackageSink)\.ts$/.test(
+      fileName,
+    ) &&
+    /\b(?:GGUF_MAGIC|MIN_GGUF_FILE_SIZE|MIN_MODEL_FILE_SIZE)\b|\.corruption\b|\.size\s*[<>]=?/.test(
+      text,
+    )
   ) {
     report(
       'artifact-verification-policy-is-shared',
@@ -98,205 +190,653 @@ for (const file of files) {
       source,
       source,
       'app-owned format, size, or corruption branch',
-    )
+    );
   }
 
   if (fileName === 'src/services/modelServices/remoteImageGeneration.ts') {
-    report('mobile-image-lifecycle-is-shared', fileName, source, source, 'file:remoteImageGeneration')
+    report(
+      'mobile-image-lifecycle-is-shared',
+      fileName,
+      source,
+      source,
+      'file:remoteImageGeneration',
+    );
   }
 
   if (
     fileName === 'src/stores/remoteServerStore.ts' &&
-    /\b(?:addServer|updateServer|removeServer|discoverModels|testConnection|clearAllServers)\s*:/.test(text)
+    /\b(?:addServer|updateServer|removeServer|discoverModels|testConnection|clearAllServers)\s*:/.test(
+      text,
+    )
   ) {
-    report('remote-server-workflow-is-shared', fileName, source, source, 'store:actionable-workflow')
+    report(
+      'remote-server-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'store:actionable-workflow',
+    );
   }
 
   if (
     /^src\/(?:components|hooks|screens)\//.test(fileName) &&
     /services\/networkDiscovery/.test(text)
   ) {
-    report('remote-server-workflow-is-shared', fileName, source, source, 'ui:direct-lan-discovery')
+    report(
+      'remote-server-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'ui:direct-lan-discovery',
+    );
   }
 
-  if (/^src\/services\/(?:llmToolGeneration|litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight)\.ts$/.test(fileName)) {
-    report('mobile-tool-routing-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
+  if (
+    /^src\/(?:components|hooks|screens)\//.test(fileName) &&
+    /\bmodelLibrary\.(?:repairMmProj|repairVision)\s*\(/.test(text)
+  ) {
+    report(
+      'vision-repair-command-is-shared',
+      fileName,
+      source,
+      source,
+      'UI calls a raw vision repair workflow instead of the typed application command',
+    );
   }
 
-  if (/^src\/(?:constants\/models|services\/(?:curatedLiteRTRegistry|whisperModels))\.ts$/.test(fileName)) {
-    report('mobile-catalog-policy-is-shared', fileName, source, source, `file:${path.basename(fileName)}`)
+  if (
+    /^src\/services\/(?:llmToolGeneration|litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight)\.ts$/.test(
+      fileName,
+    )
+  ) {
+    report(
+      'mobile-tool-routing-is-shared',
+      fileName,
+      source,
+      source,
+      `file:${path.basename(fileName)}`,
+    );
   }
 
-  if (fileName === 'src/services/adapters/remote/serverDiscovery.ts' && /\/v1\/models|\/api\/tags/.test(text)) {
-    report('remote-discovery-policy-is-shared', fileName, source, source, 'literal:endpoint-order')
+  if (
+    /^src\/(?:constants\/models|services\/(?:curatedLiteRTRegistry|whisperModels))\.ts$/.test(
+      fileName,
+    )
+  ) {
+    report(
+      'mobile-catalog-policy-is-shared',
+      fileName,
+      source,
+      source,
+      `file:${path.basename(fileName)}`,
+    );
+  }
+
+  if (
+    /^src\/services\/(?:huggingFaceModelBrowser|autoSetupImageCatalogProvider)\.ts$/.test(
+      fileName,
+    ) &&
+    /\bguessStyle\b|(?:reality|realistic|chillout|photo|anime|anything|counterfeit|meina|abyssorange|pastel)[^\n]{0,80}\.includes\s*\(/i.test(
+      text,
+    )
+  ) {
+    report(
+      'image-style-classification-is-shared',
+      fileName,
+      source,
+      source,
+      'local:image-style-heuristic',
+    );
+  }
+
+  if (
+    (fileName === 'src/services/adapters/remote/serverDiscovery.ts' &&
+      /\/v1\/models|\/api\/tags|\b(?:remoteDiscoveryEndpoints|remoteTextDiscoveryCandidates|remoteGatewayCatalog|defaultRemoteSelections|detectServerType|testEndpoint)\b/.test(
+        text,
+      )) ||
+    (fileName === 'src/services/httpClientUtils.ts' &&
+      /\b(?:RemoteProviderDiscoveryApplicationService|remoteProviderProbes|detectServerType|testEndpoint)\b/.test(
+        text,
+      ))
+  ) {
+    report(
+      'remote-discovery-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:provider-policy',
+    );
+  }
+
+  if (
+    fileName === 'src/services/networkDiscovery.ts' &&
+    /\b(?:PROVIDERS|FALLBACK_SUBNETS|MAX_IN_FLIGHT|TIMEOUT_MS|GATEWAY_TIMEOUT_MS|runPool|subnetBase|isPrivateIPv4|isIPv6)\b|\/v1\/models|\/api\/tags|192\.168\.[01]/.test(
+      text,
+    )
+  ) {
+    report(
+      'lan-discovery-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:lan-scan-policy',
+    );
+  }
+
+  if (
+    fileName === 'src/services/adapters/remote/modelCapabilityDiscovery.ts' &&
+    /\/api\/show|\/api\/v1\/models|\/props|\/v1\/chat\/completions|Say hi|enable_thinking|\b(?:ollamaCapabilityInfo|lmStudioCapabilityInfo|llamaCppCapabilityInfo|resolveRemoteCapabilityEvidence|remoteDeltaHasReasoning)\b/.test(
+      text,
+    )
+  ) {
+    report(
+      'remote-capability-discovery-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:capability-probe-policy',
+    );
   }
 
   if (
     fileName === 'src/stores/whisperStore.ts' &&
-    /\b(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)\s*:/.test(text)
+    /\b(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)\s*:/.test(
+      text,
+    )
   ) {
-    report('transcription-workflow-is-shared', fileName, source, source, 'store:actionable-workflow')
+    report(
+      'transcription-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'store:actionable-workflow',
+    );
   }
+
   if (
-    /^(?:src\/screens\/ChatsListScreen|src\/components\/ModelSelectorModal\/index|src\/screens\/HomeScreen\/hooks\/useRemoteModelHandlers)\.tsx?$/.test(fileName) &&
-    /\b(?:selectMobileModel|clearMobileModel|mobileResidencyIntents)\b/.test(text)
+    fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
+    /\bpending(?:Text|Image|Transcription)ModelId\b/.test(text)
   ) {
-    report('ui-model-commands-are-shared', fileName, source, source, 'ui:direct-selection-or-residency-command')
+    report(
+      'residency-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'module-global:pending-model-id',
+    );
+  }
+
+  if (fileName === 'src/services/modelPreloader.ts') {
+    report(
+      'dead-boot-preloader-is-removed',
+      fileName,
+      source,
+      source,
+      'file:modelPreloader',
+    );
+  }
+
+  if (
+    /^(?:src\/screens\/ChatsListScreen|src\/components\/ModelSelectorModal\/index|src\/screens\/HomeScreen\/hooks\/useRemoteModelHandlers)\.tsx?$/.test(
+      fileName,
+    ) &&
+    /\b(?:selectMobileModel|clearMobileModel|mobileResidencyIntents)\b/.test(
+      text,
+    )
+  ) {
+    report(
+      'ui-model-commands-are-shared',
+      fileName,
+      source,
+      source,
+      'ui:direct-selection-or-residency-command',
+    );
+  }
+
+  if (isUi && /\bmobileResidencyIntents\b/.test(text)) {
+    report(
+      'ui-model-commands-are-shared',
+      fileName,
+      source,
+      source,
+      'ui:direct-residency-intent-bypasses-model-command-application',
+    );
+  }
+
+  if (
+    fileName === 'src/screens/ModelsScreen/useImageModels.ts' &&
+    /\breconcileMobileImageDownloads\b|imageDownloadRecoveryApplication/.test(
+      text,
+    )
+  ) {
+    report(
+      'image-download-recovery-starts-at-bootstrap',
+      fileName,
+      source,
+      source,
+      'screen-owned:image-download-recovery',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/downloadTypes.ts' &&
+    /\b(?:ModelDownloadType|ModelDownloadStatus|PublicDownloadType)\b/.test(
+      text,
+    )
+  ) {
+    report(
+      'download-vocabulary-is-shared',
+      fileName,
+      source,
+      source,
+      'local:download-type-or-status-alias',
+    );
   }
 
   if (
     fileName === 'src/screens/ChatScreen/mobileChatSession.ts' &&
-    /\b(?:imageIntentDecision|appendProjectKnowledge|composeChatContext)\b/.test(text)
+    /\b(?:imageIntentDecision|appendProjectKnowledge|composeChatContext)\b/.test(
+      text,
+    )
   ) {
-    report('chat-orchestration-is-shared', fileName, source, source, 'screen:direct-chat-policy')
+    report(
+      'chat-orchestration-is-shared',
+      fileName,
+      source,
+      source,
+      'screen:direct-chat-policy',
+    );
   }
 
   if (
     fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
     !/\bModelLifecycleApplicationService\b/.test(text)
   ) {
-    report('model-lifecycle-transaction-is-shared', fileName, source, source, 'adapter:missing-shared-application-service')
-  }
-
-
-  if (
-    fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
-    /\bpending(?:Text|Image|Transcription)ModelId\b/.test(text)
-  ) {
-    report('residency-workflow-is-shared', fileName, source, source, 'module-global:pending-model-id')
-  }
-
-  if (fileName === 'src/services/modelPreloader.ts') {
-    report('dead-boot-preloader-is-removed', fileName, source, source, 'file:modelPreloader')
+    report(
+      'model-lifecycle-transaction-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:missing-shared-application-service',
+    );
   }
 
   if (fileName === 'src/services/engines.ts') {
-    report('text-engine-policy-is-shared', fileName, source, source, 'obsolete:parallel-engine-facade')
+    report(
+      'text-engine-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'obsolete:parallel-engine-facade',
+    );
   }
 
   if (fileName === 'src/utils/modelSelectorFilters.ts') {
-    report('catalog-filter-policy-is-shared', fileName, source, source, 'obsolete:catalog-filter-projection')
+    report(
+      'catalog-filter-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'obsolete:catalog-filter-projection',
+    );
   }
 
   if (
-    /^src\/services\/(?:modelServices\/bootstrap\/ragBootstrap|adapters\/rag\/mobileRagPorts)\.ts$/.test(fileName) &&
-    /(?:chunkSize\s*:\s*600|overlap\s*:\s*120|minChunkLength\s*:\s*20|dimension\s*:\s*384|topK\s*=\s*5)/.test(text)
+    /^src\/services\/(?:modelServices\/bootstrap\/ragBootstrap|adapters\/rag\/mobileRagPorts)\.ts$/.test(
+      fileName,
+    ) &&
+    /(?:chunkSize\s*:\s*600|overlap\s*:\s*120|minChunkLength\s*:\s*20|dimension\s*:\s*384|topK\s*=\s*5)/.test(
+      text,
+    )
   ) {
-    report('rag-profile-is-shared', fileName, source, source, 'local:rag-profile-default')
+    report(
+      'rag-profile-is-shared',
+      fileName,
+      source,
+      source,
+      'local:rag-profile-default',
+    );
   }
 
   if (
-    /^(?:src\/stores\/appStore|src\/services\/localDreamGenerator|src\/components\/GenerationSettingsModal\/ImageQualitySliders)\.tsx?$/.test(fileName) &&
-    /(?:guidanceScale|imageGuidanceScale)[^\n]{0,30}(?:\|\||:)\s*7\.5/.test(text)
+    /^(?:src\/stores\/appStore|src\/services\/localDreamGenerator|src\/components\/GenerationSettingsModal\/ImageQualitySliders)\.tsx?$/.test(
+      fileName,
+    ) &&
+    /(?:guidanceScale|imageGuidanceScale)[^\n]{0,30}(?:\|\||:)\s*7\.5/.test(
+      text,
+    )
   ) {
-    report('image-settings-defaults-are-shared', fileName, source, source, 'local:image-guidance-default')
+    report(
+      'image-settings-defaults-are-shared',
+      fileName,
+      source,
+      source,
+      'local:image-guidance-default',
+    );
   }
 
   if (
     fileName === 'src/services/llm.ts' &&
-    /\b(?:effectiveAvailableMB|resolveSafeContext|checkMemoryForModel|getGpuLayersForDevice)\b|backend\s*===\s*INFERENCE_BACKENDS\.(?:HTP|OPENCL)/.test(text)
+    /\b(?:effectiveAvailableMB|resolveSafeContext|checkMemoryForModel|getGpuLayersForDevice)\b|backend\s*===\s*INFERENCE_BACKENDS\.(?:HTP|OPENCL)/.test(
+      text,
+    )
   ) {
-    report('mobile-text-load-policy-is-shared', fileName, source, source, 'local:text-load-policy')
+    report(
+      'mobile-text-load-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:text-load-policy',
+    );
   }
 
   if (
     fileName === 'src/services/llmHelpers.ts' &&
-    /\b(?:GPU_INIT_TIMEOUT_MS|HTP_INIT_TIMEOUT_MS|GPU_INIT_TIMEOUT_MS_IOS|gpuInitTimeoutMs|tryGpuInit|withTimeout)\b|Attempt\s+[123]\/3/.test(text)
+    /\b(?:GPU_INIT_TIMEOUT_MS|HTP_INIT_TIMEOUT_MS|GPU_INIT_TIMEOUT_MS_IOS|gpuInitTimeoutMs|tryGpuInit|withTimeout)\b|Attempt\s+[123]\/3/.test(
+      text,
+    )
   ) {
-    report('mobile-native-load-fallback-is-shared', fileName, source, source, 'local:native-load-fallback')
+    report(
+      'mobile-native-load-fallback-is-shared',
+      fileName,
+      source,
+      source,
+      'local:native-load-fallback',
+    );
   }
 
   if (
     fileName === 'src/services/contextCompaction.ts' &&
-    /class\s+ContextCompactionService|\b(?:planContextCompaction|compactedConversation|SUMMARIZER_SYSTEM_PROMPT|oldMessages|summaryTokenBudget)\b/.test(text)
+    /class\s+ContextCompactionService|\b(?:planContextCompaction|compactedConversation|SUMMARIZER_SYSTEM_PROMPT|oldMessages|summaryTokenBudget)\b/.test(
+      text,
+    )
   ) {
-    report('context-compaction-workflow-is-shared', fileName, source, source, 'local:compaction-workflow')
+    report(
+      'context-compaction-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'local:compaction-workflow',
+    );
   }
 
   if (
     fileName === 'src/services/llmSafetyChecks.ts' &&
-    /\b(?:estimateTextLoadMemory|modelMemoryFit|planSafeContext|checkMemoryForModel|resolveSafeContext)\b/.test(text)
+    /\b(?:estimateTextLoadMemory|modelMemoryFit|planSafeContext|checkMemoryForModel|resolveSafeContext)\b/.test(
+      text,
+    )
   ) {
-    report('mobile-load-admission-is-shared', fileName, source, source, 'local:load-admission')
+    report(
+      'mobile-load-admission-is-shared',
+      fileName,
+      source,
+      source,
+      'local:load-admission',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/modelMemoryAdvisory.ts' &&
+    /\b(?:modelMemoryBudgetMB|modelWarningThresholdMB|estimateRuntimeMemoryBytes|getCurrentlyLoadedMemoryGB|getOtherLoadedMemoryGB|loadedTextModelId|loadedImageModelId)\b/.test(
+      text,
+    )
+  ) {
+    report(
+      'mobile-memory-advisory-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned budget, estimate, or loaded-id reconstruction',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/modelState.ts' &&
+    /export\s+async\s+function\s+checkMemoryForModel[\s\S]{0,800}\b(?:getLoadedModelIds|downloadedModels|hasSessionOverride|getLoadPolicy)\b/.test(
+      text,
+    )
+  ) {
+    report(
+      'mobile-memory-advisory-is-shared',
+      fileName,
+      source,
+      source,
+      'facade-owned advisory inputs or verdict',
+    );
+  }
+
+  if (
+    fileName === 'src/utils/ggufCapabilities.ts' &&
+    /(?:NAME_PATTERNS|\.includes\s*\(|new\s+RegExp|\.some\s*\()/.test(text)
+  ) {
+    report(
+      'gguf-capability-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned GGUF family policy',
+    );
   }
 
   if (
     fileName === 'src/services/imageGenerationHelpers.ts' &&
     /\.slice\(-10\)|\.slice\(0,\s*500\)|function\s+readableText\b/.test(text)
   ) {
-    report('image-enhancement-context-policy-is-shared', fileName, source, source, 'local:context-selection-policy')
+    report(
+      'image-enhancement-context-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:context-selection-policy',
+    );
   }
 
   if (
     fileName === 'pro/sync/textModelTransferAdapter.ts' &&
-    /function\s+(?:manifest|modelIdWithoutFile)\b|kind\s*:\s*files\.length/.test(text)
+    /function\s+(?:manifest|modelIdWithoutFile)\b|kind\s*:\s*files\.length/.test(
+      text,
+    )
   ) {
-    report('model-transfer-manifest-policy-is-shared', fileName, source, source, 'local:text-manifest-policy')
+    report(
+      'model-transfer-manifest-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:text-manifest-policy',
+    );
+  }
+
+  if (
+    fileName === 'pro/sync/whisperModelTransferAdapter.ts' &&
+    (!/\bprojectInstalledWhisperTransfer\s*\(/.test(text) ||
+      !/\bwhisperModelIdFromTransferId\s*\(/.test(text) ||
+      /WHISPER_ID_PREFIX|function\s+(?:displayName|manifest)\b|kind\s*:\s*['"]transcription['"][\s\S]{0,240}engine\s*:\s*['"]whisper['"]/.test(
+        text,
+      ))
+  ) {
+    report(
+      'whisper-transfer-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:whisper-transfer-policy',
+    );
   }
 
   if (
     fileName === 'pro/sync/imageModelTransferAdapter.ts' &&
     /256\s*\*\s*1024\s*\*\s*1024|IMAGE_ARCHIVE_RESERVE_BYTES/.test(text)
   ) {
-    report('model-transfer-reserve-policy-is-shared', fileName, source, source, 'local:image-archive-reserve')
+    report(
+      'model-transfer-reserve-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:image-archive-reserve',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/coordinatedDownloadBridge.ts' &&
+    /\b(?:kindFor|statusFor)\b|offgrid-download-staging|revision\s*:\s*['"]mobile|record\.phase\s*===/.test(
+      text,
+    )
+  ) {
+    report(
+      'download-command-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:coordinated-download-policy',
+    );
+  }
+
+  if (
+    fileName === 'src/services/whisperModelDownloads.ts' &&
+    /\b(?:DownloadOperationRegistry|cancelRequested|markPublished|hasReplacement)\b|Downloaded model file is invalid/.test(
+      text,
+    )
+  ) {
+    report(
+      'download-command-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:whisper-download-policy',
+    );
+  }
+
+  if (
+    fileName === 'src/services/downloadEventProjection.ts' &&
+    /entry\.modelType|mmProjStatus|setProcessing|setCompleted|updateMmProjProgress|updateProgress/.test(
+      text,
+    )
+  ) {
+    report(
+      'download-command-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:download-event-policy',
+    );
   }
 
   if (
     fileName === 'src/services/modelFailureReasons.ts' &&
     /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b/.test(text)
   ) {
-    report('model-failure-policy-is-shared', fileName, source, source, 'local:failure-policy')
+    report(
+      'model-failure-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:failure-policy',
+    );
   }
 
   if (
     fileName === 'src/screens/ChatScreen/useChatModelActions.ts' &&
-    /\b(?:isOverridableMemoryError|reasonFromLoadError|loadModelWithOverride|getMultimodalSupport)\b/.test(text)
+    /\b(?:isOverridableMemoryError|reasonFromLoadError|loadModelWithOverride|getMultimodalSupport)\b/.test(
+      text,
+    )
   ) {
-    report('chat-readiness-policy-is-shared', fileName, source, source, 'app-owned readiness or force-load decision')
+    report(
+      'chat-readiness-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned readiness or force-load decision',
+    );
   }
 
   if (
     fileName === 'src/screens/ChatScreen/modelReadiness.ts' &&
-    /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b|\bisModelReady\b/.test(text)
+    /function\s+(?:reasonFromLoadError|modelNotReadyAlert)\b|\bisModelReady\b/.test(
+      text,
+    )
   ) {
-    report('chat-readiness-policy-is-shared', fileName, source, source, 'screen-owned readiness decision')
+    report(
+      'chat-readiness-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'screen-owned readiness decision',
+    );
   }
 
   if (
     fileName === 'src/services/imagePromptEnhancement.ts' &&
-    /\b(?:buildImageEnhancementMessages|cleanImageEnhancement|cleanEnhancedPrompt)\b/.test(text)
+    /\b(?:buildImageEnhancementMessages|cleanImageEnhancement|cleanEnhancedPrompt)\b/.test(
+      text,
+    )
   ) {
-    report('prompt-enhancement-orchestration-is-shared', fileName, source, source, 'app-owned enhancement policy')
+    report(
+      'prompt-enhancement-orchestration-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned enhancement policy',
+    );
   }
 
   if (
     fileName === 'src/utils/visionRepair.ts' &&
     /includes\(['"](?:vl|vision|smolvlm)['"]\)/.test(text)
   ) {
-    report('vision-repair-policy-is-shared', fileName, source, source, 'app-owned model-name heuristic')
+    report(
+      'vision-repair-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned model-name heuristic',
+    );
   }
 
   if (
     fileName === 'src/utils/downloadStatus.ts' &&
-    /(?:ACTIVE_STATUSES|return\s+status\s*===\s*['"](?:pending|running|failed)['"])/.test(text)
+    /(?:ACTIVE_STATUSES|return\s+status\s*===\s*['"](?:pending|running|failed)['"])/.test(
+      text,
+    )
   ) {
-    report('download-status-policy-is-shared', fileName, source, source, 'local:status-policy')
+    report(
+      'download-status-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'local:status-policy',
+    );
   }
 
   if (/\b(?:abortPreload|preloadSelectedModels)\b/.test(text)) {
-    report('dead-boot-preloader-is-removed', fileName, source, source, 'symbol:boot-preload')
+    report(
+      'dead-boot-preloader-is-removed',
+      fileName,
+      source,
+      source,
+      'symbol:boot-preload',
+    );
   }
 
   if (
     fileName === 'src/services/loadPolicySync.ts' &&
-    /\b(?:loadPolicyFromSettings|activeUnsubscribe|isInitialSeed|modelLoadingMode\s*[!=]=|aggressiveModelLoading\s*[!=]=)\b/.test(text)
+    /\b(?:loadPolicyFromSettings|activeUnsubscribe|isInitialSeed|modelLoadingMode\s*[!=]=|aggressiveModelLoading\s*[!=]=)\b/.test(
+      text,
+    )
   ) {
-    report('load-policy-transition-is-shared', fileName, source, source, 'adapter:policy-transition')
+    report(
+      'load-policy-transition-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:policy-transition',
+    );
   }
 
   if (
     fileName === 'src/screens/ModelsScreen/useTextModels.ts' &&
-    /(?:modelDownloadProjection|cancelBackgroundDownload|deleteModel\s*\(|mobileResidencyIntents)/.test(text)
+    /(?:modelDownloadProjection|cancelBackgroundDownload|deleteModel\s*\(|mobileResidencyIntents)/.test(
+      text,
+    )
   ) {
     report(
       'model-library-command-is-shared',
@@ -304,12 +844,16 @@ for (const file of files) {
       source,
       source,
       'screen-owned cancellation, deletion, projection, or runtime ordering',
-    )
+    );
   }
 
   if (
-    /^src\/screens\/ModelsScreen\/(?:useModelsScreen|importHelpers|TextModelsTab)\.tsx?$/.test(fileName) &&
-    /(?:lower\.includes\(['"](?:mmproj|projector)['"]\)|endsWith\(['"]\.(?:zip|gguf|litertlm)['"]\)|modelLibrary\.markVisionModel)/.test(text)
+    /^src\/screens\/ModelsScreen\/(?:useModelsScreen|importHelpers|TextModelsTab)\.tsx?$/.test(
+      fileName,
+    ) &&
+    /(?:lower\.includes\(['"](?:mmproj|projector)['"]\)|endsWith\(['"]\.(?:zip|gguf|litertlm)['"]\)|modelLibrary\.markVisionModel)/.test(
+      text,
+    )
   ) {
     report(
       'model-library-import-and-repair-commands-are-shared',
@@ -317,12 +861,72 @@ for (const file of files) {
       source,
       source,
       'screen-owned import classification or metadata repair',
+    );
+  }
+
+  if (
+    /^src\/(?:components|hooks|screens)\//.test(fileName) &&
+    /\bmodelLibrary\.importLocalModel\s*\(/.test(text)
+  ) {
+    report(
+      'model-file-import-transaction-is-shared',
+      fileName,
+      source,
+      source,
+      'UI or screen helper calls the platform import workflow directly',
+    );
+  }
+
+  if (
+    /^src\/screens\/ModelsScreen\/(?:useModelsScreen|importHelpers|TextModelsTab)\.tsx?$/.test(
+      fileName,
+    ) &&
+    /(?:react-native-fs|react-native-zip-archive|importedImageIdentity|detectImportedImageBackend|new\s+ImageArchiveImportService|addDownloadedImageModel\s*\()/.test(
+      text,
     )
+  ) {
+    report(
+      'image-archive-import-transaction-is-shared',
+      fileName,
+      source,
+      source,
+      'ui-owned archive, package, registration, or identity transaction',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/sidecarGenerationAdapter.ts' &&
+    /(?:Reply only YES or NO|\.slice\(0,\s*200\)|includes\(['"]yes['"]\)|labels\.map|score\s*:)/i.test(
+      text,
+    )
+  ) {
+    report(
+      'classifier-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'sidecar-owned prompt, parsing, labels, or confidence',
+    );
+  }
+
+  if (
+    fileName === 'src/services/modelServices/sidecarExecutionComposition.ts' &&
+    /output\.labels\.(?:reduce|sort)|label\s*===\s*['"]image['"]/.test(text)
+  ) {
+    report(
+      'classifier-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'composition-owned classifier route projection',
+    );
   }
 
   if (
     fileName === 'src/screens/ModelsScreen/useImageModels.ts' &&
-    /(?:resumeImageDownload|modelDownloadProjection|resumingDownloadKeysRef)/.test(text)
+    /(?:resumeImageDownload|modelDownloadProjection|resumingDownloadKeysRef)/.test(
+      text,
+    )
   ) {
     report(
       'image-download-recovery-is-shared',
@@ -330,12 +934,79 @@ for (const file of files) {
       source,
       source,
       'screen-owned recovery admission, projection, or de-duplication',
-    )
+    );
   }
 
   if (
-    /^src\/services\/adapters\/downloads\/(?:text|image)DownloadAdapter\.ts$/.test(fileName) &&
-    /(?:modelLibrary\.(?:deleteModel|deleteImageModel)|removeDownloaded(?:Image)?Model|unload(?:Text|Image)Model)/.test(text)
+    /^src\/services\/imageDownload(?:Actions|Resume|Retry|Qnn)\.ts$/.test(
+      fileName,
+    ) &&
+    /(?:react-native-fs|react-native-zip-archive|\bRNFS\b|\bunzip\b|hardwareService|modelLibrary|imageDownloadRecoveryAction|imageDownloadRetryAction|createImageDownloadPlan|new\s+Date\s*\(|downloadSequentialImageFiles)/.test(
+      text,
+    )
+  ) {
+    report(
+      'image-download-application-is-shared',
+      fileName,
+      source,
+      source,
+      'app service owns image transfer, compatibility, recovery, registration, or activation policy',
+    );
+  }
+
+  if (
+    fileName.startsWith('src/services/') &&
+    !fileName.startsWith('src/services/adapters/') &&
+    /(?:imageDownloadRecoveryAction|imageDownloadRetryAction|createImageDownloadPlan)/.test(
+      text,
+    )
+  ) {
+    report(
+      'image-download-policy-is-shared',
+      fileName,
+      source,
+      source,
+      'non-composition service imports portable image-download policy primitives',
+    );
+  }
+
+  if (
+    /^src\/(?:screens|hooks|stores|components)\//.test(fileName) &&
+    /(?:imageDownloadApplicationAdapter|react-native-zip-archive|coordinatedDownloadBridge|imageDownloadWorkflowAdapter)/.test(
+      text,
+    )
+  ) {
+    report(
+      'image-download-ui-uses-typed-intents',
+      fileName,
+      source,
+      source,
+      'UI imports an image-download native or workflow adapter',
+    );
+  }
+
+  if (
+    !fileName.startsWith('src/services/adapters/') &&
+    /(?:deviceVariant\s*===\s*['"]8gen2['"]|modelVariant\s*===\s*deviceVariant|modelVariant\s*!==\s*['"]8gen2['"])/.test(
+      text,
+    )
+  ) {
+    report(
+      'image-device-compatibility-is-shared',
+      fileName,
+      source,
+      source,
+      'app-owned QNN compatibility matrix',
+    );
+  }
+
+  if (
+    /^src\/services\/adapters\/downloads\/(?:text|image)DownloadAdapter\.ts$/.test(
+      fileName,
+    ) &&
+    /(?:modelLibrary\.(?:deleteModel|deleteImageModel)|removeDownloaded(?:Image)?Model|unload(?:Text|Image)Model)/.test(
+      text,
+    )
   ) {
     report(
       'model-library-command-is-shared',
@@ -343,39 +1014,81 @@ for (const file of files) {
       source,
       source,
       'provider-owned package deletion, projection cleanup, or runtime ordering',
-    )
+    );
   }
 
   if (
     fileName === 'pro/audio/ttsStore.ts' &&
-    /\b(?:ttsRegistry|modelResidencyManager|withVoiceSwitchTimeout|completedVoiceAssets|engine\.(?:setVoice|initialize|release|downloadAssets|deleteAssets|generateAndSave))\b/.test(text)
+    /\b(?:ttsRegistry|modelResidencyManager|withVoiceSwitchTimeout|completedVoiceAssets|engine\.(?:setVoice|initialize|release|downloadAssets|deleteAssets|generateAndSave))\b/.test(
+      text,
+    )
   ) {
-    report('voice-control-plane-is-shared', fileName, source, source, 'store:voice-workflow')
+    report(
+      'voice-control-plane-is-shared',
+      fileName,
+      source,
+      source,
+      'store:voice-workflow',
+    );
   }
 
   if (
     fileName === 'pro/audio/ttsPlayback.ts' &&
-    /\b(?:AbortController|dispatchPlayback|playbackStatus\s*[!=]=|currentMessageId\s*[!=]=)\b/.test(text)
+    /\b(?:AbortController|dispatchPlayback|playbackStatus\s*[!=]=|currentMessageId\s*[!=]=)\b/.test(
+      text,
+    )
   ) {
-    report('voice-playback-control-is-shared', fileName, source, source, 'adapter:playback-state-machine')
+    report(
+      'voice-playback-control-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:playback-state-machine',
+    );
   }
 
   if (
     fileName === 'pro/audio/ttsDownloadActions.ts' &&
-    /\b(?:downloadAssets|deleteAssets|modelDownloaded|voiceAssetsDownloaded|modelResidencyManager)\b/.test(text)
+    /\b(?:downloadAssets|deleteAssets|modelDownloaded|voiceAssetsDownloaded|modelResidencyManager)\b/.test(
+      text,
+    )
   ) {
-    report('voice-download-workflow-is-shared', fileName, source, source, 'adapter:download-policy')
+    report(
+      'voice-download-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:download-policy',
+    );
   }
 
   if (
     fileName === 'pro/audio/voiceGenerationPort.ts' &&
-    /\b(?:engine\.speak|initializeEngine|reconcileDownloadedFromPersisted|Promise\.race)\b/.test(text)
+    /\b(?:engine\.speak|initializeEngine|reconcileDownloadedFromPersisted|Promise\.race)\b/.test(
+      text,
+    )
   ) {
-    report('voice-synthesis-flow-is-shared', fileName, source, source, 'adapter:synthesis-policy')
+    report(
+      'voice-synthesis-flow-is-shared',
+      fileName,
+      source,
+      source,
+      'adapter:synthesis-policy',
+    );
   }
 
-  if (/useWhisperStore\.getState\(\)\.(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)/.test(text)) {
-    report('transcription-workflow-is-shared', fileName, source, source, 'call:whisper-store-workflow')
+  if (
+    /useWhisperStore\.getState\(\)\.(?:downloadModel|selectModel|loadModel|unloadModel|deleteModel|deleteModelById|refreshPresentModels)/.test(
+      text,
+    )
+  ) {
+    report(
+      'transcription-workflow-is-shared',
+      fileName,
+      source,
+      source,
+      'call:whisper-store-workflow',
+    );
   }
 
   const visit = node => {
@@ -384,41 +1097,85 @@ for (const file of files) {
       ts.isVariableDeclaration(node) &&
       ts.isObjectBindingPattern(node.name) &&
       ts.isCallExpression(node.initializer) &&
-      /^(?:useAppStore|useRemoteServerStore)$/.test(nodeText(source, node.initializer.expression))
+      /^(?:useAppStore|useRemoteServerStore)$/.test(
+        nodeText(source, node.initializer.expression),
+      )
     ) {
       for (const element of node.name.elements) {
-        const name = (element.propertyName ?? element.name).getText(source)
+        const name = (element.propertyName ?? element.name).getText(source);
         if (selectionProjectionKeys.has(name)) {
-          report('ui-reads-shared-selection-snapshot', fileName, source, element, `raw-key:${name}`)
+          report(
+            'ui-reads-shared-selection-snapshot',
+            fileName,
+            source,
+            element,
+            `raw-key:${name}`,
+          );
         }
       }
     }
 
     if (
       /^src\/stores\/(?:appStore|remoteServerStore)\.ts$/.test(fileName) &&
-      (ts.isPropertySignature(node) || ts.isPropertyAssignment(node) || ts.isMethodDeclaration(node)) &&
+      (ts.isPropertySignature(node) ||
+        ts.isPropertyAssignment(node) ||
+        ts.isMethodDeclaration(node)) &&
       node.name &&
       /^(?:setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(
-        ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name) ? node.name.text : '',
+        ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name)
+          ? node.name.text
+          : '',
       )
     ) {
-      report('stores-expose-no-selection-writers', fileName, source, node.name, `writer:${node.name.getText(source)}`)
+      report(
+        'stores-expose-no-selection-writers',
+        fileName,
+        source,
+        node.name,
+        `writer:${node.name.getText(source)}`,
+      );
     }
 
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      const specifier = node.moduleSpecifier.text
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      const specifier = node.moduleSpecifier.text;
       if (/services\/engines$/.test(specifier)) {
-        report('text-engine-policy-is-shared', fileName, source, node, `import:${specifier}`)
+        report(
+          'text-engine-policy-is-shared',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
       }
-      if (isUi && /(services\/litert(?:\.|$)|llama|whisperService|localDreamGenerator|imageGenerationService|adapters\/providers)/i.test(specifier)) {
-        report('ui-does-not-import-raw-model-engine', fileName, source, node, `import:${specifier}`)
+      if (
+        isUi &&
+        /(services\/litert(?:\.|$)|llama|whisperService|localDreamGenerator|imageGenerationService|adapters\/providers)/i.test(
+          specifier,
+        )
+      ) {
+        report(
+          'ui-does-not-import-raw-model-engine',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
       }
       if (
         !isAdapter &&
         fileName !== 'src/services/modelServices/mobileLLMService.ts' &&
         /adapters\/providers$/.test(specifier)
       ) {
-        report('provider-policy-uses-shared-capabilities', fileName, source, node, `import:${specifier}`)
+        report(
+          'provider-policy-uses-shared-capabilities',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
       }
       if (
         /modelServices\/modelLifecycleBootstrap/.test(specifier) &&
@@ -427,33 +1184,66 @@ for (const file of files) {
         ts.isNamedImports(node.importClause.namedBindings)
       ) {
         for (const element of node.importClause.namedBindings.elements) {
-          const importedName = (element.propertyName ?? element.name).text
+          const importedName = (element.propertyName ?? element.name).text;
           if (/^(?:load|unload|eject|force)\w*Models?$/.test(importedName)) {
-            report('deprecated-residency-api-outside-model-port', fileName, source, element, `import:${importedName}`)
+            report(
+              'deprecated-residency-api-outside-model-port',
+              fileName,
+              source,
+              element,
+              `import:${importedName}`,
+            );
           }
         }
       }
       if (
         fileName === 'src/services/imageGenerationService.ts' &&
-        /(remoteServerStore|localDreamGenerator|imagePromptEnhancement|residencyIntents|sharedImageGeneration)/.test(specifier)
+        /(remoteServerStore|localDreamGenerator|imagePromptEnhancement|residencyIntents|sharedImageGeneration)/.test(
+          specifier,
+        )
       ) {
-        report('mobile-image-lifecycle-is-shared', fileName, source, node, `import:${specifier}`)
+        report(
+          'mobile-image-lifecycle-is-shared',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
       }
       if (
         fileName !== 'src/services/modelServices/toolPorts.ts' &&
-        /(?:litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight|llmToolGeneration)/.test(specifier)
+        /(?:litertToolSelector|toolEmbeddingRouter|toolCapabilityPreflight|llmToolGeneration)/.test(
+          specifier,
+        )
       ) {
-        report('mobile-tool-routing-is-shared', fileName, source, node, `import:${specifier}`)
+        report(
+          'mobile-tool-routing-is-shared',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
       }
       if (
-        fileName !== 'src/services/modelServices/imageGenerationApplication.ts' &&
+        fileName !==
+          'src/services/modelServices/imageGenerationApplication.ts' &&
         node.importClause?.namedBindings &&
         ts.isNamedImports(node.importClause.namedBindings)
       ) {
         for (const element of node.importClause.namedBindings.elements) {
-          const importedName = (element.propertyName ?? element.name).text
-          if (/^(?:imageRuntimeNeedsReload|isFirstImageRuntimeRun|imageApplicationFailure|imageProgressStatus|resolveImageGenerationSettings)$/.test(importedName)) {
-            report('mobile-image-lifecycle-is-shared', fileName, source, element, `import:${importedName}`)
+          const importedName = (element.propertyName ?? element.name).text;
+          if (
+            /^(?:imageRuntimeNeedsReload|isFirstImageRuntimeRun|imageApplicationFailure|imageProgressStatus|resolveImageGenerationSettings)$/.test(
+              importedName,
+            )
+          ) {
+            report(
+              'mobile-image-lifecycle-is-shared',
+              fileName,
+              source,
+              element,
+              `import:${importedName}`,
+            );
           }
         }
       }
@@ -463,176 +1253,386 @@ for (const file of files) {
       ts.isExportDeclaration(node) &&
       node.moduleSpecifier &&
       ts.isStringLiteral(node.moduleSpecifier) &&
-      /modelServices\/modelLifecycleBootstrap/.test(node.moduleSpecifier.text) &&
+      /modelServices\/modelLifecycleBootstrap/.test(
+        node.moduleSpecifier.text,
+      ) &&
       node.exportClause &&
       ts.isNamedExports(node.exportClause)
     ) {
       for (const element of node.exportClause.elements) {
         if (/^(?:load|unload|eject|force)\w*Models?$/.test(element.name.text)) {
-          report('deprecated-residency-api-outside-model-port', fileName, source, element, `export:${element.name.text}`)
+          report(
+            'deprecated-residency-api-outside-model-port',
+            fileName,
+            source,
+            element,
+            `export:${element.name.text}`,
+          );
         }
       }
     }
 
     if (ts.isCallExpression(node)) {
-      const call = nodeText(source, node.expression)
-      const rawName = call.split('.').at(-1)
+      const call = nodeText(source, node.expression);
+      const rawName = call.split('.').at(-1);
       if (
         canonicalSelectionReadSurface &&
         /^(?:useAppStore|useRemoteServerStore)$/.test(call) &&
-        [...selectionProjectionKeys].some(key => new RegExp(`\\.${key}\\b`).test(nodeText(source, node)))
+        [...selectionProjectionKeys].some(key =>
+          new RegExp(`\\.${key}\\b`).test(nodeText(source, node)),
+        )
       ) {
-        report('ui-reads-shared-selection-snapshot', fileName, source, node, `selector:${nodeText(source, node)}`)
+        report(
+          'ui-reads-shared-selection-snapshot',
+          fileName,
+          source,
+          node,
+          `selector:${nodeText(source, node)}`,
+        );
       }
       if (
-        /^(setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(rawName) &&
+        /^(setActiveModelId|setActiveImageModelId|setActiveServerId|setActiveRemoteTextModelId|setActiveRemoteImageModelId|setActiveRemoteMediaServerId)$/.test(
+          rawName,
+        ) &&
         fileName !== 'src/services/modelServices/modelSelectionProjection.ts'
       ) {
-        report('active-model-writes-use-canonical-selection-port', fileName, source, node, `call:${rawName}`)
-      }
-      if (fileName !== 'src/services/modelServices/modelSelectionProjection.ts') {
-        const assignedKeys = node.arguments.flatMap(assignedSelectionKeys)
-        if (
-          /\.setState$/.test(call) &&
-          assignedKeys.length > 0
-        ) {
-          report('selection-projections-have-one-writer', fileName, source, node, `call:${call}:${assignedKeys.join(',')}`)
-        }
-        if (/\.updateSettings$/.test(call) && assignedKeys.includes('classifierModelId')) {
-          report('selection-projections-have-one-writer', fileName, source, node, `call:${call}`)
-        }
-      }
-      if (/^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|dispatchGenerationFn|resolveTurnKind|regenerateResponseFn)$/.test(rawName)) {
-        report('generation-callers-use-shared-service', fileName, source, node, `call:${rawName}`)
-      }
-      if (/^(chat|chatMessages|chatStream|streamChat)$/.test(rawName)) {
-        report('no-route-owning-llm-api', fileName, source, node, `call:${rawName}`)
+        report(
+          'active-model-writes-use-canonical-selection-port',
+          fileName,
+          source,
+          node,
+          `call:${rawName}`,
+        );
       }
       if (
-        /^useDownloadStore\.getState\(\)\.(add|setStatus|setProcessing|retryEntry|remove)$/.test(call) &&
-        !/^src\/services\/(adapters\/downloads\/|adapters\/models\/library\/|downloadEventProjection\.ts$)/.test(fileName)
+        fileName !== 'src/services/modelServices/modelSelectionProjection.ts'
       ) {
-        report('apps-do-not-own-download-state-machines', fileName, source, node, `call:${call}`)
+        const assignedKeys = node.arguments.flatMap(assignedSelectionKeys);
+        if (/\.setState$/.test(call) && assignedKeys.length > 0) {
+          report(
+            'selection-projections-have-one-writer',
+            fileName,
+            source,
+            node,
+            `call:${call}:${assignedKeys.join(',')}`,
+          );
+        }
+        if (
+          /\.updateSettings$/.test(call) &&
+          assignedKeys.includes('classifierModelId')
+        ) {
+          report(
+            'selection-projections-have-one-writer',
+            fileName,
+            source,
+            node,
+            `call:${call}`,
+          );
+        }
+      }
+      if (
+        /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|dispatchGenerationFn|resolveTurnKind|regenerateResponseFn)$/.test(
+          rawName,
+        )
+      ) {
+        report(
+          'generation-callers-use-shared-service',
+          fileName,
+          source,
+          node,
+          `call:${rawName}`,
+        );
+      }
+      if (/^(chat|chatMessages|chatStream|streamChat)$/.test(rawName)) {
+        report(
+          'no-route-owning-llm-api',
+          fileName,
+          source,
+          node,
+          `call:${rawName}`,
+        );
+      }
+      if (
+        /^useDownloadStore\.getState\(\)\.(add|setStatus|setProcessing|retryEntry|remove)$/.test(
+          call,
+        ) &&
+        !/^src\/services\/(adapters\/downloads\/|adapters\/models\/library\/|downloadEventProjection\.ts$)/.test(
+          fileName,
+        )
+      ) {
+        report(
+          'apps-do-not-own-download-state-machines',
+          fileName,
+          source,
+          node,
+          `call:${call}`,
+        );
       }
     }
 
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|chat|chatMessages|chatStream|streamChat)$/.test(node.name.getText(source)) &&
+      /^(generateResponse|generateResponseWithTools|generateWithMaxTokens|generateToolSelection|generateForChatSession|completeText|completeTextWithTools|completeCappedText|chat|chatMessages|chatStream|streamChat)$/.test(
+        node.name.getText(source),
+      ) &&
       /^(src\/services\/(llm|litert)\.ts)$/.test(fileName)
     ) {
-      report('no-route-owning-llm-api', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+      report(
+        'no-route-owning-llm-api',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.getText(source)}`,
+      );
     }
 
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(?:ensureImageModelLoaded|runGenerationAndSave|enhanceImageGenerationPrompt|resolveImageGenerationRoute|retryImageGeneration|forceLoadImageModel)$/.test(node.name.getText(source))
+      /^(?:ensureImageModelLoaded|runGenerationAndSave|enhanceImageGenerationPrompt|resolveImageGenerationRoute|retryImageGeneration|forceLoadImageModel)$/.test(
+        node.name.getText(source),
+      )
     ) {
-      report('mobile-image-lifecycle-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+      report(
+        'mobile-image-lifecycle-is-shared',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.getText(source)}`,
+      );
     }
 
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(?:generateWithToolsImpl|selectRelevantTools|selectToolsByEmbedding|remoteToolCapabilityIssue)$/.test(node.name.getText(source))
+      /^(?:generateWithToolsImpl|selectRelevantTools|selectToolsByEmbedding|remoteToolCapabilityIssue)$/.test(
+        node.name.getText(source),
+      )
     ) {
-      report('mobile-tool-routing-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+      report(
+        'mobile-tool-routing-is-shared',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.getText(source)}`,
+      );
     }
 
     if (
       (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) &&
       node.name &&
-      /^(?:computeFilteredResults|bestFitScore|matchesOrgFilter|isTextModel|defaultModelIds|fetchGatewayModelCatalogPolicy)$/.test(node.name.getText(source))
+      /^(?:computeFilteredResults|bestFitScore|matchesOrgFilter|isTextModel|defaultModelIds|fetchGatewayModelCatalogPolicy)$/.test(
+        node.name.getText(source),
+      )
     ) {
-      report('mobile-catalog-policy-is-shared', fileName, source, node.name, `declaration:${node.name.getText(source)}`)
+      report(
+        'mobile-catalog-policy-is-shared',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.getText(source)}`,
+      );
     }
 
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      /^(?:cancelRequested|remoteImageRequest|lastImageGenerationParams)$/.test(node.name.text)
+      /^(?:cancelRequested|remoteImageRequest|lastImageGenerationParams)$/.test(
+        node.name.text,
+      )
     ) {
-      report('mobile-image-lifecycle-is-shared', fileName, source, node.name, `declaration:${node.name.text}`)
+      report(
+        'mobile-image-lifecycle-is-shared',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.text}`,
+      );
     }
 
     if (
-      (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
-      node.name && /^(ProviderRegistry|LLMProvider)$/.test(node.name.text)
+      (ts.isClassDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isTypeAliasDeclaration(node)) &&
+      node.name &&
+      /^(ProviderRegistry|LLMProvider)$/.test(node.name.text)
     ) {
-      report('no-parallel-provider-control-plane', fileName, source, node.name, `declaration:${node.name.text}`)
+      report(
+        'no-parallel-provider-control-plane',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.text}`,
+      );
     }
 
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && /^(providerRegistry|localProvider)$/.test(node.name.text)) {
-      report('no-parallel-provider-control-plane', fileName, source, node.name, `declaration:${node.name.text}`)
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      /^(providerRegistry|localProvider)$/.test(node.name.text)
+    ) {
+      report(
+        'no-parallel-provider-control-plane',
+        fileName,
+        source,
+        node.name,
+        `declaration:${node.name.text}`,
+      );
     }
 
-    if (isAdapter && (ts.isIfStatement(node) || ts.isSwitchStatement(node) || ts.isConditionalExpression(node))) {
+    if (
+      isAdapter &&
+      (ts.isIfStatement(node) ||
+        ts.isSwitchStatement(node) ||
+        ts.isConditionalExpression(node))
+    ) {
       const condition = ts.isIfStatement(node)
         ? node.expression
         : ts.isSwitchStatement(node)
-          ? node.expression
-          : node.condition
-      const expression = nodeText(source, condition)
+        ? node.expression
+        : node.condition;
+      const expression = nodeText(source, condition);
       if (
-        /(provider(Id)?\s*(===|!==)|\.provider(Id)?\s*(===|!==)|instanceof\s+\w*Provider|is(?:Ollama|OpenRouter|Gemini)|enableThinking|disableThinking|reasoningControl)/i.test(expression)
+        /(provider(Id)?\s*(===|!==)|\.provider(Id)?\s*(===|!==)|instanceof\s+\w*Provider|is(?:Ollama|OpenRouter|Gemini)|enableThinking|disableThinking|reasoningControl)/i.test(
+          expression,
+        )
       ) {
-        report('adapters-do-not-own-provider-or-reasoning-policy', fileName, source, condition, `branch:${expression}`)
+        report(
+          'adapters-do-not-own-provider-or-reasoning-policy',
+          fileName,
+          source,
+          condition,
+          `branch:${expression}`,
+        );
       }
     }
 
-    if (isUi && ts.isStringLiteralLike(node) && node.text.includes('remote-vision:')) {
-      report('internal-remote-vision-id-never-reaches-ui', fileName, source, node, `literal:${node.text}`)
-    }
-
     if (
-      /^src\/screens\/ChatScreen\/(mobileChatSession|useChatGenerationActions)\.tsx?$/.test(fileName) &&
-      ts.isImportSpecifier(node) &&
-      /^(generationService|imageGenerationService|onnxImageGeneratorService)$/.test(node.name.text)
+      isUi &&
+      ts.isStringLiteralLike(node) &&
+      node.text.includes('remote-vision:')
     ) {
-      report('ui-uses-chat-projection-and-model-ports', fileName, source, node, `import:${node.name.text}`)
-    }
-
-    if (ts.isClassDeclaration(node) && node.name && /(DownloadQueue|DownloadCoordinator|DownloadStateMachine|DownloadRegistry|WhisperModelDownloads)$/.test(node.name.text)) {
-      report('apps-do-not-own-download-state-machines', fileName, source, node.name, `class:${node.name.text}`)
+      report(
+        'internal-remote-vision-id-never-reaches-ui',
+        fileName,
+        source,
+        node,
+        `literal:${node.text}`,
+      );
     }
 
     if (
-      (ts.isPropertyAssignment(node) || ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) &&
-      /^(whisperModel|ttsModel|activeWhisperModel|activeTtsModel|whisper_model|tts_model)$/.test(
-        node.name && (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name)) ? node.name.text : '',
+      /^src\/screens\/ChatScreen\/(mobileChatSession|useChatGenerationActions)\.tsx?$/.test(
+        fileName,
+      ) &&
+      ts.isImportSpecifier(node) &&
+      /^(generationService|imageGenerationService|onnxImageGeneratorService)$/.test(
+        node.name.text,
       )
     ) {
-      report('no-legacy-whisper-or-tts-setting-key', fileName, source, node.name, `key:${node.name.text}`)
+      report(
+        'ui-uses-chat-projection-and-model-ports',
+        fileName,
+        source,
+        node,
+        `import:${node.name.text}`,
+      );
     }
 
-    ts.forEachChild(node, visit)
+    if (
+      ts.isClassDeclaration(node) &&
+      node.name &&
+      /(DownloadQueue|DownloadCoordinator|DownloadStateMachine|DownloadRegistry|WhisperModelDownloads)$/.test(
+        node.name.text,
+      )
+    ) {
+      report(
+        'apps-do-not-own-download-state-machines',
+        fileName,
+        source,
+        node.name,
+        `class:${node.name.text}`,
+      );
+    }
+
+    if (
+      (ts.isPropertyAssignment(node) ||
+        ts.isPropertyDeclaration(node) ||
+        ts.isPropertySignature(node)) &&
+      /^(whisperModel|ttsModel|activeWhisperModel|activeTtsModel|whisper_model|tts_model)$/.test(
+        node.name &&
+          (ts.isIdentifier(node.name) || ts.isStringLiteralLike(node.name))
+          ? node.name.text
+          : '',
+      )
+    ) {
+      report(
+        'no-legacy-whisper-or-tts-setting-key',
+        fileName,
+        source,
+        node.name,
+        `key:${node.name.text}`,
+      );
+    }
+
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+}
+
+for (const file of testFiles) {
+  const text = fs.readFileSync(file, 'utf8');
+  if (/(?:jest|vi)\.mock\s*\(\s*['"]@offgrid\/models['"]/.test(text)) {
+    const source = ts.createSourceFile(
+      file,
+      text,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    report(
+      'tests-do-not-mock-shared-models',
+      relative(file),
+      source,
+      source,
+      'mock:@offgrid/models',
+    );
   }
-  visit(source)
 }
 
-const allowlist = new Map(temporaryModelArchitectureAllowlist.map(entry => [entry.key, entry]))
-const used = new Set()
-const violations = []
+const allowlist = new Map(
+  temporaryModelArchitectureAllowlist.map(entry => [entry.key, entry]),
+);
+const used = new Set();
+const violations = [];
 for (const finding of findings) {
-  const key = keyOf(finding)
-  if (allowlist.has(key)) used.add(key)
-  else violations.push(finding)
+  const key = keyOf(finding);
+  if (allowlist.has(key)) used.add(key);
+  else violations.push(finding);
 }
-const stale = [...allowlist.values()].filter(entry => !used.has(entry.key))
+const stale = [...allowlist.values()].filter(entry => !used.has(entry.key));
 
-for (const finding of findings.filter(finding => allowlist.has(keyOf(finding)))) {
-  const debt = allowlist.get(keyOf(finding))
-  console.warn(`TEMPORARY ${finding.rule}: ${finding.file}:${finding.line} ${finding.detail}`)
-  console.warn(`  owner=${debt.owner}; reason=${debt.reason}; removeWhen=${debt.removeWhen}`)
+for (const finding of findings.filter(finding =>
+  allowlist.has(keyOf(finding)),
+)) {
+  const debt = allowlist.get(keyOf(finding));
+  console.warn(
+    `TEMPORARY ${finding.rule}: ${finding.file}:${finding.line} ${finding.detail}`,
+  );
+  console.warn(
+    `  owner=${debt.owner}; reason=${debt.reason}; removeWhen=${debt.removeWhen}`,
+  );
 }
 if (violations.length > 0 || stale.length > 0) {
   for (const finding of violations) {
-    console.error(`VIOLATION ${finding.rule}: ${finding.file}:${finding.line} ${finding.detail}`)
+    console.error(
+      `VIOLATION ${finding.rule}: ${finding.file}:${finding.line} ${finding.detail}`,
+    );
   }
-  for (const entry of stale) console.error(`STALE ALLOWLIST: ${entry.key}`)
-  process.exitCode = 1
+  for (const entry of stale) console.error(`STALE ALLOWLIST: ${entry.key}`);
+  process.exitCode = 1;
 } else {
-  console.log(`Mobile model architecture gate passed (${used.size} temporary item(s)).`)
+  console.log(
+    `Mobile model architecture gate passed (${used.size} temporary item(s)).`,
+  );
 }

@@ -23,6 +23,7 @@ import {
 import { localDreamGeneratorService } from '../../src/services/localDreamGenerator';
 import { activeModelService } from '../harness/activeModelLifecycle';
 import { llmService } from '../../src/services/llm';
+import { mobileResidencyIntents } from '../../src/services/modelServices/residencyIntents';
 import { resetStores, flushPromises } from '../utils/testHelpers';
 import { createONNXImageModel } from '../utils/factories';
 
@@ -44,7 +45,14 @@ function trackPhases(): { phases: ImageGenPhase[]; stop: () => void } {
 }
 
 const setupModel = () => {
-  const model = createONNXImageModel({ id: 'img-1', modelPath: '/mock/img-model' });
+  const model = createONNXImageModel({
+    id: 'img-1',
+    modelPath: '/mock/img-model',
+    backend: 'coreml',
+    // Keep this phase-machine fixture below admission limits. Memory refusal has
+    // separate coverage; this suite must reach the native load-failure seam.
+    size: 128 * 1024 * 1024,
+  });
   useAppStore.setState({
     downloadedImageModels: [model],
     activeImageModelId: 'img-1',
@@ -75,6 +83,7 @@ beforeEach(async () => {
   mockLlm.isModelLoaded.mockReturnValue(false);
   mockLlm.isCurrentlyGenerating.mockReturnValue(false);
   mockLlm.stopGeneration.mockResolvedValue();
+  jest.spyOn(mobileResidencyIntents, 'ensureImage').mockResolvedValue();
   await imageGenerationService.cancelGeneration().catch(() => {});
 });
 
@@ -221,7 +230,7 @@ describe('no-model / load-failure surface an error phase, never a silent hang (c
   it('image model load failure → error phase, not stuck in loading (case 38)', async () => {
     setupModel();
     mockDream.isModelLoaded.mockResolvedValue(false); // force a load attempt
-    mockActive.loadImageModel.mockRejectedValue(new Error('weights corrupted'));
+    jest.spyOn(mobileResidencyIntents, 'ensureImage').mockRejectedValue(new Error('weights corrupted'));
 
     const result = await imageGenerationService.generateImage({ prompt: 'broken model' });
 

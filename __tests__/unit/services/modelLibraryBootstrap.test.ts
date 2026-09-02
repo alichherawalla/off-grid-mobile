@@ -7,13 +7,20 @@
 
 import RNFS from 'react-native-fs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
+import {
+  modelLibrary,
+} from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { huggingFaceService } from '../../../src/services/huggingface';
 import { buildDownloadedModel } from '../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
 import { textProvider } from '../../../src/services/adapters/downloads/textDownloadAdapter';
 import { useAppStore } from '../../../src/stores';
+import {
+  describeModelCredibility,
+  isModelProjectorFile,
+  resolveStoredModelPath,
+} from '@offgrid/models';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -184,6 +191,18 @@ describe('ModelManager', () => {
       const models = await modelLibrary.getDownloadedModels();
 
       expect(models).toEqual([]);
+    });
+
+    it('preserves a text registry read failure instead of returning empty inventory', async () => {
+      mockedAsyncStorage.getItem.mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await expect(modelLibrary.getDownloadedModels()).rejects.toEqual(
+        expect.objectContaining({
+          name: 'ModelLibraryRegistryReadError',
+          kind: 'model-library-registry-read',
+          registry: 'text',
+        }),
+      );
     });
 
     it('returns stored models that exist on disk', async () => {
@@ -487,33 +506,29 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
-  // determineCredibility (private)
+  // determineCredibility (Shared registry policy)
   // ========================================================================
   describe('determineCredibility', () => {
-    // Access private method
-    const determineCredibility = (author: string) =>
-      (modelLibrary as any).determineCredibility(author);
-
     it('recognizes lmstudio-community source', () => {
-      const result = determineCredibility('lmstudio-community');
+      const result = describeModelCredibility('lmstudio-community');
       expect(result.source).toBe('lmstudio');
       expect(result.isVerifiedQuantizer).toBe(true);
     });
 
     it('recognizes official model authors', () => {
-      const result = determineCredibility('meta-llama');
+      const result = describeModelCredibility('meta-llama');
       expect(result.source).toBe('official');
       expect(result.isOfficial).toBe(true);
     });
 
     it('recognizes verified quantizers', () => {
-      const result = determineCredibility('TheBloke');
+      const result = describeModelCredibility('TheBloke');
       expect(result.source).toBe('verified-quantizer');
       expect(result.isVerifiedQuantizer).toBe(true);
     });
 
     it('defaults to community for unknown authors', () => {
-      const result = determineCredibility('random-user');
+      const result = describeModelCredibility('random-user');
       expect(result.source).toBe('community');
       expect(result.isOfficial).toBe(false);
       expect(result.isVerifiedQuantizer).toBe(false);
@@ -1096,17 +1111,14 @@ describe('ModelManager', () => {
   });
 
   // ========================================================================
-  // resolveStoredPath (private, tested via cast)
+  // resolveStoredModelPath (Shared registry policy)
   // ========================================================================
   describe('resolveStoredPath', () => {
-    const resolveStoredPath = (storedPath: string, currentBaseDir: string) =>
-      (modelLibrary as any).resolveStoredPath(storedPath, currentBaseDir);
-
     it('returns re-resolved path when UUID changes', () => {
       const storedPath = '/old-uuid/Documents/models/mymodel.gguf';
       const currentBaseDir = '/new-uuid/Documents/models';
 
-      const result = resolveStoredPath(storedPath, currentBaseDir);
+      const result = resolveStoredModelPath(storedPath, currentBaseDir);
       expect(result).toBe('/new-uuid/Documents/models/mymodel.gguf');
     });
 
@@ -1114,7 +1126,7 @@ describe('ModelManager', () => {
       const storedPath = '/completely/different/path/model.gguf';
       const currentBaseDir = '/new-uuid/Documents/models';
 
-      const result = resolveStoredPath(storedPath, currentBaseDir);
+      const result = resolveStoredModelPath(storedPath, currentBaseDir);
       expect(result).toBeNull();
     });
 
@@ -1123,7 +1135,7 @@ describe('ModelManager', () => {
       const storedPath = '/old-uuid/Documents/models/';
       const currentBaseDir = '/new-uuid/Documents/models';
 
-      const result = resolveStoredPath(storedPath, currentBaseDir);
+      const result = resolveStoredModelPath(storedPath, currentBaseDir);
       expect(result).toBeNull();
     });
 
@@ -1131,40 +1143,37 @@ describe('ModelManager', () => {
       const storedPath = '/old-uuid/Documents/image_models/sd-turbo/model.onnx';
       const currentBaseDir = '/new-uuid/Documents/image_models';
 
-      const result = resolveStoredPath(storedPath, currentBaseDir);
+      const result = resolveStoredModelPath(storedPath, currentBaseDir);
       expect(result).toBe('/new-uuid/Documents/image_models/sd-turbo/model.onnx');
     });
   });
 
   // ========================================================================
-  // isMMProjFile (private, tested via cast)
+  // isModelProjectorFile (Shared registry policy)
   // ========================================================================
   describe('isMMProjFile', () => {
-    const isMMProjFile = (fileName: string) =>
-      (modelLibrary as any).isMMProjFile(fileName);
-
     it('detects mmproj filenames', () => {
-      expect(isMMProjFile('model-mmproj-f16.gguf')).toBe(true);
-      expect(isMMProjFile('Qwen3VL-2B-mmproj-Q4_0.gguf')).toBe(true);
+      expect(isModelProjectorFile('model-mmproj-f16.gguf')).toBe(true);
+      expect(isModelProjectorFile('Qwen3VL-2B-mmproj-Q4_0.gguf')).toBe(true);
     });
 
     it('detects projector filenames', () => {
-      expect(isMMProjFile('model-projector-f16.gguf')).toBe(true);
+      expect(isModelProjectorFile('model-projector-f16.gguf')).toBe(true);
     });
 
     it('detects clip .gguf filenames', () => {
-      expect(isMMProjFile('clip-vit-large.gguf')).toBe(true);
+      expect(isModelProjectorFile('clip-vit-large.gguf')).toBe(true);
     });
 
     it('rejects non-mmproj filenames', () => {
-      expect(isMMProjFile('llama-3.2-3B-Q4_K_M.gguf')).toBe(false);
-      expect(isMMProjFile('Qwen3-8B-Instruct-Q4_K_M.gguf')).toBe(false);
-      expect(isMMProjFile('phi-3-mini.gguf')).toBe(false);
+      expect(isModelProjectorFile('llama-3.2-3B-Q4_K_M.gguf')).toBe(false);
+      expect(isModelProjectorFile('Qwen3-8B-Instruct-Q4_K_M.gguf')).toBe(false);
+      expect(isModelProjectorFile('phi-3-mini.gguf')).toBe(false);
     });
 
     it('is case-insensitive', () => {
-      expect(isMMProjFile('Model-MMPROJ-F16.GGUF')).toBe(true);
-      expect(isMMProjFile('CLIP-model.gguf')).toBe(true);
+      expect(isModelProjectorFile('Model-MMPROJ-F16.GGUF')).toBe(true);
+      expect(isModelProjectorFile('CLIP-model.gguf')).toBe(true);
     });
   });
 
@@ -1410,7 +1419,9 @@ describe('ModelManager', () => {
       const storedModels = [
         { id: 'm1', name: 'Model 1', filePath: '/models/m1.gguf', fileName: 'm1.gguf', fileSize: 1000 },
       ];
-      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedAsyncStorage.getItem.mockImplementation((key: string) => Promise.resolve(
+        key === MODELS_STORAGE_KEY ? JSON.stringify(storedModels) : '[]',
+      ));
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.readDir.mockResolvedValue([
         { name: 'm1.gguf', path: '/models/m1.gguf', size: 1000, isFile: () => true, isDirectory: () => false } as any,
@@ -2460,6 +2471,18 @@ describe('ModelManager', () => {
 
       const result = await modelLibrary.getDownloadedImageModels();
       expect(result).toEqual([]);
+    });
+
+    it('preserves an image registry read failure instead of returning empty inventory', async () => {
+      mockedAsyncStorage.getItem.mockRejectedValueOnce(new Error('storage unavailable'));
+
+      await expect(modelLibrary.getDownloadedImageModels()).rejects.toEqual(
+        expect.objectContaining({
+          name: 'ModelLibraryRegistryReadError',
+          kind: 'model-library-registry-read',
+          registry: 'image',
+        }),
+      );
     });
 
     it('filters out models whose files no longer exist', async () => {

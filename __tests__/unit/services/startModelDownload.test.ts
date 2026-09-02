@@ -24,7 +24,7 @@ jest.mock('../../../src/stores/downloadStore', () => ({
     reportStatus: (downloadId: string, status: string, error?: unknown) =>
       mockStore.setStatus(downloadId, status, error),
   },
-  isActiveStatus: (s: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(s),
+  isActiveStatus: (s: string) => ['queued', 'downloading', 'paused', 'verifying', 'processing'].includes(s),
 }));
 
 const mockAddDownloadedModel = jest.fn();
@@ -64,7 +64,7 @@ describe('startModelDownload', () => {
   });
 
   it('is a no-op when a download is already active (duplicate guard)', async () => {
-    mockStore.downloads = { [KEY]: { status: 'running' } };
+    mockStore.downloads = { [KEY]: { status: 'downloading' } };
     await startModelDownload(MODEL_ID, FILE, {});
     expect(mockDownloadModelBackground).not.toHaveBeenCalled();
   });
@@ -99,7 +99,7 @@ describe('startModelDownload', () => {
     const p = startModelDownload(MODEL_ID, FILE, {});
     // add() was called synchronously, before downloadModelBackground resolved.
     expect(mockStore.add).toHaveBeenCalledWith(expect.objectContaining({
-      modelKey: KEY, downloadId: `queued:${KEY}`, status: 'pending', modelType: 'text',
+      modelKey: KEY, downloadId: `queued:${KEY}`, status: 'queued', modelType: 'text',
     }));
     resolveStart!({ downloadId: 'dl-1' });
     await p;
@@ -114,8 +114,8 @@ describe('startModelDownload', () => {
   });
 
   it('is a no-op on a second tap while the first is still QUEUED (dedup)', async () => {
-    // Simulate the first tap having published the queued row (status pending).
-    mockStore.downloads = { [KEY]: { status: 'pending' } };
+    // Simulate the first tap having published the canonical queued row.
+    mockStore.downloads = { [KEY]: { status: 'queued' } };
     await startModelDownload(MODEL_ID, FILE, {});
     expect(mockDownloadModelBackground).not.toHaveBeenCalled();
     expect(mockStore.add).not.toHaveBeenCalled();

@@ -1,6 +1,5 @@
 import { remoteMediaRuntime } from '../../../src/services/adapters/remote/mediaRuntime';
 import * as Keychain from 'react-native-keychain';
-import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import '../../../src/services/modelServices';
 import { executeMobileTranscription } from '../../../src/services/mobileTranscription';
@@ -97,6 +96,22 @@ describe('remoteMediaRuntime', () => {
       prompt: 'A quiet desk',
     });
     expect(server).not.toHaveProperty('apiKey');
+  });
+
+  it('does not duplicate a persisted OpenAI v1 route', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'image-bytes' }] }),
+    ) as typeof fetch;
+
+    await remoteMediaRuntime.generateImage(
+      { ...server, endpoint: 'http://192.168.1.30:7878/v1' },
+      { prompt: 'A quiet desk' },
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://192.168.1.30:7878/v1/images/generations',
+      expect.any(Object),
+    );
   });
 
   it('sends a stored credential only to an HTTPS endpoint', async () => {

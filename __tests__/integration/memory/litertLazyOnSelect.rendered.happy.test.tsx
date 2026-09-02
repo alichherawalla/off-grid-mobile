@@ -1,14 +1,14 @@
 /**
  * T020 (HAPPY/GUARD, UI integration, HEAVY entry point) — selecting a LiteRT model marks it active WITHOUT
- * loading it into RAM; opening a new chat then prepares it before the first send.
+ * loading it into RAM; the first send then prepares it on demand.
  *
  * The T020 device note ("eager warm on select") is STALE: the app deliberately removed eager-load-on-select
  * (useModelLoading.ts:27-31 — "Selecting a model only MARKS it active … Loading eagerly here used to race
  * that path and leave both a text and an image model resident at the same time") in favour of the lazy load
  * the user asked for (DEVICE_TEST_FINDINGS: "Lazy model loading — model loads on first send, not on select
  * ('exactly the lazy model loading I wanted')"). This guard protects that decision from regressing back to
- * eager warm on selection (which re-introduces the co-residency race). A new chat is an explicit request
- * to use the selected model, so its preparation is allowed to begin when ChatScreen mounts.
+ * eager warm on selection (which re-introduces the co-residency race). Opening a chat is navigation,
+ * not an inference request, so preparation must wait for the first send.
  *
  * Residency is validated through the model selector's real "In Memory" section (same as T111–T117), not
  * getResidents(). Falsify: if select eager-loaded, models-row-text-ram would be present BEFORE any send.
@@ -21,8 +21,8 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {}, useIsFocused: () => true,
 }));
 
-describe('T020 (rendered) — LiteRT selection is lazy and new chat prepares it', () => {
-  it('is NOT in memory after selection, then IS in memory when the new chat opens', async () => {
+describe('T020 (rendered) — LiteRT selection and chat entry stay lazy', () => {
+  it('is NOT in memory after selection or chat entry, then IS in memory after first send', async () => {
     // deferInitialLoad: leave the model in the real select-but-not-loaded state (no forced pre-load).
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', deferInitialLoad: true });
     const React = require('react');
@@ -41,17 +41,19 @@ describe('T020 (rendered) — LiteRT selection is lazy and new chat prepares it'
     expect(before.queryByTestId('models-row-text-ram')).toBeNull();
     before.unmount();
 
-    // Opening the new chat is the first explicit request to use this model. The real ChatScreen
-    // preparation path loads it before the first message.
+    // Opening the new chat is navigation only. It must not allocate the model.
     h.render();
-    const prepared = openSelector();
-    await h.rtl.waitFor(() => {
-      expect(prepared.queryByTestId('models-row-text-ram')).not.toBeNull();
-    }, { timeout: 4000 });
-    prepared.unmount();
+    const afterEntry = openSelector();
+    await h.settle(400);
+    expect(afterEntry.queryByTestId('models-row-text-ram')).toBeNull();
+    afterEntry.unmount();
 
-    // The prepared model serves the first send through the real generation path.
+    // The first send owns preparation and then serves the generation.
     await h.send('hello', { content: 'Hi there.' });
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
+    const afterSend = openSelector();
+    await h.rtl.waitFor(() => {
+      expect(afterSend.queryByTestId('models-row-text-ram')).not.toBeNull();
+    }, { timeout: 4000 });
+    afterSend.unmount();
   });
 });

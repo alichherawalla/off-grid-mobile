@@ -23,8 +23,9 @@ jest.mock('../../../src/services/adapters/native/modelLifecycle', () => ({
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: {
-    generateResponse: jest.fn(async (_messages, options) => {
+    runNativeCompletion: jest.fn(async (_messages, options) => {
       options.onStream({ content: 'YES' });
+      return { content: 'YES' };
     }),
     stopGeneration: jest.fn(async () => undefined),
   },
@@ -65,7 +66,7 @@ describe('Mobile classifier residency integration', () => {
           loaded: false,
           residentSizeMB: 128,
           residencyKey: 'mobile:text-engine',
-          residencyMode: 'operation',
+          residencyLifecycle: 'operation',
         }];
       },
     };
@@ -78,15 +79,20 @@ describe('Mobile classifier residency integration', () => {
     const residency = new ModelResidencyManager({
       current: () => ({ totalMB: 8_192, availableMB: 6_000, platform: 'mobile' }),
     });
-    residency.register({
-      key: 'text:active-route',
-      modelId: 'active-text.gguf',
-      type: 'text',
-      sizeMB: 512,
-      residencyKey: 'mobile:text-engine',
-    }, async () => {
-      mockLifecycleEvents.push('unload:text');
-    });
+    const textLease = await residency.acquire(
+      {
+        key: 'text:active-route',
+        modelId: 'active-text.gguf',
+        type: 'text',
+        sizeMB: 512,
+        residencyKey: 'mobile:text-engine',
+      },
+      {
+        load: async () => undefined,
+        unload: async () => { mockLifecycleEvents.push('unload:text'); },
+      },
+    );
+    await textLease.release();
 
     const generation = new GenerationService(models, residency);
     const registrations = new Map<string, () => void>();

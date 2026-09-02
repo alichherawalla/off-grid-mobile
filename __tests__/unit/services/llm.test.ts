@@ -1212,7 +1212,7 @@ describe('LLMService', () => {
   // Additional branch coverage tests
   // ========================================================================
   describe('stopGeneration error branch', () => {
-    it('handles stopCompletion error gracefully', async () => {
+    it('cleans up and preserves a stopCompletion error', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       const ctx = createMockLlamaContext({
         stopCompletion: jest.fn(() => Promise.reject(new Error('already stopped'))),
@@ -1222,8 +1222,7 @@ describe('LLMService', () => {
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      // Should not throw
-      await llmService.stopGeneration();
+      await expect(llmService.stopGeneration()).rejects.toThrow('already stopped');
 
       expect(llmService.isCurrentlyGenerating()).toBe(false);
       consoleSpy.mockRestore();

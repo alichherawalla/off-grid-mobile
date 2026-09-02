@@ -21,12 +21,13 @@ describe('remote image generation skips local prompt enhancement', () => {
       name: 'LM Studio',
       caps: { supportsToolCalling: false, supportsThinking: false },
     });
-    const { useAppStore, useRemoteServerStore } = require('../../../src/stores');
+    const { useAppStore } = require('../../../src/stores');
     const { selectMobileModel } = require('../../../src/services/modelServices');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
     const { imageGenerationService } = require('../../../src/services/imageGenerationService');
 
     const imageModelId = 'remote-image-model';
-    useRemoteServerStore.getState().updateServer(serverId, {
+    await remoteServerManager.updateServer(serverId, {
       catalog: { image: [{ id: imageModelId, name: 'Remote Image Model' }] },
     });
     await selectMobileModel({

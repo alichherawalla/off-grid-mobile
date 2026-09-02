@@ -57,7 +57,7 @@ describe('remote server reconnect', () => {
 
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(endpointA);
+    ).toBe(`${endpointA}/v1`);
     expect(result).toEqual({
       moved: [],
       found: [
@@ -92,7 +92,7 @@ describe('remote server reconnect', () => {
 
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(oldEndpoint);
+    ).toBe(`${oldEndpoint}/v1`);
     expect(result.moved).toEqual([]);
     expect(result.found).toEqual([
       expect.objectContaining({ endpoint: discoveredEndpoint }),
@@ -120,7 +120,7 @@ describe('remote server reconnect', () => {
 
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(oldEndpoint);
+    ).toBe(`${oldEndpoint}/v1`);
     expect(result.moved).toEqual([]);
     expect(result.found).toEqual([
       expect.objectContaining({ endpoint: discoveredEndpoint }),
@@ -145,7 +145,7 @@ describe('remote server reconnect', () => {
 
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(discoveredEndpoint);
+    ).toBe(`${discoveredEndpoint}/v1`);
     expect(result.moved).toEqual([serverId]);
     expect(result.found).toEqual([]);
   });

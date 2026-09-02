@@ -20,7 +20,25 @@
  * both fit ~4GB free, so the resident is evicted.
  */
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
-import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../harness/deviceMemory';
+import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';
+
+async function seedResident(spec: Parameters<typeof modelResidencyManager.acquire>[0]): Promise<void> {
+  const lease = await modelResidencyManager.acquire(
+    spec,
+    { load: async () => undefined, unload: async () => undefined },
+  );
+  await lease.release();
+}
+
+const acquire = async (spec: Parameters<typeof modelResidencyManager.acquire>[0], override = false) => {
+  const lease = await modelResidencyManager.acquire(
+    spec,
+    { load: async () => undefined, unload: async () => undefined },
+    { override },
+  );
+  await lease.release();
+  return lease;
+};
 
 afterEach(() => {
   resetDeviceMemory();
@@ -34,9 +52,9 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
   it('conservative: loading an image evicts the resident text even when both fit', async () => {
     roomy();
     modelResidencyManager.setLoadPolicy('conservative');
-    makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
+    await seedResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
 
-    const { evicted } = await modelResidencyManager.makeRoomFor({
+    const { evicted } = await acquire({
       key: 'image', type: 'image', modelId: 'sd', sizeMB: 2000, dirtyMemory: true,
     });
 
@@ -47,9 +65,9 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
   it('balanced: text + image CO-RESIDE when they both fit the budget', async () => {
     roomy();
     modelResidencyManager.setLoadPolicy('balanced');
-    makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
+    await seedResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
 
-    const { evicted } = await modelResidencyManager.makeRoomFor({
+    const { evicted } = await acquire({
       key: 'image', type: 'image', modelId: 'sd', sizeMB: 2000, dirtyMemory: true,
     });
 
@@ -63,9 +81,9 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
     // so balanced evicts the resident to fit the incoming.
     setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(4000) });
     modelResidencyManager.setLoadPolicy('balanced');
-    makeResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 4000, dirtyMemory: true });
+    await seedResident({ key: 'image', type: 'image', modelId: 'sd', sizeMB: 4000, dirtyMemory: true });
 
-    const { fits, evicted } = await modelResidencyManager.makeRoomFor({
+    const { fits, evicted } = await acquire({
       key: 'text', type: 'text', modelId: 'big', sizeMB: 5000, dirtyMemory: true,
     });
 
@@ -77,9 +95,9 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
   it('aggressive: text + image CO-RESIDE (not single-model) when they fit', async () => {
     roomy();
     modelResidencyManager.setLoadPolicy('aggressive');
-    makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
+    await seedResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 2000, dirtyMemory: false });
 
-    const { evicted } = await modelResidencyManager.makeRoomFor({
+    const { evicted } = await acquire({
       key: 'image', type: 'image', modelId: 'sd', sizeMB: 2000, dirtyMemory: true,
     });
 
@@ -92,11 +110,11 @@ describe('model-loading modes — conservative / balanced / aggressive (red-flow
     // A model far bigger than the budget with another model resident + tiny real free RAM.
     setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
     modelResidencyManager.setLoadPolicy('balanced');
-    makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5000, dirtyMemory: false });
+    await seedResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5000, dirtyMemory: false });
 
-    const { fits, evicted } = await modelResidencyManager.makeRoomFor(
+    const { fits, evicted } = await acquire(
       { key: 'image', type: 'image', modelId: 'sd', sizeMB: 9000, dirtyMemory: true },
-      { override: true },
+      true,
     );
 
     expect(fits).toBe(true); // never refused under override

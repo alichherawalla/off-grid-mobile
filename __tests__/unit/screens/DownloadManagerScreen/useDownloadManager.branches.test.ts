@@ -21,9 +21,14 @@ const mockUseAppStore = jest.fn();
 const mockUseDownloadStore = jest.fn();
 const mockDownloadStoreGetState = jest.fn();
 
+const mockRepairVision = jest.fn();
 const mockModelManager = {
   getDownloadedModels: jest.fn(),
-  repairVision: jest.fn(),
+  repairVision: mockRepairVision,
+  executeVisionRepair: jest.fn(async ({ model }: { model: unknown }) => ({
+    status: 'completed',
+    outcome: await mockRepairVision(model),
+  })),
   repairMmProj: jest.fn(),
   getModelFiles: jest.fn(),
 };
@@ -276,13 +281,16 @@ describe('handleRepairVision', () => {
     expect(mockSetRepairingVision).toHaveBeenCalledWith(REPAIR_ITEM.modelId, false);
   });
 
-  it('republishes the model list so the repaired model reloads', async () => {
+  it('delegates repair without a second legacy model-list write', async () => {
     withRepairableModel();
     mockModelManager.repairVision.mockResolvedValue({ kind: 'repaired', repoId: 'org/repo' });
-    mockModelManager.getDownloadedModels.mockResolvedValue([{ id: 'x' }]);
     const { result } = renderHook(() => useDownloadManager());
     await repair(result);
-    expect(setDownloadedModels).toHaveBeenCalledWith([{ id: 'x' }]);
+    expect(mockModelManager.executeVisionRepair).toHaveBeenCalledWith({
+      type: 'repair-model',
+      model: appState.downloadedModels[0],
+    });
+    expect(setDownloadedModels).not.toHaveBeenCalled();
   });
 
   it('shows Repair Failed when the service itself throws', async () => {

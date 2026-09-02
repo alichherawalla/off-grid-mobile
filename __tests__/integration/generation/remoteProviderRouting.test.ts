@@ -68,13 +68,14 @@ describe('canonical Mobile text route authority', () => {
       capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: true },
       lastUpdated: new Date().toISOString(),
     }]);
-    const transport = remoteTransport(serverId);
-    remoteTextTransportRegistry.register(serverId, transport);
-
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
     expect(activeMobileModel('text').model).toMatchObject({ id: modelId, source: 'remote', serverId });
-    expect(remoteTextTransportRegistry.get(serverId)).toBe(transport);
+    expect(remoteTextTransportRegistry.get(serverId)).toMatchObject({
+      id: serverId,
+      type: 'openai-compatible',
+      config: { endpoint: 'http://127.0.0.1:11434/v1' },
+    });
     expect(mobileTextEngineControl.activeLocalProviderId()).toBeNull();
     expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
     expect(mobileTextEngineControl.capabilities(modelId)).toEqual({
@@ -137,7 +138,6 @@ describe('canonical Mobile text route authority', () => {
   });
 
   it('selects and clears a remote embedding route through the same server control plane', async () => {
-    const remote = useRemoteServerStore.getState();
     const serverId = (await remoteServerManager.addServer({
       name: 'Embedding server',
       endpoint: 'https://embeddings.example.test/v1',

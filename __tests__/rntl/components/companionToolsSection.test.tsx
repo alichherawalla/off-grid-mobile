@@ -23,7 +23,11 @@ jest.mock('../../../src/theme', () => ({
   }),
 }));
 
-const mockState: { knownDevices: unknown[]; servers: unknown[] } = { knownDevices: [], servers: [] };
+const mockState: {
+  knownDevices: unknown[];
+  servers: unknown[];
+  disabledCompanionDeviceIds: string[];
+} = { knownDevices: [], servers: [], disabledCompanionDeviceIds: [] };
 const mockRequestTools = jest.fn();
 
 jest.mock('../../../pro/sync/syncStore', () => ({
@@ -31,7 +35,10 @@ jest.mock('../../../pro/sync/syncStore', () => ({
     selector({ knownDevices: mockState.knownDevices }),
 }));
 jest.mock('../../../pro/mcp/mcpStore', () => ({
-  useMcpStore: (selector: (s: unknown) => unknown) => selector({ servers: mockState.servers }),
+  useMcpStore: (selector: (s: unknown) => unknown) => selector({
+    servers: mockState.servers,
+    disabledCompanionDeviceIds: mockState.disabledCompanionDeviceIds,
+  }),
 }));
 jest.mock('../../../pro/mcp/mcpToolGrantService', () => ({
   requestTools: (...args: unknown[]) => mockRequestTools(...args),
@@ -55,6 +62,7 @@ maybe('CompanionToolsSection', () => {
   beforeEach(() => {
     mockState.knownDevices = [];
     mockState.servers = [];
+    mockState.disabledCompanionDeviceIds = [];
     mockRequestTools.mockClear();
   });
 
@@ -71,7 +79,7 @@ maybe('CompanionToolsSection', () => {
     expect(queryByTestId('companion-tools-phone1')).toBeNull();
 
     const sw = getByTestId('companion-tools-switch-mac1');
-    expect(sw.props.value).toBe(true); // granted -> on
+    expect(sw.props.value).toBe(true);
     fireEvent(sw, 'valueChange', false);
     expect(mockRequestTools).toHaveBeenCalledWith('mac1', false);
   });

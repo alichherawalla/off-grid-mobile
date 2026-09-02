@@ -280,6 +280,57 @@ describe('Pro mobile state sync journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
 
+    // A live Desktop resend can publish the user turn before its new conversation reaches this
+    // device. Each op arrives in its own live frame, so catch-up's batch ordering cannot repair it.
+    // The durable user turn must appear when the parent arrives and survive replacement of the old
+    // assistant answer.
+    const sendLiveOp = (
+      entity: string,
+      entityId: string,
+      kind: 'put' | 'delete',
+      fields?: Record<string, unknown>,
+    ): void => {
+      const op = remoteLog.record(entity, entityId, kind, fields);
+      remote!.engine.sendApp(mobile.id, STATE_CHANNEL, { t: 'ops', ops: [op] });
+    };
+    sendLiveOp(CORE_SYNC_ENTITIES.message, 'resend-user-message', 'put', {
+      conversation_id: 'resend-conversation',
+      role: 'user',
+      content: 'Explain React state in one sentence.',
+      context: null,
+      created_at: '2026-07-27T12:01:00.000Z',
+    });
+    sendLiveOp(
+      CORE_SYNC_ENTITIES.conversation,
+      'resend-conversation',
+      'put',
+      {
+        title: 'Resend keeps the user turn',
+        project_id: null,
+        created_at: '2026-07-27T12:00:00.000Z',
+        updated_at: '2026-07-27T12:03:00.000Z',
+      },
+    );
+    sendLiveOp(CORE_SYNC_ENTITIES.message, 'resend-old-answer', 'put', {
+      conversation_id: 'resend-conversation',
+      role: 'assistant',
+      content: 'The first answer that was replaced.',
+      context: null,
+      created_at: '2026-07-27T12:02:00.000Z',
+    });
+    sendLiveOp(
+      CORE_SYNC_ENTITIES.message,
+      'resend-old-answer',
+      'delete',
+    );
+    sendLiveOp(CORE_SYNC_ENTITIES.message, 'resend-new-answer', 'put', {
+      conversation_id: 'resend-conversation',
+      role: 'assistant',
+      content: 'React state stores data that changes over time.',
+      context: null,
+      created_at: '2026-07-27T12:03:00.000Z',
+    });
+
     // The "no devices found, open Sync on a nearby device" notice must NOT come back, or the screen tells the user
     // to go and do the thing they have just finished doing, directly above the device they did it to. It reads as
     // the app failing to see the peer it is holding a pairing with.
@@ -317,6 +368,18 @@ describe('Pro mobile state sync journey', () => {
     expect(
       ui.getByText('I should confirm the notes before answering.'),
     ).toBeTruthy();
+    fireEvent.press(ui.getByLabelText('Back'));
+
+    fireEvent.press(ui.getByText('Resend keeps the user turn'));
+    await waitFor(() =>
+      expect(
+        ui!.getByText('Explain React state in one sentence.'),
+      ).toBeTruthy(),
+    );
+    expect(
+      ui.getByText('React state stores data that changes over time.'),
+    ).toBeTruthy();
+    expect(ui.queryByText('The first answer that was replaced.')).toBeNull();
     fireEvent.press(ui.getByLabelText('Back'));
 
     useChatStore.getState().addMessage('remote-conversation', {

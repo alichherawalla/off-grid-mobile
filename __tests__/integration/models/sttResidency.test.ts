@@ -6,8 +6,8 @@
  * time, OOM-ing the app and forcing the user to resend.
  *
  * Why the old suite missed it: `whisperStore.test.ts` mocks the residency
- * manager's `makeRoomFor` to ALWAYS return `{ fits: true }` and only asserts
- * that `makeRoomFor`/`loadModel` were *called*. That is a false green — it
+ * manager's old admission method to ALWAYS return `{ fits: true }` and only asserts
+ * that admission/load were *called*. That is a false green — it
  * passes whether or not the store RESPECTS the verdict, and the bug was
  * precisely that the store ignored `fits` and loaded anyway.
  *
@@ -63,11 +63,13 @@ const whisperResidentKey = () => modelResidencyManager.getResidents().find(
 )?.key;
 
 /** A resident generation (text) model, as activeModelService would register it. */
-const registerTextModel = (sizeMB: number) => {
-  modelResidencyManager.register(
+const registerTextModel = async (sizeMB: number) => {
+  const lease = await modelResidencyManager.acquire(
     { key: 'text', type: 'text', sizeMB },
-    async () => { /* text unload */ },
+    { load: async () => undefined, unload: async () => undefined },
+    { override: true },
   );
+  await lease.release();
 };
 
 describe('STT residency — single-model invariant', () => {
@@ -104,7 +106,7 @@ describe('STT residency — single-model invariant', () => {
     // The text model is resident (like right after a voice "Load Anyway"). Residency
     // will NOT evict an 8.5GB generation model to make room for a 142MB sidecar, so
     // makeRoomFor returns fits=false. The store must honor that and stay out.
-    registerTextModel(8537);
+    await registerTextModel(8537);
 
     await transcriptionModelIntents.loadModel();
 
@@ -126,11 +128,13 @@ describe('STT residency — single-model invariant', () => {
 
     // 2. A big text model needs to load. activeModelService asks residency to make
     //    room with override (Load Anyway) — this evicts whisper.
-    const { evicted } = await modelResidencyManager.makeRoomFor(
+    const textLease = await modelResidencyManager.acquire(
       { key: 'text', type: 'text', modelId: 'gemma-e4b', sizeMB: 8537 },
+      { load: async () => undefined, unload: async () => undefined },
       { override: true },
     );
-    registerTextModel(8537); // text now actually resident
+    await textLease.release();
+    const { evicted } = textLease;
     expect(evicted).toContain(residentKey);
     expect(isWhisperResident()).toBe(false);
     // whisper's unload ran → store flag cleared (the eviction path).
@@ -147,12 +151,12 @@ describe('STT residency — single-model invariant', () => {
   });
 
   it('after the text model unloads, whisper can load again', async () => {
-    registerTextModel(8537);
+    await registerTextModel(8537);
     await transcriptionModelIntents.loadModel();
     expect(isWhisperResident()).toBe(false);
 
     // Text model goes away (turn finished / model switched).
-    modelResidencyManager.release('text');
+    await modelResidencyManager.unload('text', async () => undefined);
 
     await transcriptionModelIntents.loadModel();
     expect(isWhisperResident()).toBe(true);

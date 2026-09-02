@@ -55,31 +55,28 @@ type Harness = {
   };
   fs: { module: Record<string, jest.Mock> };
   syncId: string;
+  sourcePath: string;
 };
 
 /** Index a real document into a real knowledge base, and return the handles the cases need. */
 async function indexedDocument(): Promise<Harness> {
   installRealSqlite();
+  // Register the real Mobile sidecar composition before RAG asks for an
+  // embedding. The suite uses the same public application seam as the app.
+  require('../../../src/services/modelServices');
   const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
-  const { documentService } = require('../../../src/services/documentService');
-  const { embeddingService } = require('../../../src/services/adapters/native/embeddingRuntimeAdapter');
   const {
     knowledgeDocumentSyncService,
   } = require('../../../pro/sync/knowledgeDocumentSyncService');
   const { modelTransferFsBoundary } = require('../../utils/modelTransferFsBoundary');
 
   modelTransferFsBoundary.reset();
-  modelTransferFsBoundary.module.writeFile(DOC_PATH, CONTENTS, 'utf8');
-
-  // The embedding MODEL is native; deterministic vectors keep indexing real without it.
-  jest.spyOn(embeddingService, 'load').mockResolvedValue(undefined as never);
-  jest.spyOn(embeddingService, 'getDimension').mockReturnValue(3);
-  jest.spyOn(embeddingService, 'embed').mockResolvedValue([1, 0, 0] as never);
-  jest.spyOn(embeddingService, 'embedBatch').mockResolvedValue([[1, 0, 0]] as never);
-  // Native document extraction.
-  jest
-    .spyOn(documentService, 'processDocumentFromPath')
-    .mockResolvedValue({ type: 'document', textContent: CONTENTS } as never);
+  await modelTransferFsBoundary.module.writeFile(
+    '/docs/all-MiniLM-L6-v2-Q8_0.gguf',
+    'GGUF',
+    'utf8',
+  );
+  await modelTransferFsBoundary.module.writeFile(DOC_PATH, CONTENTS, 'utf8');
 
   await ragService.indexDocument({
     projectId: 'p1',
@@ -94,6 +91,7 @@ async function indexedDocument(): Promise<Harness> {
     service: knowledgeDocumentSyncService,
     fs: modelTransferFsBoundary,
     syncId: document.syncId,
+    sourcePath: document.filePath,
   };
 }
 
@@ -103,7 +101,7 @@ const failureFor = (h: Harness): { status: string; error?: string } | undefined 
 describePro('retrying a knowledge document that no longer matches what was indexed', () => {
   it('refuses when the file has been deleted, and says so', async () => {
     const h = await indexedDocument();
-    h.fs.module.unlink(DOC_PATH);
+    await h.fs.module.unlink(h.sourcePath);
 
     await expect(h.service.retry(THE_MAC, h.syncId)).rejects.toThrow(
       'knowledge document source is no longer available',
@@ -119,7 +117,7 @@ describePro('retrying a knowledge document that no longer matches what was index
   it('refuses when the file changed after it was indexed, and says so', async () => {
     const h = await indexedDocument();
     // The user edited the contract after adding it. The index still describes the OLD text.
-    h.fs.module.writeFile(DOC_PATH, `${CONTENTS} plus a clause added later`, 'utf8');
+    await h.fs.module.writeFile(h.sourcePath, `${CONTENTS} plus a clause added later`, 'utf8');
 
     await expect(h.service.retry(THE_MAC, h.syncId)).rejects.toThrow(
       'knowledge document source changed after it was indexed',
@@ -134,8 +132,8 @@ describePro('retrying a knowledge document that no longer matches what was index
 
   it('refuses when the path now points at a folder', async () => {
     const h = await indexedDocument();
-    h.fs.module.unlink(DOC_PATH);
-    h.fs.module.mkdir(DOC_PATH);
+    await h.fs.module.unlink(h.sourcePath);
+    await h.fs.module.mkdir(h.sourcePath);
 
     await expect(h.service.retry(THE_MAC, h.syncId)).rejects.toThrow(
       'knowledge document source is not a file',

@@ -75,7 +75,7 @@ describe('imageProvider', () => {
     await imageProvider.retry('image:sdxl');
     expect(mockRetryImageDownload).not.toHaveBeenCalled();
     expect(mockBg.retryDownload).toHaveBeenCalledWith('dl-img');
-    expect(useDownloadStore.getState().downloads['image:sdxl/m'].status).toBe('pending');
+    expect(useDownloadStore.getState().downloads['image:sdxl/m'].status).toBe('queued');
   });
 
   // B6: bytes finished then EXTRACTION failed (missing model files) → the native row is gone, so

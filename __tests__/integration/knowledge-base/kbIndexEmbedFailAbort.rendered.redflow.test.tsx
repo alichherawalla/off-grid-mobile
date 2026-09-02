@@ -43,6 +43,7 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
     const RNFS = require('react-native-fs');
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
+    require('../../../src/services/modelServices');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
      
 
@@ -89,6 +90,7 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
     const RNFS = require('react-native-fs');
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
+    require('../../../src/services/modelServices');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
      
 

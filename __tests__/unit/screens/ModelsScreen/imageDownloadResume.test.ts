@@ -2,8 +2,9 @@ import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../../src/services/modelServices/coordinatedDownloadBridge';
 import { modelLibrary } from '../../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
-import { registerAndNotify } from '../../../../src/services/imageDownloadActions';
 import { resumeImageDownload } from '../../../../src/services/imageDownloadResume';
+
+const mockAddDownloadedImageModel = jest.fn();
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
@@ -30,15 +31,21 @@ jest.mock('../../../../src/services/modelServices/bootstrap/modelLibraryBootstra
   modelLibrary: {
     getImageModelsDirectory: jest.fn(),
     getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
+    addDownloadedImageModel: (...args: unknown[]) => mockAddDownloadedImageModel(...args),
   },
 }));
 jest.mock('../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {
     moveCompletedDownload: jest.fn(),
+    getActiveDownloads: jest.fn(() => Promise.resolve([])),
+    cancelDownload: jest.fn(() => Promise.resolve()),
+    retryDownload: jest.fn(() => Promise.resolve()),
+    startProgressPolling: jest.fn(),
   },
 }));
 
 const mockSetStatus = jest.fn();
+const mockRemove = jest.fn();
 jest.mock('../../../../src/stores/downloadStore', () => ({
   useDownloadStore: {
     getState: () => ({
@@ -48,17 +55,13 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
   modelDownloadProjection: {
     reportStatus: (downloadId: string, status: string, error?: unknown) =>
       mockSetStatus(downloadId, status, error),
+    remove: (modelKey: string) => mockRemove(modelKey),
   },
-}));
-
-jest.mock('../../../../src/services/imageDownloadActions', () => ({
-  registerAndNotify: jest.fn(),
 }));
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockUnzip = unzip as jest.MockedFunction<typeof unzip>;
 const mockMoveCompletedDownload = backgroundDownloadService.moveCompletedDownload as jest.MockedFunction<typeof backgroundDownloadService.moveCompletedDownload>;
-const mockRegisterAndNotify = registerAndNotify as jest.MockedFunction<typeof registerAndNotify>;
 const mockGetImageModelsDirectory = modelLibrary.getImageModelsDirectory as jest.MockedFunction<typeof modelLibrary.getImageModelsDirectory>;
 
 type DirItem = RNFS.ReadDirResItemT;
@@ -161,7 +164,7 @@ describe('resumeImageDownload', () => {
 
     await resumeImageDownload(makeEntry(), makeDeps() as any);
 
-    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockAddDownloadedImageModel).toHaveBeenCalledTimes(1);
     expect(mockMoveCompletedDownload).not.toHaveBeenCalled();
     expect(mockUnzip).not.toHaveBeenCalled();
     expect(mockSetStatus).not.toHaveBeenCalled();
@@ -184,7 +187,7 @@ describe('resumeImageDownload', () => {
     expect(mockedRNFS.unlink).toHaveBeenCalledWith(zipPath);
     expect(mockMoveCompletedDownload).toHaveBeenCalledWith('dl-1', zipPath);
     expect(mockUnzip).toHaveBeenCalledWith(zipPath, modelDir);
-    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockAddDownloadedImageModel).toHaveBeenCalledTimes(1);
   });
 
   it('cleans empty modelDir and failed zip before recovering', async () => {
@@ -206,7 +209,7 @@ describe('resumeImageDownload', () => {
     expect(mockedRNFS.unlink).toHaveBeenCalledWith(modelDir);
     expect(mockedRNFS.unlink).toHaveBeenCalledWith(zipPath);
     expect(mockMoveCompletedDownload).toHaveBeenCalledTimes(1);
-    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockAddDownloadedImageModel).toHaveBeenCalledTimes(1);
   });
 
   it('marks the entry failed and removes partial modelDir when unzip fails after move recovery', async () => {
@@ -222,7 +225,7 @@ describe('resumeImageDownload', () => {
 
     expect(mockedRNFS.unlink).toHaveBeenCalledWith(modelDir);
     expect(mockSetStatus).toHaveBeenCalledWith('dl-1', 'failed', { message: 'corrupt zip' });
-    expect(mockRegisterAndNotify).not.toHaveBeenCalled();
+    expect(mockAddDownloadedImageModel).not.toHaveBeenCalled();
   });
 
   it('unzips valid zip directly without calling moveCompletedDownload', async () => {
@@ -234,7 +237,7 @@ describe('resumeImageDownload', () => {
 
     expect(mockMoveCompletedDownload).not.toHaveBeenCalled();
     expect(mockUnzip).toHaveBeenCalledWith(zipPath, modelDir);
-    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockAddDownloadedImageModel).toHaveBeenCalledTimes(1);
   });
 
   it('registers multifile model when modelDir exists', async () => {
@@ -248,10 +251,11 @@ describe('resumeImageDownload', () => {
       }),
     });
     existingPaths.add(modelDir);
+    dirEntries[modelDir] = [makeFileItem(`${modelDir}/weights.bin`)];
 
     await resumeImageDownload(entry, makeDeps() as any);
 
-    expect(mockRegisterAndNotify).toHaveBeenCalledTimes(1);
+    expect(mockAddDownloadedImageModel).toHaveBeenCalledTimes(1);
     expect(mockMoveCompletedDownload).not.toHaveBeenCalled();
   });
 });

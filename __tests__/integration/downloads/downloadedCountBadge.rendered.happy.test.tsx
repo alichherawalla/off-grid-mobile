@@ -24,11 +24,11 @@
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
-// Three recommended-model ids that render at the default 12GB RAM profile (params ≤ 13B). A downloaded
+// Three recommended-model ids that render within the harness device budget. A downloaded
 // row whose id STARTS WITH a recommended id makes that recommended card render its downloaded mark
 // (the real match rule: downloadedModels.some(m => m.id.startsWith(item.id))).
 const RECOMMENDED_IDS = [
-  'unsloth/gemma-4-E2B-it-GGUF',
+  'ggml-org/SmolLM3-3B-GGUF',
   'unsloth/Qwen3.5-0.8B-GGUF',
   'unsloth/Qwen3.5-2B-GGUF',
 ];
@@ -66,7 +66,6 @@ describe('T012 (rendered) — ModelsScreen reflects N downloaded models', () => 
 
     // The recommended list is present (it renders on mount, no search needed).
     await waitFor(() => { expect(view.getByTestId('models-list')).not.toBeNull(); });
-
     // The count of downloaded marks the user sees on ModelsScreen must equal N.
     await waitFor(() => {
       expect(view.queryAllByTestId(/^model-card-\d+-downloaded$/).length).toBe(N);

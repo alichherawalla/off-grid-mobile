@@ -33,6 +33,7 @@ describe('T115 (rendered) — voice-note send reclaims idle STT on a tight devic
     });
     // Whisper resident (real download+select) BEFORE render (the order the working voice tests use).
     await h.setupWhisperModel();
+    await h.loadSelectedWhisperOnDemand();
     h.render();
      
     const React = require('react');

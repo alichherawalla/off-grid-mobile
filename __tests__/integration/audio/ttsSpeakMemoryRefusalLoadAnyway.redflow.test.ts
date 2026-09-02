@@ -74,11 +74,23 @@ describe('TTS speak-path memory refusal is overridable (Load Anyway) — red-flo
     // A resident peer sidecar (whisper) whose NATIVE unload REJECTS — the override force tries to evict it
     // to free room, the native unload fails, so makeRoomFor returns { fits:false } even under override.
     // This is the reachable device refusal on the evict-everything speak-turn force.
-    modelResidencyManager.register(
-      { key: 'whisper', type: 'whisper' as never, sizeMB: 1500, canEvict: () => true },
-      async () => { throw new Error('native unload rejected'); },
-      1,
+    const resident = await modelResidencyManager.acquire(
+      {
+        key: 'transcription:test-whisper',
+        modelId: 'test-whisper',
+        type: 'transcription',
+        sizeMB: 1500,
+        lifecycle: 'persistent',
+        canEvict: () => true,
+      },
+      {
+        load: async () => undefined,
+        unload: async () => { throw new Error('native unload rejected'); },
+      },
+      { now: 1 },
     );
+    expect(resident.acquired).toBe(true);
+    await resident.release();
 
     ttsRegistry.register('faketts', makeFakeEngine);
     await useTTSStore.getState().setEngine('faketts');

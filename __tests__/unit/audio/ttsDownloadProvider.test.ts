@@ -40,7 +40,7 @@ beforeEach(() => {
 describe('ttsProvider', () => {
   it('lists a downloaded engine as completed; retry supported, cancel is not', async () => {
     const d = (await ttsProvider.list())[0];
-    expect(d.id).toBe('tts:kokoro');
+    expect(d.id).toBe('tts:software-mansion/executorch-kokoro');
     expect(d.status).toBe('completed');
     expect(d.capabilities.cancel).toBe(false);
     expect(d.capabilities.retry).toBe(true);
@@ -57,7 +57,7 @@ describe('ttsProvider', () => {
     mockEngine.getPhase.mockReturnValue('error');
     mockEngine.getLastDownloadError.mockReturnValue('Download interrupted or missing resource');
     const d = (await ttsProvider.list())[0];
-    expect(d.status).toBe('error');
+    expect(d.status).toBe('failed');
     expect(d.error).toBe('Download interrupted or missing resource');
     expect(d.capabilities.retry).toBe(true);
   });
@@ -67,12 +67,12 @@ describe('ttsProvider', () => {
     mockEngine.getPhase.mockReturnValue('error');
     mockEngine.getLastDownloadError.mockReturnValue(null);
     const d = (await ttsProvider.list())[0];
-    expect(d.status).toBe('error');
+    expect(d.status).toBe('failed');
     expect(d.error).toBe('Download failed');
   });
 
   it('retry re-runs the download for the engine via the store', async () => {
-    await ttsProvider.retry('tts:kokoro');
+    await ttsProvider.retry('tts:software-mansion/executorch-kokoro');
     // Already the active engine → no switch, just re-download.
     expect(mockTts.setEngine).not.toHaveBeenCalled();
     expect(mockTts.downloadModels).toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe('ttsProvider', () => {
 
   it('retry switches to the target engine first when it is not active', async () => {
     mockTts.settings.engineId = 'removed-engine';
-    await ttsProvider.retry('tts:kokoro');
+    await ttsProvider.retry('tts:software-mansion/executorch-kokoro');
     expect(mockTts.setEngine).toHaveBeenCalledWith('kokoro');
     expect(mockTts.downloadModels).toHaveBeenCalled();
     mockTts.settings.engineId = 'kokoro';
@@ -104,7 +104,7 @@ describe('ttsProvider', () => {
   });
 
   it('remove routes through the TTS store delete', async () => {
-    await ttsProvider.remove('tts:kokoro');
+    await ttsProvider.remove('tts:software-mansion/executorch-kokoro');
     expect(mockTts.deleteModels).toHaveBeenCalled();
   });
 });

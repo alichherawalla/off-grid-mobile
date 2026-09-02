@@ -15,11 +15,13 @@
  * the row shows the download icon, and these queries throw.
  */
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
+import RNFS from 'react-native-fs';
 import { WhisperPickerSheet } from '../../../src/components/models/WhisperPickerSheet';
 import { useDownloadStore } from '../../../src/stores/downloadStore';
 import { useWhisperStore } from '../../../src/stores/whisperStore';
 import type { DownloadEntry } from '../../../src/utils/downloadStatus';
+import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
 
 const TOTAL = 142 * 1024 * 1024; // ggml-base.en is 142 MB
 
@@ -32,7 +34,7 @@ const sttEntry = (over: Partial<DownloadEntry>): DownloadEntry => ({
   fileName: 'ggml-base.en.bin',
   quantization: '',
   modelType: 'stt',
-  status: 'running',
+  status: 'downloading',
   bytesDownloaded: Math.round(0.42 * TOTAL),
   totalBytes: TOTAL,
   combinedTotalBytes: TOTAL,
@@ -45,11 +47,13 @@ describe('WhisperPickerSheet reflects a canonical-store STT download (device 202
   beforeEach(() => {
     useDownloadStore.setState({ downloads: {} });
     useWhisperStore.setState({ downloadProgressById: {}, downloadedModelId: null, presentModelIds: [], isModelLoading: false });
+    useModelFailureStore.getState().clear();
+    (RNFS.exists as jest.Mock).mockReset().mockResolvedValue(false);
   });
 
   it('shows the transferring % on the matching row — not the plain download icon', () => {
     // Boundary: the native service registers a running STT download in the canonical store.
-    useDownloadStore.getState().add(sttEntry({ status: 'running', progress: 0.42 }));
+    useDownloadStore.getState().add(sttEntry({ status: 'downloading', progress: 0.42 }));
 
     const { getByText, getByTestId } = render(<WhisperPickerSheet visible onClose={() => {}} />);
 
@@ -60,7 +64,7 @@ describe('WhisperPickerSheet reflects a canonical-store STT download (device 202
   });
 
   it('shows the queued clock for a pending canonical STT download', () => {
-    useDownloadStore.getState().add(sttEntry({ status: 'pending', progress: 0, bytesDownloaded: 0 }));
+    useDownloadStore.getState().add(sttEntry({ status: 'queued', progress: 0, bytesDownloaded: 0 }));
 
     const { getByTestId } = render(<WhisperPickerSheet visible onClose={() => {}} />);
 
@@ -85,5 +89,18 @@ describe('WhisperPickerSheet reflects a canonical-store STT download (device 202
     const { getByTestId } = render(<WhisperPickerSheet visible onClose={() => {}} />);
 
     expect(getByTestId('whisper-row-queued')).toBeTruthy();
+  });
+
+  it('renders the canonical transcription failure when disk reconciliation fails', async () => {
+    (RNFS.exists as jest.Mock).mockRejectedValueOnce(
+      new Error('Model storage is unavailable'),
+    );
+
+    const ui = render(<WhisperPickerSheet visible onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(ui.getByTestId('model-failure-stt')).toBeTruthy();
+      expect(ui.getByText('Model storage is unavailable')).toBeTruthy();
+    });
   });
 });

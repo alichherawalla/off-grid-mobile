@@ -31,9 +31,22 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
 
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
       if (String(url).includes('/v1/models')) {
-        return { ok: true, status: 200, json: async () => ({ object: 'list', data: [{ id: 'llama-3-8b', object: 'model', owned_by: 'local' }] }) };
+        const payload = { object: 'list', data: [{ id: 'llama-3-8b', object: 'model', owned_by: 'local' }] };
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => payload,
+          text: async () => JSON.stringify(payload),
+        };
       }
-      return { ok: false, status: 404, json: async () => ({}) };
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({}),
+        text: async () => '{}',
+      };
     });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };

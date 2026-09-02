@@ -22,10 +22,11 @@ describe('Q14 — advisory vs authoritative image-RAM estimate diverge (red-flow
 
     const model = createONNXImageModel({ id: 'sd', name: 'SD', size: 2 * GB, backend: 'mnn' });
 
-    const advisory = await checkMemoryForModel({
-      modelId: 'sd', modelType: 'image', ids: {}, policy: 'balanced',
-      lists: { downloadedModels: [], downloadedImageModels: [model] },
-    });
+    // The Mobile application adapter observes the model from the real store and
+    // delegates the estimate to Shared. Keep the test on that public contract.
+    const { useAppStore } = require('../../../src/stores/appStore');
+    useAppStore.setState({ downloadedImageModels: [model] });
+    const advisory = await checkMemoryForModel('sd', 'image');
     const advisoryGB = advisory.requiredMemoryGB;
     const gateGB = hardwareService.estimateImageModelRam(model) / GB;
 

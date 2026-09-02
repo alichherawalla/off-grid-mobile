@@ -47,6 +47,15 @@ jest.mock('@react-native-documents/picker', () => ({
   errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' },
 }));
 
+const mockImportSelectedModelFiles = jest.fn().mockResolvedValue({
+  status: 'imported',
+  model: { id: 'model-1', name: 'Test Model' },
+});
+jest.mock('../../../../src/services/adapters/models/library/modelFileImportApplicationAdapter', () => ({
+  importSelectedModelFiles: (...args: unknown[]) =>
+    mockImportSelectedModelFiles(...args),
+}));
+
 // Mock CustomAlert
 jest.mock('../../../../src/components/CustomAlert', () => ({
   showAlert: jest.fn((title, message) => ({ title, message, visible: true })),
@@ -158,15 +167,13 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
   isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 
-// Mock modelLibrary
-const mockSelectMobileModel = jest.fn().mockResolvedValue(undefined);
+// Mock the filesystem-facing model library port. Import policy stays in the real helper.
 jest.mock('../../../../src/services', () => ({
   modelLibrary: {
     getImageModelsDirectory: jest.fn(() => '/models/images'),
     addDownloadedImageModel: jest.fn().mockResolvedValue(undefined),
-    importLocalModel: jest.fn().mockResolvedValue({ id: 'model-1', name: 'Test Model' }),
+    getModelsDirectory: jest.fn(() => '/models/text'),
   },
-  selectMobileModel: (...args: any[]) => mockSelectMobileModel(...args),
 }));
 
 // Mock utils
@@ -181,8 +188,11 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
 
 describe('useModelsScreen', () => {
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
+    const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
+    realAppStore.setState({ activeImageModelId: null, downloadedImageModels: [] });
   });
 
   describe('initial state', () => {
@@ -328,11 +338,13 @@ describe('useModelsScreen', () => {
 
   describe('handleImportLocalModel - GGUF success path', () => {
     it('imports single GGUF file successfully (object-arg signature)', async () => {
-      const { modelLibrary } = require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
 
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 4000 }]);
-      modelLibrary.importLocalModel.mockResolvedValueOnce({ id: 'gguf-1', name: 'Test GGUF Model' });
+      mockImportSelectedModelFiles.mockResolvedValueOnce({
+        status: 'imported',
+        model: { id: 'gguf-1', name: 'Test GGUF Model' },
+      });
       useAppStore.mockReturnValue({
         addDownloadedModel: jest.fn(),
         activeImageModelId: null,
@@ -346,11 +358,9 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      // importLocalModel now takes an options object, not positional args
-      expect(modelLibrary.importLocalModel).toHaveBeenCalledWith(expect.objectContaining({
-        sourceUri: 'file://test.gguf',
-        fileName: 'test.gguf',
-        sourceSize: 4000,
+      expect(mockImportSelectedModelFiles).toHaveBeenCalledWith(expect.objectContaining({
+        modelsDir: '/models/text',
+        artifacts: [{ uri: 'file://test.gguf', name: 'test.gguf', sizeBytes: 4000 }],
         onProgress: expect.any(Function),
       }));
       expect(result.current.alertState.visible).toBe(true);
@@ -360,14 +370,13 @@ describe('useModelsScreen', () => {
     });
 
     it('returns early without calling pick if isImporting is already true', async () => {
-      const { modelLibrary } = require('../../../../src/services');
       const { result } = renderHook(() => useModelsScreen());
 
-      // Make importLocalModel hang so isImporting stays true after pick returns
+      // Keep the canonical command pending so the second UI intent must be ignored.
       let resolveImport!: (v: any) => void;
       const hangingImport = new Promise(r => { resolveImport = r; });
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 100 }]);
-      modelLibrary.importLocalModel.mockReturnValueOnce(hangingImport);
+      mockImportSelectedModelFiles.mockReturnValueOnce(hangingImport);
 
       // Start first import — pick returns, isImporting becomes true, import hangs
       const firstImport = act(() => { result.current.handleImportLocalModel(); });
@@ -518,6 +527,10 @@ describe('useModelsScreen', () => {
       require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
+      const { mobileModelSelectionService } = require(
+        '../../../../src/services/modelServices/modelSelectionApplication'
+      );
+      const writeSelection = jest.spyOn(mobileModelSelectionService, 'write');
 
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
       useAppStore.mockReturnValue({
@@ -534,16 +547,21 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(mockSelectMobileModel).toHaveBeenCalledWith(expect.objectContaining({
-        source: 'local',
-        modality: 'image',
-      }));
+      expect(writeSelection).toHaveBeenCalledWith(
+        'image',
+        expect.any(String),
+      );
     });
 
     it('does not set active image model id when one is already active', async () => {
       require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
+      const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
+      const { mobileModelSelectionService } = require(
+        '../../../../src/services/modelServices/modelSelectionApplication'
+      );
       const RNFS = require('react-native-fs');
+      const writeSelection = jest.spyOn(mobileModelSelectionService, 'write');
 
       const mockSetActiveImageModelId = jest.fn();
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
@@ -553,6 +571,14 @@ describe('useModelsScreen', () => {
         setActiveImageModelId: mockSetActiveImageModelId,
         addDownloadedImageModel: jest.fn(),
       });
+      realAppStore.setState({
+        activeImageModelId: 'existing-model-id',
+        downloadedImageModels: [{
+          id: 'existing-model-id',
+          name: 'Existing',
+          backend: 'mnn',
+        } as any],
+      });
       RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
 
       const { result } = renderHook(() => useModelsScreen());
@@ -561,7 +587,7 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(mockSelectMobileModel).not.toHaveBeenCalled();
+      expect(writeSelection).not.toHaveBeenCalled();
     });
   });
 

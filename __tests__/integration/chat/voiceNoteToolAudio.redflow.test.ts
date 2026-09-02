@@ -4,7 +4,6 @@
  */
 import { installNativeBoundary } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
-import { setupWithConversation } from '../../utils/testHelpers';
 
 describe('voice note on LiteRT', () => {
   it('sends transcript text and no audio file to the native model', async () => {
@@ -33,7 +32,9 @@ describe('voice note on LiteRT', () => {
     });
     boundary.litert!.scriptTurn({ content: 'The result is 4.' });
 
-    const conversationId = setupWithConversation({ modelId: 'lrt' });
+    const conversationId = useChatStore
+      .getState()
+      .createConversation('lrt');
     const user = useChatStore.getState().addMessage(conversationId, {
       role: 'user',
       content: 'use the calculator for two plus two',

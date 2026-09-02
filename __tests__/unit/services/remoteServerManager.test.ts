@@ -19,6 +19,10 @@ import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 
 describe('Mobile remote-server application composition', () => {
+  beforeAll(async () => {
+    await useRemoteServerStore.persist.rehydrate();
+  });
+
   beforeEach(() => {
     useRemoteServerStore.setState({
       servers: [], activeServerId: null, discoveredModels: {}, serverHealth: {},
@@ -54,7 +58,7 @@ describe('Mobile remote-server application composition', () => {
     await expect(remoteServerManager.addServer({
       name: 'Unsafe', endpoint: 'http://models.example.com/v1',
       provider: 'openai-compatible', apiKey: 'secret',
-    })).rejects.toThrow('API keys require an HTTPS remote server.');
+    })).rejects.toThrow('Remote HTTP servers must use a private LAN or Tailscale address.');
     expect(remoteServerManager.getServers()).toEqual([]);
   });
 });

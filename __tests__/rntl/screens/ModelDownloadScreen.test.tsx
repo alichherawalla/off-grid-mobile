@@ -86,8 +86,10 @@ jest.mock('../../../src/stores/remoteServerStore', () => ({
 const mockGetModelFiles = jest.fn<Promise<any[]>, any[]>(() => Promise.resolve([]));
 const mockDownloadModel = jest.fn();
 const mockDownloadModelBackground = jest.fn();
+const mockScanAndReconcile = jest.fn();
 
 jest.mock('../../../src/services/modelCatalogFiles', () => ({
+  catalogModelFiles: () => [],
   fetchModelFiles: async (models: { id: string }[]) => {
     const result: Record<string, any[]> = {};
     for (const model of models) {
@@ -130,6 +132,7 @@ jest.mock('../../../src/services', () => ({
   remoteServerManager: {
     addServer: jest.fn().mockResolvedValue({ id: 'new-server' }),
     testConnection: jest.fn().mockResolvedValue({ success: false }),
+    scanAndReconcile: (...args: any[]) => mockScanAndReconcile(...args),
     setActiveRemoteTextModel: jest.fn().mockResolvedValue(undefined),
   },
 }));
@@ -284,6 +287,7 @@ describe('ModelDownloadScreen', () => {
     mockRemoteServerState.servers = [];
     mockRemoteServerState.discoveredModels = {};
     mockRemoteServerState.testConnection.mockResolvedValue({ success: false });
+    mockScanAndReconcile.mockResolvedValue({ moved: [], found: [] });
     mockGetModelFiles.mockResolvedValue([]);
     mockDownloadModel.mockResolvedValue(undefined);
     mockDownloadModelBackground.mockResolvedValue(undefined);
@@ -574,8 +578,7 @@ describe('ModelDownloadScreen', () => {
   // ===========================================================================
 
   it('handleScanNetwork — scan error shows Scan Failed alert', async () => {
-    const { discoverLANServers } = jest.requireMock('../../../src/services/networkDiscovery');
-    discoverLANServers.mockRejectedValueOnce(new Error('wifi off'));
+    mockScanAndReconcile.mockRejectedValueOnce(new Error('wifi off'));
 
     const result = render(<AdvancedSetupScreen navigation={mockNavigation} />);
     await flushPromises();
@@ -590,8 +593,7 @@ describe('ModelDownloadScreen', () => {
   });
 
   it('handleScanNetwork — no reachable servers shows No Servers Found alert', async () => {
-    const { discoverLANServers } = jest.requireMock('../../../src/services/networkDiscovery');
-    discoverLANServers.mockResolvedValueOnce([]);
+    mockScanAndReconcile.mockResolvedValueOnce({ moved: [], found: [] });
     // testConnection returns failure so reachable set is empty
     mockRemoteServerState.testConnection.mockResolvedValue({ success: false });
     mockRemoteServerState.servers = [];

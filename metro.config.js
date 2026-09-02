@@ -28,6 +28,10 @@ const syncRuntimeModules = {
   '@noble/hashes/hmac': path.resolve(sharedNodeModulesPath, '@noble/hashes/hmac.js'),
   '@noble/hashes/sha256': path.resolve(sharedNodeModulesPath, '@noble/hashes/sha256.js'),
 };
+const modelsSemanticModules = {
+  '@offgrid/models/catalog': path.resolve(modelsPackagePath, 'dist/catalog/index.js'),
+  '@offgrid/models/quant': path.resolve(modelsPackagePath, 'dist/quant.js'),
+};
 
 const config = {
   // pro/ is a submodule inside the project root, so Metro already watches it by default. The sync
@@ -49,6 +53,10 @@ const config = {
       const syncRuntimeModule = syncRuntimeModules[moduleName];
       if (syncRuntimeModule) {
         return { type: 'sourceFile', filePath: syncRuntimeModule };
+      }
+      const modelsSemanticModule = modelsSemanticModules[moduleName];
+      if (modelsSemanticModule) {
+        return { type: 'sourceFile', filePath: modelsSemanticModule };
       }
       return context.resolveRequest(context, moduleName, platform);
     },

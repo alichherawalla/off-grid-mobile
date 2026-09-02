@@ -28,7 +28,7 @@ const KEY = makeModelKey('author/model', 'model.gguf');
 
 const inflightEntry = (over: Partial<DownloadEntry> = {}): DownloadEntry => ({
   modelKey: KEY, downloadId: 'dl-1', modelId: 'author/model', fileName: 'model.gguf',
-  quantization: 'Q4_K_M', modelType: 'text', status: 'pending',
+  quantization: 'Q4_K_M', modelType: 'text', status: 'queued',
   bytesDownloaded: 0, totalBytes: 1000, combinedTotalBytes: 1000, progress: 0, createdAt: 1000,
   ...over,
 });
@@ -56,7 +56,7 @@ describe('startModelDownload flow (real stores)', () => {
   });
 
   it('does not start a second download when one is already active (real-store guard)', async () => {
-    useDownloadStore.getState().add(inflightEntry({ status: 'running' }));
+    useDownloadStore.getState().add(inflightEntry({ status: 'downloading' }));
     await startModelDownload('author/model', FILE);
     expect(mockDownloadModelBackground).not.toHaveBeenCalled();
   });
@@ -67,7 +67,7 @@ describe('startModelDownload flow (real stores)', () => {
     startModelDownload('author/model', FILE);
     const entry = useDownloadStore.getState().downloads[KEY];
     expect(entry).toBeDefined();
-    expect(entry.status).toBe('pending');
+    expect(entry.status).toBe('queued');
     expect(entry.downloadId).toBe(`queued:${KEY}`);
   });
 
@@ -84,7 +84,7 @@ describe('startModelDownload flow (real stores)', () => {
     // Reconcile the queued placeholder to the real id (download.ts does this), then let
     // native progress mark it running — the state the watch error fires against.
     useDownloadStore.getState().retryEntry(KEY, 'dl-1');
-    useDownloadStore.getState().setStatus('dl-1', 'running');
+    useDownloadStore.getState().setStatus('dl-1', 'downloading');
 
     mockOnError!(new Error('net'));
 

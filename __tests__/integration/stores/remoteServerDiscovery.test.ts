@@ -13,19 +13,9 @@ jest.mock('../../../src/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-// Mock httpClient — not exercised in discovery but imported by the store
-jest.mock('../../../src/services/httpClient', () => ({
-  testEndpoint: jest.fn(),
-  detectServerType: jest.fn(),
-}));
-
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { mobileRemoteServerApplication } from '../../../src/services/modelServices/remoteServerApplication';
-import {
-  detectServerType,
-  testEndpoint,
-} from '../../../src/services/httpClient';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,6 +41,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
     status,
+    headers: { get: () => null },
     json: async () => body,
   } as unknown as Response;
 }
@@ -552,13 +543,6 @@ describe('remoteServerDiscovery integration', () => {
         endpoint: 'http://192.168.1.44:7878',
         name: 'Studio Mac',
       }); // NOSONAR
-      (testEndpoint as jest.Mock).mockResolvedValue({
-        success: true,
-        latency: 8,
-      });
-      (detectServerType as jest.Mock).mockResolvedValue({
-        type: 'off-grid-desktop',
-      });
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
           return Promise.resolve(

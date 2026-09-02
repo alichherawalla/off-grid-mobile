@@ -47,7 +47,8 @@ import {
   scanForUntrackedTextModels,
   scanForUntrackedImageModels,
   deleteOrphanedFile,
-  } from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
+  type ReconcileImageModelsOpts,
+} from '../../../../../../src/services/adapters/models/library/modelScanAdapter';
 import { importLocalModel } from '../../../../../../src/services/adapters/models/library/localModelImportAdapter';
 import * as storage from '../../../../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
 import { copyFileWithProgress } from '../../../../../../src/services/adapters/models/modelFileCopyAdapter';
@@ -173,7 +174,7 @@ describe('cleanupMMProjEntries', () => {
 });
 
 describe('reconcileFinishedImageDownloads', () => {
-  const base = () => ({
+  const base = (): ReconcileImageModelsOpts => ({
     imageModelsDir: '/img',
     getImageModels: jest.fn(async (): Promise<any[]> => []),
     addImageModel: jest.fn(async () => {}),
@@ -310,17 +311,34 @@ describe('reconcileFinishedImageDownloads', () => {
 
   it('top-level catch keeps reconciliation non-fatal', async () => {
     const opts = base();
+    const onDegraded = jest.fn();
+    opts.onDegraded = onDegraded;
     mockedRNFS.exists.mockResolvedValueOnce(true);
     mockedRNFS.readDir.mockRejectedValueOnce(new Error('readDir blew up'));
     const out = await reconcileFinishedImageDownloads(opts);
     expect(out).toEqual([]);
+    expect(onDegraded).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'ModelLibraryScanDegradedError',
+      operation: 'image-reconciliation',
+      recoveredCount: 0,
+    }));
   });
 });
 
 describe('scanForUntrackedTextModels', () => {
   it('outer catch returns [] when getModels throws', async () => {
-    const out = await scanForUntrackedTextModels('/m', async () => { throw new Error('boom'); });
+    const onDegraded = jest.fn();
+    const out = await scanForUntrackedTextModels(
+      '/m',
+      async () => { throw new Error('boom'); },
+      onDegraded,
+    );
     expect(out).toEqual([]);
+    expect(onDegraded).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'ModelLibraryScanDegradedError',
+      operation: 'text-model-scan',
+      recoveredCount: 0,
+    }));
   });
 
   it('returns [] when dir does not exist', async () => {

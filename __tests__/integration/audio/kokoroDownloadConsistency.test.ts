@@ -62,7 +62,7 @@ describe('Kokoro download-state consistency (DM vs Voice tab share one source)',
     mockKokoro._setDownloadProgress(0.61); // Voice tab shows 61% → phase 'downloading'
 
     const items = await ttsProvider.list();
-    const kokoro = items.find((d) => d.id === 'tts:kokoro');
+    const kokoro = items.find((d) => d.id === 'tts:software-mansion/executorch-kokoro');
 
     // NEVER 'completed'. Both views render from this same list, so they agree.
     expect(kokoro?.status).toBe('downloading');
@@ -73,7 +73,7 @@ describe('Kokoro download-state consistency (DM vs Voice tab share one source)',
     fetchResources.mockResolvedValueOnce(undefined);
     await mockKokoro.downloadAssets(); // fetch resolves → genuine completion
 
-    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:kokoro');
+    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:software-mansion/executorch-kokoro');
     expect(kokoro?.status).toBe('completed');
     expect(kokoro?.progress).toBe(1);
   });
@@ -81,7 +81,7 @@ describe('Kokoro download-state consistency (DM vs Voice tab share one source)',
   it('persisted completion hydrated on boot reads as completed', async () => {
     mockKokoro.hydrateDownloaded(true);
 
-    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:kokoro');
+    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:software-mansion/executorch-kokoro');
     expect(kokoro?.status).toBe('completed');
   });
 
@@ -89,7 +89,7 @@ describe('Kokoro download-state consistency (DM vs Voice tab share one source)',
     // A prior interrupted fetch left the shared .pte behind; no fetch has finished.
     listDownloadedFiles.mockResolvedValue(CORE.map((f) => `/cache/react-native-executorch/${f}`));
 
-    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:kokoro');
+    const kokoro = (await ttsProvider.list()).find((d) => d.id === 'tts:software-mansion/executorch-kokoro');
     expect(kokoro?.status).not.toBe('completed');
   });
 });

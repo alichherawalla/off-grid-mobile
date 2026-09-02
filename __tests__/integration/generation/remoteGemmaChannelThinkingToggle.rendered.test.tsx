@@ -103,7 +103,8 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     // capability path reads the remote model (the screen prefers a remote when one is active).
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
 
-    const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
+    const { useAppStore } = require('../../../src/stores');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
     const { llmService } = require('../../../src/services/llm');
     const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
@@ -115,10 +116,10 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     try {
       // REAL "add a server" end state + REAL discovery — this is what runs deltaHasThinking. No caps
       // are pre-placed; supportsThinking is EMERGENT from the probe stream through the real detection.
-      const serverId = useRemoteServerStore.getState().addServer({
+      const serverId = (await remoteServerManager.addServer({
         name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
-      });
-      await useRemoteServerStore.getState().discoverModels(serverId);
+      })).id;
+      await remoteServerManager.discoverModels(serverId);
 
       // REAL "user selects this discovered remote model" — sets it active + registers the provider
       // and applies the discovered capabilities. Same action the model picker fires.
@@ -149,7 +150,8 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     // discriminator: it FAILS if deltaHasThinking is broken to be always-true (the surviving M10 mutant),
     // so together with the positive case it pins detection to the actual delimiter grammar.
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
-    const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
+    const { useAppStore } = require('../../../src/stores');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
     const { llmService } = require('../../../src/services/llm');
     const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
@@ -158,10 +160,10 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
     const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
     try {
-      const serverId = useRemoteServerStore.getState().addServer({
+      const serverId = (await remoteServerManager.addServer({
         name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
-      });
-      await useRemoteServerStore.getState().discoverModels(serverId);
+      })).id;
+      await remoteServerManager.discoverModels(serverId);
       await selectRemoteMobileModel(serverId, 'text', MODEL_ID);
     } finally {
       restoreFetch();

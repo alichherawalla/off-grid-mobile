@@ -30,6 +30,7 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
      
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
     const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
+    const { resolveTextResidentSpec } = require('../../../src/services/modelServices/modelLifecycleBootstrap');
     const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
      
 
@@ -42,7 +43,12 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
 
     // Pin the budget tight: the resident text model fills it, so the whisper sidecar cannot co-reside →
     // makeRoomFor returns fits=false → whisperStore.loadModel returns 'blocked'.
-    modelResidencyManager.setBudgetOverrideMB(700);
+    // Keep the text model admissible by itself while leaving no room for Whisper.
+    // A fixed 700 MB budget became invalid when the canonical estimator started
+    // accounting for the model's full working set: it made the post-transcription
+    // text reload impossible and no longer represented this journey.
+    const textResident = await resolveTextResidentSpec('m');
+    modelResidencyManager.setBudgetOverrideMB(textResident.sizeMB);
 
     h.render();
     await h.enterVoiceMode();

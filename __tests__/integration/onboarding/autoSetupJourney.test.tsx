@@ -9,9 +9,9 @@ import {
 import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
 import type {
   DownloadProvider,
+  DownloadModelType,
   ModelDownload,
   ModelDownloadStartRequest,
-  ModelDownloadType,
 } from '../../../src/services/modelServices/downloadTypes';
 import { uniformDownloadId } from '@offgrid/models';
 import { useAppStore } from '../../../src/stores';
@@ -39,7 +39,7 @@ class NativeDownloadBoundary implements DownloadProvider {
   private readonly listeners = new Set<() => void>();
   completeOnStart = true;
 
-  constructor(readonly modelType: ModelDownloadType) {}
+  constructor(readonly modelType: DownloadModelType) {}
 
   async list(): Promise<ModelDownload[]> {
     return this.downloads;

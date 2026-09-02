@@ -54,6 +54,9 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     // Mirrors the metro alias so tests can import pro modules that reference core.
     '^@offgrid/core/(.*)$': '<rootDir>/src/$1',
+    // Run Shared semantic package entries from source, as @offgrid/sync does below.
+    '^@offgrid/models/catalog$': '<rootDir>/../shared/packages/models/src/catalog/index.ts',
+    '^@offgrid/models/quant$': '<rootDir>/../shared/packages/models/src/quant.ts',
     // Mirrors the metro alias: the real pro package when present on disk, else the null
     // stub so open-core tests resolve @offgrid/pro cleanly.
     '^@offgrid/pro$': proExists ? '<rootDir>/pro' : '<rootDir>/src/bootstrap/proStub.js',
@@ -75,6 +78,17 @@ module.exports = {
   },
   transformIgnorePatterns: ['node_modules/(?!(react-native|@react-native|@react-navigation|react-native-.*|@react-native-.*|moti|@motify|@gorhom|@shopify|@ronradtke|@op-engineering|@offgrid)/)',],
   testEnvironment: 'node',
+  // Istanbul instrumentation retained one transformed copy of every source file in the
+  // coordinator, so worker recycling could not prevent the full matrix from reaching the
+  // 8 GB heap ceiling. V8 records counters in each recyclable worker and Jest still merges
+  // them into the same complete coverage report and applies the thresholds below.
+  coverageProvider: 'v8',
+  // One worker keeps stateful React Native suites serial, while an idle-memory
+  // limit lets Jest replace that worker between files. `--runInBand` runs in the
+  // coordinator process, where Jest cannot recycle the growing module and
+  // instrumentation graph; the full coverage matrix eventually exhausted even
+  // an 8 GB heap. Coverage from replacement workers is still merged by Jest.
+  workerIdleMemoryLimit: process.env.JEST_WORKER_IDLE_MEMORY_LIMIT || '512MB',
   clearMocks: true,
   verbose: true,
   testTimeout: 10000,

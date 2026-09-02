@@ -435,7 +435,13 @@ describe('GenerationSettingsModal', () => {
   it('opens classifier model picker and shows downloaded models', () => {
     mockStoreValues.settings = { ...defaultSettings, autoDetectMethod: 'llm' };
     mockStoreValues.downloadedModels = [
-      { id: 'smol-model', name: 'SmolLM', fileSize: 500000000, quantization: 'Q4_K_M' },
+      {
+        id: 'smol-model',
+        name: 'SmolLM',
+        fileSize: 500000000,
+        quantization: 'Q4_K_M',
+        engine: 'llama.rn',
+      },
     ];
 
     const { getByText, getByTestId, getAllByText } = render(
@@ -455,7 +461,13 @@ describe('GenerationSettingsModal', () => {
   it('selects classifier model from picker', () => {
     mockStoreValues.settings = { ...defaultSettings, autoDetectMethod: 'llm' };
     mockStoreValues.downloadedModels = [
-      { id: 'smol-model', name: 'SmolLM', fileSize: 500000000, quantization: 'Q4_K_M' },
+      {
+        id: 'smol-model',
+        name: 'SmolLM',
+        fileSize: 500000000,
+        quantization: 'Q4_K_M',
+        engine: 'llama.rn',
+      },
     ];
 
     const { getByText, getByTestId } = render(
@@ -467,7 +479,12 @@ describe('GenerationSettingsModal', () => {
     fireEvent.press(getByText('Classifier Model'));
     fireEvent.press(getByText('SmolLM'));
 
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: 'smol-model' });
+    expect(mockSelectMobileModel).toHaveBeenCalledWith({
+      source: 'local',
+      hostId: 'llama.rn',
+      modality: 'classifier',
+      modelId: 'smol-model',
+    });
   });
 
   it('selects "Use current model" in classifier picker', () => {
@@ -485,7 +502,7 @@ describe('GenerationSettingsModal', () => {
     // Press the one inside the picker list
     fireEvent.press(useCurrentButtons[useCurrentButtons.length - 1]);
 
-    expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: null });
+    expect(mockClearMobileModel).toHaveBeenCalledWith('classifier');
   });
 
   // ============================================================================

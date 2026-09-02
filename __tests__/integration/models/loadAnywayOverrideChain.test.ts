@@ -5,7 +5,7 @@
  *
  *   loadModelWithOverride  (the UI-intent helper every screen calls)
  *      → activeModelService.loadTextModel(..., { override })  (the single load gateway)
- *         → modelResidencyManager.makeRoomFor({ override })    (the memory gate + eviction)
+ *         → modelResidencyManager.acquire({ override })        (the memory gate + lifecycle)
  *
  * Only the two things we physically cannot run in-process are mocked — the `llm`
  * native module and the `hardware` RAM sensor. `loadModelWithOverride`,
@@ -15,7 +15,7 @@
  * `expect(gate).toHaveBeenCalled()`.
  *
  * The ratified contract: "Load Anyway" (override) is UNCONDITIONAL. When the user
- * taps it, makeRoomFor evicts every evictable resident to free the maximum RAM and
+ * taps it, acquire evicts every evictable resident to free the maximum RAM and
  * ALWAYS loads (fits: true) — there is NO survival floor, and it NEVER refuses. The
  * old "override still refuses below a survival floor / when the model is too big"
  * behaviour is gone: the UI frames it as "not recommended, but you can try", and the
@@ -96,20 +96,24 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
    *  the old predictive floor credited 0 MB for evicting a clean model. Its unload
    *  flips `reclaimed` so the RAM sensor reports the memory iOS frees on unload. */
   let reclaimed = false;
-  const registerCleanVictim = (sizeMB = 4000) => {
+  const registerCleanVictim = async (sizeMB = 4000) => {
     const unload = jest.fn(async () => {
       reclaimed = true;
     });
-    modelResidencyManager.register(
+    // Model a runtime that became resident before available memory dropped.
+    modelResidencyManager.setBudgetOverrideMB(null);
+    const lease = await modelResidencyManager.acquire(
       {
-        key: 'whisper',
-        type: 'whisper',
+        key: 'transcription',
+        type: 'transcription',
         modelId: 'stt-1',
         sizeMB,
         dirtyMemory: false,
       },
-      unload,
+      { load: async () => undefined, unload },
     );
+    await lease.release();
+    modelResidencyManager.setBudgetOverrideMB(2000);
     return unload;
   };
 
@@ -169,7 +173,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
   });
 
   it('first load (no override) surfaces an overridable "Insufficient Memory" prompt with a Load Anyway button, and does NOT touch native or evict', async () => {
-    registerCleanVictim();
+    await registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
 
     const ui = driveLoad('big-gguf');
@@ -184,12 +188,12 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     // A refusal is NOT a load and NOT an eviction — the victim must survive so the
     // user's Load-Anyway retry still has room to reclaim.
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(modelResidencyManager.isResident('whisper')).toBe(true);
+    expect(modelResidencyManager.isResident('transcription')).toBe(true);
     expect(getAppState().activeModelId).not.toBe('big-gguf');
   });
 
   it('tapping Load Anyway evicts the clean resident and unconditionally loads the model, even with pre-eviction free RAM very low', async () => {
-    const victimUnload = registerCleanVictim();
+    const victimUnload = await registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
 
     const ui = driveLoad('big-gguf');
@@ -199,7 +203,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
 
     // OUTCOME: the clean victim was actually evicted (freeing real RAM)...
     expect(victimUnload).toHaveBeenCalledTimes(1);
-    expect(modelResidencyManager.isResident('whisper')).toBe(false);
+    expect(modelResidencyManager.isResident('transcription')).toBe(false);
     // ...and the model loaded through the native engine and became active.
     expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
     expect(getAppState().activeModelId).toBe('big-gguf');
@@ -214,7 +218,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     mockHardwareService.getAvailableMemoryGB.mockImplementation(() =>
       reclaimed ? 1.1 : 1,
     );
-    const victimUnload = registerCleanVictim();
+    const victimUnload = await registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
 
     // CONTRAST — WITHOUT override the normal memory gate refuses: an overridable
@@ -223,7 +227,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     await gated.start();
     expect(gated.lastVisible()?.title).toBe('Insufficient Memory');
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(modelResidencyManager.isResident('whisper')).toBe(true);
+    expect(modelResidencyManager.isResident('transcription')).toBe(true);
     expect(getAppState().activeModelId).not.toBe('big-gguf');
 
     // WITH override (tapping Load Anyway) it evicts the victim and loads unconditionally.
@@ -231,7 +235,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     await gated.tapLoadAnyway();
 
     expect(victimUnload).toHaveBeenCalledTimes(1);
-    expect(modelResidencyManager.isResident('whisper')).toBe(false);
+    expect(modelResidencyManager.isResident('transcription')).toBe(false);
     expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
     expect(getAppState().activeModelId).toBe('big-gguf');
     // The override never dead-ends in an Error, and it only offered Load Anyway once.
@@ -243,7 +247,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
   });
 
   it('session memory: after a Load-Anyway succeeds for a model, re-loading the SAME model skips the gate entirely (no second prompt)', async () => {
-    registerCleanVictim();
+    await registerCleanVictim();
     useAppStore.setState({ downloadedModels: [bigGguf()] });
 
     // First run: prompt → Load Anyway → loads.

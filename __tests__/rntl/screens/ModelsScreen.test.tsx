@@ -1052,6 +1052,38 @@ describe('ModelsScreen', () => {
       });
     });
 
+    it('renders Gemma 4 E2B files from the Shared catalog without network discovery', async () => {
+      mockSearchModels.mockResolvedValue([
+        createModelInfo({
+          id: 'unsloth/gemma-4-E2B-it-GGUF',
+          name: 'Gemma 4 E2B',
+          author: 'google',
+          files: [],
+        }),
+      ]);
+      mockGetModelFiles.mockRejectedValue(new Error('Network discovery must not run'));
+
+      const { getByTestId, getByText, queryByText } = renderModelsScreen();
+
+      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
+      await act(async () => {
+        fireEvent.changeText(getByTestId('search-input'), 'Gemma 4 E2B');
+      });
+      await waitFor(() => expect(getByText('Gemma 4 E2B')).toBeTruthy());
+
+      await act(async () => {
+        fireEvent.press(getByTestId('model-card-0'));
+      });
+
+      await waitFor(() => {
+        expect(getByText('gemma-4-E2B-it-Q4_K_M')).toBeTruthy();
+      });
+      expect(getByText(/Vision files include mmproj/)).toBeTruthy();
+      expect(queryByText('No compatible files found for this model.')).toBeNull();
+      expect(queryByText('Failed to load model files.')).toBeNull();
+      expect(mockGetModelFiles).not.toHaveBeenCalled();
+    });
+
     it('shows credibility badge for official models', async () => {
       const searchResults = [
         createModelInfo({
@@ -1192,6 +1224,7 @@ describe('ModelsScreen', () => {
           id: 'org/vision-model',
           name: 'Vision Model',
           author: 'org',
+          files: [],
         }),
       ];
       mockSearchModels.mockResolvedValue(searchResults);
@@ -1758,6 +1791,7 @@ describe('ModelsScreen', () => {
           id: 'test-org/test-model-3B',
           name: 'Test Model',
           author: 'test-org',
+          files: [],
         }),
       ]);
       mockGetModelFiles.mockResolvedValue(files);
@@ -1798,6 +1832,7 @@ describe('ModelsScreen', () => {
           id: 'test-org/test-model-3B',
           name: 'Test Model',
           author: 'test-org',
+          files: [],
         }),
       ]);
 
@@ -1834,6 +1869,7 @@ describe('ModelsScreen', () => {
           id: 'test-org/test-model-3B',
           name: 'Test Model',
           author: 'test-org',
+          files: [],
         }),
       ]);
       mockGetModelFiles.mockResolvedValue(files);
@@ -1884,6 +1920,7 @@ describe('ModelsScreen', () => {
           id: 'test-org/test-model-3B',
           name: 'Test Model',
           author: 'test-org',
+          files: [],
         }),
       ]);
       mockGetModelFiles.mockResolvedValue(files);

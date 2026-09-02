@@ -29,7 +29,7 @@ describe('Q11 (rendered) — context-full "New chat" drops the project', () => {
     const { render } = require('../../harness/nativeBoundary').requireRTL();
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
-    const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+    const { runPersistedChatTurnFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useAppStore, useProjectStore, useChatStore } = require('../../../src/stores');
     const { ProjectChatsScreen } = require('../../../src/screens/ProjectChatsScreen');
      
@@ -50,7 +50,7 @@ describe('Q11 (rendered) — context-full "New chat" drops the project', () => {
 
     boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
     boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
-    await startGenerationFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
+    await runPersistedChatTurnFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
 
     // User taps "New chat" on the context-full alert → creates the continuation ("New Conversation").
     const alert = captured.alerts.find(a => a.buttons?.some(b => b.text === 'New chat'));

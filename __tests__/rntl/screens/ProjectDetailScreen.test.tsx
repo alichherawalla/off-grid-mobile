@@ -51,8 +51,16 @@ let mockProject: any = {
 };
 
 let mockConversations: any[] = [];
-let mockDownloadedModels: any[] = [{ id: 'model1', name: 'Test Model' }];
-let mockActiveModelId: string | null = 'model1';
+let mockTextModels: any[] = [{ id: 'model1', name: 'Test Model' }];
+let mockActiveTextModel: any = { id: 'model1', name: 'Test Model' };
+
+jest.mock('../../../src/hooks/useActiveMobileModel', () => ({
+  useActiveMobileModel: () => ({ model: mockActiveTextModel }),
+}));
+
+jest.mock('../../../src/hooks/useMobileModelInventory', () => ({
+  useMobileModelInventory: () => mockTextModels,
+}));
 
 jest.mock('../../../src/stores', () => ({
   useProjectStore: jest.fn(() => ({
@@ -67,8 +75,6 @@ jest.mock('../../../src/stores', () => ({
   })),
   useAppStore: jest.fn((selector?: any) => {
     const state = {
-      downloadedModels: mockDownloadedModels,
-      activeModelId: mockActiveModelId,
       themeMode: 'system',
     };
     return selector ? selector(state) : state;
@@ -202,8 +208,8 @@ describe('ProjectDetailScreen', () => {
       updatedAt: new Date().toISOString(),
     };
     mockConversations = [];
-    mockDownloadedModels = [{ id: 'model1', name: 'Test Model' }];
-    mockActiveModelId = 'model1';
+    mockTextModels = [{ id: 'model1', name: 'Test Model' }];
+    mockActiveTextModel = { id: 'model1', name: 'Test Model' };
   });
 
   // ============================================================================
@@ -275,7 +281,7 @@ describe('ProjectDetailScreen', () => {
     });
 
     it('hides "Start a Chat" button when no models downloaded', () => {
-      mockDownloadedModels = [];
+      mockTextModels = [];
       const { queryByText } = render(<ProjectDetailScreen />);
       expect(queryByText('Start a Chat')).toBeNull();
     });
@@ -397,36 +403,41 @@ describe('ProjectDetailScreen', () => {
   // New Chat
   // ============================================================================
   describe('new chat', () => {
-    it('creates new conversation and navigates when "New" button is pressed', () => {
+    it('navigates to the project chat when "New" is pressed', () => {
       const { getByText } = render(<ProjectDetailScreen />);
       fireEvent.press(getByText('New'));
 
-      expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
       expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'new-conv-1', projectId: 'proj1' });
     });
 
     it('disables New button when no models available', () => {
-      mockDownloadedModels = [];
+      mockTextModels = [];
       const { getByTestId } = render(<ProjectDetailScreen />);
       const newButton = getByTestId('button-New');
       expect(newButton.props.accessibilityState?.disabled || newButton.props.disabled).toBeTruthy();
     });
 
-    it('uses active model ID for new conversation', () => {
-      mockActiveModelId = 'model1';
+    it('starts a chat when the selected text route is available', () => {
+      mockActiveTextModel = { id: 'model1', name: 'Test Model' };
       const { getByText } = render(<ProjectDetailScreen />);
       fireEvent.press(getByText('New'));
 
-      expect(mockCreateConversation).toHaveBeenCalledWith('model1', undefined, 'proj1');
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {
+        conversationId: 'new-conv-1',
+        projectId: 'proj1',
+      });
     });
 
-    it('falls back to first downloaded model when no active model', () => {
-      mockActiveModelId = null;
-      mockDownloadedModels = [{ id: 'fallback-model', name: 'Fallback' }];
+    it('starts a chat when only an inventory model is available', () => {
+      mockActiveTextModel = null;
+      mockTextModels = [{ id: 'fallback-model', name: 'Fallback' }];
       const { getByText } = render(<ProjectDetailScreen />);
       fireEvent.press(getByText('New'));
 
-      expect(mockCreateConversation).toHaveBeenCalledWith('fallback-model', undefined, 'proj1');
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {
+        conversationId: 'new-conv-1',
+        projectId: 'proj1',
+      });
     });
   });
 
@@ -585,29 +596,6 @@ describe('ProjectDetailScreen', () => {
       mockProject = { ...mockProject, description: null };
       const { queryByText } = render(<ProjectDetailScreen />);
       expect(queryByText('A test project description')).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // handleNewChat with no models (lines 57-58)
-  // ============================================================================
-  describe('new chat when no models', () => {
-    it('exercises handleNewChat no-model branch (lines 57-58)', () => {
-      // The branch at lines 57-58 fires when downloadedModels is empty.
-      // We can't directly observe the alert (mock store isn't reactive enough),
-      // but we can verify handleNewChat runs the guard path and does NOT call
-      // createConversation (which would be called in the happy path).
-      mockDownloadedModels = [];
-
-      const { getByTestId } = render(<ProjectDetailScreen />);
-
-      // Call onPress directly — exercises the !hasModels branch
-      act(() => {
-        getByTestId('button-New').props.onPress?.();
-      });
-
-      // createConversation should NOT have been called (no models = early return)
-      expect(mockCreateConversation).not.toHaveBeenCalled();
     });
   });
 

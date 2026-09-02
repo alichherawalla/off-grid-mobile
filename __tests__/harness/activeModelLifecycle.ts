@@ -23,8 +23,7 @@ import {
   supportsAudioInput,
   syncWithNativeState,
 } from '../../src/services/modelServices/modelState';
-import { getCurrentlyLoadedMemoryGB } from '../../src/services/modelServices/modelMemoryAdvisory';
-import { useAppStore } from '../../src/stores/appStore';
+import { modelResidencyManager } from '../../src/services/modelServices/residencyBootstrap';
 import { registerLifecycleProjectionPort } from '../../src/services/modelServices/lifecycleProjectionPort';
 import { mobileModelSelectionStore } from '../../src/services/modelServices/selectionStore';
 
@@ -36,18 +35,8 @@ registerLifecycleProjectionPort({
 });
 
 function currentLoadedMemoryGB(): number {
-  const ids = getLoadedModelIds();
-  const state = useAppStore.getState();
-  return getCurrentlyLoadedMemoryGB(
-    {
-      loadedTextModelId: ids.textModelId,
-      loadedImageModelId: ids.imageModelId,
-    },
-    {
-      downloadedModels: state.downloadedModels,
-      downloadedImageModels: state.downloadedImageModels,
-    },
-  );
+  return modelResidencyManager.getResidents()
+    .reduce((total, resident) => total + resident.sizeMB, 0) / 1024;
 }
 
 export const activeModelService = {

@@ -22,7 +22,7 @@ describe('project chat does NOT auto-inject search_knowledge_base (red-flow)', (
      
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
-    const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+    const { runPersistedChatTurnFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useProjectStore, useChatStore } = require('../../../src/stores');
      
 
@@ -38,7 +38,7 @@ describe('project chat does NOT auto-inject search_knowledge_base (red-flow)', (
     const { deps } = makeGenDeps({ activeConversationId: convId });
 
     boundary.llama!.scriptCompletion({ text: 'Hello there.' });
-    await startGenerationFn(deps, { targetConversationId: convId, messageText: 'hi', setDebugInfo: () => {} });
+    await runPersistedChatTurnFn(deps, { targetConversationId: convId, messageText: 'hi', setDebugInfo: () => {} });
 
     // What actually reached the model: no search_knowledge_base was force-injected by the project.
     const sentToModel = JSON.stringify(boundary.llama!.calls.completion);

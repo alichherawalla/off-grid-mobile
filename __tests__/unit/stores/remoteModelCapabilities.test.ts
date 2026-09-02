@@ -11,7 +11,6 @@ import {
   fetchRemoteModelInfo,
   fetchLmStudioModelInfo,
   fetchLlamaCppProps,
-  fetchLlamaCppPropsCached,
   fetchModelCapabilities,
   isGenerativeModel,
 } from '../../../src/services/adapters/remote/modelCapabilityDiscovery';
@@ -264,25 +263,25 @@ describe('fetchLlamaCppProps', () => {
     expect(info!.supportsThinking).toBe(true);
   });
 
-  it('logs a warning (not silent) when /props is unavailable', async () => {
+  it('logs a provider-safe warning when a capability probe is unavailable', async () => {
     const logger = require('../../../src/utils/logger').default;
     logger.warn.mockClear();
     mockFetchError(new Error('DNS failure'));
     const info = await fetchLlamaCppProps('http://192.168.1.58:7878');
     expect(info).toBeNull();
     expect(logger.warn).toHaveBeenCalledWith(
-      '[fetchLlamaCppProps] /props unavailable:',
-      'http://192.168.1.58:7878',
+      '[remote-capability] probe unavailable:',
+      'llama-cpp',
       'DNS failure',
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// fetchLlamaCppPropsCached — de-duplication
+// fetchLlamaCppProps — de-duplication
 // ---------------------------------------------------------------------------
 
-describe('fetchLlamaCppPropsCached', () => {
+describe('fetchLlamaCppProps', () => {
   it('shares a single in-flight /props request across concurrent calls to one endpoint', async () => {
     let calls = 0;
     globalThis.fetch = jest.fn().mockImplementation(() => {
@@ -296,9 +295,9 @@ describe('fetchLlamaCppPropsCached', () => {
     const ep = 'http://192.168.1.58:7878';
     // Fire three concurrent calls (as N models on one server would).
     const [a, b, c] = await Promise.all([
-      fetchLlamaCppPropsCached(ep),
-      fetchLlamaCppPropsCached(ep),
-      fetchLlamaCppPropsCached(ep),
+      fetchLlamaCppProps(ep),
+      fetchLlamaCppProps(ep),
+      fetchLlamaCppProps(ep),
     ]);
 
     expect(calls).toBe(1); // one /props request, not three
@@ -317,8 +316,8 @@ describe('fetchLlamaCppPropsCached', () => {
       } as any);
     });
     const ep = 'http://192.168.1.60:7878';
-    await fetchLlamaCppPropsCached(ep);
-    await fetchLlamaCppPropsCached(ep); // after settle → new request
+    await fetchLlamaCppProps(ep);
+    await fetchLlamaCppProps(ep); // after settle → new request
     expect(calls).toBe(2);
   });
 });

@@ -71,7 +71,7 @@ export async function installRemoteModel(opts: {
 } = {}): Promise<{ serverId: string; modelId: string }> {
    
   const { useRemoteServerStore } = require('../../src/stores');
-  const { createProviderForServerImpl } = require('../../src/services/adapters/remote/serverRuntime');
+  const { remoteServerManager } = require('../../src/services/modelServices/remoteServerController');
   const { llmService } = require('../../src/services/llm');
   const { clearMobileModel, selectMobileModel } = require('../../src/services/modelServices');
    
@@ -85,7 +85,8 @@ export async function installRemoteModel(opts: {
   const provider = opts.provider ?? 'openai-compatible';
   const modelId = 'remote-model';
 
-  const serverId = useRemoteServerStore.getState().addServer({ name, endpoint, provider });
+  const server = await remoteServerManager.addServer({ name, endpoint, provider });
+  const serverId = server.id;
   const model = {
     id: modelId, name: 'Remote Model', serverId, lastUpdated: 't',
     capabilities: {
@@ -100,9 +101,8 @@ export async function installRemoteModel(opts: {
   const store = useRemoteServerStore.getState();
   store.setDiscoveredModels(serverId, [model]);
 
-  // Register the transport the SAME way the connect flow does, then select through the shared route owner.
-  const server = useRemoteServerStore.getState().getServerById(serverId);
-  await createProviderForServerImpl(server);
+  // The application service registers the transport as part of the atomic save transaction.
+  // Select through the shared route owner after projecting the discovered catalog.
   await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
   return { serverId, modelId };
 }

@@ -35,6 +35,7 @@ describe('T023b (rendered) — Eject All frees every resident, sidecars included
      
     await activeModelService.loadImageModel('sd');
     await h.setupWhisperModel();
+    await h.loadSelectedWhisperOnDemand();
 
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();
 

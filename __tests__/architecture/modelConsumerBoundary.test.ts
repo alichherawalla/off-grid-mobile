@@ -65,6 +65,7 @@ describe('cross-device model consumer boundaries', () => {
       /mobile(?:Voice)?GenerationService\.generate\s*\(/g,
       new Set([
         'src/services/chatGenerationProjection.ts',
+        'src/services/modelServices/chatGenerationApplication.ts',
         'src/services/mobileSidecarGeneration.ts',
         'src/services/mobileTranscription.ts',
         'src/services/sharedImageGeneration.ts',

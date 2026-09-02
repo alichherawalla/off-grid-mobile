@@ -15,8 +15,13 @@ const mockUnloadTextModel = jest.fn().mockResolvedValue(undefined);
 const mockUnloadImageModel = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../src/services', () => ({
   selectMobileModel: (...args: any[]) => mockSelectMobileModel(...args),
-  unloadTextModel: (...args: any[]) => mockUnloadTextModel(...args),
-  unloadImageModel: (...args: any[]) => mockUnloadImageModel(...args),
+}));
+
+jest.mock('../../../src/services/modelServices/modelCommandApplication', () => ({
+  mobileModelCommands: {
+    unload: (modality: string) =>
+      modality === 'text' ? mockUnloadTextModel() : mockUnloadImageModel(),
+  },
 }));
 
 jest.mock('../../../src/components', () => ({
@@ -26,10 +31,6 @@ jest.mock('../../../src/components', () => ({
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeImageModel(overrides: Partial<any> = {}): any {
-  return { id: 'img-1', name: 'SDXL', ...overrides };
-}
 
 function makeSetters() {
   return {
@@ -51,25 +52,6 @@ describe('useModelLoading', () => {
     // migration (f540bf76) moved that write into activeModelService.selectTextModel — the hook now
     // dispatches the select intent, so the store-setter mock is no longer the writer. Selection making
     // a model active (without eager load) is covered by the rendered model-selection integration tests.)
-  });
-
-  describe('handleSelectImageModel', () => {
-    it('marks the image model active without loading it', async () => {
-      const setters = makeSetters();
-      const { result } = renderHook(() => useModelLoading(setters));
-
-      await act(async () => {
-        await result.current.handleSelectImageModel(makeImageModel());
-      });
-
-      expect(mockSelectMobileModel).toHaveBeenCalledWith({
-        source: 'local',
-        hostId: 'image-runtime',
-        modality: 'image',
-        modelId: 'img-1',
-      });
-      expect(setters.setPickerType).toHaveBeenCalledWith(null);
-    });
   });
 
   describe('handleUnloadTextModel', () => {

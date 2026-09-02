@@ -264,7 +264,7 @@ describe('WhisperService', () => {
           modelId: 'whisper-tiny.en',
           fileName: 'ggml-tiny.en.bin',
           modelType: 'stt',
-          status: 'pending',
+          status: 'queued',
         }),
       );
       // Once a slot opens and the native download starts, the placeholder is
@@ -997,6 +997,41 @@ describe('WhisperService', () => {
         }),
       );
     });
+
+    it('does not start native transcription for an already-aborted request', async () => {
+      const transcribe = jest.fn();
+      (whisperService as any).context = { transcribe };
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        whisperService.transcribeFileRaw('/audio.wav', { signal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'GenerationAbortedError' });
+      expect(transcribe).not.toHaveBeenCalled();
+    });
+
+    it('awaits file stop and rejects instead of returning a transcript after cancellation', async () => {
+      let resolveTranscript!: (value: { result: string }) => void;
+      let rejectStop!: (error: Error) => void;
+      const nativeFailure = new Error('native file stop failed');
+      const stop = jest.fn(() => new Promise<void>((_resolve, reject) => { rejectStop = reject; }));
+      (whisperService as any).context = {
+        transcribe: jest.fn(() => ({
+          promise: new Promise(resolve => { resolveTranscript = resolve; }),
+          stop,
+        })),
+      };
+      const controller = new AbortController();
+      const result = whisperService.transcribeFileRaw('/audio.wav', { signal: controller.signal });
+
+      controller.abort();
+      await Promise.resolve();
+      resolveTranscript({ result: 'must not escape after cancellation' });
+      rejectStop(nativeFailure);
+
+      await expect(result).rejects.toBe(nativeFailure);
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ========================================================================
@@ -1036,15 +1071,14 @@ describe('WhisperService', () => {
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });
 
-    it('handles stopFn error gracefully during forceReset', async () => {
+    it('cleans up and preserves a native stop error during forceReset', async () => {
       (whisperService as any).isTranscribing = true;
       (whisperService as any).stopFn = () => {
         throw new Error('stop error');
       };
       (whisperService as any).context = { release: jest.fn() };
 
-      // Should not throw
-      await whisperService.forceReset();
+      await expect(whisperService.forceReset()).rejects.toThrow('stop error');
 
       expect(whisperService.isCurrentlyTranscribing()).toBe(false);
     });

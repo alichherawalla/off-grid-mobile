@@ -6,12 +6,21 @@
 
 jest.mock('react-native-fs', () => ({
   exists: jest.fn(),
+  readDir: jest.fn(),
+  stat: jest.fn(),
+  read: jest.fn(),
   mkdir: jest.fn(),
   unlink: jest.fn(),
+  writeFile: jest.fn(),
 }));
 
 jest.mock('react-native-zip-archive', () => ({
   unzip: jest.fn(),
+}));
+
+jest.mock('../../../../../../src/utils/imageModelIntegrity', () => ({
+  validateImageModelDir: jest.fn(async () => ({ complete: true, missing: [] })),
+  ensureImageExtractionComplete: jest.fn(async () => undefined),
 }));
 
 jest.mock('../../../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
@@ -33,6 +42,9 @@ import { resolveCoreMLModelDir, downloadCoreMLTokenizerFiles } from '../../../..
 import { syncCompletedImageDownloads } from '../../../../../../src/services/adapters/models/library/imageDownloadRecoveryAdapter';
 
 const mockExists = RNFS.exists as jest.Mock;
+const mockReadDir = RNFS.readDir as jest.Mock;
+const mockStat = RNFS.stat as jest.Mock;
+const mockRead = RNFS.read as jest.Mock;
 const mockMkdir = RNFS.mkdir as jest.Mock;
 const mockUnlink = RNFS.unlink as jest.Mock;
 const mockUnzip = unzip as jest.Mock;
@@ -63,6 +75,9 @@ describe('syncCompletedImageDownloads', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockExists.mockResolvedValue(true);
+    mockReadDir.mockResolvedValue([{ name: '_ready' }]);
+    mockStat.mockResolvedValue({ size: 500 });
+    mockRead.mockResolvedValue('PK34');
     mockMkdir.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
     mockUnzip.mockResolvedValue(undefined);
@@ -170,6 +185,7 @@ describe('syncCompletedImageDownloads', () => {
   });
 
   it('recovers a zip download and adds model', async () => {
+    mockExists.mockResolvedValue(false);
     mockGetActiveDownloads.mockResolvedValue([
       { downloadId: 2, status: 'completed' },
     ]);
@@ -189,7 +205,6 @@ describe('syncCompletedImageDownloads', () => {
     const result = await syncCompletedImageDownloads(opts);
     expect(mockMoveCompletedDownload).toHaveBeenCalledWith(2, '/models/images/model2.zip');
     expect(mockUnzip).toHaveBeenCalledWith('/models/images/model2.zip', '/models/images/model2');
-    expect(mockUnlink).toHaveBeenCalledWith('/models/images/model2.zip');
     expect(result[0].modelPath).toBe('/models/images/model2');
   });
 

@@ -4,12 +4,13 @@
  */
 
 import React from 'react';
-import { render, act, renderHook } from '@testing-library/react-native';
+import { render, act, renderHook, waitFor } from '@testing-library/react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createDownloadedModel } from '../../utils/factories';
+import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
 
 // ─── ProgressBar ────────────────────────────────────────────────────
 describe('ProgressBar', () => {
@@ -101,19 +102,27 @@ describe('useOnboardingSteps', () => {
     expect(result.current.totalCount).toBe(6);
   });
 
-  it('marks downloadedModel as completed when models exist', () => {
+  it('marks downloadedModel as completed when models exist', async () => {
     act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
     const { result } = renderHook(() => useOnboardingSteps());
-    const step = result.current.steps.find((s: any) => s.id === 'downloadedModel');
-    expect(step.completed).toBe(true);
-    expect(result.current.completedCount).toBe(1);
+    await act(refreshMobileModelServices);
+    await waitFor(() => {
+      const step = result.current.steps.find((s: any) => s.id === 'downloadedModel');
+      expect(step.completed).toBe(true);
+      expect(result.current.completedCount).toBe(1);
+    });
   });
 
-  it('marks loadedModel as completed when activeModelId is set', () => {
-    act(() => { useAppStore.setState({ activeModelId: 'model-1' }); });
+  it('marks loadedModel as completed when a real local route is selected', async () => {
+    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel({ id: 'model-1' })); });
     const { result } = renderHook(() => useOnboardingSteps());
-    const step = result.current.steps.find((s: any) => s.id === 'loadedModel');
-    expect(step.completed).toBe(true);
+    await act(async () => {
+      await selectMobileModel({ source: 'local', hostId: 'llama', modality: 'text', modelId: 'model-1' });
+    });
+    await waitFor(() => {
+      const step = result.current.steps.find((s: any) => s.id === 'loadedModel');
+      expect(step.completed).toBe(true);
+    });
   });
 
   it('marks sentMessage as completed when a conversation has messages', () => {

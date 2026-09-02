@@ -17,7 +17,7 @@ describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
      
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
-    const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+    const { runPersistedChatTurnFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useAppStore, useProjectStore, useChatStore } = require('../../../src/stores');
      
 
@@ -39,7 +39,7 @@ describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
     // Generation overflows the context window → the context-full alert is raised.
     boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
     boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
-    await startGenerationFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
+    await runPersistedChatTurnFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
 
     // The user taps "New chat" on that alert.
     const alert = captured.alerts.find(a => a.buttons?.some(b => b.text === 'New chat'));

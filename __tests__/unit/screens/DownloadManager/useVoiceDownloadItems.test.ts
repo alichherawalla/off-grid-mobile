@@ -59,7 +59,7 @@ import { useVoiceDownloadItems } from '../../../../src/screens/DownloadManagerSc
 
 const CAPS = { cancel: false, retry: false, remove: true, resumable: true, determinateProgress: false };
 const ttsEntry = (over: Partial<ModelDownload> = {}): ModelDownload => ({
-  id: 'tts:kokoro', modelType: 'tts', name: 'Kokoro TTS', sizeBytes: 82_000_000,
+  id: 'tts:software-mansion/executorch-kokoro', modelType: 'tts', name: 'Kokoro TTS', sizeBytes: 82_000_000,
   bytesDownloaded: 82_000_000, progress: 1, status: 'completed', capabilities: CAPS, ...over,
 });
 
@@ -82,7 +82,7 @@ describe('useVoiceDownloadItems', () => {
     const tts = result.current.voiceItems.find(i => i.modelType === 'tts');
     expect(stt?.fileName).toBe('ggml-base.en.bin');
     expect(stt?.modelId).toBe('base.en');
-    expect(tts?.modelId).toBe('kokoro');
+    expect(tts?.modelId).toBe('software-mansion/executorch-kokoro');
     expect(tts?.fileName).toBe('Kokoro TTS');
   });
 
@@ -127,7 +127,7 @@ describe('useVoiceDownloadItems', () => {
     // failed ACTIVE item with a retryable reason code so the Download Manager
     // shows the Retry button.
     mockServiceList = [ttsEntry({
-      status: 'error', progress: 0.3, bytesDownloaded: 24_000_000,
+      status: 'failed', progress: 0.3, bytesDownloaded: 24_000_000,
       error: 'Download interrupted or missing resource',
     })];
     const { result } = renderHook(() => useVoiceDownloadItems(jest.fn()));
@@ -144,7 +144,7 @@ describe('useVoiceDownloadItems', () => {
   });
 
   it('falls back to the retryable code when the engine gives no failure message', async () => {
-    mockServiceList = [ttsEntry({ status: 'error', progress: 0, bytesDownloaded: 0 })];
+    mockServiceList = [ttsEntry({ status: 'failed', progress: 0, bytesDownloaded: 0 })];
     const { result } = renderHook(() => useVoiceDownloadItems(jest.fn()));
     await waitFor(() => expect(result.current.voiceItems.some(i => i.modelType === 'tts')).toBe(true));
 
@@ -188,6 +188,9 @@ describe('useVoiceDownloadItems', () => {
     const confirm = alert.buttons?.find(b => b.text === 'Delete');
     await act(async () => { confirm?.onPress?.(); });
 
-    await waitFor(() => expect(mockCallHook).toHaveBeenCalledWith('downloads.deleteVoiceModel', 'kokoro'));
+    await waitFor(() => expect(mockCallHook).toHaveBeenCalledWith(
+      'downloads.deleteVoiceModel',
+      'software-mansion/executorch-kokoro',
+    ));
   });
 });

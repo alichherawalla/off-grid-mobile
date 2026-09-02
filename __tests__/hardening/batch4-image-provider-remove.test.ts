@@ -24,6 +24,8 @@ jest.mock('../../src/services/modelServices/modelLifecycleBootstrap', () => ({
 jest.mock('../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {
     cancelDownload: jest.fn(async () => {}),
+    cancelQueued: jest.fn(() => false),
+    getActiveDownloads: jest.fn(async () => []),
     retryDownload: jest.fn(async () => {}),
     startProgressPolling: jest.fn(),
   },
@@ -61,8 +63,8 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
     expect(useAppStore.getState().downloadedImageModels.find((m: any) => m.id === 'sdxl')).toBeUndefined();
     // No in-flight row existed, so no native cancel needed.
     expect(mockCancel).not.toHaveBeenCalled();
-    // Always unload defensively so the ejected model can't stay resident.
-    expect(mockUnload).toHaveBeenCalled();
+    // A package that is not selected has no resident runtime to release.
+    expect(mockUnload).not.toHaveBeenCalled();
   });
 
   it('uninstalling the ACTIVE model clears activeImageModelId (disables image gen — cases 29/38)', async () => {
@@ -88,7 +90,8 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
 
     expect(mockCancel).toHaveBeenCalledWith('dl-9');
     expect(useDownloadStore.getState().downloads['image:sdxl/m']).toBeUndefined();
-    expect(mockDelete).toHaveBeenCalledWith('sdxl');
+    // There is no durable package yet, so cancellation must not invoke package deletion.
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it('still deletes files and removes from store even when the native unload fails (best-effort teardown)', async () => {

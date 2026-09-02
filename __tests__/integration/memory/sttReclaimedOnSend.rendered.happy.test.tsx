@@ -24,7 +24,8 @@ describe('STT reclaim on send (memory-tight) — rendered characterization', () 
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();
 
     await h.setupWhisperModel();
-    expect(types()).toEqual(['text', 'whisper']);
+    await h.loadSelectedWhisperOnDemand();
+    expect(types()).toEqual(['text', 'transcription']);
 
     h.boundary.setRam({ platform: 'android', totalBytes: 6 * GB, availBytes: 5 * GB });
     await hardwareService.refreshMemoryInfo();

@@ -36,7 +36,7 @@ import { Linking, Clipboard } from 'react-native';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
 import { SUPPORT_EMAIL } from '../../../src/utils/supportEmail';
-import * as networkDiscovery from '../../../src/services/networkDiscovery';
+import { remoteServerManager } from '../../../src/services/modelServices/remoteServerController';
 import logger from '../../../src/utils/logger';
 
 // Mock requestAnimationFrame
@@ -110,6 +110,14 @@ jest.mock('../../../src/services', () => ({
 
 jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
   ejectAllModelsForUser: () => mockEjectAll(),
+}));
+
+jest.mock('../../../src/services/modelServices/modelCommandApplication', () => ({
+  mobileModelCommands: {
+    select: (intent: any) => mockSelectMobileModel(intent),
+    unload: (modality: string) =>
+      modality === 'text' ? mockUnloadTextModel() : mockUnloadImageModel(),
+  },
 }));
 
 jest.mock('../../../src/hooks/useActiveTextModel', () => ({
@@ -379,6 +387,14 @@ describe('HomeScreen', () => {
     (activeModelService.getLoadedModelIds as jest.Mock).mockReturnValue({ textModelId: null, imageModelId: null });
     mockLoadTextModel.mockResolvedValue(undefined);
     mockLoadImageModel.mockResolvedValue(undefined);
+    mockSelectMobileModel.mockImplementation(async (route: any) => {
+      if (route.modality === 'text') {
+        useAppStore.setState({ activeModelId: route.modelId });
+        useAppStore.getState().setLastTextModelId(route.modelId);
+      } else if (route.modality === 'image') {
+        useAppStore.setState({ activeImageModelId: route.modelId });
+      }
+    });
     mockUnloadTextModel.mockResolvedValue(undefined);
     mockUnloadImageModel.mockResolvedValue(undefined);
     mockUnloadAllModels.mockResolvedValue({ textUnloaded: true, imageUnloaded: true });
@@ -415,7 +431,9 @@ describe('HomeScreen', () => {
   describe('LAN discovery lifecycle', () => {
     it('waits for saved remote settings and recovers from a pre-scan remount', async () => {
       jest.useFakeTimers();
-      const discoverySpy = jest.spyOn(networkDiscovery, 'discoverLANServers').mockResolvedValue([]);
+      const discoverySpy = jest
+        .spyOn(remoteServerManager, 'scanAndReconcile')
+        .mockResolvedValue({ moved: [], found: [] });
       let finishHydration: ((state: ReturnType<typeof useRemoteServerStore.getState>) => void) | undefined;
       const unsubscribe = jest.fn();
       const persistApi = useRemoteServerStore.persist;
@@ -480,6 +498,16 @@ describe('HomeScreen', () => {
       const { getByTestId, getByText } = renderHomeScreen();
       expect(getByTestId('desktop-promo-card')).toBeTruthy();
       expect(getByText('Off Grid AI Desktop')).toBeTruthy();
+    });
+
+    it('renders the product idea card before the Desktop announcement', () => {
+      const { toJSON } = renderHomeScreen();
+      const renderedHome = JSON.stringify(toJSON());
+      const supportCardIndex = renderedHome.indexOf('home-support-card');
+      const desktopPromoIndex = renderedHome.indexOf('desktop-promo-card');
+
+      expect(supportCardIndex).toBeGreaterThanOrEqual(0);
+      expect(desktopPromoIndex).toBeGreaterThan(supportCardIndex);
     });
 
     it('hides the card when previously dismissed', () => {
@@ -1298,7 +1326,7 @@ describe('HomeScreen', () => {
       expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
     });
 
-    it('loads the image runtime, then marks its shared route active', async () => {
+    it('marks the shared image route active without an eager runtime load', async () => {
       const imageModel = createONNXImageModel({ name: 'Pick Image' });
       useAppStore.setState({ downloadedImageModels: [imageModel] });
 
@@ -1312,11 +1340,13 @@ describe('HomeScreen', () => {
       await waitFor(() => {
         expect(useAppStore.getState().activeImageModelId).toBe(imageModel.id);
       });
-      expect(mockLoadImageModel).toHaveBeenCalledWith(
-        imageModel.id,
-        undefined,
-        undefined,
-      );
+      expect(mockSelectMobileModel).toHaveBeenCalledWith({
+        source: 'local',
+        hostId: imageModel.backend ?? 'image-runtime',
+        modality: 'image',
+        modelId: imageModel.id,
+      });
+      expect(mockLoadImageModel).not.toHaveBeenCalled();
       expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
     });
 
@@ -1422,7 +1452,6 @@ describe('HomeScreen', () => {
 
     it('keeps the image route selected when its unload fails', async () => {
       mockUnloadImageModel.mockRejectedValue(new Error('Unload failed'));
-      const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
 
       const imageModel = createONNXImageModel({ name: 'Fail Image Unload' });
       useAppStore.setState({
@@ -1437,15 +1466,9 @@ describe('HomeScreen', () => {
         fireEvent.press(result.getByText('Unload'));
       });
 
-      await waitFor(() => {
-        expect(errorSpy).toHaveBeenCalledWith(
-          'Failed to unload image model:',
-          expect.any(Error),
-        );
-      });
+      await waitFor(() => expect(mockUnloadImageModel).toHaveBeenCalled());
       expect(useAppStore.getState().activeImageModelId).toBe(imageModel.id);
       expect(mockClearMobileModel).not.toHaveBeenCalledWith('image');
-      errorSpy.mockRestore();
     });
   });
 
@@ -1500,10 +1523,10 @@ describe('HomeScreen', () => {
   // Loading Overlay
   // ============================================================================
   // While a model loads, the collapsed summary row shows an inline
-  // ActivityIndicator and the ModelsManagerSheet rows show "Loading…" for the
+  // ActivityIndicator and the ModelsManagerSheet rows show "Loading..." for the
   // type that is loading. The full-screen LoadingOverlay is also shown.
   describe('loading indicator', () => {
-    it('shows "Loading…" in the manager text row while unloading a text model', async () => {
+    it('shows "Loading..." in the manager text row while unloading a text model', async () => {
       const model = createDownloadedModel({ name: 'To Unload' });
       useAppStore.setState({
         downloadedModels: [model],
@@ -1522,10 +1545,10 @@ describe('HomeScreen', () => {
       });
       await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
 
-      // The text row shows "Loading…" (loadingState.type === 'text') during unload.
+      // The text row shows "Loading..." (loadingState.type === 'text') during unload.
       fireEvent.press(result.getByTestId('models-summary'));
       await waitFor(() => {
-        expect(result.queryByText('Loading…')).toBeTruthy();
+        expect(result.queryByText('Loading...')).toBeTruthy();
       });
     });
   });

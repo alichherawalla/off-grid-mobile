@@ -13,6 +13,7 @@ import { Platform } from 'react-native';
 import { hardwareService } from '../../src/services/hardware';
 import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import type { LoadPolicy } from '../../src/services/memoryBudget';
+import type { ResidentSpec } from '@offgrid/models';
 
 const originalOS = Platform.OS;
 
@@ -44,11 +45,19 @@ export function resetDeviceMemory(): void {
 
 const MB = 1 / 1024; // GB per MB, for readable specs
 /** Register a resident model directly (as if already loaded), with a dumb unload spy. */
-export function makeResident(
-  spec: { key: string; type: any; modelId?: string; sizeMB: number; dirtyMemory?: boolean; canEvict?: () => boolean },
-): jest.Mock {
+export async function makeResident(
+  spec: ResidentSpec,
+): Promise<jest.Mock> {
   const unload = jest.fn().mockResolvedValue(undefined);
-  modelResidencyManager.register(spec, unload, 1);
+  const lease = await modelResidencyManager.acquire(
+    { ...spec, lifecycle: 'persistent' },
+    { load: async () => undefined, unload },
+    { now: 1 },
+  );
+  if (!lease.acquired) {
+    throw new Error(`Could not seed resident ${spec.key}`);
+  }
+  await lease.release();
   return unload;
 }
 

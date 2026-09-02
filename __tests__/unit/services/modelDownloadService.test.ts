@@ -6,7 +6,7 @@
 import logger from '../../../src/utils/logger';
 import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
 import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
-import type { DownloadProvider, ModelDownload, ModelDownloadType } from '../../../src/services/modelServices/downloadTypes';
+import type { DownloadModelType, DownloadProvider, ModelDownload } from '../../../src/services/modelServices/downloadTypes';
 
 // The queue of not-yet-started downloads is owned by backgroundDownloadService; the
 // service maps a uniform id onto it to cancel a "Queued" row that no provider lists.
@@ -25,7 +25,7 @@ jest.spyOn(logger, 'log').mockImplementation(() => {});
 
 const CAPS_FULL = { cancel: true, retry: true, remove: true, resumable: true, determinateProgress: true };
 
-function makeProvider(modelType: ModelDownloadType, initial: ModelDownload[]): DownloadProvider & {
+function makeProvider(modelType: DownloadModelType, initial: ModelDownload[]): DownloadProvider & {
   _set: (d: ModelDownload[]) => void; _onChange?: () => void;
   retry: jest.Mock; cancel: jest.Mock; remove: jest.Mock;
 } {
@@ -42,7 +42,7 @@ function makeProvider(modelType: ModelDownloadType, initial: ModelDownload[]): D
   return p;
 }
 
-const dl = (id: string, modelType: ModelDownloadType, over: Partial<ModelDownload> = {}): ModelDownload => ({
+const dl = (id: string, modelType: DownloadModelType, over: Partial<ModelDownload> = {}): ModelDownload => ({
   id, modelType, name: id, sizeBytes: 100, bytesDownloaded: 0, progress: 0,
   status: 'downloading', capabilities: CAPS_FULL, ...over,
 });
@@ -157,19 +157,19 @@ describe('ModelDownloadService', () => {
     expect(mockBg.cancelQueued).not.toHaveBeenCalled();
   });
 
-  it('reconcile() lets a provider strand an un-resumable in-flight download as error (app-kill), logged', async () => {
+  it('reconcile() lets a provider strand an un-resumable in-flight download as failed (app-kill), logged', async () => {
     // iOS-style backend: was downloading when the app was killed, can't resume.
     const p = makeProvider('stt', [dl('stt:base', 'stt', { status: 'downloading', capabilities: { ...CAPS_FULL, resumable: false } })]);
     (p as any).reconcile = jest.fn(async () => {
-      p._set([dl('stt:base', 'stt', { status: 'error', error: 'interrupted — retry', capabilities: { ...CAPS_FULL, resumable: false } })]);
+      p._set([dl('stt:base', 'stt', { status: 'failed', error: 'interrupted — retry', capabilities: { ...CAPS_FULL, resumable: false } })]);
     });
     modelDownloadService.register(p);
     await modelDownloadService.list();      // new → downloading
-    await modelDownloadService.reconcile(); // provider strands it → downloading → error
+    await modelDownloadService.reconcile(); // provider strands it → downloading → failed
 
     expect((p as any).reconcile).toHaveBeenCalled();
     const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('stt:base') && l.includes('downloading → error'))).toBe(true);
+    expect(lines.some((l: string) => l.includes('stt:base') && l.includes('downloading → failed'))).toBe(true);
     expect(lines.some((l: string) => l.includes('reconcile start'))).toBe(true);
   });
 

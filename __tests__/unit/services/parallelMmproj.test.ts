@@ -52,9 +52,9 @@ const {
 
 const MODELS_DIR = `${RNFS.DocumentDirectoryPath}/models`;
 const file = (vision = true) => ({
-  name: 'model-Q4.gguf', size: 8, quantization: 'Q4', downloadUrl: 'https://hf/model-Q4.gguf',
+  name: 'model-Q4.gguf', size: 1024, quantization: 'Q4', downloadUrl: 'https://hf/model-Q4.gguf',
   ...(vision ? { mmProjFile: {
-    name: 'mmproj-F16.gguf', size: 4, downloadUrl: 'https://hf/mmproj-F16.gguf',
+    name: 'mmproj-F16.gguf', size: 1024, downloadUrl: 'https://hf/mmproj-F16.gguf',
   } } : {}),
 });
 
@@ -101,7 +101,7 @@ test('the operation projects combined progress through one store row', async () 
   expect(events.filter(event => event.type === 'progress')).toHaveLength(2);
   const entry = useDownloadStore.getState().downloads['owner/model/model-Q4.gguf'];
   expect(entry.progress).toBe(1);
-  expect(progress).toHaveBeenCalledWith(expect.objectContaining({ totalBytes: 12, progress: 1 }));
+  expect(progress).toHaveBeenCalledWith(expect.objectContaining({ totalBytes: 2048, progress: 1 }));
 });
 
 test('watch finalizes and registers exactly once from the replayable Shared handle', async () => {
@@ -139,8 +139,8 @@ test('an optional projector failure registers the exact model as text-only', asy
 test('already installed artifacts are persisted before completion is published', async () => {
   const primary = `${MODELS_DIR}/model-Q4.gguf`;
   const projector = `${MODELS_DIR}/model-mmproj-F16.gguf`;
-  mockExisting.add(primary); mockSizes.set(primary, 8);
-  mockExisting.add(projector); mockSizes.set(projector, 4);
+  mockExisting.add(primary); mockSizes.set(primary, 1024);
+  mockExisting.add(projector); mockSizes.set(projector, 1024);
   const { info, context } = await start();
   const onComplete = jest.fn();
   watchBackgroundDownload({
@@ -155,7 +155,7 @@ test('already installed artifacts are persisted before completion is published',
 
 test('vision repair uses the same Shared manifest and returns the verified projector path', async () => {
   const primary = `${MODELS_DIR}/model-Q4.gguf`;
-  mockExisting.add(primary); mockSizes.set(primary, 8);
+  mockExisting.add(primary); mockSizes.set(primary, 1024);
   const onDownloadIdReady = jest.fn();
   const path = await performMmProjRepairDownload({
     modelId: 'owner/model', file: file(), modelsDir: MODELS_DIR, onDownloadIdReady,

@@ -59,7 +59,7 @@ describe('hydrateDownloadStore', () => {
 
     const entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
     expect(entry).toBeDefined();
-    expect(entry.status).toBe('running');
+    expect(entry.status).toBe('downloading');
     expect(entry.bytesDownloaded).toBe(500);
     expect(entry.progress).toBe(0.5);
   });
@@ -166,7 +166,7 @@ describe('hydrateDownloadStore', () => {
     fileName: 'model.gguf',
     quantization: 'Q4_K_M',
     modelType: 'text' as const,
-    status: 'running' as const,
+    status: 'downloading' as const,
     bytesDownloaded: 1_100_000_000,
     totalBytes: 5_500_000_000,
     combinedTotalBytes: 5_500_000_000,
@@ -199,6 +199,6 @@ describe('hydrateDownloadStore', () => {
     await hydrateDownloadStore();
 
     const entry = useDownloadStore.getState().downloads['author/big-model/model.gguf'];
-    expect(entry.status).toBe('running');      // live native row wins — no false strand (no Android regression)
+    expect(entry.status).toBe('downloading'); // live native row wins — no false strand (no Android regression)
   });
 });

@@ -20,6 +20,7 @@ jest.mock('react-native-fs', () => {
     mkdir: jest.fn(() => Promise.resolve()),
     unlink: jest.fn(() => Promise.resolve()),
     writeFile: jest.fn(() => Promise.resolve()),
+    read: jest.fn(() => Promise.resolve('PK34')),
     stat,
     readDir: jest.fn(async (parent: string) =>
       Promise.all(
@@ -124,6 +125,33 @@ jest.mock('../../../../src/services', () => ({
     cancelDownload: jest.fn(() => Promise.resolve()),
     cancelQueued: jest.fn(() => true),
   },
+}));
+
+jest.mock('../../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
+  modelLibrary: {
+    getImageModelsDirectory: () => mockGetImageModelsDirectory(),
+    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
+    addDownloadedImageModel: (model: any) => mockAddDownloadedImageModel(model),
+  },
+}));
+
+jest.mock('../../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
+  coordinatedDownloads: {
+    startDownload: (params: any) => mockStartDownload(params),
+    downloadFileTo: (opts: any) => mockDownloadFileTo(opts),
+    onComplete: (id: string, callback: Function) => mockOnComplete(id, callback),
+    onError: (id: string, callback: Function) => mockOnError(id, callback),
+    moveCompletedDownload: (id: string, targetPath: string) => mockMoveCompletedDownload(id, targetPath),
+    getActiveDownloads: jest.fn(() => Promise.resolve([])),
+    retryDownload: jest.fn(() => Promise.resolve()),
+    startProgressPolling: jest.fn(),
+    cancelDownload: jest.fn(() => Promise.resolve()),
+    cancelQueued: jest.fn(() => true),
+  },
+}));
+
+jest.mock('../../../../src/services/hardware', () => ({
+  hardwareService: { getSoCInfo: () => mockGetSoCInfo() },
 }));
 
 jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
@@ -271,6 +299,7 @@ describe('imageDownloadActions', () => {
     expect(completeCallbacks).toHaveLength(1);
 
     await completeCallbacks[0]();
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(mockStoreApi.setProcessing).toHaveBeenCalledWith('zip-42');
     expect(mockMoveCompletedDownload).toHaveBeenCalled();
@@ -285,6 +314,7 @@ describe('imageDownloadActions', () => {
     expect(errorCallbacks).toHaveLength(1);
 
     errorCallbacks[0]({ reason: 'Connection lost' });
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(mockStoreApi.remove).not.toHaveBeenCalledWith('image:test-zip-model');
     expect(deps.setAlertState).toHaveBeenCalledWith(expect.objectContaining({ title: 'Download Failed' }));
@@ -375,7 +405,7 @@ describe('imageDownloadActions', () => {
     await expect(cancel('non-existent-model')).resolves.toBeUndefined();
   });
 
-  it('downloadHuggingFaceModel cancels cleanly when store entry removed mid-download', async () => {
+  it('downloadHuggingFaceModel cancels cleanly through the operation owner', async () => {
     const deps = makeDeps();
     const modelInfo = makeHFModelInfo();
     let resolveFirst!: () => void;
@@ -390,7 +420,8 @@ describe('imageDownloadActions', () => {
     });
 
     const downloadPromise = downloadHuggingFaceModel(modelInfo, deps);
-    mockStoreApi.remove('image:test-hf-model');
+    await new Promise(resolve => setImmediate(resolve));
+    await cancelSyntheticImageDownload(modelInfo.id);
     resolveFirst();
     await downloadPromise;
 
@@ -414,7 +445,9 @@ describe('imageDownloadActions', () => {
     resolveFile();
     await downloadPromise;
 
-    const { backgroundDownloadService: svc } = jest.requireMock('../../../../src/services');
+    const { coordinatedDownloads: svc } = jest.requireMock(
+      '../../../../src/services/modelServices/coordinatedDownloadBridge',
+    );
     expect(svc.cancelDownload).toHaveBeenCalledWith('native-42');
   });
 
@@ -431,7 +464,9 @@ describe('imageDownloadActions', () => {
     await new Promise(r => setTimeout(r, 0));
     await cancelSyntheticImageDownload(modelInfo.id);
 
-    const { backgroundDownloadService: svc } = jest.requireMock('../../../../src/services');
+    const { coordinatedDownloads: svc } = jest.requireMock(
+      '../../../../src/services/modelServices/coordinatedDownloadBridge',
+    );
     // Routed to the queue owner by the part's key (== makeImageModelKey), not left to
     // promote-then-cancel. Native cancelDownload is NOT used (there is no downloadId).
     expect(svc.cancelQueued).toHaveBeenCalledWith('image:test-hf-model');

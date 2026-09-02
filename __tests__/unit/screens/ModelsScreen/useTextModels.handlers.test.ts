@@ -270,6 +270,41 @@ describe('runSearch', () => {
 // ── handleSelectModel ────────────────────────────────────────────────
 
 describe('handleSelectModel', () => {
+  it('uses the Shared Gemma artifacts when network file discovery fails', async () => {
+    const { huggingFaceService } = jest.requireMock('../../../../src/services');
+    huggingFaceService.getModelFiles.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useTextModels(setAlertState));
+    const gemma: any = {
+      id: 'unsloth/gemma-4-E2B-it-GGUF',
+      name: 'Gemma 4 E2B',
+      author: 'google',
+      description: '',
+      downloads: 0,
+      likes: 0,
+      tags: ['vision'],
+      lastModified: '',
+      files: [],
+    };
+
+    await act(async () => {
+      await result.current.handleSelectModel(gemma);
+    });
+
+    expect(result.current.modelFiles).toEqual([
+      expect.objectContaining({
+        name: 'gemma-4-E2B-it-Q4_K_M.gguf',
+        quantization: 'Q4_K_M',
+        mmProjFile: expect.objectContaining({
+          name: 'mmproj-gemma-4-E2B-it-F16.gguf',
+        }),
+      }),
+    ]);
+    expect(huggingFaceService.getModelFiles).not.toHaveBeenCalled();
+    expect(setAlertState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Failed to load model files.' }),
+    );
+  });
+
   it('short-circuits HF fetch when model id is in the offgrid/ namespace and ships files', async () => {
     const { huggingFaceService } = jest.requireMock('../../../../src/services');
     const getModelFilesSpy = jest.spyOn(huggingFaceService, 'getModelFiles');
@@ -294,14 +329,14 @@ describe('handleSelectModel', () => {
     expect(result.current.selectedModel).toBe(curatedModel);
   });
 
-  it('falls through to HF fetch for non-offgrid models even when factories pre-populate files', async () => {
+  it('uses pre-populated catalog files for any projected model without a second fetch', async () => {
     const { huggingFaceService } = jest.requireMock('../../../../src/services');
     const fetched = [{ name: 'q4.gguf', size: 2000, quantization: 'Q4_K_M', downloadUrl: 'https://hf/q4' }];
     huggingFaceService.getModelFiles.mockResolvedValueOnce(fetched);
 
     const { result } = renderHook(() => useTextModels(setAlertState));
 
-    // Factory-style model with prepopulated files — must NOT short-circuit
+    // A projected model already carries the authoritative artifact list.
     const hfModel: any = {
       id: 'test-org/test-model',
       name: 'Test Model',
@@ -315,8 +350,8 @@ describe('handleSelectModel', () => {
       await result.current.handleSelectModel(hfModel);
     });
 
-    expect(huggingFaceService.getModelFiles).toHaveBeenCalledWith('test-org/test-model');
-    expect(result.current.modelFiles).toEqual(fetched);
+    expect(huggingFaceService.getModelFiles).not.toHaveBeenCalled();
+    expect(result.current.modelFiles).toEqual(hfModel.files);
   });
 });
 

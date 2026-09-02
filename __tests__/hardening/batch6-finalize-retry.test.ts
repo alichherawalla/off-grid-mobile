@@ -7,7 +7,7 @@ function operation() {
     files: {
       pathFor: name => `/models/${name}`,
       exists: async path => paths.has(path),
-      size: async () => 8,
+      size: async () => 1024,
       readPrefix: async () => Uint8Array.from([0x47, 0x47, 0x55, 0x46]),
       remove: async path => { paths.delete(path); },
     },
@@ -23,7 +23,7 @@ function operation() {
     id: 'text:model', modelId: 'owner/model', kind: 'text', revision: 'mobile',
     artifacts: [{
       id: 'primary', name: 'model.gguf', localName: 'model.gguf',
-      url: 'https://example/model.gguf', sizeBytes: 8, role: 'primary', required: true,
+      url: 'https://example/model.gguf', sizeBytes: 1024, role: 'primary', required: true,
     }],
   });
 }

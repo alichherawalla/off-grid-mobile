@@ -42,7 +42,7 @@ function entry(overrides: Partial<DownloadEntry> = {}): DownloadEntry {
     fileName: 'model.gguf',
     quantization: 'Q4',
     modelType: 'text',
-    status: 'pending',
+    status: 'queued',
     bytesDownloaded: 0,
     totalBytes: 100,
     combinedTotalBytes: 120,
@@ -86,7 +86,7 @@ describe('useDownloads Shared projection integration', () => {
       status: 'running', bytesDownloaded: 40, totalBytes: 100,
     }));
     expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      status: 'running', bytesDownloaded: 40,
+      status: 'downloading', bytesDownloaded: 40,
     });
 
     act(() => mockProgressListener?.({
@@ -94,7 +94,7 @@ describe('useDownloads Shared projection integration', () => {
       status: 'waiting_for_network', bytesDownloaded: 40, totalBytes: 100,
     }));
     expect(useDownloadStore.getState().downloads['llm:model/model.gguf'].status)
-      .toBe('waiting_for_network');
+      .toBe('paused');
 
     act(() => mockErrorListener?.({
       downloadId: 'main', fileName: 'model.gguf', modelId: 'llm:model',
@@ -109,7 +109,7 @@ describe('useDownloads Shared projection integration', () => {
     useDownloadStore.getState().add(entry({
       status: 'completed',
       mmProjDownloadId: 'projector',
-      mmProjStatus: 'running',
+      mmProjStatus: 'downloading',
     }));
     renderHook(() => useDownloadListeners());
 
@@ -164,7 +164,7 @@ describe('useDownloads Shared projection integration', () => {
     ));
     expect(cancelDownload()).toHaveBeenCalledWith('main');
     expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      downloadId: 'replacement', status: 'pending',
+      downloadId: 'replacement', status: 'queued',
     });
   });
 });

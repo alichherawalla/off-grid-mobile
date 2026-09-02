@@ -551,6 +551,13 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       t.unmount();
     },
 
+    /** Acquire the selected Whisper runtime through the same residency intent used by microphone demand. */
+    async loadSelectedWhisperOnDemand(modelId = 'tiny.en') {
+      const { mobileResidencyIntents } = require('../../src/services/modelServices/residencyIntents');
+      const result = await mobileResidencyIntents.ensureTranscription(modelId);
+      expect(result).toBe('loaded');
+    },
+
     /** Start a real chat-mode mic gesture. Tests can release it as a hold or keep it pressed. */
     async tapMic() {
       const view = this.view!;
@@ -657,17 +664,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
             [engineId]: true,
           },
         });
-      // The real EngineBridge (mounted in render()) now mounts KokoroTTSBridge → the executorch fake reports
-      // isReady → KokoroEngine._setBridge → phase 'ready'. Wait for that emergent readiness (the same signal
-      // the real Voice toggle gates on) — never set by the test.
-      await rtl.waitFor(
-        () => {
-          expect(useTTSStore.getState().isReady).toBe(true);
-        },
-        { timeout: 4000 },
-      );
       // GESTURE: open the chat-input quick-settings popover and tap the Voice row (the alternate real entry
-      // to voice mode, per the header dropdown). initializeEngine + interfaceMode='audio' run for real.
+      // to voice mode, per the header dropdown). This intent owns on-demand engine
+      // initialization; the harness must not wait for eager readiness first.
       rtl.fireEvent.press(
         await rtl.waitFor(() => view.getByTestId('quick-settings-button')),
       );

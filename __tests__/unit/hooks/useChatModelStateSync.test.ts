@@ -1,28 +1,28 @@
 /**
- * Characterization tests for useChatModelStateSync — it had ZERO tests, and it owns the
- * capability derivation being centralized onto deriveEngineCapabilities. These pin the EXACT
- * current behavior (the two effects that set supportsVision / supportsToolCalling /
- * supportsThinking across remote / LiteRT / llama) so the migration is provably behavior-neutral.
- * Note the two DIFFERENT remote checks preserved verbatim: the vision effect keys on
- * activeModelInfo.isRemote; the tools/thinking effect keys on activeRemoteTextModelId.
+ * useChatModelStateSync projects capabilities from the canonical text-engine control
+ * port. Native engines and remote metadata are inputs to that owner, not parallel
+ * capability sources in this hook.
  */
 import { renderHook } from '@testing-library/react-native';
 import { useChatModelStateSync } from '../../../src/screens/ChatScreen/useChatModelActions';
 
-jest.mock('../../../src/services/llm', () => ({
-  llmService: {
-    isModelLoaded: jest.fn(() => false),
-    getMultimodalSupport: jest.fn(() => null),
-    supportsToolCalling: jest.fn(() => false),
-    supportsThinking: jest.fn(() => false),
-  },
-}));
-jest.mock('../../../src/services/litert', () => ({
-  liteRTService: { isModelLoaded: jest.fn(() => false) },
+const mockEnsureReady = jest.fn();
+const mockReadinessFactory = jest.fn(() => ({ ensureReady: mockEnsureReady }));
+const mockCapabilities = jest.fn(() => ({
+  vision: false,
+  tools: false,
+  thinking: false,
 }));
 
-const { llmService } = require('../../../src/services/llm');
-const { liteRTService } = require('../../../src/services/litert');
+jest.mock('../../../src/services/modelServices/chatModelReadinessPort', () => ({
+  mobileChatModelReadiness: mockReadinessFactory,
+}));
+
+jest.mock('../../../src/services/modelServices/textEngineControl', () => ({
+  mobileTextEngineControl: {
+    capabilities: () => mockCapabilities(),
+  },
+}));
 
 function run(deps: Partial<Parameters<typeof useChatModelStateSync>[0]>) {
   const setSupportsVision = jest.fn();
@@ -33,7 +33,6 @@ function run(deps: Partial<Parameters<typeof useChatModelStateSync>[0]>) {
       activeModelInfo: { isRemote: false },
       activeModelId: 'm1',
       activeModel: undefined,
-      modelDeps: {},
       activeRemoteModel: null,
       isModelLoading: false,
       setSupportsVision,
@@ -52,15 +51,18 @@ function run(deps: Partial<Parameters<typeof useChatModelStateSync>[0]>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  llmService.isModelLoaded.mockReturnValue(false);
-  llmService.getMultimodalSupport.mockReturnValue(null);
-  llmService.supportsToolCalling.mockReturnValue(false);
-  llmService.supportsThinking.mockReturnValue(false);
-  liteRTService.isModelLoaded.mockReturnValue(false);
+  mockCapabilities.mockReturnValue({ vision: false, tools: false, thinking: false });
 });
 
-describe('useChatModelStateSync — capability derivation (characterization)', () => {
+describe('useChatModelStateSync — canonical capability projection', () => {
+  it.each(['new', 'existing'])('%s Chat entry reads metadata without preparing a runtime', () => {
+    run({ activeModel: { id: 'm1', engine: 'llama', filePath: '/m1.gguf' } as any });
+    expect(mockReadinessFactory).not.toHaveBeenCalled();
+    expect(mockEnsureReady).not.toHaveBeenCalled();
+  });
+
   it('remote model: caps come from the declared remote capabilities', () => {
+    mockCapabilities.mockReturnValue({ vision: true, tools: true, thinking: false });
     const r = run({
       activeModelInfo: { isRemote: true },
       activeRemoteModel: { capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: false } },
@@ -69,22 +71,19 @@ describe('useChatModelStateSync — capability derivation (characterization)', (
   });
 
   it('LiteRT model LOADED: vision from the flag, tools+thinking true', () => {
-    liteRTService.isModelLoaded.mockReturnValue(true);
+    mockCapabilities.mockReturnValue({ vision: true, tools: true, thinking: true });
     const r = run({ activeModel: { engine: 'litert', liteRTVision: true } as any });
     expect(r).toEqual({ vision: true, tools: true, thinking: true });
   });
 
   it('LiteRT model NOT loaded: vision STILL from the flag, tools/thinking false', () => {
-    liteRTService.isModelLoaded.mockReturnValue(false);
+    mockCapabilities.mockReturnValue({ vision: true, tools: false, thinking: false });
     const r = run({ activeModel: { engine: 'litert', liteRTVision: true } as any });
     expect(r).toEqual({ vision: true, tools: false, thinking: false });
   });
 
   it('llama model LOADED with vision mmproj: caps from the live engine', () => {
-    llmService.isModelLoaded.mockReturnValue(true);
-    llmService.getMultimodalSupport.mockReturnValue({ vision: true });
-    llmService.supportsToolCalling.mockReturnValue(true);
-    llmService.supportsThinking.mockReturnValue(true);
+    mockCapabilities.mockReturnValue({ vision: true, tools: true, thinking: true });
     const r = run({ activeModel: { engine: 'llama', mmProjPath: '/mmproj.gguf' } as any });
     expect(r).toEqual({ vision: true, tools: true, thinking: true });
   });

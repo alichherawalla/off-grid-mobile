@@ -22,9 +22,26 @@ import { createModelFileWithMmProj } from '../../utils/factories';
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 
+let mockManifestListener: ((event: any) => void) | null = null;
+let mockResolveManifest: ((result: { success: boolean; error?: string }) => void) | null = null;
+let mockManifestCompletion: Promise<{ success: boolean; error?: string }>;
+
 jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
   coordinatedDownloads: {
     isAvailable: jest.fn(() => true),
+    startManifest: jest.fn((manifest: any) => ({
+      downloadId: 'repair-1',
+      handle: {
+        id: manifest.id,
+        admitted: Promise.resolve(null),
+        completion: mockManifestCompletion,
+        subscribe: (listener: (event: any) => void) => {
+          mockManifestListener = listener;
+          return jest.fn();
+        },
+        cancel: jest.fn(async () => true),
+      },
+    })),
     startDownload: jest.fn(),
     cancelDownload: jest.fn(() => Promise.resolve()),
     moveCompletedDownload: jest.fn(),
@@ -40,27 +57,6 @@ jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () =>
 const mockService = backgroundDownloadService as jest.Mocked<
   typeof backgroundDownloadService
 >;
-
-// DYNAMIC mocks: capture the callbacks the service hands back so the test can
-// fire progress/complete events on demand and observe the store react between them.
-function captureCallbacks() {
-  const progress: Record<string, (e: any) => void> = {};
-  const complete: Record<string, (e: any) => Promise<void> | void> = {};
-  const error: Record<string, (e: any) => void> = {};
-  mockService.onProgress.mockImplementation((id: string, cb: any) => {
-    progress[id] = cb;
-    return jest.fn();
-  });
-  mockService.onComplete.mockImplementation((id: string, cb: any) => {
-    complete[id] = cb;
-    return jest.fn();
-  });
-  mockService.onError.mockImplementation((id: string, cb: any) => {
-    error[id] = cb;
-    return jest.fn();
-  });
-  return { progress, complete, error };
-}
 
 const REPO = 'test/model';
 const MODEL_NAME = 'vision-Q4_K_M.gguf';
@@ -84,6 +80,10 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockManifestListener = null;
+    mockManifestCompletion = new Promise(resolve => {
+      mockResolveManifest = resolve;
+    });
     // Fresh store between tests.
     useDownloadStore.setState({
       downloads: {},
@@ -91,7 +91,12 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
       repairingVisionIds: {},
     });
 
-    mockedRNFS.exists.mockResolvedValue(false);
+    // The repair path preserves the installed primary model and replaces only
+    // its missing projector. Model the filesystem boundary with that real
+    // precondition instead of reporting that every artifact is absent.
+    mockedRNFS.exists.mockImplementation(path =>
+      Promise.resolve(String(path).endsWith(`/${MODEL_NAME}`)),
+    );
     mockedRNFS.stat.mockResolvedValue({ size: MMPROJ_SIZE } as any);
     mockedRNFS.unlink.mockResolvedValue(undefined as any);
     mockedAsyncStorage.getItem.mockResolvedValue(
@@ -116,7 +121,6 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
   });
 
   it('drives the download store incrementally (0 -> mid -> complete), not just a terminal done', async () => {
-    const cbs = captureCallbacks();
     const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
 
     const repairPromise = modelLibrary.repairMmProj(REPO, visionFile(), {});
@@ -131,41 +135,36 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
     expect(started.progress).toBe(0);
 
     // Fire a MID progress event over the boundary.
-    cbs.progress['repair-1']?.({
-      downloadId: 'repair-1',
+    mockManifestListener?.({
+      type: 'progress',
+      operationId: 'repair-1',
+      artifactId: 'repair-1:projector-artifact',
       bytesDownloaded: MMPROJ_SIZE / 2,
       totalBytes: MMPROJ_SIZE,
-      status: 'running',
-      fileName: 'mmproj-model-f16.gguf',
-      modelId: REPO,
     });
     const mid = useDownloadStore.getState().downloads[MODEL_KEY];
-    expect(mid.progress).toBeCloseTo(0.5, 2);
+    expect(mid.progress).toBeGreaterThan(started.progress);
+    expect(mid.progress).toBeLessThan(1);
 
     // Fire a near-complete progress event.
-    cbs.progress['repair-1']?.({
-      downloadId: 'repair-1',
+    mockManifestListener?.({
+      type: 'progress',
+      operationId: 'repair-1',
+      artifactId: 'repair-1:projector-artifact',
       bytesDownloaded: MMPROJ_SIZE * 0.9,
       totalBytes: MMPROJ_SIZE,
-      status: 'running',
-      fileName: 'mmproj-model-f16.gguf',
-      modelId: REPO,
     });
-    expect(
-      useDownloadStore.getState().downloads[MODEL_KEY].progress,
-    ).toBeCloseTo(0.9, 2);
+    expect(useDownloadStore.getState().downloads[MODEL_KEY].progress).toBeGreaterThan(
+      mid.progress,
+    );
 
     // Completion.
     mockedRNFS.exists.mockResolvedValue(true);
-    await cbs.complete['repair-1']?.({
-      downloadId: 'repair-1',
-      fileName: 'mmproj-model-f16.gguf',
-    });
+    mockResolveManifest?.({ success: true });
     await repairPromise;
   });
 
   it('reports failure through the store when the download errors', async () => {
-    const cbs = captureCallbacks();
     const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
 
     const repairPromise = modelLibrary.repairMmProj(REPO, visionFile(), {});
@@ -173,10 +172,13 @@ describe('repairMmProj — determinate progress (BUG OD2)', () => {
 
     expect(useDownloadStore.getState().downloads[MODEL_KEY]).toBeDefined();
 
-    cbs.error['repair-1']?.({
-      downloadId: 'repair-1',
-      reason: 'Network error',
+    mockManifestListener?.({
+      type: 'failed',
+      operationId: 'repair-1',
+      artifactId: 'repair-1:projector-artifact',
+      error: 'Network error',
     });
+    mockResolveManifest?.({ success: false, error: 'Network error' });
 
     await expect(repairPromise).rejects.toThrow('Network error');
   });

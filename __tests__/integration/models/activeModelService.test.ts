@@ -664,17 +664,20 @@ describe('ActiveModelService Integration', () => {
       expect(result.severity).toBe('warning');
     });
 
-    it('should return critical for models exceeding 60% of RAM', async () => {
+    it('should return critical when the model exceeds the canonical residency budget', async () => {
       const model = createDownloadedModel({
         id: 'huge-model',
         fileSize: 8 * 1024 * 1024 * 1024, // 8GB
       });
       useAppStore.setState({ downloadedModels: [model] });
 
-      // 8GB device - 8GB * 1.5 = 12GB > 4.8GB (60%)
+      // Both advisory observations must describe the same 8GB device: deviceInfo
+      // supplies UI evidence and the residency memory source supplies the budget.
       mockHardwareService.getDeviceInfo.mockResolvedValue(
         createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 })
       );
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(8);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(8);
 
       const result = await activeModelService.checkMemoryForModel('huge-model', 'text');
 
@@ -691,6 +694,8 @@ describe('ActiveModelService Integration', () => {
       mockHardwareService.getDeviceInfo.mockResolvedValue(
         createDeviceInfo({ totalMemory: 12 * 1024 * 1024 * 1024 })
       );
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(12);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(12);
 
       modelResidencyManager.setLoadPolicy('balanced');
       const balanced = await activeModelService.checkMemoryForModel('mid-model', 'text');
@@ -1393,8 +1398,10 @@ describe('ActiveModelService Integration', () => {
 
   describe('unloadTextModel with store but no native', () => {
     it('clears store even when native is not loaded', async () => {
-      // Set store state without loading natively
-      useAppStore.setState({ activeModelId: 'orphan-model' });
+      // A selected model is a real library model even when the native runtime was
+      // already lost. The lifecycle resolver reads that canonical registry fact.
+      const model = createDownloadedModel({ id: 'orphan-model' });
+      useAppStore.setState({ activeModelId: model.id, downloadedModels: [model] });
       mockLlmService.isModelLoaded.mockReturnValue(false);
 
       await activeModelService.unloadTextModel();
@@ -1408,7 +1415,11 @@ describe('ActiveModelService Integration', () => {
 
   describe('unloadImageModel with store but no native', () => {
     it('clears store even when native is not loaded', async () => {
-      useAppStore.setState({ activeImageModelId: 'orphan-img' });
+      const model = createONNXImageModel({ id: 'orphan-img' });
+      useAppStore.setState({
+        activeImageModelId: model.id,
+        downloadedImageModels: [model],
+      });
       mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
 
       await activeModelService.unloadImageModel();
@@ -2074,12 +2085,15 @@ describe('ActiveModelService Integration', () => {
       expect(result.canLoad).toBe(true);
     });
 
-    it('blocks model exceeding 40% on 4GB device', async () => {
+    it('blocks a model that exceeds the canonical 4GB-device budget', async () => {
       mockHardwareService.getDeviceInfo.mockResolvedValue(
         createDeviceInfo({ totalMemory: 4 * 1024 * 1024 * 1024 }),
       );
+      mockHardwareService.getTotalMemoryGB.mockReturnValue(4);
+      mockHardwareService.getAvailableMemoryGB.mockReturnValue(4);
 
-      // 1.5GB * 1.8x = 2.7GB > 4 * 0.4 = 1.6GB budget → critical
+      // Native image estimate is 1.5GB * 2.5 = 3.75GB. Shared's balanced
+      // 4GB-device budget is 2GB, so admission is critical.
       const model = createONNXImageModel({ id: 'too-big-4gb', size: 1.5 * 1024 * 1024 * 1024 });
       useAppStore.setState({ downloadedImageModels: [model] });
 

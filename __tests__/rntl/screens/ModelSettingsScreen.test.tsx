@@ -720,6 +720,18 @@ describe('ModelSettingsScreen', () => {
   // Additional Slider Tests
   // ============================================================================
   describe('additional slider updates', () => {
+    it('renders Thinking Budget as one discrete slider and persists the selected cap', () => {
+      useAppStore.getState().updateSettings({ reasoningBudget: -1 });
+      const { getByTestId, queryByTestId } = renderWithSections('text');
+
+      expect(getByTestId('thinking-budget-value').props.children).toBe('Auto');
+      expect(queryByTestId('thinking-budget--1-button')).toBeNull();
+
+      fireEvent(getByTestId('thinking-budget-slider'), 'slidingComplete', 4);
+
+      expect(useAppStore.getState().settings.reasoningBudget).toBe(4096);
+    });
+
     it('updates topP when slider completes', () => {
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');

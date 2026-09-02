@@ -157,9 +157,14 @@ jest.mock('../../src/services/adapters/native/embeddingRuntimeAdapter', () => ({
 
 import { ragService } from '../../src/services/modelServices/bootstrap/ragBootstrap';
 import { ragDatabase } from '../../src/services/adapters/rag/ragDatabaseAdapter';
+import { embeddingService } from '../../src/services/adapters/native/embeddingRuntimeAdapter';
 import { documentService } from '../../src/services/documentService';
+import { installSidecarExecutionBoundary } from '../harness/sidecarExecution';
 
 const mockDocService = documentService as jest.Mocked<typeof documentService>;
+const disposeSidecarExecution = installSidecarExecutionBoundary({
+  embedding: inputs => embeddingService.embedBatch(inputs),
+});
 
 /** Reset the in-memory DB + force RagDatabase to re-open against the fresh engine. */
 function resetDb() {
@@ -174,6 +179,7 @@ const SOLAR_DOC = 'A detailed guide to solar panel installation and roof mountin
 const BATTERY_DOC = 'Battery storage sizing and charge controller wiring for a home energy system setup.';
 
 describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite semantics)', () => {
+  afterAll(disposeSidecarExecution);
   beforeEach(() => {
     jest.restoreAllMocks(); // undo any jest.spyOn from a prior test (clearMocks doesn't)
     jest.clearAllMocks();

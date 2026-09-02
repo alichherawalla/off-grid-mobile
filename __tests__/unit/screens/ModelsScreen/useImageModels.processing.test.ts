@@ -1,4 +1,4 @@
-import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { renderHook, waitFor } from '@testing-library/react-native';
 import { useImageModels } from '../../../../src/screens/ModelsScreen/useImageModels';
 
 const mockUseAppStore = jest.fn();
@@ -47,7 +47,7 @@ jest.mock('../../../../src/services/coreMLModelBrowser', () => ({
   fetchAvailableCoreMLModels: jest.fn().mockResolvedValue([]),
 }));
 
-describe('useImageModels processing resume', () => {
+describe('useImageModels processing recovery ownership', () => {
   const setAlertState = jest.fn();
   const addDownloadedImageModel = jest.fn();
   const setActiveImageModelId = jest.fn();
@@ -80,7 +80,7 @@ describe('useImageModels processing resume', () => {
     );
   });
 
-  it('resumes image downloads that enter processing after mount', async () => {
+  it('does not duplicate registry-owned recovery when processing begins after mount', async () => {
     const { rerender } = renderHook(({ _tick }: { _tick: number }) => useImageModels(setAlertState), {
       initialProps: { _tick: 0 },
     });
@@ -115,26 +115,10 @@ describe('useImageModels processing resume', () => {
     );
     rerender({ _tick: 1 });
 
-    await waitFor(() => {
-      expect(mockResumeImageDownload).toHaveBeenCalledWith(
-        processingEntry,
-        expect.objectContaining({
-          addDownloadedImageModel,
-          activeImageModelId: null,
-          selectActiveImageModel: expect.any(Function),
-          setAlertState,
-          triedImageGen: true,
-        }),
-      );
-    });
+    expect(mockResumeImageDownload).not.toHaveBeenCalled();
   });
 
-  it('does not resume the same processing entry twice while a resume is in flight', async () => {
-    let resolveResume!: () => void;
-    mockResumeImageDownload.mockImplementation(
-      () => new Promise<void>(resolve => { resolveResume = resolve; }),
-    );
-
+  it('does not duplicate registry-owned recovery across rerenders', async () => {
     const processingEntry = {
       modelKey: 'image:test-image',
       downloadId: 'dl-1',
@@ -162,16 +146,7 @@ describe('useImageModels processing resume', () => {
       initialProps: { _tick: 0 },
     });
 
-    await waitFor(() => {
-      expect(mockResumeImageDownload).toHaveBeenCalledTimes(1);
-    });
-
     rerender({ _tick: 1 });
-    expect(mockResumeImageDownload).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveResume();
-      await Promise.resolve();
-    });
+    expect(mockResumeImageDownload).not.toHaveBeenCalled();
   });
 });

@@ -15,29 +15,16 @@
  */
 import { mobileChatGenerationProjection } from '../../../src/services/chatGenerationProjection';
 import { generationSession } from '../../../src/services/generationSession';
-import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { llmService } from '../../../src/services/llm';
 import { resetStores, setupWithConversation, flushPromises } from '../../utils/testHelpers';
-import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
 import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
 import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
-
-function makeFailingTransport(serverId: string): TextStreamTransport {
-  return {
-    id: serverId,
-    type: 'openai-compatible',
-    // The failure: the server rejects (HTTP 400).
-    generate: jest.fn(async () => { throw new Error('HTTP 400: Bad Request'); }),
-    stopGeneration: jest.fn(async () => {}),
-    isReady: jest.fn(async () => true),
-  };
-}
 
 describe('BUG #29(a) — remote failure clears all loading flags', () => {
   beforeEach(async () => {
@@ -51,22 +38,42 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
   });
 
   afterEach(() => {
-    remoteTextTransportRegistry.clear();
     useRemoteServerStore.setState({ activeServerId: null } as any);
   });
 
   it('leaves isGenerating / isThinking / isStreaming / session all false after a remote error', async () => {
     const serverId = (await remoteServerManager.addServer({
       name: 'Failing server',
-      endpoint: 'http://remote.invalid',
+      endpoint: 'http://127.0.0.1:11434',
       provider: 'openai-compatible',
     })).id;
     useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
       id: 'remote-model', name: 'Remote model', serverId,
-      capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      // The default chat request includes enabled tools. Admit the request so
+      // this test reaches the intended HTTP failure boundary.
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
       lastUpdated: '2026-08-30T00:00:00.000Z',
     }]);
-    remoteTextTransportRegistry.register(serverId, makeFailingTransport(serverId));
+    // External transport boundary: the current async server manager installs
+    // the real provider. Its network request receives the intended HTTP 400.
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = class {
+      readyState = 0;
+      status = 0;
+      responseText = '';
+      onreadystatechange: null | (() => void) = null;
+      onprogress: null | (() => void) = null;
+      onerror: null | (() => void) = null;
+      ontimeout: null | (() => void) = null;
+      open(): void { this.readyState = 1; }
+      setRequestHeader(): void {}
+      abort(): void {}
+      send(): void {
+        this.status = 400;
+        this.responseText = 'Bad Request';
+        this.readyState = 4;
+        this.onreadystatechange?.();
+      }
+    };
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId: 'remote-model' });
     await refreshMobileModelServices();
 

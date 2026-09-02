@@ -11,12 +11,13 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
 import { selectMobileModel } from '../../../src/services/modelServices';
+import type { ModelCommandApplicationService } from '@offgrid/models';
 import {
   createConversation,
   createMessage,
@@ -27,6 +28,11 @@ import {
 
 // Mock navigation
 const mockNavigate = jest.fn();
+type ModelCommandSelect = ModelCommandApplicationService['select'];
+const mockModelCommandSelect = jest.fn<
+  ReturnType<ModelCommandSelect>,
+  Parameters<ModelCommandSelect>
+>(async () => undefined);
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {
@@ -45,6 +51,20 @@ jest.mock('@react-navigation/native', () => {
 
 jest.mock('../../../src/hooks/useFocusTrigger', () => ({
   useFocusTrigger: () => 0,
+}));
+
+jest.mock('../../../src/services/modelServices/modelCommandApplication', () => ({
+  mobileModelCommands: {
+    select: mockModelCommandSelect,
+    unload: jest.fn(async () => undefined),
+  },
+  selectLocalTextModelOnDemand: (model: { id: string; engine: string }) =>
+    mockModelCommandSelect({
+      source: 'local',
+      hostId: model.engine,
+      modality: 'text',
+      modelId: model.id,
+    }, { load: false }),
 }));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
@@ -122,12 +142,17 @@ jest.mock('../../../src/services', () => ({
 }));
 
 jest.mock('../../../src/components', () => ({
-  ModelSelectorModal: ({ visible }: any) => {
+  ModelSelectorModal: ({ visible, onSelectModel }: any) => {
     if (!visible) return null;
-    const { View, Text } = require('react-native');
+    const { View, Text, TouchableOpacity } = require('react-native');
     return (
       <View testID="model-selector-modal">
         <Text>Select Model</Text>
+        <TouchableOpacity
+          onPress={() => onSelectModel({ id: 'local-text', engine: 'llama' })}
+        >
+          <Text>Choose local model</Text>
+        </TouchableOpacity>
       </View>
     );
   },
@@ -179,6 +204,27 @@ describe('ChatsListScreen', () => {
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
+    });
+
+    it('selects a text route without loading it before Chat opens', async () => {
+      useAppStore.setState({
+        downloadedModels: [createDownloadedModel({ id: 'local-text' })],
+        activeModelId: null,
+        downloadedImageModels: [],
+        activeImageModelId: null,
+      });
+      const { getByText } = render(<ChatsListScreen />);
+
+      fireEvent.press(getByText('New'));
+      fireEvent.press(getByText('Choose local model'));
+
+      await waitFor(() => expect(mockModelCommandSelect).toHaveBeenCalledWith({
+        source: 'local',
+        hostId: 'llama',
+        modality: 'text',
+        modelId: 'local-text',
+      }, { load: false }));
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 

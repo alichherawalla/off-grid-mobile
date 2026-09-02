@@ -50,7 +50,7 @@ jest.mock('@offgrid/core/hooks/useModelDownloads', () => ({
   useModelDownloads: () => mockDownloads,
 }));
 const ttsDl = (status: string, progress = status === 'completed' ? 1 : 0) =>
-  ({ id: 'tts:kokoro', modelType: 'tts', name: 'Kokoro TTS', status, progress });
+  ({ id: 'tts:software-mansion/executorch-kokoro', modelType: 'tts', name: 'Kokoro TTS', status, progress });
 
 const actions = {
   setVoice: jest.fn(async () => {}),

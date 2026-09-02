@@ -1,12 +1,21 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import RNFS from 'react-native-fs';
 import { RemoteModelOptionsSection } from '../../../src/components/models/RemoteModelOptionsSection';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import { RemoteModelField } from '../../../src/components/RemoteServerEditor/RemoteModelField';
+import { TranscriptionModelsTab } from '../../../src/screens/ModelsScreen/TranscriptionModelsTab';
+import {
+  refreshMobileModelServices,
+  selectRemoteMobileModel,
+} from '../../../src/services/modelServices';
+import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
 
 describe('remote media model pickers', () => {
   beforeEach(async () => {
     await remoteServerManager.clearAllServers();
+    useModelFailureStore.getState().clear();
   });
 
   async function addGateway(): Promise<string> {
@@ -52,6 +61,43 @@ describe('remote media model pickers', () => {
     ui.unmount();
   });
 
+  it('shows the remote transcription privacy boundary even when remote choices are hidden', async () => {
+    const serverId = await addGateway();
+    await refreshMobileModelServices();
+    await selectRemoteMobileModel(
+      serverId,
+      'transcription',
+      '/models/whisper-base.bin',
+    );
+
+    const ui = render(
+      <TranscriptionModelsTab showRemoteModels={false} />,
+    );
+
+    await waitFor(() => {
+      expect(
+        ui.getByText('Whisper Base runs on your active remote server'),
+      ).toBeTruthy();
+    });
+    expect(ui.queryByText(/audio is never sent anywhere/)).toBeNull();
+    ui.unmount();
+  });
+
+  it('shows a canonical transcription failure when tab disk reconciliation fails', async () => {
+    (RNFS.exists as jest.Mock).mockResolvedValueOnce(true);
+    (RNFS.readDir as jest.Mock).mockRejectedValueOnce(
+      new Error('Model storage is unavailable'),
+    );
+
+    const ui = render(<TranscriptionModelsTab showRemoteModels={false} />);
+
+    await waitFor(() => {
+      expect(ui.getByTestId('model-failure-stt')).toBeTruthy();
+      expect(ui.getByText('Model storage is unavailable')).toBeTruthy();
+    });
+    ui.unmount();
+  });
+
   it('changes the active voice model without changing the raw server model ID', async () => {
     const serverId = await addGateway();
     const textServerId = (await remoteServerManager.addServer({
@@ -83,5 +129,26 @@ describe('remote media model pickers', () => {
     });
     expect(ui.getByText('Orpheus')).toBeTruthy();
     ui.unmount();
+  });
+
+  it('shows the canonical catalog name when Desktop reports an active file alias', () => {
+    const ui = render(
+      <RemoteModelField
+        label="Text model"
+        value="Qwen3.5-2B-Q4_K_M.gguf"
+        displayValue="Qwen 3.5 2B"
+        options={[{
+          id: 'unsloth/Qwen3.5-2B-GGUF',
+          name: 'Qwen 3.5 2B',
+          activeAliases: ['Qwen3.5-2B-Q4_K_M.gguf'],
+        }]}
+        onChange={jest.fn()}
+        placeholder="Model"
+        testID="canonical-model"
+      />,
+    );
+
+    expect(ui.getByText('Qwen 3.5 2B')).toBeTruthy();
+    expect(ui.queryByText('Qwen3.5-2B-Q4_K_M.gguf')).toBeNull();
   });
 });
