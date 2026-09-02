@@ -58,7 +58,7 @@ export async function startModelDownload(
     fileName: file.name,
     quantization: file.quantization,
     modelType: 'text',
-    status: 'pending',
+    status: 'queued',
     bytesDownloaded: 0,
     totalBytes: file.size,
     combinedTotalBytes: file.size + (file.mmProjFile?.size ?? 0),

@@ -12,19 +12,13 @@ import {
   isFailedDownloadStatus,
   isQueuedDownloadStatus,
   isTransferringDownloadStatus,
+  type DownloadLifecyclePhase,
 } from '@offgrid/models';
 
-export type DownloadStatus =
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'waiting_for_network'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+/** Shared owns the one lifecycle vocabulary used by every download projection. */
+export type DownloadStatus = DownloadLifecyclePhase
 
-export type ModelType = 'text' | 'image' | 'stt' | 'tts'
+type ModelType = 'text' | 'image' | 'stt' | 'tts'
 
 export interface DownloadEntry {
   modelKey: ModelKey

@@ -4,7 +4,6 @@ import type { ModelKey } from '../utils/modelKey';
 import type { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
 export type { DownloadStatus, DownloadEntry };
-export type { ModelType } from '../utils/downloadStatus';
 export {
   isActiveStatus,
   isQueuedStatus,
