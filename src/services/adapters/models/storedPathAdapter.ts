@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import logger from '../../../utils/logger';
-import { modelPathBasename, resolveStoredModelPath } from '@offgrid/models';
+import { resolveStoredModelPath } from '@offgrid/models';
 
 /**
  * ONE answer to "is this stored model still on disk, and where?".

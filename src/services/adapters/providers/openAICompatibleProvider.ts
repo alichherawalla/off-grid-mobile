@@ -22,6 +22,7 @@ import type {
 } from './openAICompatibleTypes';
 import {
   openAICompatibleCompletionPayload,
+  remoteApiBase,
   remoteAuthorizationHeaders,
   remoteTextTransport,
 } from '@offgrid/models';
@@ -122,9 +123,7 @@ export class OpenAICompatibleTransport implements TextStreamTransport {
       };
       Object.assign(headers, remoteAuthorizationHeaders(this.config.endpoint, this.config.apiKey));
 
-      let baseUrl = this.config.endpoint;
-      while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-      const url = `${baseUrl}/v1/chat/completions`;
+      const url = `${remoteApiBase(this.config.endpoint)}/chat/completions`;
 
       const state: OpenAIStreamState = {
         fullContent: '', fullReasoningContent: '',

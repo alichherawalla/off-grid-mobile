@@ -60,7 +60,7 @@ async function restartIosTextDownload(entry: DownloadEntry): Promise<void> {
   // while the re-issued download waits for a free concurrency slot (device 2026-07-15: a retried item
   // stuck behind the 3-download cap looked like retry did nothing). No-op if the store entry lost its
   // downloadId; the re-issue below still restores it.
-  if (entry.downloadId) useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+  if (entry.downloadId) useDownloadStore.getState().setStatus(entry.downloadId, 'queued');
   const info = await modelLibrary.downloadModelBackground(entry.modelId, file);
   reattach(info.downloadId);
 }
@@ -132,10 +132,10 @@ export const textProvider: DownloadProvider = {
       // Android resumes the existing WorkManager job in place, so it genuinely needs the live
       // downloadId to reattach to.
       if (!entry.downloadId) return;
-      useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+      useDownloadStore.getState().setStatus(entry.downloadId, 'queued');
       await backgroundDownloadService.retryDownload(entry.downloadId);
       if (entry.mmProjDownloadId && entry.mmProjStatus === 'failed') {
-        useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
+        useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'queued');
         await backgroundDownloadService.retryDownload(entry.mmProjDownloadId).catch(() => {});
         modelLibrary.resetMmProjForRetry(entry.downloadId);
       }
@@ -205,7 +205,7 @@ export const textProvider: DownloadProvider = {
       // in the service vocabulary) and re-issue through the SAME 3-slot cap a normal
       // start uses, so they auto-resume up to 3 and the rest wait their turn.
       logger.log(`[DL-SM] text:${e.modelId} reconcile: interrupted → re-queued`);
-      store.setStatus(e.downloadId, 'pending');
+      store.setStatus(e.downloadId, 'queued');
       // Fire-and-forget: awaiting would block launch behind the cap; the queue drains
       // them. A failure to re-issue is logged, not silently dropped.
       restartIosTextDownload(e).catch(err =>

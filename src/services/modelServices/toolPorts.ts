@@ -25,7 +25,7 @@ import {
   mobileToolEmbeddingPort,
 } from '../adapters/native/toolEmbeddingAdapter';
 import { clearMobileEphemeralTextState } from './generationAdapters';
-import type { ToolCall, ToolResult } from '../tools/types';
+import type { ToolCall } from '../tools/types';
 
 function toolCall(
   call: GenerationToolCall,
@@ -132,24 +132,3 @@ export const mobileConversationPort: ConversationPort = {
     });
   },
 };
-
-export function mobileToolResult(result: ToolExecutionResult, call: GenerationToolCall): ToolResult {
-  const metadata = result.metadata?.toolResult;
-  const shared = metadata && typeof metadata === 'object'
-    ? metadata as Partial<ToolResult>
-    : {};
-  return {
-    toolCallId: typeof shared.toolCallId === 'string' ? shared.toolCallId : call.id,
-    name: typeof shared.name === 'string' ? shared.name : call.name,
-    content: typeof shared.content === 'string' ? shared.content : contentText(result.content),
-    error: typeof shared.error === 'string' ? shared.error : undefined,
-    errorCategory: typeof shared.errorCategory === 'string'
-      ? shared.errorCategory as ToolResult['errorCategory']
-      : undefined,
-    status: shared.status === 'ok' || shared.status === 'empty' || shared.status === 'error'
-      ? shared.status
-      : result.isError ? 'error' : 'ok',
-    durationMs: typeof shared.durationMs === 'number' ? shared.durationMs : 0,
-    terminal: shared.terminal,
-  };
-}

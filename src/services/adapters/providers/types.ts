@@ -34,7 +34,7 @@ export interface ProviderCapabilities {
 }
 
 /** Result of a generation completion */
-export interface CompletionResult {
+interface CompletionResult {
   /** Generated content */
   content: string;
   /** Reasoning/thinking content (if supported) */

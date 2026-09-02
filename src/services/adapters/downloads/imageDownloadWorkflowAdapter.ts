@@ -1,19 +1,13 @@
 import {
-  createImageDownloadPlan,
   ImageDownloadWorkflowService,
   type DownloadOperationOwner,
   type ImageDownloadPlan,
 } from '@offgrid/models';
 import { modelDownloadProjection } from '../../../stores/downloadStore';
 import type { DownloadEntry } from '../../../utils/downloadStatus';
-import type { ImageModelDescriptor } from '../../imageModelDownloadTypes';
 import { coordinatedDownloads } from '../../modelServices/coordinatedDownloadBridge';
 
 const workflow = new ImageDownloadWorkflowService<DownloadEntry>(modelDownloadProjection);
-
-export function mobileImageDownloadPlan(model: ImageModelDescriptor): ImageDownloadPlan {
-  return createImageDownloadPlan(model);
-}
 
 export function beginImageDownload(plan: ImageDownloadPlan): DownloadOperationOwner | undefined {
   return workflow.begin(plan, {
@@ -23,7 +17,7 @@ export function beginImageDownload(plan: ImageDownloadPlan): DownloadOperationOw
     fileName: plan.fileName,
     quantization: '',
     modelType: 'image',
-    status: 'pending',
+    status: 'queued',
     bytesDownloaded: 0,
     totalBytes: plan.totalBytes,
     combinedTotalBytes: plan.totalBytes,
@@ -80,10 +74,6 @@ export async function cancelOwnedImageDownload(
     cancelQueued: async modelKey => { transfers.cancelQueued(modelKey); },
     cancelTransfer: id => transfers.cancelDownload(id),
   });
-}
-
-export function currentImageDownload(modelId: string): DownloadOperationOwner | undefined {
-  return workflow.current(`image:${modelId}`);
 }
 
 export function isActiveImageDownload(owner: DownloadOperationOwner): boolean {

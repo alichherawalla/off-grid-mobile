@@ -19,12 +19,12 @@ type ProgressEvent = Parameters<DownloadProgressCallback>[0];
 type Listener<T> = (event: T) => void;
 interface ActiveHandle { manifest: ModelArtifactManifest; handle: ModelDownloadHandle; params: DownloadParams; transferId?: string; logicalId?: string; unsubscribe: () => void }
 
-export interface CoordinatedManifestHandle {
+interface CoordinatedManifestHandle {
   downloadId: string;
   handle: ModelDownloadHandle;
 }
 
-export const downloadApplication = new ModelDownloadApplicationService();
+const downloadApplication = new ModelDownloadApplicationService();
 
 const files = {
   pathFor: (localName: string) => `${RNFS.DocumentDirectoryPath}/${localName}`,

@@ -6,7 +6,7 @@ import {
 } from '@offgrid/models';
 import { mobileResidencyIntents } from './residencyIntents';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
-import { mobileRouteId } from './mobileRoute';
+import { selectLocalTranscriptionModelOnDemand } from './modelCommandApplication';
 
 export type MobileTranscriptionLoadResult = 'loaded' | 'blocked' | 'error';
 type Observer = { onLoaded?(): void; onUnloaded?(): void };
@@ -18,12 +18,15 @@ interface MobileTranscriptionProjection {
 
 let projection: MobileTranscriptionProjection | null = null;
 
-export function registerTranscriptionModelProjection(port: MobileTranscriptionProjection): void {
+export function registerTranscriptionModelProjection(
+  port: MobileTranscriptionProjection,
+): void {
   projection = port;
 }
 
 function requireProjection(): MobileTranscriptionProjection {
-  if (!projection) throw new Error('Transcription model projection is not registered');
+  if (!projection)
+    throw new Error('Transcription model projection is not registered');
   return projection;
 }
 
@@ -34,7 +37,11 @@ export const mobileTranscriptionRuntime = {
   loadedModelPath: () => whisperService.getLoadedModelPath(),
   isModelLoaded: () => whisperService.isModelLoaded(),
   isSelectedModelLoaded(modelId: string | null): boolean {
-    return !!modelId && whisperService.getLoadedModelPath() === whisperService.getModelPath(modelId);
+    return (
+      !!modelId &&
+      whisperService.getLoadedModelPath() ===
+        whisperService.getModelPath(modelId)
+    );
   },
   isTranscribing: () => whisperService.isCurrentlyTranscribing(),
   stopTranscription: () => whisperService.stopTranscription(),
@@ -47,10 +54,12 @@ export const mobileTranscriptionRuntime = {
     whisperService.downloadModel(...args),
   delete: (...args: Parameters<typeof whisperService.deleteModel>) =>
     whisperService.deleteModel(...args),
-  listDownloaded: (...args: Parameters<typeof whisperService.listDownloadedModels>) =>
-    whisperService.listDownloadedModels(...args),
-  isDownloaded: (...args: Parameters<typeof whisperService.isModelDownloaded>) =>
-    whisperService.isModelDownloaded(...args),
+  listDownloaded: (
+    ...args: Parameters<typeof whisperService.listDownloadedModels>
+  ) => whisperService.listDownloadedModels(...args),
+  isDownloaded: (
+    ...args: Parameters<typeof whisperService.isModelDownloaded>
+  ) => whisperService.isModelDownloaded(...args),
 };
 
 /** Shared workflow with Mobile native, filesystem, route, and UI projection ports. */
@@ -59,16 +68,15 @@ export const transcriptionModelIntents = new TranscriptionModelWorkflow({
   project: patch => requireProjection().project(patch),
   modelPath: modelId => mobileTranscriptionRuntime.modelPath(modelId),
   loadedModelPath: () => mobileTranscriptionRuntime.loadedModelPath(),
-  download: (modelId, onProgress) => mobileTranscriptionRuntime.download(modelId, onProgress),
+  download: (modelId, onProgress) =>
+    mobileTranscriptionRuntime.download(modelId, onProgress),
   ensureLoaded: modelId => mobileTranscriptionRuntime.ensureLoaded(modelId),
   unload: modelId => mobileTranscriptionRuntime.unload(modelId),
   delete: modelId => mobileTranscriptionRuntime.delete(modelId),
   listDownloaded: () => mobileTranscriptionRuntime.listDownloaded(),
   isDownloaded: modelId => mobileTranscriptionRuntime.isDownloaded(modelId),
-  selectRoute: async modelId => {
-    await lifecycleProjectionPort.selectRoute('transcription', modelId
-      ? mobileRouteId({ source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId })
-      : null);
+  selectRoute: selectLocalTranscriptionModelOnDemand,
+  refreshInventory: async () => {
+    await lifecycleProjectionPort.refreshInventory();
   },
-  refreshInventory: async () => { await lifecycleProjectionPort.refreshInventory(); },
 });

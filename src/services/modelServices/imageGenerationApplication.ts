@@ -8,7 +8,10 @@ import { Platform } from 'react-native';
 import { useAppStore } from '../../stores/appStore';
 import type { GeneratedImage } from '../../types';
 import { generateId } from '../../utils/generateId';
-import { isOverridableMemoryError } from '../../utils/modelLoadErrors';
+import {
+  isImageModelIncompleteError,
+  isOverridableMemoryError,
+} from '../../utils/modelLoadErrors';
 import { mobileTextEngineControl } from './textEngineControl';
 import { enhanceImagePrompt } from '../imagePromptEnhancement';
 import { saveImageGenerationResult } from '../imageGenerationResult';
@@ -18,6 +21,10 @@ import { reportModelFailure } from '../modelFailureHandler';
 import { executeMobileImageGeneration } from '../sharedImageGeneration';
 import { refreshMobileModelServices } from './index';
 import { mobileResidencyIntents } from './residencyIntents';
+import {
+  cancelActiveImageGenerationAtBoundary,
+  ImageGenerationCancelError,
+} from './imageGenerationAdapter';
 
 function localModel(model: RuntimeModel): ActiveImageModel {
   const record = useAppStore.getState().downloadedImageModels.find(candidate => candidate.id === model.id);
@@ -93,11 +100,20 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
       };
     },
     async ensureLoaded(model, input) {
-      await mobileResidencyIntents.ensureImage(
-        model.id,
-        undefined,
-        input.force ? { override: true } : undefined,
-      );
+      try {
+        await mobileResidencyIntents.ensureImage(
+          model.id,
+          undefined,
+          input.force ? { override: true } : undefined,
+        );
+      } catch (error) {
+        // Preserve typed recovery errors so the application can offer the correct
+        // memory override or re-download action. Give unknown native failures the
+        // model-load context that the user needs instead of exposing a bare bridge error.
+        if (isOverridableMemoryError(error) || isImageModelIncompleteError(error)) throw error;
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to load image model: ${detail}`);
+      }
     },
     async execute(input, onProgress) {
       executing = true;
@@ -140,11 +156,20 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
       });
     },
     async cancelBoundary() {
-      if (executing) return;
-      await Promise.allSettled([
-        localDreamGeneratorService.cancelGeneration(),
-        mobileTextEngineControl.stopActive(),
-      ]);
+      try {
+        if (executing) await cancelActiveImageGenerationAtBoundary();
+        else await mobileTextEngineControl.stopActive();
+      } catch (error) {
+        const failure = error instanceof ImageGenerationCancelError
+          ? error
+          : new ImageGenerationCancelError(error);
+        reportModelFailure('image', failure, {
+          id: 'image-generation-cancel',
+          title: 'Image generation could not stop',
+          message: failure.message,
+        });
+        throw failure;
+      }
     },
     async ejectForRetry() {
       await mobileResidencyIntents.ejectAll();

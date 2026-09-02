@@ -1,15 +1,51 @@
-import type {
+import {
   GeneratedBinaryArtifact,
-  GenerationAdapter,
-  GenerationChunk,
-  GenerationRequest,
+  bindGenerationCancellation,
+  GenerationAbortedError,
+  GenerationCancellationFailedError,
+  type GenerationCancellationBinding,
+  type GenerationAdapter,
+  type GenerationChunk,
+  type GenerationRequest,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { localDreamGeneratorService } from '../localDreamGenerator';
 import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
+import logger from '../../utils/logger';
+
+export class ImageGenerationCancelError extends GenerationCancellationFailedError {
+  readonly code = 'image-generation-cancel-failed' as const;
+
+  constructor(readonly cause: unknown) {
+    super('The image runtime did not confirm that generation stopped.', cause);
+    this.name = 'ImageGenerationCancelError';
+  }
+}
+
+/** Native cancel port: false is a refusal, not a successful cancellation. */
+export async function cancelImageGenerationAtBoundary(
+  cancel: () => Promise<boolean>,
+): Promise<void> {
+  try {
+    const confirmed = await cancel();
+    if (!confirmed) throw new Error('The native image runtime refused cancellation.');
+  } catch (cause) {
+    const failure = cause instanceof ImageGenerationCancelError
+      ? cause
+      : new ImageGenerationCancelError(cause);
+    logger.error('[ImageGenerationAdapter] Image generation cancel failed:', failure);
+    throw failure;
+  }
+}
 
 type PendingChunk = { value?: GenerationChunk; error?: unknown; done?: boolean };
+let activeImageCancellation: GenerationCancellationBinding | null = null;
+
+/** Application cancellation port. It joins the adapter's idempotent native operation. */
+export function cancelActiveImageGenerationAtBoundary(): Promise<void> {
+  return activeImageCancellation?.cancel() ?? Promise.resolve();
+}
 
 function imageOperation(request: GenerationRequest) {
   if (request.operation?.type !== 'image') {
@@ -46,8 +82,16 @@ async function* localImageChunks(request: GenerationRequest): AsyncIterable<Gene
     wake = null;
     listener?.();
   };
-  const abort = () => localDreamGeneratorService.cancelGeneration().catch(() => undefined);
-  request.signal?.addEventListener('abort', abort, { once: true });
+  if (request.signal?.aborted) throw new GenerationAbortedError();
+  const cancellation = bindGenerationCancellation(
+    request.signal,
+    () => cancelImageGenerationAtBoundary(() => localDreamGeneratorService.cancelGeneration()),
+    error => push({ error }),
+  );
+  const unregisterCancellation = request.cancellation?.register(
+    () => cancellation.cancel(),
+  );
+  activeImageCancellation = cancellation;
   const generation = localDreamGeneratorService.generateImage(
     {
       prompt: operation.prompt,
@@ -92,8 +136,11 @@ async function* localImageChunks(request: GenerationRequest): AsyncIterable<Gene
       if (item.value) yield item.value;
     }
     await generation;
+    await cancellation.wait();
   } finally {
-    request.signal?.removeEventListener('abort', abort);
+    unregisterCancellation?.();
+    cancellation.dispose();
+    if (activeImageCancellation === cancellation) activeImageCancellation = null;
   }
 }
 

@@ -14,7 +14,3 @@ export function registerMobileChatSessionControl(port: MobileChatSessionControlP
 export function stopActiveMobileChatSession(): boolean {
   return activePort?.stopActive() ?? false;
 }
-
-export function stopMobileChatConversation(conversationId: string): number {
-  return activePort?.stopConversation(conversationId) ?? 0;
-}

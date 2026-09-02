@@ -4,7 +4,6 @@ import { useAppStore } from '../../stores/appStore';
 import logger from '../../utils/logger';
 import { llmService } from '../llm';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
-import { modelResidencyManager } from './residencyBootstrap';
 import { activeModelSnapshot } from './modelStateSnapshot';
 import type {
   ActiveModelInfo,
@@ -94,37 +93,14 @@ export async function checkMemoryForModel(
   modelId: string,
   modelType: ModelType,
 ): Promise<MemoryCheckResult> {
-  const state = useAppStore.getState();
-  const loaded = getLoadedModelIds();
-  return checkMemory({
-    modelId,
-    modelType,
-    ids: {
-      loadedTextModelId: loaded.textModelId,
-      loadedImageModelId: loaded.imageModelId,
-    },
-    lists: {
-      downloadedModels: state.downloadedModels,
-      downloadedImageModels: state.downloadedImageModels,
-    },
-    policy: modelResidencyManager.getLoadPolicy(),
-    sessionOverride: modelResidencyManager.hasSessionOverride(modelId),
-  });
+  return checkMemory(modelId, modelType);
 }
 
 export async function checkMemoryForDualModel(
   textModelId: string | null,
   imageModelId: string | null,
 ): Promise<MemoryCheckResult> {
-  const state = useAppStore.getState();
-  return checkDualMemory({
-    textModelId,
-    imageModelId,
-    lists: {
-      downloadedModels: state.downloadedModels,
-      downloadedImageModels: state.downloadedImageModels,
-    },
-  });
+  return checkDualMemory(textModelId, imageModelId);
 }
 
 export async function clearTextModelCache(): Promise<void> {

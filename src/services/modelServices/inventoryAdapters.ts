@@ -1,7 +1,9 @@
 import {
   catalogKindForArtifact,
   isGrounderModel,
+  projectGgufCapabilities,
   runtimeModalityForModelKind,
+  selectedRemoteModelName,
   type ModelInventoryAdapter,
   type RuntimeModel,
 } from '@offgrid/models';
@@ -14,7 +16,6 @@ import type {
   RemoteModelCategory,
   RemoteServer,
 } from '../../types';
-import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 import { displayModelName } from '../adapters/remote/serverDiscovery';
 import { remoteTextTransportRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
@@ -73,25 +74,41 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
     (model.engine === 'litert'
       ? liteRTService.isModelLoaded()
       : llmService.isModelLoaded());
-  const predicted = model.engine === 'llama'
-    ? predictGgufCapabilities(model)
-    : { tools: false, thinking: false };
+  const projected = model.engine === 'llama'
+    ? projectGgufCapabilities({
+        artifact: {
+          id: model.id,
+          name: model.name,
+          fileName: model.fileName,
+          projectorPresent: !!model.mmProjPath,
+        },
+        runtime: loaded
+          ? {
+              loaded: true,
+              tools: llmService.supportsToolCalling(),
+              thinking: llmService.supportsThinking(),
+              vision: llmService.supportsVision(),
+            }
+          : undefined,
+      })
+    : { tools: false, thinking: false, vision: false };
+  const supportsVision = model.engine === 'litert'
+    ? model.liteRTVision
+    : projected.vision;
   return runtime(identity, {
     name: model.name,
-    kind: catalogKind ?? (model.engine === 'llama' && (model.isVisionModel || !!model.mmProjPath)
-      ? 'vision'
-      : 'text'),
+    // Capability is the SSOT for route kind. A LiteRT vision bundle must be
+    // selectable for a vision operation just like a GGUF with a projector.
+    kind: catalogKind ?? (supportsVision ? 'vision' : 'text'),
     capabilities: {
       textGeneration: true,
       streaming: true,
-      vision: model.engine === 'litert'
-        ? model.liteRTVision
-        : !!model.mmProjPath,
+      vision: supportsVision,
       audioInput: model.engine === 'litert' && !!model.liteRTAudio,
       // Mobile provides the portable tool loop for every local text route. The
       // catalog flag describes native template evidence, not route capability.
       tools: true,
-      thinking: model.engine === 'litert' ? true : predicted.thinking,
+      thinking: model.engine === 'litert' ? true : projected.thinking,
     },
     reasoning: model.engine === 'llama' && loaded
       ? llmService.getReasoningMetadata()
@@ -128,7 +145,7 @@ export const localLiteRTInventoryAdapter: ModelInventoryAdapter = {
   },
 };
 
-export const localImageInventoryAdapter: ModelInventoryAdapter = {
+const localImageInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-image-inventory',
   async listModels() {
     const state = useAppStore.getState();
@@ -146,6 +163,7 @@ export const localImageInventoryAdapter: ModelInventoryAdapter = {
         kind: 'image',
         capabilities: { imageGeneration: true },
         residentSizeMB: Math.ceil(model.size / (1024 * 1024)),
+        residencyKey: 'mobile:image-engine',
         installed: true,
         ready: true,
         loaded: selected && imageState.isLoaded,
@@ -155,7 +173,7 @@ export const localImageInventoryAdapter: ModelInventoryAdapter = {
   },
 };
 
-export const localWhisperInventoryAdapter: ModelInventoryAdapter = {
+const localWhisperInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-whisper-inventory',
   async listModels() {
     const state = useWhisperStore.getState();
@@ -197,23 +215,41 @@ function remoteTextModels(server: RemoteServer): RemoteModel[] {
     ? state.activeRemoteTextModelId
     : null;
   if (selectedId && isGrounderModel(selectedId)) return discovered;
-  if (!selectedId || discovered.some(model => model.id === selectedId)) {
-    return discovered;
-  }
-  return [
-    ...discovered,
-    {
-      id: selectedId,
-      name: displayModelName(selectedId),
-      serverId: server.id,
-      capabilities: {
-        supportsVision: false,
-        supportsToolCalling: false,
-        supportsThinking: false,
-      },
-      lastUpdated: new Date(0).toISOString(),
-    },
-  ];
+  return discovered;
+}
+
+function undiscoveredSelectedRemoteTextRuntime(
+  server: RemoteServer,
+  discovered: readonly RemoteModel[],
+): RuntimeModel | null {
+  const state = useRemoteServerStore.getState();
+  const selectedId = state.activeServerId === server.id
+    ? state.activeRemoteTextModelId
+    : null;
+  if (
+    !selectedId ||
+    isGrounderModel(selectedId) ||
+    discovered.some(model => model.id === selectedId)
+  ) return null;
+  const identity: MobileRouteFacts = {
+    source: 'remote',
+    hostId: server.id,
+    modality: 'text',
+    modelId: selectedId,
+  };
+  return runtime(identity, {
+    name: selectedRemoteModelName(server, 'text') ?? displayModelName(selectedId),
+    kind: 'text',
+    // The text route is known. Vision, tools, and thinking stay absent until discovery
+    // provides evidence; absence is not negative capability evidence.
+    capabilities: { textGeneration: true, streaming: true },
+    installed: true,
+    ready: !!remoteTextTransportRegistry.get(server.id),
+    loaded: true,
+    error: state.serverHealth[server.id]?.status === 'unhealthy'
+      ? 'Remote server is unavailable'
+      : undefined,
+  });
 }
 
 function remoteMediaOptions(
@@ -222,8 +258,13 @@ function remoteMediaOptions(
 ): Array<{ id: string; name: string }> {
   const catalog = server.catalog?.[category] ?? [];
   const configured = server.selections?.[category]?.trim();
-  if (!configured || catalog.some(model => model.id === configured)) return catalog;
-  return [...catalog, { id: configured, name: displayModelName(configured) }];
+  if (!configured || catalog.some(model =>
+    model.id === configured || model.activeAliases?.includes(configured),
+  )) return catalog;
+  return [...catalog, {
+    id: configured,
+    name: selectedRemoteModelName(server, category) ?? displayModelName(configured),
+  }];
 }
 
 function remoteMediaRuntime(
@@ -257,13 +298,14 @@ function remoteMediaRuntime(
   });
 }
 
-export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
+const remoteModelInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-remote-model-inventory',
   async listModels() {
     const state = useRemoteServerStore.getState();
     return state.servers.flatMap(server => {
       const transport = remoteTextTransportRegistry.get(server.id);
-      const text = remoteTextModels(server).map(model => {
+      const discoveredText = remoteTextModels(server);
+      const text = discoveredText.map(model => {
         const identity: MobileRouteFacts = {
           source: 'remote',
           hostId: server.id,
@@ -289,8 +331,13 @@ export const remoteModelInventoryAdapter: ModelInventoryAdapter = {
             : undefined,
         });
       });
+      const undiscoveredSelection = undiscoveredSelectedRemoteTextRuntime(
+        server,
+        discoveredText,
+      );
       return [
         ...text,
+        ...(undiscoveredSelection ? [undiscoveredSelection] : []),
         ...remoteMediaOptions(server, 'image').map(option =>
           remoteMediaRuntime(server, 'image', option),
         ),
@@ -330,14 +377,14 @@ function embeddingRuntime(modality: 'embedding'): RuntimeModel {
   );
 }
 
-export const embeddingInventoryAdapter: ModelInventoryAdapter = {
+const embeddingInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-embedding-inventory',
   async listModels() {
     return [embeddingRuntime('embedding')];
   },
 };
 
-export const classifierInventoryAdapter: ModelInventoryAdapter = {
+const classifierInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-classifier-inventory',
   async listModels() {
     const state = useAppStore.getState();

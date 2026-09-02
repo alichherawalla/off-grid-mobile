@@ -1,17 +1,60 @@
-import type {
-  GenerationAdapter,
-  GenerationChunk,
-  GenerationRequest,
-  LLMService,
-  RuntimeModel,
-} from '@offgrid/models';
 import {
+  bindGenerationCancellation,
+  GenerationAbortedError,
+  GenerationCancellationFailedError,
   classifyTranscriptionError,
   cleanTranscription,
+  type GenerationAdapter,
+  type GenerationChunk,
+  type GenerationRequest,
+  type LLMService,
+  type RuntimeModel,
 } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
 import { whisperService } from '../whisperService';
+import logger from '../../utils/logger';
+
+export class TranscriptionResetError extends GenerationCancellationFailedError {
+  readonly code = 'transcription-reset-failed' as const;
+
+  constructor(readonly cause: unknown) {
+    super('The transcription runtime did not confirm that recording stopped.', cause);
+    this.name = 'TranscriptionResetError';
+  }
+}
+
+export class TranscriptionFileStopError extends GenerationCancellationFailedError {
+  readonly code = 'transcription-file-stop-failed' as const;
+
+  constructor(readonly cause: unknown) {
+    super('The transcription runtime did not confirm that file transcription stopped.', cause);
+    this.name = 'TranscriptionFileStopError';
+  }
+}
+
+export async function stopFileTranscriptionAtBoundary(stop: () => Promise<void>): Promise<void> {
+  try {
+    await stop();
+  } catch (cause) {
+    const failure = new TranscriptionFileStopError(cause);
+    logger.error('[TranscriptionGenerationAdapter] File transcription stop failed:', failure);
+    throw failure;
+  }
+}
+
+/** Native reset port: callers receive a typed failure instead of a false stop. */
+export async function resetTranscriptionAtBoundary(
+  reset: () => Promise<void>,
+): Promise<void> {
+  try {
+    await reset();
+  } catch (cause) {
+    const failure = new TranscriptionResetError(cause);
+    logger.error('[TranscriptionGenerationAdapter] Transcription reset failed:', failure);
+    throw failure;
+  }
+}
 
 function transcriptionInput(request: GenerationRequest) {
   if (request.operation?.type !== 'transcription') {
@@ -43,59 +86,79 @@ async function* realtimeTranscriptionChunks(
   const pending: GenerationChunk[] = [];
   let wake: (() => void) | null = null;
   let completed = false;
+  let resetFailure: unknown;
   const push = (chunk: GenerationChunk) => {
     pending.push(chunk);
     const listener = wake;
     wake = null;
     listener?.();
   };
-  const abort = () => {
-    completed = true;
-    whisperService.forceReset().catch(() => undefined);
-    const listener = wake;
-    wake = null;
-    listener?.();
-  };
-  request.signal?.addEventListener('abort', abort, { once: true });
+  const cancellation = bindGenerationCancellation(
+    request.signal,
+    () => resetTranscriptionAtBoundary(() => whisperService.forceReset()),
+    error => { resetFailure = error; },
+    () => {
+      completed = true;
+      const listener = wake;
+      wake = null;
+      listener?.();
+    },
+  );
+  const unregisterCancellation = request.cancellation?.register(
+    () => cancellation.cancel(),
+  );
+  let generationFailure: unknown;
   try {
-    await whisperService.startRealtimeTranscription(
-      result => {
-        push({
-          output: {
-            type: 'transcription',
-            text: cleanTranscription(result.text),
-            language: operation.language,
-            partial: result.isCapturing,
-            processTime: result.processTime,
-            recordingTime: result.recordingTime,
-          },
-          ...(!result.isCapturing ? { finishReason: 'stop' as const } : {}),
-        });
-        if (!result.isCapturing) completed = true;
-      },
-      {
-        language: operation.language,
-        maxLen: operation.maxLength,
-        transcribeFallback: filePath =>
-          whisperService.transcribeFileRaw(filePath, {
-            language: operation.language,
-            signal: request.signal,
-          }),
-      },
-    );
-    push({ progress: { completed: 1, total: 1 } });
-    while (!completed || pending.length) {
-      if (!pending.length && !completed) {
-        await new Promise<void>(resolve => {
-          wake = resolve;
-        });
+    try {
+      await whisperService.startRealtimeTranscription(
+        result => {
+          push({
+            output: {
+              type: 'transcription',
+              text: cleanTranscription(result.text),
+              language: operation.language,
+              partial: result.isCapturing,
+              processTime: result.processTime,
+              recordingTime: result.recordingTime,
+            },
+            ...(!result.isCapturing ? { finishReason: 'stop' as const } : {}),
+          });
+          if (!result.isCapturing) completed = true;
+        },
+        {
+          language: operation.language,
+          maxLen: operation.maxLength,
+          transcribeFallback: filePath =>
+            whisperService.transcribeFileRaw(filePath, {
+              language: operation.language,
+              signal: request.signal,
+            }),
+        },
+      );
+      push({ progress: { completed: 1, total: 1 } });
+      while (!completed || pending.length) {
+        if (!pending.length && !completed) {
+          await new Promise<void>(resolve => {
+            wake = resolve;
+          });
+        }
+        const chunk = pending.shift();
+        if (chunk) yield chunk;
       }
-      const chunk = pending.shift();
-      if (chunk) yield chunk;
+    } catch (error) {
+      generationFailure = error;
     }
   } finally {
-    request.signal?.removeEventListener('abort', abort);
+    unregisterCancellation?.();
+    cancellation.dispose();
+    try {
+      await cancellation.wait();
+    } catch (error) {
+      resetFailure ??= error;
+    }
   }
+  if (resetFailure) throw resetFailure;
+  if (generationFailure) throw generationFailure;
 }
 
 async function* transcriptionChunks(
@@ -116,22 +179,38 @@ async function* transcriptionChunks(
     if (whisperService.getLoadedModelPath() !== selectedPath) {
       throw new Error(`The selected Whisper model is not loaded: ${model.id}`);
     }
+    if (request.signal?.aborted) throw new GenerationAbortedError();
     const pending: GenerationChunk[] = [];
     let wake: (() => void) | null = null;
     let completed = false;
     let failure: unknown;
     let transcript = '';
-    const operation = whisperService
-      .transcribeFileRaw(fileUri, {
+    let cancellationSettled = false;
+    const native = whisperService.startFileTranscriptionRaw(fileUri, {
         language: input.language,
-        signal: request.signal,
         onProgress: progress => {
           pending.push({ progress: { completed: progress, total: 100 } });
           const listener = wake;
           wake = null;
           listener?.();
         },
-      })
+      });
+    const cancellation = bindGenerationCancellation(
+      request.signal,
+      () => stopFileTranscriptionAtBoundary(native.stop),
+      error => { failure = error; },
+      () => {
+        cancellationSettled = true;
+        completed = true;
+        const listener = wake;
+        wake = null;
+        listener?.();
+      },
+    );
+    const unregisterCancellation = request.cancellation?.register(
+      () => cancellation.cancel(),
+    );
+    const operation = native.promise
       .then(result => {
         transcript = result;
       })
@@ -144,17 +223,24 @@ async function* transcriptionChunks(
         wake = null;
         listener?.();
       });
-    while (!completed || pending.length) {
-      if (!pending.length && !completed) {
-        await new Promise<void>(resolve => {
-          wake = resolve;
-        });
+    try {
+      while (!completed || pending.length) {
+        if (!pending.length && !completed) {
+          await new Promise<void>(resolve => {
+            wake = resolve;
+          });
+        }
+        const chunk = pending.shift();
+        if (chunk) yield chunk;
       }
-      const chunk = pending.shift();
-      if (chunk) yield chunk;
+      if (!cancellationSettled) await operation;
+      await cancellation.wait();
+    } finally {
+      unregisterCancellation?.();
+      cancellation.dispose();
     }
-    await operation;
     if (failure) throw failure;
+    if (request.signal?.aborted) throw new GenerationAbortedError();
     text = transcript;
   } else {
     const server = useRemoteServerStore

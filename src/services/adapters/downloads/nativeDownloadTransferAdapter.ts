@@ -14,6 +14,13 @@ interface ListenerSet {
   error: (event: Failure) => void;
 }
 
+interface WaitForTransferInput {
+  transferId: string;
+  destination: string;
+  signal: AbortSignal;
+  onProgress: (progress: { bytesDownloaded: number; totalBytes: number }) => void;
+}
+
 class NativeDownloadTransferAdapter implements DownloadTransferPort {
   private readonly listeners = new Map<string, ListenerSet>();
   private readonly subscriptions: Array<{ remove(): void }> = [];
@@ -47,13 +54,18 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     });
     const transferId = String(result.downloadId);
     input.onStarted?.(transferId);
-    await this.waitForTransfer(transferId, input.destination, input.signal, input.onProgress);
+    await this.waitForTransfer({
+      transferId,
+      destination: input.destination,
+      signal: input.signal,
+      onProgress: input.onProgress,
+    });
     return { transferId };
   }
 
   async attach(input: Parameters<NonNullable<DownloadTransferPort['attach']>>[0]): Promise<void> {
     this.assertAvailable();
-    await this.waitForTransfer(input.transferId, input.destination, input.signal, input.onProgress);
+    await this.waitForTransfer(input);
   }
 
   async isActive(transferId: string): Promise<boolean> {
@@ -104,12 +116,12 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     this.listeners.clear();
   }
 
-  private waitForTransfer(
-    transferId: string,
-    destination: string,
-    signal: AbortSignal,
-    onProgress: (progress: { bytesDownloaded: number; totalBytes: number }) => void,
-  ): Promise<void> {
+  private waitForTransfer({
+    transferId,
+    destination,
+    signal,
+    onProgress,
+  }: WaitForTransferInput): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
       const cleanup = () => {
@@ -119,7 +131,7 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
       const abort = () => {
         if (settled) return;
         settled = true;
-        void this.cancel(transferId);
+        this.cancel(transferId).catch(() => undefined);
         cleanup();
         reject(new Error('Download cancelled'));
       };

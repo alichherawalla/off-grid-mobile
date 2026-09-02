@@ -28,7 +28,6 @@ export async function removeApiKeyImpl(serverId: string): Promise<void> {
 
 export {
   detectRemoteVisionCapability as detectVisionCapability,
-  detectRemoteToolCallingCapability as detectToolCallingCapability,
 } from '@offgrid/models';
 
 export async function createProviderForServerImpl(

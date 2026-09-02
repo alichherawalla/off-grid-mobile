@@ -8,12 +8,14 @@ import type {
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
   projectOffGridDesktopModels,
+  remoteApiBase,
   remoteAuthorizationHeaders,
+  type RemoteDesktopProviderEvidence,
 } from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-export interface OffGridDesktopModelState {
+interface OffGridDesktopModelState {
   catalog: RemoteModelCatalog;
   active: RemoteMediaModelIds;
   textModels: RemoteModel[];
@@ -28,11 +30,12 @@ function record(value: unknown): Record<string, unknown> | null {
 async function gatewayFetch(
   server: Pick<RemoteServer, 'endpoint' | 'apiKey'>,
   path: string,
-  init: RequestInit = {},
+  options: RequestInit & { timeoutMs?: number } = {},
 ): Promise<Response> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...init } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const endpoint = server.endpoint.replace(/\/+$/, '');
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const endpoint = remoteApiBase(server.endpoint);
   try {
     return await fetch(`${endpoint}${path}`, {
       ...init,
@@ -49,21 +52,35 @@ async function gatewayFetch(
   }
 }
 
-/** Read raw Desktop inventory over HTTP, then delegate validation and projection to Shared. */
-export async function readOffGridDesktopModelState(
-  server: Pick<RemoteServer, 'id' | 'endpoint' | 'apiKey'>,
-): Promise<OffGridDesktopModelState | null> {
+/** Read the three Desktop resources without applying provider or inventory policy. */
+export async function readOffGridDesktopModelEvidence(
+  server: Pick<RemoteServer, 'endpoint' | 'apiKey'>,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<RemoteDesktopProviderEvidence | null> {
   try {
     const [catalogResponse, installedResponse, activeResponse] = await Promise.all([
-      gatewayFetch(server, '/v1/models/catalog'),
-      gatewayFetch(server, '/v1/models/installed'),
-      gatewayFetch(server, '/v1/models/active'),
+      gatewayFetch(server, '/models/catalog', { timeoutMs }),
+      gatewayFetch(server, '/models/installed', { timeoutMs }),
+      gatewayFetch(server, '/models/active', { timeoutMs }),
     ]);
     if (!catalogResponse.ok || !installedResponse.ok || !activeResponse.ok) return null;
     const [catalog, installed, active] = await Promise.all([
       catalogResponse.json(), installedResponse.json(), activeResponse.json(),
     ]);
-    const projected = projectOffGridDesktopModels({ catalog, installed, active });
+    return { catalog, installed, active };
+  } catch {
+    return null;
+  }
+}
+
+/** Read raw Desktop inventory over HTTP, then delegate validation and projection to Shared. */
+async function readOffGridDesktopModelState(
+  server: Pick<RemoteServer, 'id' | 'endpoint' | 'apiKey'>,
+): Promise<OffGridDesktopModelState | null> {
+  try {
+    const evidence = await readOffGridDesktopModelEvidence(server);
+    if (!evidence) return null;
+    const projected = projectOffGridDesktopModels(evidence);
     if (!projected) return null;
     const lastUpdated = new Date().toISOString();
     return {
@@ -92,7 +109,7 @@ export async function activateOffGridDesktopModel(
   category: RemoteModelCategory,
   modelId: string,
 ): Promise<RemoteMediaModelIds> {
-  const response = await gatewayFetch(server, '/v1/models/activate', {
+  const response = await gatewayFetch(server, '/models/activate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: modelId, kind: category }),

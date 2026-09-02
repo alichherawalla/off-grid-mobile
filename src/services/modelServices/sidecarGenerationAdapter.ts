@@ -1,12 +1,15 @@
-import type {
-  GenerationAdapter,
-  GenerationChunk,
-  GenerationRequest,
-  LLMService,
+import {
+  ClassifierExecutionService,
+  classifierNativeLoadRequest,
+  classifierNativeUnloadRequest,
+  type GenerationAdapter,
+  type GenerationChunk,
+  type GenerationRequest,
+  type LLMService,
 } from '@offgrid/models';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
-import { llmService } from '../llm';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
+import { classifierExecutionAdapter } from '../adapters/native/classifierExecutionAdapter';
 
 function operation(request: GenerationRequest) {
   if (!request.operation) throw new TypeError('A sidecar operation is required');
@@ -22,33 +25,17 @@ async function* embeddingChunks(request: GenerationRequest): AsyncIterable<Gener
   };
 }
 
+const classifier = new ClassifierExecutionService(classifierExecutionAdapter);
+
 async function* classifierChunks(request: GenerationRequest): AsyncIterable<GenerationChunk> {
   const input = operation(request);
   if (input.type !== 'classifier') throw new TypeError('A classifier operation is required');
-  const prompt = `Is this message asking to create, generate, or draw an image? Reply only YES or NO.\n\nMessage: "${input.input.slice(0, 200)}"\n\nAnswer:`;
-  let response = '';
-  const abort = () => llmService.stopGeneration().catch(() => undefined);
-  request.signal?.addEventListener('abort', abort, { once: true });
-  try {
-    await llmService.runNativeCompletion([
-      { id: 'classify', role: 'user', content: prompt, timestamp: Date.now() },
-    ], {
-      disableThinking: true,
-      onStream: data => { response += data.content ?? ''; },
-    });
-  } finally {
-    request.signal?.removeEventListener('abort', abort);
-  }
-  const isImage = response.trim().toLowerCase().includes('yes');
-  const labels = input.labels?.length ? input.labels : ['image', 'text'];
   yield {
-    output: {
-      type: 'classification',
-      labels: labels.map(label => ({
-        label,
-        score: label === (isImage ? 'image' : 'text') ? 1 : 0,
-      })),
-    },
+    output: await classifier.classify({
+      text: input.input,
+      labels: input.labels,
+      signal: request.signal,
+    }),
     finishReason: 'stop',
   };
 }
@@ -60,14 +47,15 @@ function adapter(id: string): GenerationAdapter {
       if (model.modality === 'embedding') {
         await embeddingService.load();
       } else if (model.modality === 'classifier') {
-        await nativeModelLifecycle.loadTextModel(model.id, 120_000, false);
+        const request = classifierNativeLoadRequest(model.id);
+        await nativeModelLifecycle.loadTextModel(request.modelId, request.timeoutMs, request.force);
       }
     },
     async unload(model) {
       if (model.modality === 'embedding') {
         await embeddingService.unload();
       } else if (model.modality === 'classifier') {
-        await nativeModelLifecycle.unloadTextModel(true);
+        await nativeModelLifecycle.unloadTextModel(classifierNativeUnloadRequest().force);
       }
     },
     generate(model, request) {

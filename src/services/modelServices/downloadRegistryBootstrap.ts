@@ -4,7 +4,7 @@ import { coordinatedDownloads as backgroundDownloadService } from './coordinated
 import type {
   ModelDownloadStartRequest,
   ModelDownloadReissueRequest,
-  ModelDownloadType,
+  DownloadModelType,
 } from './downloadTypes';
 
 export const modelDownloadRegistry = new ModelDownloadRegistry<
@@ -13,20 +13,26 @@ export const modelDownloadRegistry = new ModelDownloadRegistry<
 >(
   {
     transition: message => logger.log(`[DL-SM] ${message}`),
-    error: (message, error) => logger.log(
-      `[DL-SM] ${message}: ${error instanceof Error ? error.message : String(error)}`,
-    ),
+    error: (message, error) =>
+      logger.log(
+        `[DL-SM] ${message}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ),
   },
   {
     cancel(id) {
-      const queued = backgroundDownloadService.getQueuedItems().find(item =>
-        queuedUniformId({
-          modelType: item.modelType as ModelDownloadType,
-          modelId: item.modelId,
-          modelKey: item.modelKey,
-        }) === id,
+      const queued = backgroundDownloadService.getQueuedItems().find(
+        item =>
+          queuedUniformId({
+            modelType: item.modelType as DownloadModelType,
+            modelId: item.modelId,
+            modelKey: item.modelKey,
+          }) === id,
       );
-      return queued ? backgroundDownloadService.cancelQueued(queued.modelKey) : false;
+      return queued
+        ? backgroundDownloadService.cancelQueued(queued.modelKey)
+        : false;
     },
   },
 );

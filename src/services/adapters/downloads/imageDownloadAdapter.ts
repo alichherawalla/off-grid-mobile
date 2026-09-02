@@ -136,7 +136,7 @@ export const imageProvider: DownloadProvider = {
     });
     if (action === 'resume-native') {
       try {
-        useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+        useDownloadStore.getState().setStatus(entry.downloadId, 'queued');
         await backgroundDownloadService.retryDownload(entry.downloadId);
         backgroundDownloadService.startProgressPolling();
         return;

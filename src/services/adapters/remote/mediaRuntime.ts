@@ -1,6 +1,6 @@
 import { remoteServerManager } from '../../remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
-import { resolveRemoteRoute } from '@offgrid/models';
+import { remoteMediaEndpoint, resolveRemoteRoute } from '@offgrid/models';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -20,9 +20,12 @@ export interface RemoteMediaRequestOptions {
 }
 
 function endpoint(server: RemoteServer, path: string): string {
-  let base = server.endpoint;
-  while (base.endsWith('/')) base = base.slice(0, -1);
-  return `${base}${path}`;
+  const modality = path.endsWith('/images/generations')
+    ? 'image'
+    : path.endsWith('/audio/transcriptions')
+      ? 'transcription'
+      : 'voice';
+  return remoteMediaEndpoint(server.endpoint, modality);
 }
 
 async function request<T>(

@@ -1,6 +1,7 @@
-import type {
-  GenerationMessage,
-  GenerationService,
+import {
+  classifierIntent,
+  type GenerationMessage,
+  type GenerationService,
 } from '@offgrid/models';
 import { EMBEDDING_MODEL_FILENAME } from '../adapters/native/embeddingRuntimeAdapter';
 import {
@@ -47,8 +48,7 @@ export function composeMobileSidecarExecution(
         routeId, allowFallback: false,
       });
       if (result.output.type !== 'classification') throw new TypeError('Classification returned an invalid result');
-      return result.output.labels.reduce((best, candidate) =>
-        candidate.score > best.score ? candidate : best).label === 'image' ? 'image' : 'text';
+      return classifierIntent(result.output);
     },
   });
 }

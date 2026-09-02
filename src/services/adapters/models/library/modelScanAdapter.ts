@@ -20,7 +20,6 @@ import {
   pickProjectorForModel as pickMmProjForModel,
 } from '@offgrid/models';
 
-export { isMMProjFile };
 
 async function getDirSize(dirPath: string): Promise<number> {
   try {
@@ -101,6 +100,18 @@ export interface ReconcileImageModelsOpts {
   getImageModels: () => Promise<ONNXImageModel[]>;
   addImageModel: (model: ONNXImageModel) => Promise<void>;
   activeModelIds: Set<string>;
+  onDegraded?: (error: ModelLibraryScanDegradedError) => void;
+}
+
+export class ModelLibraryScanDegradedError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly cause: unknown,
+    readonly recoveredCount: number,
+  ) {
+    super(`Model library scan degraded during ${operation}.`);
+    this.name = 'ModelLibraryScanDegradedError';
+  }
 }
 
 async function isValidZip(zipPath: string): Promise<boolean> {
@@ -173,7 +184,7 @@ async function recoverImageModelFromZipRemnant(
 }
 
 export async function reconcileFinishedImageDownloads(opts: ReconcileImageModelsOpts): Promise<ONNXImageModel[]> {
-  const { imageModelsDir, getImageModels, addImageModel, activeModelIds } = opts;
+  const { imageModelsDir, getImageModels, addImageModel, activeModelIds, onDegraded } = opts;
   const recovered: ONNXImageModel[] = [];
 
   try {
@@ -221,8 +232,8 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
           };
           await addImageModel(migrated);
           recovered.push(migrated);
-        } catch {
-          // Non-fatal — leave the old entry in place; at least files are safe.
+        } catch (error) {
+          onDegraded?.(new ModelLibraryScanDegradedError('legacy-image-migration', error, recovered.length));
         }
         continue;
       }
@@ -237,7 +248,12 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
 
       if (action === 'recover-archive') {
         // Non-fatal on unexpected error: leave the dir for the next startup attempt.
-        const model = await recoverImageModelFromZipRemnant(item, imageModelsDir).catch(() => null);
+        let model: ONNXImageModel | null = null;
+        try {
+          model = await recoverImageModelFromZipRemnant(item, imageModelsDir);
+        } catch (error) {
+          onDegraded?.(new ModelLibraryScanDegradedError('image-archive-recovery', error, recovered.length));
+        }
         if (model) {
           await addImageModel(model);
           recovered.push(model);
@@ -246,8 +262,8 @@ export async function reconcileFinishedImageDownloads(opts: ReconcileImageModels
         await RNFS.unlink(item.path).catch(() => {});
       }
     }
-  } catch {
-    // Reconciliation errors must not crash startup.
+  } catch (error) {
+    onDegraded?.(new ModelLibraryScanDegradedError('image-reconciliation', error, recovered.length));
   }
 
   return recovered;
@@ -304,12 +320,14 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
 export async function scanForUntrackedTextModels(
   modelsDir: string,
   getModels: () => Promise<DownloadedModel[]>,
+  onDegraded?: (error: ModelLibraryScanDegradedError) => void,
 ): Promise<DownloadedModel[]> {
   const discoveredModels: DownloadedModel[] = [];
 
   try {
     return await doScanForUntrackedTextModels(modelsDir, getModels);
-  } catch {
+  } catch (error) {
+    onDegraded?.(new ModelLibraryScanDegradedError('text-model-scan', error, discoveredModels.length));
     return discoveredModels;
   }
 }

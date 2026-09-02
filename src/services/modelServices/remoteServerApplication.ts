@@ -2,6 +2,7 @@ import {
   RemoteServerApplicationService,
   mergeRemoteSelections,
   type PersistedRemoteServer,
+  type RemoteModelModality,
   type RemoteServerConfiguration,
 } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -25,6 +26,7 @@ import {
   selectCanonicalModel,
 } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
+import type { RemoteModel, RemoteServer } from '../../types';
 
 function readConfiguration(): RemoteServerConfiguration {
   const state = useRemoteServerStore.getState();
@@ -45,6 +47,61 @@ function writeConfiguration(value: RemoteServerConfiguration): void {
       Object.entries(state.serverHealth).filter(([id]) => ids.has(id)),
     ),
   }));
+}
+
+interface ManagedActivationInput {
+  server: PersistedRemoteServer;
+  modality: RemoteModelModality;
+  modelId: string;
+  credential: string | null;
+}
+
+/** Translate Shared's credential-free record into the Mobile HTTP adapter input. */
+function mobileTransportServer(
+  server: PersistedRemoteServer,
+  credential: string | null,
+): RemoteServer {
+  return {
+    id: server.id,
+    name: server.name,
+    endpoint: server.endpoint,
+    provider: server.provider,
+    selections: server.selections,
+    catalog: server.catalog,
+    ...(server.modelManagement
+      ? { modelManagement: server.modelManagement }
+      : {}),
+    createdAt: server.createdAt ?? new Date(0).toISOString(),
+    ...(server.screenFramesAllowed === true
+      ? { screenFramesAllowed: true }
+      : {}),
+    ...(credential ? { apiKey: credential } : {}),
+  };
+}
+
+function isRemoteModel(value: unknown): value is RemoteModel {
+  if (!value || typeof value !== 'object') return false;
+  const model = value as Partial<RemoteModel>;
+  return (
+    typeof model.id === 'string' &&
+    typeof model.name === 'string' &&
+    typeof model.serverId === 'string' &&
+    typeof model.lastUpdated === 'string' &&
+    Boolean(model.capabilities)
+  );
+}
+
+function activateManagedRemote({
+  server,
+  modality,
+  modelId,
+  credential,
+}: ManagedActivationInput) {
+  return activateOffGridDesktopModel(
+    mobileTransportServer(server, credential),
+    modality,
+    modelId,
+  );
 }
 
 /** Mobile composition: all decisions live in Shared; this file only connects platform I/O. */
@@ -83,7 +140,7 @@ export const mobileRemoteServerApplication = new RemoteServerApplicationService(
     projectDiscovery(serverId, result) {
       useRemoteServerStore.getState().setDiscoveredModels(
         serverId,
-        (result.models ?? []) as never[],
+        (result.models ?? []).filter(isRemoteModel),
       );
     },
     async test(server, credential) {
@@ -120,12 +177,13 @@ export const mobileRemoteServerApplication = new RemoteServerApplicationService(
       return result;
     },
     scan: discoverLANServers,
-    async activateManaged(server, modality, modelId, credential) {
-      return activateOffGridDesktopModel(
-        { ...server, apiKey: credential ?? undefined } as never,
-        modality,
-        modelId,
-      );
+    activateManaged(...args) {
+      return activateManagedRemote({
+        server: args[0],
+        modality: args[1],
+        modelId: args[2],
+        credential: args[3],
+      });
     },
   },
   generateId,

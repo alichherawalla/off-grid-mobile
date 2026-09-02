@@ -1,5 +1,8 @@
 import {
   reasoningWireForGeneration,
+  bindGenerationCancellation,
+  GenerationAbortedError,
+  GenerationCancellationFailedError,
   localTextRuntime,
   parseToolCallsFromText,
   type GenerationAdapter,
@@ -25,6 +28,33 @@ import { getToolExtensions } from '../tools/extensions';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
 import { mobileTextEngineControl } from './textEngineControl';
+import logger from '../../utils/logger';
+
+export class TextGenerationStopError extends GenerationCancellationFailedError {
+  readonly code = 'text-generation-stop-failed' as const;
+
+  constructor(
+    readonly engineId: string,
+    readonly cause: unknown,
+  ) {
+    super(`The ${engineId} runtime did not confirm that generation stopped.`, cause);
+    this.name = 'TextGenerationStopError';
+  }
+}
+
+/** Native stop port: success means confirmed; failure stays typed and observable. */
+export async function stopTextGenerationAtBoundary(
+  engineId: string,
+  stop: () => Promise<void>,
+): Promise<void> {
+  try {
+    await stop();
+  } catch (cause) {
+    const failure = new TextGenerationStopError(engineId, cause);
+    logger.error('[GenerationAdapter] Text generation stop failed:', failure);
+    throw failure;
+  }
+}
 
 function textAndAttachments(
   content: GenerationMessage['content'],
@@ -136,8 +166,15 @@ async function* providerChunks(
     wake?.();
     wake = null;
   };
-  const abort = () => transport.stopGeneration().catch(() => undefined);
-  request.signal?.addEventListener('abort', abort, { once: true });
+  if (request.signal?.aborted) throw new GenerationAbortedError();
+  const cancellation = bindGenerationCancellation(
+    request.signal,
+    () => stopTextGenerationAtBoundary(transport.id, () => transport.stopGeneration()),
+    error => push({ error }),
+  );
+  const unregisterCancellation = request.cancellation?.register(
+    () => cancellation.cancel(),
+  );
   const operation = transport.generate(
     modelId,
     mobileMessages(request.messages ?? []),
@@ -185,8 +222,10 @@ async function* providerChunks(
       if (item.value) yield item.value;
     }
     await operation;
+    await cancellation.wait();
   } finally {
-    request.signal?.removeEventListener('abort', abort);
+    unregisterCancellation?.();
+    cancellation.dispose();
   }
 }
 
@@ -238,8 +277,15 @@ async function* liteRTChunks(
     wake = null;
     listener?.();
   };
-  const abort = () => liteRTService.stopGeneration().catch(() => undefined);
-  request.signal?.addEventListener('abort', abort, { once: true });
+  if (request.signal?.aborted) throw new GenerationAbortedError();
+  const cancellation = bindGenerationCancellation(
+    request.signal,
+    () => stopTextGenerationAtBoundary('litert', () => liteRTService.stopGeneration()),
+    error => push({ error }),
+  );
+  const unregisterCancellation = request.cancellation?.register(
+    () => cancellation.cancel(),
+  );
   const operation = liteRTService.generateRaw(
     mobileTextEngineControl.preparePrompt(
       current?.content ?? '',
@@ -276,8 +322,10 @@ async function* liteRTChunks(
       if (item.value) yield item.value;
     }
     await operation;
+    await cancellation.wait();
   } finally {
-    request.signal?.removeEventListener('abort', abort);
+    unregisterCancellation?.();
+    cancellation.dispose();
   }
 }
 
@@ -307,6 +355,7 @@ const llamaTextTransport: TextStreamTransport = {
     let reasoning = '';
     await llmService.runNativeCompletion(messages, {
       reasoningWire: options.reasoningWire,
+      tools: options.tools,
       onStream: data => {
         if (data.content) {
           content += data.content;
@@ -322,6 +371,7 @@ const llamaTextTransport: TextStreamTransport = {
           content: result.content || content,
           reasoningContent: result.reasoningContent || reasoning || undefined,
           meta: generationMeta(modelId),
+          toolCalls: result.toolCalls,
         });
       },
     });
@@ -377,11 +427,6 @@ function adapter(id: string): GenerationAdapter {
 /** Remove an ephemeral shared-generation prompt from either native text runtime. */
 export async function clearMobileEphemeralTextState(): Promise<void> {
   await mobileTextEngineControl.invalidateAllConversations();
-}
-
-/** Stop the remote I/O boundary selected by Shared LLMService. */
-export async function stopMobileRemoteTextTransport(serverId: string): Promise<void> {
-  await remoteTextTransportRegistry.get(serverId)?.stopGeneration();
 }
 
 /** Shared generation receives the atomic residency lifecycle directly. */

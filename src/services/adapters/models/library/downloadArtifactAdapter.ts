@@ -107,7 +107,7 @@ function addProjection(input: {
   if (existing) store.retryEntry(modelKey, id);
   else store.add({
     modelKey, downloadId: id, modelId, fileName: file.name,
-    quantization: file.quantization ?? '', modelType: 'text', status: 'pending',
+    quantization: file.quantization ?? '', modelType: 'text', status: 'queued',
     bytesDownloaded: primaryAlreadyPresent ? file.size : 0, totalBytes: file.size,
     combinedTotalBytes: file.size + (file.mmProjFile?.size ?? 0),
     mmProjBytesDownloaded: projectorAlreadyPresent ? file.mmProjFile?.size ?? 0 : 0,

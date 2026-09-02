@@ -3,6 +3,7 @@ import {
   catalogModelKind,
   decodeModelRouteId,
   reconcileModelSelection,
+  selectedRemoteModelName,
   type ModelModality,
   type ModelSelectionProjectionPort,
   type PersistedSelectionCandidate,
@@ -48,10 +49,16 @@ function localTextCandidate(
 function remoteTextCandidate(): PersistedSelectionCandidate | null {
   const state = useRemoteServerStore.getState();
   if (!state.activeServerId || !state.activeRemoteTextModelId) return null;
-  const model = state.discoveredModels[state.activeServerId]?.find(
-    item => item.id === state.activeRemoteTextModelId,
-  );
-  const name = model?.name ?? state.activeRemoteTextModelId;
+  const server = state.servers.find(item => item.id === state.activeServerId);
+  const name = server
+    ? selectedRemoteModelName({
+        ...server,
+        catalog: {
+          ...server.catalog,
+          text: state.discoveredModels[state.activeServerId] ?? [],
+        },
+      }, 'text') ?? state.activeRemoteTextModelId
+    : state.activeRemoteTextModelId;
   const kind = catalogModelKind(name, [], state.activeRemoteTextModelId);
   return candidate(
     mobileRouteId({
@@ -70,12 +77,12 @@ function remoteMediaCandidate(
   const serverId = state.activeRemoteMediaServerIds[modality];
   const server = serverId ? state.servers.find(item => item.id === serverId) : null;
   const modelId = server?.selections?.[modality]?.trim();
-  const option = server?.catalog?.[modality]?.find(item => item.id === modelId);
+  const name = server ? selectedRemoteModelName(server, modality) : null;
   return serverId && modelId
     ? candidate(
         mobileRouteId({ source: 'remote', hostId: serverId, modality, modelId }),
         modality,
-        option?.name,
+        name ?? undefined,
       )
     : null;
 }
@@ -121,7 +128,7 @@ function classifierProjection(): PersistedSelectionProjection {
 }
 
 /** Read raw platform persistence facts. Shared owns every reconciliation decision. */
-export function readMobileSelectionProjection(
+function readMobileSelectionProjection(
   modality: ModelModality,
 ): PersistedSelectionProjection {
   const app = useAppStore.getState();
@@ -173,7 +180,7 @@ function rawRoute(routeId: string | null) {
 }
 
 /** Mechanical persistence projection. It does not choose a source, fallback, or eligible model. */
-export async function writeMobileSelectionProjection(
+async function writeMobileSelectionProjection(
   modality: ModelModality,
   projection: SelectionProjectionWrite,
 ): Promise<void> {
