@@ -2062,10 +2062,10 @@ Device log: "draw a dog" classified image once (20:27), later resends replayed t
 
 ## Remote model selection shows no loading (RESOLVED in code 2026-09-02: shared `ModelCommandApplicationService.pending(modality)` + `subscribe`; the sheet spins the remote row and disables the rest while the round trip runs; test model-command-service)
 
-## Mobile still keeps a local text selection beside the shared route (open, 2026-09-02)
+## Mobile still keeps parallel selection fields beside the shared route (open, 2026-09-02; see shared/docs/SHARED_OWNERSHIP_AUDIT_2026-09-02.md #7)
 
 `activeModelId` / `lastTextModelId` and `selectedTextModelId()` remain as a second owner of the text selection. The readiness path no longer reads them; the remaining readers must move to the shared active route and the fields be deleted.
 
-## OpenRouter models all classify as text (open, 2026-09-02)
+## OpenRouter models all classify as text (RESOLVED in code 2026-09-02: shared catalog reads `architecture.output_modalities`; `remoteImageRequest` draws through OpenRouter's chat-image modality and through `/images/generations` elsewhere; both apps call it; not yet verified live)
 
 OpenRouter lists image-output models via `output_modalities`, which shared's remote inventory does not read, so Desktop's remote server shows "No image models on this server". Reading the field is small; generating through OpenRouter's chat-completions image modality needs a second remote image transport in shared.
