@@ -6,6 +6,12 @@
  */
 
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import {
+  REMOTE_LAN_PROVIDER_KINDS,
+  REMOTE_LAN_PROVIDER_LABELS,
+  remoteLanScanKinds,
+  type RemoteLanProviderKind,
+} from '@offgrid/models';
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
@@ -47,6 +53,37 @@ type NavigationProp = NativeStackNavigationProp<
   'RemoteServers'
 >;
 
+/** Which server kinds a scan looks for. Shared owns the default and the filter; this only renders. */
+const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme }) => {
+  const scanKinds = useAppStore(s => remoteLanScanKinds(s.settings));
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const toggle = (kind: RemoteLanProviderKind, on: boolean) => {
+    const next = REMOTE_LAN_PROVIDER_KINDS.filter(candidate =>
+      candidate === kind ? on : scanKinds.includes(candidate),
+    );
+    // Shared treats an empty choice as "everything"; keep one kind on so the switch you just
+    // turned off stays off.
+    updateSettings({ remoteScanKinds: next.length ? next : [kind] });
+  };
+  return (
+    <>
+      {REMOTE_LAN_PROVIDER_KINDS.map(kind => (
+        <View key={kind} style={styles.cardRow}>
+          <View style={styles.cardTextCol}>
+            <Text style={styles.cardDesc}>{REMOTE_LAN_PROVIDER_LABELS[kind]}</Text>
+          </View>
+          <Switch
+            testID={`scan-kind-${kind}`}
+            value={scanKinds.includes(kind)}
+            onValueChange={on => toggle(kind, on)}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+          />
+        </View>
+      ))}
+    </>
+  );
+};
+
 export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
@@ -57,6 +94,7 @@ export const RemoteServersScreen: React.FC = () => {
     s => s.settings.autoDiscoverRemoteModels === true,
   );
   const updateSettings = useAppStore(s => s.updateSettings);
+
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
@@ -218,6 +256,7 @@ export const RemoteServersScreen: React.FC = () => {
               }}
             />
           </View>
+          <ScanKindToggles styles={styles} theme={theme} />
         </View>
 
         <View style={styles.actionRow}>

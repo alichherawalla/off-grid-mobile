@@ -15,6 +15,7 @@ import {
   REASONING_BUDGET_AUTO,
   isExcludedTextModel,
   isSuspiciousRecoveredImageModel,
+  type RemoteLanProviderKind,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../constants';
 import {
@@ -123,6 +124,8 @@ export type AppSettings = {
    *  migration turns it ON for users who already had a gateway. `undefined` = never set (reads OFF).
    *  Optional so the migration can distinguish "never set" from an explicit choice. */
   autoDiscoverRemoteModels?: boolean;
+  /** Which server kinds a network scan looks for. Absent means all. */
+  remoteScanKinds?: RemoteLanProviderKind[];
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';

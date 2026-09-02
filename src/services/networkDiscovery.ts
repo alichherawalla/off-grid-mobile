@@ -5,8 +5,10 @@ import {
   RemoteLanDiscoveryApplicationService,
   type RemoteLanProbeEvidence,
   type RemoteLanServer,
+  remoteLanScanKinds,
 } from '@offgrid/models';
 import logger from '../utils/logger';
+import { useAppStore } from '../stores';
 
 export type DiscoveredServer = RemoteLanServer;
 
@@ -36,5 +38,5 @@ export function discoverLANServers(
   return discovery.discover(message => {
     logger.warn('[Discovery]', message);
     onLog?.(message);
-  }, onFound);
+  }, onFound, { kinds: remoteLanScanKinds(useAppStore.getState().settings) });
 }
