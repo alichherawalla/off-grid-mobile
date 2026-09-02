@@ -30,10 +30,10 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
   const dot3Anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Desktop's loader (Tailwind animate-bounce): a one-second cycle where each dot rises a
-    // quarter of its own height, eases out at the top and eases in at the bottom, with the three
-    // dots 150ms apart. Same numbers here so both apps move the same way.
-    const rise = -size / 4;
+    // Desktop's loader (Tailwind animate-bounce): a one-second cycle, ease-out at the top and
+    // ease-in at the bottom, the three dots 150ms apart. Desktop rises a quarter of the dot's
+    // height; at the sizes used here that is 1 to 2 points and reads as static, so half.
+    const rise = -size / 2;
     const half = 500;
     const loops = [dot1Anim, dot2Anim, dot3Anim].map((anim, i) =>
       Animated.sequence([
