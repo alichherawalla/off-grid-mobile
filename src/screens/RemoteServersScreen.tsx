@@ -275,13 +275,6 @@ export const RemoteServersScreen: React.FC = () => {
           <View style={styles.cardRow}>
             <View style={styles.cardTextCol}>
               <Text style={styles.cardTitle}>Auto-discover on Wi-Fi</Text>
-              {/* Describes what is happening NOW, not what the default was: the old copy read
-                  "Off by default" while the switch was on. */}
-              <Text style={styles.cardDesc}>
-                {autoDiscover
-                  ? 'Looks for servers on your network each time you open this screen.'
-                  : 'Turn this on to find servers on your network without scanning by hand.'}
-              </Text>
             </View>
             <Switch
               testID="auto-discover-toggle"
