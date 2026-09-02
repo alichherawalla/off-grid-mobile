@@ -134,6 +134,10 @@ export async function activateOffGridDesktopModel(
   }
   const refreshed = await readOffGridDesktopModelState(server);
   if (!refreshed || refreshed.active[category] !== modelId) {
+    // Say what was asked and what came back; a bare "did not confirm" hid an id-shape mismatch.
+    logger.warn(
+      `[OffGridDesktop] activation not confirmed: asked ${category}=${modelId}, Desktop reports ${JSON.stringify(refreshed?.active ?? null)}`,
+    );
     throw new Error('Desktop did not confirm the selected model.');
   }
   return refreshed.active;
