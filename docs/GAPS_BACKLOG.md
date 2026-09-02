@@ -2030,3 +2030,21 @@ the screen renders incrementally.
 A setting selects the server kinds to scan for: Off Grid AI Desktop (gateway), Ollama, LM Studio.
 Default all on. Shared owns the kind list and filters the probe plan; mobile stores the choice and
 renders the toggles in Remote Servers.
+
+## Remote image generation failure hid Desktop's reason (RESOLVED in code 2026-09-02: shared strips the `OFFGRID_IMAGE_MEMORY_LIMIT` marker; the turn shows the server's message; no "Free memory & Retry" for a remote refusal; not yet verified on a device)
+
+Desktop refused to load DreamShaper XL (its own memory guard, HTTP 500 with an OpenAI-style error
+body). Mobile threw the raw JSON body, the shared image application returned null, and the chat
+turn said "Image generation returned no image" while a red card offered "Free memory & Retry",
+which frees the PHONE. Root cause: the memory-guard wire contract lived in Desktop only, so no
+client could recognise it, and the chat session ignored the failure the application had recorded.
+Now `@offgrid/models` owns the contract and the OpenAI error-body parser; the failure builder marks a
+remote refusal as not recoverable on this device; the turn shows the recorded reason; the failure
+card appears only when it offers an action the turn cannot (eject or force load).
+
+## Remote image refusal: no "Run anyway" from the phone (open, 2026-09-02)
+
+Desktop's admission message ends with "or use Run anyway", but the gateway's
+`/v1/images/generations` does not read `allowUnsafeMemoryOverride`, so a phone cannot force the load
+or free Desktop's memory. Fix in shared first: the remote image request carries the override flag,
+the gateway honours it, and the phone's turn offers "Run anyway on <Mac>" only for a remote refusal.
