@@ -33,6 +33,9 @@ export function _clearHooksForTesting(): void {
 
 /** Known hook names, centralised so core and pro stay in sync. */
 export const HOOKS = {
+  /** () => Promise<void> — re-run adoption of paired devices as remote servers (Pro sync). Fired by
+   *  the Remote Servers "Scan network" action so one tap covers the LAN scan and the paired roster. */
+  remoteServersAdoptPaired: 'remoteServers.adoptPaired',
   /** () => readonly OnboardingSlide[] — optional feature-owned onboarding content. Core owns the
    *  renderer and navigation; feature packages contribute data only. */
   onboardingAdditionalSlides: 'onboarding.additionalSlides',

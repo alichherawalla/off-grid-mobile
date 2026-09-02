@@ -5,6 +5,7 @@
  * or an Ollama / LM Studio server on the same network.
  */
 
+import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
@@ -91,6 +92,8 @@ export const RemoteServersScreen: React.FC = () => {
     setIsScanning(true);
     setScanNote(null);
     try {
+      // Paired devices first: a Mac you paired over sync is a server without any scan.
+      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired)?.catch(() => undefined);
       const { found: newServers } = await remoteServerManager.scanAndReconcile();
       if (newServers.length === 0) {
         // Say what was actually tried. "No servers found" leaves the user with nothing to act
