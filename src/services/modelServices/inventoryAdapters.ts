@@ -6,6 +6,7 @@ import {
   selectedRemoteModelName,
   type ModelInventoryAdapter,
   type RuntimeModel,
+  inventoryModelCapabilities,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -245,9 +246,8 @@ function undiscoveredSelectedRemoteTextRuntime(
   return runtime(identity, {
     name: selectedRemoteModelName(server, 'text') ?? displayModelName(selectedId),
     kind: 'text',
-    // The text route is known. Vision, tools, and thinking stay absent until discovery
-    // provides evidence; absence is not negative capability evidence.
-    capabilities: { textGeneration: true, streaming: true },
+    // The text route is known; tools and thinking stay unknown until discovery provides evidence.
+    capabilities: inventoryModelCapabilities({ kind: 'text', source: 'remote' }),
     installed: true,
     ready: !!remoteTextTransportRegistry.get(server.id),
     loaded: true,
@@ -320,13 +320,12 @@ const remoteModelInventoryAdapter: ModelInventoryAdapter = {
         return runtime(identity, {
           name: model.name,
           kind: model.capabilities.supportsVision ? 'vision' : 'text',
-          capabilities: {
-            textGeneration: true,
-            streaming: true,
-            vision: model.capabilities.supportsVision,
-            tools: model.capabilities.supportsToolCalling,
-            thinking: model.capabilities.supportsThinking,
-          },
+          // Shared owns capability inference; this adapter only reports what discovery observed.
+          capabilities: inventoryModelCapabilities({
+            kind: model.capabilities.supportsVision ? 'vision' : 'text',
+            source: 'remote',
+            remoteCapabilities: model.capabilities,
+          }),
           reasoning: model.capabilities.reasoning,
           installed: true,
           ready: !!transport,

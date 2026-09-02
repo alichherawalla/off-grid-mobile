@@ -70,9 +70,10 @@ interface RemoteModelCapabilities extends SharedRemoteModelCapabilities {
   /** Supports vision/image input */
   supportsVision: boolean;
   /** Supports function/tool calling */
-  supportsToolCalling: boolean;
-  /** Supports extended thinking (reasoning tokens) */
-  supportsThinking: boolean;
+  /** Absent means unknown: nothing has said either way. Unknown is not "no". */
+  supportsToolCalling?: boolean;
+  /** Supports extended thinking (reasoning tokens). Absent means unknown. */
+  supportsThinking?: boolean;
   /** Provider-published reasoning control for this executable route. */
   reasoning?: ModelReasoningMetadata;
   /**

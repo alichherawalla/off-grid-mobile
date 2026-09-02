@@ -92,8 +92,13 @@ async function readOffGridDesktopModelState(
         serverId: server.id,
         capabilities: {
           supportsVision: model.capabilities?.supportsVision === true,
-          supportsToolCalling: model.capabilities?.supportsToolCalling === true,
-          supportsThinking: model.capabilities?.supportsThinking === true,
+          // Published facts pass through as published; an absent fact stays unknown.
+          ...(typeof model.capabilities?.supportsToolCalling === 'boolean'
+            ? { supportsToolCalling: model.capabilities.supportsToolCalling }
+            : {}),
+          ...(typeof model.capabilities?.supportsThinking === 'boolean'
+            ? { supportsThinking: model.capabilities.supportsThinking }
+            : {}),
         },
         lastUpdated,
       })),
