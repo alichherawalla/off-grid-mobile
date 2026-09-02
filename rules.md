@@ -141,6 +141,21 @@ the simple thing directly.
 So, before any tooling: if the answer requires unusual measurement to explain, the implementation is
 probably wrong, and it is complicated where it should be plain. Simplify it and the symptom goes.
 
+## Where the logs live (pull the file before guessing)
+
+Every surface writes one durable log. When a person reports "it did X on the device", read that
+file first; it beats reasoning from memory every time.
+
+| Surface | File | How to read it |
+|---|---|---|
+| Desktop (main process, incl. pro) | `<data dir>/logs/off-grid-ai-desktop.log` - data dir is `OFFGRID_DATA_DIR`, else Electron `userData` (`~/Library/Application Support/Off Grid AI Desktop` on macOS), else `<cwd>/.offgrid`; `OFFGRID_DIAGNOSTIC_LOG` overrides the path | `tail -f` it. Rotates at its size cap. |
+| Mobile, iOS (dev build `ai.offgridmobile.dev`) | `Documents/offgrid-debug.log` inside the app container | `xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer --domain-identifier ai.offgridmobile.dev --source Documents/offgrid-debug.log --destination /tmp/offgrid-debug.log` |
+| Mobile, Android (dev build) | `files/offgrid-debug.log` inside the app's data dir | `adb shell run-as ai.offgridmobile.dev cat files/offgrid-debug.log > /tmp/offgrid-debug.log` |
+
+The mobile sink is dev-only (`__DEV__`), mirrors every `logger.*` line, appends a
+`===== session start … =====` marker per launch, and the in-app Debug Logs screen shows the same lines
+live. `mobile/rules.md` carries the full iOS recipe (reading the UDID from devicectl JSON).
+
 ## Debugging — start with the source of truth
 
 **Most bugs here are source-of-truth bugs, and the fix is almost always to collapse two sources into
