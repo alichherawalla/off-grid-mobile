@@ -41,7 +41,6 @@ export async function executeMobileImageGeneration(
         routeId,
         allowFallback: false,
         signal: options.signal,
-        timeoutMs: 10 * 60_000,
       },
       {
         chunk: chunk => {
