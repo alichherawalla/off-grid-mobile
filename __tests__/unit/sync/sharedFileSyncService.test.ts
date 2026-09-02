@@ -407,6 +407,55 @@ describe('the files this phone offers the rest of the mesh', () => {
       });
     });
 
+    it('is not rescanned once per streamed token, only when the chat commits', async () => {
+      await attachmentOnDisk();
+      await launch();
+      await settle();
+      expect(putIds()).toEqual([ATTACHMENT_ID]);
+      const mutationsAfterLaunch = mutations.length;
+      // The scan reaches the disk through exists/hash/stat; count those calls at the boundary.
+      const spies = ['exists', 'hash', 'stat'].map(name =>
+        jest.spyOn(fs as unknown as Record<string, (...args: never[]) => unknown>, name),
+      );
+      const nativeReads = (): number =>
+        spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0);
+      const readsAfterLaunch = nativeReads();
+
+      // A reply streaming in updates the chat store once per token. None of those writes changes a
+      // conversation, so none of them may walk the attachments again: on a phone that walk ran per
+      // token, stat-ing every file and re-deciding every record, until the UI stopped responding.
+      useChatStore.getState().startStreaming(CONVERSATION_ID);
+      for (let token = 0; token < 200; token += 1) {
+        useChatStore.getState().appendToStreamingReasoningContent(`think${token} `);
+        useChatStore.getState().appendToStreamingMessage(`word${token} `);
+      }
+      await settle();
+      expect(mutations.length).toBe(mutationsAfterLaunch);
+      expect(nativeReads()).toBe(readsAfterLaunch);
+
+      // Committing a message changes the conversation, and that is when the scan runs again: a photo
+      // attached to the committed message is admitted and told to the mesh.
+      const SECOND_ATTACHMENT_ID = '66666666-6666-4666-8666-666666666666';
+      const secondPath = `/docs/attachments/${SECOND_ATTACHMENT_ID}.jpg`;
+      await write(secondPath, 4096);
+      useChatStore.getState().addMessage(CONVERSATION_ID, {
+        role: 'user',
+        content: 'and this one',
+        attachments: [
+          {
+            id: SECOND_ATTACHMENT_ID,
+            type: 'image',
+            uri: `file://${secondPath}`,
+            mimeType: 'image/jpeg',
+            fileName: 'harbour.jpg',
+          },
+        ],
+      } as never);
+      await settle();
+      expect(nativeReads()).toBeGreaterThan(readsAfterLaunch);
+      expect(putIds()).toEqual([ATTACHMENT_ID, SECOND_ATTACHMENT_ID]);
+    });
+
     it('is skipped while its message has no durable identity yet', async () => {
       await attachmentOnDisk();
       useChatStore.setState({
