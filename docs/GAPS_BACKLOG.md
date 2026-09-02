@@ -1998,12 +1998,13 @@ All 23 cases throw "Invalid attempt to spread non-iterable instance" inside the 
 the code from the start of the day (ea263c08), so it predates today's home changes. Likely a mock
 that returns undefined where the hook spreads a list. Fix the seam, then the test.
 
-## Silent fallback from a remote model to a tiny local one (open, 2026-09-02)
+## Silent fallback from a remote model to a tiny local one (RESOLVED in code 2026-09-02: shared `fallbackNoticeText` + a "Model changed" row on the shared `fallback` event; the meta line names `turn.result.model`; unit test `chatGenerationProjection.fallback.test.ts`; not yet verified on a device)
 
 Desktop's Qwen 3.5 2B returned 502 mid-turn; shared fell back to the only loaded local text model,
 SmolLM2 135M, which wrote a rambling answer. The turn kept the "Waiting for Qwen 3.5 2B" label and
 never said which model answered. A fallback that changes the model must be visible in the chat and
-in the turn's meta line.
+in the turn's meta line. Still open from this entry: the streaming header label ("Waiting for ...")
+reads the active route and does not switch to the model that took over until the turn finishes.
 
 ## Streaming speech gives up when the voice engine is still loading (open, 2026-09-02)
 
