@@ -91,7 +91,7 @@ export const ModelsManagerSheet: React.FC<Props> = ({
       onClose={onClose}
       onClosed={onClosed}
       title="MODELS"
-      snapPoints={['55%']}
+      enableDynamicSizing
     >
       <View style={styles.content}>
         {ROWS.map(row => {
