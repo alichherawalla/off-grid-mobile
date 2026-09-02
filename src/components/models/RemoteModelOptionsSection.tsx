@@ -17,6 +17,22 @@ interface Props {
 }
 
 /** Shared remote rows for image, transcription, and voice model pickers. */
+/**
+ * You should read what happened and what still works, not a transport error. The device name is
+ * the one you gave it; local models keep working while it is away.
+ */
+export function remoteSelectionFailureText(serverName: string, reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason ?? '');
+  if (
+    /network request failed|failed to fetch|unreachable|not connected|econn|enotfound|timed? ?out|offline|socket/i.test(
+      message,
+    )
+  ) {
+    return `${serverName} can't be reached right now. Models on this phone keep working.`;
+  }
+  return message || `${serverName} could not take this model right now.`;
+}
+
 export const RemoteModelOptionsSection: React.FC<Props> = ({
   category,
   onSelect,
@@ -65,11 +81,7 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
                 });
                 onSelect?.();
               } catch (reason) {
-                setError(
-                  reason instanceof Error
-                    ? reason.message
-                    : 'The remote model could not be selected.',
-                );
+                setError(remoteSelectionFailureText(option.serverName, reason));
               } finally {
                 setSelecting(null);
               }
