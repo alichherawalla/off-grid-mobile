@@ -84,8 +84,10 @@ export const shouldShowEvictedBar = (
     return false;
   if (chat.isGeneratingImage) return false;
   if (!chat.activeModelId || chat.activeModelInfo?.isRemote) return false;
+  // A user turn the shared session recorded as an IMAGE turn (stopped or failed) is not waiting
+  // for a text reply either, so the text model's absence is not what the person needs told.
   const last = chat.displayMessages[chat.displayMessages.length - 1];
-  return last?.role === 'user';
+  return last?.role === 'user' && last.turnKind !== 'image';
 };
 
 // "Model unloaded to free memory — tap to continue": the active text model was evicted
