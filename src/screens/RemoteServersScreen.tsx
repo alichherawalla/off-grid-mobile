@@ -66,9 +66,9 @@ const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme 
     updateSettings({ remoteScanKinds: next.length ? next : [kind] });
   };
   return (
-    <>
+    <View style={styles.kindGroup}>
       {REMOTE_LAN_PROVIDER_KINDS.map(kind => (
-        <View key={kind} style={styles.cardRow}>
+        <View key={kind} style={styles.kindRow}>
           <View style={styles.cardTextCol}>
             <Text style={styles.cardDesc}>{REMOTE_LAN_PROVIDER_LABELS[kind]}</Text>
           </View>
@@ -80,7 +80,7 @@ const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme 
           />
         </View>
       ))}
-    </>
+    </View>
   );
 };
 
