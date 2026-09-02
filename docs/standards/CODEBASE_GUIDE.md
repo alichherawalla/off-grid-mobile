@@ -1368,6 +1368,15 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 
 #### 9.4.4 Model Loading Strategies
 
+Selecting a model and loading it into memory are separate actions. The Models sheet stores the
+selected route. Opening Home, entering Chat, or opening a model picker does not load a local text,
+image, or voice runtime. The app acquires the selected runtime when the user sends a message,
+starts image generation, or requests speech. Remote Server settings show the server catalog's
+model name; transport IDs and repository IDs are not user-facing labels when a catalog name exists.
+
+For curated downloads, Shared `@offgrid/models` owns the artifact list. Mobile uses network file
+discovery only for a model that is not present in the Shared catalog.
+
 **Performance mode (`'performance'`):**
 - Model stays loaded in RAM across generations
 - Faster response times (no load latency between messages)

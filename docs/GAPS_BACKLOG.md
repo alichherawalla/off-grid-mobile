@@ -1811,3 +1811,183 @@ Evidence:
 Close this gap only after the native manifest contract and rendered repeat-scan journey pass, the
 Android debug and release builds pass, the fixed debug app is installed without clearing data, and
 opening Scan QR shows the Android camera permission prompt once. Do not automate the camera scan.
+# Mobile model-control gaps
+
+- [x] **Resolved — Models manager sheet presents its four-row projection in a bounded viewport.**
+  Evidence (2026-09-01): `ModelsManagerSheet` now uses a 55% AppSheet snap point instead of
+  intrinsic animated-modal sizing, which collapsed to the header height on device. The generic
+  sheet exposes its rendered surface for boundary verification. A focused rendered regression
+  asserts that the presented surface has a non-zero fixed height and that Text, Image, Voice, and
+  Speech rows are all present. The exact Mobile TypeScript and lint gates pass. The focused
+  Jest process produced no output and did not finish within 50 seconds, so it was stopped and is
+  not reported as passing.
+
+- [x] **Resolved — Home shows the product-idea card before the Desktop announcement.**
+  Evidence (2026-09-01): `HomeScreen` renders `home-support-card` before
+  `desktop-promo-card`. The rendered regression records both test IDs and asserts their order.
+  The exact Mobile TypeScript, ESLint, Android lint, dependency-cruiser, and Knip gates pass. The
+  focused Jest runner remains blocked by the silent-runner condition described below, so this is
+  code and static-gate evidence, not installed-device evidence.
+
+## 2026-09-01 model-control architecture audit
+
+This milestone audited migration-touched model control only. It did not change production code and
+did not run a broad test or build. `shared/` has no equivalent gaps backlog, so Shared-owned defects
+that break Mobile are recorded here. Existing user-reported gaps are marked **known**. Findings that
+the code audit first isolated are marked **new**.
+
+- [x] **Resolved — Mobile uses Shared catalog artifacts for every curated model.**
+  `shared/packages/models/src/catalog/chat.ts:159-184` already owns the Gemma 4 E2B artifact names,
+  URLs, sizes, and roles. `mobile/src/screens/ModelsScreen/useTextModels.ts:42-68` projects a curated
+  entry without those canonical files, and `useTextModels.ts:290-315` then fetches the repository
+  again for every non-`offgrid/` entry. A failed or changed remote repository therefore produces an
+  empty file list and the generic `Failed to load model files` alert even when Shared has a complete
+  entry. This is the direct code path behind the reported Gemma 4 E2B `No compatible files` failure.
+  Shared is now the only source for curated primary/projector artifact names, URLs, sizes, hashes,
+  roles, and quantization. `modelCatalogFiles.ts` contains the pure Shared-to-Mobile projection and
+  a discovery port. That port calls Hugging Face only when the model ID is absent from Shared. The
+  Models screen and its onboarding direct-download path both use this resolver; the old
+  `offgrid/*` namespace exception is removed.
+
+  Evidence (2026-09-01): Mobile and Shared models TypeScript passed. Shared now publishes narrow
+  `catalog` and `quant` semantic entries, and Mobile injects the Hugging Face discovery adapter at
+  composition sites instead of importing it into the pure catalog resolver. The focused Jest suite
+  passed 4/4 within its 60-second external limit. It covers the exact Gemma 4 E2B
+  primary/projector projection, proves catalog resolution makes zero discovery calls, and proves
+  an uncatalogued model uses the discovery port. Focused ESLint has zero errors; two existing hook
+  dependency warnings remain in `useTextModels.ts` and are outside this repair.
+
+- [x] **Resolved — Shared catalog aliases now own remote model display names.**
+  Shared already owns alias-aware display resolution in
+  `shared/packages/models/src/remote/inventory.ts:133-142`. Mobile ignores that policy in
+  `mobile/src/components/RemoteServerEditor/RemoteModelField.tsx:37-41`,
+  `mobile/src/services/modelServices/modelSelectionProjection.ts:66-79`, and
+  `mobile/src/services/modelServices/inventoryAdapters.ts:235-242`; each path accepts only an exact
+  ID and then invents a fallback name. This is why a filename alias or internal route ID can appear
+  instead of the catalog model name. Replace the three derivations with one Shared alias-aware
+  resolver and keep the UI as a projection only.
+  Evidence (2026-09-01): the editor, persisted selection projection, and runtime inventory now use
+  Shared catalog names and `activeAliases`. `RemoteServerEditorApplicationService` projects all
+  four display names before React renders them. It also maps a `remote-vision:<server>:<model>`
+  transport identity back to the discovered catalog identity. `RemoteModelField` no longer parses
+  identities. Its loading value is exactly `...`. Focused application and rendered regressions
+  cover `Qwen 3.5 2B`, `DreamShaper XL Turbo`, the exact loading value, and absence of the raw
+  transport ID. The focused Jest process remained silent and was stopped within the bounded limit,
+  so these regressions are written but are not reported as passing.
+
+- [x] **Resolved — Shared API-base normalization owns every edited Mobile route.**
+  Shared persists non-Anthropic endpoints as API bases in
+  `shared/packages/models/src/remote/configuration-policy.ts:92-105`, using `remoteApiBase` from
+  `shared/packages/models/src/remote/identity.ts:19-23`. Mobile then treats that persisted API base
+  as an origin and appends `/v1` again in
+  `mobile/src/services/adapters/providers/openAICompatibleProvider.ts:125-127`,
+  `mobile/src/services/adapters/remote/offGridDesktopModels.ts:29-64`, and the error label in
+  `mobile/src/components/RemoteServerEditor/useRemoteServerForm.ts:191-211`. Shared must own one
+  route builder for models, chat, and Desktop-managed endpoints. Mobile transport adapters must only
+  execute the resulting URL.
+  Evidence (2026-09-01): chat and Desktop-managed adapters use Shared `remoteApiBase`; discovery
+  and the editor error state use Shared `remoteDiscoveryEndpoints`. A focused transport test covers
+  a saved `/v1` address and rejects every `/v1/v1/` request.
+
+- [x] **Resolved — Desktop capability evidence is preserved without invented defaults.**
+  Evidence (2026-09-01): `publishedCatalogRemoteCapabilities` now validates the canonical Shared
+  `ModelCapabilities` fields and preserves explicit true and false values in the remote projection.
+  Missing evidence stays absent. The focused Shared projection contract covers vision, tools,
+  thinking, explicit unsupported values, and unknown values. The real Desktop gateway integration
+  confirms `/v1/models/catalog` returns these catalog facts without changing them. Shared and
+  Desktop model architecture checks, both type checks, and the focused Desktop integration pass.
+
+- [x] **Resolved — Remote Server Editor failures remain typed, visible, and retryable.**
+  `mobile/src/components/RemoteServerEditor/useRemoteServerForm.ts:79-98` converts a Keychain read
+  failure into an empty key. Its automatic discovery at `useRemoteServerForm.ts:167-187` ignores a
+  typed unsuccessful result and suppresses thrown failures. Its post-save probe at
+  `useRemoteServerForm.ts:306-310` also suppresses every rejection before the editor closes. These
+  paths can show stale selections or report an apparently successful save with an unusable server.
+  Route each failure through one application-service result and render a retryable error. Do not
+  treat missing credentials, failed discovery, and cancellation as the same state.
+  Evidence (2026-09-01): the editor controller preserves distinct `credential-read`, `discovery`,
+  and `post-save-probe` failures. Keychain failure offers Retry, discovery failure stays visible,
+  and a failed post-save probe keeps the editor open. The exact Mobile TypeScript and lint gates
+  pass.
+
+- [x] **Resolved — Remote discovery failure is distinct from a successful empty catalog.**
+  Evidence (2026-09-01): the Mobile discovery adapter now throws a typed
+  `RemoteModelDiscoveryError` when Shared returns an unsuccessful discovery result. It returns an
+  empty model list only for successful discovery with no models. The application port therefore
+  cannot project an unavailable server as an authoritative empty catalog.
+
+- [x] **Resolved — Text and image registry read failures remain failures.**
+  Evidence (2026-09-01): the model-library bootstrap wraps rejected text and image persistence reads
+  as `ModelLibraryRegistryReadError`, including the registry kind and original cause. It no longer
+  maps either I/O failure to an empty installed-model inventory.
+
+- [x] **Resolved — Undiscovered remote capability evidence remains unknown.**
+  Evidence (2026-09-01): a selected remote text route that is absent from discovery keeps only the
+  known text-generation and streaming facts. Vision, tools, and thinking are absent until Shared
+  discovery supplies evidence; Mobile no longer invents three `false` capability values.
+
+  Focused ESLint and the full Mobile TypeScript check pass. Three focused Jest files were started
+  directly, but the runner produced no output for 60 seconds and was stopped. The regressions are
+  present, but their execution is not reported as passing.
+
+- [x] **Resolved in code — opening Chat no longer loads the selected text runtime.**
+  The obsolete `prepareSelectedModel` input and its `initiateModelLoad` screen-entry effect were
+  removed from `mobile/src/screens/ChatScreen/useChatScreen.ts` and
+  `mobile/src/screens/ChatScreen/useChatModelActions.ts`. `useChatModelStateSync` now projects only
+  selected-model capabilities. The existing send-time `ensureTextModelForChatFn` adapter remains the
+  only local acquisition path and delegates the decision to Shared `ChatModelReadinessService`.
+  Focused evidence is in `mobile/__tests__/unit/hooks/useChatModelStateSync.test.ts` (new and existing
+  Chat entry do not prepare a runtime) and `mobile/__tests__/unit/hooks/useChatModelActions.test.ts`
+  (first local readiness acquisition loads once; a remote route does not acquire a local runtime).
+  Focused ESLint and the exact Mobile type check pass. The focused Jest
+  runner was stopped after repeated bounded runs produced no output, so test execution remains a
+  verification blocker rather than being reported as passed.
+
+- [x] **Resolved — Mobile Pro loads the voice runtime only for explicit speech demand.**
+  The obsolete `audio.preload` hook and contract are removed. The app-root Kokoro bridge now starts
+  released even when its assets are downloaded. It mounts the ExecuTorch hook only when the Shared
+  `VoiceApplicationService` acquires residency for `synthesize()` or another explicit initialize
+  request. App boot, navigation, inventory, and download-status checks do not load the runtime.
+  Evidence (2026-09-01): the exact Mobile TypeScript and lint gates pass. The rendered bridge regression
+  asserts that a downloaded model stays idle and does not call `useTextToSpeech` until
+  `engine.initialize()` requests it. The focused Jest process produced no output and was stopped at
+  50 seconds, so this test is written but not reported as passing.
+
+- [x] **Resolved — Shared owns the canonical Kokoro model-to-runtime identity map.**
+  `EXECUTORCH_KOKORO_IDENTITY` defines the catalog model ID, native engine ID, and native asset ID
+  once. Mobile Pro imports that mapping for engine registration, runtime assets, inventory,
+  selection routes, residency routes, and download IDs. User-facing and control-plane projections
+  now use `software-mansion/executorch-kokoro`; only the native adapter persists `kokoro` as its
+  engine setting.
+  Evidence (2026-09-01): the focused Shared identity/catalog test passes 7/7. The Shared models
+  focused build, Mobile TypeScript, focused Mobile ESLint, and diff checks pass.
+
+- [x] **Resolved — user-visible Mobile loading labels end with three ASCII periods (`...`).**
+  The Remote Server Editor, Models manager, no-model Chat state, and Home loading overlay now use
+  ASCII `...`. The source audit finds no remaining ellipsis glyph or affected loading title without
+  the suffix. The exact Mobile TypeScript and lint gates pass.
+
+- [x] **Resolved — transcription selection is on demand and has one writer.**
+  Shared now records the canonical route without acquiring Whisper residency. Microphone demand owns
+  the first native load. The workflow projection contract cannot write `selectedModelId`, and Mobile
+  no longer sends a duplicate selection command after Shared selection or download.
+  Evidence (2026-09-01): Shared workflow tests pass 6/6; Shared and Mobile type-check and architecture
+  gates pass.
+
+- [x] **Resolved — generation abort failures remain visible.**
+  Text stop, image cancel, and transcription reset now preserve typed native failures, log them, and
+  publish them through the existing model-failure boundary. A native image cancellation refusal is
+  also a failure. Shared AbortSignal lifecycle ownership keeps the operation idempotent without a
+  Mobile-owned lifecycle flag.
+  Evidence (2026-09-01): Mobile type-check, focused lint, both architecture gates, and diff checks pass.
+
+### Boundary result
+
+The dependency direction is correct at the repository boundary: Mobile core does not import Pro,
+and the audited Pro audio control imports Shared policy through the core aliases. The audited
+identity, URL, artifact, capability, lifecycle, and editor-error defects are resolved in code.
+The exact Mobile TypeScript gate passes. The exact lint chain passes with zero ESLint errors,
+Android lint successful, and the configured iOS fallback reporting that SwiftLint is not installed.
+Dependency-cruiser reports zero violations across 595 modules and 3,071 dependencies; Knip reports
+no findings. Focused Jest execution and the exact final acceptance chains remain required before
+the migration is verified complete.
