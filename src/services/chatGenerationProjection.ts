@@ -8,7 +8,7 @@ import { buildGenerationMetaImpl } from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 
-export interface GenerationState {
+interface GenerationState {
   isGenerating: boolean;
   isThinking: boolean;
   conversationId: string | null;
@@ -86,7 +86,9 @@ class MobileGenerationProjection {
 
   private toolStarted(name: string): void {
     useChatStore.getState().resetStreamingSegment();
-    this.totalReasoningLength = 0;
+    // Shared reports turn-level cumulative reasoning across tool rounds. Keep
+    // the consumed length when the visible segment resets, so the next round
+    // appends only its new reasoning instead of repeating the completed round.
     this.update({ streamingContent: '', isThinking: true,
       routedToolNames: [...(this.state.routedToolNames ?? []), name] });
   }

@@ -459,8 +459,7 @@ class LiteRTService {
     // back to incomingEstimate (which sums all JS history) and triggering an unnecessary
     // compaction. Caller can invalidate explicitly via invalidateConversation() if
     // the message rewind requires a fresh native conversation.
-    try { await LiteRTModule.stopGeneration(); }
-    catch (e) { logger.log(TAG, `stopGeneration — error (ignored): ${String(e)}`); }
+    await LiteRTModule.stopGeneration();
   }
 
   // ---------------------------------------------------------------------------

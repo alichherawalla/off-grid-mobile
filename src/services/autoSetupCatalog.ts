@@ -6,6 +6,7 @@ import {
   type GuidedSetupCatalog,
 } from '@offgrid/models';
 import { fetchModelFiles } from './modelCatalogFiles';
+import { huggingFaceService } from './huggingface';
 import { hardwareService } from './hardware';
 import { autoSetupImageCatalogProvider } from './autoSetupImageCatalogProvider';
 import type { ModelFile } from '../types';
@@ -23,14 +24,16 @@ export type AutoSetupCompatibleCatalog = GuidedSetupCatalog<
 
 export interface AutoSetupCatalogBoundaries {
   totalMemoryGB: () => number;
-  fetchTextFiles: typeof fetchModelFiles;
+  fetchTextFiles: (
+    models: { id: string }[],
+  ) => ReturnType<typeof fetchModelFiles>;
   imageRecommendation: typeof hardwareService.getImageModelRecommendation;
   imageModels: typeof autoSetupImageCatalogProvider.load;
 }
 
 const productionCatalogBoundaries: AutoSetupCatalogBoundaries = {
   totalMemoryGB: () => hardwareService.getTotalMemoryGB(),
-  fetchTextFiles: fetchModelFiles,
+  fetchTextFiles: models => fetchModelFiles(models, huggingFaceService),
   imageRecommendation: () => hardwareService.getImageModelRecommendation(),
   imageModels: () => autoSetupImageCatalogProvider.load(),
 };

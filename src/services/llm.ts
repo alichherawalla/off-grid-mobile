@@ -32,8 +32,7 @@ import { dropMissingImageAttachments, modelImageAttachments } from './llmImageIn
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { resolveSpeculative } from './mtpDetection';
-import type { CompleteCallback, StreamCallback, StreamToken } from './llmStreamTypes';
-export type { StreamToken };
+import type { CompleteCallback, StreamCallback } from './llmStreamTypes';
 const resolveGpuBackend = (enabled: boolean, devices: string[]): string =>
   !enabled ? 'CPU' : (Platform.OS === 'ios' ? 'Metal' : (devices.join(', ') || 'OpenCL'));
 class LLMService {
@@ -263,7 +262,7 @@ class LLMService {
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }
-  async runNativeCompletion(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean; reasoningWire?: ReasoningWireFragment }): Promise<string> {
+  async runNativeCompletion(messages: Message[], options?: { onStream?: StreamCallback; onComplete?: CompleteCallback; disableThinking?: boolean; reasoningWire?: ReasoningWireFragment; tools?: unknown[] }): Promise<string> {
     const { onStream, onComplete, ...opts } = options ?? {};
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
@@ -285,7 +284,12 @@ class LLMService {
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
       const fallbackWire = reasoningWireFragment(resolveReasoningPlan(
         { enabled: thinkingOn, budgetTokens: settings.reasoningBudget }, this.getReasoningMetadata()));
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...(opts.reasoningWire ?? fallbackWire) };
+      const completionParams = {
+        messages: oaiMessages,
+        ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }),
+        ...(opts.reasoningWire ?? fallbackWire),
+        ...(opts.tools?.length ? { tools: opts.tools } : {}),
+      };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
@@ -312,7 +316,25 @@ class LLMService {
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);
       if (completionResult?.context_full) { logger.log('[LLM] Context full detected — signalling for compaction'); throw new Error('Context is full'); }
-      const result = { content: cr?.content || cr?.text || fullContent, reasoningContent: cr?.reasoning_content || fullReasoningContent };
+      const toolCalls = Array.isArray(cr?.tool_calls)
+        ? cr.tool_calls.flatMap((call: any) => {
+            const fn = call?.function;
+            if (!fn?.name) return [];
+            return [{
+              id: call.id,
+              name: fn.name,
+              arguments:
+                typeof fn.arguments === 'string'
+                  ? fn.arguments
+                  : JSON.stringify(fn.arguments ?? {}),
+            }];
+          })
+        : undefined;
+      const result = {
+        content: cr?.content || cr?.text || fullContent,
+        reasoningContent: cr?.reasoning_content || fullReasoningContent,
+        toolCalls,
+      };
       logger.log(`[LLM][THINKING] Final result — hasContent=${!!result.content}, hasReasoningContent=${!!result.reasoningContent}, reasoningLength=${result.reasoningContent?.length ?? 0}, fullReasoningFromStream=${fullReasoningContent.length}`);
       onComplete?.(result);
       return result.content;
@@ -367,13 +389,18 @@ class LLMService {
     try { await completionWork; return fullResponse.trim(); } finally { this.isGenerating = false; this.activeCompletionPromise = null; }
   }
   async stopGeneration(): Promise<void> {
-    if (this.context) { try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop error:', e); } }
+    let stopFailure: unknown;
+    if (this.context) {
+      try { await this.context.stopCompletion(); }
+      catch (error) { stopFailure = error; }
+    }
     // Declare idle only AFTER the in-flight completion actually unwinds — llama cannot honor a
     // stop during prefill (a 2.6k-token KB prefill unwound ~9s on-device), so clearing the flag
     // early made the readiness check say "free" while the native context was still busy, racing
     // the user's next send straight into 'LLM service busy' / a stale-stop-killed empty turn.
     if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
     this.isGenerating = false;
+    if (stopFailure) throw stopFailure;
   }
   /** Wait (bounded) until no completion is in flight. Returns true when idle. */
   async waitForIdle(timeoutMs: number = 15000): Promise<boolean> {

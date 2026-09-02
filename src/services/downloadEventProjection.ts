@@ -1,7 +1,7 @@
 import {
   coordinatedDownloads as downloads,
 } from './modelServices/coordinatedDownloadBridge';
-import { ModelDownloadApplicationService } from '@offgrid/models';
+import { ModelDownloadApplicationService, mapDownloadStoreStatus } from '@offgrid/models';
 import { modelDownloadProjection } from '../stores/downloadStore';
 import { toUserMessage } from '../utils/downloadErrors';
 import type { ModelKey } from '../utils/modelKey';
@@ -15,7 +15,7 @@ export function subscribeToDownloadProjection(): () => void {
   const unsubProgress = downloads.onAnyProgress(event => {
     downloadApplication.projectEvent({
       controller: modelDownloadProjection,
-      event,
+      event: { ...event, status: mapDownloadStoreStatus(event.status) },
       errorMessage: toUserMessage,
       at: Date.now(),
     });

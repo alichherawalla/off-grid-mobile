@@ -3,6 +3,15 @@
  * Native generation adapters import it without importing llm.ts, which keeps
  * the engine boundary free of circular dependencies.
  */
-export type StreamToken = { content?: string; reasoningContent?: string };
+type StreamToken = { content?: string; reasoningContent?: string };
 export type StreamCallback = (data: StreamToken) => void;
-export type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
+type NativeToolCall = {
+  id?: string;
+  name: string;
+  arguments: string;
+};
+export type CompleteCallback = (result: {
+  content: string;
+  reasoningContent: string;
+  toolCalls?: NativeToolCall[];
+}) => void;

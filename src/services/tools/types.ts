@@ -1,6 +1,5 @@
 import type {
   SharedToolCall,
-  SharedToolErrorCategory,
   SharedToolResult,
   ToolCatalogEntry,
 } from '@offgrid/models';
@@ -16,5 +15,4 @@ export interface ToolCall extends Omit<SharedToolCall, 'arguments'> {
   };
 }
 
-export type ToolErrorCategory = SharedToolErrorCategory;
 export type ToolResult = SharedToolResult;

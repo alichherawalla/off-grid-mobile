@@ -30,9 +30,8 @@ export const TOOL_CALL_CLOSERS: string[] = [...SHARED_TOOL_CALL_CLOSERS];
  * stripper misses — the DR7 promise applied to this second grammar. `\w+` after the `=` is the
  * tool/param name; the block closes with `</function>`.
  */
-export const XML_TOOL_CALL_FUNCTION_MARKER =
+const XML_TOOL_CALL_FUNCTION_MARKER =
   SHARED_XML_TOOL_CALL_FUNCTION_MARKER;
-export { XML_TOOL_CALL_PARAMETER_MARKER } from '@offgrid/sync';
 const XML_TOOL_CALL_FUNCTION_CLOSER = '</function>';
 
 const escapeRegExp = (s: string): string =>
@@ -61,14 +60,6 @@ const XML_TOOL_CALL_BLOCK_PATTERN = new RegExp(
  * back until the next chunk. Single source shared by ThinkTagParser and ToolCallTokenFilter (both
  * had a verbatim copy).
  */
-export function partialTagSuffix(text: string, tag: string): number {
-  return sharedPartialTagSuffix(text, tag);
-}
-/** Longest suffix of `text` that is a prefix of ANY tag — hold back a partial opener/closer of any form. */
-export function maxPartialTagSuffix(text: string, tags: string[]): number {
-  return sharedMaxPartialTagSuffix(text, tags);
-}
-
 const CONTROL_TOKEN_PATTERNS: RegExp[] = [
   /<\|im_start\|>\s*(?:system|assistant|user|tool)?\s*\n?/gi,
   /<\|im_end\|>\s*\n?/gi,
@@ -238,10 +229,8 @@ import {
   TOOL_CALL_CLOSERS as SHARED_TOOL_CALL_CLOSERS,
   TOOL_CALL_OPENERS as SHARED_TOOL_CALL_OPENERS,
   XML_TOOL_CALL_FUNCTION_MARKER as SHARED_XML_TOOL_CALL_FUNCTION_MARKER,
-  maxPartialTagSuffix as sharedMaxPartialTagSuffix,
   parseChatModelOutput,
   parseChatThinkingContent,
-  partialTagSuffix as sharedPartialTagSuffix,
   stripChatControlTokens,
   type ReasoningDelimiter as SharedReasoningDelimiter,
 } from '@offgrid/sync';

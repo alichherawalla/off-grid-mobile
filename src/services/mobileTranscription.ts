@@ -18,10 +18,6 @@ export function cancelMobileTranscription(): void {
   activeRequests.clear();
 }
 
-export function isMobileTranscribing(): boolean {
-  return activeRequests.size > 0;
-}
-
 export async function startMobileRealtimeTranscription(
   onResult: (result: RealtimeTranscriptionResult) => void,
   options: { language?: string; maxLength?: number; onError?: (error: unknown) => void } = {},

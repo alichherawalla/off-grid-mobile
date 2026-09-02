@@ -17,8 +17,6 @@ export {
 export {
   imageToBase64DataUrl,
   isPrivateNetworkEndpoint,
-  testEndpoint,
-  detectServerType,
 } from './httpClientUtils';
 // The stream-message types live in httpClientTypes so httpClientSSE can import them without
 // importing this file (which imports SSE) — that would be a cycle. Imported for internal use here

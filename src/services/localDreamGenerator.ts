@@ -1,5 +1,9 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-import { DEFAULT_IMAGE_GUIDANCE } from '@offgrid/models';
+import {
+  projectNativeGeneratedImageResult,
+  projectNativeImageGeneration,
+  type NativeImageGenerationProjection,
+} from '@offgrid/models';
 import {
   ImageGenerationParams,
   ImageGenerationProgress,
@@ -129,39 +133,21 @@ class LocalDreamGeneratorService {
     );
   }
 
-  private buildNativeParams(params: ImageGenerationParams & { previewInterval?: number }, prompt: string) {
-    const np = {
-      prompt,
-      negativePrompt: params.negativePrompt || '',
-      steps: params.steps || 8,
-      guidanceScale: params.guidanceScale || DEFAULT_IMAGE_GUIDANCE,
-      seed: params.seed ?? generateRandomSeed(),
-      width: params.width || 512,
-      height: params.height || 512,
-      previewInterval: params.previewInterval ?? 2,
-      useOpenCL: params.useOpenCL ?? true,
-    };
+  private buildNativeParams(params: ImageGenerationParams & { previewInterval?: number }): NativeImageGenerationProjection {
+    const np = projectNativeImageGeneration({
+      platform: Platform.OS,
+      request: params,
+      randomSeed: generateRandomSeed(),
+    });
     logger.log(`[WIRE-IMAGE-PARAMS] ${JSON.stringify({ requested: { steps: params.steps, guidanceScale: params.guidanceScale, width: params.width, height: params.height }, native: { ...np, prompt: undefined } })}`); // [WIRE] settings→native image params
     return np;
   }
 
-  private buildResult(params: ImageGenerationParams, result: any): GeneratedImage {
+  private buildResult(params: NativeImageGenerationProjection, result: unknown): GeneratedImage {
     logger.log(`[WIRE-IMAGE] ${JSON.stringify(result)}`); // [WIRE] raw native generateImage result shape from-device
-    return {
-      id: result.id,
-      prompt: params.prompt,
-      negativePrompt: params.negativePrompt,
-      imagePath: result.imagePath,
-      width: result.width,
-      height: result.height,
-      steps: params.steps || 8,
-      seed: result.seed,
-      modelId: '',
-      // ISO-8601, the one form every consumer of this field can read - the gallery's date, and the
-      // sync descriptor that a peer validates with Date.parse. Epoch milliseconds as text passes the
-      // `string` type and fails every reader.
-      createdAt: new Date().toISOString(),
-    };
+    const projected = projectNativeGeneratedImageResult({ value: result, request: params });
+    if (!projected) throw new Error('Native image generation returned an invalid result');
+    return projected;
   }
 
   async generateImage(
@@ -175,8 +161,7 @@ class LocalDreamGeneratorService {
     if (this.generating) {
       throw new Error('Image generation already in progress');
     }
-    const trimmedPrompt = (params.prompt || '').trim();
-    if (!trimmedPrompt) {
+    if (!(params.prompt || '').trim()) {
       throw new Error('Cannot generate image with an empty prompt');
     }
 
@@ -184,11 +169,12 @@ class LocalDreamGeneratorService {
     const progressSubscription = this.subscribeToProgress(onProgress, onPreview);
 
     try {
-      const result = await DiffusionModule.generateImage(this.buildNativeParams(params, trimmedPrompt));
+      const nativeParams = this.buildNativeParams(params);
+      const result = await DiffusionModule.generateImage(nativeParams);
       // Native side releases the CoreML pipeline after generation to free
       // memory, so clear TS-side state so the next request triggers a reload.
       this.loadedThreads = null;
-      return this.buildResult(params, result);
+      return this.buildResult(nativeParams, result);
     } catch (error: any) {
       const msg = error?.message || '';
       if (msg.includes('ERR_NO_MODEL') || msg.includes('unloaded') || msg.includes('Pipeline failed')) {
@@ -215,17 +201,16 @@ class LocalDreamGeneratorService {
     if (!this.isAvailable()) return [];
     try {
       const images = await DiffusionModule.getGeneratedImages();
-      return images.map((img: any) => ({
-        id: img.id,
-        prompt: img.prompt || '',
-        imagePath: img.imagePath,
-        width: img.width || 512,
-        height: img.height || 512,
-        steps: img.steps || 20,
-        seed: img.seed || 0,
-        modelId: img.modelId || '',
-        createdAt: img.createdAt,
-      }));
+      return images.flatMap((img: unknown) => {
+        const value = img && typeof img === 'object' ? img as Record<string, unknown> : {};
+        const request = projectNativeImageGeneration({
+          platform: Platform.OS,
+          request: { prompt: typeof value.prompt === 'string' ? value.prompt : '' },
+          randomSeed: 0,
+        });
+        const projected = projectNativeGeneratedImageResult({ value: img, request });
+        return projected ? [projected] : [];
+      });
     } catch {
       return [];
     }
@@ -247,16 +232,7 @@ class LocalDreamGeneratorService {
   }
 
   getConstants() {
-    if (!this.isAvailable()) {
-      return {
-        DEFAULT_STEPS: 20,
-        DEFAULT_GUIDANCE_SCALE: DEFAULT_IMAGE_GUIDANCE,
-        DEFAULT_WIDTH: 512,
-        DEFAULT_HEIGHT: 512,
-        SUPPORTED_WIDTHS: [128, 192, 256, 320, 384, 448, 512],
-        SUPPORTED_HEIGHTS: [128, 192, 256, 320, 384, 448, 512],
-      };
-    }
+    if (!this.isAvailable()) return null;
     const __c = DiffusionModule.getConstants();
     logger.log(`[WIRE-IMAGE-CONSTANTS] ${JSON.stringify(__c)}`); // [WIRE] raw native diffusion constants (steps/guidance/supported sizes)
     return __c;

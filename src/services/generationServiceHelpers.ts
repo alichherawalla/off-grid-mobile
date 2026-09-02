@@ -6,8 +6,6 @@ import { liteRTService } from './litert';
 import { llmService } from './llm';
 import { activeMobileRoute } from './modelServices/mobileLLMService';
 
-export const FLUSH_INTERVAL_MS = 50;
-
 function liteRTMeta(service: any, modelName: string | undefined): GenerationMeta {
   const backend = liteRTService.getActiveBackend() ?? 'cpu';
   const stats = service.liteRTBenchmarkStats ?? liteRTService.getLastBenchmarkStats();
