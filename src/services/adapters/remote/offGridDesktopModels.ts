@@ -1,3 +1,4 @@
+import logger from '../../../utils/logger';
 import type {
   RemoteMediaModelIds,
   RemoteModel,
@@ -103,7 +104,13 @@ async function readOffGridDesktopModelState(
         lastUpdated,
       })),
     };
-  } catch {
+  } catch (error) {
+    // Never silent: "Desktop model state could not be read" needs a cause in the log.
+    logger.warn(
+      `[OffGridDesktop] model state unreadable at ${server.endpoint}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
     return null;
   }
 }
