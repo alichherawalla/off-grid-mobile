@@ -25,28 +25,30 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
   testID,
 }) => {
   const { colors } = useTheme();
-  const dot1Anim = useRef(new Animated.Value(0.3)).current;
-  const dot2Anim = useRef(new Animated.Value(0.3)).current;
-  const dot3Anim = useRef(new Animated.Value(0.3)).current;
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const duration = 400;
-    // Each dot runs the same fade, offset by 150ms, so the brightness travels left to right.
+    const duration = 300;
+    // Each dot bounces up and settles, offset by 150ms, so one dot is always highest and the
+    // bounce travels left to right. Movement, not fading: a fade reads as blinking.
     const loops = [dot1Anim, dot2Anim, dot3Anim].map((anim, i) =>
       Animated.sequence([
         Animated.delay(i * 150),
         Animated.loop(
           Animated.sequence([
             Animated.timing(anim, {
-              toValue: 1,
+              toValue: -size,
               duration,
               useNativeDriver: true,
             }),
             Animated.timing(anim, {
-              toValue: 0.3,
+              toValue: 0,
               duration,
               useNativeDriver: true,
             }),
+            Animated.delay(150),
           ]),
         ),
       ]),
@@ -54,7 +56,7 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
     loops.forEach(loop => loop.start());
 
     return () => loops.forEach(loop => loop.stop());
-  }, [dot1Anim, dot2Anim, dot3Anim]);
+  }, [dot1Anim, dot2Anim, dot3Anim, size]);
 
   const dotStyle = {
     width: size,
@@ -70,9 +72,27 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
       accessibilityRole="progressbar"
       accessibilityLabel="Working"
     >
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot1Anim }]} />
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot2Anim }]} />
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot3Anim }]} />
+      <Animated.View
+        style={[
+          styles.dot,
+          dotStyle,
+          { transform: [{ translateY: dot1Anim }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.dot,
+          dotStyle,
+          { transform: [{ translateY: dot2Anim }] },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.dot,
+          dotStyle,
+          { transform: [{ translateY: dot3Anim }] },
+        ]}
+      />
     </View>
   );
 };
