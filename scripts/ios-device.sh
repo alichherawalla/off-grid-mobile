@@ -16,6 +16,12 @@
 #   IOS_DEVICE_ID  — target a specific device UDID
 #   IOS_TEAM       — development team id
 #   IOS_PROFILE    — set to force MANUAL signing with a named profile (fallback)
+#
+# Metro reachability. A device build probes Metro at launch; AppDelegate bounds that probe to 2 s and
+# falls back to the bundle shipped in the app, so on a network where the phone cannot reach the Mac:
+#   FORCE_BUNDLING=1          — ship main.jsbundle in the Debug app (the fallback needs it)
+#   SKIP_BUNDLING_METRO_IP=1  — do not bake the Mac's Wi-Fi address into the app
+#   METRO_HOST=100.x.y.z      — bake a reachable address instead (a Tailscale IP, say)
 set -euo pipefail
 
 # Pick a target device, then make sure it is actually reachable. These are two

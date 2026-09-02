@@ -343,7 +343,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
+			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n\n# METRO_HOST overrides the Metro address a device build probes at launch. React Native writes the\n# Mac's Wi-Fi address; on a network with client isolation the phone cannot reach it, the probe blocks\n# scene creation and iOS kills the app at 20 s (0x8BADF00D). Point it at an address the phone can\n# reach (a Tailscale IP, say): METRO_HOST=100.x.y.z npm run ios:device\nif [ -n \"${METRO_HOST:-}\" ] && [[ \"$CONFIGURATION\" = *Debug* ]] && [[ ! \"$PLATFORM_NAME\" == *simulator ]]; then\n  echo \"$METRO_HOST\" > \"$CONFIGURATION_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/ip.txt\"\nfi\n";
 		};
 		21682FCE928FD9ACF8CB4BC3 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
