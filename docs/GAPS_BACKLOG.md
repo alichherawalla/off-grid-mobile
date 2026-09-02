@@ -2018,3 +2018,15 @@ Selecting a Desktop model via OGAD returned "Desktop did not confirm the selecte
 Desktop was restarting its model server under a burst of activations. Activations are now joined in
 shared; verify the flow end to end. Follow-up: a device paired over sync should auto-register as a
 remote server, so the two connections are one.
+
+## Remote server scan: results appear only when the whole scan ends (open, 2026-09-02)
+
+`RemoteLanDiscoveryApplicationService` returns one list at the end. The screen must show each
+server the moment it is found. Shared emits found servers as it goes (a callback or async iterable);
+the screen renders incrementally.
+
+## Remote server scan: choose which kinds to look for (open, 2026-09-02)
+
+A setting selects the server kinds to scan for: Off Grid AI Desktop (gateway), Ollama, LM Studio.
+Default all on. Shared owns the kind list and filters the probe plan; mobile stores the choice and
+renders the toggles in Remote Servers.
