@@ -23,32 +23,10 @@ class CoreMLDiffusionModule: RCTEventEmitter {
   // Serial queue for all pipeline operations
   private let pipelineQueue = DispatchQueue(label: "ai.offgridmobile.coreml.diffusion", qos: .userInitiated)
 
-  override init() {
-    super.init()
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(handleMemoryWarning),
-      name: UIApplication.didReceiveMemoryWarningNotification,
-      object: nil
-    )
-  }
-
-  deinit {
-    NotificationCenter.default.removeObserver(self)
-  }
-
-  @objc private func handleMemoryWarning() {
-    // If we're not actively generating, release the pipeline to free memory
-    guard !generating else { return }
-    if pipeline != nil {
-      NSLog("[CoreMLDiffusion] Memory warning received — unloading pipeline to prevent crash")
-      pipeline = nil
-      loadedModelPath = nil
-      sendEvent(withName: "LocalDreamError", body: [
-        "error": "Model unloaded due to low memory. Please try a smaller model."
-      ])
-    }
-  }
+  // Low memory is handled in ONE place: the shared ModelResidencyManager, which receives the same
+  // warning through AppState and decides what to evict. This module used to drop its pipeline on
+  // its own; the JavaScript record then still said "loaded", ensure skipped the load, and the next
+  // generate failed with ERR_NO_MODEL. The engine only loads and unloads when asked.
 
   // MARK: - RCTEventEmitter
 
