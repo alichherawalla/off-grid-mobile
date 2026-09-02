@@ -1,6 +1,6 @@
 import { remoteServerManager } from '../../remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
-import { remoteMediaEndpoint, resolveRemoteRoute, remoteErrorBodyMessage } from '@offgrid/models';
+import { remoteMediaEndpoint, resolveRemoteRoute, remoteErrorBodyMessage, remoteImageRequest, parseRemoteImageResponse } from '@offgrid/models';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 
 
@@ -31,6 +31,8 @@ async function request<T>(
   input: {
     server: RemoteServer;
     path: string;
+    /** A full URL chosen by shared policy; `path` names the modality for the endpoint rule. */
+    url?: string;
     init: RequestInit;
     signal?: AbortSignal;
   },
@@ -43,7 +45,7 @@ async function request<T>(
   try {
     const apiKey = await remoteServerManager.getApiKey(server.id);
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
-    const response = await fetch(endpoint(server, path), {
+    const response = await fetch(input.url ?? endpoint(server, path), {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -86,30 +88,36 @@ function requiredModel(
 export const remoteMediaRuntime = {
   async generateImage(
     server: RemoteServer,
-    input: { prompt: string; size?: string; model?: string; allowUnsafeMemoryOverride?: boolean },
+    input: {
+      prompt: string;
+      model?: string;
+      width?: number;
+      height?: number;
+      allowUnsafeMemoryOverride?: boolean;
+    },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
-    const payload = await request({
+    const plan = remoteImageRequest({
+      provider: server.provider,
+      endpoint: server.endpoint,
+      model: input.model ?? requiredModel(server, 'image'),
+      prompt: input.prompt,
+      width: input.width,
+      height: input.height,
+      allowUnsafeMemoryOverride: input.allowUnsafeMemoryOverride,
+    });
+    const artifact = await request({
       server,
       path: '/v1/images/generations',
+      url: plan.url,
       init: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: input.model ?? requiredModel(server, 'image'),
-          prompt: input.prompt,
-          size: input.size ?? '1024x1024',
-          response_format: 'b64_json',
-          ...(input.allowUnsafeMemoryOverride ? { allow_unsafe_memory_override: true } : {}),
-        }),
+        body: JSON.stringify(plan.body),
       },
       signal: options.signal,
-    }, response => response.json() as Promise<{
-      data?: Array<{ b64_json?: string; url?: string }>;
-    }>);
-    const image = payload.data?.[0];
-    if (!image?.b64_json && !image?.url) throw new Error('Remote server returned no image');
-    return { base64: image.b64_json, url: image.url };
+    }, async response => parseRemoteImageResponse(await response.json(), plan.transport));
+    return { base64: artifact.base64, url: artifact.url };
   },
 
   async transcribe(

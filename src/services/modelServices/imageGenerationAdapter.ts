@@ -162,7 +162,8 @@ export function mobileImageGenerationAdapter(id: string): GenerationAdapter {
         server,
         {
           prompt: operation.prompt,
-          size: `${operation.width ?? 512}x${operation.height ?? 512}`,
+          width: operation.width ?? 512,
+          height: operation.height ?? 512,
           model: model.id,
           allowUnsafeMemoryOverride: operation.allowUnsafeMemoryOverride,
         },
