@@ -222,7 +222,9 @@ async function generateForSession(
       previewInterval: request.operation.previewInterval,
       conversationId: identity.conversationId,
     });
-    if (!generated) throw new Error('Image generation returned no image');
+    if (!generated) {
+      throw new Error(mobileImageChatGeneration.lastError() ?? 'Image generation returned no image');
+    }
     const model =
       (request.routeId ? mobileLLMService.get(request.routeId) : null) ??
       activeMobileRoute('image').model;

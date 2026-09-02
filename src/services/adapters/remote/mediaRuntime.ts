@@ -1,6 +1,6 @@
 import { remoteServerManager } from '../../remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
-import { remoteMediaEndpoint, resolveRemoteRoute } from '@offgrid/models';
+import { remoteMediaEndpoint, resolveRemoteRoute, remoteErrorBodyMessage } from '@offgrid/models';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
 
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -57,7 +57,7 @@ async function request<T>(
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(detail || `Remote server returned HTTP ${response.status}`);
+      throw new Error(remoteErrorBodyMessage(detail, response.status));
     }
     // Keep timeout and caller cancellation attached until the response body is
     // consumed. A successful header is not a completed image/audio transfer.

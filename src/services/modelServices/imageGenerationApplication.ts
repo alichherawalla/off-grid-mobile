@@ -176,6 +176,9 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
     },
     isForceLoadError: isOverridableMemoryError,
     onFailure(failure: ImageApplicationFailure, actions) {
+      // The chat turn already shows the reason. The card exists only for the
+      // recovery actions the turn cannot offer: free this device's memory or force the load.
+      if (!failure.retryAfterEject && !failure.forceLoadAllowed) return;
       reportModelFailure('image', failure.cause, {
         message: failure.message,
         onRetry: actions.retry,
