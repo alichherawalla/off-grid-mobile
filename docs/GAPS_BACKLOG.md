@@ -1991,3 +1991,9 @@ Android lint successful, and the configured iOS fallback reporting that SwiftLin
 Dependency-cruiser reports zero violations across 595 modules and 3,071 dependencies; Knip reports
 no findings. Focused Jest execution and the exact final acceptance chains remain required before
 the migration is verified complete.
+
+## Unit test `__tests__/unit/hooks/useHomeScreen.test.ts` fails on every case (pre-existing, 2026-09-02)
+
+All 23 cases throw "Invalid attempt to spread non-iterable instance" inside the hook. Fails on
+the code from the start of the day (ea263c08), so it predates today's home changes. Likely a mock
+that returns undefined where the hook spreads a list. Fix the seam, then the test.
