@@ -2042,7 +2042,7 @@ Now `@offgrid/models` owns the contract and the OpenAI error-body parser; the fa
 remote refusal as not recoverable on this device; the turn shows the recorded reason; the failure
 card appears only when it offers an action the turn cannot (eject or force load).
 
-## Remote image refusal: no "Run anyway" from the phone (open, 2026-09-02)
+## Remote image refusal: no "Run anyway" from the phone (RESOLVED in code 2026-09-02: a guard refusal from a remote server is overridable; the card's Run anyway resends with `allow_unsafe_memory_override`; Desktop's gateway honours it; not yet verified on a device)
 
 Desktop's admission message ends with "or use Run anyway", but the gateway's
 `/v1/images/generations` does not read `allowUnsafeMemoryOverride`, so a phone cannot force the load
