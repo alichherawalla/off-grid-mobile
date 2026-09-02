@@ -12,17 +12,36 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
 import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
-import { selectMobileModel } from '../../services/modelServices';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
+import { ModelFailureCard } from '../ModelFailureCard';
+import { reportModelFailure } from '../../services/modelFailureHandler';
+import logger from '../../utils/logger';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
 };
 
+type WhisperPickerOperation = 'select' | 'reconcile';
+
+function reportWhisperPickerFailure(
+  operation: WhisperPickerOperation,
+  error: unknown,
+): void {
+  logger.error(`[WhisperPicker] ${operation} failed:`, error);
+  reportModelFailure('stt', error, {
+    id: `whisper-picker-${operation}`,
+    title: 'Transcription models are unavailable',
+    message: error instanceof Error
+      ? error.message
+      : 'Off Grid AI could not update your transcription models.',
+  });
+}
+
 /**
  * Transcription (Whisper) model picker. Whisper keeps a single active STT model,
- * so selecting a model downloads it (auto-loading) and replaces the previous one.
+ * so selecting a model records the route and replaces the previous selection.
+ * Microphone demand owns native loading.
  */
 export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { colors } = useTheme();
@@ -33,6 +52,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
     : null;
   const isModelLoading = useWhisperStore(s => s.isModelLoading);
   const presentModelIds = useWhisperStore(s => s.presentModelIds);
+  const whisperError = useWhisperStore(s => s.error);
   const downloadModel = (modelId: string) => transcriptionModelIntents.downloadModel(modelId);
   const selectModel = (modelId: string) => transcriptionModelIntents.selectModel(modelId);
   const deleteModelById = (modelId: string) => transcriptionModelIntents.deleteModel(modelId);
@@ -43,8 +63,21 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { stateFor, anyDownloading } = useSttDownloadState();
 
   useEffect(() => {
-    if (visible && !anyDownloading) transcriptionModelIntents.reconcileDisk();
+    if (visible && !anyDownloading) {
+      transcriptionModelIntents.reconcileDisk().catch(error =>
+        reportWhisperPickerFailure('reconcile', error),
+      );
+    }
   }, [visible, anyDownloading]);
+
+  useEffect(() => {
+    if (!visible || !whisperError) return;
+    reportModelFailure('stt', whisperError, {
+      id: 'whisper-picker-workflow',
+      title: 'Transcription model unavailable',
+      message: whisperError,
+    });
+  }, [visible, whisperError]);
 
   return (
     <AppSheet
@@ -53,6 +86,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
       title="TRANSCRIPTION MODEL"
       enableDynamicSizing
     >
+      <ModelFailureCard />
       <View style={styles.content}>
         <RemoteModelOptionsSection
           category="transcription"
@@ -83,16 +117,16 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
               disabled={busy}
               onPress={async () => {
                 if (present) {
-                  if (!active) await selectModel(m.id);
+                  if (!active) {
+                    try {
+                      await selectModel(m.id);
+                    } catch (error) {
+                      reportWhisperPickerFailure('select', error);
+                    }
+                  }
                 } else {
                   await downloadModel(m.id);
                 }
-                await selectMobileModel({
-                  source: 'local',
-                  hostId: 'whisper.rn',
-                  modality: 'transcription',
-                  modelId: m.id,
-                });
               }}
             >
               <View style={styles.rowInfo}>

@@ -84,7 +84,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     activeRemoteImageModelId,
     handleSelectTextModel,
     handleUnloadTextModel,
-    handleSelectImageModel,
     handleUnloadImageModel,
     // Remote model handlers
     handleEjectAll,
@@ -286,9 +285,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Icon name="chevron-right" size={16} color={colors.textMuted} />
           </AnimatedPressable>
 
-          {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
-          <DesktopPromoCard />
-
           <AnimatedEntry index={5} staggerMs={50} trigger={focusTrigger}>
             <Card style={styles.supportCard} testID="home-support-card">
               <View style={styles.supportHeader}>
@@ -315,6 +311,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             </Card>
           </AnimatedEntry>
 
+          {/* Off Grid AI Desktop — live announcement; owns its own copy/dismiss state. */}
+          <DesktopPromoCard />
+
           {/* Model Stats row removed — the per-type counts now live in the Models
               card above, and the chat count sits next to "See all". */}
         </ScrollView>
@@ -326,7 +325,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         onClose={() => setPickerType(null)}
         onSelectModel={handleSelectTextModel}
         onUnloadModel={handleUnloadTextModel}
-        onSelectImageModel={handleSelectImageModel}
         onUnloadImageModel={handleUnloadImageModel}
         isLoading={loadingState.isLoading}
         onSelectionComplete={() => setPickerType(null)}

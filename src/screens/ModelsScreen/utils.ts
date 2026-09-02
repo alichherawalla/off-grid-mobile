@@ -1,9 +1,8 @@
-import RNFS from 'react-native-fs';
 import { HFImageModel } from '../../services/huggingFaceModelBrowser';
 import { ModelInfo, ImageModelRecommendation, SoCInfo } from '../../types';
 import { ImageModelDescriptor, ModelTypeFilter } from './types';
 import { imageBackendLabel } from '../../utils/imageBackend';
-import { sizeToBytes } from '../../utils/fileSize';
+export { getDirectorySize } from '../../services/adapters/filesystem/directorySize';
 import {
   getModelType as sharedModelType,
   imageCatalogCompatibility,
@@ -20,20 +19,6 @@ export function formatNumber(num: number): string {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
-}
-
-export async function getDirectorySize(dirPath: string): Promise<number> {
-  let total = 0;
-  const items = await RNFS.readDir(dirPath);
-  for (const item of items) {
-    if (item.isDirectory()) {
-      total += await getDirectorySize(item.path);
-    } else {
-      const s = sizeToBytes(item.size);
-      total += s;
-    }
-  }
-  return total;
 }
 
 export function getModelType(model: ModelInfo): ModelTypeFilter {

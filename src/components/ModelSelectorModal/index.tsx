@@ -16,7 +16,6 @@ import {
 } from '../../types';
 import { resolveSelectedTextModel, remoteServerModelOptions } from '../../services';
 import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
-import { loadModelWithOverride } from '../../services/loadModelWithOverride';
 import {
   CustomAlert,
   AlertState,
@@ -41,7 +40,16 @@ const remoteModelId = (model: { source: string; id: string } | null) =>
 const remoteServerId = (model: { source: string; serverId?: string } | null) =>
   model?.source === 'remote' ? model.serverId ?? null : null;
 
-function savedTextModels(
+function evidenceBasedRemoteCapabilities(
+  evidence?: Partial<RemoteModel['capabilities']>,
+): RemoteModel['capabilities'] {
+  // RemoteModel predates Shared's evidence-based capability contract and still
+  // declares these fields as required. An empty projection preserves "unknown"
+  // at runtime instead of inventing negative capability evidence.
+  return { ...evidence } as RemoteModel['capabilities'];
+}
+
+export function savedTextModels(
   server: RemoteServer,
   discovered: RemoteModel[],
 ): RemoteModel[] {
@@ -50,22 +58,39 @@ function savedTextModels(
       id: option.id,
       name: option.name,
       serverId: option.serverId,
-      capabilities: {
-        supportsVision: false,
-        supportsToolCalling: false,
-        supportsThinking: false,
-      },
+      capabilities: evidenceBasedRemoteCapabilities(option.capabilities),
       details: { serverName: option.serverName },
       lastUpdated: server.createdAt,
     },
   );
 }
 
+export function savedImageModels(server: RemoteServer): RemoteModel[] {
+  return remoteServerModelOptions([server], 'image').map(option => ({
+    id: option.id,
+    name: option.name,
+    serverId: option.serverId,
+    capabilities: evidenceBasedRemoteCapabilities(option.capabilities),
+    details: { serverName: option.serverName },
+    lastUpdated: server.createdAt,
+  }));
+}
+
+export function selectLocalImageModelOnDemand(
+  model: ONNXImageModel,
+): Promise<void> {
+  return mobileModelCommands.select({
+    source: 'local',
+    hostId: model.backend ?? 'image-runtime',
+    modality: 'image',
+    modelId: model.id,
+  }, { load: false });
+}
+
 interface ModelSelectorModalProps {
   visible: boolean;
   onClose: () => void;
   onSelectModel: (model: DownloadedModel) => void;
-  onSelectImageModel?: (model: ONNXImageModel) => void;
   onUnloadModel: () => void;
   onUnloadImageModel?: () => void;
   isLoading: boolean;
@@ -79,7 +104,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   visible,
   onClose,
   onSelectModel,
-  onSelectImageModel,
   onUnloadModel,
   onUnloadImageModel,
   isLoading,
@@ -115,12 +139,6 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const activeRemoteImageModelId = remoteModelId(activeImageRoute);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
-  // The image model currently being LOADED (the row the user just tapped) — distinct from
-  // activeImageModelId, which only flips to the new model on success. The row spinner keys off THIS,
-  // else it shows on the previously-active model instead of the one that's loading (device 2026-07-14).
-  const [loadingImageModelId, setLoadingImageModelId] = useState<string | null>(
-    null,
-  );
   // Which text row shows the spinner: the model the SERVICE is loading, and only while it is loading.
   //
   // This used to be the row the user tapped, cleared by an effect on the parent's isLoading. Tapping a
@@ -173,46 +191,24 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       .map(server => ({
         serverId: server.id,
         serverName: server.name,
-        models: remoteServerModelOptions([server], 'image').map(option => ({
-          id: option.id,
-          name: option.name,
-          serverId: option.serverId,
-          capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
-          details: { serverName: option.serverName },
-          lastUpdated: server.createdAt,
-        })),
+        models: savedImageModels(server),
       }))
       .filter(group => group.models.length > 0);
   }, [servers, serverHealth]);
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
     if (activeImageModelId === model.id) return;
-    // Shared inline Load-Anyway flow so a memory-blocked image load offers the
-    // override here too, instead of a dead-end "Failed to Load".
-    await loadModelWithOverride(
-      opts => mobileModelCommands.select({
-        source: 'local',
-        hostId: model.backend ?? 'image-runtime',
-        modality: 'image',
-        modelId: model.id,
-      }, { override: opts?.override }),
-      {
-        setAlertState,
-        onAttemptStart: () => {
-          setIsLoadingImage(true);
-          setLoadingImageModelId(model.id);
-        },
-        onAttemptEnd: () => {
-          setIsLoadingImage(false);
-          setLoadingImageModelId(null);
-        },
-        onSuccess: () => {
-          onSelectImageModel?.(model);
-          onSelectionComplete?.();
-        },
-        onError: error => logger.error('Failed to load image model:', error),
-      },
-    );
+    try {
+      // Selection records intent only. The first image operation owns admission
+      // and loading through Shared, just as the text route does.
+      await selectLocalImageModelOnDemand(model);
+      onSelectionComplete?.();
+    } catch (error) {
+      logger.error('[ModelSelectorModal] Failed to select image model:', error);
+      setAlertState(
+        showAlert('Failed to Select Model', (error as Error).message),
+      );
+    }
   };
 
   const handleUnloadImageModel = async () => {
@@ -393,7 +389,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
             activeRemoteImageServerId={remoteServerId(activeImageRoute)}
               isAnyLoading={isAnyLoading}
               isLoadingImage={isLoadingImage}
-              loadingModelId={loadingImageModelId}
+              loadingModelId={null}
               onSelectImageModel={handleSelectImageModel}
               onSelectRemoteVisionModel={handleSelectRemoteVisionModel}
               onUnloadImageModel={handleUnloadImageModel}

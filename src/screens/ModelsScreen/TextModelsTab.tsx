@@ -28,6 +28,7 @@ import { repairDownloadedVisionMetadata } from '../../services/modelServices/mod
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
+import { huggingFaceService } from '../../services/huggingface';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -338,7 +339,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   const styles = useThemedStyles(createStyles);
 
   const downloadRecommendedFile = async (item: ModelInfo) => {
-    const files = await fetchModelFiles([item]);
+    const files = await fetchModelFiles([item], huggingFaceService);
     const file = files[item.id]?.[0];
     if (!file) {
       setAlertState(showAlert('Download unavailable', 'No compatible Q4_K_M file was found.'));

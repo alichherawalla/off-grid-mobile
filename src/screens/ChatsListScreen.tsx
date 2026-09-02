@@ -19,9 +19,11 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService } from '../services';
-import { mobileModelCommands } from '../services/modelServices/modelCommandApplication';
-import { loadModelWithOverride } from '../services/loadModelWithOverride';
-import { Conversation } from '../types';
+import {
+  mobileModelCommands,
+  selectLocalTextModelOnDemand,
+} from '../services/modelServices/modelCommandApplication';
+import { Conversation, DownloadedModel } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
 import { formatWhen } from '../utils/localTime';
@@ -62,44 +64,14 @@ export const ChatsListScreen: React.FC = () => {
     setShowModelSelector(true);
   };
 
-  const handleSelectTextModel = async (model: any) => {
-    // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
-    // here just like the chat screen (was a dead-end "Failed to load model").
-    await loadModelWithOverride(
-      async (opts) => {
-        await mobileModelCommands.select({
-          source: 'local',
-          hostId: model.engine,
-          modality: 'text',
-          modelId: model.id,
-        }, { override: opts?.override });
-      },
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
-  };
-
-  const handleSelectImageModel = async (model: any) => {
-    await loadModelWithOverride(
-      async (opts) => {
-        await mobileModelCommands.select({
-          source: 'local',
-          hostId: model.backend ?? 'image-runtime',
-          modality: 'image',
-          modelId: model.id,
-        }, { override: opts?.override });
-      },
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
+  const handleSelectTextModel = async (model: DownloadedModel) => {
+    try {
+      await selectLocalTextModelOnDemand(model);
+      setShowModelSelector(false);
+      navigation.navigate('Chat', {});
+    } catch (error) {
+      setAlertState(showAlert('Failed to Select Model', (error as Error).message));
+    }
   };
 
   const handleUnloadTextModel = async () => {
@@ -259,7 +231,6 @@ export const ChatsListScreen: React.FC = () => {
         visible={showModelSelector}
         onClose={() => setShowModelSelector(false)}
         onSelectModel={handleSelectTextModel}
-        onSelectImageModel={handleSelectImageModel}
         onUnloadModel={handleUnloadTextModel}
         onUnloadImageModel={handleUnloadImageModel}
         isLoading={isModelLoading}

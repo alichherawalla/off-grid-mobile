@@ -7,7 +7,6 @@ import {
   isMemoryToolAllowed,
   type ChatSessionEvent,
   type ChatQueueProjection,
-  type ChatSessionRepositoryPort,
   type ChatTurn,
   type GenerationEvents,
   type GenerationMessage,
@@ -15,7 +14,6 @@ import {
   type GenerationRequest,
   type GenerationResult,
   runtimeModelRouteId,
-  projectChatMessage,
 } from '@offgrid/models';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -28,7 +26,8 @@ import { ragService, retrievalService } from '../../services';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { mobileLLMService } from '../../services/modelServices/mobileLLMService';
-import { mobileGenerationService, refreshMobileModelServices } from '../../services/modelServices';
+import { refreshMobileModelServices } from '../../services/modelServices';
+import { generateMobileChat } from '../../services/modelServices/chatGenerationApplication';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { registerMobileChatSessionControl } from '../../services/modelServices/chatSessionControl';
 import { modelInputAudioUris } from '../../services/modelMedia';
@@ -36,95 +35,27 @@ import { useAppStore, useChatStore, useProjectStore } from '../../stores';
 import type { MediaAttachment, Message } from '../../types';
 import { isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
-
-function generationMessage(message: Message): GenerationMessage {
-  return projectChatMessage(message, {
-    audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
-  });
-}
+import { reportModelFailure } from '../../services/modelFailureHandler';
+import {
+  generationMessage,
+  MobileChatTurnRepository,
+} from './mobileChatTurnRepository';
 
 function messageText(message: GenerationMessage): string {
   if (typeof message.content === 'string') return message.content;
   return message.content
     .filter(part => part.type === 'text')
-    .map(part => part.type === 'text' ? part.text : '')
+    .map(part => (part.type === 'text' ? part.text : ''))
     .join('\n');
 }
 
-/** Reconstruct shared turn records from the durable Mobile conversation projection. */
-function persistedTurns(conversationId: string): ChatTurn[] {
-  const conversation = useChatStore.getState().conversations.find(
-    candidate => candidate.id === conversationId,
-  );
-  if (!conversation) return [];
-  const turns: ChatTurn[] = [];
-  for (let index = 0; index < conversation.messages.length; index += 1) {
-    const user = conversation.messages[index];
-    if (user.role !== 'user' || user.isSystemInfo) continue;
-    const replies = conversation.messages.slice(index + 1);
-    const nextUser = replies.findIndex(message => message.role === 'user');
-    const segment = nextUser < 0 ? replies : replies.slice(0, nextUser);
-    const responseMessages = segment
-      .filter(message => message.role === 'assistant' || message.role === 'tool')
-      .map(generationMessage);
-    const assistant = [...responseMessages].reverse().find(message => message.role === 'assistant');
-    const operation: GenerationOperation = user.turnKind === 'image'
-      ? { type: 'image', prompt: user.content }
-      : user.attachments?.some(attachment => attachment.type === 'image')
-        ? { type: 'vision' }
-        : { type: 'text' };
-    turns.push({
-      id: user.id,
-      conversationId,
-      projectId: conversation.projectId,
-      userMessage: generationMessage(user),
-      assistantMessage: assistant,
-      responseMessages: responseMessages.length ? responseMessages : undefined,
-      status: assistant ? 'completed' : 'queued',
-      request: { operation, request: {} },
-    });
-  }
-  return turns;
-}
-
-class MobileChatTurnRepository implements ChatSessionRepositoryPort {
-  private readonly sessions = new Map<string, ChatTurn[]>();
-
-  async read(conversationId: string): Promise<readonly ChatTurn[]> {
-    const current = this.sessions.get(conversationId);
-    if (current) return current;
-    const hydrated = persistedTurns(conversationId);
-    this.sessions.set(conversationId, hydrated);
-    return hydrated;
-  }
-
-  async write(conversationId: string, turns: readonly ChatTurn[]): Promise<void> {
-    this.sessions.set(conversationId, [...turns]);
-  }
-
-  invalidate(conversationId: string): void {
-    this.sessions.delete(conversationId);
-  }
-
-  /** Seed durable history without the new row before ChatSessionService appends it. */
-  prepareNew(conversationId: string, turnId: string): Message | null {
-    const conversation = useChatStore.getState().conversations.find(
-      candidate => candidate.id === conversationId,
-    );
-    const message = conversation?.messages.find(candidate => candidate.id === turnId) ?? null;
-    if (!message) return null;
-    if (!this.sessions.has(conversationId)) {
-      this.sessions.set(
-        conversationId,
-        persistedTurns(conversationId).filter(turn => turn.id !== turnId),
-      );
-    }
-    return message;
-  }
-}
 
 const repository = new MobileChatTurnRepository();
-let queue: ChatQueueProjection = { entries: [], runningCount: 0, queuedCount: 0 };
+let queue: ChatQueueProjection = {
+  entries: [],
+  runningCount: 0,
+  queuedCount: 0,
+};
 const queueListeners = new Set<(projection: ChatQueueProjection) => void>();
 
 export interface MobileChatCommandOptions {
@@ -137,25 +68,53 @@ export interface MobileChatCommandOptions {
 
 const commandOptions = new Map<string, MobileChatCommandOptions>();
 
+type ClassifierFailureStage = 'provisioning' | 'classification';
+
+export function projectClassifierFailure(
+  stage: ClassifierFailureStage,
+  error: unknown,
+): void {
+  logger.warn(
+    `[ChatSession] Intent classifier ${stage} failed; using the selected text route`,
+    error,
+  );
+  reportModelFailure('text', error, {
+    severity: 'warning',
+    id: 'mobile-chat-classifier',
+    title: 'Automatic routing is unavailable',
+    message: 'Off Grid will use the selected text model for this message.',
+  });
+}
+
 const operationService = new ChatOperationApplicationService({
   inspect() {
     const state = useAppStore.getState();
     return {
       imageEnabled: true,
       imageGenerationRunning: mobileImageChatGeneration.isGenerating(),
-      imageRoutingMode: state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
+      imageRoutingMode:
+        state.settings.imageGenerationMode === 'manual' ? 'manual' : 'auto',
       imageRouteAvailable: !!activeMobileRoute('image').model,
       textRouteAvailable: !!activeMobileRoute('text').model,
       modelAutoDetection: state.settings.autoDetectMethod === 'llm',
-      dedicatedClassifierAvailable: !!state.settings.classifierModelId
-        && state.downloadedModels.some(model => model.id === state.settings.classifierModelId),
+      dedicatedClassifierAvailable:
+        !!state.settings.classifierModelId &&
+        state.downloadedModels.some(
+          model => model.id === state.settings.classifierModelId,
+        ),
     };
   },
-  provisionClassifier: () => { ensureDefaultClassifier().catch(() => undefined); },
+  provisionClassifier: () => {
+    ensureDefaultClassifier().catch(error =>
+      projectClassifierFailure('provisioning', error),
+    );
+  },
   classify(text, input) {
     const state = useAppStore.getState();
     const classifierModel = state.settings.classifierModelId
-      ? state.downloadedModels.find(model => model.id === state.settings.classifierModelId)
+      ? state.downloadedModels.find(
+          model => model.id === state.settings.classifierModelId,
+        )
       : null;
     return intentClassifier.classifyIntent(text, {
       useLLM: input.useModel,
@@ -163,8 +122,11 @@ const operationService = new ChatOperationApplicationService({
       onStatusChange: input.onStatusChange,
     });
   },
-  refreshRoutes: async () => { await refreshMobileModelServices(); },
-  onClassificationError: error => logger.warn('[ChatSession] Intent classification failed; using text', error),
+  refreshRoutes: async () => {
+    await refreshMobileModelServices();
+  },
+  onClassificationError: error =>
+    projectClassifierFailure('classification', error),
 });
 
 async function resolveMobileChatOperation(input: {
@@ -175,8 +137,9 @@ async function resolveMobileChatOperation(input: {
   identity: { turnId: string };
 }): Promise<GenerationOperation> {
   const options = commandOptions.get(input.identity.turnId);
-  const hasImage = Array.isArray(input.userMessage.content)
-    && input.userMessage.content.some(part => part.type === 'image');
+  const hasImage =
+    Array.isArray(input.userMessage.content) &&
+    input.userMessage.content.some(part => part.type === 'image');
   return operationService.resolve({
     text: messageText(input.userMessage),
     hasImage,
@@ -191,10 +154,16 @@ async function resolveMobileChatOperation(input: {
 }
 
 const chatContext = new ChatContextApplicationService({
-  conversation: id => useChatStore.getState().conversations.find(candidate => candidate.id === id) ?? null,
+  conversation: id =>
+    useChatStore
+      .getState()
+      .conversations.find(candidate => candidate.id === id) ?? null,
   project: id => useProjectStore.getState().getProject(id) ?? null,
-  defaultSystemPrompt: () => useAppStore.getState().settings.systemPrompt || APP_CONFIG.defaultSystemPrompt,
-  augmentSystemPrompt: prompt => callHook<string>(HOOKS.audioAugmentPrompt, prompt) ?? prompt,
+  defaultSystemPrompt: () =>
+    useAppStore.getState().settings.systemPrompt ||
+    APP_CONFIG.defaultSystemPrompt,
+  augmentSystemPrompt: prompt =>
+    callHook<string>(HOOKS.audioAugmentPrompt, prompt) ?? prompt,
   async enabledDocumentNames(projectId) {
     return (await ragService.getDocumentsByProject(projectId))
       .filter(document => document.enabled)
@@ -202,19 +171,24 @@ const chatContext = new ChatContextApplicationService({
   },
   async retrieve(projectId, query) {
     const result = await ragService.searchProject(projectId, query);
-    return result.chunks.length ? retrievalService.formatForPrompt(result) : undefined;
+    return result.chunks.length
+      ? retrievalService.formatForPrompt(result)
+      : undefined;
   },
   audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
-  onRetrievalError: error => logger.error('[ChatSession] RAG augmentation failed', error),
+  onRetrievalError: error =>
+    logger.error('[ChatSession] RAG augmentation failed', error),
 });
 
 function publishSessionEvent(event: ChatSessionEvent): void {
   if (event.type === 'started') {
-    useChatStore.getState().updateMessageTurnKind(
-      event.turn.conversationId,
-      event.turn.id,
-      event.turn.request.operation.type === 'image' ? 'image' : 'text',
-    );
+    useChatStore
+      .getState()
+      .updateMessageTurnKind(
+        event.turn.conversationId,
+        event.turn.id,
+        event.turn.request.operation.type === 'image' ? 'image' : 'text',
+      );
   }
   mobileChatGenerationProjection.publish(event);
   if (event.type === 'queue_changed') {
@@ -224,7 +198,8 @@ function publishSessionEvent(event: ChatSessionEvent): void {
   }
   if (event.type === 'invalidated') {
     const first = event.turnIds[0];
-    if (first) useChatStore.getState().deleteMessagesAfter(event.conversationId, first);
+    if (first)
+      useChatStore.getState().deleteMessagesAfter(event.conversationId, first);
   }
 }
 
@@ -233,13 +208,15 @@ async function generateForSession(
   events: GenerationEvents = {},
 ): Promise<GenerationResult> {
   if (request.operation?.type !== 'image') {
-    await refreshMobileModelServices();
-    return mobileGenerationService.generate(request, events);
+    return generateMobileChat(request, events);
   }
   const identity = request.identity;
-  if (!identity?.conversationId) throw new Error('Image generation requires a conversation identity');
+  if (!identity?.conversationId)
+    throw new Error('Image generation requires a conversation identity');
   await refreshMobileModelServices();
-  const abort = () => { mobileImageChatGeneration.cancel().catch(() => undefined); };
+  const abort = () => {
+    mobileImageChatGeneration.cancel().catch(() => undefined);
+  };
   request.signal?.addEventListener('abort', abort, { once: true });
   try {
     const generated = await mobileImageChatGeneration.generate({
@@ -253,22 +230,25 @@ async function generateForSession(
       conversationId: identity.conversationId,
     });
     if (!generated) throw new Error('Image generation returned no image');
-    const model = (request.routeId ? mobileLLMService.get(request.routeId) : null)
-      ?? activeMobileRoute('image').model;
+    const model =
+      (request.routeId ? mobileLLMService.get(request.routeId) : null) ??
+      activeMobileRoute('image').model;
     if (!model) throw new Error('The selected image model is unavailable');
     const routeId = model.routeId ?? runtimeModelRouteId(model);
     return {
       model,
       output: {
         type: 'image',
-        images: [{
-          id: generated.id,
-          mimeType: 'image/png',
-          uri: `file://${generated.imagePath}`,
-          width: generated.width,
-          height: generated.height,
-          seed: generated.seed,
-        }],
+        images: [
+          {
+            id: generated.id,
+            mimeType: 'image/png',
+            uri: `file://${generated.imagePath}`,
+            width: generated.width,
+            height: generated.height,
+            seed: generated.seed,
+          },
+        ],
       },
       content: '',
       reasoning: '',
@@ -284,7 +264,9 @@ async function generateForSession(
 
 function chatRequestDefaults(): ChatTurn['request']['request'] {
   const state = useAppStore.getState();
-  const selected = state.downloadedModels.find(model => model.id === state.activeModelId);
+  const selected = state.downloadedModels.find(
+    model => model.id === state.activeModelId,
+  );
   return chatGenerationRequestDefaults({
     runtime: selected && isLiteRTModel(selected) ? 'litert' : 'standard',
     standard: {
@@ -309,20 +291,28 @@ const service = new ChatSessionService(
   repository,
   {
     rag: {
-      augment: ({ identity, signal }) => chatContext.compose({
-        conversationId: identity.conversationId,
-        projectId: identity.projectId,
-        signal,
-      }),
+      augment: ({ identity, signal }) =>
+        chatContext.compose({
+          conversationId: identity.conversationId,
+          projectId: identity.projectId,
+          signal,
+        }),
     },
     tools: {
       resolve: async ({ identity }) => {
-        const enabledToolIds = useAppStore.getState().settings.enabledTools ?? [];
-        const admittedToolIds = enabledToolIds.filter(toolId => isMemoryToolAllowed(toolId, {
-          projectActive: !!identity.projectId && !!useProjectStore.getState().getProject(identity.projectId), allMemory: true,
-        }));
+        const enabledToolIds =
+          useAppStore.getState().settings.enabledTools ?? [];
+        const admittedToolIds = enabledToolIds.filter(toolId =>
+          isMemoryToolAllowed(toolId, {
+            projectActive:
+              !!identity.projectId &&
+              !!useProjectStore.getState().getProject(identity.projectId),
+            allMemory: true,
+          }),
+        );
         if (!admittedToolIds.length) return {};
-        const messages = useChatStore.getState()
+        const messages = useChatStore
+          .getState()
           .getConversationMessages(identity.conversationId)
           .filter(message => !message.isSystemInfo);
         const tools = await mobileToolDefinitions(admittedToolIds, messages);
@@ -331,21 +321,27 @@ const service = new ChatSessionService(
     },
     operation: { resolve: resolveMobileChatOperation },
     compactionRetry: {
-      shouldRetry: ({ error }) => contextCompactionService.isContextFullError(error),
+      shouldRetry: ({ error }) =>
+        contextCompactionService.isContextFullError(error),
       mayReplaceCommittedPartial: () => false,
     },
     compaction: {
       compact: async ({ identity, messages }) => {
         const system = messages.find(message => message.role === 'system');
-        const mobileMessages = useChatStore.getState()
+        const mobileMessages = useChatStore
+          .getState()
           .getConversationMessages(identity.conversationId)
           .filter(message => !message.isSystemInfo);
-        const conversation = useChatStore.getState().conversations.find(
-          candidate => candidate.id === identity.conversationId,
-        );
+        const conversation = useChatStore
+          .getState()
+          .conversations.find(
+            candidate => candidate.id === identity.conversationId,
+          );
         const compacted = await contextCompactionService.compact({
           conversationId: identity.conversationId,
-          systemPrompt: system ? messageText(system) : APP_CONFIG.defaultSystemPrompt,
+          systemPrompt: system
+            ? messageText(system)
+            : APP_CONFIG.defaultSystemPrompt,
           allMessages: mobileMessages,
           previousSummary: conversation?.compactionSummary,
         });
@@ -378,22 +374,24 @@ export const mobileChatSession = {
     turnId: string,
     options: MobileChatCommandOptions = {},
   ): Promise<ChatTurn> {
-    const conversation = useChatStore.getState().conversations.find(
-      candidate => candidate.id === conversationId,
-    );
+    const conversation = useChatStore
+      .getState()
+      .conversations.find(candidate => candidate.id === conversationId);
     const message = repository.prepareNew(conversationId, turnId);
-    if (!message || message.role !== 'user') throw new Error(`Chat turn not found: ${turnId}`);
-    const recordedOperation: GenerationOperation | undefined = message.turnKind === 'image'
-      ? { type: 'image', prompt: message.content }
-      : message.turnKind === 'text'
-        ? (message.attachments?.some(attachment => attachment.type === 'image')
+    if (!message || message.role !== 'user')
+      throw new Error(`Chat turn not found: ${turnId}`);
+    const recordedOperation: GenerationOperation | undefined =
+      message.turnKind === 'image'
+        ? { type: 'image', prompt: message.content }
+        : message.turnKind === 'text'
+        ? message.attachments?.some(attachment => attachment.type === 'image')
           ? { type: 'vision' }
-          : { type: 'text' })
+          : { type: 'text' }
         : options.imageMode === 'force'
-          ? { type: 'image', prompt: message.content }
-          : options.imageMode === 'disabled'
-            ? { type: 'text' }
-            : undefined;
+        ? { type: 'image', prompt: message.content }
+        : options.imageMode === 'disabled'
+        ? { type: 'text' }
+        : undefined;
     commandOptions.set(turnId, options);
     try {
       return await service.send({
@@ -413,10 +411,12 @@ export const mobileChatSession = {
   async regenerate(
     conversationId: string,
     turnId: string,
-    input?: GenerationOperation | {
-      operation?: GenerationOperation;
-      options?: MobileChatCommandOptions;
-    },
+    input?:
+      | GenerationOperation
+      | {
+          operation?: GenerationOperation;
+          options?: MobileChatCommandOptions;
+        },
   ): Promise<ChatTurn> {
     const operation = input && 'type' in input ? input : input?.operation;
     const options = input && 'type' in input ? {} : input?.options ?? {};
@@ -429,7 +429,11 @@ export const mobileChatSession = {
     }
   },
 
-  async edit(conversationId: string, turnId: string, message: Message): Promise<ChatTurn> {
+  async edit(
+    conversationId: string,
+    turnId: string,
+    message: Message,
+  ): Promise<ChatTurn> {
     repository.invalidate(conversationId);
     return service.edit({
       conversationId,
@@ -448,11 +452,14 @@ export const mobileChatSession = {
 
   clearQueued(): void {
     for (const entry of queue.entries) {
-      if (entry.status === 'queued') service.stop(entry.turnId, 'Queue cleared');
+      if (entry.status === 'queued')
+        service.stop(entry.turnId, 'Queue cleared');
     }
   },
 
-  subscribeQueue(listener: (projection: ChatQueueProjection) => void): () => void {
+  subscribeQueue(
+    listener: (projection: ChatQueueProjection) => void,
+  ): () => void {
     queueListeners.add(listener);
     listener(queue);
     return () => queueListeners.delete(listener);

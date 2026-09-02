@@ -1,24 +1,17 @@
 import { Dispatch, SetStateAction, useEffect } from 'react';
-import { modelNotReadyAlert } from '@offgrid/models';
+import { AlertState, showAlert } from '../../components';
+import { modelLibrary, selectedTextModelId } from '../../services';
 import {
-  AlertState,
-  showAlert,
-  hideAlert,
-} from '../../components';
-import {
-  llmService,
-  modelLibrary,
-  selectedTextModelId,
-} from '../../services';
-import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
-import { selectMobileModel } from '../../services/modelServices';
+  mobileModelCommands,
+  selectLocalTextModelOnDemand,
+} from '../../services/modelServices/modelCommandApplication';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
-import { useAppStore } from '../../stores';
+import { useAppStore, useChatStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
-import logger from '../../utils/logger';
 import { ModelReadyOutcome } from './modelReadiness';
 import { mobileChatModelReadiness } from '../../services/modelServices/chatModelReadinessPort';
 import { mobileChatSession } from './mobileChatSession';
+import logger from '../../utils/logger';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -43,7 +36,11 @@ type ModelActionDeps = {
   isStreaming: boolean;
   settings: { showGenerationDetails: boolean };
   clearStreamingMessage: () => void;
-  createConversation: (modelId: string, title?: string, projectId?: string) => string;
+  createConversation: (
+    modelId: string,
+    title?: string,
+    projectId?: string,
+  ) => string;
   addMessage: (convId: string, msg: any) => void;
   setIsModelLoading: (loading: boolean) => void;
   setLoadingModel: (model: DownloadedModel | null) => void;
@@ -63,10 +60,14 @@ function waitForRenderFrame(): Promise<void> {
 }
 
 function addSystemMsg(
-  deps: Pick<ModelActionDeps, 'activeConversationId' | 'settings' | 'addMessage'>,
+  deps: Pick<
+    ModelActionDeps,
+    'activeConversationId' | 'settings' | 'addMessage'
+  >,
   content: string,
 ) {
-  if (!deps.activeConversationId || !deps.settings.showGenerationDetails) return;
+  if (!deps.activeConversationId || !deps.settings.showGenerationDetails)
+    return;
   deps.addMessage(deps.activeConversationId, {
     role: 'assistant',
     content: `_${content}_`,
@@ -80,9 +81,22 @@ function addSystemMsg(
  * device-reported "Backend=GPU but the turn ran on CPU" class). The verdict is owned by the
  * Shared control plane through the native runtime port; this only renders it.
  */
-function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'activeConversationId' | 'addMessage'>) {
-  const notice = mobileTextEngineControl.backendFallbackNotice(deps.activeModel?.id);
+function addBackendFallbackMsg(
+  deps: Pick<
+    ModelActionDeps,
+    'activeModel' | 'activeConversationId' | 'addMessage'
+  >,
+) {
+  const notice = mobileTextEngineControl.backendFallbackNotice(
+    deps.activeModel?.id,
+  );
   if (!notice || !deps.activeConversationId) return;
+  logger.warn('[TextEngine] GPU fallback:', notice);
+  const alreadyVisible = useChatStore
+    .getState()
+    .getConversationMessages(deps.activeConversationId)
+    .some(message => message.isSystemInfo && message.content.includes(notice));
+  if (alreadyVisible) return;
   deps.addMessage(deps.activeConversationId, {
     role: 'assistant',
     content: `_${notice}_`,
@@ -97,7 +111,8 @@ export async function initiateModelLoad(
 ): Promise<ModelReadyOutcome> {
   const force = typeof options === 'object' && !!options.force;
   const { activeModel, activeModelId } = deps;
-  if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected', forceLoadAllowed: false };
+  if (!activeModel || !activeModelId)
+    return { ok: false, reason: 'no-model-selected', forceLoadAllowed: false };
   let started = false;
 
   try {
@@ -105,22 +120,33 @@ export async function initiateModelLoad(
       activeModel,
       activeModelId,
       remote: !!deps.activeModelInfo?.isRemote,
-      beforeLoad: alreadyLoading ? undefined : async () => {
-        started = true;
-        deps.setIsModelLoading(true);
-        deps.setLoadingModel(activeModel);
-        deps.modelLoadStartTimeRef.current = Date.now();
-        await waitForRenderFrame();
-      },
+      beforeLoad: alreadyLoading
+        ? undefined
+        : async () => {
+            started = true;
+            deps.setIsModelLoading(true);
+            deps.setLoadingModel(activeModel);
+            deps.modelLoadStartTimeRef.current = Date.now();
+            await waitForRenderFrame();
+          },
     });
-    const outcome = force ? await service.forceLoad() : await service.ensureReady();
+    const outcome = force
+      ? await service.forceLoad()
+      : await service.ensureReady();
     if (!outcome.ok) return outcome;
     deps.setSupportsVision(loadedModelVision(activeModel));
-    if (started && deps.modelLoadStartTimeRef.current && deps.settings.showGenerationDetails) {
-      const loadTime = ((Date.now() - deps.modelLoadStartTimeRef.current) / 1000).toFixed(1);
+    if (
+      started &&
+      deps.modelLoadStartTimeRef.current &&
+      deps.settings.showGenerationDetails
+    ) {
+      const loadTime = (
+        (Date.now() - deps.modelLoadStartTimeRef.current) /
+        1000
+      ).toFixed(1);
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
-    if (started) addBackendFallbackMsg(deps);
+    addBackendFallbackMsg(deps);
     return outcome;
   } finally {
     if (started) {
@@ -142,7 +168,8 @@ export async function ensureTextModelForChatFn(deps: {
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
   const modelId = selectedTextModelId();
-  const model = useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null;
+  const model =
+    useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null;
   let started = false;
   const service = mobileChatModelReadiness({
     activeModel: model,
@@ -172,84 +199,37 @@ export async function ensureModelLoadedFn(
   deps: ModelActionDeps,
 ): Promise<ModelReadyOutcome> {
   const { activeModel, activeModelId } = deps;
-  if (!activeModel || !activeModelId) return { ok: false, reason: 'no-model-selected', forceLoadAllowed: false };
+  if (!activeModel || !activeModelId)
+    return { ok: false, reason: 'no-model-selected', forceLoadAllowed: false };
   return initiateModelLoad(deps, false);
 }
 
-export async function forceLoadModelFn(deps: ModelActionDeps): Promise<ModelReadyOutcome> {
+export async function forceLoadModelFn(
+  deps: ModelActionDeps,
+): Promise<ModelReadyOutcome> {
   return initiateModelLoad(deps, false, { force: true });
 }
 
-function presentModelLoadOutcome(
-  deps: ModelActionDeps,
-  outcome: ModelReadyOutcome,
-  onLoadedResume?: () => void,
-): void {
-  if (outcome.ok) return;
-  const copy = modelNotReadyAlert(outcome.reason, outcome.detail);
-  const buttons = outcome.forceLoadAllowed
-    ? [
-        { text: 'Cancel', style: 'cancel' as const },
-        {
-          text: 'Load Anyway',
-          style: 'destructive' as const,
-          onPress: () => {
-            deps.setAlertState(hideAlert());
-            forceLoadModelFn(deps).then(forced => {
-              if (forced.ok) onLoadedResume?.();
-              else presentModelLoadOutcome(deps, forced);
-            }).catch(error => logger.error('[ModelLoad] Force load failed:', error));
-          },
-        },
-      ]
-    : undefined;
-  deps.setAlertState(showAlert(copy.title, copy.message, buttons));
-}
-
-export async function proceedWithModelLoadFn(
-  deps: ModelActionDeps,
-  model: DownloadedModel,
-): Promise<void> {
-  // Close the picker FIRST so the load runs behind the dismissed sheet and the
-  // minimal in-chat loading card shows — not a load running with the sheet still open.
-  deps.setShowModelSelector(false);
-  const outcome = await initiateModelLoad({
-    ...deps,
-    activeModel: model,
-    activeModelId: model.id,
-  }, false);
-  presentModelLoadOutcome({ ...deps, activeModel: model, activeModelId: model.id }, outcome);
-}
-
 /**
- * Selecting a text model in chat is the SAME decision Home/ChatsList/ModelSelector
- * make: load it through the MEASURED residency loader, offering the shared
- * "Load Anyway" override if that loader refuses. There is NO separate predictive
- * pre-check gate here — the residency loader (makeRoomFor, evict-then-measure) is
- * authoritative, so a model the old fileSize×1.5 estimate would have blocked in
- * chat now loads exactly as it does from Home (bug OD3).
+ * A picker tap changes the canonical route only. The first local generation owns
+ * residency acquisition through ChatModelReadinessService. This keeps navigation
+ * and selection free of native model I/O.
  */
 export async function handleModelSelectFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
-  await selectMobileModel({
-    source: 'local',
-    hostId: model.engine,
-    modality: 'text',
-    modelId: model.id,
-  });
-  if (llmService.getLoadedModelPath() === model.filePath) {
-    deps.setShowModelSelector(false);
-    return;
-  }
-  await proceedWithModelLoadFn(deps, model);
+  await selectLocalTextModelOnDemand(model);
+  deps.setShowModelSelector(false);
 }
 
-export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> {
+export async function handleUnloadModelFn(
+  deps: ModelActionDeps,
+): Promise<void> {
   const { activeModel, isStreaming, clearStreamingMessage } = deps;
   if (isStreaming) {
-    if (deps.activeConversationId) mobileChatSession.stopConversation(deps.activeConversationId);
+    if (deps.activeConversationId)
+      mobileChatSession.stopConversation(deps.activeConversationId);
     else mobileChatSession.stop();
     clearStreamingMessage();
   }
@@ -257,13 +237,15 @@ export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> 
   deps.setIsModelLoading(true);
   deps.setLoadingModel(activeModel ?? null);
   try {
-    await mobileResidencyIntents.unloadText();
+    await mobileModelCommands.unload('text');
     deps.setSupportsVision(false);
     if (deps.settings.showGenerationDetails && modelName) {
       addSystemMsg(deps, `Model unloaded: ${modelName}`);
     }
   } catch (error) {
-    deps.setAlertState(showAlert('Error', `Failed to unload model: ${(error as Error).message}`));
+    deps.setAlertState(
+      showAlert('Error', `Failed to unload model: ${(error as Error).message}`),
+    );
   } finally {
     deps.setIsModelLoading(false);
     deps.setLoadingModel(null);
@@ -287,15 +269,19 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
         // hydrator. If it hasn't surfaced the active model yet (slow FS, or one already
         // placed in the store), keep that entry rather than blanking the selection —
         // otherwise activeImageModel resolves to undefined and image routing dies.
-        const { downloadedImageModels: current, activeImageModelId: activeId } = useAppStore.getState();
-        const merged = activeId && !models.some(m => m.id === activeId)
-          ? [...models, ...current.filter(m => m.id === activeId)]
-          : models;
+        const { downloadedImageModels: current, activeImageModelId: activeId } =
+          useAppStore.getState();
+        const merged =
+          activeId && !models.some(m => m.id === activeId)
+            ? [...models, ...current.filter(m => m.id === activeId)]
+            : models;
         setDownloadedImageModels(merged);
       }
     }, 0);
-    return () => { cancelled = true; clearTimeout(timer); };
-
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [setDownloadedImageModels]);
 }
 
@@ -303,42 +289,58 @@ type ModelStateSyncDeps = {
   activeModelInfo: { isRemote: boolean };
   activeModelId: string | null;
   activeModel: DownloadedModel | undefined;
-  modelDeps: any;
-  activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean } } | null;
+  activeRemoteModel: {
+    capabilities?: {
+      supportsVision?: boolean;
+      supportsToolCalling?: boolean;
+      supportsThinking?: boolean;
+    };
+  } | null;
   isModelLoading: boolean;
   setSupportsVision: (v: boolean) => void;
   setSupportsToolCalling: (v: boolean) => void;
   setSupportsThinking: (v: boolean) => void;
-  prepareSelectedModel?: boolean;
 };
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
-  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking, prepareSelectedModel } = deps;
-  const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
-  // A brand-new chat is an explicit request to get the selected model ready. Start the
-  // real load here so the chat renders its authoritative loading state before Send.
-  // Existing conversations still load on demand, and remote models have no local load.
-  useEffect(() => {
-    if (
-      !prepareSelectedModel ||
-      activeModelInfo.isRemote ||
-      !activeModel ||
-      !activeModelId
-    ) return;
-    initiateModelLoad(deps.modelDeps, false)
-      .then(outcome => presentModelLoadOutcome(deps.modelDeps, outcome))
-      .catch(error => logger.error('[ChatScreen] New-chat model preparation failed:', error));
-    // modelDeps is a render snapshot; the identity inputs below own when a new load starts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepareSelectedModel, activeModelInfo.isRemote, activeModelId, activeModel?.filePath]);
+  const {
+    activeModelInfo,
+    activeModelId,
+    activeModel,
+    activeRemoteModel,
+    isModelLoading,
+    setSupportsVision,
+    setSupportsToolCalling,
+    setSupportsThinking,
+  } = deps;
+  const activeModelMmProjPath =
+    activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
 
   useEffect(() => {
     // Shared projects the canonical route capabilities for every runtime.
-    setSupportsVision(mobileTextEngineControl.capabilities(activeModelId).vision);
-  }, [activeModelId, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsVision, activeModelMmProjPath, isModelLoading, setSupportsVision]);
+    setSupportsVision(
+      mobileTextEngineControl.capabilities(activeModelId).vision,
+    );
+  }, [
+    activeModelId,
+    activeModelInfo.isRemote,
+    activeRemoteModel?.capabilities?.supportsVision,
+    activeModelMmProjPath,
+    isModelLoading,
+    setSupportsVision,
+  ]);
   useEffect(() => {
     // Use the same canonical route source for tool and thinking capabilities.
     const caps = mobileTextEngineControl.capabilities(activeModelId);
     setSupportsToolCalling(caps.tools);
     setSupportsThinking(caps.thinking);
-  }, [activeModelId, activeModel?.engine, isModelLoading, activeModelInfo.isRemote, activeRemoteModel?.capabilities?.supportsToolCalling, activeRemoteModel?.capabilities?.supportsThinking, setSupportsThinking, setSupportsToolCalling]);
+  }, [
+    activeModelId,
+    activeModel?.engine,
+    isModelLoading,
+    activeModelInfo.isRemote,
+    activeRemoteModel?.capabilities?.supportsToolCalling,
+    activeRemoteModel?.capabilities?.supportsThinking,
+    setSupportsThinking,
+    setSupportsToolCalling,
+  ]);
 }

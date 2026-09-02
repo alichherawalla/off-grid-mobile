@@ -203,30 +203,44 @@ export const ModelLoadingModeSelector: React.FC = () => {
 
 // ─── Thinking Budget ─────────────────────────────────────────────────────────
 
-// Values AND labels come from the shared @offgrid/models contract so OGAD and OGAM render
-// identical options. Only the "tokens" suffix is trimmed: six pills share one row here, so the
-// pill shows the number ("512", "2K") and the description carries the unit.
-const THINKING_BUDGET_OPTIONS: PillOption<string>[] = [
-  { id: String(REASONING_BUDGET_AUTO), label: 'Auto' },
-  ...REASONING_BUDGET_OPTIONS.map(v => ({
-    id: String(v),
-    label: reasoningBudgetLabel(v).replace(' tokens', ''),
-  })),
-];
+// The shared model contract owns the allowed values. The slider uses their
+// ordered index because Auto is not a numeric token cap.
+const THINKING_BUDGET_VALUES = [
+  REASONING_BUDGET_AUTO,
+  ...REASONING_BUDGET_OPTIONS,
+] as const;
+
+function thinkingBudgetSliderLabel(index: number): string {
+  const value = THINKING_BUDGET_VALUES[Math.round(index)] ?? REASONING_BUDGET_AUTO;
+  return value === REASONING_BUDGET_AUTO
+    ? 'Auto'
+    : reasoningBudgetLabel(value).replace(' tokens', '');
+}
 
 /** llama.rn path only: the cap rides the completion request as thinking_budget_tokens
  *  (shared rule: @offgrid/models thinkingBudgetPayload). LiteRT has no thinking channel. */
 export const ThinkingBudgetSelector: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const current = String(settings.reasoningBudget ?? REASONING_BUDGET_AUTO);
+  const current = settings.reasoningBudget ?? REASONING_BUDGET_AUTO;
+  const selectedIndex = Math.max(
+    0,
+    THINKING_BUDGET_VALUES.findIndex(value => value === current),
+  );
   return (
-    <SegmentedRow<string>
+    <SliderSetting
+      testID="thinking-budget"
       label="Thinking Budget"
       description="Auto lets the model think for as long as it needs. A cap ends the thinking at that many tokens so the answer arrives sooner. Applies when Thinking is on."
-      options={THINKING_BUDGET_OPTIONS}
-      current={current}
-      onSelect={(id) => updateSettings({ reasoningBudget: Number(id) })}
-      testIdFor={(id) => `thinking-budget-${id}-button`}
+      value={selectedIndex}
+      min={0}
+      max={THINKING_BUDGET_VALUES.length - 1}
+      step={1}
+      editableValue={false}
+      formatValue={thinkingBudgetSliderLabel}
+      onChange={(index) => {
+        const value = THINKING_BUDGET_VALUES[Math.round(index)] ?? REASONING_BUDGET_AUTO;
+        updateSettings({ reasoningBudget: value });
+      }}
     />
   );
 };

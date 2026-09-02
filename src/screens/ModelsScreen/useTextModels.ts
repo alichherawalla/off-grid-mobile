@@ -13,10 +13,26 @@ import { startModelDownload } from '../../services/startModelDownload';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
-import { FilterDimension, FilterState, ModelTypeFilter, CredibilityFilter, SizeFilter, SortOption } from './types';
-import { initialFilterState, SIZE_OPTIONS, VISION_PIPELINE_TAG, CODE_FALLBACK_QUERY } from './constants';
+import {
+  FilterDimension,
+  FilterState,
+  ModelTypeFilter,
+  CredibilityFilter,
+  SizeFilter,
+  SortOption,
+} from './types';
+import {
+  initialFilterState,
+  SIZE_OPTIONS,
+  VISION_PIPELINE_TAG,
+  CODE_FALLBACK_QUERY,
+} from './constants';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
+import {
+  catalogModelFiles,
+  resolveModelFiles,
+} from '../../services/modelCatalogFiles';
 import {
   MODEL_ORGS,
   RECOMMENDED_MODELS,
@@ -27,20 +43,131 @@ import {
   uniformDownloadId,
 } from '@offgrid/models';
 
-function mapCuratedModel(m: typeof RECOMMENDED_MODELS[number], details: Record<string, ModelInfo>): ModelInfo {
+function mapCuratedModel(
+  m: (typeof RECOMMENDED_MODELS)[number],
+  details: Record<string, ModelInfo>,
+): ModelInfo {
   const fetched = details[m.id];
-  const curatedFields = { modelType: m.type, paramCount: m.params, minRamGB: m.minRam };
-  if (fetched) return { ...fetched, name: m.name, description: m.description, ...curatedFields };
-  return { id: m.id, name: m.name, author: m.id.split('/')[0], description: m.description, downloads: -1, likes: 0, tags: [], lastModified: '', files: [], ...curatedFields };
+  const catalogFiles = catalogModelFiles(m.id) ?? [];
+  const curatedFields = {
+    modelType: m.type,
+    paramCount: m.params,
+    minRamGB: m.minRam,
+    files: catalogFiles,
+  };
+  if (fetched)
+    return {
+      ...fetched,
+      name: m.name,
+      description: m.description,
+      ...curatedFields,
+    };
+  return {
+    id: m.id,
+    name: m.name,
+    author: m.id.split('/')[0],
+    description: m.description,
+    downloads: -1,
+    likes: 0,
+    tags: [],
+    lastModified: '',
+    ...curatedFields,
+  };
 }
 
-async function fetchRecommendedModelDetails(): Promise<Record<string, ModelInfo>> {
+async function fetchRecommendedModelDetails(): Promise<
+  Record<string, ModelInfo>
+> {
   const details: Record<string, ModelInfo> = {};
-  await Promise.allSettled(RECOMMENDED_MODELS.map(async (m) => {
-    try { details[m.id] = await huggingFaceService.getModelDetails(m.id); }
-    catch (e) { logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e); }
-  }));
+  await Promise.allSettled(
+    RECOMMENDED_MODELS.map(async m => {
+      try {
+        details[m.id] = await huggingFaceService.getModelDetails(m.id);
+      } catch (e) {
+        logger.warn(`[ModelsScreen] Failed to fetch details for ${m.id}:`, e);
+      }
+    }),
+  );
   return details;
+}
+
+function useCatalogCollections(input: {
+  filterState: FilterState;
+  searchResults: ModelInfo[];
+  recommendedModelDetails: Record<string, ModelInfo>;
+}) {
+  const { filterState, searchResults, recommendedModelDetails } = input;
+  const ramGB = hardwareService.getTotalMemoryGB();
+  const deviceRecommendation = useMemo(
+    () => hardwareService.getModelRecommendation(),
+    [],
+  );
+  const hasActiveFilters =
+    filterState.orgs.length > 0 ||
+    filterState.type !== 'all' ||
+    filterState.source !== 'all' ||
+    filterState.size !== 'all' ||
+    filterState.quant !== 'all' ||
+    filterState.sort !== 'recommended';
+  const filteredResults = useMemo(
+    () =>
+      queryCatalogModels({
+        models: searchResults,
+        state: filterState,
+        ramGb: ramGB,
+        organizations: MODEL_ORGS,
+      }),
+    [searchResults, filterState, ramGB],
+  );
+  const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
+    const size =
+      filterState.size === 'all'
+        ? null
+        : SIZE_OPTIONS.find(option => option.key === filterState.size) ?? null;
+    const models = recommendedCatalogModels({
+      maxParams: deviceRecommendation.maxParameters,
+      ramGb: ramGB,
+      type: filterState.type,
+      orgs: filterState.orgs,
+      size,
+    }).map(model => mapCuratedModel(model, recommendedModelDetails));
+    const sorted = queryCatalogModels({
+      models,
+      state: {
+        ...filterState,
+        orgs: [],
+        type: 'all',
+        source: 'all',
+        size: 'all',
+        quant: 'all',
+      },
+      ramGb: ramGB,
+    });
+    return filterState.sort === 'recommended'
+      ? prioritizeAccelerated(sorted, modelSupportsNpuGpu)
+      : sorted;
+  }, [
+    deviceRecommendation.maxParameters,
+    filterState,
+    recommendedModelDetails,
+    ramGB,
+  ]);
+  const trendingAsModelInfo = useMemo(
+    () =>
+      trendingCatalogModels({
+        maxParams: deviceRecommendation.maxParameters,
+        ramGb: ramGB,
+      }).map(model => mapCuratedModel(model, recommendedModelDetails)),
+    [deviceRecommendation.maxParameters, recommendedModelDetails, ramGB],
+  );
+  return {
+    ramGB,
+    deviceRecommendation,
+    hasActiveFilters,
+    filteredResults,
+    recommendedAsModelInfo,
+    trendingAsModelInfo,
+  };
 }
 
 export function useTextModels(setAlertState: (s: AlertState) => void) {
@@ -52,9 +179,12 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [selectedModel, setSelectedModel] = useState<ModelInfo | null>(null);
   const [modelFiles, setModelFiles] = useState<ModelFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [filterState, setFilterState] = useState<FilterState>(initialFilterState);
+  const [filterState, setFilterState] =
+    useState<FilterState>(initialFilterState);
   const [textFiltersVisible, setTextFiltersVisible] = useState(false);
-  const [recommendedModelDetails, setRecommendedModelDetails] = useState<Record<string, ModelInfo>>({});
+  const [recommendedModelDetails, setRecommendedModelDetails] = useState<
+    Record<string, ModelInfo>
+  >({});
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
 
@@ -66,23 +196,36 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadDownloadedModels(); }, []);
+  useEffect(() => {
+    loadDownloadedModels();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetchRecommendedModelDetails().then(d => { if (!cancelled) setRecommendedModelDetails(d); });
-    return () => { cancelled = true; };
+    fetchRecommendedModelDetails().then(d => {
+      if (!cancelled) setRecommendedModelDetails(d);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
-        if (selectedModel) { setSelectedModel(null); setModelFiles([]); return true; }
+        if (selectedModel) {
+          setSelectedModel(null);
+          setModelFiles([]);
+          return true;
+        }
         return false;
       };
-      const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      const sub = BackHandler.addEventListener(
+        'hardwareBackPress',
+        onBackPress,
+      );
       return () => sub.remove();
-    }, [selectedModel])
+    }, [selectedModel]),
   );
 
   const runSearch = async () => {
@@ -91,18 +234,27 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const hasOrgFilter = filterState.orgs.length > 0;
     const hasSizeFilter = filterState.size !== 'all';
     if (!hasQuery && !hasTypeFilter && !hasOrgFilter && !hasSizeFilter) {
-      setHasSearched(false); setSearchResults([]); return;
+      setHasSearched(false);
+      setSearchResults([]);
+      return;
     }
     let pipelineTag: string | undefined;
     let effectiveQuery = searchQuery.trim();
     if (filterState.type === 'vision') pipelineTag = VISION_PIPELINE_TAG;
-    else if (filterState.type === 'code' && !effectiveQuery) effectiveQuery = CODE_FALLBACK_QUERY;
-    setIsLoading(true); setHasSearched(true);
+    else if (filterState.type === 'code' && !effectiveQuery)
+      effectiveQuery = CODE_FALLBACK_QUERY;
+    setIsLoading(true);
+    setHasSearched(true);
     try {
-      const results = await huggingFaceService.searchModels(effectiveQuery, { limit: 30, pipelineTag });
+      const results = await huggingFaceService.searchModels(effectiveQuery, {
+        limit: 30,
+        pipelineTag,
+      });
       setSearchResults(results);
     } catch {
-      setAlertState(showAlert('Search Error', 'Failed to search models. Please try again.'));
+      setAlertState(
+        showAlert('Search Error', 'Failed to search models. Please try again.'),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -115,8 +267,14 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   };
 
   useEffect(() => {
-    if (!searchQuery.trim()) { setHasSearched(false); setSearchResults([]); return; }
-    const timer = setTimeout(() => { runSearch(); }, 500);
+    if (!searchQuery.trim()) {
+      setHasSearched(false);
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      runSearch();
+    }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
@@ -124,24 +282,25 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   // Auto-search when searchable filters change (type/size/org) even with empty query
   // Uses runSearch directly to avoid collapsing the expanded filter dimension
   useEffect(() => {
-    if (filterState.type === 'all' && filterState.size === 'all' && filterState.orgs.length === 0) return;
+    if (
+      filterState.type === 'all' &&
+      filterState.size === 'all' &&
+      filterState.orgs.length === 0
+    )
+      return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterState.type, filterState.size, filterState.orgs.length]);
 
   const handleSelectModel = async (model: ModelInfo) => {
-    setSelectedModel(model); setIsLoadingFiles(true);
-    // Curated entries under the offgrid/ namespace (e.g. the synthetic LiteRT
-    // parent) ship with their files baked into the ModelInfo — skip the
-    // HuggingFace fetch and use them as-is. Real HF models always go through
-    // the fetch path even when factories/mocks pre-populate model.files.
-    if (model.id.startsWith('offgrid/') && model.files && model.files.length > 0) {
-      setModelFiles(model.files);
-      setIsLoadingFiles(false);
-      return;
-    }
+    setSelectedModel(model);
+    setIsLoadingFiles(true);
     try {
-      const files = await huggingFaceService.getModelFiles(model.id);
+      // Synthetic and catalog-projected parents already carry their canonical
+      // artifacts. Do not discard them and query a non-repository parent ID.
+      const files = model.files?.length
+        ? model.files
+        : await resolveModelFiles(model.id, huggingFaceService);
       setModelFiles(files);
     } catch {
       setAlertState(showAlert('Error', 'Failed to load model files.'));
@@ -155,9 +314,18 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     const modelDownloadId = `${model.id}/${file.name}`;
     setRepairingVision(modelDownloadId, true);
     try {
-      await modelLibrary.repairMmProj(model.id, file, {});
-      await loadDownloadedModels();
-      setAlertState(showAlert('Vision Repaired', `Vision file restored for ${model.name}. Reload the model to enable vision.`));
+      const result = await modelLibrary.executeVisionRepair({
+        type: 'repair-projector',
+        modelId: model.id,
+        file,
+      });
+      if (result.status === 'failed') throw new Error(result.error);
+      setAlertState(
+        showAlert(
+          'Vision Repaired',
+          `Vision file restored for ${model.name}. Reload the model to enable vision.`,
+        ),
+      );
     } catch (e) {
       setAlertState(showAlert('Repair Failed', (e as Error).message));
     } finally {
@@ -165,23 +333,34 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     }
   };
 
-  const isRepairingVisionModel = (modelDownloadId: string) => !!repairingVisionIds[modelDownloadId];
+  const isRepairingVisionModel = (modelDownloadId: string) =>
+    !!repairingVisionIds[modelDownloadId];
 
   const handleDownload = async (model: ModelInfo, file: ModelFile) => {
     // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
     // mechanism + one duplicate guard. This screen owns only its completion/error UI.
     await startModelDownload(model.id, file, {
-      onRegistered: (dm) => {
+      onRegistered: dm => {
         if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
-          setAlertState(showAlert(
-            'Model Downloaded',
-            `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,
-          ));
+          setAlertState(
+            showAlert(
+              'Model Downloaded',
+              `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,
+            ),
+          );
         } else {
-          setAlertState(showAlert('Success', `${model.name} downloaded successfully!`));
+          setAlertState(
+            showAlert('Success', `${model.name} downloaded successfully!`),
+          );
         }
       },
-      onError: (err) => setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(err.message))),
+      onError: err =>
+        setAlertState(
+          showAlert(
+            'Download Failed',
+            getUserFacingDownloadMessage(err.message),
+          ),
+        ),
     });
   };
 
@@ -206,82 +385,110 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const isModelDownloaded = (modelId: string, fileName: string) =>
     downloadedModels.some(m => matchesFile(m, modelId, fileName));
 
-  const getDownloadedModel = (modelId: string, fileName: string): DownloadedModel | undefined =>
+  const getDownloadedModel = (
+    modelId: string,
+    fileName: string,
+  ): DownloadedModel | undefined =>
     downloadedModels.find(m => matchesFile(m, modelId, fileName));
 
   // Filter actions
-  const clearFilters = useCallback(() => setFilterState(initialFilterState), []);
+  const clearFilters = useCallback(
+    () => setFilterState(initialFilterState),
+    [],
+  );
   const toggleFilterDimension = useCallback((dim: FilterDimension) => {
-    setFilterState(prev => ({ ...prev, expandedDimension: prev.expandedDimension === dim ? null : dim }));
+    setFilterState(prev => ({
+      ...prev,
+      expandedDimension: prev.expandedDimension === dim ? null : dim,
+    }));
   }, []);
   const toggleOrg = useCallback((orgKey: string) => {
     setFilterState(prev => ({
       ...prev,
-      orgs: prev.orgs.includes(orgKey) ? prev.orgs.filter(o => o !== orgKey) : [...prev.orgs, orgKey],
+      orgs: prev.orgs.includes(orgKey)
+        ? prev.orgs.filter(o => o !== orgKey)
+        : [...prev.orgs, orgKey],
     }));
   }, []);
-  const setTypeFilter = useCallback((type: ModelTypeFilter) =>
-    setFilterState(prev => ({ ...prev, type, expandedDimension: null })), []);
-  const setSourceFilter = useCallback((source: CredibilityFilter) =>
-    setFilterState(prev => ({ ...prev, source, expandedDimension: null })), []);
-  const setSizeFilter = useCallback((size: SizeFilter) =>
-    setFilterState(prev => ({ ...prev, size, expandedDimension: null })), []);
-  const setQuantFilter = useCallback((quant: string) =>
-    setFilterState(prev => ({ ...prev, quant, expandedDimension: null })), []);
-  const setSortOption = useCallback((sort: SortOption) =>
-    setFilterState(prev => ({ ...prev, sort, expandedDimension: null })), []);
-
-  // Computed
-  const ramGB = hardwareService.getTotalMemoryGB();
-  const deviceRecommendation = useMemo(() => hardwareService.getModelRecommendation(), []);
-  const hasActiveFilters = filterState.orgs.length > 0 || filterState.type !== 'all' ||
-    filterState.source !== 'all' || filterState.size !== 'all' || filterState.quant !== 'all' ||
-    filterState.sort !== 'recommended';
-
-  const filteredResults = useMemo(
-    () => queryCatalogModels({ models: searchResults, state: filterState, ramGb: ramGB, organizations: MODEL_ORGS }),
-    [searchResults, filterState, ramGB],
+  const setTypeFilter = useCallback(
+    (type: ModelTypeFilter) =>
+      setFilterState(prev => ({ ...prev, type, expandedDimension: null })),
+    [],
+  );
+  const setSourceFilter = useCallback(
+    (source: CredibilityFilter) =>
+      setFilterState(prev => ({ ...prev, source, expandedDimension: null })),
+    [],
+  );
+  const setSizeFilter = useCallback(
+    (size: SizeFilter) =>
+      setFilterState(prev => ({ ...prev, size, expandedDimension: null })),
+    [],
+  );
+  const setQuantFilter = useCallback(
+    (quant: string) =>
+      setFilterState(prev => ({ ...prev, quant, expandedDimension: null })),
+    [],
+  );
+  const setSortOption = useCallback(
+    (sort: SortOption) =>
+      setFilterState(prev => ({ ...prev, sort, expandedDimension: null })),
+    [],
   );
 
-  const recommendedAsModelInfo = useMemo((): ModelInfo[] => {
-    const maxParams = deviceRecommendation.maxParameters;
-    const size = filterState.size === 'all' ? null : SIZE_OPTIONS.find(option => option.key === filterState.size) ?? null;
-    const models = recommendedCatalogModels({ maxParams, ramGb: ramGB, type: filterState.type, orgs: filterState.orgs, size })
-      .map(model => mapCuratedModel(model, recommendedModelDetails));
-    const sorted = queryCatalogModels({
-      models,
-      state: { ...filterState, orgs: [], type: 'all', source: 'all', size: 'all', quant: 'all' },
-      ramGb: ramGB,
-    });
-    // Prioritize NPU/GPU-accelerable models (LiteRT or Q4_0/Q8_0) to the top of the
-    // recommended list, keeping the existing order stable within each group. Only for
-    // the editorial 'recommended' sort — explicit sorts (size/downloads/…) are honored.
-    if (filterState.sort !== 'recommended') return sorted;
-    return prioritizeAccelerated(sorted, modelSupportsNpuGpu);
-  }, [deviceRecommendation.maxParameters, filterState, recommendedModelDetails, ramGB]);
-
-  const trendingAsModelInfo = useMemo((): ModelInfo[] => {
-    const maxParams = deviceRecommendation.maxParameters;
-    // Pick the best-fit per family using the same bestFitScore used for "for you" recommendations
-    return trendingCatalogModels({ maxParams, ramGb: ramGB })
-      .map(model => mapCuratedModel(model, recommendedModelDetails));
-  }, [deviceRecommendation.maxParameters, recommendedModelDetails, ramGB]);
+  const {
+    ramGB,
+    deviceRecommendation,
+    hasActiveFilters,
+    filteredResults,
+    recommendedAsModelInfo,
+    trendingAsModelInfo,
+  } = useCatalogCollections({
+    filterState,
+    searchResults,
+    recommendedModelDetails,
+  });
 
   return {
-    searchQuery, setSearchQuery,
-    isLoading, isRefreshing, setIsRefreshing,
+    searchQuery,
+    setSearchQuery,
+    isLoading,
+    isRefreshing,
+    setIsRefreshing,
     hasSearched,
-    selectedModel, setSelectedModel,
-    modelFiles, setModelFiles,
+    selectedModel,
+    setSelectedModel,
+    modelFiles,
+    setModelFiles,
     isLoadingFiles,
-    filterState, setFilterState,
-    textFiltersVisible, setTextFiltersVisible,
+    filterState,
+    setFilterState,
+    textFiltersVisible,
+    setTextFiltersVisible,
     downloadedModels,
-    hasActiveFilters, ramGB, deviceRecommendation,
-    filteredResults, recommendedAsModelInfo, trendingAsModelInfo,
-    handleSearch, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel, loadDownloadedModels,
-    clearFilters, toggleFilterDimension, toggleOrg,
-    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
+    hasActiveFilters,
+    ramGB,
+    deviceRecommendation,
+    filteredResults,
+    recommendedAsModelInfo,
+    trendingAsModelInfo,
+    handleSearch,
+    handleSelectModel,
+    handleDownload,
+    handleRepairMmProj,
+    handleCancelDownload,
+    handleDeleteModel,
+    loadDownloadedModels,
+    clearFilters,
+    toggleFilterDimension,
+    toggleOrg,
+    setTypeFilter,
+    setSourceFilter,
+    setSizeFilter,
+    setQuantFilter,
+    setSortOption,
+    isModelDownloaded,
+    getDownloadedModel,
+    isRepairingVisionModel,
   };
 }

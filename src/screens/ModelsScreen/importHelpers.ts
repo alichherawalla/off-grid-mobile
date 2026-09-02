@@ -2,8 +2,12 @@ import { Alert } from 'react-native';
 import { modelLibrary } from '../../services';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { DownloadedModel } from '../../types';
-import { isLiteRTFileName } from '../../utils/modelHelpers';
-import { classifyModelImport, isModelProjectorFile } from '@offgrid/models';
+import {
+  classifyModelImport,
+  isModelProjectorFile,
+  type ModelFileImportDecision,
+} from '@offgrid/models';
+import { importSelectedModelFiles } from '../../services/adapters/models/library/modelFileImportApplicationAdapter';
 
 export type GgufFileRef = { uri: string; name: string; size: number };
 
@@ -32,8 +36,16 @@ export function classifyGgufPair(
     return { mainFile: file1, mmProjFile: file2 };
   }
   return {
-    mainFile: { uri: selection.primary.uri, name: selection.primary.name, size: selection.primary.sizeBytes },
-    mmProjFile: { uri: selection.projector.uri, name: selection.projector.name, size: selection.projector.sizeBytes },
+    mainFile: {
+      uri: selection.primary.uri,
+      name: selection.primary.name,
+      size: selection.primary.sizeBytes,
+    },
+    mmProjFile: {
+      uri: selection.projector.uri,
+      name: selection.projector.name,
+      size: selection.projector.sizeBytes,
+    },
   };
 }
 
@@ -53,73 +65,51 @@ export async function importGgufFiles(
     name: file.name ?? 'unknown',
     sizeBytes: file.size ?? 0,
   }));
-  const selection = classifyModelImport({ artifacts, liteRTAvailable: true });
-  if (selection.type !== 'text') throw new Error('Invalid text model import');
-
-  if (!selection.projector) {
-    const resolvedFileName = selection.primary.name;
-    const isLitert = selection.engine === 'litert' || isLiteRTFileName(resolvedFileName);
-
-    let liteRTVision = false;
-    if (isLitert) {
-      liteRTVision = await new Promise<boolean>(resolve => {
+  const decide = (request: ModelFileImportDecision): Promise<boolean> => {
+    if (request.type === 'litert-vision') {
+      return new Promise<boolean>(resolve => {
         Alert.alert(
           'Vision Support',
           'Does this model support image/vision input?\n\nEnable this only for multimodal models (e.g. Gemma 3n). Enabling it on a text-only model will cause a load error.',
           [
-            { text: 'Text Only', style: 'cancel', onPress: () => resolve(false) },
+            {
+              text: 'Text Only',
+              style: 'cancel',
+              onPress: () => resolve(false),
+            },
             { text: 'Vision', style: 'default', onPress: () => resolve(true) },
           ],
           { cancelable: false },
         );
       });
     }
-
-    const model = await modelLibrary.importLocalModel({
-      sourceUri: selection.primary.uri,
-      fileName: resolvedFileName,
-      sourceSize: selection.primary.sizeBytes,
-      engine: isLitert ? 'litert' : undefined,
-      liteRTVision: isLitert ? liteRTVision : undefined,
-      onProgress: p => {
-        setImportProgress(p);
-      },
-    });
-    addDownloadedModel(model);
-    setAlertState(showAlert('Success', `${model.name} imported successfully!`));
-    return;
-  }
-
-  const mainFile = selection.primary;
-  const mmProjFile = selection.projector;
-
-  const confirmed = await new Promise<boolean>(resolve => {
-    Alert.alert(
-      'Import Vision Model?',
-      `Main model:  ${mainFile.name}\nProjector:    ${mmProjFile.name}\n\nIf these look wrong, cancel and rename your files.`,
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Import', onPress: () => resolve(true) },
-      ],
-      { cancelable: false },
+    return new Promise<boolean>(resolve =>
+      Alert.alert(
+        'Import Vision Model?',
+        `Main model:  ${request.primary.name}\nProjector:    ${request.projector.name}\n\nIf these look wrong, cancel and rename your files.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Import', onPress: () => resolve(true) },
+        ],
+        { cancelable: false },
+      ),
     );
+  };
+  const result = await importSelectedModelFiles({
+    modelsDir: modelLibrary.getModelsDirectory(),
+    artifacts,
+    decide,
+    onProgress: setImportProgress,
+    refresh: addDownloadedModel,
   });
-
-  if (!confirmed) {
-    return;
-  }
-
-  const model = await modelLibrary.importLocalModel({
-    sourceUri: mainFile.uri,
-    fileName: mainFile.name,
-    sourceSize: mainFile.sizeBytes,
-    onProgress: p => {
-      setImportProgress(p);
-    },
-    mmProjSourceUri: mmProjFile.uri,
-    mmProjFileName: mmProjFile.name,
-    mmProjSourceSize: mmProjFile.sizeBytes,
-  });
-  addDownloadedModel(model);
-  setAlertState(showAlert('Success', `${model.name} imported with vision projector!`));
+  if (result.status === 'failed') throw new Error(result.error);
+  if (result.status === 'cancelled') return;
+  setAlertState(
+    showAlert(
+      'Success',
+      result.projector
+        ? `${result.model.name} imported with vision projector!`
+        : `${result.model.name} imported successfully!`,
+    ),
+  );
 }

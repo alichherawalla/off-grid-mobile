@@ -40,6 +40,12 @@ export async function reloadTextModel({
   logger.log('[ModelReload] reloading the active text model');
   try {
     const result = await mobileModelCommands.reloadText(modelId, isRemote);
+    if (result === 'reloaded') {
+      const readiness = await initiateModelLoad(modelDeps, true);
+      if (!readiness.ok) {
+        throw new Error(`Reloaded model is not ready: ${readiness.reason}`);
+      }
+    }
     logger.log(`[ModelReload] finished result=${result}`);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

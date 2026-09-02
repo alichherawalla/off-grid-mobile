@@ -45,8 +45,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
-  const { downloadedModels, setDownloadedModels, downloadedImageModels } =
-    useAppStore();
+  const { downloadedModels, downloadedImageModels } = useAppStore();
 
   const downloads = useDownloadStore(state => state.downloads);
 
@@ -292,9 +291,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
       currentMmProjFileName: item.mmProjFileName,
     });
     modelLibrary
-      .repairVision(model)
-      .then(async outcome => {
-        setDownloadedModels(await modelLibrary.getDownloadedModels());
+      .executeVisionRepair({ type: 'repair-model', model })
+      .then(result => {
+        if (result.status === 'failed') throw new Error(result.error);
+        const outcome = result.outcome;
         logger.log('[DownloadDebug] Repair vision outcome', {
           modelId: item.modelId,
           outcome: outcome.kind,

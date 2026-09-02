@@ -1,79 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import RNFS from 'react-native-fs';
-import { unzip } from 'react-native-zip-archive';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
 import { useDownloadStore, isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
-import { modelLibrary, selectMobileModel } from '../../services';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
-import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
-import { ONNXImageModel } from '../../types';
 import { ModelTab, NavigationProp } from './types';
 import { initialFilterState } from './constants';
-import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
-import {
-  classifyModelImport,
-  detectImportedImageBackend,
-  importedImageIdentity,
-} from '@offgrid/models';
-
-type ZipImportDeps = {
-  addDownloadedImageModel: (model: ONNXImageModel) => void;
-  activeImageModelId: string | null;
-  selectActiveImageModel: (model: ONNXImageModel) => Promise<void>;
-  setImportProgress: (p: { fraction: number; fileName: string } | null) => void;
-  setAlertState: (s: AlertState) => void;
-};
-
-async function importImageModelZip(sourceUri: string, fileName: string, deps: ZipImportDeps): Promise<void> {
-  const { addDownloadedImageModel, activeImageModelId, selectActiveImageModel, setImportProgress, setAlertState } = deps;
-  const imageModelsDir = modelLibrary.getImageModelsDirectory();
-  const identity = importedImageIdentity(fileName, Date.now());
-  const modelId = identity.id;
-  const modelDir = `${imageModelsDir}/${modelId}`;
-  const zipPath = `${imageModelsDir}/${modelId}.zip`;
-  if (!(await RNFS.exists(imageModelsDir))) await RNFS.mkdir(imageModelsDir);
-  setImportProgress({ fraction: 0.1, fileName });
-  if (Platform.OS === 'ios') await RNFS.moveFile(sourceUri, zipPath);
-  else await RNFS.copyFile(sourceUri, zipPath);
-  setImportProgress({ fraction: 0.5, fileName });
-  if (!(await RNFS.exists(modelDir))) await RNFS.mkdir(modelDir);
-  setImportProgress({ fraction: 0.6, fileName });
-  await unzip(zipPath, modelDir);
-  setImportProgress({ fraction: 0.85, fileName });
-  const dirContents = await RNFS.readDir(modelDir);
-  const hasMLModelC = dirContents.some(f => f.name.endsWith('.mlmodelc'));
-  const hasNestedMLModelC = !hasMLModelC && dirContents.some(f => f.isDirectory());
-  let resolvedModelDir = modelDir;
-  const backend = detectImportedImageBackend(dirContents.map(entry => ({
-    name: entry.name,
-    directory: entry.isDirectory(),
-  })));
-  if (hasMLModelC || hasNestedMLModelC) {
-    resolvedModelDir = await resolveCoreMLModelDir(modelDir);
-  }
-  await RNFS.unlink(zipPath).catch(() => { });
-  const totalSize = await getDirectorySize(resolvedModelDir);
-  setImportProgress({ fraction: 0.95, fileName });
-  const modelName = identity.name;
-  const imageModel: ONNXImageModel = {
-    id: modelId, name: modelName, description: 'Locally imported image model',
-    modelPath: resolvedModelDir, downloadedAt: new Date().toISOString(), size: totalSize, backend,
-  };
-  await modelLibrary.addDownloadedImageModel(imageModel);
-  addDownloadedImageModel(imageModel);
-  if (!activeImageModelId) await selectActiveImageModel(imageModel);
-  setImportProgress({ fraction: 1, fileName });
-  setAlertState(showAlert('Success', `${modelName} imported successfully!`));
-}
+import { classifyModelImport } from '@offgrid/models';
+import { importMobileImageArchive } from '../../services/adapters/models/library/imageArchiveImportAdapter';
 
 
 export function useModelsScreen() {
@@ -84,7 +24,7 @@ export function useModelsScreen() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
 
-  const { addDownloadedModel, activeImageModelId, addDownloadedImageModel } = useAppStore();
+  const { addDownloadedModel } = useAppStore();
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);
@@ -112,19 +52,24 @@ export function useModelsScreen() {
     text.setIsRefreshing(false);
   };
 
-  const handleImportImageModelZip = (sourceUri: string, fileName: string) =>
-    importImageModelZip(sourceUri, fileName, {
-      addDownloadedImageModel,
-      activeImageModelId,
-      selectActiveImageModel: model => selectMobileModel({
-        source: 'local',
-        hostId: model.backend ?? 'image-runtime',
-        modality: 'image',
-        modelId: model.id,
-      }),
-      setImportProgress,
-      setAlertState,
+  const handleImportImageModelZip = async (sourceUri: string, fileName: string) => {
+    const result = await importMobileImageArchive({
+      sourceUri,
+      fileName,
+      onProgress: progress => setImportProgress({ fraction: progress.fraction, fileName: progress.fileName }),
     });
+    if (result.status === 'imported') {
+      const repairMessage = result.repair
+        ? ` The model was imported, but ${result.repair.kind === 'activate' ? 'it could not be selected' : result.repair.kind === 'refresh' ? 'the model list could not be refreshed' : 'temporary files could not be removed'}.`
+        : '';
+      setAlertState(showAlert('Success', `${result.model.name} imported successfully.${repairMessage}`));
+      return;
+    }
+    const cleanup = result.repair.kind === 'cleanup_required'
+      ? ' Temporary files could not be removed. Try the import again after restarting the app.'
+      : '';
+    setAlertState(showAlert('Import Failed', `${result.error}${cleanup}`));
+  };
 
   const isPickingRef = useRef(false);
 

@@ -44,6 +44,7 @@ import {
   useChatRuntimeSubscriptions,
 } from './useChatScreenLifecycle';
 import { useChatScreenActions } from './useChatScreenActions';
+import type { RuntimeModel } from '@offgrid/models';
 
 export type { AlertState };
 export type { ChatMessageItem } from './types';
@@ -51,6 +52,19 @@ export { getPlaceholderText } from './types';
 export { computePendingSettings } from './pendingSettings';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
+
+/**
+ * A model can make chat available only when Shared says that its route is ready
+ * and the route can serve a chat turn. Embedding and operation-only sidecars are
+ * inventory entries, but they are not chat routes.
+ */
+export function hasUsableChatRoute(models: readonly RuntimeModel[]): boolean {
+  return models.some(
+    model =>
+      model.ready &&
+      (model.modality === 'text' || model.modality === 'image'),
+  );
+}
 
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -157,8 +171,7 @@ export const useChatScreen = () => {
   const hasTextModel = activeModelInfo.modelId !== null;
   const hasActiveModel = hasTextModel || activeImageSnapshot.model !== null;
   const activeModelName = activeModelInfo.modelName;
-  const hasAvailableModels =
-    availableModels.length > 0;
+  const hasAvailableModels = hasUsableChatRoute(availableModels);
 
   const effectiveProjectId = activeConversation
     ? activeConversation.projectId
@@ -259,13 +272,11 @@ export const useChatScreen = () => {
     activeModelInfo,
     activeModelId: activeModelInfo.modelId,
     activeModel,
-    modelDeps,
     activeRemoteModel,
     isModelLoading,
     setSupportsVision,
     setSupportsToolCalling,
     setSupportsThinking,
-    prepareSelectedModel: route.params?.conversationId == null,
   });
 
   const isGeneratingForThisConversation =

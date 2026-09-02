@@ -5,7 +5,7 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { needsVisionRepair } from '../../utils/visionRepair';
-import { reportModelFailure } from '../../services/modelFailureHandler';
+import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
 import { useChatStore } from '../../stores';
 import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import type { CacheType, DownloadedModel, MediaAttachment, Message, Project, RemoteModel } from '../../types';
@@ -103,8 +103,31 @@ function presentGenerationError(deps: GenerationDeps, conversationId: string, er
     || message.includes('Exceeding the maximum number of tokens')
     || message.includes('Input token ids');
   if (contextFull) {
+    const sourceConversation = useChatStore.getState().conversations.find(
+      candidate => candidate.id === conversationId,
+    );
+    const modelId = deps.activeModelInfo?.modelId ?? deps.activeModel?.id ?? deps.activeImageModel?.id;
     deps.setAlertState({
-      ...showAlert('Context window full', "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat."),
+      ...showAlert(
+        'Context window full',
+        "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.",
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'New chat',
+            onPress: () => {
+              if (!modelId) return;
+              const nextId = deps.createConversation(
+                modelId,
+                undefined,
+                sourceConversation?.projectId,
+              );
+              deps.setActiveConversation(nextId);
+              deps.setAlertState(hideAlert());
+            },
+          },
+        ],
+      ),
       prominentMessage: true,
     });
     return;
@@ -165,8 +188,23 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
     return;
   }
   if (blockedImageForNonVisionModel(deps, call.attachments)) return;
+  // A failure card describes the previous text attempt. Once a new accepted
+  // attempt starts, that stale projection must not sit beside the live stream.
+  clearModelFailure('text');
   callHook(HOOKS.audioStop);
   await prepareMobileChatGeneration();
+  if (
+    !deps.activeModelInfo?.isRemote &&
+    deps.activeModel &&
+    call.imageMode !== 'force'
+  ) {
+    const ready = await ensureReadyOrAlert(deps, 'send', () => {
+      handleSendFn(deps, call).catch(error =>
+        logger.error('[ChatGen] Retried send failed', error),
+      );
+    });
+    if (!ready) return;
+  }
   let conversationId = deps.activeConversationId;
   if (!conversationId) {
     const modelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;

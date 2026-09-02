@@ -11,7 +11,7 @@
  * the active one.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ModelCard } from '../../components';
@@ -32,16 +32,27 @@ import { WHISPER_MODELS } from '@offgrid/models';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
-import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
-import { selectMobileModel } from '../../services/modelServices';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
+import { ModelFailureCard } from '../../components/ModelFailureCard';
+import { reportModelFailure } from '../../services/modelFailureHandler';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
 
 const formatSize = (mb: number): string =>
   mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`;
+
+function reportTranscriptionReconcileFailure(error: unknown): void {
+  logger.error('[Transcription] disk reconciliation failed:', error);
+  reportModelFailure('stt', error, {
+    id: 'transcription-models-reconcile',
+    title: 'Transcription models are unavailable',
+    message: error instanceof Error
+      ? error.message
+      : 'Off Grid AI could not update your transcription models.',
+  });
+}
 
 interface WhisperCardProps {
   model: (typeof WHISPER_MODELS)[number];
@@ -134,17 +145,15 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // Reuse the Models screen's shared banner styling so it matches the other tabs.
   const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const remoteLabels = useActiveRemoteModelLabels();
   const activeRoute = useActiveMobileModel('transcription').model;
+  const activeRemoteModelName = activeRoute?.source === 'remote'
+    ? activeRoute.name
+    : null;
   const downloadedModelId = activeRoute?.source === 'local'
     ? activeRoute.id
     : null;
 
-  const {
-    presentModelIds,
-    error: whisperError,
-    clearError,
-  } = useWhisperStore();
+  const { presentModelIds, error: whisperError } = useWhisperStore();
 
   // In-flight STT state from the SINGLE owner (canonical download tracker + whisper-store
   // fallback), shared with the Home "Speech" picker so the two surfaces can never disagree.
@@ -156,7 +165,11 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
   useEffect(() => {
-    if (!anyDownloading) transcriptionModelIntents.reconcileDisk();
+    if (!anyDownloading) {
+      transcriptionModelIntents.reconcileDisk().catch(
+        reportTranscriptionReconcileFailure,
+      );
+    }
   }, [anyDownloading]);
 
   // Re-derive from disk whenever the Models screen regains focus (e.g. returning
@@ -164,9 +177,22 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // truth, so this keeps the list in sync without any cross-screen wiring.
   useFocusEffect(
     useCallback(() => {
-      if (!anyDownloading) transcriptionModelIntents.reconcileDisk();
+      if (!anyDownloading) {
+        transcriptionModelIntents.reconcileDisk().catch(
+          reportTranscriptionReconcileFailure,
+        );
+      }
     }, [anyDownloading]),
   );
+
+  useEffect(() => {
+    if (!whisperError) return;
+    reportModelFailure('stt', whisperError, {
+      id: 'transcription-models-workflow',
+      title: 'Transcription model unavailable',
+      message: whisperError,
+    });
+  }, [whisperError]);
 
   const handleDownload = useCallback(
     async (id: string) => {
@@ -174,9 +200,6 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     // started here — or from the chat voice button — shows progress on this tab.
       try {
         await transcriptionModelIntents.downloadModel(id);
-        await selectMobileModel({
-          source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
-        });
       } catch (err) {
         logger.error('[Transcription] download failed:', err);
       }
@@ -188,9 +211,6 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     async (id: string) => {
       try {
         await transcriptionModelIntents.selectModel(id);
-        await selectMobileModel({
-          source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId: id,
-        });
       } catch (err) {
         logger.error('[Transcription] select failed:', err);
       }
@@ -260,22 +280,17 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     >
       <View style={shared.deviceBanner}>
         <Icon
-          name={remoteLabels.transcription ? 'cloud' : 'shield'}
+          name={activeRemoteModelName ? 'cloud' : 'shield'}
           size={11}
           color={colors.trending}
         />
         <Text style={shared.deviceBannerText}>
-          {showRemoteModels && remoteLabels.transcription
-            ? `${remoteLabels.transcription} runs on your active remote server`
+          {activeRemoteModelName
+            ? `${activeRemoteModelName} runs on your active remote server`
             : 'Transcription runs on your phone, audio is never sent anywhere'}
         </Text>
       </View>
-
-      {whisperError && (
-        <TouchableOpacity onPress={clearError}>
-          <Text style={styles.error}>{whisperError} (tap to dismiss)</Text>
-        </TouchableOpacity>
-      )}
+      <ModelFailureCard />
 
       {showLanguageSelector && (
         <TranscriptionLanguageSelect testID="models-transcription-language" />
@@ -306,5 +321,4 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
       ...TYPOGRAPHY.label, textTransform: 'uppercase' as const, color: colors.textMuted,
       letterSpacing: 0.3, marginBottom: SPACING.sm, marginTop: SPACING.xs,
     },
-    error: { ...TYPOGRAPHY.bodySmall, color: colors.error, textAlign: 'center' as const, marginBottom: SPACING.md },
   });

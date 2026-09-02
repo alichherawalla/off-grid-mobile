@@ -54,7 +54,7 @@ async function loadItems(): Promise<DownloadItem[]> {
           bytesDownloaded: d.bytesDownloaded, bytesPerSecond: d.bytesPerSecond,
           progress: d.progress, status: 'downloading', name: d.name,
         });
-      } else if (d.status === 'error') {
+      } else if (d.status === 'failed') {
         // A failed Kokoro fetch. Surface it as a failed active item so the
         // Download Manager shows it with a Retry button (executorch resumes from
         // its cache); the Retry action routes back through

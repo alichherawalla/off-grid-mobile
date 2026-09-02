@@ -100,7 +100,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const {
     handleSelectTextModel: _handleSelectTextModel,
     handleUnloadTextModel: _handleUnloadTextModel,
-    handleSelectImageModel: _handleSelectImageModel,
     handleUnloadImageModel,
   } = useModelLoading({
     setLoadingState,
@@ -110,7 +109,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const handleSelectTextModel = _handleSelectTextModel;
   const handleUnloadTextModel = _handleUnloadTextModel;
-  const handleSelectImageModel = _handleSelectImageModel;
 
   const {
     model: activeTextModel,
@@ -375,7 +373,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     activeRemoteImageModelId,
     handleSelectTextModel,
     handleUnloadTextModel,
-    handleSelectImageModel,
     handleUnloadImageModel,
     // Remote model handlers
     handleSelectRemoteTextModel,

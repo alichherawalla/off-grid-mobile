@@ -247,7 +247,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
         onClosedRef.current?.();
       });
     }
-  }, [visible]);
+  }, [animateOut, modalVisible, visible]);
 
   // Track keyboard height so the sheet lifts above the keyboard
   useEffect(() => {
@@ -327,6 +327,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
         {/* Sheet */}
         <Animated.View
+          testID="app-sheet-surface"
           style={[
             styles.sheet,
             {

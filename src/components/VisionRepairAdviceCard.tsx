@@ -32,8 +32,7 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
   const [dismissed, setDismissed] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const { downloadedModels, activeModelId, setDownloadedModels } =
-    useAppStore();
+  const { downloadedModels, activeModelId } = useAppStore();
 
   const activeModel = downloadedModels.find(m => m.id === activeModelId);
   const broken =
@@ -51,8 +50,12 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
   const repair = async (): Promise<void> => {
     setRepairing(true);
     try {
-      const outcome = await modelLibrary.repairVision(activeModel);
-      setDownloadedModels(await modelLibrary.getDownloadedModels());
+      const repairResult = await modelLibrary.executeVisionRepair({
+        type: 'repair-model',
+        model: activeModel,
+      });
+      if (repairResult.status === 'failed') throw new Error(repairResult.error);
+      const outcome = repairResult.outcome;
       const [, body] = visionRepairMessage(outcome, activeModel.name);
       setResult(body);
       // Only a repair that actually landed is worth reloading for; the other outcomes leave the

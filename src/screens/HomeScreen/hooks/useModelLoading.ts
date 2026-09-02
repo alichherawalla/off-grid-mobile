@@ -1,11 +1,9 @@
 import { useCallback } from 'react';
 import { InteractionManager } from 'react-native';
 import { showAlert, AlertState } from '../../../components';
-import {
-  selectMobileModel,
-} from '../../../services';
-import { mobileResidencyIntents } from '../../../services/modelServices/residencyIntents';
-import { DownloadedModel, ONNXImageModel } from '../../../types';
+import { selectMobileModel } from '../../../services';
+import { mobileModelCommands } from '../../../services/modelServices/modelCommandApplication';
+import { DownloadedModel } from '../../../types';
 import { LoadingState, ModelPickerType } from './types';
 
 type Setters = {
@@ -16,10 +14,12 @@ type Setters = {
 
 const idle: LoadingState = { isLoading: false, type: null, modelName: null };
 
-/** Yield one interaction cycle so the inline "Loading…" card paints before the
+/** Yield one interaction cycle so the inline "Loading..." card paints before the
  *  (potentially bridge-blocking) native unload starts. */
 const waitForOverlay = () =>
-  new Promise<void>(resolve => InteractionManager.runAfterInteractions(() => resolve()));
+  new Promise<void>(resolve =>
+    InteractionManager.runAfterInteractions(() => resolve()),
+  );
 
 export const useModelLoading = ({
   setLoadingState,
@@ -49,7 +49,7 @@ export const useModelLoading = ({
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     await waitForOverlay();
     try {
-      await mobileResidencyIntents.unloadText();
+      await mobileModelCommands.unload('text');
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
@@ -57,25 +57,12 @@ export const useModelLoading = ({
     }
   }, [setLoadingState, setPickerType, setAlertState]);
 
-  const handleSelectImageModel = useCallback(
-    async (model: ONNXImageModel) => {
-      setPickerType(null);
-      await selectMobileModel({
-        source: 'local',
-        hostId: model.backend ?? 'image-runtime',
-        modality: 'image',
-        modelId: model.id,
-      });
-    },
-    [setPickerType],
-  );
-
   const handleUnloadImageModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     await waitForOverlay();
     try {
-      await mobileResidencyIntents.unloadImage();
+      await mobileModelCommands.unload('image');
     } catch (_error) {
       setAlertState(showAlert('Error', 'Failed to unload model'));
     } finally {
@@ -86,7 +73,6 @@ export const useModelLoading = ({
   return {
     handleSelectTextModel,
     handleUnloadTextModel,
-    handleSelectImageModel,
     handleUnloadImageModel,
   };
 };

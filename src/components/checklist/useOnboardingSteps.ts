@@ -14,7 +14,12 @@ export function useOnboardingSteps() {
   const availableModels = useMobileModelInventory();
   const activeText = useActiveMobileModel('text');
   const activeImage = useActiveMobileModel('image');
-  const hasAnyModel = availableModels.length > 0;
+  // Built-in sidecars (embedding, transcription, and voice) are runtime inventory,
+  // but they are not a model that the user downloaded for chat or image creation.
+  // Keep this product milestone scoped to the two user-installable model journeys.
+  const hasAnyModel = availableModels.some(model =>
+    model.installed && (model.modality === 'text' || model.modality === 'image'),
+  );
   const hasActiveModel = activeText.model !== null || activeImage.model !== null;
 
   const steps: OnboardingStep[] = useMemo(() => [
