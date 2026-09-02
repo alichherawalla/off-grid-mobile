@@ -404,6 +404,7 @@ function adapter(id: string): GenerationAdapter {
         ? { reasoning: llmService.getReasoningMetadata() }
         : model;
       const reasoningWire = reasoningWireForGeneration(request, reasoningModel);
+      logger.log(`[WIRE-REASONING] ${JSON.stringify({ routeId: request.routeId, reasoning: request.reasoning, control: reasoningModel.reasoning?.control, wire: reasoningWire })}`); // [WIRE] policy→wire per turn
       if (localRuntime === 'litert') {
         yield* liteRTChunks(request, context, reasoningWire);
         return;

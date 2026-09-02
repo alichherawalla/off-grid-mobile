@@ -36,6 +36,17 @@ xcrun devicectl device copy from \
 
 Then `grep`/read `/tmp/offgrid-debug.log`. The file appends a `===== session start … =====` marker on each launch and is size-capped (rotates, keeping the tail). The in-app **Debug Logs** screen (Settings → Debug Logs) shows the same lines live for quick visual checks. **When diagnosing a device issue, pull this file rather than guessing.**
 
+### Metro keeps a stale copy of a rebuilt shared package
+
+Every `@offgrid/*` package is a `file:` symlink into `../shared`, and `tsup --clean` deletes and
+recreates `dist/` with new chunk names. Metro's per-client bundle graph (the phone's) often keeps the
+OLD dist after that, while a fresh `curl .../index.bundle` shows the new code - so a "reloaded" app
+still runs the previous shared build. After rebuilding a shared package: `touch` the files under its
+`dist/`, then reload the app (`curl -X POST localhost:8081/reload`); if it still lags, restart Metro
+with `--reset-cache`. Prove which code the phone runs before debugging the logic: Metro's Hermes
+inspector accepts `Runtime.evaluate` (`curl localhost:8081/json/list` for the socket, then
+`__r(<module id from the dev bundle>)` to reach a module's exports).
+
 ## Branch Policy
 
 **Never push directly to `main`.** All changes must go through a pull request:
