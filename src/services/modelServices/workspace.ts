@@ -6,6 +6,7 @@ import {
 } from '@offgrid/models';
 import { generateId } from '../../utils/generateId';
 import { mobileModelSelectionStore } from './selectionStore';
+import { mobileExecutionAdapterId } from './mobileRoute';
 import { modelResidencyManager } from './residencyBootstrap';
 
 // Tool and conversation ports are resolved at call time: their modules reach back into this
@@ -71,6 +72,19 @@ const lazyRemote: RemotePorts = {
   },
 };
 
+// Remote reachability, read at call time from the transport registry and server health.
+function remoteStatus(serverId: string): { ready: boolean; error?: string } {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { remoteTextTransportRegistry } = require('../adapters/providers/registry') as typeof import('../adapters/providers/registry');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { useRemoteServerStore } = require('../../stores/remoteServerStore') as typeof import('../../stores/remoteServerStore');
+  const unhealthy = useRemoteServerStore.getState().serverHealth[serverId]?.status === 'unhealthy';
+  return {
+    ready: !!remoteTextTransportRegistry.get(serverId),
+    ...(unhealthy ? { error: 'Remote server is unavailable' } : {}),
+  };
+}
+
 /** The ONE shared facade Mobile composes its model layer from. Everything here is a port. */
 export const mobileWorkspace = createModelWorkspace({
   selection: mobileModelSelectionStore,
@@ -79,6 +93,10 @@ export const mobileWorkspace = createModelWorkspace({
   generation: { tools: lazyTools, conversations: lazyConversations },
   remote: lazyRemote,
   remoteServerId: generateId,
+  remoteInventory: {
+    adapterId: (modality, server) => mobileExecutionAdapterId('remote', server.id, modality),
+    status: server => remoteStatus(server.id),
+  },
 });
 
 /** Remote-server application, owned by the workspace. */

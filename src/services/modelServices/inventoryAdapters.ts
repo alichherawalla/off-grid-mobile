@@ -1,26 +1,17 @@
 import {
   catalogKindForArtifact,
-  isGrounderModel,
   projectGgufCapabilities,
   runtimeModalityForModelKind,
-  selectedRemoteModelName,
   type ModelInventoryAdapter,
   type RuntimeModel,
-  inventoryModelCapabilities,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from './activeRoute';
 import { rememberedLocalTextModelId } from './modelSelectionProjection';
-import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
 import type {
   DownloadedModel,
-  RemoteModel,
-  RemoteModelCategory,
-  RemoteServer,
 } from '../../types';
-import { displayModelName } from '../adapters/remote/serverDiscovery';
-import { remoteTextTransportRegistry } from '../adapters/providers';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { whisperService } from '../whisperService';
@@ -40,8 +31,6 @@ import {
 } from './mobileRoute';
 import { mobileLocalVoiceInventoryAdapter } from './voiceGenerationAdapter';
 import { readMobileModelSelection } from './modelSelectionProjection';
-
-type MobileRemoteMediaModality = 'image' | 'transcription' | 'voice' | 'embedding';
 
 function runtime(
   identity: MobileRouteFacts,
@@ -214,153 +203,6 @@ const localWhisperInventoryAdapter: ModelInventoryAdapter = {
   },
 };
 
-function remoteTextModels(server: RemoteServer): RemoteModel[] {
-  const state = useRemoteServerStore.getState();
-  const discovered = (state.discoveredModels[server.id] ?? []).filter(
-    model => !isGrounderModel(model.name || model.id),
-  );
-  const selectedId = state.activeServerId === server.id
-    ? state.activeRemoteTextModelId
-    : null;
-  if (selectedId && isGrounderModel(selectedId)) return discovered;
-  return discovered;
-}
-
-function undiscoveredSelectedRemoteTextRuntime(
-  server: RemoteServer,
-  discovered: readonly RemoteModel[],
-): RuntimeModel | null {
-  const state = useRemoteServerStore.getState();
-  const selectedId = state.activeServerId === server.id
-    ? state.activeRemoteTextModelId
-    : null;
-  if (
-    !selectedId ||
-    isGrounderModel(selectedId) ||
-    discovered.some(model => model.id === selectedId)
-  ) return null;
-  const identity: MobileRouteFacts = {
-    source: 'remote',
-    hostId: server.id,
-    modality: 'text',
-    modelId: selectedId,
-  };
-  return runtime(identity, {
-    name: selectedRemoteModelName(server, 'text') ?? displayModelName(selectedId),
-    kind: 'text',
-    // The text route is known; tools and thinking stay unknown until discovery provides evidence.
-    capabilities: inventoryModelCapabilities({ kind: 'text', source: 'remote' }),
-    installed: true,
-    ready: !!remoteTextTransportRegistry.get(server.id),
-    loaded: true,
-    error: state.serverHealth[server.id]?.status === 'unhealthy'
-      ? 'Remote server is unavailable'
-      : undefined,
-  });
-}
-
-function remoteMediaOptions(
-  server: RemoteServer,
-  category: Exclude<RemoteModelCategory, 'text'>,
-): Array<{ id: string; name: string }> {
-  const catalog = server.catalog?.[category] ?? [];
-  const configured = server.selections?.[category]?.trim();
-  if (!configured || catalog.some(model =>
-    model.id === configured || model.activeAliases?.includes(configured),
-  )) return catalog;
-  return [...catalog, {
-    id: configured,
-    name: selectedRemoteModelName(server, category) ?? displayModelName(configured),
-  }];
-}
-
-function remoteMediaRuntime(
-  server: RemoteServer,
-  modality: MobileRemoteMediaModality,
-  option: { id: string; name: string },
-): RuntimeModel {
-  const identity: MobileRouteFacts = {
-    source: 'remote',
-    hostId: server.id,
-    modality,
-    modelId: option.id,
-  };
-  const selectedServerId =
-    useRemoteServerStore.getState().activeRemoteMediaServerIds[modality];
-  const selected =
-    selectedServerId === server.id && server.selections?.[modality] === option.id;
-  return runtime(identity, {
-    name: option.name,
-    kind: modality,
-    capabilities: modality === 'transcription'
-      ? { audioInput: true, transcription: true }
-      : modality === 'image'
-      ? { imageGeneration: true }
-      : modality === 'voice'
-      ? { speechSynthesis: true }
-      : { embeddings: true },
-    installed: true,
-    ready: selected,
-    loaded: selected,
-  });
-}
-
-const remoteModelInventoryAdapter: ModelInventoryAdapter = {
-  id: 'mobile-remote-model-inventory',
-  async listModels() {
-    const state = useRemoteServerStore.getState();
-    return state.servers.flatMap(server => {
-      const transport = remoteTextTransportRegistry.get(server.id);
-      const discoveredText = remoteTextModels(server);
-      const text = discoveredText.map(model => {
-        const identity: MobileRouteFacts = {
-          source: 'remote',
-          hostId: server.id,
-          modality: 'text',
-          modelId: model.id,
-        };
-        return runtime(identity, {
-          name: model.name,
-          kind: model.capabilities.supportsVision ? 'vision' : 'text',
-          // Shared owns capability inference; this adapter only reports what discovery observed.
-          capabilities: inventoryModelCapabilities({
-            kind: model.capabilities.supportsVision ? 'vision' : 'text',
-            source: 'remote',
-            remoteCapabilities: model.capabilities,
-          }),
-          reasoning: model.capabilities.reasoning,
-          installed: true,
-          ready: !!transport,
-          loaded: state.activeServerId === server.id && state.activeRemoteTextModelId === model.id,
-          error: state.serverHealth[server.id]?.status === 'unhealthy'
-            ? 'Remote server is unavailable'
-            : undefined,
-        });
-      });
-      const undiscoveredSelection = undiscoveredSelectedRemoteTextRuntime(
-        server,
-        discoveredText,
-      );
-      return [
-        ...text,
-        ...(undiscoveredSelection ? [undiscoveredSelection] : []),
-        ...remoteMediaOptions(server, 'image').map(option =>
-          remoteMediaRuntime(server, 'image', option),
-        ),
-        ...remoteMediaOptions(server, 'transcription').map(option =>
-          remoteMediaRuntime(server, 'transcription', option),
-        ),
-        ...remoteMediaOptions(server, 'voice').map(option =>
-          remoteMediaRuntime(server, 'voice', option),
-        ),
-        ...remoteMediaOptions(server, 'embedding').map(option =>
-          remoteMediaRuntime(server, 'embedding', option),
-        ),
-      ];
-    });
-  },
-};
-
 function embeddingRuntime(modality: 'embedding'): RuntimeModel {
   return runtime(
     {
@@ -431,5 +273,4 @@ export const mobileInventoryAdapters: ModelInventoryAdapter[] = [
   mobileLocalVoiceInventoryAdapter,
   embeddingInventoryAdapter,
   classifierInventoryAdapter,
-  remoteModelInventoryAdapter,
 ];
