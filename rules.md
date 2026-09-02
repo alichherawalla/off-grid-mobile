@@ -226,6 +226,14 @@ render projections. That covers selection and routing, intent classification, ad
 memory policy, download and registry rules, generation lifecycle and cancellation, remote
 discovery, tool orchestration, transfer manifests, and speech/transcription workflows.
 
+**Standing instruction (2026-09-02): for every package in `shared/`, all business logic lives in the
+shared package. Mobile and Desktop are dumb consumers - they supply ports (storage, native runtime,
+IPC, rendering) and nothing else. That is what "hexagonal architecture" means here. A host file
+should read as "wire port A to shared method B". If the other host would need the same function,
+copy string, mapping, or rule, it is business logic and it goes to shared. SSOT, SOLID, DRY, SRP,
+and Clean Architecture apply to everything we build; a `() => false` policy stub or a duplicated
+helper in a host is the tell that a rule leaked out of shared.**
+
 The shared packages are: `@offgrid/analytics`, `@offgrid/artifacts`, `@offgrid/automation`, `@offgrid/capture`, `@offgrid/clipboard`, `@offgrid/design`, `@offgrid/finops`, `@offgrid/memory`, `@offgrid/models`, `@offgrid/pipeline`, `@offgrid/policy`, `@offgrid/rag`, `@offgrid/speech`, `@offgrid/sync`, `@offgrid/ui`, `@offgrid/use`, `@offgrid/vectordb`. Before writing any
 model-related condition in `desktop/` or `mobile/`, look for the owner among them. If the rule
 exists there, call it. If it does not, add it there with its tests, then call it from both apps.
