@@ -32,6 +32,7 @@ import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { useIsProActive } from '../../hooks/useIsProActive';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { useModelResidencyBusy } from '../../services/modelServices/useModelResidencyBusy';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
@@ -159,6 +160,10 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
 }) => {
   const hasScrolledRef = React.useRef(false);
   const interfaceMode = useUiModeStore(s => s.interfaceMode);
+  // Switching to voice loads the voice model (about 15 s on a phone). The list must not go quiet
+  // for that long: say what is happening, above whatever is already on screen.
+  const voiceBusy = useModelResidencyBusy('voice');
+  const preparingVoice = interfaceMode === 'audio' && voiceBusy;
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { toolCountHintDismissed } = useAppStore();
   // Subscribe to Pro activation so this re-renders the moment a license is
@@ -224,6 +229,11 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   );
   return (
     <>
+      {preparingVoice ? (
+        <View testID="voice-preparing" style={styles.voicePreparingRow}>
+          <ThinkingIndicator text="Preparing voice…" />
+        </View>
+      ) : null}
       {chat.displayMessages.length === 0 ? (
         // Voice mode gets its own welcome hero (big "tap to speak" mic); free
         // builds / chat mode fall back to the standard empty chat.

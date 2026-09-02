@@ -5,6 +5,10 @@ import { createImageStyles } from './stylesImage';
 const createLayoutStyles = (colors: ThemeColors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   keyboardView: { flex: 1 },
+  voicePreparingRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
   messageList: { paddingVertical: 16 },
 });
 
