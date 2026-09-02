@@ -2006,13 +2006,13 @@ never said which model answered. A fallback that changes the model must be visib
 in the turn's meta line. Still open from this entry: the streaming header label ("Waiting for ...")
 reads the active route and does not switch to the model that took over until the turn finishes.
 
-## Streaming speech gives up when the voice engine is still loading (open, 2026-09-02)
+## Streaming speech gives up when the voice engine is still loading (RESOLVED 2026-09-02: held answer replays on ready; test streamingSpeechWaitsForEngine)
 
 `speakCompletedTurn ready=false streaming=false → speak full message`: a turn that started while
 Kokoro was still loading spoke the whole answer at the end instead of sentence by sentence. Streaming
 should wait for the engine, not fall back.
 
-## Cannot change Desktop's selected model from the phone (open, 2026-09-02)
+## Cannot change Desktop's selected model from the phone (RESOLVED 2026-09-02: activations joined in shared; paired Mac adopted at its live address via the resume handshake; roster keeps dialable addresses)
 
 Selecting a Desktop model via OGAD returned "Desktop did not confirm the selected model." while
 Desktop was restarting its model server under a burst of activations. Activations are now joined in
