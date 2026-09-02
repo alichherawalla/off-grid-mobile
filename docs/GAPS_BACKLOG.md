@@ -2069,3 +2069,19 @@ Device log: "draw a dog" classified image once (20:27), later resends replayed t
 ## OpenRouter models all classify as text (RESOLVED in code 2026-09-02: shared catalog reads `architecture.output_modalities`; `remoteImageRequest` draws through OpenRouter's chat-image modality and through `/images/generations` elsewhere; both apps call it; not yet verified live)
 
 OpenRouter lists image-output models via `output_modalities`, which shared's remote inventory does not read, so Desktop's remote server shows "No image models on this server". Reading the field is small; generating through OpenRouter's chat-completions image modality needs a second remote image transport in shared.
+
+## Model selection has two writers and three hand-kept copies (open, 2026-09-02)
+
+One fact, "which model answers each modality on this Mac", is held in: Desktop's canonical
+`model-selections.json` (authority), the phone's selection store (was a second WRITER: its store
+adapter activated the route on Desktop on every write; fixed 2026-09-02, mobile commit "selection: the
+phone's selection write is pure"), the saved remote server's per-modality `selections`, the legacy
+`active-modalities.json`, and the "Use remote server" toggle derived from the text selection. The last
+three must become read-only projections of the authority, owned by `@offgrid/models`; today two of
+them are written by hand. Symptoms today: Nano Banana saved on Desktop, phone re-activated DreamShaper
+(22:33Z), both surfaces then failed on the local model's memory guard.
+
+## Pre-existing failing test: remoteServer discovery 'keeps a reachable saved server when another discovered server uses the same port' (open, 2026-09-02)
+
+Fails on the branch head before today's selection change (verified with the change stashed). Not a
+mockist; needs a real fix of the seam or the expectation.
