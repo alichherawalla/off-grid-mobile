@@ -1,3 +1,4 @@
+import type { ChatTurn } from '@offgrid/models';
 import type { GenerationMeta } from '../types';
 import { useAppStore } from '../stores';
 import { mobileTextEngineControl } from './modelServices/textEngineControl';
@@ -34,9 +35,14 @@ function liteRTMeta(service: any, modelName: string | undefined): GenerationMeta
   };
 }
 
-export function buildGenerationMetaImpl(service: any): GenerationMeta {
+/**
+ * The meta line names the model that answered. Shared records it on the finished turn; when a
+ * fallback answered, that differs from the active route, so the turn wins and the route is the
+ * fallback only for turns that never reached a result (stop, failure).
+ */
+export function buildGenerationMetaImpl(service: any, turn?: ChatTurn): GenerationMeta {
   let meta: GenerationMeta;
-  const active = activeMobileRoute('text').model;
+  const active = turn?.result?.model ?? activeMobileRoute('text').model;
   if (active?.source === 'remote') {
     const tokenCount = Math.ceil((service.state.streamingContent.length + service.totalReasoningLength) / 4);
     const duration = service.state.startTime ? (Date.now() - service.state.startTime) / 1000 : 0;
