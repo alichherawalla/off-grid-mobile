@@ -53,6 +53,7 @@ class MobileGenerationProjection {
       case 'started': this.start(event.turn); return;
       case 'partial': this.partial(event.turn, event.partial.content, event.partial.reasoning); return;
       case 'tool_started': this.toolStarted(event.call.name); return;
+      case 'compacted': this.compacted(); return;
       case 'completed': this.complete(event.turn); return;
       case 'stopped': this.stop(event.turn); return;
       case 'failed': this.fail(event.turn); return;
@@ -98,6 +99,13 @@ class MobileGenerationProjection {
     // appends only its new reasoning instead of repeating the completed round.
     this.update({ streamingContent: '', isThinking: true,
       routedToolNames: [...(this.state.routedToolNames ?? []), name] });
+  }
+
+  /** Compaction is forward-looking: text already on screen stays; the continuation streams after it. */
+  private compacted(): void {
+    this.forceFlushTokens();
+    useChatStore.getState().resetStreamingSegment();
+    this.update({ streamingContent: '', isThinking: true });
   }
 
   private complete(turn: ChatTurn): void {

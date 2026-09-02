@@ -39,15 +39,9 @@ import { reportModelFailure } from '../../services/modelFailureHandler';
 import {
   generationMessage,
   MobileChatTurnRepository,
+  committedRoundMessage,
+  generationMessageText as messageText,
 } from './mobileChatTurnRepository';
-
-function messageText(message: GenerationMessage): string {
-  if (typeof message.content === 'string') return message.content;
-  return message.content
-    .filter(part => part.type === 'text')
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .join('\n');
-}
 
 
 const repository = new MobileChatTurnRepository();
@@ -323,15 +317,21 @@ const service = new ChatSessionService(
     compactionRetry: {
       shouldRetry: ({ error }) =>
         contextCompactionService.isContextFullError(error),
-      mayReplaceCommittedPartial: () => false,
     },
     compaction: {
-      compact: async ({ identity, messages }) => {
+      compact: async ({ identity, messages, responseMessages }) => {
         const system = messages.find(message => message.role === 'system');
-        const mobileMessages = useChatStore
-          .getState()
-          .getConversationMessages(identity.conversationId)
-          .filter(message => !message.isSystemInfo);
+        // The store holds history up to this turn's user row. This turn's committed rounds
+        // (tool calls, tool results, streamed text) exist only in the session, so they join here.
+        const mobileMessages = [
+          ...useChatStore
+            .getState()
+            .getConversationMessages(identity.conversationId)
+            .filter(message => !message.isSystemInfo),
+          ...responseMessages.map((message, index) =>
+            committedRoundMessage(identity.conversationId, message, index),
+          ),
+        ];
         const conversation = useChatStore
           .getState()
           .conversations.find(
@@ -344,6 +344,7 @@ const service = new ChatSessionService(
             : APP_CONFIG.defaultSystemPrompt,
           allMessages: mobileMessages,
           previousSummary: conversation?.compactionSummary,
+          protectedTailCount: responseMessages.length,
         });
         return compacted.map(generationMessage);
       },

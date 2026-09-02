@@ -38,6 +38,7 @@ export const contextCompactionService = {
     systemPrompt: string;
     allMessages: Message[];
     previousSummary?: string;
+    protectedTailCount?: number;
   }) => sharedCompaction.compact(input),
   clearSummary: (conversationId: string) => sharedCompaction.clear(conversationId),
 };
