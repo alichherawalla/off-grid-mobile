@@ -2055,3 +2055,17 @@ At boot the paired Mac had no dialable address yet (roster row `lan=0.0.0.0 priv
 The adoption plan treated "no address" as "not wanted" and removed the adopted server, which
 dropped the text, image, and speech selections pointing at it. Choices made before the fix are
 gone once; they stay after it.
+
+## Resend never re-classified a turn; a stale local text model ran beside the remote one (RESOLVED in code 2026-09-02: shared `ChatSessionService` resolves the kind on every run and carries only the user's explicit choice; `ensureTextModelForChat` reads the shared active route; a resend passes `allowFallback: false`; the 60 s remote media timeout is gone; remote HTTP errors show the server's message)
+
+Device log: "draw a dog" classified image once (20:27), later resends replayed the recorded text kind and never asked the classifier. After Desktop's llama-server was evicted for an image load, its 503 made the phone run SmolLM2 (a replayed turn from an older session carried no fallback flag). A remote DreamShaper run was cancelled at exactly 60 s by the media request timeout.
+
+## Remote model selection shows no loading (RESOLVED in code 2026-09-02: shared `ModelCommandApplicationService.pending(modality)` + `subscribe`; the sheet spins the remote row and disables the rest while the round trip runs; test model-command-service)
+
+## Mobile still keeps a local text selection beside the shared route (open, 2026-09-02)
+
+`activeModelId` / `lastTextModelId` and `selectedTextModelId()` remain as a second owner of the text selection. The readiness path no longer reads them; the remaining readers must move to the shared active route and the fields be deleted.
+
+## OpenRouter models all classify as text (open, 2026-09-02)
+
+OpenRouter lists image-output models via `output_modalities`, which shared's remote inventory does not read, so Desktop's remote server shows "No image models on this server". Reading the field is small; generating through OpenRouter's chat-completions image modality needs a second remote image transport in shared.
