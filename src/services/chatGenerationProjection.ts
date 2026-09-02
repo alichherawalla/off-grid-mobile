@@ -7,6 +7,12 @@ import { checkProPromptForText } from './proPrompt';
 import { buildGenerationMetaImpl, FLUSH_INTERVAL_MS } from './generationServiceHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
+/** Compaction is silent otherwise; you should know the model made room and that nothing here was removed. */
+export const COMPACTION_TOOL_NAME = 'context_compaction';
+export function compactionNoticeText(before: number, after: number): string {
+  const summarized = Math.max(0, before - after);
+  return `Made room to keep going. ${summarized} earlier message${summarized === 1 ? '' : 's'} were summarized for the model; the last ${after} stay word for word. Nothing here was removed.`;
+}
 
 interface GenerationState {
   isGenerating: boolean;
@@ -53,7 +59,7 @@ class MobileGenerationProjection {
       case 'started': this.start(event.turn); return;
       case 'partial': this.partial(event.turn, event.partial.content, event.partial.reasoning); return;
       case 'tool_started': this.toolStarted(event.call.name); return;
-      case 'compacted': this.compacted(); return;
+      case 'compacted': this.compacted(event.turn, event.before, event.after); return;
       case 'completed': this.complete(event.turn); return;
       case 'stopped': this.stop(event.turn); return;
       case 'failed': this.fail(event.turn); return;
@@ -102,9 +108,17 @@ class MobileGenerationProjection {
   }
 
   /** Compaction is forward-looking: text already on screen stays; the continuation streams after it. */
-  private compacted(): void {
+  private compacted(turn: ChatTurn, before: number, after: number): void {
     this.forceFlushTokens();
-    useChatStore.getState().resetStreamingSegment();
+    const store = useChatStore.getState();
+    store.resetStreamingSegment();
+    // Rendered like a tool result and kept out of the prompt (isSystemInfo).
+    store.addMessage(turn.conversationId, {
+      role: 'tool',
+      toolName: COMPACTION_TOOL_NAME,
+      content: compactionNoticeText(before, after),
+      isSystemInfo: true,
+    });
     this.update({ streamingContent: '', isThinking: true });
   }
 

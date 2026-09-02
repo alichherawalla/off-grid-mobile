@@ -31,6 +31,8 @@ function getToolIcon(toolName?: string): string {
       return 'clock';
     case 'get_device_info':
       return 'smartphone';
+    case 'context_compaction':
+      return 'archive';
     default:
       return 'tool';
   }
@@ -55,6 +57,8 @@ function getToolLabel(toolName?: string, content?: string): string {
       return 'Web Use';
     case 'computer_use':
       return 'Computer Use';
+    case 'context_compaction':
+      return 'Context compacted';
     default:
       return toolName || 'Tool result';
   }

@@ -60,7 +60,9 @@ function persistedTurns(conversationId: string): ChatTurn[] {
     const segment = nextUser < 0 ? replies : replies.slice(0, nextUser);
     const responseMessages = segment
       .filter(
-        message => message.role === 'assistant' || message.role === 'tool',
+        message =>
+          (message.role === 'assistant' || message.role === 'tool') &&
+          !message.isSystemInfo,
       )
       .map(generationMessage);
     const assistant = [...responseMessages]

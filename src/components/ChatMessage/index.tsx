@@ -347,6 +347,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     callHook(HOOKS.audioSpeak, displayContent, message.id);
   };
 
+  // A tool row can also be system info (kept out of the prompt): render it as the tool row.
+  if (message.role === 'tool')
+    return (
+      <ToolResultMessage message={message} styles={styles} colors={colors} />
+    );
   if (message.isSystemInfo) {
     return (
       <SystemInfoMessage
@@ -357,10 +362,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       />
     );
   }
-  if (message.role === 'tool')
-    return (
-      <ToolResultMessage message={message} styles={styles} colors={colors} />
-    );
   if (message.role === 'assistant' && message.toolCalls?.length) {
     return (
       <ToolCallWithThinking
