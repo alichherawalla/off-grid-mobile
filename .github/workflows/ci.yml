@@ -21,6 +21,9 @@ on:
 # `if: ${{ !cancelled() && steps.install.outcome == 'success' }}`, so a red gate does NOT hide the
 # ones after it - the whole list still reports, which is the one thing the four separate checks were
 # genuinely good at. The trade-off is wall-clock: the gates no longer run in parallel.
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: macos-latest
