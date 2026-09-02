@@ -423,7 +423,12 @@ export const mobileChatSession = {
     repository.invalidate(conversationId);
     commandOptions.set(turnId, options);
     try {
-      return await service.regenerate({ conversationId, turnId, operation });
+      return await service.regenerate({
+        conversationId,
+        turnId,
+        operation,
+        request: chatRequestDefaults(),
+      });
     } finally {
       commandOptions.delete(turnId);
     }
@@ -439,6 +444,7 @@ export const mobileChatSession = {
       conversationId,
       turnId,
       userMessage: generationMessage(message),
+      request: chatRequestDefaults(),
     });
   },
 
