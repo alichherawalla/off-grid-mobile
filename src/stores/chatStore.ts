@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { persist } from 'zustand/middleware';
 import { Message, Conversation, GenerationMeta } from '../types';
 import {
   stripStreamingControlTokens,
@@ -14,6 +13,7 @@ import {
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import {
   CHAT_STORAGE_VERSION,
+  chatPersistStorage,
   createPersistedMessage,
   migratePersistedChatState,
 } from './chatPersistence';
@@ -488,7 +488,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'local-llm-chat-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: chatPersistStorage,
       version: CHAT_STORAGE_VERSION,
       migrate: migratePersistedChatState,
       partialize: state => ({
