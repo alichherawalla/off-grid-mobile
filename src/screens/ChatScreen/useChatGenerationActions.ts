@@ -10,7 +10,7 @@ import { useChatStore } from '../../stores';
 import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import type { CacheType, DownloadedModel, MediaAttachment, Message, Project, RemoteModel } from '../../types';
 import logger from '../../utils/logger';
-import { ensureReadyOrAlert, type ModelReadyOutcome } from './modelReadiness';
+import type { ModelReadyOutcome } from './modelReadiness';
 import { mobileChatSession, prepareMobileChatGeneration, type MobileChatCommandOptions } from './mobileChatSession';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -193,18 +193,10 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
   clearModelFailure('text');
   callHook(HOOKS.audioStop);
   await prepareMobileChatGeneration();
-  if (
-    !deps.activeModelInfo?.isRemote &&
-    deps.activeModel &&
-    call.imageMode !== 'force'
-  ) {
-    const ready = await ensureReadyOrAlert(deps, 'send', () => {
-      handleSendFn(deps, call).catch(error =>
-        logger.error('[ChatGen] Retried send failed', error),
-      );
-    });
-    if (!ready) return;
-  }
+  // No text-model readiness here. The shared ChatOperationApplicationService decides whether this
+  // turn is text or image and asks for the text route (ensureTextRoute) only when it needs one;
+  // the shared residency then loads the model on acquire. Pre-loading here loaded the text model
+  // for every "draw a ..." before the shared service had routed it to the image model.
   let conversationId = deps.activeConversationId;
   if (!conversationId) {
     const modelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;
@@ -229,12 +221,6 @@ export async function replayPersistedChatTurnFn(
   if (!conversationId || !deps.hasActiveModel) return;
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   await prepareMobileChatGeneration();
-  if (!deps.activeModelInfo?.isRemote && deps.activeModel && operation?.type !== 'image') {
-    const ready = await ensureReadyOrAlert(deps, 'regenerate', () => {
-      replayPersistedChatTurnFn(deps, userMessage, operation).catch(() => undefined);
-    });
-    if (!ready) return;
-  }
   generationSession.begin(conversationId);
   try {
     const turn = await mobileChatSession.regenerate(conversationId, userMessage.id, {
