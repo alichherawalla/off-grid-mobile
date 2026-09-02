@@ -182,6 +182,22 @@ UI last remembered. Failures were dropped on the floor (`if (status !== 'complet
 failed transfer stopped existing the moment the view reset, and the surface confidently showed success.
 When you fix durability, fix the READ at the same time: persisting a failure while the renderer still
 hardcodes `status: 'completed'` converts a lost record into a durable lie.
+
+## Shared owns model business logic (the apps never duplicate it)
+
+The point of the shared monorepo is that Desktop and Mobile never carry two copies of one rule.
+Every decision about models lives in a shared package and the apps only supply I/O adapters and
+render projections. That covers selection and routing, intent classification, admission and
+memory policy, download and registry rules, generation lifecycle and cancellation, remote
+discovery, tool orchestration, transfer manifests, and speech/transcription workflows.
+
+The shared packages are: `@offgrid/analytics`, `@offgrid/artifacts`, `@offgrid/automation`, `@offgrid/capture`, `@offgrid/clipboard`, `@offgrid/design`, `@offgrid/finops`, `@offgrid/memory`, `@offgrid/models`, `@offgrid/pipeline`, `@offgrid/policy`, `@offgrid/rag`, `@offgrid/speech`, `@offgrid/sync`, `@offgrid/ui`, `@offgrid/use`, `@offgrid/vectordb`. Before writing any
+model-related condition in `desktop/` or `mobile/`, look for the owner among them. If the rule
+exists there, call it. If it does not, add it there with its tests, then call it from both apps.
+A check duplicated in an app (a `kind === 'image'` branch, a readiness pre-check before the shared
+service has decided the operation, a copied regex, a second memory rule) is a defect even when it
+is correct today, because the two copies drift apart tomorrow. Apps keep: platform adapters
+(native modules, filesystem, sockets), store wiring, screens, and navigation.
 <!-- END GENERATED: shared/CLAUDE.md#debugging-source-of-truth -->
 ## Architecture & Abstractions (SOLID)
 
