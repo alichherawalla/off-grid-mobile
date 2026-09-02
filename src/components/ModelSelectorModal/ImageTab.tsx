@@ -23,6 +23,8 @@ export interface ImageTabProps {
   isLoadingImage: boolean;
   /** Id of the image model being loaded right now (the row just tapped) — drives the per-row spinner. */
   loadingModelId?: string | null;
+  /** The remote model the owner is switching to right now. */
+  loadingRemoteModelId?: string | null;
   onSelectImageModel: (model: ONNXImageModel) => void;
   onSelectRemoteVisionModel: (model: RemoteModel, serverId: string) => void;
   onUnloadImageModel: () => void;
@@ -38,6 +40,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
   isAnyLoading,
   isLoadingImage,
   loadingModelId = null,
+  loadingRemoteModelId = null,
   onSelectImageModel,
   onUnloadImageModel,
   onSelectRemoteVisionModel,
@@ -231,6 +234,9 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                     </View>
                   </View>
                 </View>
+                {loadingRemoteModelId === model.id ? (
+                  <LoadingDots color={colors.primary} testID="model-row-loading" />
+                ) : null}
                 {isCurrent && (
                   <View style={[styles.checkmark, styles.checkmarkImage]}>
                     <Icon name="check" size={16} color={colors.background} />

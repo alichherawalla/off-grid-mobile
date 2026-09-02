@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
+import { LoadingDots } from '../LoadingDots';
 import { DownloadedModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
 import { textOverheadMultiplier } from '../../services/modelServices/modelStateTypes';
@@ -26,6 +27,8 @@ export interface TextTabProps {
   isAnyLoading: boolean;
   /** Id of the model being loaded right now (the row just tapped) — drives the per-row spinner. */
   loadingModelId?: string | null;
+  /** The remote model the owner is switching to right now. */
+  loadingRemoteModelId?: string | null;
   onSelectModel: (model: DownloadedModel) => void;
   onSelectRemoteModel: (model: RemoteModel, serverId: string) => void;
   onUnloadModel: () => void;
@@ -41,6 +44,7 @@ export const TextTab: React.FC<TextTabProps> = ({
   currentRemoteModelId,
   isAnyLoading,
   loadingModelId = null,
+  loadingRemoteModelId = null,
   onSelectModel,
   onUnloadModel,
   onSelectRemoteModel,
@@ -295,6 +299,9 @@ export const TextTab: React.FC<TextTabProps> = ({
                     )}
                   </View>
                 </View>
+                {loadingRemoteModelId === model.id ? (
+                  <LoadingDots color={colors.primary} testID="model-row-loading" />
+                ) : null}
                 {isCurrent && (
                   <View style={styles.checkmarkRemote}>
                     <Icon name="check" size={16} color={colors.background} />

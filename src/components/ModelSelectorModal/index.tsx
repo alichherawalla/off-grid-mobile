@@ -8,6 +8,7 @@ import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { loadingTextRowId } from './rowState';
+import { usePendingModelCommand } from '../../hooks/usePendingModelCommand';
 import {
   DownloadedModel,
   ONNXImageModel,
@@ -147,6 +148,13 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // to be loading a model nothing was loading (device, 2026-07-31). Deriving it from the owner means
   // the sheet cannot invent a load, and it still spins the right row for a reload of the active model.
   const modelStatus = useActiveModelStatus();
+  // A remote handoff is a round trip to the server. The owner says which route it is switching to.
+  const pendingText = usePendingModelCommand('text');
+  const pendingImage = usePendingModelCommand('image');
+  const pendingRemoteTextModelId =
+    pendingText?.source === 'remote' ? pendingText.modelId : null;
+  const pendingRemoteImageModelId =
+    pendingImage?.source === 'remote' ? pendingImage.modelId : null;
   const effectiveLoadingTextModelId = loadingTextRowId(
     modelStatus,
     isLoading,
@@ -283,7 +291,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     onUnloadModel();
   };
 
-  const isAnyLoading = isLoading || isLoadingImage;
+  const isAnyLoading = isLoading || isLoadingImage || pendingText !== null || pendingImage !== null;
 
   return (
     <AppSheet
@@ -309,6 +317,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               currentRemoteModelId={activeRemoteTextModelId}
               isAnyLoading={isAnyLoading}
               loadingModelId={effectiveLoadingTextModelId}
+              loadingRemoteModelId={pendingRemoteTextModelId}
               onSelectModel={handleSelectLocalModel}
               onSelectRemoteModel={handleSelectRemoteTextModel}
               onUnloadModel={handleUnloadModel}
@@ -330,6 +339,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
               isAnyLoading={isAnyLoading}
               isLoadingImage={isLoadingImage}
               loadingModelId={null}
+              loadingRemoteModelId={pendingRemoteImageModelId}
               onSelectImageModel={handleSelectImageModel}
               onSelectRemoteVisionModel={handleSelectRemoteVisionModel}
               onUnloadImageModel={handleUnloadImageModel}
