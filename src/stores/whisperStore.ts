@@ -32,7 +32,8 @@ export const useWhisperStore = create<WhisperState>()(
       error: null,
       transcriptionLanguage: 'en',
       clearError: () => set({ error: null }),
-      setTranscriptionLanguage: transcriptionLanguage => set({ transcriptionLanguage }),
+      setTranscriptionLanguage: transcriptionLanguage =>
+        set({ transcriptionLanguage }),
     }),
     {
       name: 'local-llm-whisper-storage',
@@ -57,13 +58,20 @@ registerTranscriptionModelProjection({
       error: state.error,
     };
   },
-  project: patch => useWhisperStore.setState({
-    ...(patch.presentModelIds !== undefined ? { presentModelIds: [...patch.presentModelIds] } : {}),
-    ...(patch.downloadProgressById !== undefined
-      ? { downloadProgressById: { ...patch.downloadProgressById } }
-      : {}),
-    ...(patch.isModelLoading !== undefined ? { isModelLoading: patch.isModelLoading } : {}),
-    ...(patch.isModelLoaded !== undefined ? { isModelLoaded: patch.isModelLoaded } : {}),
-    ...(patch.error !== undefined ? { error: patch.error } : {}),
-  }),
+  project: patch =>
+    useWhisperStore.setState({
+      ...(patch.presentModelIds !== undefined
+        ? { presentModelIds: [...patch.presentModelIds] }
+        : {}),
+      ...(patch.downloadProgressById !== undefined
+        ? { downloadProgressById: { ...patch.downloadProgressById } }
+        : {}),
+      ...(patch.isModelLoading !== undefined
+        ? { isModelLoading: patch.isModelLoading }
+        : {}),
+      ...(patch.isModelLoaded !== undefined
+        ? { isModelLoaded: patch.isModelLoaded }
+        : {}),
+      ...(patch.error !== undefined ? { error: patch.error } : {}),
+    }),
 });

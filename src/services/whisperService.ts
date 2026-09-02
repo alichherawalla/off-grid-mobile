@@ -4,7 +4,11 @@ import {
   RealtimeTranscribeEvent,
 } from 'whisper.rn';
 import { Platform, PermissionsAndroid } from 'react-native';
-import { cleanTranscription, whisperDecodeOptions } from '@offgrid/models';
+import {
+  cleanTranscription,
+  GenerationAbortedError,
+  whisperDecodeOptions,
+} from '@offgrid/models';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
@@ -401,35 +405,60 @@ class WhisperService {
       fn && this.context
         ? Promise.resolve()
             .then(fn)
-            .catch(e =>
-              logger.error(
-                '[WhisperService] Error calling stopFn during forceReset:',
-                e,
-              ),
-            )
         : Promise.resolve();
     // Keep both parts of realtime teardown behind one barrier. Native stop can emit
     // the final event, whose empty-result fallback still transcribes the recorded
     // file. Do not release or reuse the Whisper context until both have finished.
-    this.transcriptionFullyStopped =
-      fn && this.context
-        ? Promise.all([nativeStop, activeTranscriptionStopped]).then(
-            () => undefined,
-          )
-        : nativeStop;
+    const teardown = Promise.allSettled([
+      nativeStop,
+      activeTranscriptionStopped,
+    ]).then(results => {
+      const failure = results.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (failure) throw failure.reason;
+    });
+    // Keep the shared lifecycle barrier reusable after this caller receives the failure.
+    this.transcriptionFullyStopped = teardown.catch(() => undefined);
     // Discard the parallel fallback recording (B26/B28) if one is mid-flight — a cancelled/aborted
     // realtime session must not leave the file recorder capturing (B11-class leak).
     if (audioRecorderService.isCurrentlyRecording())
       audioRecorderService.cancelRecording();
     this.isTranscribing = false;
-    await this.transcriptionFullyStopped;
+    await teardown;
   }
 
   isCurrentlyTranscribing(): boolean {
     return this.isTranscribing;
   }
 
-  // Raw whisper.rn leaf. Callers must enter through GenerationService.
+  /** Start one raw file transcription and expose the exact native stop leaf. */
+  startFileTranscriptionRaw(
+    filePath: string,
+    options?: {
+      language?: string;
+      onProgress?: (progress: number) => void;
+    },
+  ): { promise: Promise<string>; stop: () => Promise<void> } {
+    if (!this.context) {
+      throw new Error('No Whisper model loaded');
+    }
+
+    const language = options?.language || 'en';
+    logger.log(`[WhisperService] Transcribing file with language=${language} model=${this.currentModelPath ?? 'unknown'}`);
+    const { promise, stop } = this.context.transcribe(filePath, {
+      ...whisperDecodeOptions(language),
+      onProgress: options?.onProgress,
+    });
+    return {
+      stop: () => Promise.resolve(stop()),
+      promise: promise.then(value => {
+        logger.log(`[WIRE-STT] ${JSON.stringify(value)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
+        return cleanTranscription(value.result);
+      }),
+    };
+  }
+
   async transcribeFileRaw(
     filePath: string,
     options?: {
@@ -438,31 +467,31 @@ class WhisperService {
       signal?: AbortSignal;
     },
   ): Promise<string> {
-    if (!this.context) {
-      throw new Error('No Whisper model loaded');
-    }
+    if (options?.signal?.aborted) throw new GenerationAbortedError();
+    const operation = this.startFileTranscriptionRaw(filePath, options);
+    if (!options?.signal) return operation.promise;
 
-    const language = options?.language || 'en';
-    logger.log(
-      `[WhisperService] Transcribing file with language=${language} model=${
-        this.currentModelPath ?? 'unknown'
-      }`,
-    );
-    const { promise, stop } = this.context.transcribe(filePath, {
-      ...whisperDecodeOptions(language),
-      onProgress: options?.onProgress,
-    });
-    const abort = () => stop();
-    options?.signal?.addEventListener('abort', abort, { once: true });
-    let __res;
+    let cancelOperation: Promise<never> | null = null;
+    let rejectCancellation: ((error: unknown) => void) | null = null;
+    const cancelled = new Promise<never>((_resolve, reject) => { rejectCancellation = reject; });
+    const abort = () => {
+      if (cancelOperation) return;
+      cancelOperation = Promise.resolve()
+        .then(operation.stop)
+        .then(() => { throw new GenerationAbortedError(); });
+      cancelOperation.catch(error => rejectCancellation?.(error));
+    };
+    options.signal.addEventListener('abort', abort, { once: true });
     try {
-      __res = await promise;
+      const result = await Promise.race([operation.promise, cancelled]);
+      if (options.signal.aborted) {
+        abort();
+        await cancelOperation;
+      }
+      return result;
     } finally {
-      options?.signal?.removeEventListener('abort', abort);
+      options.signal.removeEventListener('abort', abort);
     }
-    logger.log(`[WIRE-STT] ${JSON.stringify(__res)}`); // [WIRE] raw whisper.rn transcribe result (segments/text) from-device
-    const { result } = __res;
-    return cleanTranscription(result);
   }
 }
 

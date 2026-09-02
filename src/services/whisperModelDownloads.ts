@@ -13,7 +13,7 @@ import {
 } from './modelServices/coordinatedDownloadBridge';
 import * as whisperModelFiles from './whisperModelFiles';
 
-export interface DownloadedWhisperModel {
+interface DownloadedWhisperModel {
   modelId: string;
   fileName: string;
   sizeBytes: number;
@@ -56,7 +56,7 @@ const whisperPorts: ManagedArtifactPorts = {
 const whisperDownloadApplication = new ModelDownloadApplicationService();
 
 /** Mobile adapter. Shared owns admission, cancellation, cleanup, and delete races. */
-export class WhisperDownloadAdapter {
+class WhisperDownloadAdapter {
   async downloadModel(
     modelId: string,
     onProgress?: (progress: number) => void,
