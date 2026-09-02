@@ -94,7 +94,20 @@ export const RemoteServersScreen: React.FC = () => {
     try {
       // Paired devices first: a Mac you paired over sync is a server without any scan.
       await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired)?.catch(() => undefined);
-      const { found: newServers } = await remoteServerManager.scanAndReconcile();
+      // Each server joins the list the moment it answers; the scan keeps going behind it.
+      let addedSoFar = 0;
+      const { found: newServers } = await remoteServerManager.scanAndReconcile(
+        async found => {
+          const server = await remoteServerManager.addServer({
+            name: found.name,
+            endpoint: found.endpoint,
+            provider: 'openai-compatible',
+          });
+          remoteServerManager.testConnection(server.id).catch(() => {});
+          addedSoFar += 1;
+          setScanNote(`Found ${addedSoFar} so far, still scanning…`);
+        },
+      );
       if (newServers.length === 0) {
         // Say what was actually tried. "No servers found" leaves the user with nothing to act
         // on; the ports do, because that is what has to be listening on the other machine.
@@ -105,18 +118,6 @@ export const RemoteServersScreen: React.FC = () => {
         );
         return;
       }
-      const added = await Promise.all(
-        newServers.map(d =>
-          remoteServerManager.addServer({
-            name: d.name,
-            endpoint: d.endpoint,
-            provider: 'openai-compatible',
-          }),
-        ),
-      );
-      added.forEach(s =>
-        remoteServerManager.testConnection(s.id).catch(() => {}),
-      );
       setScanNote(
         `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
       );

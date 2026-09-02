@@ -31,9 +31,10 @@ const discovery = new RemoteLanDiscoveryApplicationService({
 
 export function discoverLANServers(
   onLog?: (message: string) => void,
+  onFound?: (server: DiscoveredServer) => void,
 ): Promise<DiscoveredServer[]> {
   return discovery.discover(message => {
     logger.warn('[Discovery]', message);
     onLog?.(message);
-  });
+  }, onFound);
 }
