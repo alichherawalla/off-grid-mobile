@@ -128,7 +128,7 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
       visible: true, onClose: () => {}, onSelectModel: () => {}, onUnloadModel: () => {}, isLoading: false,
       currentModelPath: null,
     }));
-    await rtl.waitFor(() => { expect(picker.queryByText('Select Model')).not.toBeNull(); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(picker.queryByText(/TEXT MODEL|IMAGE MODEL/)).not.toBeNull(); }, { timeout: 10000 });
     await new Promise((r) => setTimeout(r, 400)); // one poll tick of the section, so absence is real
 
     // RED on HEAD: the picker still shows "In Memory". The manager sheet is the residency surface now.

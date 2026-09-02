@@ -1143,7 +1143,7 @@ describe('HomeScreen', () => {
       openTextPicker(result);
 
       // Picker sheet shows its title (manager sheet has closed).
-      expect(queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('Select Model');
+      expect(queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('TEXT MODEL');
     });
 
     it('opens image model picker when the image manager row is pressed', () => {
@@ -1153,7 +1153,7 @@ describe('HomeScreen', () => {
       const result = renderHomeScreen();
       openImagePicker(result);
 
-      expect(result.queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('Select Model');
+      expect(result.queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('IMAGE MODEL');
     });
 
     it('shows the current empty text-model state', () => {

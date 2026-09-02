@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { Text, ScrollView, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -284,74 +284,14 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   };
 
   const isAnyLoading = isLoading || isLoadingImage;
-  const hasLoadedTextModel =
-    currentModelPath !== null || activeRemoteTextModelId !== null;
-  const hasLoadedImageModel =
-    !!activeImageModelId || activeRemoteImageModelId !== null;
 
   return (
     <AppSheet
       visible={visible}
       onClose={onClose}
       snapPoints={['40%', '75%']}
-      title="Select Model"
+      title={activeTab === 'image' ? 'IMAGE MODEL' : 'TEXT MODEL'}
     >
-        <View style={styles.tabBar}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'text' && styles.tabActive]}
-            onPress={() => setActiveTab('text')}
-            disabled={isAnyLoading}
-          >
-          <Icon
-            name="message-square"
-            size={16}
-            color={activeTab === 'text' ? colors.primary : colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'text' && styles.tabTextActive,
-            ]}
-          >
-            Text
-          </Text>
-            {hasLoadedTextModel && (
-              <View style={styles.tabBadge}>
-                <View style={styles.tabBadgeDot} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'image' && styles.tabActive]}
-            onPress={() => setActiveTab('image')}
-            disabled={isAnyLoading}
-          >
-          <Icon
-            name="image"
-            size={16}
-            color={activeTab === 'image' ? colors.info : colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === 'image' && styles.tabTextActive,
-              activeTab === 'image' && { color: colors.info },
-            ]}
-          >
-              Image
-            </Text>
-            {hasLoadedImageModel && (
-            <View
-              style={[styles.tabBadge, { backgroundColor: `${colors.info}30` }]}
-            >
-              <View
-                style={[styles.tabBadgeDot, { backgroundColor: colors.info }]}
-              />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
 
         {/* Text-model loading now shows an inline spinner ON the selected row (TextTab → ModelRow),
             not a banner over the list. The image tab keeps its own indicator, so no banner for text. */}
