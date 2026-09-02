@@ -17,7 +17,7 @@ jest.mock('../../../pro/audio/engine', () => ({
 }));
 
 jest.mock('../../../pro/audio/ttsStore', () => ({
-  useTTSStore: { getState: jest.fn(), setState: jest.fn() },
+  useTTSStore: { getState: jest.fn(), setState: jest.fn(), subscribe: jest.fn(() => () => undefined) },
 }));
 
 // This coordinator test owns segmentation and queueing. Route the canonical
