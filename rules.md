@@ -152,6 +152,15 @@ the simple thing directly.
 So, before any tooling: if the answer requires unusual measurement to explain, the implementation is
 probably wrong, and it is complicated where it should be plain. Simplify it and the symptom goes.
 
+**Before any fix: write the invariant and the smallest mechanism.** In one or two lines, state the
+invariant the system must hold and the smallest mechanism that gives it. Check that against what
+already exists in `shared` or in a library (lodash `throttle`, not a hand-rolled one) before writing
+new code. If the fix adds a concept (a cap, a gate, a ratio, a port, a helper) rather than removing
+one, that is the signal to stop and re-derive. A real example: "Context is full" on mobile grew a
+per-result character budget, a committed-partial gate, and a host-specific window port - when the
+invariant was "commit every round; when the window fills, compact what is committed and continue",
+which the existing compaction already supports.
+
 ## Where the logs live (pull the file before guessing)
 
 Every surface writes one durable log. When a person reports "it did X on the device", read that
