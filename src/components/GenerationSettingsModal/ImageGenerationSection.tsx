@@ -4,9 +4,16 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
-import { clearMobileModel, hardwareService, selectMobileModel } from '../../services';
+import {
+  clearMobileModel,
+  hardwareService,
+  selectMobileModel,
+} from '../../services';
 import { createStyles } from './styles';
-import { ImageQualityBasicSliders, ImageQualityAdvancedSliders } from './ImageQualitySliders';
+import {
+  ImageQualityBasicSliders,
+  ImageQualityAdvancedSliders,
+} from './ImageQualitySliders';
 
 // ─── Image Model Picker ───────────────────────────────────────────────────────
 
@@ -15,7 +22,9 @@ const ImageModelPicker: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { downloadedImageModels, activeImageModelId } = useAppStore();
   const [showPicker, setShowPicker] = useState(false);
-  const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const activeImageModel = downloadedImageModels.find(
+    m => m.id === activeImageModelId,
+  );
 
   const handleSelectNone = () => {
     clearMobileModel('image').catch(() => undefined);
@@ -56,12 +65,14 @@ const ImageModelPicker: React.FC = () => {
                 ]}
                 onPress={handleSelectNone}
               >
-                <Text style={styles.modelPickerItemText}>None (disable image gen)</Text>
+                <Text style={styles.modelPickerItemText}>
+                  None (disable image gen)
+                </Text>
                 {!activeImageModelId && (
                   <Icon name="check" size={18} color={colors.primary} />
                 )}
               </TouchableOpacity>
-              {downloadedImageModels.map((model) => {
+              {downloadedImageModels.map(model => {
                 const isActive = activeImageModelId === model.id;
                 const handleSelect = () => {
                   selectMobileModel({
@@ -75,14 +86,23 @@ const ImageModelPicker: React.FC = () => {
                 return (
                   <TouchableOpacity
                     key={model.id}
-                    style={[styles.modelPickerItem, isActive && styles.modelPickerItemActive]}
+                    style={[
+                      styles.modelPickerItem,
+                      isActive && styles.modelPickerItemActive,
+                    ]}
                     onPress={handleSelect}
                   >
                     <View>
-                      <Text style={styles.modelPickerItemText}>{model.name}</Text>
-                      <Text style={styles.modelPickerItemDesc}>{model.style}</Text>
+                      <Text style={styles.modelPickerItemText}>
+                        {model.name}
+                      </Text>
+                      <Text style={styles.modelPickerItemDesc}>
+                        {model.style}
+                      </Text>
                     </View>
-                    {isActive && <Icon name="check" size={18} color={colors.primary} />}
+                    {isActive && (
+                      <Icon name="check" size={18} color={colors.primary} />
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -122,7 +142,8 @@ const AutoDetectMethodToggle: React.FC = () => {
           <Text
             style={[
               styles.modeButtonText,
-              settings.autoDetectMethod === 'pattern' && styles.modeButtonTextActive,
+              settings.autoDetectMethod === 'pattern' &&
+                styles.modeButtonTextActive,
             ]}
           >
             Pattern
@@ -139,7 +160,8 @@ const AutoDetectMethodToggle: React.FC = () => {
           <Text
             style={[
               styles.modeButtonText,
-              settings.autoDetectMethod === 'llm' && styles.modeButtonTextActive,
+              settings.autoDetectMethod === 'llm' &&
+                styles.modeButtonTextActive,
             ]}
           >
             LLM
@@ -157,7 +179,9 @@ const ClassifierModelPicker: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { downloadedModels, settings } = useAppStore();
   const [showPicker, setShowPicker] = useState(false);
-  const classifierModel = downloadedModels.find(m => m.id === settings.classifierModelId);
+  const classifierModel = downloadedModels.find(
+    m => m.id === settings.classifierModelId,
+  );
 
   const handleSelectNone = () => {
     clearMobileModel('classifier').catch(() => undefined);
@@ -194,17 +218,22 @@ const ClassifierModelPicker: React.FC = () => {
           >
             <View>
               <Text style={styles.modelPickerItemText}>Use current model</Text>
-              <Text style={styles.modelPickerItemDesc}>No model switching needed</Text>
+              <Text style={styles.modelPickerItemDesc}>
+                No model switching needed
+              </Text>
             </View>
             {!settings.classifierModelId && (
               <Icon name="check" size={18} color={colors.primary} />
             )}
           </TouchableOpacity>
-          {downloadedModels.map((model) => {
+          {downloadedModels.map(model => {
             const isActive = settings.classifierModelId === model.id;
             const handleSelect = () => {
               selectMobileModel({
-                source: 'local', hostId: model.engine, modality: 'classifier', modelId: model.id,
+                source: 'local',
+                hostId: model.engine,
+                modality: 'classifier',
+                modelId: model.id,
               }).catch(() => undefined);
               setShowPicker(false);
             };
@@ -212,7 +241,10 @@ const ClassifierModelPicker: React.FC = () => {
             return (
               <TouchableOpacity
                 key={model.id}
-                style={[styles.modelPickerItem, isActive && styles.modelPickerItemActive]}
+                style={[
+                  styles.modelPickerItem,
+                  isActive && styles.modelPickerItemActive,
+                ]}
                 onPress={handleSelect}
               >
                 <View style={styles.flex1}>
@@ -222,7 +254,9 @@ const ClassifierModelPicker: React.FC = () => {
                     {isFast && ' • Fast'}
                   </Text>
                 </View>
-                {isActive && <Icon name="check" size={18} color={colors.primary} />}
+                {isActive && (
+                  <Icon name="check" size={18} color={colors.primary} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -238,28 +272,42 @@ const ClassifierModelPicker: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings, downloadedModels } = useAppStore();
+  const { settings } = useAppStore();
   const isAutoMode = settings.imageGenerationMode === 'auto';
   const isLlmDetect = settings.autoDetectMethod === 'llm';
-  // Prompt enhancement runs a text model, so it needs one available.
-  const hasTextModel = downloadedModels.length > 0;
-  const enhanceOn = settings.enhanceImagePrompts && hasTextModel;
 
   return (
     <>
       <ImageQualityAdvancedSliders />
       {isAutoMode && <AutoDetectMethodToggle />}
       {isAutoMode && isLlmDetect && <ClassifierModelPicker />}
-      <View style={[styles.modeToggleContainer, !hasTextModel && styles.dimmed]}>
+    </>
+  );
+};
+
+// ─── Prompt enhancement ──────────────────────────────────
+
+/** A first-level choice, not an advanced one: it decides whether a text model runs before every image. */
+const ImagePromptEnhancementToggle: React.FC = () => {
+  const styles = useThemedStyles(createStyles);
+  const { settings, updateSettings, downloadedModels } = useAppStore();
+  // Prompt enhancement runs a text model, so it needs one available.
+  const hasTextModel = downloadedModels.length > 0;
+  const enhanceOn = settings.enhanceImagePrompts && hasTextModel;
+
+  return (
+    <>
+      <View
+        style={[styles.modeToggleContainer, !hasTextModel && styles.dimmed]}
+      >
         <View style={styles.modeToggleInfo}>
           <Text style={styles.modeToggleLabel}>Enhance Image Prompts</Text>
           <Text style={styles.modeToggleDesc}>
             {!hasTextModel
               ? 'Download a text model to enable prompt enhancement'
               : enhanceOn
-                ? 'Text model refines your prompt before image generation (slower but better results)'
-                : 'Use your prompt directly for image generation (faster)'}
+              ? 'Text model refines your prompt before image generation (slower but better results)'
+              : 'Use your prompt directly for image generation (faster)'}
           </Text>
         </View>
         <View style={styles.modeToggleButtons}>
@@ -268,7 +316,12 @@ const ImageAdvancedSection: React.FC = () => {
             onPress={() => updateSettings({ enhanceImagePrompts: false })}
             testID="image-enhance-off"
           >
-            <Text style={[styles.modeButtonText, !enhanceOn && styles.modeButtonTextActive]}>
+            <Text
+              style={[
+                styles.modeButtonText,
+                !enhanceOn && styles.modeButtonTextActive,
+              ]}
+            >
               Off
             </Text>
           </TouchableOpacity>
@@ -278,7 +331,12 @@ const ImageAdvancedSection: React.FC = () => {
             onPress={() => updateSettings({ enhanceImagePrompts: true })}
             testID="image-enhance-on"
           >
-            <Text style={[styles.modeButtonText, enhanceOn && styles.modeButtonTextActive]}>
+            <Text
+              style={[
+                styles.modeButtonText,
+                enhanceOn && styles.modeButtonTextActive,
+              ]}
+            >
               On
             </Text>
           </TouchableOpacity>
@@ -316,7 +374,12 @@ export const ImageGenerationSection: React.FC = () => {
             onPress={() => updateSettings({ imageGenerationMode: 'auto' })}
             testID="image-gen-mode-auto"
           >
-            <Text style={[styles.modeButtonText, isAutoMode && styles.modeButtonTextActive]}>
+            <Text
+              style={[
+                styles.modeButtonText,
+                isAutoMode && styles.modeButtonTextActive,
+              ]}
+            >
               Auto
             </Text>
           </TouchableOpacity>
@@ -325,7 +388,12 @@ export const ImageGenerationSection: React.FC = () => {
             onPress={() => updateSettings({ imageGenerationMode: 'manual' })}
             testID="image-gen-mode-manual"
           >
-            <Text style={[styles.modeButtonText, !isAutoMode && styles.modeButtonTextActive]}>
+            <Text
+              style={[
+                styles.modeButtonText,
+                !isAutoMode && styles.modeButtonTextActive,
+              ]}
+            >
               Manual
             </Text>
           </TouchableOpacity>
@@ -333,8 +401,13 @@ export const ImageGenerationSection: React.FC = () => {
       </View>
 
       <ImageQualityBasicSliders />
+      <ImagePromptEnhancementToggle />
 
-      <AdvancedToggle isExpanded={showAdvanced} onPress={() => setShowAdvanced(!showAdvanced)} testID="modal-image-advanced-toggle" />
+      <AdvancedToggle
+        isExpanded={showAdvanced}
+        onPress={() => setShowAdvanced(!showAdvanced)}
+        testID="modal-image-advanced-toggle"
+      />
 
       {showAdvanced && <ImageAdvancedSection />}
     </View>
