@@ -1,5 +1,10 @@
 /** Mobile projection of the Shared ChatSessionService lifecycle. */
-import { compactionNoticeText, type ChatSessionEvent, type ChatTurn } from '@offgrid/models';
+import {
+  compactionNoticeText,
+  fallbackNoticeText,
+  type ChatSessionEvent,
+  type ChatTurn,
+} from '@offgrid/models';
 import { useAppStore, useChatStore } from '../stores';
 import type { GenerationMeta } from '../types';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
@@ -9,6 +14,8 @@ import { buildGenerationMetaImpl, FLUSH_INTERVAL_MS } from './generationServiceH
 const SHARE_PROMPT_DELAY_MS = 1500;
 /** Compaction is silent otherwise; the row below says the model made room and that nothing here was removed. */
 export const COMPACTION_TOOL_NAME = 'context_compaction';
+/** A fallback changes who answers; the row below names the model that failed and the one that took over. */
+export const MODEL_FALLBACK_TOOL_NAME = 'model_fallback';
 
 interface GenerationState {
   isGenerating: boolean;
@@ -56,6 +63,7 @@ class MobileGenerationProjection {
       case 'partial': this.partial(event.turn, event.partial.content, event.partial.reasoning); return;
       case 'tool_started': this.toolStarted(event.call.name); return;
       case 'compacted': this.compacted(event.turn, event.before, event.after); return;
+      case 'fallback': this.fallback(event); return;
       case 'completed': this.complete(event.turn); return;
       case 'stopped': this.stop(event.turn); return;
       case 'failed': this.fail(event.turn); return;
@@ -118,13 +126,29 @@ class MobileGenerationProjection {
     this.update({ streamingContent: '', isThinking: true });
   }
 
+  /** Another model takes the reply. The chat says so before that model's first token arrives. */
+  private fallback({ turn, failed, next, error }: Extract<ChatSessionEvent, { type: 'fallback' }>): void {
+    if (turn.request.operation.type === 'image') return;
+    if (this.state.conversationId !== turn.conversationId) return;
+    this.forceFlushTokens();
+    const store = useChatStore.getState();
+    store.resetStreamingSegment();
+    store.addMessage(turn.conversationId, {
+      role: 'tool',
+      toolName: MODEL_FALLBACK_TOOL_NAME,
+      content: fallbackNoticeText(failed, next, error),
+      isSystemInfo: true,
+    });
+    this.update({ streamingContent: '', isThinking: true });
+  }
+
   private complete(turn: ChatTurn): void {
     if (turn.request.operation.type === 'image') return;
     this.forceFlushTokens();
     const store = useChatStore.getState();
     const content = turn.partial?.content || turn.result?.content || '';
     if (!this.state.streamingContent && content) store.appendToStreamingMessage(content);
-    store.finalizeStreamingMessage(turn.conversationId, this.elapsed(), this.meta());
+    store.finalizeStreamingMessage(turn.conversationId, this.elapsed(), this.meta(turn));
     this.checkSharePrompt();
     this.reset();
   }
@@ -156,7 +180,7 @@ class MobileGenerationProjection {
     return this.state.startTime ? Date.now() - this.state.startTime : undefined;
   }
 
-  private meta(): GenerationMeta { return buildGenerationMetaImpl(this); }
+  private meta(turn?: ChatTurn): GenerationMeta { return buildGenerationMetaImpl(this, turn); }
 
   private checkSharePrompt(): void {
     const state = useAppStore.getState();
