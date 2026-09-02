@@ -1,5 +1,6 @@
 import { parseImageDownloadMetadata } from '@offgrid/models';
 import { useAppStore } from '../stores';
+import { activeLocalModelId } from './modelServices/activeRoute';
 import type { DownloadEntry } from '../stores/downloadStore';
 import type { AlertState } from '../utils/alertState';
 import { executeMobileImageDownload } from './adapters/downloads/imageDownloadApplicationAdapter';
@@ -20,7 +21,7 @@ export async function retryImageDownload(
     type: 'retry', entry, platformCanResume: false,
   }, {
     addDownloadedImageModel: state.addDownloadedImageModel,
-    activeImageModelId: state.activeImageModelId,
+    activeImageModelId: activeLocalModelId('image'),
     selectActiveImageModel: model => selectMobileModel({
       source: 'local', hostId: model.backend ?? 'image-runtime', modality: 'image', modelId: model.id,
     }),

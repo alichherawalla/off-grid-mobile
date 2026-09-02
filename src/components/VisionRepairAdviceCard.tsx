@@ -7,6 +7,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { AnimatedPressable } from './AnimatedPressable';
 import { LoadingDots } from './LoadingDots';
 import { useAppStore } from '../stores';
+import { useActiveLocalModelId } from '../hooks/useActiveMobileModel';
 import { modelLibrary } from '../services';
 import { needsVisionRepair } from '../utils/visionRepair';
 import { visionRepairMessage } from '@offgrid/models';
@@ -32,7 +33,8 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
   const [dismissed, setDismissed] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const { downloadedModels, activeModelId } = useAppStore();
+  const { downloadedModels } = useAppStore();
+  const activeModelId = useActiveLocalModelId('text');
 
   const activeModel = downloadedModels.find(m => m.id === activeModelId);
   const broken =

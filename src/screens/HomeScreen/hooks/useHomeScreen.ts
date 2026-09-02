@@ -24,7 +24,7 @@ import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
-import { useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
+import { useActiveLocalModelId, useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
 import { resolveAutoDiscoverMigration } from '@offgrid/models';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
@@ -79,14 +79,15 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const {
     downloadedModels,
     setDownloadedModels,
-    activeModelId,
     downloadedImageModels,
     setDownloadedImageModels,
-    activeImageModelId,
     deviceInfo,
     setDeviceInfo,
     generatedImages,
   } = useAppStore();
+  // Selection is read from the shared active route, never from a store mirror.
+  const activeModelId = useActiveLocalModelId('text');
+  const activeImageModelId = useActiveLocalModelId('image');
 
   // Select the three things Home reads, not the whole store. A streaming reply writes the chat store
   // once per token; a whole-store subscription re-rendered Home and every sheet under it per token,

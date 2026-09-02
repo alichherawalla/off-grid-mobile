@@ -17,6 +17,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService } from '../services';
 import {
@@ -42,14 +43,14 @@ export const ChatsListScreen: React.FC = () => {
   const conversations = useChatStore(s => s.conversations);
   const { deleteConversation, setActiveConversation } = useChatStore.getState();
   const { getProject } = useProjectStore();
-  const activeImageModelId = useAppStore(s => s.activeImageModelId);
   const { removeImagesByConversationId } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
 
-  const hasModels = !!activeTextModelId || !!activeImageModelId;
+  const hasImageModel = !!useActiveMobileModel('image').model;
+  const hasModels = !!activeTextModelId || hasImageModel;
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);

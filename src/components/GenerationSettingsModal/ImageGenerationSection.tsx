@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AdvancedToggle } from '../AdvancedToggle';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import {
   clearMobileModel,
   hardwareService,
@@ -20,11 +21,14 @@ import {
 const ImageModelPicker: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { downloadedImageModels, activeImageModelId } = useAppStore();
+  const { downloadedImageModels } = useAppStore();
   const [showPicker, setShowPicker] = useState(false);
-  const activeImageModel = downloadedImageModels.find(
-    m => m.id === activeImageModelId,
-  );
+  // One answer to "which image model": the shared active route, local or a paired Mac's.
+  const activeRoute = useActiveMobileModel('image').model;
+  const activeImageModelId = activeRoute?.source === 'local' ? activeRoute.id : null;
+  const activeImageModel = activeRoute
+    ? { name: activeRoute.source === 'remote' ? `${activeRoute.name} (remote)` : activeRoute.name }
+    : undefined;
 
   const handleSelectNone = () => {
     clearMobileModel('image').catch(() => undefined);
@@ -61,14 +65,14 @@ const ImageModelPicker: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.modelPickerItem,
-                  !activeImageModelId && styles.modelPickerItemActive,
+                  !activeRoute && styles.modelPickerItemActive,
                 ]}
                 onPress={handleSelectNone}
               >
                 <Text style={styles.modelPickerItemText}>
                   None (disable image gen)
                 </Text>
-                {!activeImageModelId && (
+                {!activeRoute && (
                   <Icon name="check" size={18} color={colors.primary} />
                 )}
               </TouchableOpacity>

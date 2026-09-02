@@ -7,6 +7,7 @@ import {
 } from '../../services/modelServices/modelCommandApplication';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { useAppStore, useChatStore } from '../../stores';
+import { activeLocalModelId } from '../../services/modelServices/activeRoute';
 import { DownloadedModel, RemoteModel, ONNXImageModel } from '../../types';
 import { ModelReadyOutcome } from './modelReadiness';
 import { mobileChatModelReadiness } from '../../services/modelServices/chatModelReadinessPort';
@@ -275,8 +276,8 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
         // hydrator. If it hasn't surfaced the active model yet (slow FS, or one already
         // placed in the store), keep that entry rather than blanking the selection —
         // otherwise activeImageModel resolves to undefined and image routing dies.
-        const { downloadedImageModels: current, activeImageModelId: activeId } =
-          useAppStore.getState();
+        const { downloadedImageModels: current } = useAppStore.getState();
+        const activeId = activeLocalModelId('image');
         const merged =
           activeId && !models.some(m => m.id === activeId)
             ? [...models, ...current.filter(m => m.id === activeId)]

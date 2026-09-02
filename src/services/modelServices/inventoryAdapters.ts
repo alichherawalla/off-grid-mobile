@@ -9,6 +9,8 @@ import {
   inventoryModelCapabilities,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
+import { activeLocalModelId } from './activeRoute';
+import { rememberedLocalTextModelId } from './modelSelectionProjection';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
 import type {
@@ -162,7 +164,7 @@ const localImageInventoryAdapter: ModelInventoryAdapter = {
         modality: 'image',
         modelId: model.id,
       };
-      const selected = state.activeImageModelId === model.id;
+      const selected = activeLocalModelId('image') === model.id;
       const imageState = getActiveModels().image;
       return runtime(identity, {
         name: model.name,
@@ -392,7 +394,8 @@ const classifierInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-classifier-inventory',
   async listModels() {
     const state = useAppStore.getState();
-    const modelId = state.settings.classifierModelId ?? state.activeModelId ?? state.lastTextModelId;
+    const modelId =
+      state.settings.classifierModelId ?? activeLocalModelId('text') ?? rememberedLocalTextModelId();
     const model = modelId
       ? state.downloadedModels.find(candidate => candidate.id === modelId)
       : null;
@@ -414,7 +417,7 @@ const classifierInventoryAdapter: ModelInventoryAdapter = {
         installed: true,
         ready: true,
         loaded: state.loadedTextModelId === model.id,
-        loading: state.isLoadingModel && state.activeModelId === model.id,
+        loading: state.isLoadingModel && activeLocalModelId('text') === model.id,
       },
     )];
   },

@@ -33,6 +33,7 @@ import { modelResidencyManager } from '../../services/modelServices/residencyBoo
 import { registerMobileChatSessionControl } from '../../services/modelServices/chatSessionControl';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useAppStore, useChatStore, useProjectStore } from '../../stores';
+import { activeLocalModelId } from '../../services/modelServices/activeRoute';
 import type { MediaAttachment, Message } from '../../types';
 import { isLiteRTModel } from '../../types';
 import logger from '../../utils/logger';
@@ -261,7 +262,7 @@ async function generateForSession(
 function chatRequestDefaults(): ChatTurn['request']['request'] {
   const state = useAppStore.getState();
   const selected = state.downloadedModels.find(
-    model => model.id === state.activeModelId,
+    model => model.id === activeLocalModelId('text'),
   );
   return chatGenerationRequestDefaults({
     runtime: selected && isLiteRTModel(selected) ? 'litert' : 'standard',

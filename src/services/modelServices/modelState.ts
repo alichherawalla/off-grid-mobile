@@ -13,6 +13,8 @@ import type {
 } from './modelStateTypes';
 import { selectCanonicalModel } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
+import { activeLocalModelId } from './activeRoute';
+import { rememberedLocalTextModelId } from './modelSelectionProjection';
 import {
   checkMemoryForDualModel as checkDualMemory,
   checkMemoryForModel as checkMemory,
@@ -22,7 +24,7 @@ import { getResourceUsage as readResourceUsage } from './modelStateNativeProject
 const selectedTextModel = createSelectedModelResolver<DownloadedModel>({
   read: () => {
     const state = useAppStore.getState();
-    return { models: state.downloadedModels, selectedId: state.activeModelId };
+    return { models: state.downloadedModels, selectedId: activeLocalModelId('text') };
   },
   warn: message => logger.warn(message),
 });
@@ -32,10 +34,9 @@ export function resolveSelectedTextModel(): DownloadedModel | null {
 }
 
 export function selectedTextModelId(): string | null {
-  const state = useAppStore.getState();
   return selectedModelId({
-    activeModelId: state.activeModelId,
-    lastModelId: state.lastTextModelId,
+    activeModelId: activeLocalModelId('text'),
+    lastModelId: rememberedLocalTextModelId(),
   });
 }
 
@@ -53,7 +54,7 @@ export function getActiveModels(): ActiveModelInfo {
   return activeModelSnapshot({
     textModel: resolveSelectedTextModel(),
     imageModel: store.downloadedImageModels.find(
-      model => model.id === store.activeImageModelId,
+      model => model.id === activeLocalModelId('image'),
     ) ?? null,
     textIsLoaded: native.textIsLoaded,
     imageIsLoaded: native.imageIsLoaded,

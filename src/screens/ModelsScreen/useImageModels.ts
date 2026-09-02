@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
+import { useActiveLocalModelId } from '../../hooks/useActiveMobileModel';
 import { useAppStore } from '../../stores';
 import {
   modelLibrary,
@@ -55,9 +56,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     downloadedImageModels,
     setDownloadedImageModels,
     addDownloadedImageModel,
-    activeImageModelId,
     onboardingChecklist,
   } = useAppStore();
+  const activeImageModelId = useActiveLocalModelId('image');
 
   const makeDeps = (): ImageDownloadDeps => ({
     addDownloadedImageModel,

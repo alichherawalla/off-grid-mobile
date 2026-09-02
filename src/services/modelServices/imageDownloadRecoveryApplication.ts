@@ -6,6 +6,7 @@ import type { ImageDownloadDeps } from '../imageModelDownloadTypes';
 import { resumeImageDownload } from '../imageDownloadResume';
 import { modelLibrary } from './bootstrap/modelLibraryBootstrap';
 import { useAppStore } from '../../stores/appStore';
+import { activeLocalModelId } from './activeRoute';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { mobileModelCommands } from './modelCommandApplication';
 
@@ -66,7 +67,7 @@ export function reconcileImageDownloadsAtBootstrap(
     ),
     {
       addDownloadedImageModel: state.addDownloadedImageModel,
-      activeImageModelId: state.activeImageModelId,
+      activeImageModelId: activeLocalModelId('image'),
       selectActiveImageModel: model =>
         mobileModelCommands.select(
           {

@@ -159,6 +159,11 @@ function readMobileSelectionProjection(
   }
 }
 
+/** The last explicitly selected LOCAL text model, kept for restoration after eviction. */
+export function rememberedLocalTextModelId(): string | null {
+  return useAppStore.getState().lastTextModelId;
+}
+
 /** Canonical read for non-reactive adapter code. Reconciliation remains owned by Shared. */
 export function readMobileModelSelection(modality: ModelModality): string | null {
   return reconcileModelSelection(modality, readMobileSelectionProjection(modality)).selectedRouteId;

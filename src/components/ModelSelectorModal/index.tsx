@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
+import { useActiveLocalModelId } from '../../hooks/useActiveMobileModel';
 import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
@@ -115,12 +116,9 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
-  const {
-    downloadedModels,
-    downloadedImageModels,
-    activeImageModelId,
-    activeModelId,
-  } = useAppStore();
+  const { downloadedModels, downloadedImageModels } = useAppStore();
+  const activeImageModelId = useActiveLocalModelId('image');
+  const activeModelId = useActiveLocalModelId('text');
   // "Currently loaded" comes from the ONE reactive source (ActiveModelService's loaded state, projected to
   // the store) — engine-agnostic and never stale. Callers no longer pass it, so the sheet can't disagree
   // with the overview (which reads activeModelId, the SELECTION). See useLoadedTextModelPath.

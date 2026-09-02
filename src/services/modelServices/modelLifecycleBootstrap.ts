@@ -9,6 +9,7 @@ import {
   type ResidentSpec,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
+import { activeLocalModelId } from './activeRoute';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import logger from '../../utils/logger';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
@@ -136,11 +137,10 @@ const lifecycleService = new ModelLifecycleApplicationService(modelResidencyMana
     throw new Error(`Unsupported persistent lifecycle modality: ${modality}`);
   },
   async resolveUnload(modality) {
-    const store = useAppStore.getState();
     const text = modality === 'text';
     const modelId = text
-      ? nativeModelLifecycle.getState().loadedTextModelId ?? store.activeModelId
-      : nativeModelLifecycle.getState().loadedImageModelId ?? store.activeImageModelId;
+      ? nativeModelLifecycle.getState().loadedTextModelId ?? activeLocalModelId('text')
+      : nativeModelLifecycle.getState().loadedImageModelId ?? activeLocalModelId('image');
     const spec = modelId
       ? (text ? await resolveTextResidentSpec(modelId) : await imageSpec(modelId))
       : modelResidentSpec({

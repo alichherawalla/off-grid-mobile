@@ -3,6 +3,7 @@
  */
 
 import { useAppStore } from '../../stores/appStore';
+import { activeLocalModelId } from './activeRoute';
 import { hardwareService } from '../hardware';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
@@ -14,14 +15,16 @@ export async function getResourceUsage(): Promise<ResourceUsage> {
   const store = useAppStore.getState();
   let estimatedModelMemory = 0;
 
-  if (store.activeModelId) {
-    const tm = store.downloadedModels.find(m => m.id === store.activeModelId);
+  const activeTextId = activeLocalModelId('text');
+  const activeImageId = activeLocalModelId('image');
+  if (activeTextId) {
+    const tm = store.downloadedModels.find(m => m.id === activeTextId);
     if (tm?.fileSize) {
       estimatedModelMemory += tm.fileSize * 1.2;
     }
   }
-  if (store.activeImageModelId) {
-    const im = store.downloadedImageModels.find(m => m.id === store.activeImageModelId);
+  if (activeImageId) {
+    const im = store.downloadedImageModels.find(m => m.id === activeImageId);
     if (im?.size) {
       estimatedModelMemory += im.size * 1.3;
     }
@@ -45,20 +48,21 @@ export interface SyncStateTarget {
 }
 
 export async function syncWithNativeState(target: SyncStateTarget): Promise<void> {
-  const store = useAppStore.getState();
+  const activeTextId = activeLocalModelId('text');
+  const activeImageId = activeLocalModelId('image');
 
   const textModelLoaded = llmService.isModelLoaded() || liteRTService.isModelLoaded();
   if (!textModelLoaded) {
     target.setLoadedTextModelId(null);
-  } else if (!target.loadedTextModelId && store.activeModelId) {
-    target.setLoadedTextModelId(store.activeModelId);
+  } else if (!target.loadedTextModelId && activeTextId) {
+    target.setLoadedTextModelId(activeTextId);
   }
 
   const imageModelLoaded = await onnxImageGeneratorService.isModelLoaded();
   if (!imageModelLoaded) {
     target.setLoadedImageModelId(null);
     target.setLoadedImageModelThreads(null);
-  } else if (!target.loadedImageModelId && store.activeImageModelId) {
-    target.setLoadedImageModelId(store.activeImageModelId);
+  } else if (!target.loadedImageModelId && activeImageId) {
+    target.setLoadedImageModelId(activeImageId);
   }
 }

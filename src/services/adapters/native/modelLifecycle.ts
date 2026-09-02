@@ -4,6 +4,7 @@ import { liteRTService } from '../../litert';
 import { localDreamGeneratorService as imageEngine } from '../../localDreamGenerator';
 import { ImageModelIncompleteError } from '../../modelLoadErrors';
 import { useAppStore } from '../../../stores/appStore';
+import { activeLocalModelId } from '../../modelServices/activeRoute';
 import { validateImageModelDir } from '../../../utils/imageModelIntegrity';
 import {
   checkImageHardwareSupport,
@@ -50,7 +51,8 @@ class NativeModelLifecycle {
 
   supportsAudioInput(): boolean {
     const store = useAppStore.getState();
-    const model = store.downloadedModels.find(candidate => candidate.id === store.activeModelId);
+    const activeTextId = activeLocalModelId('text');
+    const model = store.downloadedModels.find(candidate => candidate.id === activeTextId);
     if (!model) return false;
     return model.engine === 'litert'
       ? liteRTService.supportsAudio()
@@ -110,7 +112,7 @@ class NativeModelLifecycle {
       engine => engine.isModelLoaded(),
     );
     const isLoaded = loadedEngines.length > 0;
-    if (!store.activeModelId && !this.loadedTextModelId && !isLoaded) return;
+    if (!activeLocalModelId('text') && !this.loadedTextModelId && !isLoaded) return;
     this.loading.text = true;
     this.changed();
     try {
@@ -182,9 +184,8 @@ class NativeModelLifecycle {
 
   async unloadImageModel(_keepSelection = false): Promise<void> {
     if (this.imageLoadPromise) await this.imageLoadPromise;
-    const store = useAppStore.getState();
     const isLoaded = await imageEngine.isModelLoaded();
-    if (!store.activeImageModelId && !this.loadedImageModelId && !isLoaded) return;
+    if (!activeLocalModelId('image') && !this.loadedImageModelId && !isLoaded) return;
     this.loading.image = true;
     this.changed();
     try {
@@ -203,16 +204,16 @@ class NativeModelLifecycle {
     if (!textLoaded) {
       this.loadedTextModelId = null;
       store.setLoadedTextModelId(null);
-    } else if (!this.loadedTextModelId && store.activeModelId) {
-      this.loadedTextModelId = store.activeModelId;
-      store.setLoadedTextModelId(store.activeModelId);
+    } else if (!this.loadedTextModelId && activeLocalModelId('text')) {
+      this.loadedTextModelId = activeLocalModelId('text');
+      store.setLoadedTextModelId(this.loadedTextModelId);
     }
     const imageLoaded = await imageEngine.isModelLoaded();
     if (!imageLoaded) {
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
-    } else if (!this.loadedImageModelId && store.activeImageModelId) {
-      this.loadedImageModelId = store.activeImageModelId;
+    } else if (!this.loadedImageModelId && activeLocalModelId('image')) {
+      this.loadedImageModelId = activeLocalModelId('image');
     }
     this.changed();
   }

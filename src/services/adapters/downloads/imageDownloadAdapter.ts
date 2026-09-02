@@ -11,6 +11,7 @@
 import { Platform } from 'react-native';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useAppStore } from '../../../stores';
+import { activeLocalModelId } from '../../modelServices/activeRoute';
 import { useDownloadStore, isActiveStatus, DownloadEntry } from '../../../stores/downloadStore';
 import logger from '../../../utils/logger';
 import {
@@ -53,7 +54,7 @@ export const imageProvider: DownloadProvider = {
     const app = useAppStore.getState();
     await startImageModelDownload(request.model, {
       addDownloadedImageModel: app.addDownloadedImageModel,
-      activeImageModelId: app.activeImageModelId,
+      activeImageModelId: activeLocalModelId('image'),
       selectActiveImageModel: model => selectMobileRoute(
         'image',
         mobileRouteId({
