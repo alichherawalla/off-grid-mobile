@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { View, StyleSheet, Animated, Easing, ViewStyle } from 'react-native';
 import { useTheme } from '../theme';
 
 interface LoadingDotsProps {
@@ -30,25 +30,28 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
   const dot3Anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const duration = 300;
-    // Each dot bounces up and settles, offset by 150ms, so one dot is always highest and the
-    // bounce travels left to right. Movement, not fading: a fade reads as blinking.
+    // Desktop's loader (Tailwind animate-bounce): a one-second cycle where each dot rises a
+    // quarter of its own height, eases out at the top and eases in at the bottom, with the three
+    // dots 150ms apart. Same numbers here so both apps move the same way.
+    const rise = -size / 4;
+    const half = 500;
     const loops = [dot1Anim, dot2Anim, dot3Anim].map((anim, i) =>
       Animated.sequence([
         Animated.delay(i * 150),
         Animated.loop(
           Animated.sequence([
             Animated.timing(anim, {
-              toValue: -size,
-              duration,
+              toValue: rise,
+              duration: half,
+              easing: Easing.bezier(0, 0, 0.2, 1),
               useNativeDriver: true,
             }),
             Animated.timing(anim, {
               toValue: 0,
-              duration,
+              duration: half,
+              easing: Easing.bezier(0.8, 0, 1, 1),
               useNativeDriver: true,
             }),
-            Animated.delay(150),
           ]),
         ),
       ]),

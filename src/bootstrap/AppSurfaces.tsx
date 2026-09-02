@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -21,11 +22,14 @@ export function InitializingSurface({ colors, isDark }: SurfaceTheme) {
     >
       <SafeAreaProvider>
         <View
-          style={[styles.loadingContainer, { backgroundColor: colors.background }]}
+          style={[
+            styles.loadingContainer,
+            { backgroundColor: colors.background },
+          ]}
           testID="app-loading"
         >
           <SystemBars style={isDark ? 'light' : 'dark'} />
-          <ActivityIndicator size="large" color={colors.primary} />
+          <LoadingDots size={10} />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -36,7 +40,11 @@ interface LockedSurfaceProps extends SurfaceTheme {
   onUnlock: () => void;
 }
 
-export function LockedSurface({ colors, isDark, onUnlock }: LockedSurfaceProps) {
+export function LockedSurface({
+  colors,
+  isDark,
+  onUnlock,
+}: LockedSurfaceProps) {
   return (
     <GestureHandlerRootView
       style={[styles.flex, { backgroundColor: colors.background }]}
@@ -55,7 +63,12 @@ interface MainSurfaceProps extends SurfaceTheme {
   onNavigationReady: () => void;
 }
 
-export function MainSurface({ AppRoot, colors, isDark, onNavigationReady }: MainSurfaceProps) {
+export function MainSurface({
+  AppRoot,
+  colors,
+  isDark,
+  onNavigationReady,
+}: MainSurfaceProps) {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <SafeAreaProvider>
