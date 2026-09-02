@@ -45,7 +45,9 @@ export function ThinkingBlock({
               style={styles.thinkingPreview}
             >
               <MarkdownText dimmed compact>
-                {parsedContent.thinking}
+                {parsedContent.thinking.length > 80
+                  ? `${parsedContent.thinking.slice(0, 80)}...`
+                  : parsedContent.thinking}
               </MarkdownText>
             </View>
           )}

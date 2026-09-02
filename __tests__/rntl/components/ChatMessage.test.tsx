@@ -1687,12 +1687,15 @@ describe('ChatMessage', () => {
         `<think>${longThinking}</think>Response here.`,
       );
 
-      const { getByTestId, getByText } = render(
+      const { getByTestId, getByText, queryByText } = render(
         <ChatMessage message={message} />,
       );
 
       expect(getByTestId('thinking-block-preview')).toBeTruthy();
-      expect(getByText(longThinking)).toBeTruthy();
+      // The collapsed preview is a markdown-rendered head of the reasoning, capped at 80 characters;
+      // the markdown typographer draws the trailing dots as one ellipsis, which is what a person sees.
+      expect(getByText(`${'A'.repeat(80)}…`)).toBeTruthy();
+      expect(queryByText(longThinking)).toBeNull();
     });
 
     it('shows full preview when thinking text is <= 80 chars', () => {
