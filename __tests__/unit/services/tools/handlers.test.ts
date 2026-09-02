@@ -280,6 +280,22 @@ describe('Tool Handlers', () => {
       expect(result.content).toContain('Title & More');
     });
 
+    it('decodes each entity exactly once, so an escaped entity stays literal', async () => {
+      const html = buildBraveSearchHTML([{
+        title: 'Shows &amp;lt;tag&amp;gt; verbatim',
+        url: 'https://example.com',
+        snippet: 'Keeps &amp;amp; as one ampersand entity',
+      }]);
+      (globalThis as any).fetch = jest.fn().mockResolvedValue({
+        text: jest.fn().mockResolvedValue(html),
+      });
+
+      const result = await runTool('web_search', { query: 'entities' });
+      expect(result.content).toContain('Shows &lt;tag&gt; verbatim');
+      expect(result.content).not.toContain('<tag>');
+      expect(result.content).toContain('Keeps &amp; as one ampersand entity');
+    });
+
     it('handles fetch timeout/error gracefully', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('Network request failed'));
 
