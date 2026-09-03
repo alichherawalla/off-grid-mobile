@@ -46,7 +46,7 @@ function localTextCandidateFor(
   const kind = catalogKindForArtifact(model) ?? catalogModelKind(model.name, [], model.id);
   return candidate(
     mobileRouteId({ source: 'local', hostId: model.engine, modality, modelId: model.id }),
-    kind === 'code' ? 'text' : kind,
+    kind,
     model.name,
   );
 }
@@ -91,7 +91,7 @@ function remoteCandidateFromRoute(
         'text',
       ) ?? route.modelId;
     const kind = catalogModelKind(name, [], route.modelId);
-    return candidate(routeId!, kind === 'code' ? 'text' : kind, name);
+    return candidate(routeId!, kind, name);
   }
   return candidate(
     routeId!,
@@ -107,7 +107,7 @@ function projectionFromEntry(
   const remembered = localCandidateFromRoute(modality, entry.rememberedLocalRouteId);
   return {
     local: localCandidateFromRoute(modality, entry.localRouteId),
-    remote: modality === 'classifier' ? null : remoteCandidateFromRoute(modality, entry.remoteRouteId),
+    remote: remoteCandidateFromRoute(modality, entry.remoteRouteId),
     localFallbacks: remembered ? [remembered] : [],
   };
 }
