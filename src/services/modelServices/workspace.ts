@@ -1,4 +1,6 @@
 import {
+  DERIVED_TEXT_MODALITIES,
+  type DerivedTextModality,
   createModelWorkspace,
   type ConversationPort,
   type RemoteServerApplicationPorts,
@@ -129,7 +131,7 @@ export const mobileWorkspace = createModelWorkspace({
     // Mobile has no remote executor for the derived text routes yet; shared skips a route whose
     // executor is null.
     adapterId: (modality, server) =>
-      modality === 'classifier' || modality === 'tool_selection' || modality === 'computer_use'
+      DERIVED_TEXT_MODALITIES.includes(modality as DerivedTextModality)
         ? null
         : mobileExecutionAdapterId('remote', server.id, modality),
     status: server => remoteStatus(server.id),

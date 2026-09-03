@@ -6,12 +6,13 @@ import {
   runIndependentUnloads,
   unloadPersistentResident,
   type ResidentSpec,
+  modelLoadTimeoutMs,
 } from '@offgrid/models';
 import type { ModelLifecycleApplicationService } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId, activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
-import { nativeModelLifecycle, mobileModelLoadTimeoutMs } from '../adapters/native/modelLifecycle';
+import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { estimateTextModelMemoryMB } from '../modelMemory';
@@ -116,7 +117,7 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
         handlers: {
           load: () => nativeModelLifecycle.loadTextModel(
             modelId,
-            command.timeoutMs ?? mobileModelLoadTimeoutMs('text'),
+            command.timeoutMs ?? modelLoadTimeoutMs('text'),
             command.override || modelResidencyManager.hasSessionOverride(modelId),
           ),
           unload: () => nativeModelLifecycle.unloadTextModel(true),
@@ -130,7 +131,7 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
         spec: await imageSpec(modelId),
         routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
         handlers: {
-          load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? mobileModelLoadTimeoutMs('image')),
+          load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? modelLoadTimeoutMs('image')),
           unload: () => nativeModelLifecycle.unloadImageModel(true),
         },
         forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
