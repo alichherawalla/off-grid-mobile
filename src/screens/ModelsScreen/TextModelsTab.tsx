@@ -1,3 +1,4 @@
+import { stripModelFileExtension } from '@offgrid/models';
 import React, { useEffect } from 'react';
 import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
@@ -155,7 +156,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     };
     const onDownload = buildFileDownloadHandler({ s, fileName: item.name, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
-    const displayName = liteRTMeta?.displayName ?? item.name.replace('.gguf', '');
+    const displayName = liteRTMeta?.displayName ?? stripModelFileExtension(item.name);
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
     const storeEntry = storeDownloads[s.downloadKey];
     // Retry routes through the single owner (modelDownloadRegistry → textProvider): Android resumes the

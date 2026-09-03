@@ -1,9 +1,11 @@
+import { MOBILE_EMBEDDING_MODEL } from '@offgrid/models';
 import { initLlama, LlamaContext } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import logger from '../../../utils/logger';
 
-export const EMBEDDING_MODEL_FILENAME = 'all-MiniLM-L6-v2-Q8_0.gguf';
+/** The catalog fact, re-exported for this adapter's callers. */
+export const EMBEDDING_MODEL_FILENAME = MOBILE_EMBEDDING_MODEL.fileName;
 const EMBEDDING_DIMENSION = 384;
 const EMBEDDING_CTX_SIZE = 512;
 /** Approx resident footprint: ~25MB Q8 weights + working set + 512-ctx KV. */

@@ -1,3 +1,4 @@
+import { isGgufFile } from '@offgrid/models';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
@@ -365,7 +366,7 @@ async function doScanForUntrackedTextModels(
   for (const item of items) {
     const lowerName = item.name.toLowerCase();
     const isMmProj = isMMProjFile(lowerName);
-    if (!item.isFile() || !item.name.endsWith('.gguf') || isMmProj) {
+    if (!item.isFile() || !isGgufFile(item.name) || isMmProj) {
       continue;
     }
 
