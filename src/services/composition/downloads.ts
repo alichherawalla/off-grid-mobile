@@ -7,36 +7,43 @@ import {
   ModelDownloadProjectionController,
   ModelDownloadRegistry,
 } from '@offgrid/models';
-import {
-  mobileDownloadProjectionPorts,
-  modelDownloadProjection,
-} from '../../stores/downloadStore';
 import type { DownloadEntry } from '../../stores/downloadStore';
-import { mobileModelDownloadPorts } from '../modelServices/modelDownloadCoordinator';
-import {
-  mobileDownloadRegistryLogger,
-  mobileDownloadRegistryPorts,
-  type MobileDownloadRegistry,
-} from '../modelServices/downloadRegistryBootstrap';
+import type { MobileDownloadRegistry } from '../modelServices/downloadRegistryBootstrap';
 import { once } from './once';
+
+// Resolved at call time: this module reaches back into the composition, and an eager import
+// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
+const ports1 = (): typeof import('../../stores/downloadStore') =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('../../stores/downloadStore') as typeof import('../../stores/downloadStore');
+// Resolved at call time: this module reaches back into the composition, and an eager import
+// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
+const ports2 = (): typeof import('../modelServices/modelDownloadCoordinator') =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('../modelServices/modelDownloadCoordinator') as typeof import('../modelServices/modelDownloadCoordinator');
+// Resolved at call time: this module reaches back into the composition, and an eager import
+// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
+const ports3 = (): typeof import('../modelServices/downloadRegistryBootstrap') =>
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('../modelServices/downloadRegistryBootstrap') as typeof import('../modelServices/downloadRegistryBootstrap');
 
 /** Stateless; one instance serves every download surface. */
 export const modelDownloadApplication = once(() => new ModelDownloadApplicationService());
 
 export const modelDownloadCoordinator = once(
-  () => new ModelDownloadCoordinator(mobileModelDownloadPorts()),
+  () => new ModelDownloadCoordinator(ports2().mobileModelDownloadPorts()),
 );
 
 export const modelDownloadRegistry = once(
   (): MobileDownloadRegistry =>
-    new ModelDownloadRegistry(mobileDownloadRegistryLogger(), mobileDownloadRegistryPorts()),
+    new ModelDownloadRegistry(ports3().mobileDownloadRegistryLogger(), ports3().mobileDownloadRegistryPorts()),
 );
 
 export const modelDownloadProjectionController = once(
-  () => new ModelDownloadProjectionController<DownloadEntry>(mobileDownloadProjectionPorts()),
+  () => new ModelDownloadProjectionController<DownloadEntry>(ports1().mobileDownloadProjectionPorts()),
 );
 export const imageDownloadWorkflow = once(
-  () => new ImageDownloadWorkflowService<DownloadEntry>(modelDownloadProjection),
+  () => new ImageDownloadWorkflowService<DownloadEntry>(ports1().modelDownloadProjection),
 );
 /** One application per image download (or restart recovery), over the ports the caller supplies. */
 export function imageDownloadApplication<Owner>(
