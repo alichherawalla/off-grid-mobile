@@ -3,7 +3,14 @@ import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { RagSearchResult } from '../modelServices/bootstrap/ragBootstrap';
 import logger from '../../utils/logger';
-import { executePortableTool } from '@offgrid/models';
+import {
+  braveSearchUrl,
+  executePortableTool,
+  formatWebSearchResults,
+  isPrivateNetworkUrl,
+  normalizeToolUrl,
+  parseBraveResults,
+} from '@offgrid/models';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
   return { toolCallId: call.id, name: call.name, content: opts.content, error: opts.error, durationMs: Date.now() - start };
@@ -55,104 +62,18 @@ async function dispatchTool(call: ToolCall): Promise<string> {
 async function handleWebSearch(query: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
-
   try {
-    const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
-    const response = await fetch(url, {
+    const response = await fetch(braveSearchUrl(query), {
       signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
         'Accept': 'text/html',
       },
     });
-    const html = await response.text();
-    const results = parseBraveResults(html);
-
-    if (results.length === 0) {
-      return `No results found for "${query}".`;
-    }
-
-    return results
-      .slice(0, 5)
-      .map((r, i) => {
-        const heading = r.url ? `[${r.title}](${r.url})` : r.title;
-        return `${i + 1}. ${heading}\n   ${r.snippet}`;
-      })
-      .join('\n\n');
+    return formatWebSearchResults(parseBraveResults(await response.text()), query);
   } finally {
     clearTimeout(timeout);
   }
-}
-
-type SearchResult = { title: string; snippet: string; url?: string };
-
-function stripHtmlTags(html: string): string {
-  let result = '';
-  let inTag = false;
-  for (const ch of html) {
-    if (ch === '<') { inTag = true; continue; }
-    if (ch === '>') { inTag = false; continue; }
-    if (!inTag) result += ch;
-  }
-  return result;
-}
-
-function parseResultBlock(block: string): SearchResult | null {
-  const urlMatch = block.match(/<a[^>]*href="(https?:\/\/[^"]+)"/);
-  const url = urlMatch ? decodeHTMLEntities(urlMatch[1]) : '';
-
-  const titleMatch = block.match(/class="[^"]*title[^"]*"[^>]*>([^<]+)</) ||
-                     block.match(/<a[^>]*href="https?:\/\/[^"]*"[^>]*>\s*<span[^>]*>([^<]+)/);
-  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : '';
-
-  const snippetMatch = block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/p>/) ||
-                       block.match(/class="snippet[^"]*"[^>]*>([\s\S]*?)<\/span>/);
-  const snippet = snippetMatch
-    ? decodeHTMLEntities(stripHtmlTags(snippetMatch[1]).trim())
-    : '';
-
-  if (!title && !snippet) return null;
-  return { title: title || '(no title)', snippet: snippet || '(no snippet)', url };
-}
-
-function parseBraveResults(html: string): SearchResult[] {
-  const results: SearchResult[] = [];
-  const blocks = html.split(/class="result-wrapper/).slice(1);
-
-  for (const block of blocks) {
-    if (results.length >= 5) break;
-    const parsed = parseResultBlock(block);
-    if (parsed) results.push(parsed);
-  }
-
-  if (results.length === 0) {
-    const linkPattern = /<a[^>]*href="(https?:\/\/(?!search\.brave)[^"]*)"[^>]*>([^<]{10,})<\/a>/g;
-    let match;
-    while ((match = linkPattern.exec(html)) !== null && results.length < 5) {
-      const title = decodeHTMLEntities(match[2].trim());
-      if (!title.includes('Brave')) {
-        results.push({ title, snippet: '', url: match[1] });
-      }
-    }
-  }
-
-  return results;
-}
-
-const NAMED_HTML_ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
-};
-
-/**
- * One pass over the text. Chained replaceAll calls decoded `&amp;lt;` twice (to `<`), so a
- * page that showed a literal `&lt;` came back as markup. Each entity is decoded exactly once.
- */
-function decodeHTMLEntities(text: string): string {
-  return text.replaceAll(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (entity, body: string) => {
-    if (body.startsWith('#x')) return String.fromCodePoint(Number.parseInt(body.slice(2), 16));
-    if (body.startsWith('#')) return String.fromCodePoint(Number(body.slice(1)));
-    return NAMED_HTML_ENTITIES[body] ?? entity;
-  });
 }
 
 async function collectDeviceSection(
@@ -199,15 +120,6 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
   return parts.join('\n\n');
 }
 
-/** Block SSRF: reject private/loopback/link-local/cloud-metadata URLs. */
-function isPrivateUrl(url: string): boolean {
-  const m = url.match(/^https?:\/\/([^/:]+)/i);
-  if (!m) return false;
-  const h = m[1].toLowerCase();
-  return h === 'localhost' || h === '[::1]' || h === 'metadata.google.internal'
-    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h);
-}
-
 function nodeToText(node: any): string {
   if (node.nodeType === 3) return node.text ?? '';
   const tag = (node.tagName ?? '').toLowerCase();
@@ -248,12 +160,8 @@ function htmlToMarkdown(html: string): string {
 
 async function handleReadUrl(rawUrl: string): Promise<string> {
   const MAX_CHARS = 4000;
-  // Strip surrounding quotes/angle brackets that models sometimes emit
-  let url = rawUrl.trim();
-  while (url.length > 0 && '"\'<> '.includes(url[0])) url = url.slice(1);
-  while (url.length > 0 && '"\'<> '.includes(url[url.length - 1])) url = url.slice(0, -1);
-  if (!/^https?:\/\//i.test(url)) throw new Error('Invalid URL: must start with http:// or https://');
-  if (isPrivateUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
+  const url = normalizeToolUrl(rawUrl);
+  if (isPrivateNetworkUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
