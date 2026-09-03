@@ -32,7 +32,7 @@ import {
   isSuspiciousRecoveredImageModel,
   isSuspiciousRecoveredTextModel,
   isUnsupportedJetsamImageModel,
-} from '@offgrid/models';
+} from '@offgrid/application';
 import logger from '../../utils/logger';
 
 type TabType = 'text' | 'image';

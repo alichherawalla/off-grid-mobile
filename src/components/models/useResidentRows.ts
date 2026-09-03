@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import { ejectResidentForUser } from '../../services/modelServices/ejectModelsForUser';
 import { applicationFacade } from '../../services/applicationFacade';
-import type { Resident, ResidentType } from '@offgrid/models';
+import type { Resident, ResidentType } from '@offgrid/application';
 
 /** The manager sheet's modality rows. Defined HERE (the lower-level projection) rather than in
  *  ModelsManagerSheet so the hook doesn't import the component — that was a dependency cycle

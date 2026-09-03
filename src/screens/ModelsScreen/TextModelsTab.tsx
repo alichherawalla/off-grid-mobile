@@ -1,4 +1,4 @@
-import { liteRTGpuUnsupportedNotice, stripModelFileExtension } from '@offgrid/models';
+import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, stripModelFileExtension, uniformDownloadId } from '@offgrid/application';
 import React, { useEffect } from 'react';
 import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
@@ -23,11 +23,9 @@ import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
-import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '@offgrid/models';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { repairDownloadedVisionMetadata } from '../../services/modelServices/modelMetadataRepairCommand';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
-import { uniformDownloadId } from '@offgrid/models';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 import { huggingFaceService } from '../../services/huggingface';
 
