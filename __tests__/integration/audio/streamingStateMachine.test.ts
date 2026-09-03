@@ -44,9 +44,6 @@ const mockCanLoad = jest.fn((..._a: unknown[]) => false);
 jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
   modelResidencyManager: { canLoadWithoutEviction: (...a: unknown[]) => mockCanLoad(...a) },
 }));
-jest.mock('../../../pro/audio/ttsStore', () => ({
-  useTTSStore: { getState: jest.fn(), setState: jest.fn() },
-}));
 
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
@@ -56,7 +53,6 @@ import {
 import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
 import { bindVoiceProjection } from '../../../pro/audio/ttsControlService';
 
-const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
 const flush = () => new Promise<void>((r) => setImmediate(r));
 async function waitForSpeakCount(count: number): Promise<void> {
   const deadline = Date.now() + 1_000;
@@ -91,14 +87,12 @@ beforeEach(async () => {
     isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
     initializeEngine: jest.fn().mockResolvedValue(undefined),
   };
-  store.getState.mockImplementation(() => state);
-  store.setState.mockImplementation((partial: any) => {
-    const p = typeof partial === 'function' ? partial(state) : partial;
-    state = { ...state, ...p };
+  // The REAL zustand store carries the state under test; only the engine is faked.
+  useTTSStore.setState(state as never);
+  bindVoiceProjection({
+    set: (partial: any) => useTTSStore.setState(partial),
+    get: () => useTTSStore.getState() as never,
   });
-  // This suite replaces ttsStore, so its module-level composition does not run.
-  // Bind the fake projection to the real Shared voice application service.
-  bindVoiceProjection({ set: store.setState, get: store.getState });
   resetStreamingSpeech();
   await flush();
   events = [];
@@ -128,7 +122,7 @@ describe('streaming state machine — happy path', () => {
     expect(names()[names().length - 1]).toBe('status → idle (ended)');
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toEqual(['One.', 'Two.', 'Three']);
     expect(isStreamingSpeechActive()).toBe(false);
-    expect(state.playbackStatus).toBe('idle');
+    expect(useTTSStore.getState().playbackStatus).toBe('idle');
   });
 });
 
@@ -145,7 +139,7 @@ describe('streaming state machine — engine errors never wedge', () => {
     expect(names()).toContain('stream segment FAILED');
     expect(names()).not.toContain('stream drain ABORT: engine wedged → release for fresh remount');
     expect(names()).toContain('stream drain DONE → ended'); // recovered, finished
-    expect(state.playbackStatus).toBe('idle');
+    expect(useTTSStore.getState().playbackStatus).toBe('idle');
     expect(isStreamingSpeechActive()).toBe(false);
   });
 
@@ -182,7 +176,7 @@ describe('streaming state machine — engine errors never wedge', () => {
 
 describe('streaming state machine — budget-aware warm-up (the intelligent path)', () => {
   it('warms TTS to stream alongside the LLM when residency reports budget', async () => {
-    state.isReady = false; // engine cold at stream start
+    useTTSStore.setState({ isReady: false } as never); // engine cold at stream start
     enginePhase = 'idle';
     mockCanLoad.mockReturnValue(true); // headroom to coexist with the LLM
     feedStreamingText('Streaming this. ');
@@ -193,7 +187,7 @@ describe('streaming state machine — budget-aware warm-up (the intelligent path
   });
 
   it('does NOT warm (stays speak-after) when there is no budget', async () => {
-    state.isReady = false;
+    useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
     mockCanLoad.mockReturnValue(false); // memory-tight
     feedStreamingText('No budget here. ');
@@ -203,7 +197,7 @@ describe('streaming state machine — budget-aware warm-up (the intelligent path
   });
 
   it('only attempts the warm once per turn', async () => {
-    state.isReady = false;
+    useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
     mockCanLoad.mockReturnValue(true);
     feedStreamingText('One. ');
