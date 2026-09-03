@@ -7,8 +7,6 @@ import type { RecordProvenance } from '@offgrid/sync';
 import {
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
   DEFAULT_SPEAKER_DRAIN_MS,
-} from '@offgrid/application';
-import {
   DEFAULT_IMAGE_GUIDANCE,
   MOBILE_LITERT_SETTINGS_DEFAULTS,
   MOBILE_TEXT_SETTINGS_DEFAULTS,
@@ -16,7 +14,7 @@ import {
   isExcludedTextModel,
   isSuspiciousRecoveredImageModel,
   type RemoteLanProviderKind,
-} from '@offgrid/models';
+} from '@offgrid/application';
 import { APP_CONFIG } from '../constants';
 import {
   VoiceTurnMode,

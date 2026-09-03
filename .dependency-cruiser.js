@@ -62,6 +62,18 @@ module.exports = {
       to: { path: '^\\.\\./shared/packages/(rag|use|speech)/' },
     },
     {
+      name: 'presentation-not-to-raw-models',
+      severity: 'error',
+      comment: 'Presentation reads Models through @offgrid/application. Raw Models imports are limited to explicit composition and platform-adapter paths.',
+      from: {
+        path: '^(src/(screens|components|hooks|stores)/|pro/ui/)',
+        pathNot: '^src/services/(adapters|composition)/',
+      },
+      to: {
+        path: '^(node_modules/@offgrid/models/|\\.\\./shared/packages/models/)',
+      },
+    },
+    {
       name: 'no-orphans',
       severity: 'error',
       comment: 'Orphan module (no importers, imports nothing relevant) — dead code. Confirm with grep, then delete (the standing dead-code gate that retires the manual recon).',

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Vibration } from 'react-native';
-import { cleanTranscription } from '@offgrid/models';
 import {
+  cleanTranscription,
   nextPartialTranscript,
   remainingTranscribingDisplayMs,
   shouldAbsorbRealtimeStart,
