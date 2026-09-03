@@ -15,7 +15,7 @@ import type {
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { whisperService } from '../whisperService';
-import { WHISPER_MODELS } from '@offgrid/models';
+import { WHISPER_MODELS, projectLiteRTCapabilities } from '@offgrid/models';
 import {
   getActiveModels,
 } from './modelState';
@@ -83,10 +83,8 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
             }
           : undefined,
       })
-    : { tools: false, thinking: false, vision: false };
-  const supportsVision = model.engine === 'litert'
-    ? model.liteRTVision
-    : projected.vision;
+    : projectLiteRTCapabilities({ vision: model.liteRTVision });
+  const supportsVision = projected.vision;
   return runtime(identity, {
     name: model.name,
     // Capability is the SSOT for route kind. A LiteRT vision bundle must be

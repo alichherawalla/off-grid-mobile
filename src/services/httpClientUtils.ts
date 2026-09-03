@@ -1,12 +1,10 @@
+import { IMAGE_MIME, imageMimeForExtension } from '@offgrid/models';
 /** HTTP client utilities for image conversion and network validation. */
 
 import { isTailscaleIPv4 } from '../utils/network';
 
 function mimeTypeFromExtension(ext: string | undefined): string {
-  if (ext === 'png') return 'image/png';
-  if (ext === 'gif') return 'image/gif';
-  if (ext === 'webp') return 'image/webp';
-  return 'image/jpeg';
+  return imageMimeForExtension(ext) ?? IMAGE_MIME.jpeg;
 }
 
 async function fetchBlobAsBase64(uri: string): Promise<string> {

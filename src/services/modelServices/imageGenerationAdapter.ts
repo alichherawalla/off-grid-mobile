@@ -1,3 +1,4 @@
+import { DEFAULT_IMAGE_MIME } from '@offgrid/models';
 import {
   GeneratedBinaryArtifact,
   bindGenerationCancellation,
@@ -63,7 +64,7 @@ function localArtifact(result: {
 }): GeneratedBinaryArtifact {
   return {
     id: result.id,
-    mimeType: 'image/png',
+    mimeType: DEFAULT_IMAGE_MIME,
     uri: `file://${result.imagePath}`,
     width: result.width,
     height: result.height,
@@ -112,7 +113,7 @@ async function* localImageChunks(request: GenerationRequest): AsyncIterable<Gene
         progress: {
           completed: preview.step,
           total: preview.totalSteps,
-          preview: { mimeType: 'image/png', uri: `file://${preview.previewPath}` },
+          preview: { mimeType: DEFAULT_IMAGE_MIME, uri: `file://${preview.previewPath}` },
         },
       },
     }),
@@ -172,7 +173,7 @@ export function mobileImageGenerationAdapter(id: string): GenerationAdapter {
       yield {
         output: {
           type: 'image',
-          images: [{ mimeType: 'image/png', data: result.base64, uri: result.url }],
+          images: [{ mimeType: DEFAULT_IMAGE_MIME, data: result.base64, uri: result.url }],
         },
         finishReason: 'stop',
       };

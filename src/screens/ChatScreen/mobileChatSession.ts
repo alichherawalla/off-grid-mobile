@@ -1,3 +1,4 @@
+import { DEFAULT_IMAGE_MIME } from '@offgrid/models';
 import {
   CHAT_GENERATION_RECLAIM_POLICY,
   chatGenerationRequestDefaults,
@@ -252,7 +253,7 @@ async function generateForSession(
         images: [
           {
             id: generated.id,
-            mimeType: 'image/png',
+            mimeType: DEFAULT_IMAGE_MIME,
             uri: `file://${generated.imagePath}`,
             width: generated.width,
             height: generated.height,

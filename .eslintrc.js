@@ -181,7 +181,7 @@ module.exports = {
           'warn',
           {
             selector:
-              "Property[key.name=/^(maxTokens|temperature|topP|thinking|timeoutMs)$/][value.type='Literal']",
+              "Property[key.name=/^(maxTokens|temperature|topP|timeoutMs)$/][value.type='Literal'], Property[key.name='thinking'][value.type='Literal'][value.raw=/^(true|false)$/]",
             message:
               'Class 1: a generation parameter is a pipeline decision. Use a shared request builder.',
           },
@@ -194,7 +194,15 @@ module.exports = {
     },
     {
       // The composition root is the ONE place shared services are constructed with this app's ports.
-      files: ['src/services/modelServices/workspace.ts', 'src/services/composition/**/*.ts', 'pro/composition/**/*.ts'],
+      files: [
+        'src/services/modelServices/workspace.ts',
+        'src/services/composition/**/*.ts',
+        'pro/composition/**/*.ts',
+        // Selection persistence ports: the ONE place mobile encodes and decodes its routes.
+        'src/services/modelServices/mobileRoute.ts',
+        'src/services/modelServices/selectionStore.ts',
+        'src/services/modelServices/modelSelectionProjection.ts',
+      ],
       rules: { '@typescript-eslint/no-restricted-imports': 'off' },
     },
     {
