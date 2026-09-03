@@ -217,7 +217,7 @@ describe('TTSSection', () => {
       expect(queryByTestId('chat-tts-language-en-US')).toBeNull();
 
       act(() => { useTTSStore.setState({ voiceSwitchProgress: 0.42 }); });
-      expect(getByText('Downloading English (UK) voice - 42% · Rate unavailable')).toBeTruthy();
+      expect(getByText('Downloading English (UK) voice - 42%')).toBeTruthy();
 
       act(() => {
         useTTSStore.setState({

@@ -545,7 +545,7 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('25% · 256 B / 1 KB · Rate unavailable')).toBeTruthy();
+    expect(getByText('25% · 256 B / 1 KB')).toBeTruthy();
   });
 
   it('shows the measured rate for an active download', () => {

@@ -136,7 +136,7 @@ describe('VoiceModelsPanel', () => {
     mockStoreState.isReady = false;
     const { getByText, queryByText } = await renderPanel();
     expect(getByText('40%')).toBeTruthy();
-    expect(getByText('Rate unavailable')).toBeTruthy();
+    expect(queryByText(/Rate unavailable/)).toBeNull();
     expect(queryByText(/NaN/)).toBeNull();
   });
 
