@@ -31,7 +31,6 @@ import { applicationFacade } from '../../services/applicationFacade';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { refreshMobileModelServices } from '../../services/modelServices';
-import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { registerMobileChatSessionControl } from '../../services/modelServices/chatSessionControl';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useAppStore, useChatStore, useProjectStore } from '../../stores';
@@ -358,7 +357,8 @@ registerMobileChatSessionControl({
 
 /** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
 export async function prepareMobileChatGeneration(): Promise<void> {
-  await modelResidencyManager.reclaim(CHAT_GENERATION_RECLAIM_POLICY);
+  const outcome = await applicationFacade().models.reclaim(CHAT_GENERATION_RECLAIM_POLICY);
+  if (!outcome.ok) throw outcome.failure;
 }
 
 export const mobileChatSession = {

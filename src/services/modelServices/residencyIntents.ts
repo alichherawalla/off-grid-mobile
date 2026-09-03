@@ -12,7 +12,7 @@ import {
   unloadTranscriptionModel,
 } from './modelLifecycleBootstrap';
 import { memoryOverride } from '../composition/model-library';
-import { modelResidencyManager } from './residencyBootstrap';
+import { applicationFacade } from '../applicationFacade';
 
 /** Canonical application intents. Only this model-service boundary invokes native lifecycle APIs. */
 export const mobileResidencyIntents = {
@@ -26,15 +26,15 @@ export const mobileResidencyIntents = {
   ensureTranscription: loadTranscriptionModel,
   unloadTranscription: unloadTranscriptionModel,
   setLoadPolicy(policy: ResidencyLoadPolicy): void {
-    modelResidencyManager.setLoadPolicy(policy);
+    applicationFacade().models.setLoadPolicy(policy);
   },
   async canPreloadText(modelId: string): Promise<boolean> {
-    return modelResidencyManager.canLoadWithoutEviction(
+    return applicationFacade().models.canLoadWithoutEviction(
       await resolveTextResidentSpec(modelId),
     );
   },
   canPreloadTranscription(modelId: string): boolean {
-    return modelResidencyManager.canLoadWithoutEviction(
+    return applicationFacade().models.canLoadWithoutEviction(
       resolveTranscriptionResidentSpec(modelId),
     );
   },
