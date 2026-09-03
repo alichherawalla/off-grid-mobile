@@ -107,7 +107,7 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
     // The window the route runs with. LiteRT and remote routes leave it unknown (gap as data),
     // so Shared keeps its flat tool-result bound there.
     contextLength: model.engine === 'llama'
-      ? llmService.getPerformanceSettings().contextLength || undefined
+      ? llmService.getPerformanceSettings()?.contextLength || undefined
       : undefined,
     residentSizeMB: Math.ceil(
       (model.fileSize + (model.engine === 'llama' ? model.mmProjFileSize ?? 0 : 0)) /

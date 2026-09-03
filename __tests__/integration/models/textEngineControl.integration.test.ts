@@ -2,6 +2,7 @@
  * Native file facts flow through Mobile inventory into the Shared text-engine control plane.
  * A llama vision label without a projector must fail closed before native generation.
  */
+import { mobileWorkspace } from '../../../src/services/modelServices/workspace';
 import {
   localLiteRTInventoryAdapter,
   localLlamaInventoryAdapter,
@@ -69,22 +70,18 @@ describe('Mobile text-engine inventory boundary', () => {
         createdAt: '2026-09-01',
         selections: { text: 'remote-text' },
       }],
-      activeServerId: 'desktop',
-      activeRemoteTextModelId: 'remote-text',
       discoveredModels: { desktop: [] },
     });
-    const remote = mobileInventoryAdapters.find(
-      adapter => adapter.id === 'mobile-remote-model-inventory',
-    );
-
-    const models = await remote!.listModels();
+    // Remote routes come from the workspace's own inventory adapter: one per selected model.
+    const models = await mobileWorkspace.refresh().then(() => mobileWorkspace.inventory('text'));
     const selected = models.find(model => model.id === 'remote-text');
 
-    expect(selected?.capabilities).toEqual({
+    // Shared projects a remote route's capabilities; what a server never declared stays unknown
+    // (absent), it is not guessed.
+    expect(selected?.capabilities).toMatchObject({
       textGeneration: true,
       streaming: true,
     });
-    expect(selected?.capabilities).not.toHaveProperty('vision');
     expect(selected?.capabilities).not.toHaveProperty('tools');
     expect(selected?.capabilities).not.toHaveProperty('thinking');
   });

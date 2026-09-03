@@ -192,7 +192,8 @@ describe('useModelsScreen', () => {
     jest.clearAllMocks();
     Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
     const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
-    realAppStore.setState({ activeImageModelId: null, downloadedImageModels: [] });
+    realAppStore.setState({ downloadedImageModels: [] });
+    require('../../../../src/stores/modelSelectionStore').useModelSelectionStore.setState({ entries: {} });
   });
 
   describe('initial state', () => {
@@ -572,12 +573,20 @@ describe('useModelsScreen', () => {
         addDownloadedImageModel: jest.fn(),
       });
       realAppStore.setState({
-        activeImageModelId: 'existing-model-id',
         downloadedImageModels: [{
           id: 'existing-model-id',
           name: 'Existing',
           backend: 'mnn',
         } as any],
+      });
+      // The persisted selection, as the app writes it through the one selection owner.
+      const { useModelSelectionStore } = require('../../../../src/stores/modelSelectionStore');
+      const { mobileRouteId } = require('../../../../src/services/modelServices/mobileRoute');
+      useModelSelectionStore.getState().setEntry('image', {
+        localRouteId: mobileRouteId({
+          source: 'local', hostId: 'mnn', modality: 'image', modelId: 'existing-model-id',
+        }),
+        remoteRouteId: null,
       });
       RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
 

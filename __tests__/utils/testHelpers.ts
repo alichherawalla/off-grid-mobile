@@ -11,6 +11,9 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useProjectStore } from '../../src/stores/projectStore';
 import { useWhisperStore } from '../../src/stores/whisperStore';
 import { useRemoteServerStore } from '../../src/stores/remoteServerStore';
+import { useModelSelectionStore } from '../../src/stores/modelSelectionStore';
+import { useModelResidencyStore } from '../../src/stores/modelResidencyStore';
+import { mobileRouteId } from '../../src/services/modelServices/mobileRoute';
 import {
   createConversation,
   createMessage,
@@ -34,6 +37,10 @@ import {
 export const resetStores = (): void => {
   // Reset the ID counter for consistent test data
   resetIdCounter();
+
+  // Reset the selection and residency stores (one owner each)
+  useModelSelectionStore.setState({ entries: {} });
+  useModelResidencyStore.setState({ loadedTextModelId: null, textModelEvicted: false, warmedImageModels: [] });
 
   // Reset app store
   useAppStore.setState({
@@ -170,9 +177,15 @@ export const setupWithActiveModel = (
   const model = createDownloadedModel(modelOptions);
   useAppStore.setState({
     downloadedModels: [model],
-    activeModelId: model.id,
     hasCompletedOnboarding: true,
     deviceInfo: createDeviceInfo(),
+  });
+  // The persisted selection, as the app would have written it through the one selection owner.
+  const localRouteId = mobileRouteId({
+    source: 'local', hostId: model.engine, modality: 'text', modelId: model.id,
+  });
+  useModelSelectionStore.getState().setEntry('text', {
+    localRouteId, remoteRouteId: null, rememberedLocalRouteId: localRouteId,
   });
   return model.id;
 };
@@ -211,9 +224,12 @@ export const setupFullChat = (
  */
 export const setupWithImageModel = (): string => {
   const imageModel = createONNXImageModel();
-  useAppStore.setState({
-    downloadedImageModels: [imageModel],
-    activeImageModelId: imageModel.id,
+  useAppStore.setState({ downloadedImageModels: [imageModel] });
+  useModelSelectionStore.getState().setEntry('image', {
+    localRouteId: mobileRouteId({
+      source: 'local', hostId: imageModel.backend ?? 'image-runtime', modality: 'image', modelId: imageModel.id,
+    }),
+    remoteRouteId: null,
   });
   return imageModel.id;
 };
