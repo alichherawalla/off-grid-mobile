@@ -12,8 +12,8 @@ import {
   decodeModelSettingPatch,
   encodeChangedModelSettings,
 } from '@offgrid/models';
+import type { KnowledgeDocumentSnapshot } from '@offgrid/application';
 import type { Conversation, Message, Project } from '../../types';
-import type { KnowledgeDocumentSnapshot } from './knowledgeDocument';
 import { serializeMessageContext } from './messageContext';
 
 // The committed-mutation contract (entity table in wire order, mutation shape) is shared with
@@ -26,11 +26,11 @@ export function modelSettingMutations(
   after: Record<string, unknown>,
 ): SyncMutation[] {
   return encodeChangedModelSettings('mobile', before, after).map(setting => ({
-      entity: CORE_SYNC_ENTITIES.modelSetting,
-      entityId: setting.wireKey,
-      kind: 'put',
-      fields: { version: setting.version, value_json: setting.valueJson },
-    }));
+    entity: CORE_SYNC_ENTITIES.modelSetting,
+    entityId: setting.wireKey,
+    kind: 'put',
+    fields: { version: setting.version, value_json: setting.valueJson },
+  }));
 }
 
 export function mobileModelSettingPatch(

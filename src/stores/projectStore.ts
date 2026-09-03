@@ -8,7 +8,6 @@ import { applicationFacade } from '../services/applicationFacade';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
 import {
-  CORE_SYNC_ENTITIES,
   emitSyncMutation,
   projectPutMutation,
 } from '../services/sync/mutation';
@@ -131,14 +130,12 @@ export const useProjectStore = create<ProjectState>()(
 
       deleteProject: id => {
         const projectExists = get().projects.some(project => project.id === id);
-        applicationFacade().rag
-          .removeProjectDocuments(id)
-          .catch(err =>
-            logger.error(
-              `Failed to delete RAG documents for project ${id}`,
-              err,
-            ),
-          );
+        if (projectExists)
+          applicationFacade()
+            .workflows.deleteProject(id)
+            .catch(err =>
+              logger.error(`Failed to complete project cleanup for ${id}`, err),
+            );
         // Cascade: unfile the project's chats so none is left pointing at a project that
         // no longer exists (a dangling projectId isn't re-filable and still tripped the
         // KB-tool injection). The project store owns "what happens on delete" (like RAG
@@ -147,13 +144,6 @@ export const useProjectStore = create<ProjectState>()(
         set(state => ({
           projects: state.projects.filter(project => project.id !== id),
         }));
-        if (projectExists) {
-          emitSyncMutation({
-            entity: CORE_SYNC_ENTITIES.project,
-            entityId: id,
-            kind: 'delete',
-          });
-        }
       },
 
       getProject: id => {

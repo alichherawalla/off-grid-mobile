@@ -80,9 +80,6 @@ export const HOOKS = {
    *  live previews it holds for the conversation; the durable tombstone is emitted by the caller. */
   chatStreamDiscardConversation: 'chatStream.discardConversation',
 
-  /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
-   *  a document lifecycle change. Pro transfers or reconciles it with peers. */
-  syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
   /** (text: string, timestamp: number) => void — core copied text locally. Pro records it through
    *  the shared clipboard owner instead of waiting for a delayed native clipboard notification. */
   clipboardRecordLocalText: 'clipboard.recordLocalText',
