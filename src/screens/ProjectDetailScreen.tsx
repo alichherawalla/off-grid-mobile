@@ -96,9 +96,20 @@ export const ProjectDetailScreen: React.FC = () => {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: () => {
-              deleteProject(projectId);
-              navigation.goBack();
+            onPress: async () => {
+              try {
+                await deleteProject(projectId);
+                navigation.goBack();
+              } catch (error: unknown) {
+                setAlertState(
+                  showAlert(
+                    'Project Not Deleted',
+                    error instanceof Error
+                      ? error.message
+                      : 'Failed to delete project',
+                  ),
+                );
+              }
             },
           },
         ],

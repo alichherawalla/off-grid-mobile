@@ -6,7 +6,6 @@ import { Project } from '../types';
 import { generateId } from '../utils/generateId';
 import { applicationFacade } from '../services/applicationFacade';
 import { useChatStore } from './chatStore';
-import logger from '../utils/logger';
 import {
   emitSyncMutation,
   projectPutMutation,
@@ -23,7 +22,7 @@ interface ProjectState {
     id: string,
     updates: Partial<Omit<Project, 'id' | 'createdAt'>>,
   ) => void;
-  deleteProject: (id: string) => void;
+  deleteProject: (id: string) => Promise<void>;
   getProject: (id: string) => Project | undefined;
   duplicateProject: (id: string) => Project | null;
 }
@@ -128,18 +127,13 @@ export const useProjectStore = create<ProjectState>()(
         if (project) emitSyncMutation(projectPutMutation(project));
       },
 
-      deleteProject: id => {
+      deleteProject: async id => {
         const projectExists = get().projects.some(project => project.id === id);
-        if (projectExists)
-          applicationFacade()
-            .workflows.deleteProject(id)
-            .catch(err =>
-              logger.error(`Failed to complete project cleanup for ${id}`, err),
-            );
-        // Cascade: unfile the project's chats so none is left pointing at a project that
-        // no longer exists (a dangling projectId isn't re-filable and still tripped the
-        // KB-tool injection). The project store owns "what happens on delete" (like RAG
-        // cleanup above); chatStore owns the conversation mutation.
+        if (!projectExists) return;
+
+        await applicationFacade().workflows.deleteProject(id);
+        // The shared workflow has completed durable sync and RAG cleanup. Now remove local
+        // references together so no chat points at a missing project.
         useChatStore.getState().unfileConversationsForProject(id);
         set(state => ({
           projects: state.projects.filter(project => project.id !== id),
