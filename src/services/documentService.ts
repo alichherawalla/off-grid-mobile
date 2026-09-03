@@ -11,47 +11,21 @@ import { pdfExtractor } from './pdfExtractor';
 import { useAppStore } from '../stores/appStore';
 import { APP_CONFIG } from '../constants';
 import { generateId } from '../utils/generateId';
+import {
+  admitDocument,
+  documentAttachmentCharBudget,
+  documentPreview,
+  formatDocumentForContext,
+  isPdfDocument,
+  isSupportedDocument,
+  supportedDocumentExtensions,
+  truncateDocumentText,
+  type DocumentCapabilities,
+} from '@offgrid/rag';
 
-// File extensions we can read as text
-const TEXT_EXTENSIONS = [
-  '.txt',
-  '.md',
-  '.csv',
-  '.json',
-  '.xml',
-  '.html',
-  '.log',
-  '.py',
-  '.js',
-  '.ts',
-  '.jsx',
-  '.tsx',
-  '.java',
-  '.c',
-  '.cpp',
-  '.h',
-  '.swift',
-  '.kt',
-  '.go',
-  '.rs',
-  '.rb',
-  '.php',
-  '.sql',
-  '.sh',
-  '.yaml',
-  '.yml',
-  '.toml',
-  '.ini',
-  '.cfg',
-  '.conf',
-];
-
-// PDF extension handled separately via native module
-const PDF_EXTENSION = '.pdf';
-
-// Max file size we'll read (5MB)
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
-
+// The attachment rules (which files, how large, how much of one the model sees, the truncation
+// marker, the context block, the preview) are @offgrid/rag's `document-attachment`; this service
+// keeps only the file system and the PDF extractor.
 // Persistent directory for attached documents
 const ATTACHMENTS_DIR = `${RNFS.DocumentDirectoryPath}/attachments`;
 
@@ -65,15 +39,23 @@ class DocumentService {
       await RNFS.mkdir(ATTACHMENTS_DIR);
     }
   }
+  /** What this device can open: PDFs only when the native extractor is present. */
+  private capabilities(): DocumentCapabilities {
+    return { pdf: pdfExtractor.isAvailable() };
+  }
+
+  /** The chat's context window as the model sees it, in tokens. */
+  private contextLength(): number {
+    return (
+      useAppStore.getState().settings.contextLength || APP_CONFIG.maxContextLength
+    );
+  }
+
   /**
    * Check if a file extension is supported
    */
   isSupported(fileName: string): boolean {
-    const extension = `.${fileName.split('.').pop()?.toLowerCase()}`;
-    if (extension === PDF_EXTENSION && pdfExtractor.isAvailable()) {
-      return true;
-    }
-    return TEXT_EXTENSIONS.includes(extension);
+    return isSupportedDocument(fileName, this.capabilities());
   }
 
   /**
@@ -148,17 +130,6 @@ class DocumentService {
     return uri;
   }
 
-  private validateFileType(extension: string, isPdf: boolean): void {
-    if (!isPdf && !TEXT_EXTENSIONS.includes(extension)) {
-      throw new Error(
-        `Unsupported file type: ${extension}. Supported: txt, md, csv, json, pdf, code files`,
-      );
-    }
-    if (isPdf && !pdfExtractor.isAvailable()) {
-      throw new Error('PDF extraction is not available on this device');
-    }
-  }
-
   private async readContent(
     resolvedPath: string,
     isPdf: boolean,
@@ -174,13 +145,7 @@ class DocumentService {
       console.log(
         `[DocumentService] Successfully read ${raw.length} characters`,
       );
-      if (raw.length > maxChars) {
-        return `${raw.substring(
-          0,
-          maxChars,
-        )}\n\n... [Content truncated due to length]`;
-      }
-      return raw;
+      return truncateDocumentText(raw, maxChars);
     } catch (error: any) {
       console.error(
         `[DocumentService] Error reading content:`,
@@ -224,12 +189,12 @@ class DocumentService {
         `[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`,
       );
       const name = fileName || filePath.split('/').pop() || 'document';
-      const extension = `.${name.split('.').pop()?.toLowerCase()}`;
-      const isPdf = extension === PDF_EXTENSION;
-      console.log(
-        `[DocumentService] Detected extension: ${extension}, isPdf: ${isPdf}`,
-      );
-      this.validateFileType(extension, isPdf);
+      const isPdf = isPdfDocument(name);
+      console.log(`[DocumentService] isPdf: ${isPdf}`);
+      const typeAdmission = admitDocument(name, undefined, this.capabilities());
+      if (!typeAdmission.admitted) {
+        throw new Error(typeAdmission.reason);
+      }
 
       const resolvedPath = await this.resolveContentUri(filePath, name);
       console.log(`[DocumentService] Resolved path: ${resolvedPath}`);
@@ -259,22 +224,13 @@ class DocumentService {
       }
       const fileSize = facts.size;
       console.log(`[DocumentService] File size: ${fileSize} bytes`);
-      if (fileSize > MAX_FILE_SIZE) {
-        throw new Error(
-          `File is too large. Maximum size is ${
-            MAX_FILE_SIZE / (1024 * 1024)
-          }MB`,
-        );
+      const admission = admitDocument(name, fileSize, this.capabilities());
+      if (!admission.admitted) {
+        throw new Error(admission.reason);
       }
 
       const maxChars =
-        maxCharsOverride ??
-        Math.floor(
-          (useAppStore.getState().settings.contextLength ||
-            APP_CONFIG.maxContextLength) *
-            4 *
-            0.5,
-        );
+        maxCharsOverride ?? documentAttachmentCharBudget(this.contextLength());
       const textContent = await this.readContent(resolvedPath, isPdf, maxChars);
       const { id, uri } = await this.savePersistentCopy(
         resolvedPath,
@@ -303,17 +259,10 @@ class DocumentService {
     text: string,
     fileName: string = 'pasted-text.txt',
   ): Promise<MediaAttachment> {
-    const contextLength =
-      useAppStore.getState().settings.contextLength ||
-      APP_CONFIG.maxContextLength;
-    const maxChars = Math.floor(contextLength * 4 * 0.5);
-    let textContent = text;
-    if (textContent.length > maxChars) {
-      textContent = `${textContent.substring(
-        0,
-        maxChars,
-      )}\n\n... [Content truncated due to length]`;
-    }
+    const textContent = truncateDocumentText(
+      text,
+      documentAttachmentCharBudget(this.contextLength()),
+    );
 
     const id = generateId();
 
@@ -342,39 +291,23 @@ class DocumentService {
    * Format document content for including in LLM context
    */
   formatForContext(attachment: MediaAttachment): string {
-    if (attachment.type !== 'document' || !attachment.textContent) {
-      return '';
-    }
-
-    const fileName = attachment.fileName || 'document';
-    return `\n\n---\n📄 **Attached Document: ${fileName}**\n\`\`\`\n${attachment.textContent}\n\`\`\`\n---\n`;
+    return attachment.type === 'document' ? formatDocumentForContext(attachment) : '';
   }
 
   /**
    * Get a short preview of document content
    */
-  getPreview(attachment: MediaAttachment, maxLength: number = 100): string {
-    if (attachment.type !== 'document' || !attachment.textContent) {
-      return attachment.fileName || 'Document';
-    }
-
-    const preview = attachment.textContent
-      .substring(0, maxLength)
-      .replaceAll('\n', ' ');
-    return preview.length < attachment.textContent.length
-      ? `${preview}...`
-      : preview;
+  getPreview(attachment: MediaAttachment, maxLength?: number): string {
+    return attachment.type === 'document'
+      ? documentPreview(attachment, maxLength)
+      : attachment.fileName || 'Document';
   }
 
   /**
    * Get list of supported file extensions
    */
   getSupportedExtensions(): string[] {
-    const exts = [...TEXT_EXTENSIONS];
-    if (pdfExtractor.isAvailable()) {
-      exts.push(PDF_EXTENSION);
-    }
-    return exts;
+    return supportedDocumentExtensions(this.capabilities());
   }
 }
 
