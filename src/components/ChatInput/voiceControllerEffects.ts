@@ -1,7 +1,7 @@
 import { useEffect, type MutableRefObject } from 'react';
 import { recordingController } from '../../services/recordingController';
 import { audioRecorderService } from '../../services/audioRecorderService';
-import { voiceSession } from '../../services/voiceSession';
+import { applicationFacade } from '../../services/applicationFacade';
 import { useAppStore } from '../../stores';
 
 interface VoiceControllerEffectInput {
@@ -34,7 +34,7 @@ export function useVoiceControllerEffects(input: VoiceControllerEffectInput): vo
         (useAppStore.getState().settings.voiceTurnMode ?? 'silence') ===
         'handsfree'
       ) {
-        voiceSession.dispatch('userStop');
+        applicationFacade().speech.session.dispatch('userStop');
       }
       stopRef.current();
     },
@@ -79,14 +79,15 @@ export async function stopVoiceRecording(input: {
   stopAudioModeRecording: () => Promise<void>;
   stopWhisperRecording: () => Promise<void>;
 }): Promise<void> {
-  voiceSession.dispatch('turnCaptured');
+  applicationFacade().speech.session.dispatch('turnCaptured');
   input.stopListeningForSilence();
   try {
     if (input.isDirectRecording) return await input.stopDirectRecording();
     if (input.isAudioModeRecording) return await input.stopAudioModeRecording();
     await input.stopWhisperRecording();
   } finally {
-    if (input.isChatDictation) voiceSession.dispatch('dictationFinished');
+    if (input.isChatDictation)
+      applicationFacade().speech.session.dispatch('dictationFinished');
   }
 }
 
@@ -100,7 +101,8 @@ export function cancelVoiceRecording(input: {
   clearConversation: () => void;
   stopListeningForSilence: () => void;
 }): void {
-  const isReplayCancellation = !!voiceSession.current().replayReturnsTo;
+  const isReplayCancellation =
+    !!applicationFacade().speech.snapshot().voice.replayReturnsTo;
   input.stopListeningForSilence();
   try {
     if (input.isDirectRecording || input.isAudioModeRecording) {
@@ -113,6 +115,7 @@ export function cancelVoiceRecording(input: {
     }
     input.clearConversation();
   } finally {
-    if (!isReplayCancellation) voiceSession.dispatch('dictationFinished');
+    if (!isReplayCancellation)
+      applicationFacade().speech.session.dispatch('dictationFinished');
   }
 }

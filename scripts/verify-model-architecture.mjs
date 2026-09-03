@@ -1216,6 +1216,20 @@ for (const file of files) {
         );
       }
       if (
+        fileName ===
+          'src/components/ChatInput/voiceControllerEffects.ts' &&
+        /(?:^|\/)services\/voiceSession$/.test(specifier) &&
+        importsRuntimeValue(node)
+      ) {
+        report(
+          'voice-controller-uses-speech-facade',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
+      }
+      if (
         specifier === '@offgrid/rag' &&
         importsRuntimeValue(node) &&
         !ragRuntimeImportOwners.has(fileName)
