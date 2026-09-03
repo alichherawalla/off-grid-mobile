@@ -1,4 +1,4 @@
-import { stripModelFileExtension } from '@offgrid/models';
+import { liteRTGpuUnsupportedNotice, stripModelFileExtension } from '@offgrid/models';
 import React, { useEffect } from 'react';
 import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
@@ -103,6 +103,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  // Shared decides which devices lack a LiteRT GPU path; this screen only shows the sentence.
+  const liteRTGpuNotice = liteRTGpuUnsupportedNotice({ platform: Platform.OS, deviceModel: DeviceInfo.getModel() });
 
   // Pre-set the next pending (Download Manager icon) so it fires regardless of
   // how the user dismisses step 9 (button or backdrop tap).
@@ -229,10 +231,10 @@ const ModelDetailView: React.FC<DetailProps> = ({
           </View>
         )}
       </Card>
-      {selectedModel.id === LITERT_PARENT_ID && Platform.OS === 'android' && DeviceInfo.getModel().toLowerCase().includes('pixel 10') && (
+      {selectedModel.id === LITERT_PARENT_ID && liteRTGpuNotice && (
         <Card style={styles.deviceBanner}>
           <Icon name="info" size={14} color={colors.trending} />
-          <Text style={styles.deviceBannerText}>{'GPU acceleration is not yet supported on Pixel 10. Models will run on CPU. Support coming soon.'}</Text>
+          <Text style={styles.deviceBannerText}>{liteRTGpuNotice}</Text>
         </Card>
       )}
       <Text style={styles.sectionTitle}>Available Files</Text>

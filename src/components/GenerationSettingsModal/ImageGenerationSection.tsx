@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isFastClassifierModel } from '@offgrid/models';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AdvancedToggle } from '../AdvancedToggle';
@@ -241,7 +242,7 @@ const ClassifierModelPicker: React.FC = () => {
               }).catch(() => undefined);
               setShowPicker(false);
             };
-            const isFast = model.id.toLowerCase().includes('smol');
+            const isFast = isFastClassifierModel(model.id);
             return (
               <TouchableOpacity
                 key={model.id}

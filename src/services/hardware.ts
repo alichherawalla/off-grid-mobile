@@ -13,7 +13,9 @@ import {
   SoCVendor,
   ImageModelRecommendation,
 } from '../types';
-import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS } from '@offgrid/models';
+import { MODEL_RECOMMENDATIONS, RECOMMENDED_MODELS,
+  formatFileSize,
+} from '@offgrid/models';
 import { HTP_ENABLED } from '../config/featureFlags';
 import {
   appleChipForDevice,
@@ -241,11 +243,9 @@ class HardwareService {
   ): number {
     return estimateParameterMemoryGB(parametersBillions, quantization);
   }
+  /** One byte formatter for every surface (shared). */
   formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
+    return formatFileSize(bytes);
   }
   getModelTotalSize(model: { fileSize?: number; size?: number; mmProjFileSize?: number }): number {
     return modelArtifactBytes(model);
