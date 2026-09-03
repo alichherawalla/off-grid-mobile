@@ -16,7 +16,7 @@ import {
   SharePromptSheet,
   ProAhaSheet,
 } from '../../components';
-import { WHISPER_MODELS } from '@offgrid/models';
+import { WHISPER_MODELS } from '@offgrid/application';
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';

@@ -1,4 +1,4 @@
-import type { ActiveModelSnapshot, ModelModality } from '@offgrid/models';
+import type { ActiveModelSnapshot, ModelModality } from '@offgrid/application';
 import { useModelsProjection } from './useApplicationProjection';
 
 /** The selected LOCAL model id for a modality, or null (a remote route reads as null). */

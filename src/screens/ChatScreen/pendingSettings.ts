@@ -1,4 +1,4 @@
-import { hasPendingTextEngineSettings } from '@offgrid/models';
+import { hasPendingTextEngineSettings } from '@offgrid/application';
 
 /**
  * Whether live settings differ from what the loaded model was loaded with.

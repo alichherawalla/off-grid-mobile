@@ -45,7 +45,7 @@ import {
   useChatRuntimeSubscriptions,
 } from './useChatScreenLifecycle';
 import { useChatScreenActions } from './useChatScreenActions';
-import type { RuntimeModel } from '@offgrid/models';
+import type { RuntimeModel } from '@offgrid/application';
 
 export type { AlertState };
 export type { ChatMessageItem } from './types';

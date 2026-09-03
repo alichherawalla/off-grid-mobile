@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { newProjectChatRouteId } from '@offgrid/models';
+import { newProjectChatRouteId } from '@offgrid/application';
 import {
   View,
   Text,

@@ -1,4 +1,4 @@
-import type { ModelModality, RuntimeModel } from '@offgrid/models';
+import type { ModelModality, RuntimeModel } from '@offgrid/application';
 import { useModelsProjection } from './useApplicationProjection';
 
 /** Reactive read-only inventory projection from the Shared model service. */
