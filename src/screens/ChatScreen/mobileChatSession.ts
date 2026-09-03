@@ -31,7 +31,6 @@ import { applicationFacade } from '../../services/applicationFacade';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
 import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { refreshMobileModelServices } from '../../services/modelServices';
-import { generateMobileChat } from '../../services/modelServices/chatGenerationApplication';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import { registerMobileChatSessionControl } from '../../services/modelServices/chatSessionControl';
 import { modelInputAudioUris } from '../../services/modelMedia';
@@ -45,6 +44,7 @@ import {
   generationMessage,
   MobileChatTurnRepository,
 } from './mobileChatTurnRepository';
+import { generateChatWithModelsFacade } from './modelsFacadeGeneration';
 
 
 const repository = new MobileChatTurnRepository();
@@ -214,7 +214,8 @@ async function generateForSession(
   events: GenerationEvents = {},
 ): Promise<GenerationResult> {
   if (request.operation?.type !== 'image') {
-    return generateMobileChat(request, events);
+    await refreshMobileModelServices();
+    return generateChatWithModelsFacade(request, events);
   }
   const identity = request.identity;
   if (!identity?.conversationId)
