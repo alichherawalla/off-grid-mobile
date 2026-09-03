@@ -32,6 +32,46 @@ interface StoredEmbedding {
   embedding: number[];
 }
 
+function rowNumber(row: Record<string, unknown>, field: string, index: number): number {
+  const value = row[field];
+  if (typeof value !== 'number') {
+    throw new Error(`Invalid RAG document row at index ${index}: invalid ${field}.`);
+  }
+  return value;
+}
+
+function rowText(row: Record<string, unknown>, field: string, index: number): string {
+  const value = row[field];
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid RAG document row at index ${index}: invalid ${field}.`);
+  }
+  return value;
+}
+
+function decodeRagDocument(value: unknown, index: number): RagDocument {
+  if (!value || typeof value !== 'object') {
+    throw new Error(`Invalid RAG document row at index ${index}: expected an object.`);
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    id: rowNumber(row, 'id', index),
+    sync_id: rowText(row, 'sync_id', index),
+    project_id: rowText(row, 'project_id', index),
+    name: rowText(row, 'name', index),
+    path: rowText(row, 'path', index),
+    size: rowNumber(row, 'size', index),
+    created_at: rowText(row, 'created_at', index),
+    enabled: rowNumber(row, 'enabled', index),
+  };
+}
+
+function decodeRagDocuments(value: unknown): RagDocument[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid RAG document query result: expected rows.');
+  }
+  return value.map(decodeRagDocument);
+}
+
 class RagDatabase {
   private db: DB | null = null;
   private ready = false;
@@ -250,7 +290,7 @@ class RagDatabase {
       'SELECT id, sync_id, project_id, name, path, size, created_at, enabled FROM rag_documents WHERE project_id = ? ORDER BY created_at DESC',
       [projectId],
     );
-    return (result.rows ?? []) as unknown as RagDocument[];
+    return decodeRagDocuments(result.rows ?? []);
   }
 
   listDocumentPage(
@@ -266,7 +306,7 @@ class RagDatabase {
        LIMIT ?`,
       [afterId ?? 0, limit],
     );
-    const documents = (result.rows ?? []) as unknown as RagDocument[];
+    const documents = decodeRagDocuments(result.rows ?? []);
     return {
       documents,
       nextAfterId:
@@ -282,7 +322,7 @@ class RagDatabase {
       'SELECT id, sync_id, project_id, name, path, size, created_at, enabled FROM rag_documents WHERE id = ?',
       [docId],
     );
-    return ((result.rows ?? []) as unknown as RagDocument[])[0];
+    return decodeRagDocuments(result.rows ?? [])[0];
   }
 
   getDocumentBySyncId(syncId: string): RagDocument | undefined {
@@ -291,7 +331,7 @@ class RagDatabase {
       'SELECT id, sync_id, project_id, name, path, size, created_at, enabled FROM rag_documents WHERE sync_id = ?',
       [syncId],
     );
-    return ((result.rows ?? []) as unknown as RagDocument[])[0];
+    return decodeRagDocuments(result.rows ?? [])[0];
   }
 
   toggleEnabled(docId: number, enabled: boolean): void {
