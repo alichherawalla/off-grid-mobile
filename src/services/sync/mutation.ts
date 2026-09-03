@@ -1,14 +1,12 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
-  KNOWLEDGE_DOCUMENT_ENTITY,
-  SHARED_FILE_ENTITY,
-  TASK_LAUNCH_ENTITY,
-  TASK_CONTROL_ENTITY,
-  TASK_RUN_ENTITY,
+  CORE_SYNC_ENTITIES,
   createKnowledgeDocumentStateFields,
   createSharedFileStateFields,
   isRuntimeOnlyMessage,
   type SharedFileDescriptor,
+  type CoreSyncEntity,
+  type SyncMutation,
 } from '@offgrid/sync';
 import {
   decodeModelSettingPatch,
@@ -18,29 +16,10 @@ import type { Conversation, Message, Project } from '../../types';
 import type { KnowledgeDocumentSnapshot } from './knowledgeDocument';
 import { serializeMessageContext } from './messageContext';
 
-/** Stable wire entity names shared with Off Grid Desktop. */
-export const CORE_SYNC_ENTITIES = {
-  // Dependency order is wire order: parents must materialize before children.
-  project: 'project',
-  conversation: 'conversation',
-  message: 'message',
-  knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
-  sharedFile: SHARED_FILE_ENTITY,
-  modelSetting: 'model_setting',
-  taskLaunch: TASK_LAUNCH_ENTITY,
-  taskRun: TASK_RUN_ENTITY,
-  taskControl: TASK_CONTROL_ENTITY,
-} as const;
-
-export type CoreSyncEntity =
-  (typeof CORE_SYNC_ENTITIES)[keyof typeof CORE_SYNC_ENTITIES];
-
-export interface SyncMutation {
-  entity: CoreSyncEntity;
-  entityId: string;
-  kind: 'put' | 'delete';
-  fields?: Record<string, unknown>;
-}
+// The committed-mutation contract (entity table in wire order, mutation shape) is shared with
+// Off Grid Desktop through @offgrid/sync; this module keeps only the Mobile record builders.
+export { CORE_SYNC_ENTITIES } from '@offgrid/sync';
+export type { CoreSyncEntity, SyncMutation } from '@offgrid/sync';
 
 export function modelSettingMutations(
   before: Record<string, unknown>,
