@@ -9,6 +9,12 @@ import {
   GenerationAbortedError,
   whisperDecodeOptions,
 } from '@offgrid/models';
+import {
+  WHISPER_REALTIME_OPTIONS,
+  realtimeFinalSource,
+  realtimeStartPlan,
+  realtimeStopDecision,
+} from '@offgrid/speech';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
@@ -193,14 +199,16 @@ class WhisperService {
       throw new Error('No Whisper model loaded');
     }
 
-    // If already transcribing, force stop before starting new
-    if (this.isTranscribing || this.stopFn) {
+    const startPlan = realtimeStartPlan({
+      isTranscribing: this.isTranscribing,
+      hasStopHandle: this.stopFn !== null,
+    });
+    if (startPlan.stopPrevious) {
       logger.log(
         '[WhisperService] Stopping previous transcription before starting new one',
       );
       await this.stopTranscription();
-      // Small delay to ensure cleanup
-      await new Promise<void>(resolve => setTimeout(resolve, 100));
+      await new Promise<void>(resolve => setTimeout(resolve, startPlan.settleMs));
     }
 
     this.realtimeStart.begin();
@@ -222,11 +230,6 @@ class WhisperService {
         throw new Error('Microphone permission denied');
       }
 
-      // B26/B28 ROOT: realtime capture yields NO audio on device (spoke, blank input). The reliable
-      // pipeline is record→file→transcribeFile (the voice-mode path, T079). So we record the SAME
-      // utterance to a file alongside the realtime stream, and on the stream's FINAL event, when it
-      // produced no usable transcript, we transcribe the recorded FILE and deliver THAT as the
-      // authoritative result — one uniform "voice in → transcribed text out" pipeline for every mode.
       // Best-effort: if the recorder can't start (permission/hardware), realtime alone still runs.
       try {
         await audioRecorderService.startRecording();
@@ -238,15 +241,15 @@ class WhisperService {
         );
       }
 
-      // Always close the parallel file recorder. Prefer a usable realtime result;
-      // when it is empty (B26), transcribe the captured file instead.
-      const resolveFinalText = async (
-        realtimeText: string,
-      ): Promise<string> => {
+      const resolveFinalText = async (realtimeText: string): Promise<string> => {
+        const source = realtimeFinalSource({
+          realtimeCleaned: cleanTranscription(realtimeText),
+          fileRecorded: recordedFile,
+        });
         if (!recordedFile) return realtimeText;
         try {
           const { path } = await audioRecorderService.stopRecording();
-          if (cleanTranscription(realtimeText)) return realtimeText;
+          if (source === 'realtime') return realtimeText;
           const fileText = options?.transcribeFallback
             ? await options.transcribeFallback(path)
             : await this.transcribeFileRaw(path, { language });
@@ -277,15 +280,10 @@ class WhisperService {
       }
 
       logger.log('[WhisperService] Calling transcribeRealtime...');
-      // Use the transcribeRealtime API
       const { stop, subscribe } = await this.context.transcribeRealtime({
         ...whisperDecodeOptions(language),
-        maxLen: options?.maxLen || 0, // 0 = no limit
-        realtimeAudioSec: 30, // Process in 30-second chunks
-        realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
-        // Decode only slices that contain speech, so a quiet room is not decoded into invented
-        // words. This does NOT end the turn - only useVoiceInput does that, in voice mode.
-        useVad: true,
+        ...WHISPER_REALTIME_OPTIONS,
+        maxLen: options?.maxLen || WHISPER_REALTIME_OPTIONS.maxLen,
         ...(Platform.OS === 'ios' && {
           audioSessionOnStartIos: {
             category: 'PlayAndRecord',
@@ -358,26 +356,28 @@ class WhisperService {
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
     try {
-      if (!this.stopFn) {
+      let decision = realtimeStopDecision({
+        hasStopHandle: this.stopFn !== null,
+        startPending: this.isTranscribing && this.stopFn === null,
+        contextAlive: this.context !== null,
+      });
+      if (decision === 'wait-for-start') {
         logger.log('[WhisperService] Stop is waiting for realtime startup');
         await this.realtimeStart.wait();
+        decision = realtimeStopDecision({
+          hasStopHandle: this.stopFn !== null,
+          startPending: false,
+          contextAlive: this.context !== null,
+        });
       }
-      // Grab and clear stopFn atomically to prevent double-stop race conditions.
-      // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
-      // both see stopFn as non-null and call it twice, causing SIGSEGV in
-      // finishRealtimeTranscribeJob on the native side.
       const fn = this.stopFn;
       this.stopFn = null;
-      if (fn) {
-        // Guard: only call stop if context still exists
-        // Calling stop on a freed context causes SIGSEGV
-        if (this.context) {
-          await fn();
-        } else {
-          logger.log(
-            '[WhisperService] Context already released, skipping stopFn call',
-          );
-        }
+      if (decision === 'stop' && fn) {
+        await fn();
+      } else if (decision === 'skip-context-released') {
+        logger.log(
+          '[WhisperService] Context already released, skipping stopFn call',
+        );
       }
     } catch (error) {
       logger.error('[WhisperService] Error stopping transcription:', error);

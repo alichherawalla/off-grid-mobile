@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Vibration } from 'react-native';
 import { cleanTranscription } from '@offgrid/models';
+import {
+  nextPartialTranscript,
+  remainingTranscribingDisplayMs,
+  shouldAbsorbRealtimeStart,
+} from '@offgrid/speech';
 import { mobileTranscriptionRuntime } from '../services/modelServices/transcriptionRuntimePort';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';
@@ -91,9 +96,6 @@ export const useWhisperTranscription = ({
   // make room for a text model — reloading it into the just-freed RAM and undoing the eviction
   // (the [MEM-SM] override measured corrupted free RAM). Loading on demand lets eviction stick.
 
-  // Minimum time to show transcribing state (ms)
-  const MIN_TRANSCRIBING_TIME = 600;
-
   // Helper to finalize transcription with minimum display time
   // NOTE: This does NOT clear isTranscribing - that's done by clearResult()
   // which is called from ChatInput after the text is added to the input box.
@@ -111,8 +113,7 @@ export const useWhisperTranscription = ({
       return;
     }
     const startTime = transcribingStartTime.current;
-    const elapsed = startTime ? Date.now() - startTime : MIN_TRANSCRIBING_TIME;
-    const remaining = Math.max(0, MIN_TRANSCRIBING_TIME - elapsed);
+    const remaining = remainingTranscribingDisplayMs(startTime, Date.now());
 
     if (remaining > 0) {
       // Store result and wait for minimum time
@@ -284,9 +285,7 @@ export const useWhisperTranscription = ({
             // empty cleaned partial (pure silence/noise marker mid-capture) must NOT
             // clobber an existing good partial or the "listening…" UI state.
             const cleaned = cleanTranscription(result.text);
-            if (cleaned) {
-              setPartialResult(cleaned);
-            }
+            setPartialResult(shown => nextPartialTranscript(shown, cleaned));
           } else {
             // Recording finished - haptic feedback
             if (mountedRef.current) Vibration.vibrate(30);
@@ -349,11 +348,11 @@ export const useWhisperTranscription = ({
     // then re-started, entering the native transcribeRealtime a SECOND time while the
     // first session was still tearing down → the "State: -100" collision (B12). A
     // double-tap must be ONE clean recording, so ignore the extra start.
-    if (
-      startInFlight.current ||
-      isRecording ||
-      mobileTranscriptionRuntime.isTranscribing()
-    ) {
+    if (shouldAbsorbRealtimeStart({
+      startInFlight: startInFlight.current,
+      isRecording,
+      isTranscribing: mobileTranscriptionRuntime.isTranscribing(),
+    })) {
       logger.log(
         '[Whisper] Already recording — ignoring redundant start (no second session)',
       );
