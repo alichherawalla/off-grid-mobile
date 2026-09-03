@@ -1,11 +1,12 @@
-import type {
-  GenerationAdapter,
-  GenerationChunk,
-  GenerationRequest,
-  LLMService,
-  ModelInventoryAdapter,
-  RuntimeModel,
+import {
+  type GenerationAdapter,
+  type GenerationChunk,
+  type GenerationRequest,
+  type ModelInventoryAdapter,
+  type RuntimeModel,
+  classifyStreamingRuntimeError,
 } from '@offgrid/models';
+import type { LLMService } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { synthesizeRemoteVoiceFile } from '../adapters/remote/voicePlayback';
 
@@ -91,10 +92,7 @@ function voiceAdapter(id: string): GenerationAdapter {
       }
       return remoteVoiceChunks(model, request);
     },
-    classifyError(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return /cancel|abort/i.test(message) ? 'fatal' : 'retryable';
-    },
+    classifyError: classifyStreamingRuntimeError,
   };
 }
 

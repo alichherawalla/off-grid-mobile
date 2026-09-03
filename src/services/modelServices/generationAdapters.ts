@@ -14,6 +14,7 @@ import {
   type ModelResidencyLifecyclePort,
   type ReasoningWireFragment,
   type RuntimeModel,
+  classifyRuntimeError,
 } from '@offgrid/models';
 import type { LLMService } from '@offgrid/models';
 import type { GenerationMeta, MediaAttachment, Message } from '../../types';
@@ -418,10 +419,7 @@ function adapter(id: string): GenerationAdapter {
       }
       yield* providerChunks(remoteTransportFor(model), model.id, request, reasoningWire);
     },
-    classifyError(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return /memory|unavailable|not ready|timeout|network/i.test(message) ? 'retryable' : 'fatal';
-    },
+    classifyError: classifyRuntimeError,
   };
 }
 

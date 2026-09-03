@@ -1,4 +1,4 @@
-import { DEFAULT_IMAGE_MIME } from '@offgrid/models';
+import { DEFAULT_IMAGE_MIME, classifyRuntimeError } from '@offgrid/models';
 import {
   GeneratedBinaryArtifact,
   bindGenerationCancellation,
@@ -178,11 +178,6 @@ export function mobileImageGenerationAdapter(id: string): GenerationAdapter {
         finishReason: 'stop',
       };
     },
-    classifyError(error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return /memory|unavailable|not ready|timeout|network/i.test(message)
-        ? 'retryable'
-        : 'fatal';
-    },
+    classifyError: classifyRuntimeError,
   };
 }
