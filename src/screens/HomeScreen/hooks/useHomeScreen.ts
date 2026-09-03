@@ -11,6 +11,7 @@ import {
   useChatStore,
   useRemoteServerStore,
 } from '../../../stores';
+import { useDiscoveredRemoteModels } from '../../../hooks/useDiscoveredRemoteModels';
 import {
   modelLibrary,
   hardwareService,
@@ -97,10 +98,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const deleteConversation = useChatStore(state => state.deleteConversation);
 
   // Remote server store for remote models
-  const {
-    servers: remoteServers,
-    discoveredModels: remoteDiscoveredModels,
-  } = useRemoteServerStore();
+  const remoteServers = useRemoteServerStore(state => state.servers);
+  const remoteDiscoveredModels = useDiscoveredRemoteModels();
 
   const {
     handleSelectTextModel: _handleSelectTextModel,

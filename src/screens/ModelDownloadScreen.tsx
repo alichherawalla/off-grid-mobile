@@ -17,6 +17,7 @@ import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
 import { isActiveStatus } from '../stores/downloadStore';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
+import { useDiscoveredRemoteModels } from '../hooks/useDiscoveredRemoteModels';
 import {
   hardwareService,
   remoteServerManager,
@@ -62,7 +63,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
 
   const { deviceInfo, setDeviceInfo, setModelRecommendation } = useAppStore();
   const servers = useRemoteServerStore((s) => s.servers);
-  const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
+  const discoveredModels = useDiscoveredRemoteModels();
 
   // Init hardware + model recommendations
   useEffect(() => {
@@ -155,7 +156,8 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
       setConnectedServerId(server.id);
-      const models = discoveredModels[server.id] || result.models || [];
+      const known = discoveredModels[server.id];
+      const models = known?.length ? known : result.models || [];
       if (models.length === 0) {
         setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Off Grid AI Desktop, Ollama, or LM Studio, then reconnect.`));
         return;

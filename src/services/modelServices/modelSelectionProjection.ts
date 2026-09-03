@@ -82,17 +82,12 @@ function remoteCandidateFromRoute(
 ): PersistedSelectionCandidate | null {
   const route = routeId ? decodeModelRouteId(routeId) : null;
   if (!route?.serverId) return null;
-  const state = useRemoteServerStore.getState();
-  const server = state.servers.find(item => item.id === route.serverId);
+  const server = useRemoteServerStore.getState().servers.find(item => item.id === route.serverId);
   if (!server) return null;
   if (modality === 'text') {
     const name =
       selectedRemoteModelName(
-        {
-          ...server,
-          selections: { ...server.selections, text: route.modelId },
-          catalog: { ...server.catalog, text: state.discoveredModels[server.id] ?? [] },
-        },
+        { ...server, selections: { ...server.selections, text: route.modelId } },
         'text',
       ) ?? route.modelId;
     const kind = catalogModelKind(name, [], route.modelId);
@@ -127,12 +122,20 @@ interface LegacyStores {
   remote: ReturnType<typeof useRemoteServerStore.getState>;
 }
 
+/**
+ * Before the selection store, a media selection lived on the legacy active server's own
+ * `selections`; an image selection also needed the retired activeRemoteImageModelId. Read here once.
+ */
 function legacyRemoteMediaRoute(stores: LegacyStores, media: RemoteMediaModality): string | null {
-  const serverId = stores.remote.activeRemoteMediaServerIds?.[media];
-  const server = serverId ? stores.remote.servers.find(item => item.id === serverId) : null;
+  const { remote } = stores;
+  if (media === 'embedding') return null;
+  if (media === 'image' && !remote.activeRemoteImageModelId) return null;
+  const server = remote.activeServerId
+    ? remote.servers.find(item => item.id === remote.activeServerId)
+    : null;
   const modelId = server?.selections?.[media]?.trim();
-  return serverId && modelId
-    ? mobileRouteId({ source: 'remote', hostId: serverId, modality: media, modelId })
+  return server && modelId
+    ? mobileRouteId({ source: 'remote', hostId: server.id, modality: media, modelId })
     : null;
 }
 

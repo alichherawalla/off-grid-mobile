@@ -149,14 +149,12 @@ export const resetStores = (): void => {
   useRemoteServerStore.setState({
     servers: [],
     activeServerId: null,
-    discoveredModels: {},
     serverHealth: {},
     isLoading: false,
     testingServerId: null,
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
-    activeRemoteMediaServerIds: {},
   });
   require('../../src/stores/downloadStore').useDownloadStore.setState({
     downloads: {},
@@ -585,14 +583,12 @@ export const resetRemoteServerStore = (): void => {
   useRemoteServerStore.setState({
     servers: [],
     activeServerId: null,
-    discoveredModels: {},
     serverHealth: {},
     isLoading: false,
     testingServerId: null,
     discoveringServerId: null,
     activeRemoteTextModelId: null,
     activeRemoteImageModelId: null,
-    activeRemoteMediaServerIds: {},
   });
 };
 

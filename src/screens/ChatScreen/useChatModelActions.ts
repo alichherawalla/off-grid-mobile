@@ -17,11 +17,6 @@ import logger from '../../utils/logger';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
-/** Vision support for a just-loaded local model from Shared's canonical route projection. */
-function loadedModelVision(model: DownloadedModel): boolean {
-  return mobileTextEngineControl.capabilities(model.id).vision;
-}
-
 type ActiveModelInfo = {
   isRemote: boolean;
   model: DownloadedModel | RemoteModel | null;
@@ -46,7 +41,6 @@ type ModelActionDeps = {
   addMessage: (convId: string, msg: any) => void;
   setIsModelLoading: (loading: boolean) => void;
   setLoadingModel: (model: DownloadedModel | null) => void;
-  setSupportsVision: SetState<boolean>;
   setShowModelSelector: SetState<boolean>;
   setAlertState: SetState<AlertState>;
   modelLoadStartTimeRef: React.MutableRefObject<number | null>;
@@ -136,7 +130,6 @@ export async function initiateModelLoad(
       ? await service.forceLoad()
       : await service.ensureReady();
     if (!outcome.ok) return outcome;
-    deps.setSupportsVision(loadedModelVision(activeModel));
     if (
       started &&
       deps.modelLoadStartTimeRef.current &&
@@ -245,7 +238,6 @@ export async function handleUnloadModelFn(
   deps.setLoadingModel(activeModel ?? null);
   try {
     await mobileModelCommands.unload('text');
-    deps.setSupportsVision(false);
     if (deps.settings.showGenerationDetails && modelName) {
       addSystemMsg(deps, `Model unloaded: ${modelName}`);
     }
@@ -290,64 +282,4 @@ export function useChatImageModelEffects(deps: ImageModelEffectsDeps): void {
       clearTimeout(timer);
     };
   }, [setDownloadedImageModels]);
-}
-
-type ModelStateSyncDeps = {
-  activeModelInfo: { isRemote: boolean };
-  activeModelId: string | null;
-  activeModel: DownloadedModel | undefined;
-  activeRemoteModel: {
-    capabilities?: {
-      supportsVision?: boolean;
-      supportsToolCalling?: boolean;
-      supportsThinking?: boolean;
-    };
-  } | null;
-  isModelLoading: boolean;
-  setSupportsVision: (v: boolean) => void;
-  setSupportsToolCalling: (v: boolean) => void;
-  setSupportsThinking: (v: boolean) => void;
-};
-export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
-  const {
-    activeModelInfo,
-    activeModelId,
-    activeModel,
-    activeRemoteModel,
-    isModelLoading,
-    setSupportsVision,
-    setSupportsToolCalling,
-    setSupportsThinking,
-  } = deps;
-  const activeModelMmProjPath =
-    activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
-
-  useEffect(() => {
-    // Shared projects the canonical route capabilities for every runtime.
-    setSupportsVision(
-      mobileTextEngineControl.capabilities(activeModelId).vision,
-    );
-  }, [
-    activeModelId,
-    activeModelInfo.isRemote,
-    activeRemoteModel?.capabilities?.supportsVision,
-    activeModelMmProjPath,
-    isModelLoading,
-    setSupportsVision,
-  ]);
-  useEffect(() => {
-    // Use the same canonical route source for tool and thinking capabilities.
-    const caps = mobileTextEngineControl.capabilities(activeModelId);
-    setSupportsToolCalling(caps.tools);
-    setSupportsThinking(caps.thinking);
-  }, [
-    activeModelId,
-    activeModel?.engine,
-    isModelLoading,
-    activeModelInfo.isRemote,
-    activeRemoteModel?.capabilities?.supportsToolCalling,
-    activeRemoteModel?.capabilities?.supportsThinking,
-    setSupportsThinking,
-    setSupportsToolCalling,
-  ]);
 }

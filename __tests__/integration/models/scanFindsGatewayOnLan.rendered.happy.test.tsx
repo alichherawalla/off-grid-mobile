@@ -41,7 +41,7 @@ describe('scanning a network that has an Off Grid AI Desktop on it', () => {
   let lan: LanProbeHandle;
 
   beforeEach(() => {
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
 
     // Device boundary: this phone's own address, and that it is a real handset so the scan runs.
      

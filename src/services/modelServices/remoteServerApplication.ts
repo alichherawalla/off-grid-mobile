@@ -37,9 +37,6 @@ function writeConfiguration(value: RemoteServerConfiguration): void {
       ...server,
       createdAt: server.createdAt ?? new Date(0).toISOString(),
     })),
-    discoveredModels: Object.fromEntries(
-      Object.entries(state.discoveredModels).filter(([id]) => ids.has(id)),
-    ),
     serverHealth: Object.fromEntries(
       Object.entries(state.serverHealth).filter(([id]) => ids.has(id)),
     ),

@@ -26,7 +26,7 @@ import { useRemoteServerStore } from '../../../src/stores';
 describe('T046 (rendered) — add a remote server → it connects (connected state renders)', () => {
   beforeEach(() => {
     // Fresh store (no servers) so the added one is the only row.
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     // Fake the LAN probe: a reachable OpenAI-compatible server answering /v1/models.
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
       if (String(url).includes('/v1/models')) {

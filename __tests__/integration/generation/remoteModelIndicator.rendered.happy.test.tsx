@@ -31,7 +31,7 @@ const openSelector = () => render(
 
 describe('T053 (rendered) — remote model is marked in the selector (cloud/Remote indicator)', () => {
   beforeEach(() => {
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
       if (String(url).includes('/v1/models')) {
         return { ok: true, status: 200, json: async () => ({ object: 'list', data: [{ id: 'llama-3-8b', object: 'model', owned_by: 'local' }] }) };

@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
+import { serverDiscoveredModels } from '../../stores/remoteServerProjection';
 import { useActiveLocalModelId } from '../../hooks/useActiveMobileModel';
 import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
 import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
@@ -51,21 +52,8 @@ function evidenceBasedRemoteCapabilities(
   return { ...evidence } as RemoteModel['capabilities'];
 }
 
-export function savedTextModels(
-  server: RemoteServer,
-  discovered: RemoteModel[],
-): RemoteModel[] {
-  return remoteServerModelOptions([server], 'text').map(option =>
-    discovered.find(model => model.id === option.id) ?? {
-      id: option.id,
-      name: option.name,
-      serverId: option.serverId,
-      capabilities: evidenceBasedRemoteCapabilities(option.capabilities),
-      details: { serverName: option.serverName },
-      lastUpdated: server.createdAt,
-    },
-  );
-}
+/** A server's text rows are the store's derived read of its catalog. */
+export const savedTextModels = serverDiscoveredModels;
 
 export function savedImageModels(server: RemoteServer): RemoteModel[] {
   return remoteServerModelOptions([server], 'image').map(option => ({
@@ -131,7 +119,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // under a different id still marks its row instead of leaving the sheet looking empty.
   const selectedModelPath =
     resolveSelectedTextModel()?.filePath ?? null;
-  const { servers, discoveredModels, serverHealth } = useRemoteServerStore();
+  const { servers, serverHealth } = useRemoteServerStore();
   const activeTextRoute = useActiveMobileModel('text').model;
   const activeImageRoute = useActiveMobileModel('image').model;
   const activeRemoteTextModelId = remoteModelId(activeTextRoute);
@@ -186,10 +174,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
       .map(server => ({
         serverId: server.id,
         serverName: server.name,
-        models: savedTextModels(server, discoveredModels[server.id] ?? []),
+        models: savedTextModels(server),
       }))
       .filter(group => group.models.length > 0);
-  }, [servers, discoveredModels, serverHealth]);
+  }, [servers, serverHealth]);
 
   const remoteImageModels = useMemo(() => {
     return servers

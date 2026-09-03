@@ -3,6 +3,7 @@ import { mobileVoiceGenerationService as voiceGeneration } from '../composition/
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { serverDiscoveredModels } from '../../stores/remoteServerProjection';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useModelSelectionStore } from '../../stores/modelSelectionStore';
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
@@ -201,9 +202,10 @@ export function mobileTextModelRecord(
       candidate => candidate.id === identity.modelId && candidate.engine === identity.hostId,
     ) ?? resolveSelectedTextModel();
   }
-  return useRemoteServerStore.getState().discoveredModels[identity.hostId]?.find(
-    candidate => candidate.id === identity.modelId,
-  ) ?? null;
+  const server = useRemoteServerStore.getState().servers.find(item => item.id === identity.hostId);
+  return server
+    ? serverDiscoveredModels(server).find(candidate => candidate.id === identity.modelId) ?? null
+    : null;
 }
 
 export { mobileRouteId } from './mobileRoute';

@@ -28,7 +28,7 @@ import { useRemoteServerStore } from '../../../src/stores';
 
 describe('T047 (rendered) — empty LAN scan shows the alert AND adds no phantom server (DEV-B8)', () => {
   beforeEach(() => {
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
   });
 
   it('reports that nothing answered and leaves the list empty when nothing is discovered', async () => {

@@ -17,7 +17,7 @@ const server: RemoteServer = {
 
 describe('model selector evidence and loading policy', () => {
   it('does not fabricate negative capabilities for undiscovered saved routes', () => {
-    expect(savedTextModels(server, [])[0]?.capabilities).toEqual({});
+    expect(savedTextModels(server)[0]?.capabilities).toEqual({});
     expect(savedImageModels(server)[0]?.capabilities).toEqual({});
   });
 
@@ -33,7 +33,7 @@ describe('model selector evidence and loading policy', () => {
       },
     };
 
-    expect(savedTextModels(catalogServer, [])[0]?.capabilities).toEqual({
+    expect(savedTextModels(catalogServer)[0]?.capabilities).toEqual({
       supportsVision: true,
     });
   });

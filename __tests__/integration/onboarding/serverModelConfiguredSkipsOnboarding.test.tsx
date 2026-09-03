@@ -103,7 +103,7 @@ describe('T095 — server + model configured → tap Continue → routes into th
   beforeEach(() => {
     resetStores();
     // Fresh remote-server slate so the added server is the only row.
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     // Onboarding slides already done + NO on-device model downloaded → the initial route is the remaining
     // onboarding step, Auto Setup (per AppNavigator's initial-route logic). This is BOOT state, not a
     // fabrication of the tested outcome — the outcome (skipping to Main) is produced by the gestures below.

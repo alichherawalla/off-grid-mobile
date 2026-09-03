@@ -20,7 +20,6 @@ describe('Mobile text-engine inventory boundary', () => {
       servers: [],
       activeServerId: null,
       activeRemoteTextModelId: null,
-      discoveredModels: {},
       serverHealth: {},
     });
   });
@@ -70,7 +69,6 @@ describe('Mobile text-engine inventory boundary', () => {
         createdAt: '2026-09-01',
         selections: { text: 'remote-text' },
       }],
-      discoveredModels: { desktop: [] },
     });
     // Remote routes come from the workspace's own inventory adapter: one per selected model.
     const models = await mobileWorkspace.refresh().then(() => mobileWorkspace.inventory('text'));

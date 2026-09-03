@@ -28,7 +28,7 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
      
 
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     useAppStore.setState({ downloadedModels: [],  downloadedImageModels: [] });
     arrangeLocalSelection('text', null);
     arrangeLocalSelection('image', null);

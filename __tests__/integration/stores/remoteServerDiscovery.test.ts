@@ -14,6 +14,7 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { discoveredRemoteModels } from '../../../src/stores/remoteServerProjection';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { mobileRemoteServerApplication } from '../../../src/services/modelServices/workspace';
 
@@ -63,7 +64,7 @@ describe('remoteServerDiscovery integration', () => {
     mockFetch = jest.fn();
     (globalThis as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
     // Reset servers and discovered models between tests
-    useRemoteServerStore.setState({ servers: [], discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [] });
   });
 
   // =========================================================================
@@ -485,7 +486,7 @@ describe('remoteServerDiscovery integration', () => {
 
       await remoteServerManager.discoverModels('srv-id');
 
-      const stored = useRemoteServerStore.getState().discoveredModels['srv-id'];
+      const stored = discoveredRemoteModels(useRemoteServerStore.getState().servers)['srv-id'];
       expect(stored).toBeDefined();
       expect(stored).toHaveLength(1);
       expect(stored[0].id).toBe('llava-v1.6');

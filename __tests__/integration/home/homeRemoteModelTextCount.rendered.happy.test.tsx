@@ -51,7 +51,7 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
      
 
     // Fresh remote store (no servers) + ZERO local text models — the exact device precondition (0 local).
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     useAppStore.setState({ downloadedModels: [],  downloadedImageModels: [] });
     arrangeLocalSelection('text', null);
     arrangeLocalSelection('image', null);

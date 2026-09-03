@@ -55,8 +55,6 @@ describe('the Shared model selection authority and Mobile persistence projection
     useRemoteServerStore.setState({
       servers: [],
       activeRemoteImageModelId: null,
-      activeRemoteMediaServerIds: {},
-      discoveredModels: {},
       serverHealth: {},
     });
   });
@@ -162,16 +160,14 @@ describe('the Shared model selection authority and Mobile persistence projection
         id: 'server-1', name: 'Remote', endpoint: 'https://remote.test',
         provider: 'openai-compatible', createdAt: new Date(0).toISOString(),
       }],
-      discoveredModels: {
-        'server-1': [{
-          id: 'remote/gemini', name: 'Gemini', serverId: 'server-1',
-          capabilities: {
-            supportsVision: false, supportsToolCalling: true, supportsThinking: false,
-          },
-          lastUpdated: new Date(0).toISOString(),
-        }],
-      },
     });
+    useRemoteServerStore.getState().setDiscoveredModels('server-1', [{
+      id: 'remote/gemini', name: 'Gemini', serverId: 'server-1',
+      capabilities: {
+        supportsVision: false, supportsToolCalling: true, supportsThinking: false,
+      },
+      lastUpdated: new Date(0).toISOString(),
+    }]);
 
     useModelSelectionStore.getState().setEntry('text', {
       localRouteId: null, remoteRouteId: remoteRoute, rememberedLocalRouteId: localRoute,

@@ -68,7 +68,7 @@ describe('useHomeScreen', () => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
     resetStores();
-    useRemoteServerStore.setState({ servers: [], discoveredModels: {}, serverHealth: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     await refreshMobileModelServices();
   });
 
@@ -266,7 +266,7 @@ describe('useHomeScreen', () => {
       arrangeServer('server-1', [remote]);
       await arrangeRemoteSelection('text', 'server-1', 'remote-1');
       const { result } = renderHome();
-      await waitFor(() => expect(result.current.activeTextModel).toEqual(remote));
+      await waitFor(() => expect(result.current.activeTextModel).toMatchObject(remote));
     });
 
     it('returns null when no active model', () => {
@@ -311,7 +311,7 @@ describe('useHomeScreen', () => {
       arrangeServer('s1', [textModel, vlModel]);
       const { result } = renderHome();
       // All remote models (including VL) go into remoteTextModels — remote image gen not supported
-      expect(result.current.remoteTextModels).toEqual([textModel, vlModel]);
+      expect(result.current.remoteTextModels).toMatchObject([textModel, vlModel]);
       expect(result.current.remoteImageModels).toEqual([]);
     });
 

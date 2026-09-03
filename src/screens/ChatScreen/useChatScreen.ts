@@ -11,8 +11,9 @@ import {
   useAppStore,
   useChatStore,
   useProjectStore,
-  useRemoteServerStore,
 } from '../../stores';
+import { useDiscoveredRemoteModels } from '../../hooks/useDiscoveredRemoteModels';
+import { useActiveTextCapabilities } from '../../hooks/useActiveTextCapabilities';
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
@@ -32,7 +33,6 @@ import {
   forceLoadModelFn,
   ensureTextModelForChatFn,
   useChatImageModelEffects,
-  useChatModelStateSync,
 } from './useChatModelActions';
 import type { GenerationDeps } from './useChatGenerationActions';
 import { getDisplayMessages } from './types';
@@ -85,7 +85,6 @@ export const useChatScreen = () => {
     },
     [setLoadingModelName],
   );
-  const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -95,8 +94,12 @@ export const useChatScreen = () => {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isClassifying, setIsClassifying] = useState(false);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
-  const [supportsToolCalling, setSupportsToolCalling] = useState(false);
-  const [supportsThinking, setSupportsThinking] = useState(false);
+  // Capabilities are read from the shared route projection, never copied into state.
+  const {
+    vision: supportsVision,
+    tools: supportsToolCalling,
+    thinking: supportsThinking,
+  } = useActiveTextCapabilities();
   const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(
     route.params?.projectId,
   );
@@ -128,7 +131,7 @@ export const useChatScreen = () => {
   } = useAppStore();
   const textModelEvicted = useModelResidencyStore(s => s.textModelEvicted);
 
-  const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
+  const discoveredModels = useDiscoveredRemoteModels();
 
   const {
     activeConversationId,
@@ -252,7 +255,6 @@ export const useChatScreen = () => {
     addMessage,
     setIsModelLoading,
     setLoadingModel,
-    setSupportsVision,
     setShowModelSelector,
     setAlertState,
     modelLoadStartTimeRef,
@@ -268,16 +270,6 @@ export const useChatScreen = () => {
 
   useChatImageModelEffects({
     setDownloadedImageModels,
-  });
-  useChatModelStateSync({
-    activeModelInfo,
-    activeModelId: activeModelInfo.modelId,
-    activeModel,
-    activeRemoteModel,
-    isModelLoading,
-    setSupportsVision,
-    setSupportsToolCalling,
-    setSupportsThinking,
   });
 
   const isGeneratingForThisConversation =

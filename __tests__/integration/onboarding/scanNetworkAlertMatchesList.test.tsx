@@ -102,7 +102,7 @@ describe('Scan Network — alert matches the rendered list (device state-mismatc
 
   beforeEach(() => {
     resetStores();
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.isEmulator = jest.fn(async () => false);
     DeviceInfo.getIpAddress = jest.fn(async () => '192.168.1.42'); // private IPv4 → real scan runs

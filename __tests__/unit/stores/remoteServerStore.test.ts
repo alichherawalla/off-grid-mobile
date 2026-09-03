@@ -1,15 +1,14 @@
 import { migrateRemoteServerState, useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { discoveredRemoteModels } from '../../../src/stores/remoteServerProjection';
 
 describe('remoteServerStore persistence adapter', () => {
   beforeEach(() => {
     useRemoteServerStore.setState({
       servers: [],
       activeServerId: null,
-      discoveredModels: {},
       serverHealth: {},
       activeRemoteTextModelId: null,
       activeRemoteImageModelId: null,
-      activeRemoteMediaServerIds: {},
       isLoading: false,
       testingServerId: null,
       discoveringServerId: null,
@@ -40,7 +39,11 @@ describe('remoteServerStore persistence adapter', () => {
       id: 'gemma', name: 'Gemma', serverId: 'server-1', lastUpdated: 'now',
       capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: false },
     }]);
-    expect(useRemoteServerStore.getState().discoveredModels['server-1']?.[0].id).toBe('gemma');
+    const { servers } = useRemoteServerStore.getState();
+    expect(servers[0].catalog?.text?.[0].id).toBe('gemma');
+    expect(discoveredRemoteModels(servers)['server-1']?.[0]).toMatchObject({
+      id: 'gemma', serverId: 'server-1', capabilities: { supportsVision: true, supportsToolCalling: true },
+    });
     expect(useRemoteServerStore.getState().servers[0].selections).toBeUndefined();
   });
 

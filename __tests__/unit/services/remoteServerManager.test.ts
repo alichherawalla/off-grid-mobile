@@ -25,9 +25,8 @@ describe('Mobile remote-server application composition', () => {
 
   beforeEach(() => {
     useRemoteServerStore.setState({
-      servers: [], activeServerId: null, discoveredModels: {}, serverHealth: {},
+      servers: [], activeServerId: null, serverHealth: {},
       activeRemoteTextModelId: null, activeRemoteImageModelId: null,
-      activeRemoteMediaServerIds: {},
     });
   });
 
