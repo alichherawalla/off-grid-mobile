@@ -11,6 +11,7 @@ import { pdfExtractor } from './pdfExtractor';
 import { useAppStore } from '../stores/appStore';
 import { APP_CONFIG } from '../constants';
 import { generateId } from '../utils/generateId';
+import logger from '../utils/logger';
 import {
   admitDocument,
   documentAttachmentCharBudget,
@@ -22,6 +23,10 @@ import {
   truncateDocumentText,
   type DocumentCapabilities,
 } from '@offgrid/rag';
+
+type PersistentCopyResult =
+  | { id: string; uri: string; storage: 'persistent' }
+  | { id: string; uri: string; storage: 'readable-source-fallback' };
 
 // The attachment rules (which files, how large, how much of one the model sees, the truncation
 // marker, the context block, the preview) are @offgrid/rag's `document-attachment`; this service
@@ -159,21 +164,50 @@ class DocumentService {
     resolvedPath: string,
     originalPath: string,
     name: string,
-  ): Promise<{ id: string; uri: string }> {
+  ): Promise<PersistentCopyResult> {
     await this.ensureAttachmentsDir();
     const id = generateId();
     const persistentPath = `${ATTACHMENTS_DIR}/${id}_${name}`;
-    let ok = false;
     try {
       await RNFS.copyFile(resolvedPath, persistentPath);
-      ok = await RNFS.exists(persistentPath);
-    } catch {
-      /* fall back to original path */
+      if (!(await RNFS.exists(persistentPath))) {
+        throw new Error('The persistent copy could not be verified.');
+      }
+    } catch (error: unknown) {
+      if (!(await RNFS.exists(resolvedPath))) {
+        const detail = error instanceof Error ? ` ${error.message}` : '';
+        throw new Error(
+          `Failed to save "${name}" and the source file is unavailable.${detail}`,
+        );
+      }
+      logger.warn(
+        `[DocumentService] Persistent copy failed for "${name}"; using the readable source path.`,
+        error,
+      );
+      return { id, uri: resolvedPath, storage: 'readable-source-fallback' };
     }
-    if (resolvedPath !== originalPath && ok) {
-      RNFS.unlink(resolvedPath).catch(() => {});
+
+    if (resolvedPath !== originalPath) {
+      try {
+        await RNFS.unlink(resolvedPath);
+      } catch (error: unknown) {
+        try {
+          if (await RNFS.exists(resolvedPath)) {
+            logger.error(
+              `[DocumentService] Failed to remove temporary source for "${name}".`,
+              error,
+            );
+          }
+        } catch (inspectionError: unknown) {
+          logger.error(
+            `[DocumentService] Failed to remove or inspect temporary source for "${name}".`,
+            error,
+            inspectionError,
+          );
+        }
+      }
     }
-    return { id, uri: ok ? persistentPath : resolvedPath };
+    return { id, uri: persistentPath, storage: 'persistent' };
   }
 
   /**
