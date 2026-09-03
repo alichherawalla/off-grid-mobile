@@ -37,6 +37,7 @@ import {
   mobileRouteId,
   refreshMobileModelServices,
 } from '../../src/services/modelServices';
+import { selectRemoteMobileModel } from '../../src/services/modelServices';
 import { mobileModelSelectionService } from '../../src/services/modelServices/modelSelectionApplication';
 import { remoteServerManager } from '../../src/services/remoteServerManager';
 
@@ -189,16 +190,17 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     });
     await act(refreshMobileModelServices);
     expect(getAppState().downloadedModels.length).toBe(0);
-    expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(true);
+    // Inventory lists a remote server's SELECTED models only, so a server with nothing selected is
+    // not yet "a model" for this checklist.
+    expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(false);
 
-    // An active remote text model counts as "has active model" with no local activeModelId.
+    // Selecting a remote text model makes it the active model with no local download; it satisfies
+    // both "Download a model" (a usable model exists) and "Load a model".
+    // The user's pick: the server activates the model first, then the phone records the route.
     await act(async () => {
-      await mobileModelSelectionService.write('text', mobileRouteId({
-        source: 'remote', hostId: serverId, modality: 'text', modelId: 'remote/qwen',
-      }));
-      await refreshMobileModelServices();
+      await selectRemoteMobileModel(serverId, 'text', 'remote/qwen');
     });
-    expect(getAppState().activeModelId).toBeNull();
+    expect(stepById(result.current.steps, 'downloadedModel').completed).toBe(true);
     expect(stepById(result.current.steps, 'loadedModel').completed).toBe(true);
   });
 
