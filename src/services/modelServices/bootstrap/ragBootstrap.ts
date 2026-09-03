@@ -1,16 +1,14 @@
 import { DEFAULT_RAG_RETRIEVAL_LIMIT, estimateCharBudget, type IndexStage } from '@offgrid/rag';
 import type { RagDocument, SearchResult } from '@offgrid/rag';
-import { sharedRag as composedRag } from '../../composition/rag';
-import { startMobileApplication } from '../../composition/application';
+import { applicationFacade } from '../../applicationFacade';
 import { writePastedNote } from '../../adapters/rag/pastedNoteFileAdapter';
 import type {
   RagDocument as StoredDocument,
   RagSearchResult,
 } from '../../adapters/rag/ragDatabaseAdapter';
-import {
-  emitKnowledgeDocumentMutation,
-  type KnowledgeDocumentSnapshot,
-} from '../../sync/knowledgeDocument';
+import type { KnowledgeDocumentSnapshot } from '../../sync/knowledgeDocument';
+
+const composedRag = () => applicationFacade().rag;
 
 interface IndexProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
@@ -51,22 +49,10 @@ function stored(document: RagDocument | undefined): StoredDocument | undefined {
   };
 }
 
-function snapshot(document: RagDocument): KnowledgeDocumentSnapshot {
-  return {
-    syncId: document.syncId,
-    projectId: document.projectId,
-    name: document.name,
-    filePath: document.path,
-    fileSize: document.size,
-    createdAt: document.createdAt,
-    enabled: document.enabled,
-  };
-}
-
-
+/** @deprecated Pro compatibility adapter. Core uses the registered RAG facade directly. */
 class MobileRagService {
   ensureReady = async (): Promise<void> => {
-    await startMobileApplication();
+    await applicationFacade().start();
   };
 
   async indexDocument(params: IndexDocumentParams): Promise<number> {
@@ -78,11 +64,8 @@ class MobileRagService {
       syncId: params.syncId,
       createdAt: params.createdAt,
       enabled: params.enabled,
+      origin: params.origin,
     }, stage => params.onProgress?.({ stage, message: progressMessage[stage] }));
-    const document = await composedRag().document(result.docId);
-    if (document && params.origin !== 'sync') {
-      emitKnowledgeDocumentMutation({ kind: 'indexed', document: snapshot(document) });
-    }
     return result.docId;
   }
 
@@ -114,15 +97,11 @@ class MobileRagService {
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
     await this.ensureReady();
     await composedRag().setDocumentEnabled(docId, enabled);
-    const document = await composedRag().document(docId);
-    if (document) emitKnowledgeDocumentMutation({ kind: 'enabled', syncId: document.syncId, enabled });
   }
 
   async deleteDocument(docId: number): Promise<void> {
     await this.ensureReady();
-    const document = await composedRag().document(docId);
     await composedRag().removeDocument(docId);
-    if (document) emitKnowledgeDocumentMutation({ kind: 'deleted', syncId: document.syncId });
   }
 
   async searchProject(projectId: string, query: string, contextLength?: number) {
@@ -132,10 +111,7 @@ class MobileRagService {
 
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
-    const documents = await composedRag().removeProjectDocuments(projectId);
-    for (const document of documents) {
-      emitKnowledgeDocumentMutation({ kind: 'deleted', syncId: document.syncId });
-    }
+    await composedRag().removeProjectDocuments(projectId);
   }
 
   async getAllDocumentsForSync(): Promise<KnowledgeDocumentSnapshot[]> {

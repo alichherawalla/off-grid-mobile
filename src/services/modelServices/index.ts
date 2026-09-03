@@ -18,7 +18,6 @@ import {
   type MobileRouteFacts,
 } from './mobileRoute';
 import {
-  activeMobileRoute,
   mobileLLMService,
   refreshMobileLLMServiceInventory,
   selectMobileRoute,
@@ -34,8 +33,8 @@ import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 import { mobileModelSelectionService } from './modelSelectionApplication';
 import { reportModelFailure } from '../modelFailureHandler';
-import { remoteServerManager } from '../remoteServerManager';
 import logger from '../../utils/logger';
+import { applicationFacade } from '../applicationFacade';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({
@@ -152,26 +151,19 @@ export function stopMobileModelServices(): void {
   mobileModelDownloadCoordinator.shutdown().catch(() => undefined);
 }
 
-export function activeMobileModel(modality: ActiveModelSnapshot['modality']): ActiveModelSnapshot {
-  return activeMobileRoute(modality);
-}
-
-/** The user picked a model. For a remote route, ask that server to activate it FIRST (the one
- * place the phone may change a paired Mac's selection), then record the phone's own selection. */
+/** The user picked a model. The application facade owns remote activation and route selection. */
 export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> {
-  if (facts.source === 'remote') {
-    if (facts.modality === 'text') {
-      await remoteServerManager.prepareRemoteTextModel(facts.hostId, facts.modelId);
-    } else if (
-      facts.modality === 'image' || facts.modality === 'transcription' ||
-      facts.modality === 'voice' || facts.modality === 'embedding'
-    ) {
-      await remoteServerManager.prepareRemoteMediaModel(facts.hostId, facts.modality, facts.modelId);
-    } else {
-      throw new Error(`Remote ${facts.modality} selection is not supported`);
-    }
+  const selected = await applicationFacade().models.select({
+    modality: facts.modality,
+    modelId: mobileRouteId(facts),
+  });
+  if (!selected.ok) {
+    throw new Error(
+      selected.failure.kind === 'runtime'
+        ? selected.failure.message
+        : selected.failure.kind,
+    );
   }
-  await selectMobileRoute(facts.modality, mobileRouteId(facts));
   await refreshMobileModelServices();
 }
 
@@ -187,7 +179,17 @@ export function selectRemoteMobileModel(
 export async function clearMobileModel(
   modality: ActiveModelSnapshot['modality'],
 ): Promise<void> {
-  await selectMobileRoute(modality, null);
+  const selected = await applicationFacade().models.select({
+    modality,
+    modelId: null,
+  });
+  if (!selected.ok) {
+    throw new Error(
+      selected.failure.kind === 'runtime'
+        ? selected.failure.message
+        : selected.failure.kind,
+    );
+  }
   await refreshMobileModelServices();
 }
 
@@ -210,5 +212,5 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId } from './mobileRoute';
-export { mobileLLMService, mobileModelsFacade } from './mobileLLMService';
+export { mobileLLMService } from './mobileLLMService';
 export type { MobileRouteFacts } from './mobileRoute';

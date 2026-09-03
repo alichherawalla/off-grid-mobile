@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { TextEngineCapabilities } from '@offgrid/models';
-import { useActiveMobileRoute } from '../services/modelServices/activeRoute';
+import { useActiveMobileModel } from './useActiveMobileModel';
 import { mobileTextEngineControl } from '../services/modelServices/textEngineControl';
 
 /**
@@ -8,7 +8,7 @@ import { mobileTextEngineControl } from '../services/modelServices/textEngineCon
  * when the route or inventory changes; nothing is copied into component state.
  */
 export function useActiveTextCapabilities(): TextEngineCapabilities {
-  const snapshot = useActiveMobileRoute('text');
+  const snapshot = useActiveMobileModel('text');
   return useMemo(
     () => mobileTextEngineControl.capabilities(snapshot.model?.id ?? null),
     [snapshot],

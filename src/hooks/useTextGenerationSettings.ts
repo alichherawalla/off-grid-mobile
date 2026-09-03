@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '../stores/appStore';
 import { useAppStore } from '../stores';
-import { useActiveMobileRoute } from '../services/modelServices/activeRoute';
+import { useActiveMobileModel } from './useActiveMobileModel';
 import {
   MIN_TEXT_CONTEXT_TOKENS,
   MIN_TEXT_OUTPUT_TOKENS,
@@ -38,7 +38,7 @@ const formatMaxTokens = (value: number): string =>
  */
 export function useTextGenerationSettings() {
   // The engine is a fact of the selected route's model, read from the one active route.
-  const activeTextId = useActiveMobileRoute('text').model?.id ?? null;
+  const activeTextId = useActiveMobileModel('text').model?.id ?? null;
   const isLiteRT = useAppStore(
     state => state.downloadedModels.find(m => m.id === activeTextId)?.engine === 'litert',
   );

@@ -10,6 +10,7 @@ import {
 } from '../services/proLicenseService';
 import { proEntitlementLifecycle } from '../services/proEntitlementLifecycle';
 import { selectHasProAccess } from '../stores/proAccessSlice';
+import { registerMobileApplicationPorts } from '../services/composition/application';
 
 export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
@@ -22,6 +23,9 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   logger.log('[BOOT-PRO] require returned');
   if (!pro) {
     return false; // proStub.js returns null — free build via metro extraNodeModules
+  }
+  if (typeof pro.createMobileApplicationPorts === 'function') {
+    registerMobileApplicationPorts(pro.createMobileApplicationPorts);
   }
   if (typeof pro.configureProEntitlementProvider === 'function') {
     pro.configureProEntitlementProvider(registerProEntitlementProvider);

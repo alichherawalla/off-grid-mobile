@@ -1,4 +1,4 @@
-import { useActiveMobileRoute } from '../../services/modelServices/activeRoute';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useCallback, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore } from '../../stores';
@@ -72,7 +72,7 @@ function createWhisperReadiness(
 }
 
 function useRemoteTranscriptionAvailable(): boolean {
-  return useActiveMobileRoute('transcription').model?.source === 'remote';
+  return useActiveMobileModel('transcription').model?.source === 'remote';
 }
 
 function settleVoiceIntent(intent: Promise<unknown>, label: string): void {

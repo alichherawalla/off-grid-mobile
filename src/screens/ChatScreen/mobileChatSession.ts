@@ -27,9 +27,9 @@ import { mobileImageChatGeneration } from '../../services/modelServices/imageCha
 import { contextCompactionService } from '../../services/contextCompaction';
 import { intentClassifier } from '../../services/intentClassifier';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
-import { ragService, retrievalService } from '../../services';
+import { applicationFacade } from '../../services/applicationFacade';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
-import { activeMobileRoute, mobileModelsFacade } from '../../services/modelServices/mobileLLMService';
+import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { refreshMobileModelServices } from '../../services/modelServices';
 import { generateMobileChat } from '../../services/modelServices/chatGenerationApplication';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
@@ -170,15 +170,13 @@ export function mobileChatContextPorts(): ConstructorParameters<typeof ChatConte
   augmentSystemPrompt: prompt =>
     callHook<string>(HOOKS.audioAugmentPrompt, prompt) ?? prompt,
   async enabledDocumentNames(projectId) {
-    return (await ragService.getDocumentsByProject(projectId))
+    return (await applicationFacade().rag.listDocuments(projectId))
       .filter(document => document.enabled)
       .map(document => document.name);
   },
   async retrieve(projectId, query) {
-    const result = await ragService.searchProject(projectId, query);
-    return result.chunks.length
-      ? retrievalService.formatForPrompt(result)
-      : undefined;
+    const context = await applicationFacade().rag.buildContext(projectId, query);
+    return context || undefined;
   },
   audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
   onRetrievalError: error =>
@@ -241,7 +239,7 @@ async function generateForSession(
       throw new Error(mobileImageChatGeneration.lastError() ?? 'Image generation returned no image');
     }
     const model =
-      (request.routeId ? mobileModelsFacade().lookup(request.routeId) : null) ??
+      (request.routeId ? applicationFacade().models.lookup(request.routeId) : null) ??
       activeMobileRoute('image').model;
     if (!model) throw new Error('The selected image model is unavailable');
     const routeId = model.routeId ?? runtimeModelRouteId(model);

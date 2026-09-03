@@ -1,4 +1,4 @@
-import { useActiveMobileRoute } from '../services/modelServices/activeRoute';
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
 /**
  * Remote Servers
  *
@@ -116,10 +116,10 @@ function useScanNetwork({
       // Each server joins the list the moment it answers; the scan keeps going behind it.
       let addedSoFar = 0;
       let percent = 0;
-      const note = () =>
-        setScanNote(
-          `${addedSoFar ? `Found ${addedSoFar} so far. ` : ''}Looking for ${scanKindLabels.join(', ')}… ${percent}%`,
-        );
+      const note = () => {
+        const found = addedSoFar ? `Found ${addedSoFar} so far. ` : '';
+        setScanNote(`${found}Looking for ${scanKindLabels.join(', ')}… ${percent}%`);
+      };
       note();
       const { found: newServers } = await remoteServerManager.scanAndReconcile(
         async found => {
@@ -164,7 +164,7 @@ export const RemoteServersScreen: React.FC = () => {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
   const { servers, serverHealth } = useRemoteServerStore();
-  const activeServerId = useActiveMobileRoute('text').model?.serverId ?? null;
+  const activeServerId = useActiveMobileModel('text').model?.serverId ?? null;
   const autoDiscover = useAppStore(
     s => s.settings.autoDiscoverRemoteModels === true,
   );

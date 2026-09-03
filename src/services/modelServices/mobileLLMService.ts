@@ -1,6 +1,6 @@
-import type { ModelsFacade } from '@offgrid/application';
 import type { ActiveModelSnapshot, ModelModality, RuntimeModel, WorkspaceRoutingPort } from '@offgrid/models';
 import { lazyInstance } from '../composition/lazy';
+import { applicationFacade } from '../applicationFacade';
 
 /** The single Mobile owner of model inventory, selection, and canonical route identity. */
 // Resolved on first use: the workspace module may still be initializing when this module loads.
@@ -9,16 +9,10 @@ export const mobileLLMService: WorkspaceRoutingPort = lazyInstance(
 );
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
 
-/** The public model door. The raw workspace below remains only for adapter registration. */
-export function mobileModelsFacade(): ModelsFacade {
-  return (require('../composition/application') as typeof import('../composition/application'))
-    .mobileApplication.models;
-}
-
 /** Serialize canonical inventory rebuilds so an older platform snapshot cannot win a race. */
 export function refreshMobileLLMServiceInventory() {
   refreshChain = refreshChain.catch(() => []).then(async () => {
-    const models = mobileModelsFacade();
+    const models = applicationFacade().models;
     await models.refresh();
     return [...models.snapshot().inventory];
   });
@@ -33,13 +27,16 @@ export async function selectMobileRoute(
   await refreshMobileLLMServiceInventory();
   // The facade owns selection: it resolves the route and adopts a discovered remote model on its
   // server before committing, so callers never reach the inventory service directly.
-  const selected = await mobileModelsFacade().select({ modality, modelId: canonicalId });
+  const selected = await applicationFacade().models.select({
+    modality,
+    modelId: canonicalId,
+  });
   if (!selected.ok) throw new Error(selected.failure.kind === 'runtime' ? selected.failure.message : selected.failure.kind);
   await refreshMobileLLMServiceInventory();
 }
 
 export function activeMobileRoute(modality: ModelModality): ActiveModelSnapshot {
-  const active = mobileModelsFacade().snapshot().active[modality];
+  const active = applicationFacade().models.snapshot().active[modality];
   if (!active) throw new Error(`The ${modality} model route is not initialized.`);
   return active;
 }

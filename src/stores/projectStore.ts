@@ -4,7 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project } from '../types';
 import { generateId } from '../utils/generateId';
-import { ragService } from '../services/modelServices/bootstrap/ragBootstrap';
+import { applicationFacade } from '../services/applicationFacade';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
 import {
@@ -131,8 +131,8 @@ export const useProjectStore = create<ProjectState>()(
 
       deleteProject: id => {
         const projectExists = get().projects.some(project => project.id === id);
-        ragService
-          .deleteProjectDocuments(id)
+        applicationFacade().rag
+          .removeProjectDocuments(id)
           .catch(err =>
             logger.error(
               `Failed to delete RAG documents for project ${id}`,

@@ -12,7 +12,6 @@ import {
   hardwareService,
   modelLibrary,
   authService,
-  ragService,
   remoteServerManager,
 } from './src/services';
 import logger from './src/utils/logger';
@@ -30,7 +29,10 @@ import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { createLoadPolicySync } from './src/services/loadPolicySync';
-import { stopMobileApplication } from './src/services/composition/application';
+import {
+  startMobileApplication,
+  stopMobileApplication,
+} from './src/services/composition/application';
 import {
   refreshMobileModelServices,
   startMobileModelServices,
@@ -343,6 +345,18 @@ function App() {
         // so getServers() / activeServerId reads see persisted data.
         logger.log('[BOOT] remote server hydrate');
         await ensureRemoteServerStoreHydrated();
+
+        try {
+          // Pro supplies optional domain ports before core creates the single application root.
+          logger.log('[BOOT] load pro features');
+          await loadProFeatures();
+        } catch (proError) {
+          logger.error(
+            '[App] Pro feature load failed, continuing without Pro:',
+            proError,
+          );
+        }
+
         startMobileModelServices();
         await refreshMobileModelServices();
 
@@ -374,24 +388,13 @@ function App() {
           setLocked(true);
         }
 
-        // Initialize RAG database tables
-        ragService
-          .ensureReady()
-          .catch(err =>
-            logger.error('Failed to initialize RAG service on startup', err),
-          );
-
+        // Start the single application root, including RAG and any registered Pro domains.
         try {
-          // Register the private Pro entitlement provider before the first status
-          // read, then activate only the capabilities that entitlement permits.
-          // loadProFeatures separately projects cached credential access from a
-          // Debug developer unlock; Sync reconciliation owns device admission.
-          logger.log('[BOOT] load pro features');
-          await loadProFeatures();
-        } catch (proError) {
+          await startMobileApplication();
+        } catch (applicationError) {
           logger.error(
-            '[App] Pro feature load failed, continuing without Pro:',
-            proError,
+            'Failed to initialize the application on startup',
+            applicationError,
           );
         }
 
