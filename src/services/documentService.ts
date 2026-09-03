@@ -115,17 +115,25 @@ class DocumentService {
         await RNFS.copyFile(uri, tempPath);
         console.log(`[DocumentService] Copied iOS file:// URI to: ${tempPath}`);
         return tempPath;
-      } catch (_copyError) {
+      } catch (directCopyError: unknown) {
         // If direct copy fails, try stripping the file:// prefix
         const pathWithoutScheme = decodedUri.replace(/^file:\/\//, '');
         try {
           await RNFS.copyFile(pathWithoutScheme, tempPath);
           console.log(`[DocumentService] Copied (fallback) to: ${tempPath}`);
           return tempPath;
-        } catch {
+        } catch (strippedPathError: unknown) {
           console.error(`[DocumentService] Both copy attempts failed`);
+          const directMessage =
+            directCopyError instanceof Error
+              ? directCopyError.message
+              : String(directCopyError);
+          const strippedMessage =
+            strippedPathError instanceof Error
+              ? strippedPathError.message
+              : String(strippedPathError);
           throw new Error(
-            `Could not access file. Please try selecting the file again.`,
+            `Could not access file. Please try selecting the file again. Direct copy failed: ${directMessage}. Stripped-path copy failed: ${strippedMessage}.`,
           );
         }
       }
