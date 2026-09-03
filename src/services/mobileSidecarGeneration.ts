@@ -1,6 +1,7 @@
+import type { GenerationProfileKind } from '@offgrid/models';
 import type { GenerationMessage } from '@offgrid/models';
 type SidecarExecutionPort = {
-  text(messages: GenerationMessage[], options: { maxTokens?: number; onText?: (text: string) => void }): Promise<string>;
+  text(messages: GenerationMessage[], options: { profile?: GenerationProfileKind; maxTokens?: number; onText?: (text: string) => void }): Promise<string>;
   embedding(inputs: string[]): Promise<number[][]>;
   classification(input: string, routeId?: string): Promise<'image' | 'text'>;
 };
@@ -20,7 +21,7 @@ function executionPort(): SidecarExecutionPort {
 
 export async function executeMobileText(
   messages: GenerationMessage[],
-  options: { maxTokens?: number; onText?: (text: string) => void } = {},
+  options: { profile?: GenerationProfileKind; maxTokens?: number; onText?: (text: string) => void } = {},
 ): Promise<string> {
   return executionPort().text(messages, options);
 }

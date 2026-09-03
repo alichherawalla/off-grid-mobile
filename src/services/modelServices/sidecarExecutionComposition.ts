@@ -23,6 +23,7 @@ export function composeMobileSidecarExecution(
     async text(messages: GenerationMessage[], options) {
       await refresh();
       const result = await service.generate({
+        profile: options.profile,
         operation: { type: 'text' }, messages,
         reasoning: { enabled: false }, maxTokens: options.maxTokens,
         allowFallback: false,

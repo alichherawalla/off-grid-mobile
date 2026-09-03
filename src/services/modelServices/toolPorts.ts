@@ -113,7 +113,7 @@ async function generateToolRoutingText(system: string, user: string): Promise<st
     return await executeMobileText([
       { role: 'system', content: system },
       { role: 'user', content: user },
-    ], { maxTokens: 64 });
+    ], { profile: 'tool-routing' });
   } finally {
     await clearMobileEphemeralTextState();
   }
