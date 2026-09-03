@@ -32,11 +32,9 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { Button } from '../components/Button';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
-import { remoteServerManager } from '../services/remoteServerManager';
-import {
-  clearMobileModel,
-  selectRemoteMobileModel,
-} from '../services/modelServices';
+import { applicationFacade } from '../services/applicationFacade';
+import { useModelsProjection } from '../hooks/useApplicationProjection';
+import { modelsFailureMessage } from '@offgrid/application';
 import {
   CustomAlert,
   AlertState,
@@ -121,28 +119,37 @@ function useScanNetwork({
         setScanNote(`${found}Looking for ${scanKindLabels.join(', ')}… ${percent}%`);
       };
       note();
-      const { found: newServers } = await remoteServerManager.scanAndReconcile(
-        async found => {
-          const server = await remoteServerManager.addServer({
+      const pendingSaves: Array<Promise<void>> = [];
+      let saveFailure: unknown;
+      const reconciled = await applicationFacade().models.reconcileRemoteServers({
+        onFound: found => {
+          const saving = applicationFacade().models.saveRemoteServer({
             name: found.name,
             endpoint: found.endpoint,
             provider: 'openai-compatible',
-          });
-          remoteServerManager.testConnection(server.id).catch(() => {});
-          addedSoFar += 1;
-          note();
+          }).then(async saved => {
+            if (!saved.ok) throw new Error(modelsFailureMessage(saved.failure));
+            const checked = await applicationFacade().models.checkRemoteServer(saved.value.id);
+            if (!checked.success)
+              throw new Error(checked.error ?? 'The server did not answer.');
+            addedSoFar += 1;
+            note();
+          }).catch(error => { saveFailure ??= error; });
+          pendingSaves.push(saving);
         },
-        (done, total) => {
+        onProgress: (done, total) => {
           const next = total ? Math.floor((done / total) * 100) : 0;
           if (next !== percent) {
             percent = next;
             note();
           }
         },
-      );
+      });
+      if (!reconciled.ok) throw new Error(modelsFailureMessage(reconciled.failure));
+      await Promise.all(pendingSaves);
+      if (saveFailure) throw saveFailure;
+      const newServers = reconciled.value.found;
       if (newServers.length === 0) {
-        // Say what was actually tried. "No servers found" leaves the user with nothing to act
-        // on; the ports do, because that is what has to be listening on the other machine.
         setScanNote(scanEmptyNote(servers.length));
         return;
       }
@@ -163,7 +170,8 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth } = useRemoteServerStore();
+  const servers = useModelsProjection().servers;
+  const serverHealth = useRemoteServerStore(state => state.serverHealth);
   const activeServerId = useActiveMobileModel('text').model?.serverId ?? null;
   const autoDiscover = useAppStore(
     s => s.settings.autoDiscoverRemoteModels === true,
@@ -183,7 +191,7 @@ export const RemoteServersScreen: React.FC = () => {
   // Auto-check all server statuses when screen opens
   useEffect(() => {
     servers.forEach(server => {
-      remoteServerManager.testConnection(server.id).catch(() => { });
+      applicationFacade().models.checkRemoteServer(server.id).catch(() => { });
     });
 
   // Status refresh belongs to this screen-open event, not every health projection update.
@@ -193,7 +201,7 @@ export const RemoteServersScreen: React.FC = () => {
   const handleTestServer = useCallback(async (serverId: string) => {
     setTestingId(serverId);
     try {
-      const result = await remoteServerManager.testConnection(serverId);
+      const result = await applicationFacade().models.checkRemoteServer(serverId);
       // The row's own status line already says Connected or Offline, so a success needs no
       // dialog to dismiss. Only a failure earns one, because it carries the reason.
       if (!result.success) {
@@ -220,7 +228,13 @@ export const RemoteServersScreen: React.FC = () => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await remoteServerManager.removeServer(server.id);
+            try {
+              await applicationFacade().models.removeRemoteServer(server.id);
+            } catch (error: unknown) {
+              const message = error instanceof Error
+                ? error.message : 'The server could not be removed.';
+              setAlertState(showAlert('Could not remove this server', message));
+            }
           },
         },
           ],
@@ -233,13 +247,26 @@ export const RemoteServersScreen: React.FC = () => {
   const handleUseServer = useCallback(
     async (server: (typeof servers)[0]) => {
       if (activeServerId === server.id) {
-        await clearMobileModel('text');
+        const cleared = await applicationFacade().models.select({
+          modality: 'text',
+          modelId: null,
+        });
+        if (!cleared.ok)
+          setAlertState(showAlert('Could not stop using this model',
+            modelsFailureMessage(cleared.failure)));
         return;
       }
       const textModelId = server.selections?.text;
       if (textModelId) {
         try {
-          await selectRemoteMobileModel(server.id, 'text', textModelId);
+          const routeId = applicationFacade().models.remoteModelRoute(
+            server.id, textModelId, 'text');
+          if (!routeId) throw new Error('The selected server model is unavailable.');
+          const selected = await applicationFacade().models.select({
+            modality: 'text',
+            modelId: routeId,
+          });
+          if (!selected.ok) throw new Error(modelsFailureMessage(selected.failure));
           return;
         } catch (error) {
           setAlertState(showAlert('Could not use this model', error instanceof Error
