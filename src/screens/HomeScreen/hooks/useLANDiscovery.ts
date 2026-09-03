@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { showAlert, hideAlert } from '../../../components';
+import { showAlert, hideAlert, type AlertState } from '../../../components';
 import { remoteServerManager } from '../../../services';
 import type { DiscoveredRemoteServer } from '@offgrid/models';
 import { useAppStore } from '../../../stores/appStore';
@@ -9,13 +9,14 @@ import logger from '../../../utils/logger';
 
 interface LANDiscoveryParams {
   navigation: HomeScreenNavigationProp;
-  setAlertState: (state: any) => void;
+  setAlertState: (state: AlertState) => void;
 }
 
 export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParams) {
   const addNewServersAndNotify = useCallback(async (
     newServersToAdd: DiscoveredRemoteServer[]
   ) => {
+    const connectionFailures: string[] = [];
     for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
       const added = await remoteServerManager.addServer({
@@ -23,10 +24,34 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
         endpoint: server.endpoint,
         provider: 'openai-compatible',
       });
-      remoteServerManager.testConnection(added.id).catch(() => { });
+      try {
+        const result = await remoteServerManager.testConnection(added.id);
+        if (!result.success) {
+          connectionFailures.push(
+            `${server.name}: ${result.error ?? 'Connection check failed'}`,
+          );
+        }
+      } catch (error: unknown) {
+        logger.error(
+          `[HomeScreen] Connection check failed for ${server.name}`,
+          error,
+        );
+        connectionFailures.push(
+          `${server.name}: ${
+            error instanceof Error ? error.message : 'Connection check failed'
+          }`,
+        );
+      }
     }
 
     if (newServersToAdd.length === 0) return;
+    if (connectionFailures.length > 0) {
+      setAlertState(showAlert(
+        'Server Check Failed',
+        connectionFailures.join('\n'),
+      ));
+      return;
+    }
 
     const names = newServersToAdd.map(s => s.name).join(', ');
     const title = newServersToAdd.length === 1
