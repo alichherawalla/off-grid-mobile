@@ -1,4 +1,4 @@
-import type { ResidencyLoadPolicy } from '@offgrid/models';
+import type { MemoryOverrideOffer, ResidencyLoadPolicy } from '@offgrid/models';
 import {
   ejectAllModels,
   loadImageModel,
@@ -11,6 +11,7 @@ import {
   unloadTextModel,
   unloadTranscriptionModel,
 } from './modelLifecycleBootstrap';
+import { memoryOverride } from '../composition/model-library';
 import { modelResidencyManager } from './residencyBootstrap';
 
 /** Canonical application intents. Only this model-service boundary invokes native lifecycle APIs. */
@@ -20,6 +21,7 @@ export const mobileResidencyIntents = {
   unloadImage: unloadImageModel,
   unloadText: unloadTextModel,
   ensureText: loadTextModel,
+  runAnyway: <T>(offer: MemoryOverrideOffer, retry: () => Promise<T>) => memoryOverride().runAnyway(offer, retry),
   ensureImage: loadImageModel,
   ensureTranscription: loadTranscriptionModel,
   unloadTranscription: unloadTranscriptionModel,

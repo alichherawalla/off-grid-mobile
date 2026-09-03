@@ -1,11 +1,13 @@
 import { Dispatch, SetStateAction } from 'react';
-import { admitChatImageAttachment } from '@offgrid/models';
+import { admitChatImageAttachment, memoryOverrideOffer } from '@offgrid/models';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
+import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
+import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { useChatStore } from '../../stores';
 import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import type { CacheType, DownloadedModel, MediaAttachment, Message, Project, RemoteModel } from '../../types';
@@ -96,9 +98,39 @@ function mobileCommandOptions(
   };
 }
 
-function presentGenerationError(deps: GenerationDeps, conversationId: string, error: unknown): void {
+/**
+ * A turn refused for memory is not a dead end: the shared rule decides whether "Run anyway" applies
+ * (overridable refusal, local model) and the shared service forces the load, then reruns the very
+ * turn that was refused. This only projects the offer as the failure card.
+ */
+function offerRunAnyway(error: unknown, retry: () => Promise<void>): boolean {
+  const offer = memoryOverrideOffer({ modality: 'text', error, route: activeMobileRoute('text').model });
+  if (!offer) return false;
+  reportModelFailure('text', error, {
+    id: 'chat-text-load',
+    memoryPressure: true,
+    overridable: true,
+    onLoadAnyway: () => {
+      mobileResidencyIntents
+        .runAnyway(offer, () => {
+          clearModelFailure('text');
+          return retry();
+        })
+        .catch(cause => reportModelFailure('text', cause, { id: 'chat-text-load' }));
+    },
+  });
+  return true;
+}
+
+type GenerationFailure = { error: unknown; retry?: () => Promise<void> };
+
+function presentGenerationError(deps: GenerationDeps, conversationId: string, { error, retry }: GenerationFailure): void {
   const message = error instanceof Error ? error.message : String(error || 'Failed to generate response');
   logger.error('[ChatGen] Generation failed', error);
+  if (retry && offerRunAnyway(error, retry)) {
+    deps.addMessage(conversationId, { role: 'assistant', content: message });
+    return;
+  }
   const contextFull = message.includes('too long')
     || message.includes('Exceeding the maximum number of tokens')
     || message.includes('Input token ids');
@@ -159,7 +191,7 @@ export async function runPersistedChatTurnFn(deps: GenerationDeps, call: StartGe
     // expected terminal state, not a model failure.
     if (turn.status === 'stopped') return;
   } catch (error) {
-    presentGenerationError(deps, call.targetConversationId, error);
+    presentGenerationError(deps, call.targetConversationId, { error, retry: () => runPersistedChatTurnFn(deps, call) });
     generationSession.end('error');
     return;
   }
@@ -229,7 +261,7 @@ export async function replayPersistedChatTurnFn(
     });
     generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
   } catch (error) {
-    presentGenerationError(deps, conversationId, error);
+    presentGenerationError(deps, conversationId, { error, retry: () => replayPersistedChatTurnFn(deps, userMessage, operation) });
     generationSession.end('error');
   }
 }
@@ -243,7 +275,7 @@ export async function editPersistedChatTurnFn(deps: GenerationDeps, message: Mes
     const turn = await mobileChatSession.edit(conversationId, message.id, message);
     generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
   } catch (error) {
-    presentGenerationError(deps, conversationId, error);
+    presentGenerationError(deps, conversationId, { error, retry: () => editPersistedChatTurnFn(deps, message) });
     generationSession.end('error');
   }
 }

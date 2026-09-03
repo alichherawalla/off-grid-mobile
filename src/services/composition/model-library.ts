@@ -16,7 +16,7 @@ import type { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
 import type { MobileImageDownloadRecovery } from '../modelServices/imageDownloadRecoveryApplication';
 import type { ClassifierModel } from '../classifierProvisioning';
 import type { MobileVisionRepairApplication } from '../adapters/models/library/visionRepairApplicationAdapter';
-import { once } from '@offgrid/models';
+import { MemoryOverrideService, once } from '@offgrid/models';
 
 // Resolved at call time: this module reaches back into the composition, and an eager import
 // would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
@@ -76,6 +76,13 @@ export const modelLifecycle = once(
 );
 export const modelMemoryAdvisory = once(
   () => ports9().mobileWorkspace.memoryAdvisory,
+);
+/** "Run anyway" for any modality: forces the refused load through the one lifecycle, then reruns. */
+export const memoryOverride = once(
+  () =>
+    new MemoryOverrideService({
+      load: (modality, modelId, command) => modelLifecycle().load(modality, modelId, command),
+    }),
 );
 export function chatModelReadiness(
   ports: ConstructorParameters<typeof ChatModelReadinessService>[0],

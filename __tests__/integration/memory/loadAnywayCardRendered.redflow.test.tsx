@@ -48,7 +48,7 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     await h.rtl.waitFor(() => { expect(require('@offgrid/core/services/modelServices/residencyBootstrap').modelResidencyManager.getLoadPolicy()).toBe('aggressive'); });
 
     // Precondition: no refusal surface yet.
-    expect(h.view!.queryByText('Load Anyway')).toBeNull();
+    expect(h.view!.queryByText('Run anyway')).toBeNull();
 
     // GESTURE: the real first-send lazy load → shared residency refuses.
     await h.tapSend('hello');
@@ -56,9 +56,9 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     // TERMINAL ARTIFACT: the typed memory refusal offers the override instead of
     // degrading into a generic failed-load alert.
     await h.rtl.waitFor(() => {
-      expect(h.view!.queryByText('Load Anyway')).not.toBeNull();
+      expect(h.view!.queryByText('Run anyway')).not.toBeNull();
     }, { timeout: 8000 });
-    expect(h.view!.queryByText('Not Enough Memory')).not.toBeNull();
+    expect(h.view!.queryByText(/Not Enough Memory/)).not.toBeNull();
     expect(h.view!.queryByText(/Failed to load model/)).toBeNull();
 
     // This settings root owns an asynchronous hardware refresh. Unmount it before
