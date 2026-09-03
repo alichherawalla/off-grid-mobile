@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ModelCommandRoute, ModelModality } from '@offgrid/models';
+import type { ModelCommandRoute, ModelModality } from '@offgrid/application';
 import { mobileModelCommands } from '../services/modelServices/modelCommandApplication';
 
 /** The route the shared command owner is switching this modality to, or null. */

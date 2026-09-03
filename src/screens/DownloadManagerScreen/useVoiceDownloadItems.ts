@@ -11,7 +11,7 @@ import { useWhisperStore } from '../../stores';
 import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
-import { isModelDownloadInProgress } from '@offgrid/models';
+import { isModelDownloadInProgress } from '@offgrid/application';
 import { DownloadItem, formatBytes } from './items';
 
 async function loadItems(): Promise<DownloadItem[]> {

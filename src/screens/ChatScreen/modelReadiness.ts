@@ -15,11 +15,11 @@
  * duplication).
  */
 
-import type { ChatModelReadyOutcome } from '@offgrid/models';
+import type { ChatModelReadyOutcome } from '@offgrid/application';
 // The error→reason heuristic and reason→copy live in a UI-free module (so the
 // service layer can reuse them without dragging the components barrel in). Re-export
 // for the many call sites that import them from here.
-import { reasonFromLoadError, modelNotReadyAlert } from '@offgrid/models';
+import { reasonFromLoadError, modelNotReadyAlert } from '@offgrid/application';
 
 export { reasonFromLoadError, modelNotReadyAlert };
 

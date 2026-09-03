@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TextEngineCapabilities } from '@offgrid/models';
+import type { TextEngineCapabilities } from '@offgrid/application';
 import { useActiveMobileModel } from './useActiveMobileModel';
 import { mobileTextEngineControl } from '../services/modelServices/textEngineControl';
 

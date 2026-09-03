@@ -10,7 +10,7 @@ import { useAppStore } from '../stores';
 import { useActiveLocalModelId } from '../hooks/useActiveMobileModel';
 import { modelLibrary } from '../services';
 import { needsVisionRepair } from '../utils/visionRepair';
-import { visionRepairMessage } from '@offgrid/models';
+import { visionRepairMessage } from '@offgrid/application';
 
 /**
  * In-chat notice: the model you are talking to was built to read images and cannot right now.
