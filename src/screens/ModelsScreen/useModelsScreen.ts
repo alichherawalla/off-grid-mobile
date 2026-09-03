@@ -12,7 +12,7 @@ import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
-import { classifyModelImport } from '@offgrid/models';
+import { classifyModelImport } from '@offgrid/application';
 import { importMobileImageArchive } from '../../services/adapters/models/library/imageArchiveImportAdapter';
 
 

@@ -6,7 +6,7 @@ import {
   classifyModelImport,
   isModelProjectorFile,
   type ModelFileImportDecision,
-} from '@offgrid/models';
+} from '@offgrid/application';
 import { importSelectedModelFiles } from '../../services/adapters/models/library/modelFileImportApplicationAdapter';
 
 export type GgufFileRef = { uri: string; name: string; size: number };

@@ -29,7 +29,7 @@ import {
   isRecommendedImageCatalogModel,
   recommendedImageBackendFilter,
   uniformDownloadId,
-} from '@offgrid/models';
+} from '@offgrid/application';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>(

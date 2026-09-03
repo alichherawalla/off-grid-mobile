@@ -9,7 +9,7 @@ import {
   imageCatalogStyle,
   matchesStableDiffusionVersion,
   textCatalogCompatibility,
-} from '@offgrid/models';
+} from '@offgrid/application';
 
 // Re-export the canonical byte formatter so existing importers keep working while
 // there is only ONE implementation (see src/utils/formatBytes.ts).
