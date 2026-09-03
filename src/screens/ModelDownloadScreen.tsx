@@ -16,13 +16,12 @@ import { TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
 import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
 import { isActiveStatus } from '../stores/downloadStore';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useDiscoveredRemoteModels } from '../hooks/useDiscoveredRemoteModels';
-import {
-  hardwareService,
-  remoteServerManager,
-  selectRemoteMobileModel,
-} from '../services';
+import { serverDiscoveredModels } from '../stores/remoteServerProjection';
+import { hardwareService } from '../services';
+import { applicationFacade } from '../services/applicationFacade';
+import { useModelsProjection } from '../hooks/useApplicationProjection';
+import { modelsFailureMessage } from '@offgrid/application';
 import { RemoteServer } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { NetworkSection } from './ModelDownloadHelpers';
@@ -62,7 +61,7 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const styles = useThemedStyles(createStyles);
 
   const { deviceInfo, setDeviceInfo, setModelRecommendation } = useAppStore();
-  const servers = useRemoteServerStore((s) => s.servers);
+  const servers = [...useModelsProjection().servers] as RemoteServer[];
   const discoveredModels = useDiscoveredRemoteModels();
 
   // Init hardware + model recommendations
@@ -94,12 +93,11 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
     if (healthCheckInFlight.current) return { ran: false, reachable: new Set<string>() };
     healthCheckInFlight.current = true;
     setIsCheckingNetwork(true);
-    const store = useRemoteServerStore.getState();
     const reachable = new Set<string>();
     await Promise.all(
-      store.servers.map(async (server) => {
+      applicationFacade().models.snapshot().servers.map(async (server) => {
         try {
-          const result = await remoteServerManager.testConnection(server.id);
+          const result = await applicationFacade().models.checkRemoteServer(server.id);
           if (result.success) reachable.add(server.id);
         } catch { /* offline */ }
       }),
@@ -116,10 +114,16 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const handleScanNetwork = useCallback(async () => {
     setIsScanning(true);
     try {
-      const { found } = await remoteServerManager.scanAndReconcile();
+      const reconciled = await applicationFacade().models.reconcileRemoteServers();
+      if (!reconciled.ok) throw new Error(modelsFailureMessage(reconciled.failure));
       let added = 0;
-      for (const d of found) {
-        await remoteServerManager.addServer({ name: d.name, endpoint: d.endpoint, provider: 'openai-compatible' });
+      for (const d of reconciled.value.found) {
+        const saved = await applicationFacade().models.saveRemoteServer({
+          name: d.name,
+          endpoint: d.endpoint,
+          provider: 'openai-compatible',
+        });
+        if (!saved.ok) throw new Error(modelsFailureMessage(saved.failure));
         added += 1;
       }
       const { ran, reachable } = await refreshServerHealth();
@@ -128,7 +132,8 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
       // server discovered/added, none already listed, AND a real check ran (not short-circuited by the
       // in-flight auto-check) that found nothing reachable. If the check was skipped by the in-flight
       // guard, the auto-check that owns it will settle the reachable list, so we do not alert.
-      const noServersPresent = added === 0 && useRemoteServerStore.getState().servers.length === 0;
+      const noServersPresent =
+        added === 0 && applicationFacade().models.snapshot().servers.length === 0;
       if (noServersPresent && ran && reachable.size === 0) {
         setAlertState(showAlert(
           'No Servers Found',
@@ -150,21 +155,44 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const handleConnectServer = async (server: RemoteServer) => {
     setConnectingServerId(server.id);
     try {
-      const result = await remoteServerManager.testConnection(server.id);
+      const result = await applicationFacade().models.checkRemoteServer(server.id);
       if (!result.success) {
         setAlertState(showAlert('Connection Failed', result.error || 'Could not connect to server.'));
         return;
       }
       setConnectedServerId(server.id);
-      const known = discoveredModels[server.id];
-      const models = known?.length ? known : result.models || [];
+      let models = discoveredModels[server.id] ?? [];
+      if (models.length === 0) {
+        const discovered = await applicationFacade().models.discoverRemoteServers(
+          server.id,
+        );
+        if (!discovered.ok) {
+          throw new Error(modelsFailureMessage(discovered.failure));
+        }
+        const refreshed = applicationFacade().models.remoteServer(server.id);
+        models = refreshed
+          ? serverDiscoveredModels(refreshed as RemoteServer)
+          : [];
+      }
       if (models.length === 0) {
         setAlertState(showAlert('Connected — No Models Found', `${server.name} is reachable but has no models loaded. Start a model in Off Grid AI Desktop, Ollama, or LM Studio, then reconnect.`));
         return;
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
       if (textModel) {
-        await selectRemoteMobileModel(server.id, 'text', textModel.id);
+        const routeId = applicationFacade().models.remoteModelRoute(
+          server.id,
+          textModel.id,
+          'text',
+        );
+        if (!routeId) {
+          throw new Error(`Could not resolve ${textModel.name} on ${server.name}.`);
+        }
+        const selected = await applicationFacade().models.select({
+          modality: 'text',
+          modelId: routeId,
+        });
+        if (!selected.ok) throw new Error(modelsFailureMessage(selected.failure));
       }
       setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length === 1 ? '' : 's'}. You can start chatting now.`,
         [{ text: 'Continue', onPress: () => { setAlertState(hideAlert()); navigation.replace('Main'); } }]));
