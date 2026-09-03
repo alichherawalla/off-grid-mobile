@@ -25,7 +25,7 @@ import {
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
 import { awaitMemoryReclaim } from './memoryBudget';
-import { modelResidencyManager } from './modelServices/residencyBootstrap';
+import { applicationFacade } from './applicationFacade';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
 import { dropMissingImageAttachments, modelImageAttachments } from './llmImageInput';
@@ -81,7 +81,7 @@ class LLMService {
       requestedContextLength: params.ctxLen,
       quantizedCache: !params.usesF16Cache,
       platform: Platform.OS === 'android' ? 'android' : 'ios',
-      loadPolicy: modelResidencyManager.getLoadPolicy(),
+      loadPolicy: applicationFacade().models.snapshot().loadPolicy,
       override,
     });
     const { fileSize, memory: memCheck } = admission;
