@@ -50,6 +50,27 @@ const selectionProjectionKeys = new Set([
   'downloadedModelId',
   'classifierModelId',
 ]);
+const ragRuntimeImportOwners = new Set([
+  'src/services/composition/application.ts',
+  'src/services/adapters/rag/mobileRagPorts.ts',
+  // Native file and PDF I/O for document attachments.
+  'src/services/documentService.ts',
+]);
+
+function importsRuntimeValue(node) {
+  const clause = node.importClause;
+  if (!clause) return true;
+  if (clause.isTypeOnly) return false;
+  if (clause.name) return true;
+  if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+    return true;
+  }
+  return (
+    clause.namedBindings &&
+    ts.isNamedImports(clause.namedBindings) &&
+    clause.namedBindings.elements.some(element => !element.isTypeOnly)
+  );
+}
 
 function assignedSelectionKeys(node) {
   const keys = [];
@@ -1141,6 +1162,19 @@ for (const file of files) {
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       const specifier = node.moduleSpecifier.text;
+      if (
+        specifier === '@offgrid/rag' &&
+        importsRuntimeValue(node) &&
+        !ragRuntimeImportOwners.has(fileName)
+      ) {
+        report(
+          'rag-runtime-imports-stay-in-platform-ports',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
+      }
       if (/services\/engines$/.test(specifier)) {
         report(
           'text-engine-policy-is-shared',
