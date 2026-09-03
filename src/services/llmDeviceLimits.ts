@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { BYTES_PER_GIBIBYTE, mobileTextGpuLayerLimit } from '@offgrid/models';
+import { BYTES_PER_GIBIBYTE, textGpuLayerLimit } from '@offgrid/models';
 
 /** Pure hardware sizing rules used by the native GPU adapters. */
 
@@ -12,7 +12,7 @@ export function getGpuLayersForDevice(
   requestedLayers: number,
   opts?: { modelBytes?: number; availableBytes?: number },
 ): number {
-  return mobileTextGpuLayerLimit({
+  return textGpuLayerLimit({
     platform: Platform.OS === 'android' ? 'android' : 'ios',
     totalMemoryBytes,
     requestedLayers,

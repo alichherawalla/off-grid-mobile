@@ -9,10 +9,10 @@ import {
   effectiveTextCacheType,
   llamaRnModelLoadPlan,
   gpuFallbackNotice,
-  mobileNativeBackendForLoad,
+  nativeBackendForLoad,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
-import type { MobileNativeLoadService } from '@offgrid/models';
+import type { NativeLoadService } from '@offgrid/models';
 import { nativeTextLoad } from './composition/text-load';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
@@ -116,7 +116,7 @@ export async function initContextWithFallback(
   nGpuLayers: number,
 ): Promise<ContextInitResult> {
   const modelPath = (params as any).model || 'unknown';
-  const backend = mobileNativeBackendForLoad({
+  const backend = nativeBackendForLoad({
     htpEnabled: HTP_ENABLED,
     devices: Array.isArray((params as any).devices) ? (params as any).devices : undefined,
     gpuLayers: nGpuLayers,
@@ -138,7 +138,7 @@ export async function initContextWithFallback(
   });
 }
 /** llama.rn init/release and log capture. Shared owns the fallback ladder. */
-export function mobileNativeLoadPorts(): ConstructorParameters<typeof MobileNativeLoadService<LlamaContext>>[0] {
+export function mobileNativeLoadPorts(): ConstructorParameters<typeof NativeLoadService<LlamaContext>>[0] {
   return {
     initialize: input => initLlama({
       ...input.params,

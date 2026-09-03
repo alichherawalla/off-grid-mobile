@@ -5,7 +5,7 @@ import {
   normalizeGenerationDelta,
   reasoningWireFragment,
   resolveReasoningPlan,
-  planMobileTextAccelerator,
+  planTextAccelerator,
   type ReasoningWireFragment,
 } from '@offgrid/models';
 import { textLoadAdmission } from './composition/text-load';
@@ -154,7 +154,7 @@ class LLMService {
     const openClCapability = Platform.OS === 'android' && selected === INFERENCE_BACKENDS.OPENCL
       ? await hardwareService.getOpenCLCapability()
       : undefined;
-    const accelerator = planMobileTextAccelerator({
+    const accelerator = planTextAccelerator({
       platform: Platform.OS === 'android' ? 'android' : 'ios',
       inferenceBackend: selected === INFERENCE_BACKENDS.HTP
         ? 'htp'

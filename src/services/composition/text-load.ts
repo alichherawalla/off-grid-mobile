@@ -3,8 +3,8 @@
 import type { LlamaContext } from 'llama.rn';
 import {
   LoadPolicyTransitionCoordinator,
-  MobileNativeLoadService,
-  MobileTextLoadAdmissionService,
+  NativeLoadService,
+  TextLoadAdmissionService,
 } from '@offgrid/models';
 import { once } from '@offgrid/models';
 
@@ -25,10 +25,10 @@ const ports3 = (): typeof import('../loadPolicySync') =>
   require('../loadPolicySync') as typeof import('../loadPolicySync');
 
 export const textLoadAdmission = once(
-  () => new MobileTextLoadAdmissionService(ports1().mobileTextLoadAdmissionPorts()),
+  () => new TextLoadAdmissionService(ports1().mobileTextLoadAdmissionPorts()),
 );
 export const nativeTextLoad = once(
-  () => new MobileNativeLoadService<LlamaContext>(ports2().mobileNativeLoadPorts()),
+  () => new NativeLoadService<LlamaContext>(ports2().mobileNativeLoadPorts()),
 );
 /** One coordinator per load-policy projection lifetime. */
 export function loadPolicyTransition(): LoadPolicyTransitionCoordinator {

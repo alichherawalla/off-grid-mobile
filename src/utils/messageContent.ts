@@ -34,8 +34,6 @@ const XML_TOOL_CALL_FUNCTION_MARKER =
   SHARED_XML_TOOL_CALL_FUNCTION_MARKER;
 const XML_TOOL_CALL_FUNCTION_CLOSER = '</function>';
 
-const escapeRegExp = (s: string): string =>
-  s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const CLOSERS_ALT = TOOL_CALL_CLOSERS.map(escapeRegExp).join('|');
 // One closed-block pattern per opener, built from the grammar so parser and stripper cannot drift.
 const TOOL_CALL_BLOCK_PATTERNS: RegExp[] = TOOL_CALL_OPENERS.map(
@@ -229,6 +227,7 @@ import {
   TOOL_CALL_CLOSERS as SHARED_TOOL_CALL_CLOSERS,
   TOOL_CALL_OPENERS as SHARED_TOOL_CALL_OPENERS,
   XML_TOOL_CALL_FUNCTION_MARKER as SHARED_XML_TOOL_CALL_FUNCTION_MARKER,
+  escapeRegExp,
   parseChatModelOutput,
   parseChatThinkingContent,
   stripChatControlTokens,

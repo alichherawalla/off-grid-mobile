@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import {
-  buildMobileGuidedSetupCatalog,
-  mobileGuidedSetupTextDiscoveryModels,
+  buildGuidedSetupCatalog,
+  guidedSetupTextDiscoveryModels,
   WHISPER_MODELS,
   type GuidedSetupCatalog,
 } from '@offgrid/models';
@@ -43,13 +43,13 @@ export async function loadAutoSetupCompatibleCatalog(
   boundaries: AutoSetupCatalogBoundaries = productionCatalogBoundaries,
 ): Promise<AutoSetupCompatibleCatalog> {
   const ramGB = boundaries.totalMemoryGB();
-  const textModels = mobileGuidedSetupTextDiscoveryModels(ramGB);
+  const textModels = guidedSetupTextDiscoveryModels(ramGB);
   const [files, imageRecommendation, imageModels] = await Promise.all([
     boundaries.fetchTextFiles(textModels),
     boundaries.imageRecommendation(),
     boundaries.imageModels(),
   ]);
-  return buildMobileGuidedSetupCatalog({
+  return buildGuidedSetupCatalog({
     ramGb: ramGB,
     platform: Platform.OS,
     imageRecommendation,

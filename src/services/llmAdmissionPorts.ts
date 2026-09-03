@@ -1,12 +1,12 @@
 import RNFS from 'react-native-fs';
-import type { MobileTextLoadAdmissionService } from '@offgrid/models';
+import type { TextLoadAdmissionService } from '@offgrid/models';
 import { hardwareService } from './hardware';
 import { statFile } from '../utils/fileStat';
 import { validateModelFile } from './llmSafetyChecks';
 import logger from '../utils/logger';
 
 /** Filesystem, validation, and memory facts for text-load admission. Shared decides. */
-export function mobileTextLoadAdmissionPorts(): ConstructorParameters<typeof MobileTextLoadAdmissionService>[0] {
+export function mobileTextLoadAdmissionPorts(): ConstructorParameters<typeof TextLoadAdmissionService>[0] {
   return {
     exists: path => RNFS.exists(path),
     validate: path => validateModelFile(path),
