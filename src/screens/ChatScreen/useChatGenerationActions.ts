@@ -4,10 +4,9 @@ import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
-import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
+import { applicationFacade } from '../../services/applicationFacade';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { clearModelFailure, reportModelFailure } from '../../services/modelFailureHandler';
-import { mobileResidencyIntents } from '../../services/modelServices/residencyIntents';
 import { useChatStore } from '../../stores';
 import { mobileImageChatGeneration } from '../../services/modelServices/imageChatGenerationPort';
 import type { CacheType, DownloadedModel, MediaAttachment, Message, Project, RemoteModel } from '../../types';
@@ -104,15 +103,25 @@ function mobileCommandOptions(
  * turn that was refused. This only projects the offer as the failure card.
  */
 function offerRunAnyway(error: unknown, retry: () => Promise<void>): boolean {
-  const offer = memoryOverrideOffer({ modality: 'text', error, route: activeMobileRoute('text').model });
+  const offer = memoryOverrideOffer({
+    modality: 'text',
+    error,
+    route: applicationFacade().models.snapshot().active.text?.model,
+  });
   if (!offer) return false;
   reportModelFailure('text', error, {
     id: 'chat-text-load',
     memoryPressure: true,
     overridable: true,
     onLoadAnyway: () => {
-      mobileResidencyIntents
-        .runAnyway(offer, () => {
+      applicationFacade().models
+        .load({
+          modality: offer.modality,
+          modelId: offer.modelId,
+          override: true,
+        })
+        .then(outcome => {
+          if (!outcome.ok) throw outcome.failure;
           clearModelFailure('text');
           return retry();
         })
