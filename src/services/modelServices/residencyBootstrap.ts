@@ -1,28 +1,9 @@
-import { AppState, Platform } from 'react-native';
-import { ModelResidencyManager } from '@offgrid/models';
-import { hardwareService } from '../hardware';
-import logger from '../../utils/logger';
+import { AppState } from 'react-native';
+import { mobileWorkspace } from './workspace';
 
-const memorySource = {
-  current: () => ({
-    totalMB: hardwareService.getTotalMemoryGB() * 1024,
-    availableMB: hardwareService.getAvailableMemoryGB() * 1024,
-    platform: Platform.OS,
-  }),
-  refresh: async () => {
-    await hardwareService.refreshMemoryInfo();
-    return {
-      totalMB: hardwareService.getTotalMemoryGB() * 1024,
-      availableMB: hardwareService.getAvailableMemoryGB() * 1024,
-      platform: Platform.OS,
-    };
-  },
-};
-
-export const modelResidencyManager = new ModelResidencyManager(memorySource, {
-  debug: (message, details) => logger.log(`[ModelResidency] ${message}`, details),
-  warn: (message, details) => logger.warn(`[ModelResidency] ${message}`, details),
-});
+/** The workspace owns residency (memory source and logger are its ports, see workspace.ts);
+ *  this is the same instance, kept for its many readers. */
+export const modelResidencyManager = mobileWorkspace.residency;
 
 try {
   AppState.addEventListener('memoryWarning', () => {

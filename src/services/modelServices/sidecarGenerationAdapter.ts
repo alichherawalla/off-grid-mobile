@@ -1,15 +1,14 @@
 import {
-  ClassifierExecutionService,
   classifierNativeLoadRequest,
   classifierNativeUnloadRequest,
   type GenerationAdapter,
   type GenerationChunk,
   type GenerationRequest,
-  type LLMService,
 } from '@offgrid/models';
+import type { LLMService } from '@offgrid/models';
+import { classifierExecution } from '../composition/generation';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
-import { classifierExecutionAdapter } from '../adapters/native/classifierExecutionAdapter';
 
 function operation(request: GenerationRequest) {
   if (!request.operation) throw new TypeError('A sidecar operation is required');
@@ -25,13 +24,12 @@ async function* embeddingChunks(request: GenerationRequest): AsyncIterable<Gener
   };
 }
 
-const classifier = new ClassifierExecutionService(classifierExecutionAdapter);
 
 async function* classifierChunks(request: GenerationRequest): AsyncIterable<GenerationChunk> {
   const input = operation(request);
   if (input.type !== 'classifier') throw new TypeError('A classifier operation is required');
   yield {
-    output: await classifier.classify({
+    output: await classifierExecution().classify({
       text: input.input,
       labels: input.labels,
       signal: request.signal,

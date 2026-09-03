@@ -7,9 +7,9 @@ import {
   type GenerationAdapter,
   type GenerationChunk,
   type GenerationRequest,
-  type LLMService,
   type RuntimeModel,
 } from '@offgrid/models';
+import type { LLMService } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
 import { whisperService } from '../whisperService';

@@ -1,8 +1,5 @@
-import {
-  classifierIntent,
-  type GenerationMessage,
-  type GenerationService,
-} from '@offgrid/models';
+import { classifierIntent } from '@offgrid/models';
+import type { GenerationMessage, GenerationService } from '@offgrid/models';
 import { EMBEDDING_MODEL_FILENAME } from '../adapters/native/embeddingRuntimeAdapter';
 import {
   registerMobileSidecarExecutionPort,

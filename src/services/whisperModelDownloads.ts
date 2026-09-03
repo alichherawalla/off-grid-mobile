@@ -1,12 +1,12 @@
 import RNFS from 'react-native-fs';
 import {
   WHISPER_MODELS,
-  ModelDownloadApplicationService,
   createWhisperManagedArtifact,
   whisperArtifactIdentity,
   type ManagedArtifactPorts,
 } from '@offgrid/models';
 import logger from '../utils/logger';
+import { modelDownloadApplication } from './composition/downloads';
 import { modelDownloadProjection } from '../stores/downloadStore';
 import {
   coordinatedDownloads as backgroundDownloadService,
@@ -53,7 +53,7 @@ const whisperPorts: ManagedArtifactPorts = {
   },
 };
 
-const whisperDownloadApplication = new ModelDownloadApplicationService();
+const whisperDownloadApplication = modelDownloadApplication();
 
 /** Mobile adapter. Shared owns admission, cancellation, cleanup, and delete races. */
 class WhisperDownloadAdapter {

@@ -1,7 +1,6 @@
 import { Alert, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import {
-  ModelDownloadApplicationService,
   projectArtifactDownloadEvent,
   publicRequestForManifest,
   type ModelArtifactDownloadEvent,
@@ -11,6 +10,7 @@ import {
 import type { BackgroundDownloadInfo } from '../../types';
 import type { DownloadCompleteCallback, DownloadErrorCallback, DownloadParams, DownloadProgressCallback } from '../backgroundDownloadTypes';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
+import { modelDownloadApplication } from '../composition/downloads';
 import { nativeDownloadTransferAdapter } from '../adapters/downloads/nativeDownloadTransferAdapter';
 
 type CompleteEvent = Parameters<DownloadCompleteCallback>[0];
@@ -24,7 +24,7 @@ interface CoordinatedManifestHandle {
   handle: ModelDownloadHandle;
 }
 
-const downloadApplication = new ModelDownloadApplicationService();
+const downloadApplication = modelDownloadApplication();
 
 const files = {
   pathFor: (localName: string) => `${RNFS.DocumentDirectoryPath}/${localName}`,

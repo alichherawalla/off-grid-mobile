@@ -11,11 +11,11 @@ import {
   type GenerationMessage,
   type GenerationRequest,
   type LiveGenerationContext,
-  type LLMService,
   type ModelResidencyLifecyclePort,
   type ReasoningWireFragment,
   type RuntimeModel,
 } from '@offgrid/models';
+import type { LLMService } from '@offgrid/models';
 import type { GenerationMeta, MediaAttachment, Message } from '../../types';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';

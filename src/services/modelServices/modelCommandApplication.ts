@@ -1,10 +1,12 @@
-import { ModelCommandApplicationService } from '@offgrid/models';
+import type { ModelCommandApplicationService } from '@offgrid/models';
+import { modelCommands } from '../composition/model-commands';
 import { mobileResidencyIntents } from './residencyIntents';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { mobileRouteId } from './mobileRoute';
 
-/** Mobile composition root. Shared owns command ordering; these functions are platform ports. */
-export const mobileModelCommands = new ModelCommandApplicationService({
+/** Platform ports. Shared owns command ordering. */
+export function mobileModelCommandPorts(): ConstructorParameters<typeof ModelCommandApplicationService>[0] {
+  return {
   async select(route) {
     await lifecycleProjectionPort.selectRoute(
       route.modality,
@@ -36,7 +38,10 @@ export const mobileModelCommands = new ModelCommandApplicationService({
     else if (modality === 'image')
       await mobileResidencyIntents.unloadImage(keepSelection);
   },
-});
+  };
+}
+
+export const mobileModelCommands = modelCommands();
 
 /** Record a local text route without acquiring native residency. Chat generation owns first load. */
 export function selectLocalTextModelOnDemand(model: {

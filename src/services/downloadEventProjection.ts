@@ -1,12 +1,13 @@
 import {
   coordinatedDownloads as downloads,
 } from './modelServices/coordinatedDownloadBridge';
-import { ModelDownloadApplicationService, mapDownloadStoreStatus } from '@offgrid/models';
+import { mapDownloadStoreStatus } from '@offgrid/models';
+import { modelDownloadApplication } from './composition/downloads';
 import { modelDownloadProjection } from '../stores/downloadStore';
 import { toUserMessage } from '../utils/downloadErrors';
 import type { ModelKey } from '../utils/modelKey';
 
-const downloadApplication = new ModelDownloadApplicationService();
+const downloadApplication = modelDownloadApplication();
 
 /** Route native transfer events into the shared-backed download projection store. */
 export function subscribeToDownloadProjection(): () => void {

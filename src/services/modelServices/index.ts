@@ -1,8 +1,5 @@
-import {
-  GenerationService,
-  type ActiveModelSnapshot,
-  type RuntimeModel,
-} from '@offgrid/models';
+import type { ActiveModelSnapshot, RuntimeModel } from '@offgrid/models';
+import { mobileVoiceGenerationService as voiceGeneration } from '../composition/generation';
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -22,10 +19,7 @@ import {
   refreshMobileLLMServiceInventory,
   selectMobileRoute,
 } from './mobileLLMService';
-import {
-  mobileGenerationResidency,
-  reconcileMobileGenerationAdapters,
-} from './generationAdapters';
+import { reconcileMobileGenerationAdapters } from './generationAdapters';
 import { mobileWorkspace } from './workspace';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
@@ -56,10 +50,7 @@ registerModelSelectionCommandPort({
 });
 export const mobileGenerationService = mobileWorkspace.generation;
 /** Voice has its own queue so sentence playback can run while text is still streaming. */
-export const mobileVoiceGenerationService = new GenerationService(
-  mobileLLMService,
-  mobileGenerationResidency,
-);
+export const mobileVoiceGenerationService = voiceGeneration();
 const generationAdapterRegistrations = new Map<string, () => void>();
 const transcriptionAdapterRegistrations = new Map<string, () => void>();
 const voiceAdapterRegistrations = new Map<string, () => void>();

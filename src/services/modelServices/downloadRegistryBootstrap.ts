@@ -1,4 +1,6 @@
-import { ModelDownloadRegistry, queuedUniformId } from '@offgrid/models';
+import { queuedUniformId } from '@offgrid/models';
+import type { ModelDownloadRegistry } from '@offgrid/models';
+import { modelDownloadRegistry as composedRegistry } from '../composition/downloads';
 import logger from '../../utils/logger';
 import { coordinatedDownloads as backgroundDownloadService } from './coordinatedDownloadBridge';
 import type {
@@ -7,11 +9,16 @@ import type {
   DownloadModelType,
 } from './downloadTypes';
 
-export const modelDownloadRegistry = new ModelDownloadRegistry<
+export type MobileDownloadRegistry = ModelDownloadRegistry<
   ModelDownloadStartRequest,
   ModelDownloadReissueRequest
->(
-  {
+>;
+type RegistryArguments = ConstructorParameters<
+  typeof ModelDownloadRegistry<ModelDownloadStartRequest, ModelDownloadReissueRequest>
+>;
+
+export function mobileDownloadRegistryLogger(): RegistryArguments[0] {
+  return {
     transition: message => logger.log(`[DL-SM] ${message}`),
     error: (message, error) =>
       logger.log(
@@ -19,8 +26,12 @@ export const modelDownloadRegistry = new ModelDownloadRegistry<
           error instanceof Error ? error.message : String(error)
         }`,
       ),
-  },
-  {
+  };
+}
+
+/** Queue cancellation through the native bridge. */
+export function mobileDownloadRegistryPorts(): RegistryArguments[1] {
+  return {
     cancel(id) {
       const queued = backgroundDownloadService.getQueuedItems().find(
         item =>
@@ -34,5 +45,7 @@ export const modelDownloadRegistry = new ModelDownloadRegistry<
         ? backgroundDownloadService.cancelQueued(queued.modelKey)
         : false;
     },
-  },
-);
+  };
+}
+
+export const modelDownloadRegistry: MobileDownloadRegistry = composedRegistry();

@@ -7,7 +7,9 @@ import {
 import { generateId } from '../../utils/generateId';
 import { mobileModelSelectionStore } from './selectionStore';
 import { mobileExecutionAdapterId } from './mobileRoute';
-import { modelResidencyManager } from './residencyBootstrap';
+import { Platform } from 'react-native';
+import { hardwareService } from '../hardware';
+import logger from '../../utils/logger';
 
 // Tool and conversation ports are resolved at call time: their modules reach back into this
 // composition (text engine, generation adapters), and a module-level import would form a cycle.
@@ -85,11 +87,31 @@ function remoteStatus(serverId: string): { ready: boolean; error?: string } {
   };
 }
 
+// Device memory as the residency manager's memory source.
+const memory = {
+  current: () => ({
+    totalMB: hardwareService.getTotalMemoryGB() * 1024,
+    availableMB: hardwareService.getAvailableMemoryGB() * 1024,
+    platform: Platform.OS,
+  }),
+  refresh: async () => {
+    await hardwareService.refreshMemoryInfo();
+    return {
+      totalMB: hardwareService.getTotalMemoryGB() * 1024,
+      availableMB: hardwareService.getAvailableMemoryGB() * 1024,
+      platform: Platform.OS,
+    };
+  },
+};
+
 /** The ONE shared facade Mobile composes its model layer from. Everything here is a port. */
 export const mobileWorkspace = createModelWorkspace({
   selection: mobileModelSelectionStore,
-  // Residency is built first (module order); the workspace adopts it rather than owning a second.
-  residencyManager: modelResidencyManager,
+  memory,
+  residencyLogger: {
+    debug: (message, details) => logger.log(`[ModelResidency] ${message}`, details),
+    warn: (message, details) => logger.warn(`[ModelResidency] ${message}`, details),
+  },
   generation: { tools: lazyTools, conversations: lazyConversations },
   remote: lazyRemote,
   remoteServerId: generateId,

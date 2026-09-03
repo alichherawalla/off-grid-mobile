@@ -1,11 +1,13 @@
-import { TextEngineApplicationService } from '@offgrid/models';
+import type { TextEngineApplicationService } from '@offgrid/models';
+import { textEngineControl } from '../composition/text-engine';
 import logger from '../../utils/logger';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
 import { activeMobileRoute } from './mobileLLMService';
 
 /** Native text-runtime ports. Shared owns route, capability, and lifecycle policy. */
-export const mobileTextEngineControl = new TextEngineApplicationService({
+export function mobileTextEnginePorts(): ConstructorParameters<typeof TextEngineApplicationService>[0] {
+  return {
   active: () => activeMobileRoute('text'),
   engines: [
     {
@@ -33,4 +35,7 @@ export const mobileTextEngineControl = new TextEngineApplicationService({
   onBoundaryError(operation, engineId, error) {
     logger.warn(`[TextEngine] ${operation} failed for ${engineId}:`, error);
   },
-});
+  };
+}
+
+export const mobileTextEngineControl = textEngineControl();
