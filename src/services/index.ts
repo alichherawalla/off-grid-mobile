@@ -22,6 +22,10 @@ export {
 export { imageGenerationService } from './imageGenerationService';
 export type { ImageGenerationState } from './imageGenerationService';
 export { documentService } from './documentService';
+export {
+  mobileSpeechInputPorts,
+  type MobileSpeechInputPorts,
+} from './adapters/speech/mobileSpeechInputPorts';
 export { contextCompactionService } from './contextCompaction';
 // Providers
 // HTTP Client
