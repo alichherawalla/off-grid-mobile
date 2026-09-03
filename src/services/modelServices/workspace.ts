@@ -23,7 +23,6 @@ const lazyConversations: ConversationPort = {
   append: (identity, message) => toolPorts().mobileConversationPort.append(identity, message),
 };
 function toolPorts(): typeof import('./toolPorts') {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require('./toolPorts') as typeof import('./toolPorts');
 }
 
@@ -31,7 +30,6 @@ function toolPorts(): typeof import('./toolPorts') {
 // resolved at call time as well. Every member delegates; nothing is decided here.
 type RemotePorts = Omit<RemoteServerApplicationPorts, 'select'>;
 function remotePorts(): RemotePorts {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return (require('./remoteServerApplication') as typeof import('./remoteServerApplication'))
     .mobileRemoteServerPorts;
 }
@@ -78,9 +76,7 @@ const lazyRemote: RemotePorts = {
 
 // Remote reachability, read at call time from the transport registry and server health.
 function remoteStatus(serverId: string): { ready: boolean; error?: string } {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { remoteTextTransportRegistry } = require('../adapters/providers/registry') as typeof import('../adapters/providers/registry');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useRemoteServerStore } = require('../../stores/remoteServerStore') as typeof import('../../stores/remoteServerStore');
   const unhealthy = useRemoteServerStore.getState().serverHealth[serverId]?.status === 'unhealthy';
   return {
@@ -119,13 +115,10 @@ export const mobileWorkspace = createModelWorkspace({
   remoteServerId: generateId,
   // Ports for the services the facade composes on demand; resolved at call time (module cycles).
   lifecycle: () =>
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./modelLifecycleBootstrap') as typeof import('./modelLifecycleBootstrap')).mobileModelLifecyclePorts(),
   memoryAdvisory: () =>
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./modelMemoryAdvisory') as typeof import('./modelMemoryAdvisory')).mobileModelMemoryAdvisoryPorts(),
   classifier: () =>
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../adapters/native/classifierExecutionAdapter') as typeof import('../adapters/native/classifierExecutionAdapter')).classifierExecutionAdapter,
   remoteInventory: {
     // Mobile has no remote executor for the derived text routes yet; shared skips a route whose
@@ -139,4 +132,3 @@ export const mobileWorkspace = createModelWorkspace({
 });
 
 /** Remote-server application, owned by the workspace. */
-export const mobileRemoteServerApplication = mobileWorkspace.servers;
