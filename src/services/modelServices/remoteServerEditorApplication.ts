@@ -1,8 +1,4 @@
-import {
-  parseRemoteVisionModelId,
-  remoteDiscoveryEndpoints,
-  selectedRemoteModelName,
-} from '@offgrid/models';
+import { remoteDiscoveryEndpoints, selectedRemoteOptionName } from '@offgrid/models';
 import type {
   RemoteMediaModelIds,
   RemoteModel,
@@ -132,39 +128,16 @@ function projectModelNames(
   models: readonly RemoteModel[],
   catalog: RemoteModelCatalog,
 ): RemoteServerEditorModelNames {
+  // Shared resolves a persisted or transported id (route, legacy, or native) to its option name.
   const selectedName = (
-    modality: keyof RemoteServerEditorModelIds,
     selectedId: string | undefined,
     options: RemoteModelOption[],
-  ): string | null => {
-    if (!selectedId) return null;
-    const transportedModelId = parseRemoteVisionModelId(selectedId)?.modelId;
-    const catalogOptions = transportedModelId
-      ? options.map(option => option.id === transportedModelId
-        ? {
-            ...option,
-            activeAliases: [...(option.activeAliases ?? []), selectedId],
-          }
-        : option)
-      : options;
-    return selectedRemoteModelName({
-      id: 'remote-server-editor',
-      name: 'Remote server editor',
-      endpoint: 'local://projection',
-      provider: 'custom',
-      selections: { [modality]: selectedId },
-      catalog: { [modality]: catalogOptions },
-    }, modality);
-  };
+  ): string | null => (selectedId ? selectedRemoteOptionName(selectedId, options) : null);
   return {
-    text: selectedName('text', modelIds.text, textModelOptions(models, catalog)),
-    image: selectedName('image', modelIds.image, catalog.image ?? []),
-    transcription: selectedName(
-      'transcription',
-      modelIds.transcription,
-      catalog.transcription ?? [],
-    ),
-    voice: selectedName('voice', modelIds.voice, catalog.voice ?? []),
+    text: selectedName(modelIds.text, textModelOptions(models, catalog)),
+    image: selectedName(modelIds.image, catalog.image ?? []),
+    transcription: selectedName(modelIds.transcription, catalog.transcription ?? []),
+    voice: selectedName(modelIds.voice, catalog.voice ?? []),
   };
 }
 
