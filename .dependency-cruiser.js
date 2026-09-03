@@ -53,6 +53,14 @@ module.exports = {
       to: { path: '^src/(screens|navigation)/' },
     },
     // ── Dead code ─────────────────────────────────────────────────────────────
+    // ── Application facade boundary ──
+    {
+      name: 'presentation-not-to-raw-rag-or-use',
+      severity: 'error',
+      comment: 'Presentation reads RAG and Use through @offgrid/application facades. Shared domain packages are composition and platform-adapter dependencies, not UI or store dependencies.',
+      from: { path: '^(src/(screens|components|hooks|stores)/|pro/ui/)' },
+      to: { path: '^\\.\\./shared/packages/(rag|use)/' },
+    },
     {
       name: 'no-orphans',
       severity: 'error',
