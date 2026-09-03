@@ -3,28 +3,9 @@ import { WHISPER_MODELS, type TranscriptionModelWorkflowState } from '@offgrid/m
 import { mobileResidencyIntents } from './residencyIntents';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { selectLocalTranscriptionModelOnDemand } from './modelCommandApplication';
-
-export type MobileTranscriptionLoadResult = 'loaded' | 'blocked' | 'error';
+import { requireTranscriptionModelProjection } from './transcriptionProjectionPort';
+export type { MobileTranscriptionLoadResult } from './transcriptionProjectionPort';
 type Observer = { onLoaded?(): void; onUnloaded?(): void };
-
-interface MobileTranscriptionProjection {
-  state(): TranscriptionModelWorkflowState;
-  project(patch: Partial<TranscriptionModelWorkflowState>): void;
-}
-
-let projection: MobileTranscriptionProjection | null = null;
-
-export function registerTranscriptionModelProjection(
-  port: MobileTranscriptionProjection,
-): void {
-  projection = port;
-}
-
-function requireProjection(): MobileTranscriptionProjection {
-  if (!projection)
-    throw new Error('Transcription model projection is not registered');
-  return projection;
-}
 
 /** Native transcription projection used by stores and presentation hooks. */
 export const mobileTranscriptionRuntime = {
@@ -60,8 +41,9 @@ export const mobileTranscriptionRuntime = {
 
 /** Projection, route, and inventory ports the shared workflow needs beyond the runtime. */
 export const mobileTranscriptionWorkflowPorts = {
-  state: () => requireProjection().state(),
-  project: (patch: Partial<TranscriptionModelWorkflowState>) => requireProjection().project(patch),
+  state: () => requireTranscriptionModelProjection().state(),
+  project: (patch: Partial<TranscriptionModelWorkflowState>) =>
+    requireTranscriptionModelProjection().project(patch),
   selectRoute: selectLocalTranscriptionModelOnDemand,
   refreshInventory: async () => {
     await lifecycleProjectionPort.refreshInventory();

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   registerTranscriptionModelProjection,
   type MobileTranscriptionLoadResult,
-} from '../services/modelServices/transcriptionRuntimePort';
+} from '../services/modelServices/transcriptionProjectionPort';
 
 export type WhisperLoadResult = MobileTranscriptionLoadResult;
 
