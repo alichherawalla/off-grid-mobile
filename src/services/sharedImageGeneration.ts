@@ -1,11 +1,9 @@
 import RNFS from 'react-native-fs';
+import { modelsFailureMessage, type GenerationResult } from '@offgrid/application';
 import type { GeneratedBinaryArtifact } from '@offgrid/models';
 import type { GeneratedImage } from '../types';
 import { generateId } from '../utils/generateId';
-import {
-  mobileGenerationService,
-  refreshMobileModelServices,
-} from './modelServices';
+import { applicationFacade } from './applicationFacade';
 
 export interface SharedImageGenerationInput {
   prompt: string;
@@ -35,45 +33,48 @@ export async function executeMobileImageGeneration(
   input: SharedImageGenerationInput,
   options: SharedImageGenerationOptions,
 ): Promise<GeneratedImage> {
-  await refreshMobileModelServices();
+  const models = applicationFacade().models;
+  await models.refresh();
   const { routeId, ...operation } = input;
-  const result = await mobileGenerationService.generate(
-      {
+  let result: GenerationResult | null = null;
+  for await (const event of models.generate({
+    request: {
         operation: { type: 'image', ...operation },
         routeId,
         profile: 'image-generation',
         signal: options.signal,
-      },
-      {
-        chunk: chunk => {
-          if (chunk.progress) {
-            options.onProgress?.(
-              chunk.progress.completed,
-              chunk.progress.total,
-              chunk.progress.preview,
-            );
-          }
-        },
-      },
-    );
-    if (result.output.type !== 'image' || !result.output.images.length) {
-      throw new Error('Image generation returned no image');
+    },
+  })) {
+    if (event.type === 'chunk' && event.chunk.progress) {
+      options.onProgress?.(
+        event.chunk.progress.completed,
+        event.chunk.progress.total,
+        event.chunk.progress.preview,
+      );
+    } else if (event.type === 'failed') {
+      throw new Error(modelsFailureMessage(event.failure));
+    } else if (event.type === 'result') {
+      result = event.result;
     }
-    const artifact = result.output.images[0];
-    const imageId = artifact.id ?? generateId();
-    let imagePath: string;
-    let fileName: string | undefined;
-    if (artifact.data) {
-      fileName = `${imageId}.png`;
-      const directory = `${RNFS.DocumentDirectoryPath}/generated_images`;
-      imagePath = `${directory}/${fileName}`;
-      await RNFS.mkdir(directory);
-      await RNFS.writeFile(imagePath, artifact.data, 'base64');
-    } else if (artifact.uri?.startsWith('file://')) {
-      imagePath = artifact.uri.slice('file://'.length);
-    } else {
-      throw new Error('Image generation returned no local image data');
-    }
+  }
+  if (!result || result.output.type !== 'image' || !result.output.images.length) {
+    throw new Error('Image generation returned no image');
+  }
+  const artifact = result.output.images[0];
+  const imageId = artifact.id ?? generateId();
+  let imagePath: string;
+  let fileName: string | undefined;
+  if (artifact.data) {
+    fileName = `${imageId}.png`;
+    const directory = `${RNFS.DocumentDirectoryPath}/generated_images`;
+    imagePath = `${directory}/${fileName}`;
+    await RNFS.mkdir(directory);
+    await RNFS.writeFile(imagePath, artifact.data, 'base64');
+  } else if (artifact.uri?.startsWith('file://')) {
+    imagePath = artifact.uri.slice('file://'.length);
+  } else {
+    throw new Error('Image generation returned no local image data');
+  }
   return {
       id: imageId,
       prompt: input.prompt,

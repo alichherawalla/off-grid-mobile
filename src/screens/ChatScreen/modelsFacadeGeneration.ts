@@ -1,4 +1,4 @@
-import type { ModelsFailure } from '@offgrid/application';
+import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import {
   GenerationAbortedError,
   PartialGenerationError,
@@ -40,17 +40,11 @@ function failureError(failure: ModelsFailure): Error {
     case 'cancelled':
       return new GenerationAbortedError();
     case 'context_full':
-      return new Error('Context is full');
     case 'unknown_model':
-      return new Error(`Unknown model: ${failure.identifier}`);
     case 'remote_http':
-      return new Error(
-        failure.reason ?? `Remote model request failed (${failure.status})`,
-      );
     case 'runtime':
-      return new Error(failure.message);
     default:
-      return new Error(failure.reason);
+      return new Error(modelsFailureMessage(failure));
   }
 }
 
