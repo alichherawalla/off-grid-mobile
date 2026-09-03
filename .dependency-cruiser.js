@@ -74,6 +74,24 @@ module.exports = {
       },
     },
     {
+      name: 'presentation-not-to-raw-sync',
+      severity: 'error',
+      comment: 'Presentation reads Sync through @offgrid/application. Raw Sync imports stay in explicit composition and platform-adapter seams, which are outside this presentation scope.',
+      from: { path: '^(src/(screens|components|hooks|stores)/|pro/ui/)' },
+      to: {
+        path: '^(node_modules/@offgrid/sync/|@offgrid/sync(?:/|$)|\\.\\./shared/packages/sync/)',
+      },
+    },
+    {
+      name: 'presentation-not-to-raw-automation',
+      severity: 'error',
+      comment: 'Presentation reads Automation through @offgrid/application. Raw Automation imports stay in explicit composition and platform-adapter seams, which are outside this presentation scope.',
+      from: { path: '^(src/(screens|components|hooks|stores)/|pro/ui/)' },
+      to: {
+        path: '^(node_modules/@offgrid/automation/|@offgrid/automation(?:/|$)|\\.\\./shared/packages/automation/)',
+      },
+    },
+    {
       name: 'no-orphans',
       severity: 'error',
       comment: 'Orphan module (no importers, imports nothing relevant) — dead code. Confirm with grep, then delete (the standing dead-code gate that retires the manual recon).',
