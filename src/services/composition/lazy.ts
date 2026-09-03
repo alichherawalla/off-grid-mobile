@@ -23,6 +23,11 @@ export function lazyInstance<T extends object>(resolve: () => T): T {
     defineProperty(_target, property, descriptor) {
       return Reflect.defineProperty(resolve(), property, descriptor);
     },
+    // A restored spy is deleted from the object it was installed on; that must be the real instance,
+    // or the dead spy shadows the prototype method forever.
+    deleteProperty(_target, property) {
+      return Reflect.deleteProperty(resolve(), property);
+    },
     getOwnPropertyDescriptor(_target, property) {
       const descriptor = Reflect.getOwnPropertyDescriptor(resolve(), property);
       return descriptor ? { ...descriptor, configurable: true } : undefined;
