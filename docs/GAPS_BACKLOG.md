@@ -1048,7 +1048,7 @@ exactly the failure mode batch9's own header describes from its previous hand-ro
 Fix: batch9 requires `doMockRealSqlite` from the harness and deletes its private engine. Low risk (both
 already pass over real sqlite), and it makes the harness the single definition of that boundary.
 
-## Ejecting a model mid-reply unloads the engine WITHOUT stopping the generation
+## Ejecting a model mid-reply unloads the engine WITHOUT stopping the generation (RESOLVED 2026-09-03: `ModelEjectionService.ejectResident` stops running work, `evictWhenReleased` waits for the lease, then unloads; rendered test `ejectMidReplyStopsGeneration.rendered.redflow.test.tsx` proves stopCompletion lands before release)
 
 **Verdict: fix-the-guard (live bug, observed in a rendered test).**
 
@@ -2062,7 +2062,7 @@ Device log: "draw a dog" classified image once (20:27), later resends replayed t
 
 ## Remote model selection shows no loading (RESOLVED in code 2026-09-02: shared `ModelCommandApplicationService.pending(modality)` + `subscribe`; the sheet spins the remote row and disables the rest while the round trip runs; test model-command-service)
 
-## Mobile still keeps parallel selection fields beside the shared route (open, 2026-09-02; see shared/docs/SHARED_OWNERSHIP_AUDIT_2026-09-02.md #7)
+## Mobile still keeps parallel selection fields beside the shared route (RESOLVED 2026-09-03: one selection store; `activeModelId`/`lastTextModelId` have no production readers, `activeRemoteMediaServerIds` deleted in 46b2ebca; see shared/docs/SHARED_OWNERSHIP_AUDIT_2026-09-02.md #7)
 
 `activeModelId` / `lastTextModelId` and `selectedTextModelId()` remain as a second owner of the text selection. The readiness path no longer reads them; the remaining readers must move to the shared active route and the fields be deleted.
 
