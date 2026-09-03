@@ -1,5 +1,5 @@
-import { DEFAULT_IMAGE_MIME } from '@offgrid/models';
 import {
+  DEFAULT_IMAGE_MIME,
   CHAT_GENERATION_RECLAIM_POLICY,
   chatGenerationRequestDefaults,
   isMemoryToolAllowed,
@@ -13,13 +13,16 @@ import {
   type GenerationResult,
   runtimeModelRouteId,
   generationMessageText,
-} from '@offgrid/models';
-import type {
-  ChatContextApplicationService,
-  ChatOperationApplicationService,
-  ChatSessionService,
-} from '@offgrid/models';
-import { chatContext as composedChatContext, chatOperation, chatSession } from '../../services/composition/chat';
+  modelsFailureMessage,
+  type ChatContextApplicationPorts,
+  type ChatGenerationPort,
+  type ChatOperationCommand,
+  type ChatOperationApplicationPorts,
+  type ChatOperationPolicyPort,
+  type ChatRagPort,
+  type ChatSessionRepositoryPort,
+  type ChatSessionServiceOptions,
+} from '@offgrid/application';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { mobileChatGenerationProjection } from '../../services/chatGenerationProjection';
@@ -53,6 +56,24 @@ let queue: ChatQueueProjection = {
   queuedCount: 0,
 };
 const queueListeners = new Set<(projection: ChatQueueProjection) => void>();
+const sessionEventListeners = new Set<(event: ChatSessionEvent) => void>();
+
+export const mobileChatQueueSnapshot = (): ChatQueueProjection => queue;
+export function subscribeMobileChatQueue(
+  listener: (projection: ChatQueueProjection) => void,
+): () => void {
+  queueListeners.add(listener);
+  return () => queueListeners.delete(listener);
+}
+export function subscribeMobileChatSessionEvents(
+  listener: (event: ChatSessionEvent) => void,
+): () => void {
+  sessionEventListeners.add(listener);
+  return () => sessionEventListeners.delete(listener);
+}
+export function invalidateMobileChatSession(conversationId: string): void {
+  repository.invalidate(conversationId);
+}
 
 export interface MobileChatCommandOptions {
   imageMode?: 'auto' | 'force' | 'disabled';
@@ -83,7 +104,7 @@ export function projectClassifierFailure(
 }
 
 /** Store facts, classifier, and route refresh ports. Shared owns the text/image decision. */
-export function mobileChatOperationPorts(): ConstructorParameters<typeof ChatOperationApplicationService>[0] {
+export function mobileChatOperationPorts(): ChatOperationApplicationPorts {
   return {
   inspect() {
     const state = useAppStore.getState();
@@ -131,19 +152,17 @@ export function mobileChatOperationPorts(): ConstructorParameters<typeof ChatOpe
 };
 }
 
-const operationService = (): ChatOperationApplicationService => chatOperation();
-
-async function resolveMobileChatOperation(input: {
+export function mobileChatOperationCommand(input: {
   userMessage: GenerationMessage;
   requestedOperation?: GenerationOperation;
   signal: AbortSignal;
   identity: { turnId: string };
-}): Promise<GenerationOperation> {
+}): ChatOperationCommand {
   const options = commandOptions.get(input.identity.turnId);
   const hasImage =
     Array.isArray(input.userMessage.content) &&
     input.userMessage.content.some(part => part.type === 'image');
-  return operationService().resolve({
+  return {
     text: generationMessageText(input.userMessage),
     hasImage,
     requestedOperation: input.requestedOperation,
@@ -152,11 +171,11 @@ async function resolveMobileChatOperation(input: {
     onClassifierStatus: options?.onClassifierStatus,
     onClassifierTextFallback: options?.onClassifierTextFallback,
     ensureTextRoute: options?.ensureTextRoute,
-  });
+  };
 }
 
 /** Conversation, project, prompt, and retrieval ports. Shared composes the context. */
-export function mobileChatContextPorts(): ConstructorParameters<typeof ChatContextApplicationService>[0] {
+export function mobileChatContextPorts(): ChatContextApplicationPorts {
   return {
   conversation: id =>
     useChatStore
@@ -183,9 +202,8 @@ export function mobileChatContextPorts(): ConstructorParameters<typeof ChatConte
 };
 }
 
-const chatContext = (): ChatContextApplicationService => composedChatContext();
-
 function publishSessionEvent(event: ChatSessionEvent): void {
+  sessionEventListeners.forEach(listener => listener(event));
   if (event.type === 'started') {
     useChatStore
       .getState()
@@ -296,19 +314,15 @@ function chatRequestDefaults(): ChatTurn['request']['request'] {
 }
 
 /** Generation, repository, and session options. Shared owns the turn lifecycle. */
-export function mobileChatSessionPorts(): ConstructorParameters<typeof ChatSessionService> {
+export function mobileChatSessionPorts(
+  rag: ChatRagPort,
+  operation: ChatOperationPolicyPort,
+): [ChatGenerationPort, ChatSessionRepositoryPort, ChatSessionServiceOptions] {
   return [
   { generate: generateForSession },
     repository,
     {
-      rag: {
-        augment: ({ identity, signal }) =>
-          chatContext().compose({
-            conversationId: identity.conversationId,
-            projectId: identity.projectId,
-            signal,
-          }),
-      },
+      rag,
       tools: {
         resolve: async ({ identity }) => {
           const enabledToolIds =
@@ -330,7 +344,7 @@ export function mobileChatSessionPorts(): ConstructorParameters<typeof ChatSessi
           return tools.length ? { tools, toolChoice: 'auto' } : {};
         },
       },
-      operation: { resolve: resolveMobileChatOperation },
+      operation,
       compactionRetry: {
         shouldRetry: ({ error }) =>
           contextCompactionService.isContextFullError(error),
@@ -343,16 +357,10 @@ export function mobileChatSessionPorts(): ConstructorParameters<typeof ChatSessi
   ];
 }
 
-const service = (): ChatSessionService => chatSession();
-
-function stopActiveTurn(): boolean {
-  const running = queue.entries.find(entry => entry.status === 'running');
-  return running ? service().stop(running.turnId) : false;
-}
-
 registerMobileChatSessionControl({
-  stopActive: stopActiveTurn,
-  stopConversation: conversationId => service().stopConversation(conversationId),
+  stopActive: () => applicationFacade().models.chat.stop(),
+  stopConversation: conversationId =>
+    applicationFacade().models.chat.stopConversation(conversationId),
 });
 
 /** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
@@ -384,7 +392,7 @@ export const mobileChatSession = {
         : undefined;
     commandOptions.set(turnId, options);
     try {
-      return await service().send({
+      const outcome = await applicationFacade().models.chat.send({
         conversationId,
         turnId,
         projectId: conversation?.projectId,
@@ -392,6 +400,8 @@ export const mobileChatSession = {
         operation: recordedOperation,
         request: chatRequestDefaults(),
       });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      return outcome.value;
     } finally {
       commandOptions.delete(turnId);
     }
@@ -409,15 +419,17 @@ export const mobileChatSession = {
   ): Promise<ChatTurn> {
     const operation = input && 'type' in input ? input : input?.operation;
     const options = input && 'type' in input ? {} : input?.options ?? {};
-    repository.invalidate(conversationId);
+    applicationFacade().models.chat.invalidate(conversationId);
     commandOptions.set(turnId, options);
     try {
-      return await service().regenerate({
+      const outcome = await applicationFacade().models.chat.regenerate({
         conversationId,
         turnId,
         operation,
         request: chatRequestDefaults(),
       });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      return outcome.value;
     } finally {
       commandOptions.delete(turnId);
     }
@@ -428,39 +440,38 @@ export const mobileChatSession = {
     turnId: string,
     message: Message,
   ): Promise<ChatTurn> {
-    repository.invalidate(conversationId);
-    return service().edit({
+    applicationFacade().models.chat.invalidate(conversationId);
+    const outcome = await applicationFacade().models.chat.edit({
       conversationId,
       turnId,
       userMessage: generationMessage(message),
       request: chatRequestDefaults(),
     });
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    return outcome.value;
   },
 
   stop(): boolean {
-    return stopActiveTurn();
+    return applicationFacade().models.chat.stop();
   },
 
   stopConversation(conversationId: string): number {
-    return service().stopConversation(conversationId);
+    return applicationFacade().models.chat.stopConversation(conversationId);
   },
 
   clearQueued(): void {
-    for (const entry of queue.entries) {
-      if (entry.status === 'queued')
-        service().stop(entry.turnId, 'Queue cleared');
-    }
+    applicationFacade().models.chat.clearQueued();
   },
 
   subscribeQueue(
     listener: (projection: ChatQueueProjection) => void,
   ): () => void {
-    queueListeners.add(listener);
-    listener(queue);
-    return () => queueListeners.delete(listener);
+    const chat = applicationFacade().models.chat;
+    listener(chat.snapshot());
+    return chat.subscribe(listener);
   },
 
   invalidate(conversationId: string): void {
-    repository.invalidate(conversationId);
+    applicationFacade().models.chat.invalidate(conversationId);
   },
 };
