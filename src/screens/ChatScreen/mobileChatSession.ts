@@ -29,8 +29,7 @@ import { intentClassifier } from '../../services/intentClassifier';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { ragService, retrievalService } from '../../services';
 import { mobileToolDefinitions } from '../../services/modelServices/toolPorts';
-import { activeMobileRoute } from '../../services/modelServices/mobileLLMService';
-import { mobileLLMService } from '../../services/modelServices/mobileLLMService';
+import { activeMobileRoute, mobileModelsFacade } from '../../services/modelServices/mobileLLMService';
 import { refreshMobileModelServices } from '../../services/modelServices';
 import { generateMobileChat } from '../../services/modelServices/chatGenerationApplication';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
@@ -242,7 +241,7 @@ async function generateForSession(
       throw new Error(mobileImageChatGeneration.lastError() ?? 'Image generation returned no image');
     }
     const model =
-      (request.routeId ? mobileLLMService.get(request.routeId) : null) ??
+      (request.routeId ? mobileModelsFacade().lookup(request.routeId) : null) ??
       activeMobileRoute('image').model;
     if (!model) throw new Error('The selected image model is unavailable');
     const routeId = model.routeId ?? runtimeModelRouteId(model);

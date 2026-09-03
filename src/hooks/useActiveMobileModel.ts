@@ -3,7 +3,6 @@ import type { ActiveModelSnapshot, ModelModality } from '@offgrid/models';
 // Resolved at call time: the model services reach the screens that use this hook, and an eager
 // import would form a cycle under eager module loading (jest).
 const services = (): typeof import('../services/modelServices') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('../services/modelServices') as typeof import('../services/modelServices');
 
 /** The selected LOCAL model id for a modality, or null (a remote route reads as null). */
@@ -18,7 +17,7 @@ export function useActiveMobileModel(modality: ModelModality): ActiveModelSnapsh
 
   useEffect(() => {
     const publish = () => setSnapshot(services().activeMobileModel(modality));
-    const unsubscribe = services().mobileLLMService.subscribe(publish);
+    const unsubscribe = services().mobileModelsFacade().subscribe(publish);
     services().refreshMobileModelServices().then(publish).catch(() => undefined);
     return unsubscribe;
   }, [modality]);

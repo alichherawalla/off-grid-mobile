@@ -18,6 +18,7 @@ import {
   type MobileRouteFacts,
 } from './mobileRoute';
 import {
+  activeMobileRoute,
   mobileLLMService,
   refreshMobileLLMServiceInventory,
   selectMobileRoute,
@@ -152,7 +153,7 @@ export function stopMobileModelServices(): void {
 }
 
 export function activeMobileModel(modality: ActiveModelSnapshot['modality']): ActiveModelSnapshot {
-  return mobileLLMService.active(modality);
+  return activeMobileRoute(modality);
 }
 
 /** The user picked a model. For a remote route, ask that server to activate it FIRST (the one
@@ -209,5 +210,5 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId } from './mobileRoute';
-export { mobileLLMService } from './mobileLLMService';
+export { mobileLLMService, mobileModelsFacade } from './mobileLLMService';
 export type { MobileRouteFacts } from './mobileRoute';

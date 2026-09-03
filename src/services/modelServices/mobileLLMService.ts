@@ -1,4 +1,5 @@
-import type { ActiveModelSnapshot, ModelModality, WorkspaceRoutingPort } from '@offgrid/models';
+import type { ModelsFacade } from '@offgrid/application';
+import type { ActiveModelSnapshot, ModelModality, RuntimeModel, WorkspaceRoutingPort } from '@offgrid/models';
 import { lazyInstance } from '../composition/lazy';
 
 /** The single Mobile owner of model inventory, selection, and canonical route identity. */
@@ -6,11 +7,21 @@ import { lazyInstance } from '../composition/lazy';
 export const mobileLLMService: WorkspaceRoutingPort = lazyInstance(
   () => (require('./workspace') as typeof import('./workspace')).mobileWorkspace.llm,
 );
-let refreshChain = Promise.resolve<ReturnType<WorkspaceRoutingPort['list']>>([]);
+let refreshChain = Promise.resolve<RuntimeModel[]>([]);
+
+/** The public model door. The raw workspace below remains only for adapter registration. */
+export function mobileModelsFacade(): ModelsFacade {
+  return (require('../composition/application') as typeof import('../composition/application'))
+    .mobileApplication.models;
+}
 
 /** Serialize canonical inventory rebuilds so an older platform snapshot cannot win a race. */
 export function refreshMobileLLMServiceInventory() {
-  refreshChain = refreshChain.catch(() => []).then(() => mobileLLMService.refresh());
+  refreshChain = refreshChain.catch(() => []).then(async () => {
+    const models = mobileModelsFacade();
+    await models.refresh();
+    return [...models.snapshot().inventory];
+  });
   return refreshChain;
 }
 
@@ -22,11 +33,13 @@ export async function selectMobileRoute(
   await refreshMobileLLMServiceInventory();
   // The facade owns selection: it resolves the route and adopts a discovered remote model on its
   // server before committing, so callers never reach the inventory service directly.
-  const { mobileWorkspace } = require('./workspace') as typeof import('./workspace');
-  await mobileWorkspace.select(modality, canonicalId);
+  const selected = await mobileModelsFacade().select({ modality, modelId: canonicalId });
+  if (!selected.ok) throw new Error(selected.failure.kind === 'runtime' ? selected.failure.message : selected.failure.kind);
   await refreshMobileLLMServiceInventory();
 }
 
 export function activeMobileRoute(modality: ModelModality): ActiveModelSnapshot {
-  return mobileLLMService.active(modality);
+  const active = mobileModelsFacade().snapshot().active[modality];
+  if (!active) throw new Error(`The ${modality} model route is not initialized.`);
+  return active;
 }

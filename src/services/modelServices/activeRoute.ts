@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { ActiveModelSnapshot, ModelModality } from '@offgrid/models';
-import { mobileLLMService } from './mobileLLMService';
+import { activeMobileRoute, mobileModelsFacade } from './mobileLLMService';
 import { selectedLocalModelId, selectedRouteIsRemote } from './modelSelectionProjection';
 
 /**
@@ -21,7 +21,7 @@ const snapshotCache = new Map<ModelModality, ActiveModelSnapshot>();
 
 /** The same object while the route's facts are unchanged: React's external-store hook needs stable snapshots. */
 function stableActiveRoute(modality: ModelModality): ActiveModelSnapshot {
-  const next = mobileLLMService.active(modality);
+  const next = activeMobileRoute(modality);
   const previous = snapshotCache.get(modality);
   if (
     previous &&
@@ -43,7 +43,7 @@ function stableActiveRoute(modality: ModelModality): ActiveModelSnapshot {
 /** Reactive read of the shared active route for UI: re-renders when inventory or selection changes. */
 export function useActiveMobileRoute(modality: ModelModality): ActiveModelSnapshot {
   return useSyncExternalStore(
-    listener => mobileLLMService.subscribe(listener),
+    listener => mobileModelsFacade().subscribe(listener),
     () => stableActiveRoute(modality),
     () => stableActiveRoute(modality),
   );
