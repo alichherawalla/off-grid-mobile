@@ -1,12 +1,13 @@
-import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import {
   GenerationAbortedError,
+  modelsFailureMessage,
   PartialGenerationError,
   type GenerationEvents,
   type GenerationLifecycleEvent,
   type GenerationRequest,
   type GenerationResult,
-} from '@offgrid/models';
+  type ModelsFailure,
+} from '@offgrid/application';
 import { applicationFacade } from '../../services/applicationFacade';
 
 function publishLifecycle(

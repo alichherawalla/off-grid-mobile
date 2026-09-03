@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction } from 'react';
-import { admitChatImageAttachment, memoryOverrideOffer } from '@offgrid/models';
+import { admitChatImageAttachment, memoryOverrideOffer } from '@offgrid/application';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { generationSession } from '../../services/generationSession';

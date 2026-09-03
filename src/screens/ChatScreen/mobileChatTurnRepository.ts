@@ -4,7 +4,7 @@ import {
   type ChatTurn,
   type GenerationMessage,
   type GenerationOperation,
-} from '@offgrid/models';
+} from '@offgrid/application';
 import { modelInputAudioUris } from '../../services/modelMedia';
 import { useChatStore } from '../../stores';
 import type { MediaAttachment, Message } from '../../types';
