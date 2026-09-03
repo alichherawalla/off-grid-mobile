@@ -5,6 +5,14 @@ import { useTheme } from '../../../theme';
 import { AppSheet } from '../../AppSheet';
 import { AnimatedPressable } from '../../AnimatedPressable';
 
+export interface ActionMenuExtraAction {
+  readonly label: string;
+  readonly icon: React.ComponentProps<typeof Icon>['name'];
+  readonly onPress: () => void;
+  readonly disabled?: boolean;
+  readonly testID: string;
+}
+
 interface ActionMenuSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -21,6 +29,8 @@ interface ActionMenuSheetProps {
   onSpeak: () => void;
   /** When provided, shows a "Select text" item (chat mode) for partial copy. */
   onSelectText?: () => void;
+  /** Optional host action rendered with the same interaction and visual contract. */
+  extraAction?: ActionMenuExtraAction;
 }
 
 export function ActionMenuSheet({
@@ -38,6 +48,7 @@ export function ActionMenuSheet({
   onGenerateImage,
   onSpeak,
   onSelectText,
+  extraAction,
 }: ActionMenuSheetProps) {
   const { colors } = useTheme();
 
@@ -118,6 +129,25 @@ export function ActionMenuSheet({
           >
             <Icon name="volume-2" size={18} color={colors.textSecondary} />
             <Text style={styles.actionSheetText}>Speak</Text>
+          </AnimatedPressable>
+        )}
+
+        {extraAction && (
+          <AnimatedPressable
+            testID={extraAction.testID}
+            hapticType="selection"
+            style={styles.actionSheetItem}
+            onPress={extraAction.onPress}
+            disabled={extraAction.disabled}
+            accessibilityRole="button"
+            accessibilityLabel={extraAction.label}
+          >
+            <Icon
+              name={extraAction.icon}
+              size={18}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.actionSheetText}>{extraAction.label}</Text>
           </AnimatedPressable>
         )}
       </View>
