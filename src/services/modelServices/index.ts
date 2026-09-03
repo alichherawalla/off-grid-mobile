@@ -51,7 +51,7 @@ registerModelSelectionCommandPort({
     );
   },
 });
-export const mobileGenerationService = mobileWorkspace.generation;
+const mobileGenerationService = mobileWorkspace.generation;
 /** Voice has its own queue so sentence playback can run while text is still streaming. */
 export const mobileVoiceGenerationService = voiceGeneration();
 const generationAdapterRegistrations = new Map<string, () => void>();
@@ -216,5 +216,4 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId } from './mobileRoute';
-export { mobileLLMService } from './mobileLLMService';
 export type { MobileRouteFacts } from './mobileRoute';
