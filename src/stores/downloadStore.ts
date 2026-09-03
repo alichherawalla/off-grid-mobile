@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { ModelDownloadProjectionController } from '@offgrid/models';
+import type { ModelDownloadProjectionController } from '@offgrid/models';
+import { modelDownloadProjectionController } from '../services/composition/downloads';
 import type { ModelKey } from '../utils/modelKey';
 import type { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
@@ -30,13 +31,18 @@ interface DownloadStoreState {
   remove(modelKey: ModelKey): void;
 }
 
-export const modelDownloadProjection = new ModelDownloadProjectionController<DownloadEntry>({
-  read: () => {
-    const state = useDownloadStore.getState();
-    return { downloads: state.downloads, downloadIdIndex: state.downloadIdIndex };
-  },
-  write: state => useDownloadStore.setState(state),
-});
+/** Zustand read/write as the projection's persistence port. */
+export function mobileDownloadProjectionPorts(): ConstructorParameters<typeof ModelDownloadProjectionController<DownloadEntry>>[0] {
+  return {
+    read: () => {
+      const state = useDownloadStore.getState();
+      return { downloads: state.downloads, downloadIdIndex: state.downloadIdIndex };
+    },
+    write: state => useDownloadStore.setState(state),
+  };
+}
+
+export const modelDownloadProjection = modelDownloadProjectionController();
 
 export const useDownloadStore = create<DownloadStoreState>((set) => {
   return {

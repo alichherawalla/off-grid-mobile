@@ -1,14 +1,14 @@
 import { Platform } from 'react-native';
 import {
-  ModelMemoryAdvisoryService,
   type ModelMemoryAdvisoryArtifact,
   type ProjectedMemoryCheck,
 } from '@offgrid/models';
+import type { ModelMemoryAdvisoryService } from '@offgrid/models';
 import { INFERENCE_BACKENDS } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { hardwareService } from '../hardware';
-import { modelResidencyManager } from './residencyBootstrap';
 import type { MemoryCheckResult, ModelType } from './modelStateTypes';
+import { modelMemoryAdvisory } from '../composition/model-library';
 
 function observedArtifact(
   modelId: string,
@@ -44,7 +44,9 @@ function observedArtifact(
   };
 }
 
-const advisory = new ModelMemoryAdvisoryService(modelResidencyManager, {
+/** Device memory and observed artifacts. Shared owns the verdict. */
+export function mobileModelMemoryAdvisoryPorts(): ConstructorParameters<typeof ModelMemoryAdvisoryService>[1] {
+  return {
   async deviceMemory() {
     const device = await hardwareService.getDeviceInfo();
     return {
@@ -54,7 +56,10 @@ const advisory = new ModelMemoryAdvisoryService(modelResidencyManager, {
     };
   },
   artifact: observedArtifact,
-});
+};
+}
+
+const advisory = (): ModelMemoryAdvisoryService => modelMemoryAdvisory();
 
 function renderVerdict(verdict: ProjectedMemoryCheck): MemoryCheckResult {
   return {
@@ -73,14 +78,14 @@ export async function checkMemoryForModel(
   modelId: string,
   modelType: ModelType,
 ): Promise<MemoryCheckResult> {
-  return renderVerdict(await advisory.forSelection(modelId, modelType));
+  return renderVerdict(await advisory().forSelection(modelId, modelType));
 }
 
 export async function checkMemoryForDualModel(
   textModelId: string | null,
   imageModelId: string | null,
 ): Promise<MemoryCheckResult> {
-  return renderVerdict(await advisory.forCombination([
+  return renderVerdict(await advisory().forCombination([
     { id: textModelId, type: 'text' },
     { id: imageModelId, type: 'image' },
   ]));

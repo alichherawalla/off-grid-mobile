@@ -1,16 +1,14 @@
 import {
-  ImageDownloadWorkflowService,
   type DownloadOperationOwner,
   type ImageDownloadPlan,
 } from '@offgrid/models';
 import { modelDownloadProjection } from '../../../stores/downloadStore';
-import type { DownloadEntry } from '../../../utils/downloadStatus';
 import { coordinatedDownloads } from '../../modelServices/coordinatedDownloadBridge';
+import { imageDownloadWorkflow } from '../../composition/downloads';
 
-const workflow = new ImageDownloadWorkflowService<DownloadEntry>(modelDownloadProjection);
 
 export function beginImageDownload(plan: ImageDownloadPlan): DownloadOperationOwner | undefined {
-  return workflow.begin(plan, {
+  return imageDownloadWorkflow().begin(plan, {
     modelKey: plan.modelKey,
     downloadId: plan.initialDownloadId,
     modelId: plan.modelId,
@@ -32,7 +30,7 @@ export function attachImageTransfer(
   downloadId: string,
   cancelTransfer: (id: string) => Promise<void> = id => coordinatedDownloads.cancelDownload(id),
 ): void {
-  workflow.attachTransfer(owner, downloadId, cancelTransfer);
+  imageDownloadWorkflow().attachTransfer(owner, downloadId, cancelTransfer);
 }
 
 export function reportImageDownloadProgress(
@@ -40,19 +38,19 @@ export function reportImageDownloadProgress(
   bytes: number,
   total: number,
 ): void {
-  workflow.progress(owner, bytes, total, Date.now());
+  imageDownloadWorkflow().progress(owner, bytes, total, Date.now());
 }
 
 export function beginImageDownloadProcessing(owner: DownloadOperationOwner): void {
-  workflow.processing(owner);
+  imageDownloadWorkflow().processing(owner);
 }
 
 export function failImageDownload(owner: DownloadOperationOwner, message: string): void {
-  workflow.failed(owner, message);
+  imageDownloadWorkflow().failed(owner, message);
 }
 
 export function completeImageDownload(owner: DownloadOperationOwner): void {
-  workflow.complete(owner);
+  imageDownloadWorkflow().complete(owner);
 }
 
 export function removeImageDownloadRecord(modelId: string): void {
@@ -70,12 +68,12 @@ export async function cancelOwnedImageDownload(
     cancelDownload(downloadId: string): Promise<void>
   } = coordinatedDownloads,
 ): Promise<boolean> {
-  return workflow.cancel(`image:${modelId}`, {
+  return imageDownloadWorkflow().cancel(`image:${modelId}`, {
     cancelQueued: async modelKey => { transfers.cancelQueued(modelKey); },
     cancelTransfer: id => transfers.cancelDownload(id),
   });
 }
 
 export function isActiveImageDownload(owner: DownloadOperationOwner): boolean {
-  return workflow.isActive(owner);
+  return imageDownloadWorkflow().isActive(owner);
 }

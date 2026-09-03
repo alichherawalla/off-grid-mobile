@@ -1,8 +1,8 @@
 import {
-  ModelLibraryCommandService,
   type ModelLibraryCommandTarget,
   type ModelModality,
 } from '@offgrid/models';
+import type { ModelLibraryCommandService } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import {
   modelDownloadProjection,
@@ -17,6 +17,7 @@ import { mobileModelSelectionService } from './modelSelectionApplication';
 import { readMobileModelSelection } from './modelSelectionProjection';
 import { mobileRouteId } from './mobileRoute';
 import { refreshMobileLLMServiceInventory } from './mobileLLMService';
+import { modelLibraryCommands } from '../composition/model-library';
 
 type LibraryModality = 'text' | 'image';
 
@@ -73,7 +74,9 @@ async function resolveTarget(
   };
 }
 
-const service = new ModelLibraryCommandService({
+/** Store, download-bridge, and runtime ports. Shared owns the remove/cancel transactions. */
+export function mobileModelLibraryCommandPorts(): ConstructorParameters<typeof ModelLibraryCommandService>[0] {
+  return {
   resolve: resolveTarget,
   cancelQueued: modelKey => { coordinatedDownloads.cancelQueued(modelKey); },
   cancelTransfer: transferId => coordinatedDownloads.cancelDownload(transferId),
@@ -110,7 +113,10 @@ const service = new ModelLibraryCommandService({
     const transfer = 'transferId' in event ? ` transfer=${event.transferId}` : '';
     logger.log(`[ModelLibrary] ${event.type} model=${event.modelId}${transfer} error=${event.error}`);
   },
-});
+};
+}
+
+const service = (): ModelLibraryCommandService => modelLibraryCommands();
 
 function assertSuccess(result: { success: boolean; error?: string }): void {
   if (!result.success) throw new Error(result.error ?? 'The model operation failed.');
@@ -121,7 +127,7 @@ export async function removeMobileLibraryModel(
   modality: LibraryModality,
   modelId: string,
 ): Promise<void> {
-  assertSuccess(await service.remove(modality, modelId));
+  assertSuccess(await service().remove(modality, modelId));
 }
 
 /** Mobile adapter for the Shared cancel-and-projection-cleanup transaction. */
@@ -129,5 +135,5 @@ export async function cancelMobileLibraryDownload(
   modality: LibraryModality,
   modelId: string,
 ): Promise<void> {
-  assertSuccess(await service.cancel(modality, modelId));
+  assertSuccess(await service().cancel(modality, modelId));
 }

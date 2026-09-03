@@ -2,10 +2,10 @@ import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import {
-  ImageArchiveImportService,
   type ImageArchiveImportProgress,
   type ImageArchiveImportResult,
 } from '@offgrid/models';
+import type { ImageArchiveImportService } from '@offgrid/models';
 import type { ONNXImageModel } from '../../../../types';
 import { useAppStore } from '../../../../stores/appStore';
 import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
@@ -15,8 +15,11 @@ import { mobileModelSelectionService } from '../../../modelServices/modelSelecti
 import { readMobileModelSelection } from '../../../modelServices/modelSelectionProjection';
 import { mobileRouteId } from '../../../modelServices/mobileRoute';
 import { refreshMobileLLMServiceInventory } from '../../../modelServices/mobileLLMService';
+import { imageArchiveImport } from '../../../composition/model-library';
 
-const service = new ImageArchiveImportService({
+/** Filesystem, registry, and selection ports. Shared owns the import transaction. */
+export function mobileImageArchiveImportPorts(): ConstructorParameters<typeof ImageArchiveImportService>[0] {
+  return {
   imageModelsDirectory: () => modelLibrary.getImageModelsDirectory(),
   ensureDirectory: async path => { if (!(await RNFS.exists(path))) await RNFS.mkdir(path); },
   stagePickedArchive: (sourceUri, archivePath) =>
@@ -49,7 +52,9 @@ const service = new ImageArchiveImportService({
     await refreshMobileLLMServiceInventory();
   },
   now: () => Date.now(),
-});
+};
+}
+
 
 /** Mobile image-archive boundary. Shared owns the transaction and typed outcome. */
 export function importMobileImageArchive(input: {
@@ -57,5 +62,5 @@ export function importMobileImageArchive(input: {
   fileName: string;
   onProgress?(progress: ImageArchiveImportProgress): void;
 }): Promise<ImageArchiveImportResult> {
-  return service.execute(input);
+  return imageArchiveImport().execute(input);
 }

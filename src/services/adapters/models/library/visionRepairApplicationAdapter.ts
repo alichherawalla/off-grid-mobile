@@ -1,23 +1,26 @@
-import {
+import type {
+  VisionRepairApplicationIntent,
+  VisionRepairApplicationResult,
   VisionRepairApplicationService,
-  type VisionRepairApplicationIntent,
-  type VisionRepairApplicationResult,
 } from '@offgrid/models';
+import { visionRepairApplication } from '../../../composition/model-library';
 import { useAppStore } from '../../../../stores/appStore';
 import type { DownloadedModel, ModelFile } from '../../../../types';
 import * as visionRepair from './visionRepairAdapter';
 import type { VisionRepairContext } from './visionRepairAdapter';
 
-export function executeVisionRepairIntent(
+export type MobileVisionRepairApplication = VisionRepairApplicationService<
+  DownloadedModel,
+  ModelFile,
+  DownloadedModel[]
+>;
+
+/** Projector repair and store refresh ports. Shared owns the repair intents. */
+export function mobileVisionRepairPorts(
   context: VisionRepairContext,
   getDownloadedModels: () => Promise<DownloadedModel[]>,
-  intent: VisionRepairApplicationIntent<DownloadedModel, ModelFile>,
-): Promise<VisionRepairApplicationResult<DownloadedModel[]>> {
-  return new VisionRepairApplicationService<
-    DownloadedModel,
-    ModelFile,
-    DownloadedModel[]
-  >({
+): ConstructorParameters<typeof VisionRepairApplicationService<DownloadedModel, ModelFile, DownloadedModel[]>>[0] {
+  return {
     repairModel: model => visionRepair.repairVision(context, model),
     repairProjector: (modelId, file) =>
       visionRepair.repairMmProj(context, { modelId, file }, {}),
@@ -26,5 +29,13 @@ export function executeVisionRepairIntent(
       useAppStore.getState().setDownloadedModels(models);
       return models;
     },
-  }).execute(intent);
+  };
+}
+
+export function executeVisionRepairIntent(
+  context: VisionRepairContext,
+  getDownloadedModels: () => Promise<DownloadedModel[]>,
+  intent: VisionRepairApplicationIntent<DownloadedModel, ModelFile>,
+): Promise<VisionRepairApplicationResult<DownloadedModel[]>> {
+  return visionRepairApplication(mobileVisionRepairPorts(context, getDownloadedModels)).execute(intent);
 }

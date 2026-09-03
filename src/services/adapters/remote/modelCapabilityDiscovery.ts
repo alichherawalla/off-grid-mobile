@@ -1,13 +1,14 @@
-/** Mobile raw HTTP adapter for Shared remote capability discovery. */
+/** Mobile raw HTTP adapter for Shared remote capability discovery(). */
 
 import {
-  RemoteCapabilityDiscoveryApplicationService,
   isGenerativeRemoteModel,
   type RemoteCapabilityProbeEvidence,
   type RemoteCapabilityProbeRequest,
   type RemoteModelCapabilityInfo,
 } from '@offgrid/models';
+import type { RemoteCapabilityDiscoveryApplicationService } from '@offgrid/models';
 import logger from '../../../utils/logger';
+import { remoteCapabilityDiscovery } from '../../composition/remote';
 
 export type RemoteModelInfo = RemoteModelCapabilityInfo;
 
@@ -39,26 +40,31 @@ async function execute(
   }
 }
 
-const discovery = new RemoteCapabilityDiscoveryApplicationService({ execute });
+/** Raw HTTP probe as the discovery port. */
+export function mobileRemoteCapabilityPorts(): ConstructorParameters<typeof RemoteCapabilityDiscoveryApplicationService>[0] {
+  return { execute };
+}
+
+const discovery = (): RemoteCapabilityDiscoveryApplicationService => remoteCapabilityDiscovery();
 
 export function fetchRemoteModelInfo(
   endpoint: string,
   modelName: string,
 ): Promise<RemoteModelInfo> {
-  return discovery.ollama(endpoint, modelName);
+  return discovery().ollama(endpoint, modelName);
 }
 
 export function fetchLmStudioModelInfo(
   endpoint: string,
   modelId: string,
 ): Promise<RemoteModelInfo> {
-  return discovery.lmStudio(endpoint, modelId);
+  return discovery().lmStudio(endpoint, modelId);
 }
 
 export function fetchLlamaCppProps(
   endpoint: string,
 ): Promise<RemoteModelInfo | null> {
-  return discovery.llamaCpp(endpoint);
+  return discovery().llamaCpp(endpoint);
 }
 
 export function fetchModelCapabilities(
@@ -69,7 +75,7 @@ export function fetchModelCapabilities(
     toolCalling: (id: string) => boolean;
   },
 ): Promise<RemoteModelInfo> {
-  return discovery.discover({
+  return discovery().discover({
     endpoint,
     modelId,
     fallbackVision: nameBasedDetect.vision(modelId),

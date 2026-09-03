@@ -1,7 +1,5 @@
-import {
-  ChatModelReadinessService,
-  type ChatModelReadinessFacts,
-} from '@offgrid/models';
+import type { ChatModelReadinessFacts, ChatModelReadinessService } from '@offgrid/models';
+import { chatModelReadiness } from '../composition/model-library';
 import type { DownloadedModel } from '../../types';
 import { isLiteRTModel } from '../../types';
 import { getActiveModels } from './modelState';
@@ -14,6 +12,27 @@ export interface MobileChatModelReadinessInput {
   activeModelId: string | null;
   remote: boolean;
   beforeLoad?: () => void | Promise<void>;
+}
+
+/** Load and memory-refusal ports around one readiness inspection. */
+export function mobileChatModelReadinessPorts(
+  input: MobileChatModelReadinessInput,
+  inspect: () => ChatModelReadinessFacts,
+): ConstructorParameters<typeof ChatModelReadinessService>[0] {
+  return {
+    inspect,
+    beforeLoad: input.beforeLoad,
+    async load(command) {
+      if (!input.activeModelId) throw new Error('No text model is selected');
+      if (command.forceReload) await mobileResidencyIntents.unloadText(true);
+      await mobileResidencyIntents.ensureText(
+        input.activeModelId,
+        undefined,
+        command.overrideMemory ? { override: true } : undefined,
+      );
+    },
+    isMemoryRefusal: isOverridableMemoryError,
+  };
 }
 
 /** Native/runtime fact adapter. All readiness and recovery decisions stay in Shared. */
@@ -32,18 +51,5 @@ export function mobileChatModelReadiness(
     };
   };
 
-  return new ChatModelReadinessService({
-    inspect,
-    beforeLoad: input.beforeLoad,
-    async load(command) {
-      if (!input.activeModelId) throw new Error('No text model is selected');
-      if (command.forceReload) await mobileResidencyIntents.unloadText(true);
-      await mobileResidencyIntents.ensureText(
-        input.activeModelId,
-        undefined,
-        command.overrideMemory ? { override: true } : undefined,
-      );
-    },
-    isMemoryRefusal: isOverridableMemoryError,
-  });
+  return chatModelReadiness(mobileChatModelReadinessPorts(input, inspect));
 }

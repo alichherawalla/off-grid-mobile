@@ -9,10 +9,11 @@ import {
   effectiveTextCacheType,
   llamaRnModelLoadPlan,
   gpuFallbackNotice,
-  MobileNativeLoadService,
   mobileNativeBackendForLoad,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
+import type { MobileNativeLoadService } from '@offgrid/models';
+import { nativeTextLoad } from './composition/text-load';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 import { APP_CONFIG } from '../constants';
@@ -127,7 +128,18 @@ export async function initContextWithFallback(
   resetNativeLogCapture();
   logger.log(`[LLM] initContextWithFallback: model=${modelPath}, ctx=${contextLength}, gpuLayers=${nGpuLayers}, backend=${backend.toUpperCase()}`);
   logger.log(`[WIRE-LLAMA-LOAD] ${JSON.stringify({ modelPath, contextLength, nGpuLayers, backend, params: { ...(params as Record<string, unknown>), model: undefined } })}`);
-  const service = new MobileNativeLoadService<LlamaContext>({
+  const service = nativeTextLoad();
+  return service.load({
+    platform: Platform.OS === 'android' ? 'android' : 'ios',
+    backend,
+    params: params as Record<string, unknown>,
+    contextLength,
+    gpuLayers: nGpuLayers,
+  });
+}
+/** llama.rn init/release and log capture. Shared owns the fallback ladder. */
+export function mobileNativeLoadPorts(): ConstructorParameters<typeof MobileNativeLoadService<LlamaContext>>[0] {
+  return {
     initialize: input => initLlama({
       ...input.params,
       n_ctx: input.contextLength,
@@ -141,15 +153,9 @@ export async function initContextWithFallback(
     reportFailure: (attempt, error: any) => logger.warn(
       `[LLM] ${attempt.kind} failed (${attempt.backend}, ctx=${attempt.contextLength}): ${error?.message || String(error)}`,
     ),
-  });
-  return service.load({
-    platform: Platform.OS === 'android' ? 'android' : 'ios',
-    backend,
-    params: params as Record<string, unknown>,
-    contextLength,
-    gpuLayers: nGpuLayers,
-  });
+  };
 }
+
 export interface GpuInfo {
   gpuEnabled: boolean;
   gpuReason: string;

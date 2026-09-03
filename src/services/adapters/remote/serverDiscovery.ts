@@ -5,7 +5,6 @@ import { fetchModelCapabilities } from './modelCapabilityDiscovery';
 import { readOffGridDesktopModelEvidence } from './offGridDesktopModels';
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
-  RemoteProviderDiscoveryApplicationService,
   detectRemoteToolCallingCapability,
   detectRemoteVisionCapability,
   displayRemoteModelName,
@@ -15,6 +14,9 @@ import {
   type RemoteProviderProbeEvidence,
   type RemoteTextDiscoveryCandidate,
 } from '@offgrid/models';
+import type { RemoteProviderDiscoveryApplicationService } from '@offgrid/models';
+
+import { remoteProviderDiscovery as composedProviderDiscovery } from '../../composition/remote';
 
 export const displayModelName = displayRemoteModelName;
 
@@ -83,7 +85,9 @@ async function mapTextModels(input: {
   });
 }
 
-const remoteProviderDiscovery = new RemoteProviderDiscoveryApplicationService({
+/** Transport, Desktop evidence, and capability mapping ports. Shared owns discovery. */
+export function mobileRemoteProviderDiscoveryPorts(): ConstructorParameters<typeof RemoteProviderDiscoveryApplicationService>[0] {
+  return {
   probe: probeRemoteProvider,
   readDesktop: (input, timeoutMs) => readOffGridDesktopModelEvidence({
     endpoint: input.endpoint,
@@ -93,10 +97,13 @@ const remoteProviderDiscovery = new RemoteProviderDiscoveryApplicationService({
   authorizationHeaders: remoteAuthorizationHeaders,
   now: Date.now,
   timestamp: () => new Date().toISOString(),
-});
+};
+}
+
+const remoteProviderDiscovery = (): RemoteProviderDiscoveryApplicationService => composedProviderDiscovery();
 
 async function discoverServer(server: RemoteServer): Promise<ServerTestResult> {
-  const result = await remoteProviderDiscovery.discover({
+  const result = await remoteProviderDiscovery().discover({
     serverId: server.id,
     endpoint: server.endpoint,
     apiKey: server.apiKey,

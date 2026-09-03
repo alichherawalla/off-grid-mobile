@@ -15,7 +15,8 @@
  */
 import { useAppStore } from '../stores';
 import { mobileResidencyIntents } from './modelServices/residencyIntents';
-import { LoadPolicyTransitionCoordinator } from '@offgrid/models';
+import type { LoadPolicyTransitionCoordinator } from '@offgrid/models';
+import { loadPolicyTransition } from './composition/text-load';
 
 /**
  * Mobile keeps the persisted-settings subscription and native residency ports.
@@ -26,12 +27,17 @@ export interface LoadPolicySyncCoordinator {
   dispose(): void;
 }
 
-/** Create one explicit app-lifetime projection. Repeated start calls are idempotent. */
-export function createLoadPolicySync(): LoadPolicySyncCoordinator {
-  const policy = new LoadPolicyTransitionCoordinator({
+/** Residency intents as the policy ports. */
+export function mobileLoadPolicyPorts(): ConstructorParameters<typeof LoadPolicyTransitionCoordinator>[0] {
+  return {
     setPolicy: next => mobileResidencyIntents.setLoadPolicy(next),
     ejectAll: () => mobileResidencyIntents.ejectAll(),
-  });
+  };
+}
+
+/** Create one explicit app-lifetime projection. Repeated start calls are idempotent. */
+export function createLoadPolicySync(): LoadPolicySyncCoordinator {
+  const policy = loadPolicyTransition();
   let unsubscribe: (() => void) | null = null;
   return {
     start() {

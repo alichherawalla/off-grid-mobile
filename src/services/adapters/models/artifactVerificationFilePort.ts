@@ -1,8 +1,6 @@
 import { Buffer } from 'buffer';
-import {
-  ArtifactVerificationService,
-  type ArtifactVerificationFilePort,
-} from '@offgrid/models';
+import type { ArtifactVerificationFilePort } from '@offgrid/models';
+import { artifactVerification } from '../../composition/model-library';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../../utils/fileStat';
 
@@ -23,6 +21,4 @@ export const mobileArtifactVerificationFiles: ArtifactVerificationFilePort = {
   },
 };
 
-export const mobileArtifactVerification = new ArtifactVerificationService(
-  mobileArtifactVerificationFiles,
-);
+export const mobileArtifactVerification = artifactVerification();

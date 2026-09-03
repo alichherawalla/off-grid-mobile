@@ -1,14 +1,15 @@
-/** Mobile device and HTTP adapter for Shared LAN remote-server discovery. */
+/** Mobile device and HTTP adapter for Shared LAN remote-server discovery(). */
 
 import { getIpAddress, isEmulator } from 'react-native-device-info';
 import {
-  RemoteLanDiscoveryApplicationService,
   type RemoteLanProbeEvidence,
   type RemoteLanServer,
   remoteLanScanKinds,
 } from '@offgrid/models';
+import type { RemoteLanDiscoveryApplicationService } from '@offgrid/models';
 import logger from '../utils/logger';
 import { useAppStore } from '../stores';
+import { remoteLanDiscovery } from './composition/remote';
 
 export type DiscoveredServer = RemoteLanServer;
 
@@ -25,18 +26,19 @@ async function probe(url: string, timeoutMs: number): Promise<RemoteLanProbeEvid
   }
 }
 
-const discovery = new RemoteLanDiscoveryApplicationService({
-  isEmulator,
-  ipAddress: getIpAddress,
-  probe,
-});
+/** Device identity and HTTP probe ports. Shared owns the scan. */
+export function mobileLanDiscoveryPorts(): ConstructorParameters<typeof RemoteLanDiscoveryApplicationService>[0] {
+  return { isEmulator, ipAddress: getIpAddress, probe };
+}
+
+const discovery = (): RemoteLanDiscoveryApplicationService => remoteLanDiscovery();
 
 export function discoverLANServers(
   onLog?: (message: string) => void,
   onFound?: (server: DiscoveredServer) => void,
   onProgress?: (done: number, total: number) => void,
 ): Promise<DiscoveredServer[]> {
-  return discovery.discover(message => {
+  return discovery().discover(message => {
     logger.warn('[Discovery]', message);
     onLog?.(message);
   }, onFound, { kinds: remoteLanScanKinds(useAppStore.getState().settings), onProgress });

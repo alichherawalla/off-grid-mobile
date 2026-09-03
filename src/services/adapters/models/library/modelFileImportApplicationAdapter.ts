@@ -1,10 +1,10 @@
 import RNFS from 'react-native-fs';
 import {
-  ModelFileImportApplicationService,
   resolveImportedModelUri,
   type ModelFileImportDecision,
   type ModelImportArtifact,
 } from '@offgrid/models';
+import type { ModelFileImportApplicationService } from '@offgrid/models';
 import type {
   DownloadedModel,
   LiteRTDownloadedModel,
@@ -17,15 +17,21 @@ import {
   buildDownloadedModel,
   persistDownloadedModel,
 } from './modelRegistryStorageAdapter';
+import { modelFileImport } from '../../../composition/model-library';
 
-export function importSelectedModelFiles(input: {
+export interface MobileModelFileImportInput {
   modelsDir: string;
   artifacts: readonly ModelImportArtifact[];
   decide(request: ModelFileImportDecision): Promise<boolean>;
   onProgress?(progress: { fraction: number; fileName: string }): void;
   refresh(model: DownloadedModel): void;
-}) {
-  const service = new ModelFileImportApplicationService<DownloadedModel>({
+}
+
+/** Copy, size, and registry ports for one import. Shared owns the decisions. */
+export function mobileModelFileImportPorts(
+  input: MobileModelFileImportInput,
+): ConstructorParameters<typeof ModelFileImportApplicationService<DownloadedModel>>[0] {
+  return {
     decide: input.decide,
     destinationPath: fileName => `${input.modelsDir}/${fileName}`,
     exists: path => RNFS.exists(path),
@@ -82,10 +88,15 @@ export function importSelectedModelFiles(input: {
       return model;
     },
     refresh: input.refresh,
-  });
+  };
+}
+
+export function importSelectedModelFiles(input: MobileModelFileImportInput) {
+  const service = modelFileImport(mobileModelFileImportPorts(input));
   return service.execute({
     artifacts: input.artifacts,
     liteRTAvailable: true,
     onProgress: input.onProgress,
   });
 }
+

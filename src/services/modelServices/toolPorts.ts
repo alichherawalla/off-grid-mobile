@@ -7,10 +7,11 @@ import {
   ToolExecutionContext,
   ToolExecutionResult,
   ToolExecutorPort,
-  ToolRoutingService,
   openAIToolToDefinition,
   toolSchemaTokenBudget,
 } from '@offgrid/models';
+import type { ToolRoutingService } from '@offgrid/models';
+import { toolRouting } from '../composition/tools';
 import { useAppStore } from '../../stores/appStore';
 import { useChatStore } from '../../stores/chatStore';
 import logger from '../../utils/logger';
@@ -61,11 +62,16 @@ export const mobileToolExecutor: ToolExecutorPort = {
   },
 };
 
-const toolRoutingService = new ToolRoutingService({
-  embedding: mobileToolEmbeddingPort,
-  embeddingCache: mobileToolEmbeddingCache,
-  modelSelection: generateToolRoutingText,
-});
+/** Embedding engine, cache, and model-selection text ports. Shared owns routing. */
+export function mobileToolRoutingPorts(): ConstructorParameters<typeof ToolRoutingService>[0] {
+  return {
+    embedding: mobileToolEmbeddingPort,
+    embeddingCache: mobileToolEmbeddingCache,
+    modelSelection: generateToolRoutingText,
+  };
+}
+
+const toolRoutingService = (): ToolRoutingService => toolRouting();
 
 /** Build one shared schema projection from Mobile's raw tool registries. */
 export async function mobileToolDefinitions(
@@ -84,7 +90,7 @@ export async function mobileToolDefinitions(
       return definition ? [definition] : [];
     });
   const settings = useAppStore.getState().settings;
-  const result = await toolRoutingService.select({
+  const result = await toolRoutingService().select({
     messages: messages.map(message => ({
       role: message.role,
       content: message.content,

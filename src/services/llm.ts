@@ -5,10 +5,10 @@ import {
   normalizeGenerationDelta,
   reasoningWireFragment,
   resolveReasoningPlan,
-  MobileTextLoadAdmissionService,
   planMobileTextAccelerator,
   type ReasoningWireFragment,
 } from '@offgrid/models';
+import { textLoadAdmission } from './composition/text-load';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
@@ -21,7 +21,7 @@ import {
   ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, supportsNativeThinking,
   BYTES_PER_GB,
-  validateModelFile, safeCompletion,
+  safeCompletion,
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
 import { awaitMemoryReclaim } from './memoryBudget';
@@ -76,16 +76,7 @@ class LLMService {
     const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
-    const admission = await new MobileTextLoadAdmissionService({
-      exists: path => RNFS.exists(path),
-      validate: path => validateModelFile(path),
-      size: async path => (await statFile(path))?.size ?? 0,
-      memory: async () => {
-        const snapshot = await hardwareService.getAppMemoryUsage();
-        return { availableBytes: snapshot.available, totalBytes: snapshot.total };
-      },
-      report: (event, detail) => logger.log(`[LLM][ADMISSION] ${event}`, detail ?? ''),
-    }).admit({
+    const admission = await textLoadAdmission().admit({
       modelPath,
       requestedContextLength: params.ctxLen,
       quantizedCache: !params.usesF16Cache,

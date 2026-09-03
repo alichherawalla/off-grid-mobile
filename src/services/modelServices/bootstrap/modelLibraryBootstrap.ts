@@ -17,12 +17,6 @@ import {
   DownloadCompleteCallback,
   DownloadErrorCallback,
 } from '../../adapters/models/library/types';
-import {
-  saveModelsList,
-  saveImageModelsList,
-  loadDownloadedModels,
-  loadDownloadedImageModels,
-} from '../../adapters/models/library/modelRegistryStorageAdapter';
 import type { TransferredModelManifest } from '@offgrid/sync';
 import { registerTransferredModelFile } from '../../adapters/models/library/transferAdmissionAdapter';
 import {
@@ -49,21 +43,19 @@ import {
   type ImportLocalModelOpts,
 } from '../../adapters/models/library/localModelImportAdapter';
 import {
-  isSafeImageModelId,
-  ModelLibraryRegistryService,
   type VisionRepairApplicationIntent,
   type VisionRepairApplicationResult,
   type VisionRepairOutcome,
 } from '@offgrid/models';
+import type { ModelLibraryRegistryService } from '@offgrid/models';
 import * as visionRepair from '../../adapters/models/library/visionRepairAdapter';
 import type {
   RepairOpts,
   VisionRepairContext,
 } from '../../adapters/models/library/visionRepairAdapter';
-import { resolveOwnedDocumentPath } from '../../../utils/resolveDocumentPath';
 import { startCoordinatedTextFinalizer } from '../../adapters/models/library/coordinatedTextFinalizer';
 import { executeVisionRepairIntent } from '../../adapters/models/library/visionRepairApplicationAdapter';
-import { readRegistry } from './registryRead';
+import { modelLibraryRegistry } from '../../composition/model-library';
 class ModelLibraryBootstrap {
   private readonly modelsDir: string;
   private readonly imageModelsDir: string;
@@ -78,24 +70,7 @@ class ModelLibraryBootstrap {
   constructor() {
     this.modelsDir = `${RNFS.DocumentDirectoryPath}/${APP_CONFIG.modelStorageDir}`;
     this.imageModelsDir = `${RNFS.DocumentDirectoryPath}/image_models`;
-    this.registry = new ModelLibraryRegistryService({
-      listText: () => readRegistry('text', () => loadDownloadedModels(this.modelsDir)),
-      saveText: saveModelsList,
-      listImages: () => readRegistry(
-        'image',
-        () => loadDownloadedImageModels(this.imageModelsDir),
-      ),
-      saveImages: saveImageModelsList,
-      resolveOwnedTextPath: path =>
-        resolveOwnedDocumentPath(path, this.modelsDir),
-      imageRoot: modelId =>
-        isSafeImageModelId(modelId)
-          ? `${this.imageModelsDir}/${modelId}`
-          : null,
-      exists: path => RNFS.exists(path),
-      remove: path => RNFS.unlink(path),
-      freeSpace: async () => (await RNFS.getFSInfo()).freeSpace,
-    });
+    this.registry = modelLibraryRegistry(this.modelsDir, this.imageModelsDir);
   }
 
   async initialize(): Promise<void> {

@@ -1,13 +1,13 @@
 import {
   activeRemoteModelModalities,
   ensurePersistentResident,
-  ModelLifecycleApplicationService,
   modelLoadRefusal,
   modelResidentSpec,
   runIndependentUnloads,
   unloadPersistentResident,
   type ResidentSpec,
 } from '@offgrid/models';
+import type { ModelLifecycleApplicationService } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from './activeRoute';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -21,6 +21,7 @@ import { WHISPER_MODELS } from '@offgrid/models';
 import { mobileRouteId } from './mobileRoute';
 import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
+import { modelLifecycle } from '../composition/model-library';
 
 interface LoadOptions {
   override?: boolean;
@@ -103,7 +104,9 @@ function refusedLoad(override: boolean | undefined): Error {
     : new Error(refusal.message);
 }
 
-const lifecycleService = new ModelLifecycleApplicationService(modelResidencyManager, {
+/** Native load/unload handlers and route projection. Shared owns the lifecycle. */
+export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelLifecycleApplicationService>[1] {
+  return {
   async resolveLoad(modality, modelId, command) {
     if (modality === 'text') {
       const model = useAppStore.getState().downloadedModels.find(candidate => candidate.id === modelId);
@@ -160,14 +163,17 @@ const lifecycleService = new ModelLifecycleApplicationService(modelResidencyMana
   },
   selectRoute: (modality, routeId) => lifecycleProjectionPort.selectRoute(modality, routeId),
   refreshInventory: async () => { await lifecycleProjectionPort.refreshInventory(); },
-});
+};
+}
+
+const lifecycleService = (): ModelLifecycleApplicationService => modelLifecycle();
 
 export async function loadTextModel(
   modelId: string,
   timeoutMs = 120_000,
   options?: LoadOptions,
 ): Promise<void> {
-  const acquired = await lifecycleService.load('text', modelId, {
+  const acquired = await lifecycleService().load('text', modelId, {
     override: !!options?.override,
     timeoutMs,
   });
@@ -179,7 +185,7 @@ export async function loadImageModel(
   timeoutMs = 180_000,
   options?: LoadOptions,
 ): Promise<void> {
-  const acquired = await lifecycleService.load('image', modelId, {
+  const acquired = await lifecycleService().load('image', modelId, {
     override: !!options?.override,
     timeoutMs,
   });
@@ -224,13 +230,13 @@ export async function loadTranscriptionModel(
 }
 
 export async function unloadTextModel(keepSelection = false): Promise<boolean> {
-  const unloaded = await lifecycleService.unload('text', keepSelection);
+  const unloaded = await lifecycleService().unload('text', keepSelection);
   if (!keepSelection) useAppStore.getState().setTextModelEvicted(false);
   return unloaded;
 }
 
 export async function unloadImageModel(keepSelection = false): Promise<boolean> {
-  return lifecycleService.unload('image', keepSelection);
+  return lifecycleService().unload('image', keepSelection);
 }
 
 export async function unloadTranscriptionModel(
@@ -278,7 +284,7 @@ export async function ejectAllModels(): Promise<{ count: number }> {
   });
   const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
-  const ejected = await lifecycleService.eject({
+  const ejected = await lifecycleService().eject({
     localUnloads: {
       textUnloaded: () => unloadTextModel(true),
       imageUnloaded: () => unloadImageModel(true),

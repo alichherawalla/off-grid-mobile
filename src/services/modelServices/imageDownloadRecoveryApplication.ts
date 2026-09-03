@@ -1,4 +1,5 @@
-import { ImageDownloadRecoveryService } from '@offgrid/models';
+import type { ImageDownloadRecoveryService } from '@offgrid/models';
+import { imageDownloadRecovery } from '../composition/model-library';
 import { modelDownloadProjection } from '../../stores/downloadStore';
 import type { DownloadEntry } from '../../utils/downloadStatus';
 import logger from '../../utils/logger';
@@ -10,7 +11,7 @@ import { activeLocalModelId } from './activeRoute';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { mobileModelCommands } from './modelCommandApplication';
 
-interface MobileImageRecoveryCandidate {
+export interface MobileImageRecoveryCandidate {
   modelKey: string;
   modelId: string;
   status: string;
@@ -18,8 +19,11 @@ interface MobileImageRecoveryCandidate {
   deps: ImageDownloadDeps;
 }
 
-const recovery = new ImageDownloadRecoveryService<MobileImageRecoveryCandidate>(
-  {
+export type MobileImageDownloadRecovery = ImageDownloadRecoveryService<MobileImageRecoveryCandidate>;
+
+/** Library, projection, and resume ports. Shared owns admission and de-duplication. */
+export function mobileImageDownloadRecoveryPorts(): ConstructorParameters<typeof ImageDownloadRecoveryService<MobileImageRecoveryCandidate>>[0] {
+  return {
     installedModelIds: async () =>
       new Set(
         (await modelLibrary.getDownloadedImageModels()).map(model => model.id),
@@ -35,8 +39,10 @@ const recovery = new ImageDownloadRecoveryService<MobileImageRecoveryCandidate>(
         );
       }
     },
-  },
-);
+  };
+}
+
+const recovery = (): MobileImageDownloadRecovery => imageDownloadRecovery();
 
 /** UI lifecycle adapter. Shared owns candidate admission, stale cleanup, and in-flight de-duplication. */
 function reconcileMobileImageDownloads(
@@ -44,7 +50,7 @@ function reconcileMobileImageDownloads(
   deps: ImageDownloadDeps,
   signal?: AbortSignal,
 ): Promise<void> {
-  return recovery.reconcile(
+  return recovery().reconcile(
     entries.map(entry => ({
       modelKey: entry.modelKey,
       modelId: entry.modelId.replace(/^image:/, ''),

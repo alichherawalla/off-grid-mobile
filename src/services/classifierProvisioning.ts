@@ -2,7 +2,8 @@
  * Mobile composition for Shared classifier provisioning.
  * Shared owns concurrency, artifact choice, download/select decisions, and recovery.
  */
-import { ClassifierProvisioningService } from '@offgrid/models';
+import type { ClassifierProvisioningService } from '@offgrid/models';
+import { classifierProvisioning } from './composition/model-library';
 import type { DownloadedModel, ModelFile } from '../types';
 import { useAppStore } from '../stores';
 import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
@@ -10,9 +11,11 @@ import { huggingFaceService } from './huggingface';
 import { startModelDownload } from './startModelDownload';
 import { selectMobileModel } from './modelServices';
 
-type ClassifierModel = DownloadedModel & { hostId: string };
+export type ClassifierModel = DownloadedModel & { hostId: string };
 
-const service = new ClassifierProvisioningService<ModelFile, ClassifierModel>({
+/** Store snapshot, discovery, selection, and download ports. Shared owns provisioning. */
+export function mobileClassifierProvisioningPorts(): ConstructorParameters<typeof ClassifierProvisioningService<ModelFile, ClassifierModel>>[0] {
+  return {
   snapshot: () => {
     const state = useAppStore.getState();
     return {
@@ -40,8 +43,11 @@ const service = new ClassifierProvisioningService<ModelFile, ClassifierModel>({
       }),
       onError: callbacks.onError,
     }),
-});
+};
+}
+
+const service = (): ClassifierProvisioningService<ModelFile, ClassifierModel> => classifierProvisioning();
 
 export function ensureDefaultClassifier(): Promise<void> {
-  return service.ensure();
+  return service().ensure();
 }

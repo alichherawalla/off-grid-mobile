@@ -2,11 +2,11 @@ import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import {
-  ImageDownloadApplicationService,
   type ImageDownloadApplicationResult,
   type ImageDownloadCommand,
   type ImageDownloadEntryFacts,
 } from '@offgrid/models';
+import type { ImageDownloadApplicationService } from '@offgrid/models';
 import { modelLibrary } from '../../modelServices/bootstrap/modelLibraryBootstrap';
 import { coordinatedDownloads } from '../../modelServices/coordinatedDownloadBridge';
 import { hardwareService } from '../../hardware';
@@ -30,6 +30,7 @@ import {
 } from './imageDownloadWorkflowAdapter';
 import { downloadSequentialImageFiles } from './sequentialImageFileAdapter';
 import type { DownloadOperationOwner, ImageDownloadPlan } from '@offgrid/models';
+import { imageDownloadApplication } from '../../composition/downloads';
 
 async function removeIfPresent(path: string): Promise<void> {
   if (await RNFS.exists(path)) await RNFS.unlink(path).catch(() => undefined);
@@ -90,12 +91,11 @@ function imageEntry(entry: ImageDownloadEntryFacts): ImageDownloadEntryFacts {
   return entry;
 }
 
-/** Mobile composition root. Shared owns every decision; these ports perform device I/O only. */
-export function executeMobileImageDownload(
-  command: ImageDownloadCommand,
+/** Device I/O for one image download: lifecycle projection, storage, transfers, registry. */
+export function mobileImageDownloadPorts(
   deps: ImageDownloadDeps,
-): Promise<ImageDownloadApplicationResult> {
-  const application = new ImageDownloadApplicationService<DownloadOperationOwner>({
+): ConstructorParameters<typeof ImageDownloadApplicationService<DownloadOperationOwner>>[0] {
+  return {
     lifecycle: {
       begin: beginImageDownload,
       isActive: isActiveImageDownload,
@@ -181,7 +181,15 @@ export function executeMobileImageDownload(
         deps.setAlertState(showAlert('Download Failed', getUserFacingDownloadMessage(event.message)));
       }
     },
-  });
+  };
+}
+
+/** Shared owns every decision; the ports above perform device I/O only. */
+export function executeMobileImageDownload(
+  command: ImageDownloadCommand,
+  deps: ImageDownloadDeps,
+): Promise<ImageDownloadApplicationResult> {
+  const application = imageDownloadApplication(mobileImageDownloadPorts(deps));
   return application.execute(command.type === 'retry' || command.type === 'resume'
     ? { ...command, entry: imageEntry(command.entry) }
     : command);

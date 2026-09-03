@@ -1,9 +1,8 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import {
-  ImageDownloadApplicationService,
-  type ImageDownloadMetadata,
-} from '@offgrid/models';
+import type { ImageDownloadApplicationService, ImageDownloadMetadata } from '@offgrid/models';
+import type { BackgroundDownloadInfo } from '../../../../types';
+import { imageDownloadApplication } from '../../../composition/downloads';
 import type { ONNXImageModel, PersistedDownloadInfo } from '../../../../types';
 import { coordinatedDownloads } from '../../../modelServices/coordinatedDownloadBridge';
 import { downloadCoreMLTokenizerFiles, resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
@@ -49,14 +48,13 @@ function metadata(value: PersistedDownloadInfo): ImageDownloadMetadata | null {
   };
 }
 
-/** Restart adapter. Shared owns candidate recovery, extraction, registration, and cleanup ordering. */
-export async function syncCompletedImageDownloads(
+/** Restart-recovery ports: no live lifecycle, storage and transfers only, publish into `recovered`. */
+export function mobileImageRecoveryPorts(
   opts: SyncCompletedImageDownloadsOpts,
-): Promise<ONNXImageModel[]> {
-  const rows = await coordinatedDownloads.getActiveDownloads();
-  const installedIds = new Set((await opts.getDownloadedImageModels()).map(model => model.id));
-  const recovered: ONNXImageModel[] = [];
-  const application = new ImageDownloadApplicationService<Record<string, never>>({
+  rows: readonly BackgroundDownloadInfo[],
+  recovered: ONNXImageModel[],
+): ConstructorParameters<typeof ImageDownloadApplicationService<Record<string, never>>>[0] {
+  return {
     lifecycle: {
       begin: () => undefined,
       isActive: () => false,
@@ -122,7 +120,17 @@ export async function syncCompletedImageDownloads(
     },
     deviceFacts: async () => ({ platform: 'other' }),
     now: () => new Date().toISOString(),
-  });
+  };
+}
+
+/** Restart adapter. Shared owns candidate recovery, extraction, registration, and cleanup ordering. */
+export async function syncCompletedImageDownloads(
+  opts: SyncCompletedImageDownloadsOpts,
+): Promise<ONNXImageModel[]> {
+  const rows = await coordinatedDownloads.getActiveDownloads();
+  const installedIds = new Set((await opts.getDownloadedImageModels()).map(model => model.id));
+  const recovered: ONNXImageModel[] = [];
+  const application = imageDownloadApplication(mobileImageRecoveryPorts(opts, rows, recovered));
 
   for (const row of rows) {
     if (row.status !== 'completed') continue;
