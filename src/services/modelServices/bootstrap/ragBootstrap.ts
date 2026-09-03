@@ -1,6 +1,7 @@
 import { DEFAULT_RAG_RETRIEVAL_LIMIT, estimateCharBudget, type IndexStage } from '@offgrid/rag';
-import type { RagService as SharedRagService } from '@offgrid/rag';
+import type { RagDocument, SearchResult } from '@offgrid/rag';
 import { sharedRag as composedRag } from '../../composition/rag';
+import { startMobileApplication } from '../../composition/application';
 import { writePastedNote } from '../../adapters/rag/pastedNoteFileAdapter';
 import type {
   RagDocument as StoredDocument,
@@ -36,7 +37,7 @@ const progressMessage: Record<IndexStage, string> = {
   done: 'Done',
 };
 
-function stored(document: Awaited<ReturnType<SharedRagService['getDocument']>>): StoredDocument | undefined {
+function stored(document: RagDocument | undefined): StoredDocument | undefined {
   if (!document) return undefined;
   return {
     id: document.id,
@@ -50,7 +51,7 @@ function stored(document: Awaited<ReturnType<SharedRagService['getDocument']>>):
   };
 }
 
-function snapshot(document: NonNullable<Awaited<ReturnType<SharedRagService['getDocument']>>>): KnowledgeDocumentSnapshot {
+function snapshot(document: RagDocument): KnowledgeDocumentSnapshot {
   return {
     syncId: document.syncId,
     projectId: document.projectId,
@@ -64,10 +65,12 @@ function snapshot(document: NonNullable<Awaited<ReturnType<SharedRagService['get
 
 
 class MobileRagService {
-  ensureReady = () => composedRag().ensureReady();
+  ensureReady = async (): Promise<void> => {
+    await startMobileApplication();
+  };
 
   async indexDocument(params: IndexDocumentParams): Promise<number> {
-    const result = await composedRag().indexDocument({
+    const result = await composedRag().addDocument({
       projectId: params.projectId,
       path: params.filePath,
       fileName: params.fileName,
@@ -76,7 +79,7 @@ class MobileRagService {
       createdAt: params.createdAt,
       enabled: params.enabled,
     }, stage => params.onProgress?.({ stage, message: progressMessage[stage] }));
-    const document = await composedRag().getDocument(result.docId);
+    const document = await composedRag().document(result.docId);
     if (document && params.origin !== 'sync') {
       emitKnowledgeDocumentMutation({ kind: 'indexed', document: snapshot(document) });
     }
@@ -110,27 +113,26 @@ class MobileRagService {
 
   async toggleDocument(docId: number, enabled: boolean): Promise<void> {
     await this.ensureReady();
-    await composedRag().toggleDocument(docId, enabled);
-    const document = await composedRag().getDocument(docId);
+    await composedRag().setDocumentEnabled(docId, enabled);
+    const document = await composedRag().document(docId);
     if (document) emitKnowledgeDocumentMutation({ kind: 'enabled', syncId: document.syncId, enabled });
   }
 
   async deleteDocument(docId: number): Promise<void> {
     await this.ensureReady();
-    const document = await composedRag().getDocument(docId);
-    await composedRag().deleteDocument(docId);
+    const document = await composedRag().document(docId);
+    await composedRag().removeDocument(docId);
     if (document) emitKnowledgeDocumentMutation({ kind: 'deleted', syncId: document.syncId });
   }
 
   async searchProject(projectId: string, query: string, contextLength?: number) {
     await this.ensureReady();
-    return legacySearch(await composedRag().searchProject(projectId, query, { contextLength }));
+    return legacySearch(await composedRag().search(projectId, query, { contextLength }));
   }
 
   async deleteProjectDocuments(projectId: string): Promise<void> {
     await this.ensureReady();
-    const documents = await composedRag().listDocuments(projectId);
-    await composedRag().deleteProjectDocuments(projectId);
+    const documents = await composedRag().removeProjectDocuments(projectId);
     for (const document of documents) {
       emitKnowledgeDocumentMutation({ kind: 'deleted', syncId: document.syncId });
     }
@@ -138,42 +140,26 @@ class MobileRagService {
 
   async getAllDocumentsForSync(): Promise<KnowledgeDocumentSnapshot[]> {
     await this.ensureReady();
-    return (await composedRag().listAllDocuments()).map(snapshot);
+    return composedRag().documentsForSync();
   }
 
   async indexSyncedDocument(document: KnowledgeDocumentSnapshot): Promise<number> {
     await this.ensureReady();
-    const existing = await composedRag().getDocumentBySyncId(document.syncId);
-    if (existing) {
-      if (existing.enabled !== document.enabled) await composedRag().toggleDocument(existing.id, document.enabled);
-      return existing.id;
-    }
-    return this.indexDocument({
-      projectId: document.projectId,
-      filePath: document.filePath,
-      fileName: document.name,
-      fileSize: document.fileSize,
-      syncId: document.syncId,
-      createdAt: document.createdAt,
-      enabled: document.enabled,
-      origin: 'sync',
-    });
+    return composedRag().indexSyncedDocument(document);
   }
 
   async setSyncedDocumentEnabled(syncId: string, enabled: boolean): Promise<void> {
     await this.ensureReady();
-    const document = await composedRag().getDocumentBySyncId(syncId);
-    if (document) await composedRag().toggleDocument(document.id, enabled);
+    await composedRag().setSyncedDocumentEnabled(syncId, enabled);
   }
 
   async deleteSyncedDocument(syncId: string): Promise<void> {
     await this.ensureReady();
-    const document = await composedRag().getDocumentBySyncId(syncId);
-    if (document) await composedRag().deleteDocument(document.id);
+    await composedRag().removeSyncedDocument(syncId);
   }
 }
 
-function legacySearch(result: Awaited<ReturnType<SharedRagService['searchProject']>>) {
+function legacySearch(result: SearchResult) {
   return {
     chunks: result.chunks.map(({ docId, ...chunk }) => ({ doc_id: docId, ...chunk })),
     truncated: result.truncated ?? false,
@@ -184,13 +170,13 @@ export const ragService = new MobileRagService();
 
 export const retrievalService = {
   search: async (projectId: string, query: string, topK = DEFAULT_RAG_RETRIEVAL_LIMIT) =>
-    legacySearch(await composedRag().searchProject(projectId, query, { topK })),
+    legacySearch(await composedRag().search(projectId, query, { topK })),
   searchWithBudget: async (params: { projectId: string; query: string; contextLength: number; topK?: number }) =>
-    legacySearch(await composedRag().searchProject(params.projectId, params.query, {
+    legacySearch(await composedRag().search(params.projectId, params.query, {
       topK: params.topK,
       contextLength: params.contextLength,
     })),
-  formatForPrompt: (result: { chunks: RagSearchResult[]; truncated?: boolean }) => composedRag().formatForPrompt({
+  formatForPrompt: (result: { chunks: RagSearchResult[]; truncated?: boolean }) => composedRag().formatSearchResult({
     query: '',
     chunks: result.chunks.map(({ doc_id, ...chunk }) => ({ docId: doc_id, ...chunk })),
   }),

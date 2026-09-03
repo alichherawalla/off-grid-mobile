@@ -1,19 +1,7 @@
-// Composition root: the shared RAG service over Mobile's store, embedding, and extraction ports.
-import { RagService } from '@offgrid/rag';
+// Compatibility name during the vertical cutover. This is the global application's closed facade.
 import { once } from '@offgrid/models';
 
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports1 = (): typeof import('../adapters/rag/mobileRagPorts') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../adapters/rag/mobileRagPorts') as typeof import('../adapters/rag/mobileRagPorts');
+const application = (): typeof import('./application') =>
+  require('./application') as typeof import('./application');
 
-export const sharedRag = once(() => {
-  const ports = ports1();
-  return new RagService({
-    store: ports.mobileRagStore,
-    embeddings: ports.mobileRagEmbeddings,
-    extraction: ports.mobileRagExtraction,
-    prepareDocument: ports.prepareMobileRagDocument,
-  });
-});
+export const sharedRag = once(() => application().mobileApplication.rag);

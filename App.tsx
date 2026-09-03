@@ -30,6 +30,7 @@ import { hydrateDownloadStore } from './src/services/downloadHydration';
 import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
 import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { createLoadPolicySync } from './src/services/loadPolicySync';
+import { stopMobileApplication } from './src/services/composition/application';
 import {
   refreshMobileModelServices,
   startMobileModelServices,
@@ -106,6 +107,13 @@ const ensureRemoteServerStoreHydrated = async () => {
     await persistApi.rehydrate();
   }
 };
+
+function stopMobileRuntime(loadPolicySync: ReturnType<typeof createLoadPolicySync>): void {
+  stopNetworkReconnectWatcher();
+  stopMobileModelServices();
+  stopMobileApplication();
+  loadPolicySync.dispose();
+}
 
 function App() {
   useEffect(
@@ -426,9 +434,7 @@ function App() {
     initializeApp(generation, loadPolicySync);
     return () => {
       startupGeneration.current += 1;
-      stopNetworkReconnectWatcher();
-      stopMobileModelServices();
-      loadPolicySync.dispose();
+      stopMobileRuntime(loadPolicySync);
     };
   }, [initializeApp]);
 
