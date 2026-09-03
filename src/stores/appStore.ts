@@ -148,25 +148,10 @@ export interface AppState extends ProAccessSlice {
   setDownloadedModels: (models: DownloadedModel[]) => void;
   addDownloadedModel: (model: DownloadedModel) => void;
   removeDownloadedModel: (modelId: string) => void;
-  activeModelId: string | null;
-  /** The text model that is ACTUALLY loaded in native memory right now (engine-agnostic — llama OR litert),
-   *  as opposed to activeModelId (the SELECTED model, which may be selected-but-not-yet-loaded or evicted).
-   *  A reactive projection of ActiveModelService's authoritative loaded state — the SINGLE source every
-   *  surface reads for "currently loaded", so the model sheet and the overview can't disagree (device
-   *  2026-07-14: sheet read llmService.getLoadedModelPath() — llama-only + stale — while the overview read
-   *  activeModelId). Not persisted (a relaunch has nothing loaded). */
-  loadedTextModelId: string | null;
-  setLoadedTextModelId: (modelId: string | null) => void;
-  /** The active text model was EVICTED to free RAM (e.g. an image/TTS load in voice mode)
-   *  while still selected. Drives the chat "tap to continue" reload affordance so a big
-   *  model that got unloaded can be brought back on demand. Set by the service, cleared
-   *  when a text model loads. Not persisted (a relaunch has nothing loaded to evict). */
-  textModelEvicted: boolean;
-  setTextModelEvicted: (evicted: boolean) => void;
-  /** Last text model the user explicitly selected. Persists across residency
-   *  eviction so routing can reload it on demand. */
-  lastTextModelId: string | null;
-  setLastTextModelId: (modelId: string | null) => void;
+  /** @deprecated Legacy persistence read once by the selection migration. Selection lives in modelSelectionStore. */
+  activeModelId?: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  lastTextModelId?: string | null;
   isLoadingModel: boolean;
   setIsLoadingModel: (loading: boolean) => void;
   modelMaxContext: number | null;
@@ -181,7 +166,8 @@ export interface AppState extends ProAccessSlice {
   ) => void;
   resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
-  activeImageModelId: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeImageModelId?: string | null;
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
   addDownloadedImageModel: (model: ONNXImageModel) => void;
   removeDownloadedImageModel: (modelId: string) => void;
@@ -200,12 +186,6 @@ export interface AppState extends ProAccessSlice {
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
-  /** Image models that have completed at least one generation. The FIRST run for a
-   *  model compiles/warms the backend (OpenCL kernels on Android, the CoreML model
-   *  on iOS) and takes ~120s — this drives the one-time warm-up notice on BOTH
-   *  platforms, persisted so it only shows once per model. */
-  warmedImageModels: string[];
-  markImageModelWarmed: (modelId: string) => void;
   textGenerationCount: number;
   imageGenerationCount: number;
   incrementTextGenerationCount: () => number;
@@ -269,10 +249,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   liteRTMaxTokens: MOBILE_LITERT_SETTINGS_DEFAULTS.maxTokens,
 };
 
-export const selectIsLiteRT = (state: AppState): boolean =>
-  state.downloadedModels.find(m => m.id === state.activeModelId)?.engine ===
-  'litert';
-
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -316,13 +292,6 @@ export const useAppStore = create<AppState>()(
             m => m.id !== modelId,
           ),
         })),
-      activeModelId: null,
-      loadedTextModelId: null,
-      setLoadedTextModelId: modelId => set({ loadedTextModelId: modelId }),
-      textModelEvicted: false,
-      setTextModelEvicted: evicted => set({ textModelEvicted: evicted }),
-      lastTextModelId: null,
-      setLastTextModelId: modelId => set({ lastTextModelId: modelId }),
       isLoadingModel: false,
       setIsLoadingModel: loading => set({ isLoadingModel: loading }),
       modelMaxContext: null,
@@ -358,7 +327,6 @@ export const useAppStore = create<AppState>()(
       },
       // Image models (ONNX-based)
       downloadedImageModels: [],
-      activeImageModelId: null,
       setDownloadedImageModels: models =>
         set({
           downloadedImageModels: models.filter(
@@ -419,13 +387,6 @@ export const useAppStore = create<AppState>()(
         return imageIds;
       },
       clearGeneratedImages: () => set({ generatedImages: [] }),
-      warmedImageModels: [],
-      markImageModelWarmed: modelId =>
-        set(state =>
-          state.warmedImageModels.includes(modelId)
-            ? state
-            : { warmedImageModels: [...state.warmedImageModels, modelId] },
-        ),
       textGenerationCount: 0,
       imageGenerationCount: 0,
       incrementTextGenerationCount: () => {
@@ -459,13 +420,9 @@ export const useAppStore = create<AppState>()(
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         onboardingChecklist: state.onboardingChecklist,
         checklistDismissed: state.checklistDismissed,
-        activeModelId: state.activeModelId,
-        lastTextModelId: state.lastTextModelId,
         settings: state.settings,
         modelSettingProvenance: state.modelSettingProvenance,
-        activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,
-        warmedImageModels: state.warmedImageModels,
         textGenerationCount: state.textGenerationCount,
         imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,

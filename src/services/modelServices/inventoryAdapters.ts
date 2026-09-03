@@ -1,3 +1,4 @@
+import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
   catalogKindForArtifact,
   projectGgufCapabilities,
@@ -62,7 +63,7 @@ function localTextRuntime(model: DownloadedModel): RuntimeModel {
   const state = useAppStore.getState();
   const selected = readMobileModelSelection('text') === mobileRouteId(identity);
   const loaded = selected &&
-    state.loadedTextModelId === model.id &&
+    useModelResidencyStore.getState().loadedTextModelId === model.id &&
     (model.engine === 'litert'
       ? liteRTService.isModelLoaded()
       : llmService.isModelLoaded());
@@ -256,7 +257,7 @@ const classifierInventoryAdapter: ModelInventoryAdapter = {
         residencyLifecycle: 'operation',
         installed: true,
         ready: true,
-        loaded: state.loadedTextModelId === model.id,
+        loaded: useModelResidencyStore.getState().loadedTextModelId === model.id,
         loading: state.isLoadingModel && activeLocalModelId('text') === model.id,
       },
     )];

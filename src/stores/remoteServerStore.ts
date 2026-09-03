@@ -21,8 +21,8 @@ import {
 interface RemoteServerState {
   /** Configured remote servers */
   servers: RemoteServer[];
-  /** Currently active server ID (null = local only) */
-  activeServerId: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. The active server is the text route's. */
+  activeServerId?: string | null;
   /** Models discovered per server */
   discoveredModels: Record<string, RemoteModel[]>;
   /** Server health status */
@@ -32,26 +32,16 @@ interface RemoteServerState {
   testingServerId: string | null;
   discoveringServerId: string | null;
 
-  /** Active remote text model ID (when using remote for text generation) */
-  activeRemoteTextModelId: string | null;
-  /** Active remote image/vision model ID (when using remote for vision) */
-  activeRemoteImageModelId: string | null;
-  /** Active server per non-text category. Text keeps activeServerId for provider routing. */
-  activeRemoteMediaServerIds: Partial<
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeRemoteTextModelId?: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeRemoteImageModelId?: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeRemoteMediaServerIds?: Partial<
     Record<Exclude<RemoteModelCategory, 'text'>, string>
   >;
 
-  // Active server
-  getActiveServer: () => RemoteServer | null;
-
-  // Active remote model selection
-  getActiveRemoteTextModel: () => RemoteModel | null;
-  getActiveRemoteImageModel: () => RemoteModel | null;
-  getActiveRemoteMediaServer: (
-    category: Exclude<RemoteModelCategory, 'text'>,
-  ) => RemoteServer | null;
-
-  // Boundary projections
+  // Discovery and health projections
   setDiscoveredModels: (serverId: string, models: RemoteModel[]) => void;
   clearDiscoveredModels: (serverId: string) => void;
   updateServerHealth: (serverId: string, isHealthy: boolean) => void;
@@ -99,47 +89,11 @@ export const useRemoteServerStore = create<RemoteServerState>()(
   persist(
     (set, get) => ({
       servers: [],
-      activeServerId: null,
       discoveredModels: {},
       serverHealth: {},
       isLoading: false,
       testingServerId: null,
       discoveringServerId: null,
-      activeRemoteTextModelId: null,
-      activeRemoteImageModelId: null,
-      activeRemoteMediaServerIds: {},
-
-      getActiveServer: () => {
-        const { servers, activeServerId } = get();
-        return servers.find(s => s.id === activeServerId) || null;
-      },
-
-      getActiveRemoteTextModel: () => {
-        const { activeRemoteTextModelId, activeServerId, discoveredModels } =
-          get();
-        if (!activeRemoteTextModelId || !activeServerId) return null;
-        const models = discoveredModels[activeServerId] || [];
-        return models.find(m => m.id === activeRemoteTextModelId) || null;
-      },
-
-      getActiveRemoteImageModel: () => {
-        const {
-          activeRemoteImageModelId,
-          activeRemoteMediaServerIds,
-          discoveredModels,
-        } = get();
-        const serverId = activeRemoteMediaServerIds.image;
-        if (!activeRemoteImageModelId || !serverId) return null;
-        const models = discoveredModels[serverId] || [];
-        return models.find(m => m.id === activeRemoteImageModelId) || null;
-      },
-
-      getActiveRemoteMediaServer: category => {
-        const { servers, activeRemoteMediaServerIds } = get();
-        const serverId = activeRemoteMediaServerIds[category];
-        return servers.find(server => server.id === serverId) ?? null;
-      },
-
       setDiscoveredModels: (serverId, models) => {
         set(state => ({
           discoveredModels: {
@@ -189,10 +143,6 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: state => ({
         servers: state.servers.map(({ apiKey: _apiKey, ...server }) => server),
-        activeServerId: state.activeServerId,
-        activeRemoteTextModelId: state.activeRemoteTextModelId,
-        activeRemoteImageModelId: state.activeRemoteImageModelId,
-        activeRemoteMediaServerIds: state.activeRemoteMediaServerIds,
         discoveredModels: state.discoveredModels,
         // Don't persist health status - it should be refreshed
       }),

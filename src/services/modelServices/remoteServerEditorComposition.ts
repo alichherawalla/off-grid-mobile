@@ -1,3 +1,4 @@
+import { activeMobileRoute } from './mobileLLMService';
 /** Mobile composition for the port-driven Remote Server Editor use case. */
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { createRemoteServerEditorApplication } from './remoteServerEditorApplication';
@@ -19,5 +20,5 @@ export const remoteServerEditorApplication = createRemoteServerEditorApplication
     select: (serverId, modality, modelId) =>
       selectRemoteMobileModel(serverId, modality, modelId),
   },
-  activeServerId: () => useRemoteServerStore.getState().activeServerId,
+  activeServerId: () => activeMobileRoute('text').model?.serverId ?? null,
 });

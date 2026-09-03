@@ -1,3 +1,4 @@
+import { useModelResidencyStore } from '../stores/modelResidencyStore';
 import { useAppStore, useChatStore } from '../stores';
 import type { GeneratedImage } from '../types';
 import { buildImageGenMeta, scheduleImageSharePrompt } from './imageGenerationHelpers';
@@ -21,7 +22,7 @@ export function saveImageGenerationResult(
   if (params.conversationId) result.conversationId = params.conversationId;
   const appStore = useAppStore.getState();
   appStore.addGeneratedImage(result);
-  if (!input.isRemote) appStore.markImageModelWarmed(activeImageModel.id);
+  if (!input.isRemote) useModelResidencyStore.getState().markImageModelWarmed(activeImageModel.id);
   appStore.completeChecklistStep('triedImageGen');
   scheduleImageSharePrompt();
 

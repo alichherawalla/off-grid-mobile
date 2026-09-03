@@ -1,5 +1,5 @@
+import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
-  activeRemoteModelModalities,
   ensurePersistentResident,
   modelLoadRefusal,
   modelResidentSpec,
@@ -9,8 +9,7 @@ import {
 } from '@offgrid/models';
 import type { ModelLifecycleApplicationService } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
-import { activeLocalModelId } from './activeRoute';
-import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { activeLocalModelId, activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
@@ -231,7 +230,7 @@ export async function loadTranscriptionModel(
 
 export async function unloadTextModel(keepSelection = false): Promise<boolean> {
   const unloaded = await lifecycleService().unload('text', keepSelection);
-  if (!keepSelection) useAppStore.getState().setTextModelEvicted(false);
+  if (!keepSelection) useModelResidencyStore.getState().setTextModelEvicted(false);
   return unloaded;
 }
 
@@ -274,14 +273,10 @@ export async function unloadAllModels(
 }
 
 export async function ejectAllModels(): Promise<{ count: number }> {
-  const remote = useRemoteServerStore.getState();
-  const remoteModalities = activeRemoteModelModalities({
-    textModelId: remote.activeRemoteTextModelId,
-    imageModelId: remote.activeRemoteImageModelId,
-    imageServerId: remote.activeRemoteMediaServerIds.image,
-    transcriptionServerId: remote.activeRemoteMediaServerIds.transcription,
-    voiceServerId: remote.activeRemoteMediaServerIds.voice,
-  });
+  // Which modalities a remote route answers is the active route's fact, per modality.
+  const remoteModalities = (['text', 'image', 'transcription', 'voice'] as const).filter(modality =>
+    activeRouteIsRemote(modality),
+  );
   const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
   const ejected = await lifecycleService().eject({

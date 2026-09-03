@@ -1,3 +1,4 @@
+import { activeMobileRoute } from '../../modelServices/mobileLLMService';
 import RNFS from 'react-native-fs';
 import type { RemoteServer } from '../../../types';
 import { useRemoteServerStore } from '../../../stores/remoteServerStore';
@@ -18,9 +19,11 @@ function arrayBufferToBase64(value: ArrayBuffer): string {
 }
 
 export function activeRemoteVoiceServer(): RemoteServer | null {
-  const server = useRemoteServerStore
-    .getState()
-    .getActiveRemoteMediaServer('voice');
+  // The remote voice server is the voice route's server; the route is the one selection fact.
+  const serverId = activeMobileRoute('voice').model?.serverId;
+  const server = serverId
+    ? useRemoteServerStore.getState().servers.find(item => item.id === serverId) ?? null
+    : null;
   return server?.selections?.voice ? server : null;
 }
 

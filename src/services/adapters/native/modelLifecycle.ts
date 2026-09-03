@@ -1,3 +1,4 @@
+import { useModelResidencyStore } from '../../../stores/modelResidencyStore';
 import { hardwareService } from '../../hardware';
 import { llmService } from '../../llm';
 import { liteRTService } from '../../litert';
@@ -89,12 +90,12 @@ class NativeModelLifecycle {
       loadedTextModelId: this.loadedTextModelId,
       onLoaded: id => {
         this.loadedTextModelId = id;
-        useAppStore.getState().setLoadedTextModelId(id);
-        useAppStore.getState().setTextModelEvicted(false);
+        useModelResidencyStore.getState().setLoadedTextModelId(id);
+        useModelResidencyStore.getState().setTextModelEvicted(false);
       },
       onError: () => {
         this.loadedTextModelId = null;
-        useAppStore.getState().setLoadedTextModelId(null);
+        useModelResidencyStore.getState().setLoadedTextModelId(null);
       },
       onFinally: () => {
         this.loading.text = false;
@@ -107,7 +108,6 @@ class NativeModelLifecycle {
 
   async unloadTextModel(keepSelection = false): Promise<void> {
     if (this.textLoadPromise) await this.textLoadPromise;
-    const store = useAppStore.getState();
     const loadedEngines = [llmService, liteRTService].filter(
       engine => engine.isModelLoaded(),
     );
@@ -118,12 +118,9 @@ class NativeModelLifecycle {
     try {
       for (const engine of loadedEngines) await engine.unloadModel();
       this.loadedTextModelId = null;
-      store.setLoadedTextModelId(null);
-      if (keepSelection) {
-        if (isLoaded) store.setTextModelEvicted(true);
-      } else {
-        store.setTextModelEvicted(false);
-      }
+      const residency = useModelResidencyStore.getState();
+      residency.setLoadedTextModelId(null);
+      residency.setTextModelEvicted(keepSelection && isLoaded);
     } finally {
       this.loading.text = false;
       this.changed();
@@ -199,14 +196,13 @@ class NativeModelLifecycle {
   }
 
   async syncWithNativeState(): Promise<void> {
-    const store = useAppStore.getState();
     const textLoaded = llmService.isModelLoaded() || liteRTService.isModelLoaded();
     if (!textLoaded) {
       this.loadedTextModelId = null;
-      store.setLoadedTextModelId(null);
+      useModelResidencyStore.getState().setLoadedTextModelId(null);
     } else if (!this.loadedTextModelId && activeLocalModelId('text')) {
       this.loadedTextModelId = activeLocalModelId('text');
-      store.setLoadedTextModelId(this.loadedTextModelId);
+      useModelResidencyStore.getState().setLoadedTextModelId(this.loadedTextModelId);
     }
     const imageLoaded = await imageEngine.isModelLoaded();
     if (!imageLoaded) {

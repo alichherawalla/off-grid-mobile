@@ -1,3 +1,4 @@
+import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import { useRef, useState, useCallback } from 'react';
 import {
   NavigationProp,
@@ -124,8 +125,8 @@ export const useChatScreen = () => {
     setImageGenerationStatus: setAppImageGenerationStatus,
     removeImagesByConversationId,
     loadedSettings,
-    textModelEvicted,
   } = useAppStore();
+  const textModelEvicted = useModelResidencyStore(s => s.textModelEvicted);
 
   const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
 

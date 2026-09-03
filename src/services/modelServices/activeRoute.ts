@@ -1,4 +1,5 @@
-import type { ModelModality } from '@offgrid/models';
+import { useSyncExternalStore } from 'react';
+import type { ActiveModelSnapshot, ModelModality } from '@offgrid/models';
 import { mobileLLMService } from './mobileLLMService';
 
 /**
@@ -13,4 +14,13 @@ export function activeLocalModelId(modality: ModelModality): string | null {
 
 export function activeRouteIsRemote(modality: ModelModality): boolean {
   return mobileLLMService.active(modality).model?.source === 'remote';
+}
+
+/** Reactive read of the shared active route for UI: re-renders when inventory or selection changes. */
+export function useActiveMobileRoute(modality: ModelModality): ActiveModelSnapshot {
+  return useSyncExternalStore(
+    listener => mobileLLMService.subscribe(listener),
+    () => mobileLLMService.active(modality),
+    () => mobileLLMService.active(modality),
+  );
 }

@@ -1,3 +1,4 @@
+import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
   resolveImageGenerationSettings,
   type ImageApplicationFailure,
@@ -81,7 +82,7 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
       const loaded = await localDreamGeneratorService.isModelLoaded();
       const loadedIdentity = await localDreamGeneratorService.getLoadedModelPath();
       const loadedThreads = localDreamGeneratorService.getLoadedThreads();
-      const wasWarmed = useAppStore.getState().warmedImageModels.includes(active.id);
+      const wasWarmed = useModelResidencyStore.getState().warmedImageModels.includes(active.id);
       let hasKernelCache: boolean | undefined;
       if (settings.useOpenCL) {
         try {

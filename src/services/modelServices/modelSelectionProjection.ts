@@ -13,6 +13,7 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
+import { useModelSelectionStore, type PersistedSelectionEntry } from '../../stores/modelSelectionStore';
 import { mobileRouteId } from './mobileRoute';
 import {
   selectMobileLocalVoiceRoute,
@@ -29,8 +30,14 @@ function candidate(
   return routeId ? { routeId, kind, ...(name ? { name } : {}) } : null;
 }
 
-function localTextCandidate(
-  modelId: string | null,
+// ---------------------------------------------------------------------------------------------
+// Candidates from the ONE selection store. A persisted route is a candidate only while the model it
+// names is still on this device (a deleted download must not stay selected); that installed fact is
+// the only thing read from the library stores.
+// ---------------------------------------------------------------------------------------------
+
+function localTextCandidateFor(
+  modelId: string | null | undefined,
   modality: 'text' | 'classifier' = 'text',
 ): PersistedSelectionCandidate | null {
   if (!modelId) return null;
@@ -38,130 +45,220 @@ function localTextCandidate(
   if (!model) return null;
   const kind = catalogKindForArtifact(model) ?? catalogModelKind(model.name, [], model.id);
   return candidate(
-    mobileRouteId({
-      source: 'local', hostId: model.engine, modality, modelId: model.id,
-    }),
+    mobileRouteId({ source: 'local', hostId: model.engine, modality, modelId: model.id }),
     kind === 'code' ? 'text' : kind,
     model.name,
   );
 }
 
-function remoteTextCandidate(): PersistedSelectionCandidate | null {
+function localCandidateFromRoute(
+  modality: ModelModality,
+  routeId: string | null | undefined,
+): PersistedSelectionCandidate | null {
+  const route = routeId ? decodeModelRouteId(routeId) : null;
+  if (!route || route.serverId) return null;
+  switch (modality) {
+    case 'text':
+    case 'classifier':
+      return localTextCandidateFor(route.modelId, modality);
+    case 'image': {
+      const model = useAppStore
+        .getState()
+        .downloadedImageModels.find(item => item.id === route.modelId);
+      return model ? candidate(routeId!, 'image', model.name) : null;
+    }
+    case 'transcription':
+      return candidate(routeId!, 'transcription');
+    case 'voice':
+      return candidate(selectedMobileLocalVoiceRoute(), 'voice');
+    default:
+      return null;
+  }
+}
+
+function remoteCandidateFromRoute(
+  modality: ModelModality,
+  routeId: string | null | undefined,
+): PersistedSelectionCandidate | null {
+  const route = routeId ? decodeModelRouteId(routeId) : null;
+  if (!route?.serverId) return null;
   const state = useRemoteServerStore.getState();
-  if (!state.activeServerId || !state.activeRemoteTextModelId) return null;
-  const server = state.servers.find(item => item.id === state.activeServerId);
-  const name = server
-    ? selectedRemoteModelName({
-        ...server,
-        catalog: {
-          ...server.catalog,
-          text: state.discoveredModels[state.activeServerId] ?? [],
+  const server = state.servers.find(item => item.id === route.serverId);
+  if (!server) return null;
+  if (modality === 'text') {
+    const name =
+      selectedRemoteModelName(
+        {
+          ...server,
+          selections: { ...server.selections, text: route.modelId },
+          catalog: { ...server.catalog, text: state.discoveredModels[server.id] ?? [] },
         },
-      }, 'text') ?? state.activeRemoteTextModelId
-    : state.activeRemoteTextModelId;
-  const kind = catalogModelKind(name, [], state.activeRemoteTextModelId);
+        'text',
+      ) ?? route.modelId;
+    const kind = catalogModelKind(name, [], route.modelId);
+    return candidate(routeId!, kind === 'code' ? 'text' : kind, name);
+  }
   return candidate(
-    mobileRouteId({
-      source: 'remote', hostId: state.activeServerId, modality: 'text',
-      modelId: state.activeRemoteTextModelId,
-    }),
-    kind === 'code' ? 'text' : kind,
-    name,
+    routeId!,
+    modality,
+    selectedRemoteModelName(server, modality as RemoteMediaModality) ?? undefined,
   );
 }
 
-function remoteMediaCandidate(
-  modality: RemoteMediaModality,
-): PersistedSelectionCandidate | null {
-  const state = useRemoteServerStore.getState();
-  const serverId = state.activeRemoteMediaServerIds[modality];
-  const server = serverId ? state.servers.find(item => item.id === serverId) : null;
-  const modelId = server?.selections?.[modality]?.trim();
-  const name = server ? selectedRemoteModelName(server, modality) : null;
-  return serverId && modelId
-    ? candidate(
-        mobileRouteId({ source: 'remote', hostId: serverId, modality, modelId }),
-        modality,
-        name ?? undefined,
-      )
-    : null;
-}
-
-function localImageCandidate(): PersistedSelectionCandidate | null {
-  const state = useAppStore.getState();
-  const model = state.downloadedImageModels.find(item => item.id === state.activeImageModelId);
-  return model
-    ? candidate(
-        mobileRouteId({
-          source: 'local', hostId: model.backend ?? 'image-runtime',
-          modality: 'image', modelId: model.id,
-        }),
-        'image',
-        model.name,
-      )
-    : null;
-}
-
-function localTranscriptionCandidate(): PersistedSelectionCandidate | null {
-  const modelId = useWhisperStore.getState().downloadedModelId;
-  return modelId
-    ? candidate(
-        mobileRouteId({
-          source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId,
-        }),
-        'transcription',
-      )
-    : null;
-}
-
-function classifierProjection(): PersistedSelectionProjection {
-  const state = useAppStore.getState();
-  const active = localTextCandidate(state.activeModelId, 'classifier');
-  const remembered = localTextCandidate(state.lastTextModelId, 'classifier');
+function projectionFromEntry(
+  modality: ModelModality,
+  entry: PersistedSelectionEntry,
+): PersistedSelectionProjection {
+  const remembered = localCandidateFromRoute(modality, entry.rememberedLocalRouteId);
   return {
-    local: localTextCandidate(state.settings.classifierModelId, 'classifier'),
-    remote: null,
-    localFallbacks: [active, remembered].filter(
-      (item): item is PersistedSelectionCandidate => item !== null,
-    ),
+    local: localCandidateFromRoute(modality, entry.localRouteId),
+    remote: modality === 'classifier' ? null : remoteCandidateFromRoute(modality, entry.remoteRouteId),
+    localFallbacks: remembered ? [remembered] : [],
   };
 }
 
-/** Read raw platform persistence facts. Shared owns every reconciliation decision. */
-function readMobileSelectionProjection(
-  modality: ModelModality,
-): PersistedSelectionProjection {
-  const app = useAppStore.getState();
+// ---------------------------------------------------------------------------------------------
+// One-time migration from the retired per-store fields. Read only when the selection store has no
+// entry for a modality; the result is written into the selection store so it never runs again.
+// ---------------------------------------------------------------------------------------------
+
+interface LegacyStores {
+  app: ReturnType<typeof useAppStore.getState>;
+  remote: ReturnType<typeof useRemoteServerStore.getState>;
+}
+
+function legacyRemoteMediaRoute(stores: LegacyStores, media: RemoteMediaModality): string | null {
+  const serverId = stores.remote.activeRemoteMediaServerIds?.[media];
+  const server = serverId ? stores.remote.servers.find(item => item.id === serverId) : null;
+  const modelId = server?.selections?.[media]?.trim();
+  return serverId && modelId
+    ? mobileRouteId({ source: 'remote', hostId: serverId, modality: media, modelId })
+    : null;
+}
+
+function legacyLocalTextRoute(stores: LegacyStores, modelId: string | null | undefined): string | null {
+  const model = modelId ? stores.app.downloadedModels.find(item => item.id === modelId) : null;
+  return model
+    ? mobileRouteId({ source: 'local', hostId: model.engine, modality: 'text', modelId: model.id })
+    : null;
+}
+
+function legacyEntryOf(
+  localRouteId: string | null,
+  remoteRouteId: string | null,
+  remembered?: string | null,
+): PersistedSelectionEntry | null {
+  if (!localRouteId && !remoteRouteId && !remembered) return null;
+  return { localRouteId, remoteRouteId, ...(remembered ? { rememberedLocalRouteId: remembered } : {}) };
+}
+
+function legacyTextEntry(stores: LegacyStores): PersistedSelectionEntry | null {
+  const { remote, app } = stores;
+  const remoteRouteId =
+    remote.activeServerId && remote.activeRemoteTextModelId
+      ? mobileRouteId({
+          source: 'remote',
+          hostId: remote.activeServerId,
+          modality: 'text',
+          modelId: remote.activeRemoteTextModelId,
+        })
+      : null;
+  return legacyEntryOf(
+    legacyLocalTextRoute(stores, app.activeModelId),
+    remoteRouteId,
+    legacyLocalTextRoute(stores, app.lastTextModelId),
+  );
+}
+
+function legacyImageEntry(stores: LegacyStores): PersistedSelectionEntry | null {
+  const model = stores.app.downloadedImageModels.find(item => item.id === stores.app.activeImageModelId);
+  const localRouteId = model
+    ? mobileRouteId({
+        source: 'local',
+        hostId: model.backend ?? 'image-runtime',
+        modality: 'image',
+        modelId: model.id,
+      })
+    : null;
+  return legacyEntryOf(localRouteId, legacyRemoteMediaRoute(stores, 'image'));
+}
+
+function legacyTranscriptionEntry(stores: LegacyStores): PersistedSelectionEntry | null {
+  const modelId = useWhisperStore.getState().downloadedModelId;
+  const localRouteId = modelId
+    ? mobileRouteId({ source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId })
+    : null;
+  return legacyEntryOf(localRouteId, legacyRemoteMediaRoute(stores, 'transcription'));
+}
+
+function legacyClassifierEntry(stores: LegacyStores): PersistedSelectionEntry | null {
+  const classifierId = stores.app.settings.classifierModelId;
+  const localRouteId = classifierId
+    ? localTextCandidateFor(classifierId, 'classifier')?.routeId ?? null
+    : null;
+  return legacyEntryOf(
+    localRouteId,
+    null,
+    legacyLocalTextRoute(stores, stores.app.activeModelId ?? stores.app.lastTextModelId),
+  );
+}
+
+/** The retired per-store fields, read once per modality. */
+function legacyEntry(modality: ModelModality): PersistedSelectionEntry | null {
+  const stores: LegacyStores = {
+    app: useAppStore.getState(),
+    remote: useRemoteServerStore.getState(),
+  };
   switch (modality) {
     case 'text':
-      return {
-        local: localTextCandidate(app.activeModelId),
-        remote: remoteTextCandidate(),
-        localFallbacks: [localTextCandidate(app.lastTextModelId)].filter(
-          (item): item is PersistedSelectionCandidate => item !== null,
-        ),
-      };
+      return legacyTextEntry(stores);
     case 'image':
-      return { local: localImageCandidate(), remote: remoteMediaCandidate('image') };
+      return legacyImageEntry(stores);
     case 'transcription':
-      return { local: localTranscriptionCandidate(), remote: remoteMediaCandidate('transcription') };
+      return legacyTranscriptionEntry(stores);
     case 'voice':
-      return {
-        local: candidate(selectedMobileLocalVoiceRoute(), 'voice'),
-        remote: remoteMediaCandidate('voice'),
-      };
+      return legacyEntryOf(selectedMobileLocalVoiceRoute(), legacyRemoteMediaRoute(stores, 'voice'));
     case 'embedding':
-      return { local: null, remote: remoteMediaCandidate('embedding') };
+      return legacyEntryOf(null, legacyRemoteMediaRoute(stores, 'embedding'));
     case 'classifier':
-      return classifierProjection();
+      return legacyClassifierEntry(stores);
     default:
-      return { local: null, remote: null };
+      return null;
   }
+}
+
+function entryFor(modality: ModelModality): PersistedSelectionEntry | null {
+  const store = useModelSelectionStore.getState();
+  const entry = store.entries[modality];
+  if (entry) return entry;
+  const migrated = legacyEntry(modality);
+  if (migrated) store.setEntry(modality, migrated);
+  return migrated;
+}
+
+/** Read raw persistence facts. Shared owns every reconciliation decision. */
+function readMobileSelectionProjection(modality: ModelModality): PersistedSelectionProjection {
+  const entry = entryFor(modality);
+  if (!entry) return { local: null, remote: null };
+  const projection = projectionFromEntry(modality, entry);
+  if (modality === 'classifier' && !projection.local && !projection.localFallbacks?.length) {
+    // A classifier with no explicit pick falls back to the active or remembered text model.
+    const text = entryFor('text');
+    const fallbacks = [text?.localRouteId, text?.rememberedLocalRouteId]
+      .map(routeId => {
+        const route = routeId ? decodeModelRouteId(routeId) : null;
+        return route ? localTextCandidateFor(route.modelId, 'classifier') : null;
+      })
+      .filter((item): item is PersistedSelectionCandidate => item !== null);
+    return { ...projection, localFallbacks: fallbacks };
+  }
+  return projection;
 }
 
 /** The last explicitly selected LOCAL text model, kept for restoration after eviction. */
 export function rememberedLocalTextModelId(): string | null {
-  return useAppStore.getState().lastTextModelId;
+  const routeId = entryFor('text')?.rememberedLocalRouteId;
+  return routeId ? decodeModelRouteId(routeId)?.modelId ?? null : null;
 }
 
 /** Canonical read for non-reactive adapter code. Reconciliation remains owned by Shared. */
@@ -169,85 +266,48 @@ export function readMobileModelSelection(modality: ModelModality): string | null
   return reconcileModelSelection(modality, readMobileSelectionProjection(modality)).selectedRouteId;
 }
 
-function clearRemoteMedia(modality: RemoteMediaModality): void {
-  useRemoteServerStore.setState(state => ({
-    activeRemoteMediaServerIds: Object.fromEntries(
-      Object.entries(state.activeRemoteMediaServerIds).filter(([key]) => key !== modality),
-    ),
-    ...(modality === 'image' ? { activeRemoteImageModelId: null } : {}),
-  }));
-}
-
-function rawRoute(routeId: string | null) {
+function rawRoute(routeId: string | null | undefined) {
   const route = routeId ? decodeModelRouteId(routeId) : null;
   if (routeId && !route) throw new Error('The selected model route is invalid');
   return route;
 }
 
-/** Mechanical persistence projection. It does not choose a source, fallback, or eligible model. */
+/**
+ * Mechanical persistence: the entry is written to the one selection store. The two native runtimes
+ * that read their own selected model (whisper.rn, the TTS engine) get their projection here too.
+ */
 async function writeMobileSelectionProjection(
   modality: ModelModality,
   projection: SelectionProjectionWrite,
 ): Promise<void> {
   const local = rawRoute(projection.localRouteId);
-  const remote = rawRoute(projection.remoteRouteId);
+  rawRoute(projection.remoteRouteId);
+  const previous = useModelSelectionStore.getState().entries[modality];
+  useModelSelectionStore.getState().setEntry(modality, {
+    localRouteId: projection.localRouteId,
+    remoteRouteId: projection.remoteRouteId,
+    // A clear must not erase restoration history.
+    ...(projection.rememberedLocalRouteId
+      ? { rememberedLocalRouteId: projection.rememberedLocalRouteId }
+      : previous?.rememberedLocalRouteId
+        ? { rememberedLocalRouteId: previous.rememberedLocalRouteId }
+        : {}),
+  });
   switch (modality) {
-    case 'text':
-      useAppStore.setState({
-        activeModelId: local?.modelId ?? null,
-        ...(projection.rememberedLocalRouteId
-          ? { lastTextModelId: rawRoute(projection.rememberedLocalRouteId)?.modelId ?? null }
-          : {}),
-      });
-      useRemoteServerStore.setState({
-        activeServerId: remote?.serverId ?? null,
-        activeRemoteTextModelId: remote?.modelId ?? null,
-      });
-      break;
-    case 'image':
-      useAppStore.setState({ activeImageModelId: local?.modelId ?? null });
-      if (!remote?.serverId) clearRemoteMedia('image');
-      else {
-        useRemoteServerStore.setState(state => ({
-          activeRemoteMediaServerIds: { ...state.activeRemoteMediaServerIds, image: remote.serverId },
-          activeRemoteImageModelId: remote.modelId,
-        }));
-      }
-      break;
     case 'transcription':
       useWhisperStore.setState({
         downloadedModelId: local?.modelId ?? null, isModelLoaded: false, error: null,
       });
-      if (!remote?.serverId) clearRemoteMedia('transcription');
-      else {
-        useRemoteServerStore.setState(state => ({
-          activeRemoteMediaServerIds: {
-            ...state.activeRemoteMediaServerIds, transcription: remote.serverId,
-          },
-        }));
-      }
       break;
     case 'voice':
       await selectMobileLocalVoiceRoute(projection.localRouteId);
-      if (!remote?.serverId) clearRemoteMedia('voice');
-      else {
-        useRemoteServerStore.setState(state => ({
-          activeRemoteMediaServerIds: { ...state.activeRemoteMediaServerIds, voice: remote.serverId },
-        }));
-      }
-      break;
-    case 'embedding':
-      if (!remote?.serverId) clearRemoteMedia('embedding');
-      else {
-        useRemoteServerStore.setState(state => ({
-          activeRemoteMediaServerIds: { ...state.activeRemoteMediaServerIds, embedding: remote.serverId },
-        }));
-      }
       break;
     case 'classifier':
       useAppStore.setState(state => ({
         settings: { ...state.settings, classifierModelId: local?.modelId ?? null },
       }));
+      break;
+    default:
       break;
   }
 }

@@ -1,3 +1,4 @@
+import { useActiveMobileRoute } from '../services/modelServices/activeRoute';
 /**
  * Remote Servers
  *
@@ -162,8 +163,8 @@ export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, activeServerId } =
-    useRemoteServerStore();
+  const { servers, serverHealth } = useRemoteServerStore();
+  const activeServerId = useActiveMobileRoute('text').model?.serverId ?? null;
   const autoDiscover = useAppStore(
     s => s.settings.autoDiscoverRemoteModels === true,
   );

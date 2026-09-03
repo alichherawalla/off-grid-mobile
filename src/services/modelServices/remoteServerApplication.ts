@@ -1,3 +1,4 @@
+import { activeMobileRoute } from './mobileLLMService';
 import {
   mergeRemoteSelections,
   type RemoteServerApplicationPorts,
@@ -25,7 +26,8 @@ import type { RemoteModel, RemoteServer } from '../../types';
 
 function readConfiguration(): RemoteServerConfiguration {
   const state = useRemoteServerStore.getState();
-  return { version: 1, activeServerId: state.activeServerId, servers: state.servers };
+  // The active server is the text route's server, not a fact of its own.
+  return { version: 1, activeServerId: activeMobileRoute('text').model?.serverId ?? null, servers: state.servers };
 }
 
 function writeConfiguration(value: RemoteServerConfiguration): void {
