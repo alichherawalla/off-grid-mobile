@@ -5,9 +5,9 @@ import {
   type GenerationMessage,
   type GenerationOperation,
 } from '@offgrid/application';
-import { modelInputAudioUris } from '../../services/modelMedia';
-import { useChatStore } from '../../stores';
-import type { MediaAttachment, Message } from '../../types';
+import { useChatStore } from '../../../stores';
+import type { MediaAttachment, Message } from '../../../types';
+import { modelInputAudioUris } from '../../modelMedia';
 
 export function generationMessage(message: Message): GenerationMessage {
   return projectChatMessage(message, {
@@ -16,7 +16,6 @@ export function generationMessage(message: Message): GenerationMessage {
   });
 }
 
-/** Reconstruct Shared turn records from the durable Mobile conversation projection. */
 function persistedTurns(conversationId: string): ChatTurn[] {
   const conversation = useChatStore
     .getState()
@@ -80,7 +79,6 @@ export class MobileChatTurnRepository implements ChatSessionRepositoryPort {
     this.sessions.delete(conversationId);
   }
 
-  /** Seed durable history without the new row before ChatSessionService appends it. */
   prepareNew(conversationId: string, turnId: string): Message | null {
     const conversation = useChatStore
       .getState()

@@ -8,7 +8,7 @@ import {
   type GenerationResult,
   type ModelsFailure,
 } from '@offgrid/application';
-import { applicationFacade } from '../../services/applicationFacade';
+import { applicationFacade } from '../../applicationFacade';
 
 function publishLifecycle(
   event: GenerationLifecycleEvent,
@@ -49,7 +49,6 @@ function failureError(failure: ModelsFailure): Error {
   }
 }
 
-/** Adapt the typed Models stream to the chat-session generation port. */
 export async function generateChatWithModelsFacade(
   request: GenerationRequest,
   events: GenerationEvents,
