@@ -16,7 +16,7 @@ import {
   type RuntimeModel,
   classifyRuntimeError,
 } from '@offgrid/models';
-import type { LLMService } from '@offgrid/models';
+import type { WorkspaceRoutingPort } from '@offgrid/models';
 import type { GenerationMeta, MediaAttachment, Message } from '../../types';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';
@@ -433,7 +433,7 @@ export const mobileGenerationResidency: ModelResidencyLifecyclePort = modelResid
 
 export function reconcileMobileGenerationAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: LLMService,
+  models: WorkspaceRoutingPort,
   registrations: Map<string, () => void>,
 ): void {
   const supported = new Map<string, RuntimeModel['modality']>([

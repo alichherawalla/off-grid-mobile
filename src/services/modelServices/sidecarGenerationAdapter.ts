@@ -5,7 +5,7 @@ import {
   type GenerationChunk,
   type GenerationRequest,
 } from '@offgrid/models';
-import type { LLMService } from '@offgrid/models';
+import type { WorkspaceRoutingPort } from '@offgrid/models';
 import { classifierExecution } from '../composition/generation';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
@@ -66,7 +66,7 @@ function adapter(id: string): GenerationAdapter {
 
 export function reconcileMobileSidecarAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: LLMService,
+  models: WorkspaceRoutingPort,
   registrations: Map<string, () => void>,
 ): void {
   const modalities = new Set(['embedding', 'classifier']);

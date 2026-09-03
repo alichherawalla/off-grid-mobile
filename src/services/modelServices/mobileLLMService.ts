@@ -1,12 +1,12 @@
-import type { ActiveModelSnapshot, LLMService, ModelModality } from '@offgrid/models';
+import type { ActiveModelSnapshot, ModelModality, WorkspaceRoutingPort } from '@offgrid/models';
 import { lazyInstance } from '../composition/lazy';
 
 /** The single Mobile owner of model inventory, selection, and canonical route identity. */
 // Resolved on first use: the workspace module may still be initializing when this module loads.
-export const mobileLLMService: LLMService = lazyInstance(
+export const mobileLLMService: WorkspaceRoutingPort = lazyInstance(
   () => (require('./workspace') as typeof import('./workspace')).mobileWorkspace.llm,
 );
-let refreshChain = Promise.resolve<ReturnType<LLMService['list']>>([]);
+let refreshChain = Promise.resolve<ReturnType<WorkspaceRoutingPort['list']>>([]);
 
 /** Serialize canonical inventory rebuilds so an older platform snapshot cannot win a race. */
 export function refreshMobileLLMServiceInventory() {

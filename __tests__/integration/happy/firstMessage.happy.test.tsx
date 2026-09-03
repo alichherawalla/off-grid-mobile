@@ -89,7 +89,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
 
     // Device-shaped race: provider selection is complete, but the background
     // discovery refresh temporarily has no metadata for the chosen model.
-    useRemoteServerStore.getState().clearDiscoveredModels(serverId);
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, []);
     h.render();
 
     await h.rtl.waitFor(() => {
