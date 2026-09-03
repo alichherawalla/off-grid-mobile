@@ -4,7 +4,6 @@ import { lazyInstance } from '../composition/lazy';
 /** The single Mobile owner of model inventory, selection, and canonical route identity. */
 // Resolved on first use: the workspace module may still be initializing when this module loads.
 export const mobileLLMService: LLMService = lazyInstance(
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   () => (require('./workspace') as typeof import('./workspace')).mobileWorkspace.llm,
 );
 let refreshChain = Promise.resolve<ReturnType<LLMService['list']>>([]);
@@ -21,7 +20,10 @@ export async function selectMobileRoute(
   canonicalId: string | null,
 ): Promise<void> {
   await refreshMobileLLMServiceInventory();
-  await mobileLLMService.select(modality, canonicalId);
+  // The facade owns selection: it resolves the route and adopts a discovered remote model on its
+  // server before committing, so callers never reach the inventory service directly.
+  const { mobileWorkspace } = require('./workspace') as typeof import('./workspace');
+  await mobileWorkspace.select(modality, canonicalId);
   await refreshMobileLLMServiceInventory();
 }
 
