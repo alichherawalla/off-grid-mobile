@@ -21,7 +21,7 @@ import { createStyles } from './KnowledgeBaseScreen.styles';
 import { useProjectStore } from '../stores';
 import type { RagDocument } from '@offgrid/application';
 import { applicationFacade } from '../services/applicationFacade';
-import { useRagProjection } from '../hooks/useApplicationProjection';
+import { useProjectRagDocuments } from '../hooks/useProjectRagDocuments';
 import { RootStackParamList } from '../navigation/types';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 
@@ -41,9 +41,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const kbDocs = useRagProjection().documents.filter(
-    document => document.projectId === projectId,
-  );
+  const kbDocs = useProjectRagDocuments(projectId);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [indexError, setIndexError] = useState<{ fileName: string; message: string } | null>(null);

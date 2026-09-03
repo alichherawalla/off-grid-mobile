@@ -22,7 +22,7 @@ import { PasteNoteSheet } from '../components/knowledge/PasteNoteSheet';
 import type { RagDocument } from '@offgrid/application';
 import { applicationFacade } from '../services/applicationFacade';
 import { writePastedNote } from '../services/adapters/rag/pastedNoteFileAdapter';
-import { useRagProjection } from '../hooks/useApplicationProjection';
+import { useProjectRagDocuments } from '../hooks/useProjectRagDocuments';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 
 const formatFileSize = (bytes: number): string => {
@@ -49,9 +49,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
   onNavigateToKb,
   onDocumentPress,
 }) => {
-  const kbDocs = useRagProjection().documents.filter(
-    document => document.projectId === projectId,
-  );
+  const kbDocs = useProjectRagDocuments(projectId);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [pasting, setPasting] = useState(false);

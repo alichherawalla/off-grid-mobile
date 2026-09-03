@@ -253,12 +253,27 @@ class RagDatabase {
     return (result.rows ?? []) as unknown as RagDocument[];
   }
 
-  getAllDocuments(): RagDocument[] {
+  listDocumentPage(
+    afterId: number | null,
+    limit: number,
+  ): { documents: RagDocument[]; nextAfterId: number | null } {
     const db = this.getDb();
     const result = db.executeSync(
-      'SELECT id, sync_id, project_id, name, path, size, created_at, enabled FROM rag_documents ORDER BY created_at ASC',
+      `SELECT id, sync_id, project_id, name, path, size, created_at, enabled
+       FROM rag_documents
+       WHERE id > ?
+       ORDER BY id ASC
+       LIMIT ?`,
+      [afterId ?? 0, limit],
     );
-    return (result.rows ?? []) as unknown as RagDocument[];
+    const documents = (result.rows ?? []) as unknown as RagDocument[];
+    return {
+      documents,
+      nextAfterId:
+        documents.length === limit
+          ? (documents[documents.length - 1]?.id ?? null)
+          : null,
+    };
   }
 
   getDocument(docId: number): RagDocument | undefined {

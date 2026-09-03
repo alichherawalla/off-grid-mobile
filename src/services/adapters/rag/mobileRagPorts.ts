@@ -79,8 +79,12 @@ export const mobileRagStore: VectorStore = {
   async listDocuments(projectId) {
     return ragDatabase.getDocumentsByProject(projectId).map(document);
   },
-  async listAllDocuments() {
-    return ragDatabase.getAllDocuments().map(document);
+  async listDocumentPage(afterId, limit) {
+    const page = ragDatabase.listDocumentPage(afterId, limit);
+    return {
+      documents: page.documents.map(document),
+      nextAfterId: page.nextAfterId,
+    };
   },
   async getDocument(docId) {
     const row = ragDatabase.getDocument(docId);
