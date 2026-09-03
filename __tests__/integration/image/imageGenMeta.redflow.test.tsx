@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (UI integration) — Q1 + Q7: the image size / guidance the user set is not what gets used.
  *
@@ -33,7 +34,8 @@ async function generateWithSettings(settings: Record<string, unknown>) {
    
 
   const model = createONNXImageModel({ id: 'sd', name: 'SD Test', modelPath: '/models/sd', backend: 'mnn' });
-  useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: 'sd' });
+  useAppStore.setState({ downloadedImageModels: [model] });
+  arrangeLocalSelection('image', 'sd');
   useAppStore.getState().updateSettings({
     imageThreads: 4, imageUseOpenCL: false, enhanceImagePrompts: false, imageSteps: 8, ...settings,
   });

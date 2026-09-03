@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * useEjectAllModels — the Eject All affordance on Home and in Chat.
  *
@@ -39,8 +40,10 @@ import { useEjectAllModels } from '../../../src/hooks/useEjectAllModels';
 
 /** Nothing loaded anywhere - the state a fresh install is in, reached the way the app reaches it. */
 const nothingActive = (): void => {
-  useAppStore.setState({ activeModelId: null });
-  useAppStore.setState({ activeImageModelId: null });
+  useAppStore.setState({ });
+  arrangeLocalSelection('text', null);
+  useAppStore.setState({ });
+  arrangeLocalSelection('image', null);
   useRemoteServerStore.setState({ activeRemoteTextModelId: null });
   useRemoteServerStore.setState({ activeRemoteImageModelId: null });
 };

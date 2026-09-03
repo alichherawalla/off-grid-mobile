@@ -1,3 +1,4 @@
+import { arrangeRemoteSelection, resetStores as resetStoresForSelection } from '../../utils/testHelpers';
 /**
  * Extra coverage for McpToolExtension — drives the REAL extension against the REAL
  * mcpStore + remoteServerStore + schemaTrim + mcpService parse/prompt logic. The only
@@ -46,7 +47,6 @@ jest.mock('react-native-zeroconf', () => {
 
 import { McpToolExtension } from '@offgrid/pro/mcp/McpToolExtension';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
-import { useRemoteServerStore } from '@offgrid/core/stores';
 import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/models';
 import type { McpTool } from '@offgrid/pro/mcp/types';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
@@ -105,7 +105,7 @@ function resetStores() {
     knownToolNames: [],
     toolOwners: {},
   });
-  useRemoteServerStore.setState({ activeRemoteTextModelId: null });
+  resetStoresForSelection();
 }
 
 beforeEach(() => {
@@ -121,7 +121,7 @@ describe('getOpenAISchemas', () => {
       toolOwners: { huge_tool: 's1' },
       enabledTools: ['huge_tool'],
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: null });
+    resetStoresForSelection();
 
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
     expect(schemas).toHaveLength(1);
@@ -134,14 +134,14 @@ describe('getOpenAISchemas', () => {
     expect(schemas[0].function.description).toBe('A very long description.');
   });
 
-  it('only prunes noise (keeps optional params) when a remote text model IS active', () => {
+  it('only prunes noise (keeps optional params) when a remote text model IS active', async () => {
     const large = makeLargeTool();
     useMcpStore.setState({
       serverTools: { s1: [large] },
       toolOwners: { huge_tool: 's1' },
       enabledTools: ['huge_tool'],
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: 'gpt-x' });
+    await arrangeRemoteSelection('text', 'server-1', 'gpt-x');
 
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
     const params = schemas[0].function.parameters;

@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * DEVICE 2026-07-14 — image Steps / cfg (guidance) were OFF BY ONE: change the value in Chat Settings,
  * and the NEXT generation still used the previous value; only the generation after picked it up. Image
@@ -34,13 +35,14 @@ describe('image tunables read FRESH from the store, not a stale caller snapshot 
     // is needed; size is small so the run is quick. This is the single source the service must read.
     useAppStore.setState({
       downloadedImageModels: [imgModel],
-      activeImageModelId: 'sd',
+      
       settings: {
         ...useAppStore.getState().settings,
         imageSteps: 11, imageGuidanceScale: 3.5, imageWidth: 256, imageHeight: 256,
-        enhanceImagePrompts: false,
-      },
+        enhanceImagePrompts: false
+      }
     });
+    arrangeLocalSelection('image', 'sd');
     expect(useAppStore.getState().settings.imageSteps).toBe(11);
     expect(useAppStore.getState().settings.imageGuidanceScale).toBe(3.5);
 

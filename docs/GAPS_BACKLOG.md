@@ -2085,3 +2085,36 @@ them are written by hand. Symptoms today: Nano Banana saved on Desktop, phone re
 
 Fails on the branch head before today's selection change (verified with the change stashed). Not a
 mockist; needs a real fix of the seam or the expectation.
+
+## Mobile jest: 15 suites red after the model-facade test pass, none from the facade work (open, 2026-09-03)
+
+Full run 2026-09-03: 644 of 659 suites green (7699 tests pass, 20 fail). Each red suite is either
+pre-existing (fails at commit f476a1ad, before the facade work, verified in a worktree) or follows a
+production change made today by another session whose tests were not updated:
+- `unit/services/tools/handlers.test.ts`, `tools/handlers.branches.test.ts`, `unit/services/toolHandlers.test.ts`:
+  HTML entity decoding changed in 01788641 (decode once); tests expect the old double-decode.
+- `rntl/components/ModelCard.test.tsx`, `rntl/screens/DownloadManagerScreen.test.tsx`,
+  `rntl/components/VoiceModelsPanel.test.tsx`, `pro/audio/ui/TTSSection.test.tsx`: progress copy changed in
+  581ef412 (an unknown rate is not labelled); tests expect the old "Rate unavailable" text.
+- `integration/happy/imageOomCard.happy.test.tsx`, `integration/memory/loadAnywayCardRendered.redflow.test.tsx`:
+  the failure card's button reads "Run anyway" since 66223fe6; tests look for "Load Anyway".
+- `integration/generation/remoteFailureClearsLoading.test.ts`: remote errors are readable since 16b65e27
+  ("Bad Request"); the test expects "HTTP 400".
+- `integration/models/whisperPickerCanonicalDownloadProgress.rendered.test.tsx`: updated in 5ca27970 to expect
+  "Model storage is unavailable", which no source file renders.
+- Pre-existing: `integration/audio/streamingStateMachine.test.ts` (TTS store mock lacks `subscribe`),
+  `integration/chat/remoteEnhanceSkipped.redflow.test.ts` (remote image request still carries the enhanced
+  prompt), `integration/models/modelsManagerSheetPresentation.rendered.test.tsx` (sheet surface style has no
+  height), `unit/services/remoteServerReconnect.test.ts` (already logged above).
+Doctrine applies to the fixes: assert the new copy through the rendered surface, or fix the seam; never repair a mock.
+
+## `pro/sync/pairedGatewayAdoption.test.ts` mocks the workspace (open, 2026-09-03)
+
+Passes, but it fakes `mobileWorkspace` instead of driving the real facade with a fake transport. Rewrite through
+the real workspace at the next touch.
+
+## A test writes `downloads.json` into the repo root (open, 2026-09-03)
+
+An empty `downloads.json` appeared in the desktop repo root after a vitest run: `desktop-model-download-service`
+persists to `path.join(modelsDir(), 'downloads.json')`, so some test hands it an empty `modelsDir`. Pin the models
+directory to a temp dir in that test (see "Desktop CI hermeticity"). The stray file was removed by hand.

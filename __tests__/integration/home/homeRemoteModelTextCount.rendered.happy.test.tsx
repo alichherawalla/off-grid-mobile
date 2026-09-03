@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { selectedRemoteRoute } from '../../utils/testHelpers';
 /**
  * T097 (checklist Area 14, rendered) — Home with a remote model active: the "Text" count must reflect
  * LOCAL reality (the literal local-download count) WITHOUT reading as a broken desync.
@@ -49,8 +51,10 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
      
 
     // Fresh remote store (no servers) + ZERO local text models — the exact device precondition (0 local).
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });
-    useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useAppStore.setState({ downloadedModels: [],  downloadedImageModels: [] });
+    arrangeLocalSelection('text', null);
+    arrangeLocalSelection('image', null);
 
     // LAN boundary: a reachable OpenAI-compatible server answering /v1/models with one text model (as T046).
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
@@ -79,7 +83,7 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
 
   it('shows Text count = 0 (literal local count) while the Text type reads ACTIVE (remote model represented)', async () => {
     const env = setup({ selectRemoteModel: true });
-    const { React, rtl, HomeScreen, useRemoteServerStore, nav } = env;
+    const { React, rtl, HomeScreen, nav } = env;
 
     await connectServerViaUI(env);
 
@@ -93,7 +97,7 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('remote-model-item'), { timeout: 4000 }));
 
     // The real store now reports a remote model active (EMERGENT from the gesture, not setState).
-    await rtl.waitFor(() => { expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('llama-3-8b'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(selectedRemoteRoute('text')?.modelId).toBe('llama-3-8b'); }, { timeout: 4000 });
 
     // ── Assert the rendered Home "Text" surface (ModelsSummaryRow) — the finding's exact surface ──
     // (a) The count numeral is the LITERAL local count: 0. It is a LOCAL-download count, not the remote model.

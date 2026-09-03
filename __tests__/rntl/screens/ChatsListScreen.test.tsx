@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * ChatsListScreen Tests
  *
@@ -196,10 +197,12 @@ describe('ChatsListScreen', () => {
     it('enables New when downloadable models exist but none are loaded', () => {
       useAppStore.setState({
         downloadedModels: [createDownloadedModel()],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
+        
+        downloadedImageModels: []
+        
       });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
 
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
@@ -209,10 +212,12 @@ describe('ChatsListScreen', () => {
     it('selects a text route without loading it before Chat opens', async () => {
       useAppStore.setState({
         downloadedModels: [createDownloadedModel({ id: 'local-text' })],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
+        
+        downloadedImageModels: []
+        
       });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
       const { getByText } = render(<ChatsListScreen />);
 
       fireEvent.press(getByText('New'));
@@ -264,10 +269,12 @@ describe('ChatsListScreen', () => {
     it('shows New button flow when only image models are available', () => {
       useAppStore.setState({
         downloadedModels: [],
-        activeModelId: null,
-        downloadedImageModels: [createONNXImageModel()],
-        activeImageModelId: null,
+        
+        downloadedImageModels: [createONNXImageModel()]
+        
       });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
 
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));

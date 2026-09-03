@@ -23,7 +23,21 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { resetStores, createMultipleConversations } from '../../utils/testHelpers';
+import {
+  arrangeLocalSelection,
+  createMultipleConversations,
+  resetStores,
+  selectedLocalModelId,
+} from '../../utils/testHelpers';
+import { useModelResidencyStore } from '../../../src/stores/modelResidencyStore';
+import { refreshMobileModelServices } from '../../../src/services/modelServices';
+import { rememberedLocalTextModelId } from '../../../src/services/modelServices/modelSelectionProjection';
+
+/** Select a local model the way the app persists it, then let the shared inventory see it. */
+const selectLocal = async (modality: 'text' | 'image', modelId: string) => {
+  arrangeLocalSelection(modality, modelId);
+  await refreshMobileModelServices();
+};
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -81,28 +95,12 @@ const mockGetResourceUsage = jest.fn(() => Promise.resolve({
   memoryAvailable: 4 * 1024 * 1024 * 1024,
 }));
 const mockSubscribeToModelState = jest.fn((_listener?: () => void) => jest.fn());
-const mockClearMobileModel = jest.fn(async (modality: string) => {
-  const { useAppStore: appStore } = require('../../../src/stores/appStore');
-  if (modality === 'text') appStore.setState({ activeModelId: null });
-  if (modality === 'image') appStore.setState({ activeImageModelId: null });
-});
-const mockSelectMobileModel = jest.fn(async (route: any) => {
-  const { useAppStore: appStore } = require('../../../src/stores/appStore');
-  if (route.modality === 'text') {
-    appStore.setState({ activeModelId: route.modelId });
-    appStore.getState().setLastTextModelId(route.modelId);
-  } else if (route.modality === 'image') {
-    appStore.setState({ activeImageModelId: route.modelId });
-  }
-});
 
 jest.mock('../../../src/services', () => ({
   ...jest.requireActual('../../../src/services'),
   getResourceUsage: () => mockGetResourceUsage(),
   subscribeToModelState: (listener: () => void) => mockSubscribeToModelState(listener),
   syncWithNativeState: jest.fn().mockResolvedValue(undefined),
-  selectMobileModel: (route: any) => mockSelectMobileModel(route),
-  clearMobileModel: (modality: string) => mockClearMobileModel(modality),
   loadImageModel: (...args: any[]) => mockLoadImageModel(...args),
   unloadTextModel: () => mockUnloadTextModel(),
   unloadImageModel: () => mockUnloadImageModel(),
@@ -112,52 +110,22 @@ jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
   ejectAllModelsForUser: () => mockEjectAll(),
 }));
 
-jest.mock('../../../src/services/modelServices/modelCommandApplication', () => ({
-  mobileModelCommands: {
-    select: (intent: any) => mockSelectMobileModel(intent),
-    unload: (modality: string) =>
-      modality === 'text' ? mockUnloadTextModel() : mockUnloadImageModel(),
-  },
-}));
+jest.mock('../../../src/services/modelServices/modelCommandApplication', () => {
+  // The real command application (selection, pending-route reads); only the native unload is faked.
+  const actual = jest.requireActual('../../../src/services/modelServices/modelCommandApplication');
+  return {
+    ...actual,
+    mobileModelCommands: {
+      select: (intent: any, options?: any) => actual.mobileModelCommands.select(intent, options),
+      pending: (modality: any) => actual.mobileModelCommands.pending(modality),
+      subscribe: (listener: any) => actual.mobileModelCommands.subscribe(listener),
+      unload: (modality: string) =>
+        modality === 'text' ? mockUnloadTextModel() : mockUnloadImageModel(),
+    },
+  };
+});
 
-jest.mock('../../../src/hooks/useActiveTextModel', () => ({
-  useActiveTextModel: () => {
-    const { useAppStore: appStore } = require('../../../src/stores/appStore');
-    const activeId = appStore((state: any) => state.activeModelId);
-    const models = appStore((state: any) => state.downloadedModels);
-    const model = models.find((candidate: any) => candidate.id === activeId) ?? null;
-    return {
-      model,
-      modelId: model?.id ?? null,
-      modelName: model?.name ?? 'Unknown',
-      isRemote: false,
-    };
-  },
-}));
 
-jest.mock('../../../src/hooks/useActiveMobileModel', () => ({
-  useActiveMobileModel: (modality: string) => {
-    const { useAppStore: appStore } = require('../../../src/stores/appStore');
-    const activeId = appStore((state: any) =>
-      modality === 'image' ? state.activeImageModelId : state.activeModelId,
-    );
-    const models = appStore((state: any) =>
-      modality === 'image' ? state.downloadedImageModels : state.downloadedModels,
-    );
-    const record = models.find((candidate: any) => candidate.id === activeId);
-    return {
-      modality,
-      model: record
-        ? {
-            id: record.id,
-            name: record.name,
-            source: 'local',
-            routeId: `local:${modality}:${record.id}`,
-          }
-        : null,
-    };
-  },
-}));
 
 jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
@@ -166,11 +134,8 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
     loadTextModel: mockLoadTextModel,
     // Boundary mock mirrors the real selectTextModel (the single owner of the selection write).
     selectTextModel: jest.fn((id: string) => {
-      // Inner require (the jest.mock factory is hoisted, so it can't close over the top-level
-      // import); alias to avoid shadowing the module-scope useAppStore.
-      const { useAppStore: appStore } = require('../../../src/stores');
-      appStore.setState({ activeModelId: id });
-      appStore.getState().setLastTextModelId(id);
+      // The selection is arranged the way the app persists it (one selection store).
+      require('../../utils/testHelpers').arrangeLocalSelection('text', id);
     }),
     loadImageModel: mockLoadImageModel,
     unloadTextModel: mockUnloadTextModel,
@@ -192,11 +157,15 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
   },
 }));
 
+// The disk is the library's source of truth and the store mirrors it. This boundary answers
+// with what a test placed in the store, so the screen's own library refresh keeps it.
 jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
   modelLibrary: {
-    getDownloadedModels: jest.fn(() => Promise.resolve([])),
-      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
-    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
+    getDownloadedModels: jest.fn(() =>
+      Promise.resolve(require('../../../src/stores/appStore').useAppStore.getState().downloadedModels)),
+    linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
+    getDownloadedImageModels: jest.fn(() =>
+      Promise.resolve(require('../../../src/stores/appStore').useAppStore.getState().downloadedImageModels)),
   },
 }));
 
@@ -387,14 +356,6 @@ describe('HomeScreen', () => {
     (activeModelService.getLoadedModelIds as jest.Mock).mockReturnValue({ textModelId: null, imageModelId: null });
     mockLoadTextModel.mockResolvedValue(undefined);
     mockLoadImageModel.mockResolvedValue(undefined);
-    mockSelectMobileModel.mockImplementation(async (route: any) => {
-      if (route.modality === 'text') {
-        useAppStore.setState({ activeModelId: route.modelId });
-        useAppStore.getState().setLastTextModelId(route.modelId);
-      } else if (route.modality === 'image') {
-        useAppStore.setState({ activeImageModelId: route.modelId });
-      }
-    });
     mockUnloadTextModel.mockResolvedValue(undefined);
     mockUnloadImageModel.mockResolvedValue(undefined);
     mockUnloadAllModels.mockResolvedValue({ textUnloaded: true, imageUnloaded: true });
@@ -616,12 +577,12 @@ describe('HomeScreen', () => {
       expect(getByText('Speech')).toBeTruthy();
     });
 
-    it('shows the active text model name inside the manager sheet (not on the home screen)', () => {
+    it('shows the active text model name inside the manager sheet (not on the home screen)', async () => {
       const model = createDownloadedModel({ name: 'Llama-3.2-3B' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getAllByText, getByTestId, queryByText } = renderHomeScreen();
       // The name is not rendered directly on the home screen.
@@ -632,12 +593,12 @@ describe('HomeScreen', () => {
       expect(getAllByText('Llama-3.2-3B').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows the active image model name inside the manager sheet', () => {
+    it('shows the active image model name inside the manager sheet', async () => {
       const imageModel = createONNXImageModel({ name: 'SDXL Turbo' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -661,13 +622,13 @@ describe('HomeScreen', () => {
   // New Chat Button / Setup Card
   // ============================================================================
   describe('new chat button', () => {
-    it('shows New Chat button when text model is active', () => {
+    it('shows New Chat button when text model is active', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       const { getByTestId } = renderHomeScreen();
       expect(getByTestId('new-chat-button')).toBeTruthy();
@@ -707,12 +668,12 @@ describe('HomeScreen', () => {
       expect(getByText('Browse Models')).toBeTruthy();
     });
 
-    it('navigates to Chat when New Chat pressed', () => {
+    it('navigates to Chat when New Chat pressed', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('new-chat-button'));
@@ -720,12 +681,12 @@ describe('HomeScreen', () => {
       expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
 
-    it('does not create a conversation eagerly when New Chat pressed', () => {
+    it('does not create a conversation eagerly when New Chat pressed', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('new-chat-button'));
@@ -882,8 +843,8 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       await act(async () => {
@@ -897,8 +858,8 @@ describe('HomeScreen', () => {
       const imageModel = createONNXImageModel();
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       await act(async () => {
@@ -914,12 +875,12 @@ describe('HomeScreen', () => {
       expect(queryByText('Eject All Models')).toBeNull();
     });
 
-    it('shows confirmation alert when eject all is pressed', () => {
+    it('shows confirmation alert when eject all is pressed', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -935,8 +896,8 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -955,8 +916,8 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByText, getByTestId, queryByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -972,12 +933,12 @@ describe('HomeScreen', () => {
       });
     });
 
-    it('cancels eject when Cancel is pressed', () => {
+    it('cancels eject when Cancel is pressed', async () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const { getByText, getByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -1094,30 +1055,30 @@ describe('HomeScreen', () => {
   // The estimated RAM per model is now shown in the picker items rather than on a
   // home-screen card (the home screen only shows the collapsed summary row).
   describe('estimated RAM display', () => {
-    it('shows estimated RAM for a text model in the picker', () => {
+    it('shows estimated RAM for a text model in the picker', async () => {
       const model = createDownloadedModel({
         name: 'Test Model',
         fileSize: 4 * 1024 * 1024 * 1024,
       });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const result = renderHomeScreen();
       openTextPicker(result);
       expect(result.getByText(/6\.0 GB/)).toBeTruthy();
     });
 
-    it('shows estimated RAM for an image model in the picker', () => {
+    it('shows estimated RAM for an image model in the picker', async () => {
       const imageModel = createONNXImageModel({
         name: 'Test Image Model',
         size: 2 * 1024 * 1024 * 1024,
       });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const result = renderHomeScreen();
       openImagePicker(result);
@@ -1194,13 +1155,13 @@ describe('HomeScreen', () => {
       expect(result.getByText('SD Turbo')).toBeTruthy();
     });
 
-    it('shows unload button when a text model is resident', () => {
+    it('shows unload button when a text model is resident', async () => {
       const model = createDownloadedModel({ name: 'Active Model' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       const result = renderHomeScreen();
       openTextPicker(result);
@@ -1209,12 +1170,12 @@ describe('HomeScreen', () => {
       expect(result.getByText('Unload')).toBeTruthy();
     });
 
-    it('shows unload control when an image model is active', () => {
+    it('shows unload control when an image model is active', async () => {
       const imageModel = createONNXImageModel({ name: 'Active Image' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const result = renderHomeScreen();
       openImagePicker(result);
@@ -1223,12 +1184,12 @@ describe('HomeScreen', () => {
       expect(result.getByText('Unload')).toBeTruthy();
     });
 
-    it('shows model item for active text model', () => {
+    it('shows model item for active text model', async () => {
       const model = createDownloadedModel({ name: 'Checked Model' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const result = renderHomeScreen();
       openTextPicker(result);
@@ -1317,10 +1278,10 @@ describe('HomeScreen', () => {
       });
 
       await waitFor(() => {
-        expect(useAppStore.getState().activeModelId).toBe(model.id);
+        expect(selectedLocalModelId('text')).toBe(model.id);
       });
       // Remembers the explicit choice for lazy reload.
-      expect(useAppStore.getState().lastTextModelId).toBe(model.id);
+      expect(rememberedLocalTextModelId()).toBe(model.id);
       // Mark-only: no eager load and no memory check on selection.
       expect(mockLoadTextModel).not.toHaveBeenCalled();
       expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
@@ -1338,13 +1299,7 @@ describe('HomeScreen', () => {
       });
 
       await waitFor(() => {
-        expect(useAppStore.getState().activeImageModelId).toBe(imageModel.id);
-      });
-      expect(mockSelectMobileModel).toHaveBeenCalledWith({
-        source: 'local',
-        hostId: imageModel.backend ?? 'image-runtime',
-        modality: 'image',
-        modelId: imageModel.id,
+        expect(selectedLocalModelId('image')).toBe(imageModel.id);
       });
       expect(mockLoadImageModel).not.toHaveBeenCalled();
       expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
@@ -1393,9 +1348,9 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ name: 'Unload Me' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       const result = renderHomeScreen();
       openTextPicker(result);
@@ -1413,8 +1368,8 @@ describe('HomeScreen', () => {
       const imageModel = createONNXImageModel({ name: 'Unload Image' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const result = renderHomeScreen();
       openImagePicker(result);
@@ -1434,9 +1389,9 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ name: 'Fail Unload' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       const result = renderHomeScreen();
       openTextPicker(result);
@@ -1456,8 +1411,8 @@ describe('HomeScreen', () => {
       const imageModel = createONNXImageModel({ name: 'Fail Image Unload' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('image', imageModel.id);
 
       const result = renderHomeScreen();
       openImagePicker(result);
@@ -1467,8 +1422,7 @@ describe('HomeScreen', () => {
       });
 
       await waitFor(() => expect(mockUnloadImageModel).toHaveBeenCalled());
-      expect(useAppStore.getState().activeImageModelId).toBe(imageModel.id);
-      expect(mockClearMobileModel).not.toHaveBeenCalledWith('image');
+      expect(selectedLocalModelId('image')).toBe(imageModel.id);
     });
   });
 
@@ -1482,9 +1436,9 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       const { getByText, getByTestId, queryByTestId } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
@@ -1530,9 +1484,9 @@ describe('HomeScreen', () => {
       const model = createDownloadedModel({ name: 'To Unload' });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
-        loadedTextModelId: model.id,
       });
+      await selectLocal('text', model.id);
+      useModelResidencyStore.setState({ loadedTextModelId: model.id });
 
       // Make unload hang
       mockUnloadTextModel.mockImplementation(() => new Promise(() => {}));
@@ -1566,27 +1520,27 @@ describe('HomeScreen', () => {
       expect(getByTestId('home-screen')).toBeTruthy();
     });
 
-    it('shows estimated RAM usage for a loaded text model in the picker', () => {
+    it('shows estimated RAM usage for a loaded text model in the picker', async () => {
       const model = createDownloadedModel({ fileSize: 4 * 1024 * 1024 * 1024 });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
       });
+      await selectLocal('text', model.id);
 
       const result = renderHomeScreen();
       openTextPicker(result);
       expect(result.getAllByText(/GB/).length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows RAM estimates in both pickers when both models loaded', () => {
+    it('shows RAM estimates in both pickers when both models loaded', async () => {
       const model = createDownloadedModel({ fileSize: 4 * 1024 * 1024 * 1024 });
       const imageModel = createONNXImageModel({ size: 2 * 1024 * 1024 * 1024 });
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('text', model.id);
+      await selectLocal('image', imageModel.id);
 
       const result = renderHomeScreen();
       openTextPicker(result);
@@ -1597,15 +1551,15 @@ describe('HomeScreen', () => {
       expect(result.getAllByText(/GB/).length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders without crashing when both models loaded', () => {
+    it('renders without crashing when both models loaded', async () => {
       const model = createDownloadedModel();
       const imageModel = createONNXImageModel();
       useAppStore.setState({
         downloadedModels: [model],
-        activeModelId: model.id,
         downloadedImageModels: [imageModel],
-        activeImageModelId: imageModel.id,
       });
+      await selectLocal('text', model.id);
+      await selectLocal('image', imageModel.id);
 
       const { getByTestId } = renderHomeScreen();
       expect(getByTestId('home-screen')).toBeTruthy();

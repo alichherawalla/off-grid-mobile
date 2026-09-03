@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { selectedLocalModelId } from '../../utils/testHelpers';
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AutoSetupScreen } from '../../../src/screens/AutoSetupScreen';
@@ -200,7 +202,8 @@ describe('Auto Setup release journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
-    useAppStore.setState({ activeModelId: null });
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
     textDownloads.completeOnStart = true;
     imageDownloads.completeOnStart = true;
     speechDownloads.completeOnStart = true;
@@ -248,7 +251,7 @@ describe('Auto Setup release journey', () => {
 
     fireEvent.press(ui.getByTestId('auto-setup-continue'));
     await waitFor(() => {
-      expect(useAppStore.getState().activeModelId).toContain(
+      expect(selectedLocalModelId('text')).toContain(
         'unsloth/Qwen3.5-9B-GGUF',
       );
       expect(navigation.replace).toHaveBeenCalledWith('Main');

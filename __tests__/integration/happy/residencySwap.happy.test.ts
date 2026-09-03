@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * HAPPY-PATH (integration) — smart budgeting / routing: switching text models swaps residency so only ONE
  * heavy text model is accounted resident at a time (loading a llama.cpp model evicts the LiteRT one).
@@ -35,7 +36,8 @@ describe('happy — switching text models swaps residency (one heavy model accou
 
     const litertModel = createDownloadedModel({ id: 'lrt', engine: 'litert', filePath: '/models/gemma.litertlm' });
     const llamaModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
-    useAppStore.setState({ downloadedModels: [litertModel, llamaModel], activeModelId: null });
+    useAppStore.setState({ downloadedModels: [litertModel, llamaModel] });
+    arrangeLocalSelection('text', null);
 
     const textResidents = () => (modelResidencyManager.getResidents() as Array<{ type: string; modelId?: string }>)
       .filter(r => r.type === 'text').map(r => r.modelId);

@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../utils/testHelpers';
+import { activeLocalModelId } from '../../src/services/modelServices/activeRoute';
 /**
  * BATCH 7 (Projects) hardening — new-conversation model selection.
  *
@@ -34,8 +36,8 @@ import type { DownloadedModel } from '../../src/types';
  * so the screen and this test can't drift on the selection precedence.
  */
 function selectModelId(): string | undefined {
-  const { activeModelId, downloadedModels } = useAppStore.getState();
-  return activeModelId || downloadedModels[0]?.id;
+  const { downloadedModels } = useAppStore.getState();
+  return activeLocalModelId('text') || downloadedModels[0]?.id;
 }
 
 function mkModel(id: string): DownloadedModel {
@@ -50,15 +52,17 @@ function mkModel(id: string): DownloadedModel {
 
 describe('BATCH7 new-conversation model selection (real app+chat stores)', () => {
   beforeEach(() => {
-    useAppStore.setState({ downloadedModels: [], activeModelId: null });
+    useAppStore.setState({ downloadedModels: [] });
+    arrangeLocalSelection('text', null);
     useChatStore.setState({ conversations: [], activeConversationId: null });
   });
 
   it('uses the active model id when one is set', () => {
     useAppStore.setState({
-      downloadedModels: [mkModel('first-downloaded'), mkModel('other')],
-      activeModelId: 'other',
+      downloadedModels: [mkModel('first-downloaded'), mkModel('other')]
+      
     });
+    arrangeLocalSelection('text', 'other');
 
     const modelId = selectModelId();
     expect(modelId).toBe('other'); // active wins over downloadedModels[0]
@@ -71,9 +75,10 @@ describe('BATCH7 new-conversation model selection (real app+chat stores)', () =>
 
   it('falls back to the first downloaded model when no active model', () => {
     useAppStore.setState({
-      downloadedModels: [mkModel('first-downloaded'), mkModel('second')],
-      activeModelId: null,
+      downloadedModels: [mkModel('first-downloaded'), mkModel('second')]
+      
     });
+    arrangeLocalSelection('text', null);
 
     const modelId = selectModelId();
     expect(modelId).toBe('first-downloaded');
@@ -84,12 +89,14 @@ describe('BATCH7 new-conversation model selection (real app+chat stores)', () =>
   });
 
   it('yields no model id when nothing is downloaded (guard for the No-Model alert)', () => {
-    useAppStore.setState({ downloadedModels: [], activeModelId: null });
+    useAppStore.setState({ downloadedModels: [] });
+    arrangeLocalSelection('text', null);
     expect(selectModelId()).toBeUndefined();
   });
 
   it('a project conversation is just a conversation carrying projectId', () => {
-    useAppStore.setState({ downloadedModels: [mkModel('m1')], activeModelId: 'm1' });
+    useAppStore.setState({ downloadedModels: [mkModel('m1')] });
+    arrangeLocalSelection('text', 'm1');
     const convId = useChatStore.getState().createConversation('m1', undefined, 'proj-x');
     const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
     // The only thing that scopes it to a project is projectId; title falls back
@@ -99,7 +106,8 @@ describe('BATCH7 new-conversation model selection (real app+chat stores)', () =>
   });
 
   it('a non-project conversation carries no projectId (undefined, not a stray value)', () => {
-    useAppStore.setState({ downloadedModels: [mkModel('m1')], activeModelId: 'm1' });
+    useAppStore.setState({ downloadedModels: [mkModel('m1')] });
+    arrangeLocalSelection('text', 'm1');
     const convId = useChatStore.getState().createConversation('m1');
     const conv = useChatStore.getState().conversations.find((c) => c.id === convId);
     expect(conv?.projectId).toBeUndefined();

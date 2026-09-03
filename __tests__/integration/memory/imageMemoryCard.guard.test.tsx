@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * UI integration GUARDS — memory OOM-avoidance via the image-gen path + ModelFailureCard.
  *
@@ -28,7 +29,8 @@ async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; ava
 
   // CoreML backend → activeModelService skips the mnn/qnn integrity (FS) gate, straight to the memory gate.
   const model = createONNXImageModel({ id: 'sd', name: 'Big SD', modelPath: '/models/big', backend: 'coreml' as never, size: modelSizeBytes });
-  useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: 'sd' });
+  useAppStore.setState({ downloadedImageModels: [model] });
+  arrangeLocalSelection('image', 'sd');
   useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, enhanceImagePrompts: false });
 
   await hardwareService.refreshMemoryInfo(); // pull seeded RAM into the cache the real gate reads

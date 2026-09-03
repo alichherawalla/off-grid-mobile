@@ -8,6 +8,7 @@
  * are faked. Falsified below by asserting a never-scripted answer.
  */
 import { setupChatScreen } from '../../harness/chatHarness';
+import { selectedRemoteRoute } from '../../utils/testHelpers';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -92,8 +93,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.render();
 
     await h.rtl.waitFor(() => {
-      expect(useRemoteServerStore.getState().activeServerId).toBe(serverId);
-      expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('gemma-4-e4b');
+      expect(selectedRemoteRoute('text')).toEqual({ serverId, modelId: 'gemma-4-e4b' });
     });
     expect(h.boundary.llama!.multimodalHoldActive()).toBe(false);
     expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();

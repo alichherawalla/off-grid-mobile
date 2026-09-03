@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * INTEGRATION (residency/lifecycle INVARIANT) — load → resident/ready, unload → not resident, delete →
  * removed from the library. Drives the REAL activeModelService + modelResidencyManager + llmService over
@@ -32,7 +33,8 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
     const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
-    useAppStore.setState({ downloadedModels: [model], activeModelId: null });
+    useAppStore.setState({ downloadedModels: [model] });
+    arrangeLocalSelection('text', null);
     await refreshMobileModelServices();
 
     // Load — becomes ready + resident.

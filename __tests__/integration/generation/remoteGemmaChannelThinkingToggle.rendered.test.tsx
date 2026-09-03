@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * DEV-B16 / B17 (capability half) — a REMOTE model that reasons via Gemma-style inline channel
  * markup (`<|channel>thought …`, NO separate reasoning_content field) must be detected as
@@ -110,7 +111,8 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
 
     // Route remote: no local model loaded/selected (mirrors selecting a remote model on device).
     await llmService.unloadModel();
-    useAppStore.setState({ activeModelId: null });
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
 
     const restoreFetch = installDiscoveryFetch(GEMMA_CHANNEL_PROBE_SSE);
     try {
@@ -156,7 +158,8 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     await llmService.unloadModel();
-    useAppStore.setState({ activeModelId: null });
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
 
     const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
     try {

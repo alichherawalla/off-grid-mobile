@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * Native-boundary integration for the transcript-only voice-note rule. The shared
  * GenerationService and the real Mobile LiteRT adapter run above the native fake.
@@ -20,9 +21,10 @@ describe('voice note on LiteRT', () => {
     const { useChatStore } = require('../../../src/stores/chatStore');
 
     useAppStore.setState({
-      downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })],
-      activeModelId: 'lrt',
+      downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })]
+      
     });
+    arrangeLocalSelection('text', 'lrt');
     await refreshMobileModelServices();
     await selectMobileModel({
       source: 'local',

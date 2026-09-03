@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { selectedRemoteRoute } from '../../utils/testHelpers';
 /**
  * DEVICE 2026-07-14 (IMG report) — the Models manager sheet's TEXT row showed a remote model
  * (Qwen3.5-2B on the Off Grid AI Gateway) with NO remote marker: indistinguishable from a local
@@ -26,8 +28,10 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
      
 
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });
-    useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useAppStore.setState({ downloadedModels: [],  downloadedImageModels: [] });
+    arrangeLocalSelection('text', null);
+    arrangeLocalSelection('image', null);
 
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
       if (String(url).includes('/v1/models')) {
@@ -68,14 +72,14 @@ describe('Models manager sheet — remote TEXT selection carries the cloud marke
 
   it('remote model selected → the sheet TEXT row shows the cloud marker next to the name', async () => {
     const env = setup();
-    const { React, rtl, HomeScreen, useRemoteServerStore, nav } = env;
+    const { React, rtl, HomeScreen, nav } = env;
     await connectServerViaUI(env);
 
     const home = rtl.render(React.createElement(HomeScreen, { navigation: nav }));
     // Select the remote model the way a user does: browse → tap the discovered remote model.
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('browse-models-button'), { timeout: 4000 }));
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('remote-model-item'), { timeout: 4000 }));
-    await rtl.waitFor(() => { expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('llama-3-8b'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(selectedRemoteRoute('text')?.modelId).toBe('llama-3-8b'); }, { timeout: 4000 });
 
     // Real gesture: open the Models manager sheet from the Home summary card.
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('models-summary'), { timeout: 4000 }));

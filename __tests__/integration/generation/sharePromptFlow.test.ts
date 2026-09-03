@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * Integration Tests: Share Prompt Flow
  *
@@ -230,14 +231,15 @@ describe('Share Prompt Flow Integration', () => {
       });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-model-1',
+        
         generatedImages: [],
         settings: {
           imageSteps: 20, imageGuidanceScale: 7.5,
           imageWidth: 512, imageHeight: 512, imageThreads: 4,
-          enhanceImagePrompts: false,
-        } as any,
+          enhanceImagePrompts: false
+        } as any
       });
+      arrangeLocalSelection('image', 'img-model-1');
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
       mockLocalDreamService.getLoadedModelPath.mockResolvedValue('/mock/image-model');
       mockLocalDreamService.getLoadedThreads.mockReturnValue(4);

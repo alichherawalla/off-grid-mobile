@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * Integration test — the "Load Anyway" memory-override CHAIN, end to end.
  *
@@ -41,7 +42,6 @@ import type { AlertState } from '../../../src/components/CustomAlert';
 import {
   resetStores,
   flushPromises,
-  getAppState,
 } from '../../utils/testHelpers';
 import { createDownloadedModel, createDeviceInfo } from '../../utils/factories';
 
@@ -189,7 +189,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     // user's Load-Anyway retry still has room to reclaim.
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
     expect(modelResidencyManager.isResident('transcription')).toBe(true);
-    expect(getAppState().activeModelId).not.toBe('big-gguf');
+    expect(selectedLocalModelId('text')).not.toBe('big-gguf');
   });
 
   it('tapping Load Anyway evicts the clean resident and unconditionally loads the model, even with pre-eviction free RAM very low', async () => {
@@ -206,7 +206,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(modelResidencyManager.isResident('transcription')).toBe(false);
     // ...and the model loaded through the native engine and became active.
     expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
-    expect(getAppState().activeModelId).toBe('big-gguf');
+    expect(selectedLocalModelId('text')).toBe('big-gguf');
     // The user never saw an "Error" dialog — the retry succeeded.
     expect(ui.alerts.map(a => a.title)).not.toContain('Error');
   });
@@ -228,7 +228,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(gated.lastVisible()?.title).toBe('Insufficient Memory');
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
     expect(modelResidencyManager.isResident('transcription')).toBe(true);
-    expect(getAppState().activeModelId).not.toBe('big-gguf');
+    expect(selectedLocalModelId('text')).not.toBe('big-gguf');
 
     // WITH override (tapping Load Anyway) it evicts the victim and loads unconditionally.
     mockLlmService.isModelLoaded.mockReturnValue(true); // native reports loaded after the forced load
@@ -237,7 +237,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     expect(victimUnload).toHaveBeenCalledTimes(1);
     expect(modelResidencyManager.isResident('transcription')).toBe(false);
     expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
-    expect(getAppState().activeModelId).toBe('big-gguf');
+    expect(selectedLocalModelId('text')).toBe('big-gguf');
     // The override never dead-ends in an Error, and it only offered Load Anyway once.
     expect(gated.alerts.map(a => a.title)).not.toContain('Error');
     const overridePrompts = gated.alerts.filter(
@@ -255,7 +255,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
     await first.start();
     mockLlmService.isModelLoaded.mockReturnValue(true);
     await first.tapLoadAnyway();
-    expect(getAppState().activeModelId).toBe('big-gguf');
+    expect(selectedLocalModelId('text')).toBe('big-gguf');
     expect(modelResidencyManager.hasSessionOverride('big-gguf')).toBe(true);
 
     // Evict through the real residency owner so both native state and residency state agree.
@@ -276,6 +276,6 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
       false,
     );
     expect(mockLlmService.loadModel).toHaveBeenCalledTimes(1);
-    expect(getAppState().activeModelId).toBe('big-gguf');
+    expect(selectedLocalModelId('text')).toBe('big-gguf');
   });
 });

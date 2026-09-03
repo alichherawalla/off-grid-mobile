@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * DEVICE 2026-07-14 — CHAT-mode STT must be identical on EVERY engine: transcribe and drop the text into the
  * INPUT BOX (dictation), for the user to review/edit/send. A direct-audio (LiteRT) model used to diverge —
@@ -35,7 +36,8 @@ describe('chat-mode STT is dictation-to-the-input-box on every engine (LiteRT to
 
     // A direct-audio-capable LiteRT model is active and loaded WITH audio support.
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { supportsAudio: true, maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
+    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })] });
+    arrangeLocalSelection('text', 'lrt');
     // Whisper IS available: the model file is on disk (real leaf) + selected, so ensureWhisper() can load it
     // and transcribeFile can run. The recorded note transcribes to this text.
     boundary.fs!.seedFile(`${RNFS.DocumentDirectoryPath}/whisper-models/ggml-base.en.bin`, 75 * 1024 * 1024);

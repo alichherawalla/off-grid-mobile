@@ -1,3 +1,5 @@
+import { arrangeLocalSelection, selectedLocalModelId } from '../utils/testHelpers';
+import { useModelSelectionStore } from '../../src/stores/modelSelectionStore';
 import {
   LLMService,
   ModelSelectionApplicationService,
@@ -46,13 +48,12 @@ describe('the Shared model selection authority and Mobile persistence projection
   beforeEach(() => {
     useAppStore.setState({
       downloadedModels: [],
-      activeModelId: null,
-      lastTextModelId: null,
+      
+      lastTextModelId: null
     });
+    arrangeLocalSelection('text', null);
     useRemoteServerStore.setState({
       servers: [],
-      activeServerId: null,
-      activeRemoteTextModelId: null,
       activeRemoteImageModelId: null,
       activeRemoteMediaServerIds: {},
       discoveredModels: {},
@@ -65,10 +66,11 @@ describe('the Shared model selection authority and Mobile persistence projection
       downloadedModels: [{
         id: 'local/text.gguf', name: 'Local', author: 'test', engine: 'llama',
         filePath: '/local/text.gguf', fileName: 'text.gguf', fileSize: 1,
-        quantization: 'Q4', downloadedAt: new Date(0).toISOString(),
-      }],
-      activeModelId: 'local/text.gguf',
+        quantization: 'Q4', downloadedAt: new Date(0).toISOString()
+      }]
+      
     });
+    arrangeLocalSelection('text', 'local/text.gguf');
     useRemoteServerStore.setState({
       servers: [{
         id: 'server-1', name: 'Remote', endpoint: 'https://remote.test',
@@ -88,17 +90,13 @@ describe('the Shared model selection authority and Mobile persistence projection
     await service.refresh();
 
     await service.select('text', remoteRoute);
-    expect(useAppStore.getState().activeModelId).toBeNull();
-    expect(useRemoteServerStore.getState()).toMatchObject({
-      activeServerId: 'server-1', activeRemoteTextModelId: 'remote/gemini',
-    });
+    expect(selectedLocalModelId('text')).toBeNull();
+    expect(readMobileModelSelection('text')).toBe(remoteRoute);
     expect(service.active('text').selectedId).toBe(remoteRoute);
 
     await service.select('text', localRoute);
-    expect(useAppStore.getState().activeModelId).toBe('local/text.gguf');
-    expect(useRemoteServerStore.getState()).toMatchObject({
-      activeServerId: null, activeRemoteTextModelId: null,
-    });
+    expect(selectedLocalModelId('text')).toBe('local/text.gguf');
+    expect(readMobileModelSelection('text')).toBe(localRoute);
     expect(service.active('text').selectedId).toBe(localRoute);
   });
 
@@ -107,10 +105,11 @@ describe('the Shared model selection authority and Mobile persistence projection
       downloadedModels: [{
         id: 'holo/local', name: 'Holo3.1-4B', author: 'Hcompany', engine: 'llama',
         filePath: '/local/holo.gguf', fileName: 'Holo-3.1-4B.Q4_K_M.gguf', fileSize: 1,
-        quantization: 'Q4_K_M', downloadedAt: new Date(0).toISOString(),
-      }],
-      activeModelId: 'holo/local',
+        quantization: 'Q4_K_M', downloadedAt: new Date(0).toISOString()
+      }]
+      
     });
+    arrangeLocalSelection('text', 'holo/local');
 
     expect(readMobileModelSelection('text')).toBeNull();
 
@@ -119,8 +118,12 @@ describe('the Shared model selection authority and Mobile persistence projection
         id: 'server-1', name: 'Remote', endpoint: 'https://remote.test',
         provider: 'openai-compatible', createdAt: new Date(0).toISOString(),
       }],
-      activeServerId: 'server-1',
-      activeRemoteTextModelId: 'Hcompany/Holo-3.1-4B',
+    });
+    useModelSelectionStore.getState().setEntry('text', {
+      localRouteId: null,
+      remoteRouteId: mobileRouteId({
+        source: 'remote', hostId: 'server-1', modality: 'text', modelId: 'Hcompany/Holo-3.1-4B',
+      }),
     });
     expect(readMobileModelSelection('text')).toBeNull();
   });
@@ -130,12 +133,13 @@ describe('the Shared model selection authority and Mobile persistence projection
       downloadedModels: [{
         id: 'local/text.gguf', name: 'Local', author: 'test', engine: 'llama',
         filePath: '/local/text.gguf', fileName: 'text.gguf', fileSize: 1,
-        quantization: 'Q4', downloadedAt: new Date(0).toISOString(),
+        quantization: 'Q4', downloadedAt: new Date(0).toISOString()
       }],
-      activeModelId: 'local/text.gguf',
+      
       lastTextModelId: 'local/text.gguf',
-      settings: { ...useAppStore.getState().settings, classifierModelId: null },
+      settings: { ...useAppStore.getState().settings, classifierModelId: null }
     });
+    arrangeLocalSelection('text', 'local/text.gguf');
 
     const route = readMobileModelSelection('classifier');
     expect(route).not.toBeNull();
@@ -147,18 +151,17 @@ describe('the Shared model selection authority and Mobile persistence projection
       downloadedModels: [{
         id: 'local/text.gguf', name: 'Local', author: 'test', engine: 'llama',
         filePath: '/local/text.gguf', fileName: 'text.gguf', fileSize: 1,
-        quantization: 'Q4', downloadedAt: new Date(0).toISOString(),
+        quantization: 'Q4', downloadedAt: new Date(0).toISOString()
       }],
-      activeModelId: null,
-      lastTextModelId: 'local/text.gguf',
+      
+      lastTextModelId: 'local/text.gguf'
     });
+    arrangeLocalSelection('text', null);
     useRemoteServerStore.setState({
       servers: [{
         id: 'server-1', name: 'Remote', endpoint: 'https://remote.test',
         provider: 'openai-compatible', createdAt: new Date(0).toISOString(),
       }],
-      activeServerId: 'server-1',
-      activeRemoteTextModelId: 'remote/gemini',
       discoveredModels: {
         'server-1': [{
           id: 'remote/gemini', name: 'Gemini', serverId: 'server-1',
@@ -170,10 +173,12 @@ describe('the Shared model selection authority and Mobile persistence projection
       },
     });
 
+    useModelSelectionStore.getState().setEntry('text', {
+      localRouteId: null, remoteRouteId: remoteRoute, rememberedLocalRouteId: localRoute,
+    });
     expect(readMobileModelSelection('text')).toBe(remoteRoute);
     await mobileModelSelectionService.remove({ modality: 'text', serverId: 'server-1' });
-    expect(useAppStore.getState().activeModelId).toBe('local/text.gguf');
-    expect(useRemoteServerStore.getState().activeServerId).toBeNull();
+    expect(selectedLocalModelId('text')).toBe('local/text.gguf');
     expect(readMobileModelSelection('text')).toBe(localRoute);
   });
 });

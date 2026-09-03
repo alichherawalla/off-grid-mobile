@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * UI (rendered) — where the load spinner sits in the model sheet.
  *
@@ -45,7 +46,8 @@ describe('model selector loader — the spinner follows what is being loaded', (
       filePath: '/models/b.gguf',
       fileName: 'b.gguf',
     });
-    useAppStore.setState({ downloadedModels: [A, B], activeModelId: 'a' });
+    useAppStore.setState({ downloadedModels: [A, B] });
+    arrangeLocalSelection('text', 'a');
     return { React, rtl, useAppStore, ModelSelectorModal, loadingTextRowId, A, B };
   };
    

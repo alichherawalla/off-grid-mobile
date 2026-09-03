@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../utils/testHelpers';
 /**
  * BATCH 6 — Model Management hardening: selection / activation / unload.
  *
@@ -23,7 +24,7 @@ import { llmService } from '../../src/services/llm';
 import { liteRTService } from '../../src/services/litert';
 import { localDreamGeneratorService } from '../../src/services/localDreamGenerator';
 import { hardwareService } from '../../src/services/hardware';
-import { resetStores, flushPromises, getAppState } from '../utils/testHelpers';
+import { resetStores, flushPromises } from '../utils/testHelpers';
 import { createDownloadedModel, createDeviceInfo } from '../utils/factories';
 
 jest.mock('../../src/services/llm');
@@ -77,13 +78,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
   it('activating a model sets activeModelId in the store (nothing active before)', async () => {
     const model = createDownloadedModel({ id: 'A', engine: 'llama' });
     useAppStore.setState({ downloadedModels: [model] });
-    expect(getAppState().activeModelId).toBeNull();
+    expect(selectedLocalModelId('text')).toBeNull();
 
     mockLlm.isModelLoaded.mockReturnValue(true); // native reports loaded after loadModel
     await activeModelService.loadTextModel('A');
 
     expect(mockLlm.loadModel).toHaveBeenCalledWith(model.filePath, undefined, { override: false });
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
   });
 
   // ---- #2 / #22: switching models flips the active id and unloads the old ---
@@ -94,13 +95,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
 
     mockLlm.isModelLoaded.mockReturnValue(true);
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
 
     // Loading a DIFFERENT model must unload the previous llama context, then load B.
     await activeModelService.loadTextModel('B');
     expect(mockLlm.unloadModel).toHaveBeenCalled();
     expect(mockLlm.loadModel).toHaveBeenLastCalledWith(B.filePath, undefined, { override: false });
-    expect(getAppState().activeModelId).toBe('B');
+    expect(selectedLocalModelId('text')).toBe('B');
   });
 
   // ---- #4: re-activating the already-active model is a no-op ----------------
@@ -115,7 +116,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     // Tap activate again — model is current, so loadModel must not be called again.
     await activeModelService.loadTextModel('A');
     expect(mockLlm.loadModel.mock.calls.length).toBe(loadCallsAfterFirst);
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
   });
 
   // ---- #13-15: user-initiated unload frees RAM AND clears the selection -----
@@ -125,13 +126,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
 
     mockLlm.isModelLoaded.mockReturnValue(true);
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
     expect(activeModelService.getLoadedModelIds().textModelId).toBe('A');
 
     await activeModelService.unloadTextModel(false);
 
     expect(mockLlm.unloadModel).toHaveBeenCalled();
-    expect(getAppState().activeModelId).toBeNull(); // deselected
+    expect(selectedLocalModelId('text')).toBeNull(); // deselected
     expect(activeModelService.getLoadedModelIds().textModelId).toBeNull();
     expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(false); // residency released
   });
@@ -149,13 +150,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
 
     mockLlm.isModelLoaded.mockReturnValue(true);
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
 
     const { count } = await activeModelService.ejectAll();
 
     expect(count).toBe(1);
     expect(mockLlm.unloadModel).toHaveBeenCalled(); // RAM freed
-    expect(getAppState().activeModelId).toBe('A'); // ...but still selected
+    expect(selectedLocalModelId('text')).toBe('A'); // ...but still selected
     expect(activeModelService.getLoadedModelIds().textModelId).toBeNull();
   });
 
@@ -201,6 +202,6 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     // EXPECTED once the seam is fixed: the LiteRT engine is told to unload.
     expect(mockLiteRT.unloadModel).toHaveBeenCalled();
     // And the model is fully deselected.
-    expect(getAppState().activeModelId).toBeNull();
+    expect(selectedLocalModelId('text')).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * The Pro pitch has one purchase path and one key-entry path. A second action that offered to use
  * another device's licence duplicated the Sync journey and made the purchase screen ambiguous.
@@ -22,12 +23,14 @@ describe('Pro entry from Home', () => {
     app.setOnboardingComplete(true);
     app.setDeviceInfo(createDeviceInfo());
     app.setDownloadedModels([model]);
-    useAppStore.setState({ activeModelId: model.id });
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', model.id);
   });
 
   afterEach(() => {
     const app = useAppStore.getState();
-    useAppStore.setState({ activeModelId: null });
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
     app.setDownloadedModels([]);
     app.setOnboardingComplete(false);
   });

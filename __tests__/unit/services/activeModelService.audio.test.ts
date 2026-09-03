@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * Unit tests for activeModelService.supportsAudioInput().
  * This is the engine-agnostic dispatch point that decides whether the active
@@ -45,9 +46,10 @@ const mockedLlm = llmService as jest.Mocked<typeof llmService>;
 
 function setActiveModel(model: any) {
   useAppStore.setState({
-    activeModelId: model?.id ?? null,
-    downloadedModels: model ? [model] : [],
+    
+    downloadedModels: model ? [model] : []
   });
+  arrangeLocalSelection('text', model?.id ?? null);
 }
 
 describe('activeModelService.supportsAudioInput', () => {

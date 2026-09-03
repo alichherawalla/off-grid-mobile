@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (integration) — Q3: a tool call whose `arguments` is a STRINGIFIED JSON object is passed
  * through as a raw string instead of being normalized to an object, so the tool receives no usable
@@ -33,10 +34,11 @@ async function toolResultContentFor(callBody: string): Promise<string> {
       id: 'llm',
       engine: 'llama',
       filePath: '/models/small.gguf',
-      fileName: 'small.gguf',
+      fileName: 'small.gguf'
     })],
-    activeModelId: 'llm', settings: { ...useAppStore.getState().settings, enabledTools: ['calculator'] },
+     settings: { ...useAppStore.getState().settings, enabledTools: ['calculator'] }
   });
+  arrangeLocalSelection('text', 'llm');
   const { refreshMobileModelServices } = require('../../../src/services/modelServices');
   await refreshMobileModelServices();
 

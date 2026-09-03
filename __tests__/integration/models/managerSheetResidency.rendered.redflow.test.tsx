@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * RED-FLOW (UI integration, HEAVY entry point) — the MODELS manager sheet is the residency surface
  * (agreed design 2026-07-14): each modality row shows a RAM chip when its model is RESIDENT plus a
@@ -68,7 +69,7 @@ async function setupHome() {
   rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
   const row = await rtl.waitFor(() => view.getByTestId('text-model-row-m'), { timeout: 10000 });
   rtl.fireEvent.press(row);
-  await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
+  await rtl.waitFor(() => { expect(selectedLocalModelId('text')).toBe('m'); }, { timeout: 10000 });
 
   return { boundary, React, rtl, useAppStore, activeModelService, view };
 }

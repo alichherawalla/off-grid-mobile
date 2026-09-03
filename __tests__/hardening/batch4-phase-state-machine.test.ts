@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../utils/testHelpers';
+import { useModelResidencyStore } from '../../src/stores/modelResidencyStore';
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
@@ -55,11 +57,13 @@ const setupModel = () => {
   });
   useAppStore.setState({
     downloadedImageModels: [model],
-    activeImageModelId: 'img-1',
+    
     generatedImages: [],
-    warmedImageModels: ['img-1'], // pre-warmed so the ~120s notice path is out of scope here
-    settings: { imageSteps: 8, imageGuidanceScale: 2, imageWidth: 256, imageHeight: 256, imageThreads: 4 } as any,
+    settings: { imageSteps: 8, imageGuidanceScale: 2, imageWidth: 256, imageHeight: 256, imageThreads: 4 } as any
   });
+  arrangeLocalSelection('image', 'img-1');
+  // pre-warmed so the ~120s notice path is out of scope here
+  useModelResidencyStore.setState({ warmedImageModels: ['img-1'] });
   mockDream.getLoadedModelPath.mockResolvedValue(model.modelPath);
   return model;
 };
@@ -110,9 +114,10 @@ describe('image-gen phase state machine — ordered transitions (cases 17, 18, 2
   it('enhancement ON: passes through enhancing BEFORE loading/generating (cases 17, 18)', async () => {
     setupModel();
     useAppStore.setState({
-      activeModelId: 'text-1',
-      settings: { ...useAppStore.getState().settings, enhanceImagePrompts: true } as any,
+      
+      settings: { ...useAppStore.getState().settings, enhanceImagePrompts: true } as any
     });
+    arrangeLocalSelection('text', 'text-1');
     // WHICH text model to enhance with is asked of activeModelService, which is the one owner of that
     // question so image generation cannot pick a different model than chat does. This suite mocks that
     // service, so setting activeModelId in the store is no longer enough on its own - the mock has to
@@ -214,9 +219,10 @@ describe('no-model / load-failure surface an error phase, never a silent hang (c
   it('no active image model → error phase with a clear message, generateImage returns null', async () => {
     useAppStore.setState({
       downloadedImageModels: [],
-      activeImageModelId: null,
-      settings: { imageSteps: 8, imageGuidanceScale: 2 } as any,
+      
+      settings: { imageSteps: 8, imageGuidanceScale: 2 } as any
     });
+    arrangeLocalSelection('image', null);
 
     const result = await imageGenerationService.generateImage({ prompt: 'no model' });
 

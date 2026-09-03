@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * RED-FLOW (integration → UI): model selection and runtime residency are separate
  * canonical states. A failed on-demand load keeps the user's selection, but must not
@@ -25,7 +26,7 @@ describe('load failure preserves selection but clears runtime residency (rendere
      
 
     // Pre-condition: 'm' is the active loaded model.
-    expect(h.useAppStore.getState().activeModelId).toBe('m');
+    expect(selectedLocalModelId('text')).toBe('m');
 
     // Now a reload FAILS on every backend (corrupt file / unsupported arch).
     await activeModelService.unloadTextModel(true);
@@ -33,7 +34,7 @@ describe('load failure preserves selection but clears runtime residency (rendere
     await activeModelService.loadTextModel('m').catch(() => {}); // real load path throws → caught
 
     // Selection remains stable; only runtime residency failed.
-    expect(h.useAppStore.getState().activeModelId).toBe('m');
+    expect(selectedLocalModelId('text')).toBe('m');
 
     // UI outcome: the selector shows NO currently-loaded model (the user sees no active model).
     const v = h.rtl.render(React.createElement(ModelSelectorModal, {

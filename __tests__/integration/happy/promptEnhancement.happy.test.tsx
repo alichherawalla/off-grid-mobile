@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * HAPPY-PATH (integration) — image prompt enhancement: with enhancement ON, the active TEXT engine rewrites
  * the raw prompt and the ENHANCED prompt is what reaches the native image generator.
@@ -27,7 +28,9 @@ describe('happy — image prompt enhancement rewrites the prompt via the text en
     await llmService.loadModel('/models/small.gguf');
     const textModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
     const imageModel = createONNXImageModel({ id: 'sd', name: 'SD', modelPath: '/models/sd', backend: 'mnn' });
-    useAppStore.setState({ downloadedModels: [textModel], activeModelId: 'llm', downloadedImageModels: [imageModel], activeImageModelId: 'sd' });
+    useAppStore.setState({ downloadedModels: [textModel],  downloadedImageModels: [imageModel] });
+    arrangeLocalSelection('text', 'llm');
+    arrangeLocalSelection('image', 'sd');
     useAppStore.getState().updateSettings({ imageThreads: 4, imageUseOpenCL: false, enhanceImagePrompts: true, imageSteps: 8 });
 
     // The text engine's enhancement output.

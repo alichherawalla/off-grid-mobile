@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * Integration Test: Chat and Home text-model selection PARITY (bug OD3).
  *
@@ -28,7 +29,7 @@ import { localDreamGeneratorService } from '../../../src/services/localDreamGene
 import { hardwareService } from '../../../src/services/hardware';
 import { isOverridableMemoryError } from '../../../src/services/modelLoadErrors';
 import { isResidentType } from '../../harness/modelResidency';
-import { resetStores, getAppState } from '../../utils/testHelpers';
+import { resetStores } from '../../utils/testHelpers';
 import { createDownloadedModel, createONNXImageModel, createDeviceInfo } from '../../utils/factories';
 
 // Import the REAL chat + Home selection entry points (only their alert/UI setters mocked).
@@ -180,7 +181,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     await activeModelService.loadTextModel('txt');
 
     expect(mockLlmService.loadModel).toHaveBeenCalled();
-    expect(getAppState().activeModelId).toBe('txt');
+    expect(selectedLocalModelId('text')).toBe('txt');
     expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
     // The image model was evicted to make room (evict-then-measure).
     expect(isResidentType(modelResidencyManager, 'image')).toBe(false);
@@ -203,7 +204,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     // Selection is a control-plane operation. The first send owns residency
     // acquisition, so entering a chat never loads a large model eagerly.
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(getAppState().activeModelId).toBe('txt');
+    expect(selectedLocalModelId('text')).toBe('txt');
     expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
     // And it was NOT blocked by a hard "Insufficient Memory" gate before loading.
     const blocked = deps.setAlertState.mock.calls.find(
@@ -271,6 +272,6 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     // above the survival floor).
     await activeModelService.loadTextModel('force', undefined, { override: true });
     expect(mockLlmService.loadModel).toHaveBeenCalled();
-    expect(getAppState().activeModelId).toBe('force');
+    expect(selectedLocalModelId('text')).toBe('force');
   });
 });

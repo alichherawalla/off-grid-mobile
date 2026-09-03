@@ -1,4 +1,6 @@
 import React from 'react';
+import { decodeModelRouteId } from '@offgrid/models';
+import { readMobileModelSelection } from '../../../src/services/modelServices/modelSelectionProjection';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import RNFS from 'react-native-fs';
 import { RemoteModelOptionsSection } from '../../../src/components/models/RemoteModelOptionsSection';
@@ -121,9 +123,10 @@ describe('remote media model pickers', () => {
 
     await waitFor(() => {
       const state = useRemoteServerStore.getState();
-      expect(state.activeServerId).toBe(textServerId);
-      expect(state.activeRemoteMediaServerIds.voice).toBe(serverId);
-      expect(state.getServerById(serverId)?.selections?.voice).toBe(
+      // The text route still points at the text server; the voice route at the gateway.
+      expect(decodeModelRouteId(readMobileModelSelection('text') ?? '')?.serverId).toBe(textServerId);
+      expect(decodeModelRouteId(readMobileModelSelection('voice') ?? '')?.serverId).toBe(serverId);
+      expect(state.servers.find(s => s.id === serverId)?.selections?.voice).toBe(
         '/models/orpheus.pte',
       );
     });

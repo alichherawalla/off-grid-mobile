@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * HAPPY-PATH (integration) — audio-interface transcription: the user records a note in audio mode and the
  * transcribed text is auto-sent (reaches the model as the turn content).
@@ -28,7 +29,8 @@ describe('happy — audio-mode transcription auto-sends the spoken text', () => 
     boundary.fs!.seedFile(`${boundary.fs!.DocumentDirectoryPath}/whisper-models/ggml-base.en.bin`, 142 * 1024 * 1024);
 
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { supportsAudio: true, maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
+    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })] });
+    arrangeLocalSelection('text', 'lrt');
     useWhisperStore.setState({ downloadedModelId: 'base.en' });
     useUiModeStore.setState({ interfaceMode: 'audio' as never }); // AUDIO interface — the transcribe+dispatch path
 

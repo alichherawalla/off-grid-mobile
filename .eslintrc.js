@@ -206,6 +206,9 @@ module.exports = {
         'src/services/modelServices/mobileRoute.ts',
         'src/services/modelServices/selectionStore.ts',
         'src/services/modelServices/modelSelectionProjection.ts',
+        // Tests are harnesses: they may compose shared services directly to prove the port.
+        '__tests__/**/*.ts',
+        '__tests__/**/*.tsx',
       ],
       rules: { '@typescript-eslint/no-restricted-imports': 'off' },
     },

@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * UI (rendered) — DEVICE 2026-07-14: switching a text model's backend (GPU→NPU for llama gguf, CPU↔GPU
  * for litert) keeps the SAME model id, so it's a RELOAD of the already-active model. The "Settings changed
@@ -25,7 +26,8 @@ describe('model selector loader — spinner on the active row during a no-tap re
     const B = createDownloadedModel({ id: 'b', name: 'Model B', engine: 'llama', filePath: '/models/b.gguf', fileName: 'b.gguf' });
     // A is the ACTIVE model and it is currently loaded — the exact state when the "settings changed" card
     // fires: the user did not switch models, they changed a backend/setting for the active one.
-    useAppStore.setState({ downloadedModels: [A, B], activeModelId: 'a' });
+    useAppStore.setState({ downloadedModels: [A, B] });
+    arrangeLocalSelection('text', 'a');
 
     const props = {
       visible: true, onClose: () => {}, onSelectModel: () => {}, onUnloadModel: () => {},

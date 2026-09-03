@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * RED-FLOW (UI integration, HEAVY entry point) — RAM DISPLAY AGREEMENT across surfaces.
  *
@@ -103,7 +104,7 @@ describe('RAM display agreement — picker label matches the residency chip for 
     rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
     const row = await rtl.waitFor(() => view.getByTestId('text-model-row-m'), { timeout: 10000 });
     rtl.fireEvent.press(row);
-    await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(selectedLocalModelId('text')).toBe('m'); }, { timeout: 10000 });
 
     // GESTURE: switch the inference backend to GPU (OpenCL) via the REAL BackendSelector control — the same
     // store action the settings screen dispatches — BEFORE the load, so the resident registers at 2.2×.

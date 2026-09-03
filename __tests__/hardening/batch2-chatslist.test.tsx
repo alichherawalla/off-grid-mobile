@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../utils/testHelpers';
 /**
  * Batch 2 hardening — Chats list (sort, timestamp formatting, delete, empty state)
  *
@@ -124,7 +125,8 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     jest.clearAllMocks();
     // a downloaded model so the empty-state uses the "with models" copy (doesn't matter here)
     const model = createDownloadedModel();
-    useAppStore.setState({ downloadedModels: [model], activeModelId: model.id });
+    useAppStore.setState({ downloadedModels: [model] });
+    arrangeLocalSelection('text', model.id);
   });
 
   // Case 26: today's conversation shows a clock time, NOT a date.

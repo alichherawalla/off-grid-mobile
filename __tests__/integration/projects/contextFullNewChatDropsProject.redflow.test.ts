@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (integration) — Q11: "New chat" on a context-full alert drops the project.
  *
@@ -25,9 +26,10 @@ describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
     await hardwareService.refreshMemoryInfo();
     await llmService.loadModel('/models/small.gguf');
     useAppStore.setState({
-      downloadedModels: [createDownloadedModel({ id: 'txt', engine: 'llama', filePath: '/models/small.gguf', fileName: 'small.gguf' })],
-      activeModelId: 'txt',
+      downloadedModels: [createDownloadedModel({ id: 'txt', engine: 'llama', filePath: '/models/small.gguf', fileName: 'small.gguf' })]
+      
     });
+    arrangeLocalSelection('text', 'txt');
     await require('../../../src/services/modelServices').refreshMobileModelServices();
 
     // A chat filed under a project.

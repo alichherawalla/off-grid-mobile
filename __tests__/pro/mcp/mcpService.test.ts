@@ -1,3 +1,4 @@
+import { arrangeRemoteSelection, resetStores as resetStoresForSelection } from '../../utils/testHelpers';
 /**
  * Real-behavior tests for pro/mcp/mcpService.ts — the MCP orchestration layer.
  *
@@ -87,7 +88,6 @@ import {
   TOKENS_PER_TOOL,
 } from '@offgrid/pro/mcp/mcpService';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
-import { useRemoteServerStore } from '@offgrid/core/stores';
 import type { McpServerConfig, McpTool } from '@offgrid/pro/mcp/types';
 // The SAME NeedsAuthorizationError class the service imports (from the mocked oauth
 // module) — required so the service's `err instanceof NeedsAuthorizationError` matches.
@@ -114,7 +114,7 @@ function resetStores() {
     knownToolNames: [],
     toolOwners: {},
   });
-  useRemoteServerStore.setState({ activeRemoteTextModelId: null } as any);
+  resetStoresForSelection();
 }
 
 beforeEach(() => {
@@ -185,14 +185,12 @@ describe('getMcpToolsPrompt', () => {
     expect(getMcpToolsPrompt(['ghost_tool'])).toBe('');
   });
 
-  it('injects owned tools into the prompt with the tool-call tag', () => {
+  it('injects owned tools into the prompt with the tool-call tag', async () => {
     useMcpStore.setState({
       toolOwners: { search: 'srv1' },
       serverTools: { srv1: [tool('search', 'find things')] },
     });
-    useRemoteServerStore.setState({
-      activeRemoteTextModelId: 'remote-x',
-    } as any);
+    await arrangeRemoteSelection('text', 'server-1', 'remote-x');
     const prompt = getMcpToolsPrompt(['search']);
     expect(prompt).toContain('mcp_tool_call');
     expect(prompt).toContain('- search: find things');
@@ -204,33 +202,29 @@ describe('getMcpToolsPrompt', () => {
       toolOwners: { search: 'srv1' },
       serverTools: { srv1: [tool('search', long)] },
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: null } as any);
+    resetStoresForSelection();
     const prompt = getMcpToolsPrompt(['search']);
     expect(prompt).toContain('- search: First sentence here.');
     expect(prompt).not.toContain('x'.repeat(400));
   });
 
-  it('keeps the full description for remote models (trim=false branch)', () => {
+  it('keeps the full description for remote models (trim=false branch)', async () => {
     const long = `First sentence here. ${'y'.repeat(400)}`;
     useMcpStore.setState({
       toolOwners: { search: 'srv1' },
       serverTools: { srv1: [tool('search', long)] },
     });
-    useRemoteServerStore.setState({
-      activeRemoteTextModelId: 'remote-x',
-    } as any);
+    await arrangeRemoteSelection('text', 'server-1', 'remote-x');
     const prompt = getMcpToolsPrompt(['search']);
     expect(prompt).toContain('y'.repeat(400));
   });
 
-  it('drops enabled names that no server owns while keeping owned ones', () => {
+  it('drops enabled names that no server owns while keeping owned ones', async () => {
     useMcpStore.setState({
       toolOwners: { owned: 'srv1' },
       serverTools: { srv1: [tool('owned')] },
     });
-    useRemoteServerStore.setState({
-      activeRemoteTextModelId: 'remote-x',
-    } as any);
+    await arrangeRemoteSelection('text', 'server-1', 'remote-x');
     const prompt = getMcpToolsPrompt(['owned', 'orphan']);
     expect(prompt).toContain('- owned:');
     expect(prompt).not.toContain('orphan');

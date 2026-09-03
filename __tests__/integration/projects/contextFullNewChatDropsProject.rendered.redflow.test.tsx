@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (UI, rendered) — Q11 at the pixel: after a context-full "New chat", the continuation chat is
  * MISSING from its project's chat list.
@@ -38,9 +39,10 @@ describe('Q11 (rendered) — context-full "New chat" drops the project', () => {
     await hardwareService.refreshMemoryInfo();
     await llmService.loadModel('/models/small.gguf');
     useAppStore.setState({
-      downloadedModels: [createDownloadedModel({ id: 'txt', engine: 'llama', filePath: '/models/small.gguf', fileName: 'small.gguf' })],
-      activeModelId: 'txt',
+      downloadedModels: [createDownloadedModel({ id: 'txt', engine: 'llama', filePath: '/models/small.gguf', fileName: 'small.gguf' })]
+      
     });
+    arrangeLocalSelection('text', 'txt');
     await require('../../../src/services/modelServices').refreshMobileModelServices();
 
     useProjectStore.setState({ projects: [createProject({ id: 'proj-1', name: 'Research' })] });

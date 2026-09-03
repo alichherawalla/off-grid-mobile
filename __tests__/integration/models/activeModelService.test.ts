@@ -1,3 +1,6 @@
+import { useModelResidencyStore } from '../../../src/stores/modelResidencyStore';
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * Integration Tests: ActiveModelService
  *
@@ -125,7 +128,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadTextModel('huge-1', undefined, { override: true });
 
       expect(mockLlmService.loadModel).toHaveBeenCalled();
-      expect(getAppState().activeModelId).toBe('huge-1');
+      expect(selectedLocalModelId('text')).toBe('huge-1');
     });
   });
 
@@ -147,37 +150,39 @@ describe('ActiveModelService Integration', () => {
       );
 
       // Verify store was updated
-      expect(getAppState().activeModelId).toBe('test-model-1');
+      expect(selectedLocalModelId('text')).toBe('test-model-1');
     });
 
     it('flags textModelEvicted on an eviction (keepSelection) and clears it on reload', async () => {
       const model = createDownloadedModel({ id: 'evict-me' });
-      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      useAppStore.setState({ downloadedModels: [model] });
+      useModelResidencyStore.setState({ textModelEvicted: false });
       mockLlmService.loadModel.mockResolvedValue(undefined);
       mockLlmService.isModelLoaded.mockReturnValue(true);
       await activeModelService.loadTextModel('evict-me');
-      expect(getAppState().textModelEvicted).toBe(false); // loaded → not evicted
+      expect(useModelResidencyStore.getState().textModelEvicted).toBe(false); // loaded → not evicted
 
       // Residency evicts it to free RAM (keepSelection=true) while a native model is loaded.
       await activeModelService.unloadTextModel(true);
-      expect(getAppState().textModelEvicted).toBe(true);   // flagged → chat shows "continue"
-      expect(getAppState().activeModelId).toBe('evict-me'); // selection kept
+      expect(useModelResidencyStore.getState().textModelEvicted).toBe(true);   // flagged → chat shows "continue"
+      expect(selectedLocalModelId('text')).toBe('evict-me'); // selection kept
 
       // Reloading (the "continue" tap) clears the flag.
       mockLlmService.isModelLoaded.mockReturnValue(false);
       await activeModelService.loadTextModel('evict-me');
-      expect(getAppState().textModelEvicted).toBe(false);
+      expect(useModelResidencyStore.getState().textModelEvicted).toBe(false);
     });
 
     it('a user-initiated unload clears the selection and does NOT flag textModelEvicted', async () => {
       const model = createDownloadedModel({ id: 'user-unload' });
-      useAppStore.setState({ downloadedModels: [model], textModelEvicted: false });
+      useAppStore.setState({ downloadedModels: [model] });
+      useModelResidencyStore.setState({ textModelEvicted: false });
       mockLlmService.loadModel.mockResolvedValue(undefined);
       mockLlmService.isModelLoaded.mockReturnValue(true);
       await activeModelService.loadTextModel('user-unload');
       await activeModelService.unloadTextModel(false); // user unload
-      expect(getAppState().textModelEvicted).toBe(false);
-      expect(getAppState().activeModelId).toBeNull();
+      expect(useModelResidencyStore.getState().textModelEvicted).toBe(false);
+      expect(selectedLocalModelId('text')).toBeNull();
     });
 
     it('budgets a LiteRT text model as dirty memory and a GGUF as clean (F9)', async () => {
@@ -199,7 +204,8 @@ describe('ActiveModelService Integration', () => {
 
     it('unloads a resident LiteRT model (latent bug: unload was llama-only, so LiteRT never freed)', async () => {
       const litert = createDownloadedModel({ id: 'litert-1', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m.litertlm' });
-      useAppStore.setState({ downloadedModels: [litert], activeModelId: 'litert-1' });
+      useAppStore.setState({ downloadedModels: [litert] });
+      arrangeLocalSelection('text', 'litert-1');
       // The active engine (LiteRT) reports a resident model; llama has nothing.
       jest.spyOn(liteRTService, 'isModelLoaded').mockReturnValue(true);
       const liteUnload = jest.spyOn(liteRTService, 'unloadModel').mockResolvedValue(undefined);
@@ -269,7 +275,8 @@ describe('ActiveModelService Integration', () => {
 
     it('should skip loading if model already loaded', async () => {
       const model = createDownloadedModel({ id: 'test-model-1' });
-      useAppStore.setState({ downloadedModels: [model], activeModelId: 'test-model-1' });
+      useAppStore.setState({ downloadedModels: [model] });
+      arrangeLocalSelection('text', 'test-model-1');
 
       // First, simulate that the model is already loaded via a first call
       mockLlmService.isModelLoaded.mockReturnValue(true);
@@ -384,9 +391,10 @@ describe('ActiveModelService Integration', () => {
     it('should unload text model and clear store', async () => {
       const model = createDownloadedModel({ id: 'test-model' });
       useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: 'test-model',
+        downloadedModels: [model]
+        
       });
+      arrangeLocalSelection('text', 'test-model');
 
       mockLlmService.isModelLoaded.mockReturnValue(true);
 
@@ -397,12 +405,13 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.unloadTextModel();
 
       expect(mockLlmService.unloadModel).toHaveBeenCalled();
-      expect(getAppState().activeModelId).toBe(null);
+      expect(selectedLocalModelId('text')).toBe(null);
     });
 
     it('should skip unload if no model loaded', async () => {
       mockLlmService.isModelLoaded.mockReturnValue(false);
-      useAppStore.setState({ activeModelId: null });
+      useAppStore.setState({ });
+      arrangeLocalSelection('text', null);
 
       await activeModelService.unloadTextModel();
 
@@ -416,7 +425,7 @@ describe('ActiveModelService Integration', () => {
       useAppStore.setState({ downloadedModels: [model] });
       mockLlmService.isModelLoaded.mockReturnValue(true);
       await activeModelService.loadTextModel('test-model-1');
-      expect(getAppState().activeModelId).toBe('test-model-1');
+      expect(selectedLocalModelId('text')).toBe('test-model-1');
 
       const { count } = await activeModelService.ejectAll();
 
@@ -425,11 +434,13 @@ describe('ActiveModelService Integration', () => {
       expect(count).toBeGreaterThanOrEqual(1);
       // ...but the selection is preserved (contrast: plain unloadTextModel() above
       // clears activeModelId). The model reloads on demand from the kept selection.
-      expect(getAppState().activeModelId).toBe('test-model-1');
+      expect(selectedLocalModelId('text')).toBe('test-model-1');
     });
 
     it('is a no-op count of 0 when nothing is loaded', async () => {
-      useAppStore.setState({ activeModelId: null, activeImageModelId: null });
+      useAppStore.setState({  });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
       mockLlmService.isModelLoaded.mockReturnValue(false);
       const { count } = await activeModelService.ejectAll();
       expect(count).toBe(0);
@@ -454,7 +465,7 @@ describe('ActiveModelService Integration', () => {
         { backend: 'auto', cpuOnly: false, attentionVariant: undefined },
       );
 
-      expect(getAppState().activeImageModelId).toBe('img-model-1');
+      expect(selectedLocalModelId('image')).toBe('img-model-1');
     });
 
     it('should unload previous image model when loading different model', async () => {
@@ -517,7 +528,7 @@ describe('ActiveModelService Integration', () => {
       expect(mockLlmService.unloadModel).toHaveBeenCalled();
       expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(false);
       expect(modelResidencyManager.getResidents().some(r => r.type === 'image')).toBe(true);
-      expect(getAppState().activeImageModelId).toBe('img-1');
+      expect(selectedLocalModelId('image')).toBe('img-1');
     });
 
     it('switching image -> text evicts the image model', async () => {
@@ -558,9 +569,10 @@ describe('ActiveModelService Integration', () => {
       const imageModel = createONNXImageModel({ id: 'img-model' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-model',
-        settings: { imageThreads: 4 } as any,
+        
+        settings: { imageThreads: 4 } as any
       });
+      arrangeLocalSelection('image', 'img-model');
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
 
@@ -571,7 +583,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.unloadImageModel();
 
       expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
-      expect(getAppState().activeImageModelId).toBe(null);
+      expect(selectedLocalModelId('image')).toBe(null);
     });
   });
 
@@ -598,11 +610,13 @@ describe('ActiveModelService Integration', () => {
     const imageModel = createONNXImageModel({ id: imageId, size: 512 * 1024 * 1024 });
     useAppStore.setState({
       downloadedModels: [textModel],
-      activeModelId: textId,
+      
       downloadedImageModels: [imageModel],
-      activeImageModelId: imageId,
-      settings: { imageThreads: 4 } as any,
+      
+      settings: { imageThreads: 4 } as any
     });
+    arrangeLocalSelection('text', textId);
+    arrangeLocalSelection('image', imageId);
     mockLlmService.isModelLoaded.mockReturnValue(true);
     mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
     await activeModelService.loadTextModel(textId);
@@ -753,9 +767,10 @@ describe('ActiveModelService Integration', () => {
     it('should sync internal state with native module state', async () => {
       const model = createDownloadedModel({ id: 'test-model' });
       useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: 'test-model',
+        downloadedModels: [model]
+        
       });
+      arrangeLocalSelection('text', 'test-model');
 
       // Native says model is loaded
       mockLlmService.isModelLoaded.mockReturnValue(true);
@@ -806,7 +821,8 @@ describe('ActiveModelService Integration', () => {
       // Text and image are mutually exclusive, so only one generation model is
       // resident at a time. Verify the info reflects the loaded image model.
       const imageModel = createONNXImageModel({ id: 'img-model', size: 512 * 1024 * 1024 });
-      useAppStore.setState({ downloadedImageModels: [imageModel], activeImageModelId: 'img-model', settings: { imageThreads: 4 } as any });
+      useAppStore.setState({ downloadedImageModels: [imageModel],  settings: { imageThreads: 4 } as any });
+      arrangeLocalSelection('image', 'img-model');
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
       await activeModelService.loadImageModel('img-model');
 
@@ -918,7 +934,8 @@ describe('ActiveModelService Integration', () => {
     it('should skip unload when all sources say no model', async () => {
       mockLlmService.isModelLoaded.mockReturnValue(false);
       mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
-      useAppStore.setState({ activeImageModelId: null });
+      useAppStore.setState({ });
+      arrangeLocalSelection('image', null);
 
       await activeModelService.syncWithNativeState();
 
@@ -1157,9 +1174,10 @@ describe('ActiveModelService Integration', () => {
         fileSize: 4 * 1024 * 1024 * 1024,
       });
       useAppStore.setState({
-        downloadedModels: [textModel],
-        activeModelId: 'text-est',
+        downloadedModels: [textModel]
+        
       });
+      arrangeLocalSelection('text', 'text-est');
 
       const usage = await activeModelService.getResourceUsage();
       // estimatedModelMemory should include text model memory
@@ -1172,9 +1190,10 @@ describe('ActiveModelService Integration', () => {
         size: 2 * 1024 * 1024 * 1024,
       });
       useAppStore.setState({
-        downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-est',
+        downloadedImageModels: [imageModel]
+        
       });
+      arrangeLocalSelection('image', 'img-est');
 
       const usage = await activeModelService.getResourceUsage();
       expect(usage.estimatedModelMemory).toBeGreaterThan(0);
@@ -1191,10 +1210,12 @@ describe('ActiveModelService Integration', () => {
       });
       useAppStore.setState({
         downloadedModels: [textModel],
-        activeModelId: 'text-both',
-        downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-both',
+        
+        downloadedImageModels: [imageModel]
+        
       });
+      arrangeLocalSelection('text', 'text-both');
+      arrangeLocalSelection('image', 'img-both');
 
       const usage = await activeModelService.getResourceUsage();
       // Should be sum of both model memories
@@ -1359,9 +1380,10 @@ describe('ActiveModelService Integration', () => {
     it('syncs image model internal state from store', async () => {
       const imageModel = createONNXImageModel({ id: 'sync-img' });
       useAppStore.setState({
-        downloadedImageModels: [imageModel],
-        activeImageModelId: 'sync-img',
+        downloadedImageModels: [imageModel]
+        
       });
+      arrangeLocalSelection('image', 'sync-img');
 
       // Native reports image model loaded, but internal tracking is null
       mockLlmService.isModelLoaded.mockReturnValue(false);
@@ -1378,9 +1400,10 @@ describe('ActiveModelService Integration', () => {
       const imageModel = createONNXImageModel({ id: 'clear-img' });
       useAppStore.setState({
         downloadedImageModels: [imageModel],
-        activeImageModelId: 'clear-img',
-        settings: { imageThreads: 4 } as any,
+        
+        settings: { imageThreads: 4 } as any
       });
+      arrangeLocalSelection('image', 'clear-img');
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
       await activeModelService.loadImageModel('clear-img');
@@ -1401,13 +1424,14 @@ describe('ActiveModelService Integration', () => {
       // A selected model is a real library model even when the native runtime was
       // already lost. The lifecycle resolver reads that canonical registry fact.
       const model = createDownloadedModel({ id: 'orphan-model' });
-      useAppStore.setState({ activeModelId: model.id, downloadedModels: [model] });
+      useAppStore.setState({  downloadedModels: [model] });
+      arrangeLocalSelection('text', model.id);
       mockLlmService.isModelLoaded.mockReturnValue(false);
 
       await activeModelService.unloadTextModel();
 
       // Store should be cleared
-      expect(getAppState().activeModelId).toBeNull();
+      expect(selectedLocalModelId('text')).toBeNull();
       // Native unload should NOT have been called (nothing loaded)
       expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
     });
@@ -1417,14 +1441,15 @@ describe('ActiveModelService Integration', () => {
     it('clears store even when native is not loaded', async () => {
       const model = createONNXImageModel({ id: 'orphan-img' });
       useAppStore.setState({
-        activeImageModelId: model.id,
-        downloadedImageModels: [model],
+        
+        downloadedImageModels: [model]
       });
+      arrangeLocalSelection('image', model.id);
       mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
 
       await activeModelService.unloadImageModel();
 
-      expect(getAppState().activeImageModelId).toBeNull();
+      expect(selectedLocalModelId('image')).toBeNull();
       expect(mockLocalDreamService.unloadModel).not.toHaveBeenCalled();
     });
   });
@@ -1553,7 +1578,7 @@ describe('ActiveModelService Integration', () => {
       await loadPromise;
       await unloadPromise;
 
-      expect(getAppState().activeModelId).toBeNull();
+      expect(selectedLocalModelId('text')).toBeNull();
     });
   });
 
@@ -1584,7 +1609,7 @@ describe('ActiveModelService Integration', () => {
       await loadPromise;
       await unloadPromise;
 
-      expect(getAppState().activeImageModelId).toBeNull();
+      expect(selectedLocalModelId('image')).toBeNull();
     });
   });
 
@@ -1879,7 +1904,7 @@ describe('ActiveModelService Integration', () => {
 
       mockLlmService.isModelLoaded.mockReturnValue(true);
       await activeModelService.loadTextModel('txt');
-      expect(getAppState().activeModelId).toBe('txt');
+      expect(selectedLocalModelId('text')).toBe('txt');
 
       mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
       mockLocalDreamService.loadModel.mockResolvedValue(true);
@@ -1888,8 +1913,8 @@ describe('ActiveModelService Integration', () => {
       // Text freed from RAM (they don't co-fit), but its SELECTION is kept so chat still shows it
       // and it reloads on demand (eviction must not deselect).
       expect(mockLlmService.unloadModel).toHaveBeenCalled();
-      expect(getAppState().activeModelId).toBe('txt');
-      expect(getAppState().activeImageModelId).toBe('img');
+      expect(selectedLocalModelId('text')).toBe('txt');
+      expect(selectedLocalModelId('image')).toBe('img');
     });
 
     it('keeps the text model resident when the image co-fits the budget (no forced mutual exclusion)', async () => {
@@ -1915,8 +1940,8 @@ describe('ActiveModelService Integration', () => {
 
       // Co-resident — the text model is NOT evicted.
       expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
-      expect(getAppState().activeModelId).toBe('txt-s');
-      expect(getAppState().activeImageModelId).toBe('img-s');
+      expect(selectedLocalModelId('text')).toBe('txt-s');
+      expect(selectedLocalModelId('image')).toBe('img-s');
     });
 
     it('passes cpuOnly=false to native loader', async () => {
@@ -1955,7 +1980,7 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadImageModel('img-no-txt');
 
       expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
-      expect(getAppState().activeImageModelId).toBe('img-no-txt');
+      expect(selectedLocalModelId('image')).toBe('img-no-txt');
     });
 
     it('blocks loading when model exceeds memory budget', async () => {
@@ -1990,8 +2015,8 @@ describe('ActiveModelService Integration', () => {
       // 8GB budget easily holds both (~1.5GB text + ~1.3GB image), so neither is
       // evicted — they stay co-resident.
       expect(mockLlmService.unloadModel).not.toHaveBeenCalled();
-      expect(getAppState().activeModelId).toBe('txt-hi');
-      expect(getAppState().activeImageModelId).toBe('img-hi');
+      expect(selectedLocalModelId('text')).toBe('txt-hi');
+      expect(selectedLocalModelId('image')).toBe('img-hi');
     });
 
     it('passes cpuOnly=false to native loader', async () => {
@@ -2174,7 +2199,7 @@ describe('ActiveModelService Integration', () => {
       mockLocalDreamService.loadModel.mockResolvedValue(true);
 
       await activeModelService.loadImageModel('img-ok');
-      expect(getAppState().activeImageModelId).toBe('img-ok');
+      expect(selectedLocalModelId('image')).toBe('img-ok');
     });
   });
 });

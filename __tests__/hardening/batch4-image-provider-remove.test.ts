@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../utils/testHelpers';
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
@@ -75,7 +76,7 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
 
     await imageProvider.remove('image:sdxl');
 
-    expect(useAppStore.getState().activeImageModelId).toBeNull();
+    expect(selectedLocalModelId('image')).toBeNull();
     expect(mockUnload).toHaveBeenCalled();
   });
 
@@ -103,6 +104,6 @@ describe('imageProvider.remove — uninstall chain (case 37)', () => {
 
     expect(mockDelete).toHaveBeenCalledWith('sdxl');
     expect(useAppStore.getState().downloadedImageModels).toHaveLength(0);
-    expect(useAppStore.getState().activeImageModelId).toBeNull();
+    expect(selectedLocalModelId('image')).toBeNull();
   });
 });

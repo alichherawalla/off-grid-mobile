@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * ImageGenAdviceCard — in-chat GPU-path speed/quality guidance. Renders nothing off the
  * mnn path or at good settings; shows the right tips (raise steps / lower size / raise
@@ -22,9 +23,10 @@ const setup = (backend: string | undefined, imageSteps: number | undefined, imag
     downloadedImageModels: backend
       ? ([{ id: 'img', name: 'M', modelPath: '/m', backend, downloadedAt: '', size: 1 }] as any)
       : ([] as any),
-    activeImageModelId: backend ? 'img' : null,
-    settings: { ...useAppStore.getState().settings, imageSteps, imageWidth, imageHeight: imageWidth } as any,
+    
+    settings: { ...useAppStore.getState().settings, imageSteps, imageWidth, imageHeight: imageWidth } as any
   });
+  arrangeLocalSelection('image', backend ? 'img' : null);
 };
 
 describe('ImageGenAdviceCard', () => {

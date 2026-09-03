@@ -655,3 +655,86 @@ export const actAsyncStoreUpdate = async (
     await fn();
   });
 };
+
+/**
+ * Arrange the persisted selection the way the app writes it (through the one selection store), for
+ * a local model that is already in the library store. Null clears the selection.
+ */
+export const arrangeLocalSelection = (
+  modality: 'text' | 'image',
+  modelId: string | null,
+): void => {
+  // Resolved at call time: tests that reset the module registry (installNativeBoundary) must write
+  // the store instance the production code under test reads, not the one this file imported.
+  const { useModelSelectionStore: selectionStore } = require('../../src/stores/modelSelectionStore');
+  const { useAppStore: appStore } = require('../../src/stores/appStore');
+  const { mobileRouteId: routeId } = require('../../src/services/modelServices/mobileRoute');
+  if (!modelId) {
+    selectionStore.getState().setEntry(modality, { localRouteId: null, remoteRouteId: null });
+    return;
+  }
+  const state = appStore.getState();
+  const hostId = modality === 'text'
+    ? (state.downloadedModels.find((m: { id: string }) => m.id === modelId)?.engine ?? 'llama')
+    : (state.downloadedImageModels.find((m: { id: string }) => m.id === modelId)?.backend ?? 'image-runtime');
+  const localRouteId = routeId({ source: 'local', hostId, modality, modelId });
+  selectionStore.getState().setEntry(modality, {
+    localRouteId,
+    remoteRouteId: null,
+    ...(modality === 'text' ? { rememberedLocalRouteId: localRouteId } : {}),
+  });
+};
+
+/** The persisted LOCAL selection for a modality, as the app would restore it (null when remote or none). */
+export const selectedLocalModelId = (modality: 'text' | 'image' | 'classifier'): string | null => {
+  const { activeLocalModelId } = require('../../src/services/modelServices/activeRoute');
+  return activeLocalModelId(modality);
+};
+
+/**
+ * Arrange a remote selection the way the app persists it: the server record with the model selected
+ * for that modality, plus the persisted route. Refreshes inventory so the active route reflects it.
+ */
+export const arrangeRemoteSelection = async (
+  modality: 'text' | 'image' | 'transcription' | 'voice',
+  serverId: string,
+  modelId: string,
+  server: Partial<{ name: string; endpoint: string; provider: string }> = {},
+): Promise<void> => {
+  const { useRemoteServerStore: remoteStore } = require('../../src/stores/remoteServerStore');
+  const { useModelSelectionStore: selectionStore } = require('../../src/stores/modelSelectionStore');
+  const { mobileRouteId: routeId } = require('../../src/services/modelServices/mobileRoute');
+  const state = remoteStore.getState();
+  const existing = state.servers.find((s: { id: string }) => s.id === serverId);
+  const record = {
+    id: serverId,
+    name: server.name ?? 'Remote',
+    endpoint: server.endpoint ?? 'https://remote.test/v1',
+    provider: (server.provider ?? 'openai-compatible') as never,
+    createdAt: new Date(0).toISOString(),
+    ...(existing ?? {}),
+    selections: { ...(existing?.selections ?? {}), [modality]: modelId },
+  };
+  remoteStore.setState({
+    servers: existing
+      ? state.servers.map((s: { id: string }) => (s.id === serverId ? (record as never) : s))
+      : [...state.servers, record as never],
+  });
+  selectionStore.getState().setEntry(modality, {
+    localRouteId: null,
+    remoteRouteId: routeId({ source: 'remote', hostId: serverId, modality, modelId }),
+  });
+  const { refreshMobileModelServices } = require('../../src/services/modelServices');
+  await refreshMobileModelServices();
+};
+
+/** The persisted REMOTE selection for a modality as {serverId, modelId}, or null when local or none. */
+export const selectedRemoteRoute = (
+  modality: 'text' | 'image' | 'transcription' | 'voice',
+): { serverId: string; modelId: string } | null => {
+  const { readMobileModelSelection } = require('../../src/services/modelServices/modelSelectionProjection');
+  const { decodeModelRouteId } = require('@offgrid/models');
+  const route = readMobileModelSelection(modality);
+  const decoded = route ? decodeModelRouteId(route) : null;
+  return decoded?.serverId ? { serverId: decoded.serverId, modelId: decoded.modelId } : null;
+};

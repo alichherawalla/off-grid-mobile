@@ -1,3 +1,7 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { useModelSelectionStore } from '../../../src/stores/modelSelectionStore';
+import { decodeModelRouteId } from '@offgrid/models';
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * App Store Unit Tests
  *
@@ -188,11 +192,12 @@ describe('appStore', () => {
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      useAppStore.setState({ activeModelId: 'model-1' });
+      useAppStore.setState({ });
+      arrangeLocalSelection('text', 'model-1');
 
       removeDownloadedModel('model-2');
 
-      expect(getAppState().activeModelId).toBe('model-1');
+      expect(selectedLocalModelId('text')).toBe('model-1');
     });
   });
 
@@ -447,10 +452,14 @@ describe('appStore', () => {
       const model = createONNXImageModel({ id: 'img-model-1' });
 
       addDownloadedImageModel(model);
-      useAppStore.setState({ activeImageModelId: 'img-model-1' });
+      useAppStore.setState({ });
+      arrangeLocalSelection('image', 'img-model-1');
       removeDownloadedImageModel('img-model-1');
 
-      expect(getAppState().activeImageModelId).toBe('img-model-1');
+      // The library store never touches the persisted selection; Shared reconciles it on read.
+      const persisted = useModelSelectionStore.getState().entries.image?.localRouteId ?? null;
+      expect(persisted && decodeModelRouteId(persisted)?.modelId).toBe('img-model-1');
+      expect(selectedLocalModelId('image')).toBeNull();
     });
 
     it('does not expose an independent image selection writer', () => {
@@ -820,11 +829,12 @@ describe('appStore', () => {
 
       addDownloadedImageModel(model1);
       addDownloadedImageModel(model2);
-      useAppStore.setState({ activeImageModelId: 'img-keep' });
+      useAppStore.setState({ });
+      arrangeLocalSelection('image', 'img-keep');
 
       removeDownloadedImageModel('img-remove');
 
-      expect(getAppState().activeImageModelId).toBe('img-keep');
+      expect(selectedLocalModelId('image')).toBe('img-keep');
       expect(getAppState().downloadedImageModels).toHaveLength(1);
     });
   });
@@ -938,17 +948,14 @@ describe('appStore', () => {
       // The store initializes flashAttn as Platform.OS !== 'android'.
       // The react-native preset sets defaultPlatform to 'ios', so without resetStores()
       // the store should default to true. We verify by loading a fresh store instance.
-      jest.resetModules();
-      try {
-        // Fresh require — no resetStores() interference, so we see the real default
+      // An isolated registry: the rest of this file keeps its store instances.
+      jest.isolateModules(() => {
         const {
           useAppStore: freshStore,
         } = require('../../../src/stores/appStore');
         // ios !== android → true
         expect(freshStore.getState().settings.flashAttn).toBe(true);
-      } finally {
-        jest.resetModules();
-      }
+      });
     });
 
     it('flashAttn default formula: false on Android, true elsewhere', () => {
@@ -1041,12 +1048,13 @@ describe('appStore', () => {
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      useAppStore.setState({ activeModelId: 'keep-model' });
+      useAppStore.setState({ });
+      arrangeLocalSelection('text', 'keep-model');
       removeDownloadedModel('temp-model');
 
       expect(getAppState().downloadedModels).toHaveLength(1);
       expect(getAppState().downloadedModels[0].id).toBe('keep-model');
-      expect(getAppState().activeModelId).toBe('keep-model');
+      expect(selectedLocalModelId('text')).toBe('keep-model');
     });
   });
 
