@@ -129,10 +129,8 @@ export const mobileRemoteServerPorts: Omit<RemoteServerApplicationPorts, 'select
       return { models };
     },
     projectDiscovery(serverId, result) {
-      useRemoteServerStore.getState().setDiscoveredModels(
-        serverId,
-        (result.models ?? []).filter(isRemoteModel),
-      );
+      const models = (result.models ?? []).filter(isRemoteModel);
+      useRemoteServerStore.getState().setDiscoveredModels(serverId, models);
     },
     async test(server, credential) {
       const result = await testServerConnection({

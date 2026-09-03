@@ -95,11 +95,26 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       testingServerId: null,
       discoveringServerId: null,
       setDiscoveredModels: (serverId, models) => {
+        // Discovered text models and their capabilities are catalog facts of the server: the shared
+        // inventory reads a server's catalog, so the record carries what discovery learned.
         set(state => ({
           discoveredModels: {
             ...state.discoveredModels,
             [serverId]: models,
           },
+          servers: state.servers.map(server => server.id === serverId
+            ? {
+                ...server,
+                catalog: {
+                  ...server.catalog,
+                  text: models.map(model => ({
+                    id: model.id,
+                    name: model.name,
+                    ...(model.capabilities ? { capabilities: model.capabilities } : {}),
+                  })),
+                },
+              }
+            : server),
         }));
       },
 
