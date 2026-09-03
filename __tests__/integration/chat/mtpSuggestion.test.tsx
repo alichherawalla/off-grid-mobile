@@ -15,6 +15,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { loadLlamaModelInfo } from 'llama.rn';
 import { MtpAdviceCard } from '../../../src/components/MtpAdviceCard';
 import { useAppStore } from '../../../src/stores';
+import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
 
 /** Verbatim from the device: adb → the GGUF header of Qwen3.5-0.8B-Q4_K_M.gguf. A hybrid
  *  attention/SSM model whose conversion carries NO draft layers. */
@@ -38,11 +39,15 @@ const QWEN35_ZERO_MTP = { ...QWEN35_NO_MTP, 'qwen35.nextn_predict_layers': 0 };
  *  under us. So each case installs its own model file rather than re-reading one path with
  *  different answers, which no real device would ever do. */
 let modelSeq = 0;
-function activateModelWith(metadata: object): void {
+/** Install the model in the library and select it the way the app does: through the one selection
+ *  owner. The card reads the shared active route, never a store field. */
+async function activateModelWith(metadata: object): Promise<void> {
   const filePath = `/models/Qwen3.5-0.8B-Q4_K_M-${++modelSeq}.gguf`;
   const model = { id: filePath, name: 'Qwen 3.5 0.8B', engine: 'llama' as const, filePath };
   (loadLlamaModelInfo as jest.Mock).mockResolvedValue(metadata);
-  useAppStore.setState({ downloadedModels: [model] as never, activeModelId: model.id });
+  useAppStore.setState({ downloadedModels: [model] as never });
+  await refreshMobileModelServices();
+  await selectMobileModel({ source: 'local', hostId: 'llama', modality: 'text', modelId: model.id });
 }
 
 beforeEach(() => {
@@ -51,7 +56,7 @@ beforeEach(() => {
 
 describe('the in-chat MTP offer', () => {
   it('stays silent for a model whose build carries no draft layers', async () => {
-    activateModelWith(QWEN35_NO_MTP);
+    await activateModelWith(QWEN35_NO_MTP);
     const view = render(<MtpAdviceCard onEnable={jest.fn()} />);
 
     // Give the probe a turn to answer, then confirm it answered NO by staying hidden.
@@ -60,14 +65,14 @@ describe('the in-chat MTP offer', () => {
   });
 
   it('stays silent when the model declares the module but zero layers', async () => {
-    activateModelWith(QWEN35_ZERO_MTP);
+    await activateModelWith(QWEN35_ZERO_MTP);
     const view = render(<MtpAdviceCard onEnable={jest.fn()} />);
     await waitFor(() => { expect(loadLlamaModelInfo).toHaveBeenCalled(); });
     expect(view.queryByTestId('mtp-advice')).toBeNull();
   });
 
   it('offers it for a model that can use it, and says the model will reload', async () => {
-    activateModelWith(QWEN35_WITH_MTP);
+    await activateModelWith(QWEN35_WITH_MTP);
     const view = render(<MtpAdviceCard onEnable={jest.fn()} />);
 
     await waitFor(() => { expect(view.queryByTestId('mtp-advice')).not.toBeNull(); });
@@ -76,7 +81,7 @@ describe('the in-chat MTP offer', () => {
   });
 
   it('turning it on enables the setting AND reloads, then the offer goes away', async () => {
-    activateModelWith(QWEN35_WITH_MTP);
+    await activateModelWith(QWEN35_WITH_MTP);
     const onEnable = jest.fn();
     const view = render(<MtpAdviceCard onEnable={onEnable} />);
     const enable = await waitFor(() => view.getByTestId('mtp-advice-enable'));
@@ -97,7 +102,7 @@ describe('the in-chat MTP offer', () => {
   });
 
   it('can be dismissed without changing anything', async () => {
-    activateModelWith(QWEN35_WITH_MTP);
+    await activateModelWith(QWEN35_WITH_MTP);
     const onEnable = jest.fn();
     const view = render(<MtpAdviceCard onEnable={onEnable} />);
     const dismiss = await waitFor(() => view.getByTestId('mtp-advice-dismiss'));

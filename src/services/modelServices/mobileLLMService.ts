@@ -1,8 +1,12 @@
 import type { ActiveModelSnapshot, LLMService, ModelModality } from '@offgrid/models';
-import { mobileWorkspace } from './workspace';
+import { lazyInstance } from '../composition/lazy';
 
 /** The single Mobile owner of model inventory, selection, and canonical route identity. */
-export const mobileLLMService: LLMService = mobileWorkspace.llm;
+// Resolved on first use: the workspace module may still be initializing when this module loads.
+export const mobileLLMService: LLMService = lazyInstance(
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  () => (require('./workspace') as typeof import('./workspace')).mobileWorkspace.llm,
+);
 let refreshChain = Promise.resolve<ReturnType<LLMService['list']>>([]);
 
 /** Serialize canonical inventory rebuilds so an older platform snapshot cannot win a race. */
