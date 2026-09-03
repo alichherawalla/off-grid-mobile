@@ -1,6 +1,7 @@
 // The app's model-service composition: loading it registers the selection command port that removing
 // a server clears, exactly as it is registered at startup.
 import '@offgrid/core/services/modelServices';
+import { discoveredRemoteModels } from '../../../src/stores/remoteServerProjection';
 import { useRemoteServerStore } from '@offgrid/core/stores/remoteServerStore';
 import { resetStores, waitFor } from '../../utils/testHelpers';
 import { useSyncStore } from '../../../pro/sync/syncStore';
@@ -83,7 +84,7 @@ describe('a paired Mac is adopted as a remote server', () => {
 
   beforeEach(() => {
     resetStores();
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     useSyncStore.getState().reset();
     manualMeshEndpointStore.resetCache();
   });
@@ -113,7 +114,7 @@ describe('a paired Mac is adopted as a remote server', () => {
     });
     expect(useRemoteServerStore.getState().serverHealth['paired:mac']?.status).toBe('healthy');
     expect(
-      (useRemoteServerStore.getState().discoveredModels['paired:mac'] ?? []).map(model => model.id),
+      (discoveredRemoteModels(useRemoteServerStore.getState().servers)['paired:mac'] ?? []).map(model => model.id),
     ).toEqual(['qwen3-8b']);
   });
 
