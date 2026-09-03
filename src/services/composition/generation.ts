@@ -1,7 +1,7 @@
 // Composition root: the second generation queue (voice) and the sidecar classifier over Mobile's
 // native adapters. The text/image queue is the workspace's own.
 import { ClassifierExecutionService, GenerationService } from '@offgrid/models';
-import { once } from './once';
+import { once } from '@offgrid/models';
 
 // Resolved at call time: this module reaches back into the composition, and an eager import
 // would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).

@@ -4,7 +4,7 @@ import type { DownloadedModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from '../modelServices/activeRoute';
 import logger from '../../utils/logger';
-import { once } from './once';
+import { once } from '@offgrid/models';
 
 export const selectedTextModel = once(() =>
   createSelectedModelResolver<DownloadedModel>({

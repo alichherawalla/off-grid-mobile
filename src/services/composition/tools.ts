@@ -1,6 +1,6 @@
 // Composition root: shared tool routing over Mobile's embedding ports.
 import { PersistentToolEmbeddingCache, ToolRoutingService } from '@offgrid/models';
-import { once } from './once';
+import { once } from '@offgrid/models';
 
 // Resolved at call time: this module reaches back into the composition, and an eager import
 // would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
