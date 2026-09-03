@@ -2132,3 +2132,12 @@ HTTP recorder; the recorder receives neither the body nor Authorization.
 Fork pull requests get no secrets, so the shared checkout is skipped and `npm ci` fails on the
 `file:../shared/...` dependencies with an unrelated-looking error. Decision: forks are not supported (shared
 is not published). Make the checkout step fail with an explicit message when `PRO_SUBMODULE_PAT` is empty.
+
+## Discovery must carry the Desktop's device identity so a moved server is adopted automatically again (open, 2026-09-03)
+
+Shared no longer remaps a saved server to a discovered endpoint on a unique port match alone (any LAN host on
+that port would receive the saved server's prompts, CWE-345; review thread on #635). A move now needs the
+discovered server to prove the identity the saved record carries. Discovery does not learn an identity yet,
+so a Mac that changes IP shows up as "found" for the person to adopt instead of moving silently. Fix: the
+Desktop gateway advertises its device id (mDNS TXT / `/v1/models` header), LAN discovery carries it as
+`DiscoveredRemoteServer.identity`, and `save` persists it on the record; then genuine moves auto-adopt.
