@@ -39,6 +39,7 @@ import { contextCompactionService } from '../../contextCompaction';
 import { intentClassifier } from '../../intentClassifier';
 import { reportModelFailure } from '../../modelFailureHandler';
 import { modelInputAudioUris } from '../../modelMedia';
+import { requireRagSuccess } from '../../ragOutcome';
 import { activeLocalModelId } from '../../modelServices/activeRoute';
 import { mobileImageChatGeneration } from '../../modelServices/imageChatGenerationPort';
 import { activeMobileRoute } from '../../modelServices/mobileLLMService';
@@ -204,16 +205,16 @@ export function mobileChatContextPorts(): ChatContextApplicationPorts {
     augmentSystemPrompt: prompt =>
       callHook<string>(HOOKS.audioAugmentPrompt, prompt) ?? prompt,
     async enabledDocumentNames(projectId) {
-      const outcome = await applicationFacade().rag.listDocuments(projectId);
-      if (!outcome.ok) throw new Error(outcome.failure.message);
-      return outcome.value
+      return requireRagSuccess(
+        await applicationFacade().rag.listDocuments(projectId),
+      )
         .filter(document => document.enabled)
         .map(document => document.name);
     },
     async retrieve(projectId, query) {
-      const outcome = await applicationFacade().rag.buildContext(projectId, query);
-      if (!outcome.ok) throw new Error(outcome.failure.message);
-      return outcome.value || undefined;
+      return requireRagSuccess(
+        await applicationFacade().rag.buildContext(projectId, query),
+      ) || undefined;
     },
     audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
     onRetrievalError: error =>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { showAlert, AlertState } from '../components/CustomAlert';
 import { PasteNoteSheet } from '../components/knowledge/PasteNoteSheet';
 import type { RagDocument } from '@offgrid/application';
 import { applicationFacade } from '../services/applicationFacade';
+import { requireRagSuccess } from '../services/ragOutcome';
 import { writePastedNote } from '../services/adapters/rag/pastedNoteFileAdapter';
 import { useProjectRagDocuments } from '../hooks/useProjectRagDocuments';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
@@ -49,11 +50,25 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
   onNavigateToKb,
   onDocumentPress,
 }) => {
-  const kbDocs = useProjectRagDocuments(projectId);
+  const {
+    documents: kbDocs,
+    error: documentsError,
+    retry: retryDocuments,
+  } = useProjectRagDocuments(projectId);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [pasting, setPasting] = useState(false);
   const isPickingRef = useRef(false);
+
+  useEffect(() => {
+    if (!documentsError) return;
+    setAlertState(
+      showAlert('Knowledge Base Unavailable', documentsError, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Retry', onPress: retryDocuments },
+      ]),
+    );
+  }, [documentsError, retryDocuments, setAlertState]);
 
   const handleAddDocument = async () => {
     if (isPickingRef.current) return;
@@ -79,12 +94,14 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
 
         const pathForDb = await resolvePickedFileUri(file.uri, fileName);
 
-        await applicationFacade().rag.addDocument({
-          projectId,
-          path: pathForDb,
-          fileName,
-          size: file.size || 0,
-        });
+        requireRagSuccess(
+          await applicationFacade().rag.addDocument({
+            projectId,
+            path: pathForDb,
+            fileName,
+            size: file.size || 0,
+          }),
+        );
       }
     } catch (err: any) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED)
@@ -115,12 +132,14 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
     setIndexingFile(title.trim() || 'pasted text');
     try {
       const note = await writePastedNote(title, text);
-      await applicationFacade().rag.addDocument({
-        projectId,
-        path: note.filePath,
-        fileName: note.fileName,
-        size: note.fileSize,
-      });
+      requireRagSuccess(
+        await applicationFacade().rag.addDocument({
+          projectId,
+          path: note.filePath,
+          fileName: note.fileName,
+          size: note.fileSize,
+        }),
+      );
     } finally {
       setIndexingFile(null);
     }
@@ -128,7 +147,9 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
 
   const handleToggleDocument = async (docId: number, enabled: boolean) => {
     try {
-      await applicationFacade().rag.setDocumentEnabled(docId, enabled);
+      requireRagSuccess(
+        await applicationFacade().rag.setDocumentEnabled(docId, enabled),
+      );
     } catch (err: any) {
       setAlertState(
         showAlert('Error', err?.message || 'Failed to update document'),
@@ -146,17 +167,19 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: () => {
-              applicationFacade().rag
-                .removeDocument(doc.id)
-                .catch((err: any) =>
-                  setAlertState(
-                    showAlert(
-                      'Error',
-                      err?.message || 'Failed to remove document',
-                    ),
+            onPress: async () => {
+              try {
+                requireRagSuccess(
+                  await applicationFacade().rag.removeDocument(doc.id),
+                );
+              } catch (err: any) {
+                setAlertState(
+                  showAlert(
+                    'Error',
+                    err?.message || 'Failed to remove document',
                   ),
                 );
+              }
             },
           },
         ],
@@ -223,12 +246,12 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
         </View>
       )}
 
-      {kbDocs.length === 0 && !indexingFile ? (
+      {!documentsError && kbDocs.length === 0 && !indexingFile ? (
         <View style={styles.emptyState}>
           <Icon name="file-text" size={24} color={colors.textMuted} />
           <Text style={styles.emptyStateText}>No documents added</Text>
         </View>
-      ) : (
+      ) : !documentsError ? (
         <ScrollView style={styles.sectionList} nestedScrollEnabled>
           {kbDocs.map(doc => (
             <TouchableOpacity
@@ -264,7 +287,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
             </TouchableOpacity>
           ))}
         </ScrollView>
-      )}
+      ) : null}
 
       <PasteNoteSheet
         visible={pasting}

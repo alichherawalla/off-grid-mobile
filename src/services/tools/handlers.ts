@@ -3,6 +3,7 @@ import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
 import type { SearchResult } from '@offgrid/application';
 import logger from '../../utils/logger';
+import { requireRagSuccess } from '../ragOutcome';
 import {
   braveSearchUrl,
   executePortableTool,
@@ -150,7 +151,9 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
 async function handleSearchKnowledgeBase(query: string, projectId?: string): Promise<string> {
   if (!projectId) return 'No project context. Knowledge base requires an active project.';
   const { applicationFacade } = require('../applicationFacade') as typeof import('../applicationFacade'); // NOSONAR
-  const result = await applicationFacade().rag.search(projectId, query);
+  const result = requireRagSuccess(
+    await applicationFacade().rag.search(projectId, query),
+  );
   if (result.chunks.length === 0) return `No results found for "${query}" in the knowledge base.`;
   return result.chunks
     .map((chunk: SearchResult['chunks'][number], index: number) =>
