@@ -6,7 +6,6 @@ import { applicationFacade } from '../applicationFacade';
 import { selectCanonicalModel } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
 import { shouldRecoverRemoteServers } from './remoteServerApplication';
-import { mobileRemoteServerApplication } from './workspace';
 
 class RemoteServerOperationError extends Error {
   constructor(readonly failure: ModelsFailure) {
@@ -77,8 +76,8 @@ class RemoteServerManager {
       source: 'remote', hostId: serverId, modality: 'text', modelId,
     }));
   }
-  prepareRemoteTextModel(serverId: string, modelId: string): Promise<void> {
-    return mobileRemoteServerApplication.prepareActivation(serverId, 'text', modelId);
+  async prepareRemoteTextModel(serverId: string, modelId: string): Promise<void> {
+    requireSuccess(await applicationFacade().models.prepareRemoteServer(serverId, 'text', modelId));
   }
   setActiveRemoteImageModel(serverId: string, modelId: string): Promise<void> {
     return selectCanonicalModel('image', mobileRouteId({
@@ -92,16 +91,20 @@ class RemoteServerManager {
       source: 'remote', hostId: serverId, modality: category, modelId,
     }));
   }
-  prepareRemoteMediaModel(
+  async prepareRemoteMediaModel(
     serverId: string, category: Exclude<RemoteModelCategory, 'text'>, modelId: string,
   ): Promise<void> {
-    return mobileRemoteServerApplication.prepareActivation(serverId, category, modelId);
+    requireSuccess(
+      await applicationFacade().models.prepareRemoteServer(serverId, category, modelId),
+    );
   }
   clearActiveRemoteTextModel(): Promise<void> { return selectCanonicalModel('text', null); }
   clearActiveRemoteMediaModel(category: Exclude<RemoteModelCategory, 'text'>): Promise<void> {
     return selectCanonicalModel(category, null);
   }
-  initializeProviders(): Promise<void> { return mobileRemoteServerApplication.initialize(); }
+  async initializeProviders(): Promise<void> {
+    requireSuccess(await applicationFacade().models.initializeRemoteServers());
+  }
 
   async scanAndReconcile(
     onFound?: (server: { endpoint: string; name: string }) => void,
@@ -110,11 +113,14 @@ class RemoteServerManager {
     moved: string[];
     found: Array<{ endpoint: string; name: string; type: 'gateway' }>;
   }> {
-    const result = await mobileRemoteServerApplication.reconcile({ onFound, onProgress });
+    const outcome = await applicationFacade().models.reconcileRemoteServers({ onFound, onProgress });
+    const result = requireSuccess(outcome);
     return { ...result, found: result.found.map(server => ({ ...server, type: 'gateway' })) };
   }
   async recoverActiveConnection(): Promise<void> {
-    await mobileRemoteServerApplication.recover(shouldRecoverRemoteServers());
+    requireSuccess(
+      await applicationFacade().models.recoverRemoteServers(shouldRecoverRemoteServers()),
+    );
   }
   async clearAllServers(): Promise<void> {
     for (const server of this.getServers()) await this.removeServer(server.id);
