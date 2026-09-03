@@ -110,7 +110,7 @@ function useScanNetwork({
     setScanNote(null);
     try {
       // Paired devices first: a Mac you paired over sync is a server without any scan.
-      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired)?.catch(() => undefined);
+      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired);
       // Each server joins the list the moment it answers; the scan keeps going behind it.
       let addedSoFar = 0;
       let percent = 0;
@@ -188,12 +188,13 @@ export const RemoteServersScreen: React.FC = () => {
   const [scanNote, setScanNote] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  // Auto-check all server statuses when screen opens
   useEffect(() => {
     servers.forEach(server => {
-      applicationFacade().models.checkRemoteServer(server.id).catch(() => { });
+      applicationFacade().models.checkRemoteServer(server.id).catch(error => {
+        const message = error instanceof Error ? error.message : 'The server did not answer.';
+        setAlertState(showAlert('Could not check server', message));
+      });
     });
-
   // Status refresh belongs to this screen-open event, not every health projection update.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -283,7 +284,10 @@ export const RemoteServersScreen: React.FC = () => {
   );
 
   const openDesktopUrl = useCallback(() => {
-    Linking.openURL(DESKTOP_URL).catch(() => {});
+    Linking.openURL(DESKTOP_URL).catch(error => {
+      const message = error instanceof Error ? error.message : 'The link could not be opened.';
+      setAlertState(showAlert('Could not open link', message));
+    });
   }, []);
 
   return (

@@ -72,6 +72,19 @@ function importsRuntimeValue(node) {
   );
 }
 
+function runtimeNamedImports(node) {
+  const clause = node.importClause;
+  if (
+    !clause ||
+    clause.isTypeOnly ||
+    !clause.namedBindings ||
+    !ts.isNamedImports(clause.namedBindings)
+  ) return [];
+  return clause.namedBindings.elements
+    .filter(element => !element.isTypeOnly)
+    .map(element => (element.propertyName ?? element.name).text);
+}
+
 function assignedSelectionKeys(node) {
   const keys = [];
   const inspect = candidate => {
@@ -1162,6 +1175,28 @@ for (const file of files) {
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
       const specifier = node.moduleSpecifier.text;
+      const isUiHookOrStore = /^src\/(?:components|hooks|screens|stores)\//.test(
+        fileName,
+      );
+      const importsRawRemoteServerOwner =
+        /(?:^|\/)services\/(?:remoteServerManager|modelServices\/remoteServerController)$/.test(
+          specifier,
+        ) && importsRuntimeValue(node);
+      const importsRawRemoteServerFromBarrel =
+        /(?:^|\/)services(?:\/index)?$/.test(specifier) &&
+        runtimeNamedImports(node).includes('remoteServerManager');
+      if (
+        isUiHookOrStore &&
+        (importsRawRemoteServerOwner || importsRawRemoteServerFromBarrel)
+      ) {
+        report(
+          'ui-model-commands-use-application-facade',
+          fileName,
+          source,
+          node,
+          'import:remoteServerManager',
+        );
+      }
       if (
         specifier === '@offgrid/rag' &&
         importsRuntimeValue(node) &&
