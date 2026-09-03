@@ -305,7 +305,13 @@ export const useWhisperTranscription = ({
           language: transcriptionLanguage,
         },
       );
-      if (startNonce.current !== currentNonce || !mountedRef.current) return;
+      if (startNonce.current !== currentNonce || !mountedRef.current) {
+        // A stop or cancel arrived while the native session was starting: that stop reached nothing,
+        // so the microphone is live with no button to close it. Close it here and clear the hint.
+        await mobileTranscriptionRuntime.forceReset();
+        if (mountedRef.current) setIsStartingRecording(false);
+        return;
+      }
       // Do not tell the person to speak before both the fallback recorder and
       // whisper.rn have installed their native capture handles.
       setIsStartingRecording(false);
