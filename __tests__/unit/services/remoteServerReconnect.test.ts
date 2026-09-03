@@ -99,7 +99,7 @@ describe('remote server reconnect', () => {
     ]);
   });
 
-  it('keeps a same-port discovery unclaimed when Keychain lookup fails', async () => {
+  it('reports an unproven same-port discovery without touching the Keychain', async () => {
     const oldEndpoint = 'https://desktop.example.test:7878';
     const discoveredEndpoint = 'http://192.168.1.20:7878';
     global.fetch = jest.fn((input: RequestInfo | URL) =>
@@ -112,9 +112,9 @@ describe('remote server reconnect', () => {
       endpoint: oldEndpoint,
       provider: 'openai-compatible',
     })).id;
-    (Keychain.getGenericPassword as jest.Mock).mockRejectedValueOnce(
-      new Error('Keychain unavailable'),
-    );
+    // A move needs proof of identity first; a credential is only read for a proven move, so a
+    // Keychain outage cannot block the scan and the discovery is still reported.
+    (Keychain.getGenericPassword as jest.Mock).mockClear();
 
     const result = await remoteServerManager.scanAndReconcile();
 
@@ -125,9 +125,10 @@ describe('remote server reconnect', () => {
     expect(result.found).toEqual([
       expect.objectContaining({ endpoint: discoveredEndpoint }),
     ]);
+    expect(Keychain.getGenericPassword).not.toHaveBeenCalled();
   });
 
-  it('reconciles a unique same-port discovery after Keychain confirms no credential', async () => {
+  it('does not adopt a same-port discovery that proves no identity, even with no credential (CWE-345)', async () => {
     const oldEndpoint = 'http://192.168.1.10:7878';
     const discoveredEndpoint = 'http://192.168.1.20:7878';
     global.fetch = jest.fn((input: RequestInfo | URL) =>
@@ -143,11 +144,15 @@ describe('remote server reconnect', () => {
 
     const result = await remoteServerManager.scanAndReconcile();
 
+    // Any host answering on :7878 would otherwise receive this server's prompts. Without proof of
+    // identity the saved endpoint stays and the discovery is offered to the person instead.
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(`${discoveredEndpoint}/v1`);
-    expect(result.moved).toEqual([serverId]);
-    expect(result.found).toEqual([]);
+    ).toBe(`${oldEndpoint}/v1`);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      { endpoint: discoveredEndpoint, type: 'gateway', name: 'Off Grid AI Gateway (192.168.1.20)' },
+    ]);
   });
 
   it('scans when auto-discovery is enabled and the active server is reachable', async () => {

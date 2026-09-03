@@ -100,7 +100,7 @@ describe('WhisperPickerSheet reflects a canonical-store STT download (device 202
 
     await waitFor(() => {
       expect(ui.getByTestId('model-failure-stt')).toBeTruthy();
-      expect(ui.getByText('Model storage is unavailable')).toBeTruthy();
+      expect(ui.getByText('Transcription models are unavailable')).toBeTruthy();
     });
   });
 });
