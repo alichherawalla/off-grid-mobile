@@ -110,6 +110,10 @@ module.exports = {
               'VisionRepairApplicationService',
               'VoiceApplicationService',
               'VoicePlaybackService',
+              'decodeModelRouteId',
+              'encodeModelRouteId',
+              'parseRemoteVisionModelId',
+              'remoteVisionModelId',
             ],
             message:
               'Compose shared services through @offgrid/models/workspace, not in app code. Business logic lives in shared; this app is a port.',
@@ -156,6 +160,37 @@ module.exports = {
     'sonarjs/no-duplicated-branches': 'warn',
   },
   overrides: [
+    {
+      // Pipeline decisions live in shared (MODEL_FACADE_PLAN.md "Defect classes"): request
+      // parameters (1), route-id codecs (2), image MIME literals (3). Composition root and the
+      // selection persistence ports are exempt.
+      files: ['src/**/*.ts', 'src/**/*.tsx', 'pro/**/*.ts', 'pro/**/*.tsx'],
+      excludedFiles: [
+        '**/__tests__/**',
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        'src/services/modelServices/workspace.ts',
+        'src/services/composition/**',
+        'src/services/modelServices/mobileRoute.ts',
+        'src/services/modelServices/selectionStore.ts',
+        'src/services/modelServices/modelSelectionProjection.ts',
+      ],
+      rules: {
+        'no-restricted-syntax': [
+          'warn',
+          {
+            selector:
+              "Property[key.name=/^(maxTokens|temperature|topP|thinking|timeoutMs)$/][value.type='Literal']",
+            message:
+              'Class 1: a generation parameter is a pipeline decision. Use a shared request builder.',
+          },
+          {
+            selector: "Literal[value=/^image\\/(png|jpe?g|webp)$/]",
+            message: 'Class 3: image MIME types are an artifact fact owned by shared.',
+          },
+        ],
+      },
+    },
     {
       // The composition root is the ONE place shared services are constructed with this app's ports.
       files: ['src/services/modelServices/workspace.ts', 'src/services/composition/**/*.ts'],
