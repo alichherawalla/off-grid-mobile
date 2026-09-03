@@ -63,7 +63,7 @@ let started = false;
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
 const cleanups: Array<() => void> = [];
 
-type ModelServiceInitializationStage = 'inventory' | 'downloads';
+type ModelServiceInitializationStage = 'inventory' | 'downloads' | 'shutdown';
 
 export function projectMobileModelServiceInitializationFailure(
   stage: ModelServiceInitializationStage,
@@ -74,7 +74,9 @@ export function projectMobileModelServiceInitializationFailure(
     id: `mobile-model-services-${stage}`,
     title: stage === 'downloads'
       ? 'Model downloads are unavailable'
-      : 'Model services are unavailable',
+      : stage === 'shutdown'
+        ? 'Model services did not stop cleanly'
+        : 'Model services are unavailable',
     message: error instanceof Error
       ? error.message
       : 'Off Grid could not initialize the model service.',
@@ -88,9 +90,9 @@ function consumeAlreadyProjectedFailure(): void {
 
 /** Serialize inventory rebuilds so an older store snapshot cannot win a race. */
 export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
+  const refreshInventory = () => refreshMobileLLMServiceInventory();
   refreshChain = refreshChain
-    .catch(() => [])
-    .then(() => refreshMobileLLMServiceInventory())
+    .then(refreshInventory, refreshInventory)
     .then(models => {
       reconcileMobileGenerationAdapters(
         mobileGenerationService,
@@ -148,7 +150,9 @@ export function stopMobileModelServices(): void {
   if (!started) return;
   started = false;
   for (const cleanup of cleanups.splice(0)) cleanup();
-  mobileModelDownloadCoordinator.shutdown().catch(() => undefined);
+  mobileModelDownloadCoordinator.shutdown().catch(error =>
+    projectMobileModelServiceInitializationFailure('shutdown', error),
+  );
 }
 
 /** The user picked a model. The application facade owns remote activation and route selection. */
