@@ -171,6 +171,7 @@ module.exports = {
         '**/*.test.tsx',
         'src/services/modelServices/workspace.ts',
         'src/services/composition/**',
+        'pro/composition/**',
         'src/services/modelServices/mobileRoute.ts',
         'src/services/modelServices/selectionStore.ts',
         'src/services/modelServices/modelSelectionProjection.ts',
@@ -193,7 +194,7 @@ module.exports = {
     },
     {
       // The composition root is the ONE place shared services are constructed with this app's ports.
-      files: ['src/services/modelServices/workspace.ts', 'src/services/composition/**/*.ts'],
+      files: ['src/services/modelServices/workspace.ts', 'src/services/composition/**/*.ts', 'pro/composition/**/*.ts'],
       rules: { '@typescript-eslint/no-restricted-imports': 'off' },
     },
     {

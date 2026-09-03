@@ -1,4 +1,5 @@
-import { ImagePromptEnhancementService } from '@offgrid/models';
+import type { ImagePromptEnhancementService } from '@offgrid/models';
+import { imagePromptEnhancement } from './composition/chat';
 import { PROMPT_ENHANCEMENT_STATUS } from '@offgrid/sync';
 import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';
@@ -15,14 +16,14 @@ import type { GenerateImageParams } from './imageGenerationTypes';
 
 type EnhancementStateWriter = (status: string) => void;
 
-/** Mobile is a native/runtime and presentation adapter for the Shared enhancement use case. */
-export async function enhanceImagePrompt(
+/** Runtime, generation, and chat-card presentation ports for one enhancement. */
+export function mobileImagePromptEnhancementPorts(
   params: GenerateImageParams,
   setState: EnhancementStateWriter,
-): Promise<string> {
+): ConstructorParameters<typeof ImagePromptEnhancementService>[0] {
   const conversationId = params.conversationId;
   let temporaryMessageId: string | null = null;
-  const service = new ImagePromptEnhancementService({
+  return {
     inspectText() {
       return {
         selected: !!selectedTextModelId(),
@@ -86,7 +87,16 @@ export async function enhanceImagePrompt(
     onFailure(error) {
       logger.warn('[ImageGen] Prompt enhancement boundary failed:', error);
     },
-  });
+  };
+}
+
+/** Mobile is a native/runtime and presentation adapter for the Shared enhancement use case. */
+export async function enhanceImagePrompt(
+  params: GenerateImageParams,
+  setState: EnhancementStateWriter,
+): Promise<string> {
+  const conversationId = params.conversationId;
+  const service = imagePromptEnhancement(mobileImagePromptEnhancementPorts(params, setState));
 
   return service.enhance({
     prompt: params.prompt,

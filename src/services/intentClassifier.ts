@@ -1,8 +1,5 @@
-import {
-  classifyToolsNeeded,
-  GenerationIntentService,
-  type GenerationIntent,
-} from '@offgrid/models';
+import { classifyToolsNeeded, type GenerationIntent } from '@offgrid/models';
+import { generationIntent } from './composition/chat';
 import type { DownloadedModel } from '../types';
 import logger from '../utils/logger';
 import { executeMobileClassification } from './mobileSidecarGeneration';
@@ -14,7 +11,6 @@ interface ClassifyOptions {
   onStatusChange?: (status: string) => void;
 }
 
-const service = new GenerationIntentService();
 
 /** Mobile supplies classifier I/O. Shared owns patterns, fallback, and caching. */
 class MobileIntentClassifier {
@@ -23,7 +19,7 @@ class MobileIntentClassifier {
     options: ClassifyOptions | boolean = true,
   ): Promise<GenerationIntent> {
     const opts = typeof options === 'boolean' ? { useLLM: options } : options;
-    const intent = await service.classify(message, {
+    const intent = await generationIntent().classify(message, {
       useModel: opts.useLLM,
       classifyWithModel: async query => {
         opts.onStatusChange?.('Analyzing request...');
@@ -46,11 +42,11 @@ class MobileIntentClassifier {
   }
 
   quickCheck(message: string): GenerationIntent {
-    return service.quickCheck(message);
+    return generationIntent().quickCheck(message);
   }
 
   clearCache(): void {
-    service.clear();
+    generationIntent().clear();
   }
 }
 

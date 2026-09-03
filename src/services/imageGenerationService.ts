@@ -1,5 +1,4 @@
 import {
-  ImageGenerationApplicationService,
   isImageApplicationInFlight,
   type ImageApplicationSnapshot,
 } from '@offgrid/models';
@@ -12,8 +11,7 @@ import {
   type ImageGenerationListener,
   type ImageGenerationState,
 } from './imageGenerationTypes';
-import { mobileImageGenerationApplicationPorts } from './modelServices/imageGenerationApplication';
-import { mobileLLMService } from './modelServices/mobileLLMService';
+import { imageGenerationApplication } from './composition/image';
 
 export { isInFlight } from './imageGenerationTypes';
 export type { ImageGenPhase, ImageGenerationState } from './imageGenerationTypes';
@@ -37,10 +35,7 @@ function project(snapshot: ImageApplicationSnapshot<GeneratedImage>): ImageGener
 }
 
 class ImageGenerationService {
-  private readonly application = new ImageGenerationApplicationService(
-    mobileLLMService,
-    mobileImageGenerationApplicationPorts(),
-  );
+  private readonly application = imageGenerationApplication();
   private readonly listeners = new Set<ImageGenerationListener>();
   private previousPhase: ImageGenerationState['phase'] = 'idle';
 

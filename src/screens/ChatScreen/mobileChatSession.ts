@@ -1,7 +1,4 @@
 import {
-  ChatSessionService,
-  ChatContextApplicationService,
-  ChatOperationApplicationService,
   CHAT_GENERATION_RECLAIM_POLICY,
   chatGenerationRequestDefaults,
   isMemoryToolAllowed,
@@ -16,6 +13,12 @@ import {
   runtimeModelRouteId,
   generationMessageText,
 } from '@offgrid/models';
+import type {
+  ChatContextApplicationService,
+  ChatOperationApplicationService,
+  ChatSessionService,
+} from '@offgrid/models';
+import { chatContext as composedChatContext, chatOperation, chatSession } from '../../services/composition/chat';
 import { APP_CONFIG } from '../../constants';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { mobileChatGenerationProjection } from '../../services/chatGenerationProjection';
@@ -80,7 +83,9 @@ export function projectClassifierFailure(
   });
 }
 
-const operationService = new ChatOperationApplicationService({
+/** Store facts, classifier, and route refresh ports. Shared owns the text/image decision. */
+export function mobileChatOperationPorts(): ConstructorParameters<typeof ChatOperationApplicationService>[0] {
+  return {
   inspect() {
     const state = useAppStore.getState();
     const facts = {
@@ -124,7 +129,10 @@ const operationService = new ChatOperationApplicationService({
   },
   onClassificationError: error =>
     projectClassifierFailure('classification', error),
-});
+};
+}
+
+const operationService = (): ChatOperationApplicationService => chatOperation();
 
 async function resolveMobileChatOperation(input: {
   userMessage: GenerationMessage;
@@ -136,7 +144,7 @@ async function resolveMobileChatOperation(input: {
   const hasImage =
     Array.isArray(input.userMessage.content) &&
     input.userMessage.content.some(part => part.type === 'image');
-  return operationService.resolve({
+  return operationService().resolve({
     text: generationMessageText(input.userMessage),
     hasImage,
     requestedOperation: input.requestedOperation,
@@ -148,7 +156,9 @@ async function resolveMobileChatOperation(input: {
   });
 }
 
-const chatContext = new ChatContextApplicationService({
+/** Conversation, project, prompt, and retrieval ports. Shared composes the context. */
+export function mobileChatContextPorts(): ConstructorParameters<typeof ChatContextApplicationService>[0] {
+  return {
   conversation: id =>
     useChatStore
       .getState()
@@ -173,7 +183,10 @@ const chatContext = new ChatContextApplicationService({
   audioUris: attachment => modelInputAudioUris([attachment as MediaAttachment]),
   onRetrievalError: error =>
     logger.error('[ChatSession] RAG augmentation failed', error),
-});
+};
+}
+
+const chatContext = (): ChatContextApplicationService => composedChatContext();
 
 function publishSessionEvent(event: ChatSessionEvent): void {
   if (event.type === 'started') {
@@ -283,59 +296,64 @@ function chatRequestDefaults(): ChatTurn['request']['request'] {
   });
 }
 
-const service = new ChatSessionService(
+/** Generation, repository, and session options. Shared owns the turn lifecycle. */
+export function mobileChatSessionPorts(): ConstructorParameters<typeof ChatSessionService> {
+  return [
   { generate: generateForSession },
-  repository,
-  {
-    rag: {
-      augment: ({ identity, signal }) =>
-        chatContext.compose({
-          conversationId: identity.conversationId,
-          projectId: identity.projectId,
-          signal,
-        }),
-    },
-    tools: {
-      resolve: async ({ identity }) => {
-        const enabledToolIds =
-          useAppStore.getState().settings.enabledTools ?? [];
-        const admittedToolIds = enabledToolIds.filter(toolId =>
-          isMemoryToolAllowed(toolId, {
-            projectActive:
-              !!identity.projectId &&
-              !!useProjectStore.getState().getProject(identity.projectId),
-            allMemory: true,
+    repository,
+    {
+      rag: {
+        augment: ({ identity, signal }) =>
+          chatContext().compose({
+            conversationId: identity.conversationId,
+            projectId: identity.projectId,
+            signal,
           }),
-        );
-        if (!admittedToolIds.length) return {};
-        const messages = useChatStore
-          .getState()
-          .getConversationMessages(identity.conversationId)
-          .filter(message => !message.isSystemInfo);
-        const tools = await mobileToolDefinitions(admittedToolIds, messages);
-        return tools.length ? { tools, toolChoice: 'auto' } : {};
       },
+      tools: {
+        resolve: async ({ identity }) => {
+          const enabledToolIds =
+            useAppStore.getState().settings.enabledTools ?? [];
+          const admittedToolIds = enabledToolIds.filter(toolId =>
+            isMemoryToolAllowed(toolId, {
+              projectActive:
+                !!identity.projectId &&
+                !!useProjectStore.getState().getProject(identity.projectId),
+              allMemory: true,
+            }),
+          );
+          if (!admittedToolIds.length) return {};
+          const messages = useChatStore
+            .getState()
+            .getConversationMessages(identity.conversationId)
+            .filter(message => !message.isSystemInfo);
+          const tools = await mobileToolDefinitions(admittedToolIds, messages);
+          return tools.length ? { tools, toolChoice: 'auto' } : {};
+        },
+      },
+      operation: { resolve: resolveMobileChatOperation },
+      compactionRetry: {
+        shouldRetry: ({ error }) =>
+          contextCompactionService.isContextFullError(error),
+      },
+      compaction: {
+        compact: context => contextCompactionService.compactChat(context),
+      },
+      events: { publish: publishSessionEvent },
     },
-    operation: { resolve: resolveMobileChatOperation },
-    compactionRetry: {
-      shouldRetry: ({ error }) =>
-        contextCompactionService.isContextFullError(error),
-    },
-    compaction: {
-      compact: context => contextCompactionService.compactChat(context),
-    },
-    events: { publish: publishSessionEvent },
-  },
-);
+  ];
+}
+
+const service = (): ChatSessionService => chatSession();
 
 function stopActiveTurn(): boolean {
   const running = queue.entries.find(entry => entry.status === 'running');
-  return running ? service.stop(running.turnId) : false;
+  return running ? service().stop(running.turnId) : false;
 }
 
 registerMobileChatSessionControl({
   stopActive: stopActiveTurn,
-  stopConversation: conversationId => service.stopConversation(conversationId),
+  stopConversation: conversationId => service().stopConversation(conversationId),
 });
 
 /** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
@@ -366,7 +384,7 @@ export const mobileChatSession = {
         : undefined;
     commandOptions.set(turnId, options);
     try {
-      return await service.send({
+      return await service().send({
         conversationId,
         turnId,
         projectId: conversation?.projectId,
@@ -395,7 +413,7 @@ export const mobileChatSession = {
     repository.invalidate(conversationId);
     commandOptions.set(turnId, options);
     try {
-      return await service.regenerate({
+      return await service().regenerate({
         conversationId,
         turnId,
         operation,
@@ -413,7 +431,7 @@ export const mobileChatSession = {
     message: Message,
   ): Promise<ChatTurn> {
     repository.invalidate(conversationId);
-    return service.edit({
+    return service().edit({
       conversationId,
       turnId,
       userMessage: generationMessage(message),
@@ -426,13 +444,13 @@ export const mobileChatSession = {
   },
 
   stopConversation(conversationId: string): number {
-    return service.stopConversation(conversationId);
+    return service().stopConversation(conversationId);
   },
 
   clearQueued(): void {
     for (const entry of queue.entries) {
       if (entry.status === 'queued')
-        service.stop(entry.turnId, 'Queue cleared');
+        service().stop(entry.turnId, 'Queue cleared');
     }
   },
 
