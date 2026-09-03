@@ -67,7 +67,10 @@ export function startMobileApplication(): ReturnType<
   return starting;
 }
 
-export function stopMobileApplication(): void {
-  application?.stop().catch(() => undefined);
-  starting = null;
+export async function stopMobileApplication(): Promise<void> {
+  try {
+    await application?.stop();
+  } finally {
+    starting = null;
+  }
 }
