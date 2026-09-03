@@ -1,7 +1,18 @@
 import { remoteServerManager } from '../../remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
-import { remoteMediaEndpoint, resolveRemoteRoute, remoteErrorBodyMessage, remoteImageRequest, parseRemoteImageResponse } from '@offgrid/models';
-import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from '@offgrid/models';
+import {
+  DEFAULT_REMOTE_SPEECH_MIME,
+  REMOTE_FETCH_REDIRECT_POLICY,
+  parseRemoteImageResponse,
+  remoteAuthorizationHeaders,
+  remoteErrorBodyMessage,
+  remoteImageRequest,
+  remoteMediaEndpoint,
+  remoteTranscriptionUpload,
+  remoteVoicePayload,
+  resolveRemoteRoute,
+} from '@offgrid/models';
+import type { RemoteMediaModality } from '@offgrid/models';
 
 
 export interface RemoteImageResult {
@@ -18,34 +29,25 @@ export interface RemoteMediaRequestOptions {
   signal?: AbortSignal;
 }
 
-function endpoint(server: RemoteServer, path: string): string {
-  const modality = path.endsWith('/images/generations')
-    ? 'image'
-    : path.endsWith('/audio/transcriptions')
-      ? 'transcription'
-      : 'voice';
-  return remoteMediaEndpoint(server.endpoint, modality);
-}
-
 async function request<T>(
   input: {
     server: RemoteServer;
-    path: string;
-    /** A full URL chosen by shared policy; `path` names the modality for the endpoint rule. */
+    modality: RemoteMediaModality;
+    /** A full URL chosen by shared policy; otherwise the shared endpoint rule for `modality` decides. */
     url?: string;
     init: RequestInit;
     signal?: AbortSignal;
   },
   consume: (response: Response) => Promise<T>,
 ): Promise<T> {
-  const { server, path, init, signal } = input;
+  const { server, modality, init, signal } = input;
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   try {
     const apiKey = await remoteServerManager.getApiKey(server.id);
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
-    const response = await fetch(input.url ?? endpoint(server, path), {
+    const response = await fetch(input.url ?? remoteMediaEndpoint(server.endpoint, modality), {
       ...init,
       headers: {
         Accept: 'application/json',
@@ -108,7 +110,7 @@ export const remoteMediaRuntime = {
     });
     const artifact = await request({
       server,
-      path: '/v1/images/generations',
+      modality: 'image',
       url: plan.url,
       init: {
         method: 'POST',
@@ -125,17 +127,20 @@ export const remoteMediaRuntime = {
     input: { fileUri: string; language?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<string> {
+    const upload = remoteTranscriptionUpload({
+      model: input.model ?? requiredModel(server, 'transcription'),
+      language: input.language,
+    });
     const body = new FormData();
-    body.append('model', input.model ?? requiredModel(server, 'transcription'));
-    if (input.language) body.append('language', input.language);
-    body.append('file', {
+    for (const [field, value] of Object.entries(upload.fields)) body.append(field, value);
+    body.append(upload.file.field, {
       uri: input.fileUri,
-      name: 'recording.wav',
-      type: 'audio/wav',
+      name: upload.file.name,
+      type: upload.file.type,
     } as unknown as Blob);
     const payload = await request({
       server,
-      path: '/v1/audio/transcriptions',
+      modality: 'transcription',
       init: { method: 'POST', body },
       signal: options.signal,
     }, response => response.json() as Promise<{ text?: unknown }>);
@@ -152,21 +157,20 @@ export const remoteMediaRuntime = {
   ): Promise<RemoteVoiceResult> {
     return request({
       server,
-      path: '/v1/audio/speech',
+      modality: 'voice',
       init: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(remoteVoicePayload({
           model: input.model ?? requiredModel(server, 'voice'),
-          input: input.text,
-          voice: input.voice ?? 'alloy',
-          response_format: 'mp3',
-        }),
+          text: input.text,
+          voice: input.voice,
+        })),
       },
       signal: options.signal,
     }, async response => ({
       audio: await response.arrayBuffer(),
-      contentType: response.headers.get('content-type') ?? 'audio/mpeg',
+      contentType: response.headers.get('content-type') ?? DEFAULT_REMOTE_SPEECH_MIME,
     }));
   },
 };
