@@ -107,6 +107,17 @@ follow-up runs. This is stable integration evidence, but it is not physical-devi
 Kokoro is the only supported Mobile text-to-speech runtime. OuteTTS and Qwen3 TTS are removed and
 are not valid verification targets.
 
+## Application facade boundary needs its final six-domain static gate - 2026-09-03
+
+**Verdict: enforce after each domain cutover reaches zero bypasses.**
+
+Mobile already has strict ESLint, Dependency Cruiser, and custom Models gates. Do not add a generic
+hexagonal folder plugin during the active migration. Follow
+`shared/docs/APPLICATION_BOUNDARY_ENFORCEMENT_PLAN.md`: extend the existing rules so production UI,
+stores, hooks, and app workflows use Models, Sync, RAG, Speech, Automation, and Use only through
+`@offgrid/application`. Keep narrow exceptions for composition roots, platform adapters, and
+type-only imports. Close this gap when all six domain rules pass without a new permanent allowlist.
+
 ### QA architecture closure sweep - 2026-09-01
 
 **Verdict: the package boundary is wired, but the strict zero-business-logic app boundary is still
