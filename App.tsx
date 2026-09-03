@@ -18,6 +18,7 @@ import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
 import { transcriptionModelIntents } from './src/services/modelServices/transcriptionRuntimePort';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
+import { useWhisperStore } from './src/stores/whisperStore';
 import {
   initDebugLogFile,
   appendDebugLine,
@@ -107,6 +108,23 @@ const ensureRemoteServerStoreHydrated = async () => {
   if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
   if (!persistApi.hasHydrated()) {
     await persistApi.rehydrate();
+  }
+};
+
+const ensureWhisperStoreHydrated = async () => {
+  const persistApi = useWhisperStore.persist;
+  if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
+  if (!persistApi.hasHydrated()) {
+    await persistApi.rehydrate();
+  }
+};
+
+const reconcileTranscriptionSelection = async () => {
+  await ensureWhisperStoreHydrated();
+  try {
+    await transcriptionModelIntents.reconcileDisk();
+  } catch (error) {
+    logger.error('[App] Whisper disk reconciliation failed:', error);
   }
 };
 
@@ -346,6 +364,12 @@ function App() {
         logger.log('[BOOT] remote server hydrate');
         await ensureRemoteServerStoreHydrated();
 
+        // The Shared workflow must see the persisted transcription selection before it compares
+        // that selection with disk inventory. Running this after the UI mounted allowed AsyncStorage
+        // to restore a missing model after reconciliation had already cleared it.
+        logger.log('[BOOT] transcription selection reconcile');
+        await reconcileTranscriptionSelection();
+
         try {
           // Pro supplies optional domain ports before core creates the single application root.
           logger.log('[BOOT] load pro features');
@@ -401,15 +425,6 @@ function App() {
         // Show the UI immediately
         logger.log('[BOOT] startup complete');
         setIsInitializing(false);
-
-        // Reconcile downloaded Whisper models against disk at startup. presentModelIds
-        // isn't persisted (the filesystem is the source of truth), so it rehydrates
-        // empty — without this scan a freshly launched app shows an already-installed
-        // model (e.g. base.en) as "Download" and re-fetches the full file. Fire-and-
-        // forget; the Models screen also refreshes on focus.
-        transcriptionModelIntents.reconcileDisk().catch(error => {
-          logger.error('[App] Whisper disk reconciliation failed:', error);
-        });
 
         // Models are intentionally NOT warmed at boot. A native model load is heavy
         // and contends with startup, leaving the whole app sluggish in that window.
