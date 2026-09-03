@@ -266,6 +266,22 @@ export function readMobileModelSelection(modality: ModelModality): string | null
   return reconcileModelSelection(modality, readMobileSelectionProjection(modality)).selectedRouteId;
 }
 
+function selectedRoute(modality: ModelModality) {
+  const routeId = readMobileModelSelection(modality);
+  return routeId ? decodeModelRouteId(routeId) : null;
+}
+
+/** The selected LOCAL model id for a modality; a remote route reads as null. */
+export function selectedLocalModelId(modality: ModelModality): string | null {
+  const route = selectedRoute(modality);
+  return route && !route.serverId ? route.modelId : null;
+}
+
+/** True when the selected route for a modality points at a remote server. */
+export function selectedRouteIsRemote(modality: ModelModality): boolean {
+  return Boolean(selectedRoute(modality)?.serverId);
+}
+
 function rawRoute(routeId: string | null | undefined) {
   const route = routeId ? decodeModelRouteId(routeId) : null;
   if (routeId && !route) throw new Error('The selected model route is invalid');

@@ -1,19 +1,20 @@
 import { useSyncExternalStore } from 'react';
 import type { ActiveModelSnapshot, ModelModality } from '@offgrid/models';
 import { mobileLLMService } from './mobileLLMService';
+import { selectedLocalModelId, selectedRouteIsRemote } from './modelSelectionProjection';
 
 /**
- * The one answer to "which model is selected for this modality" on the phone: the shared active
- * route. These are convenience reads for callers that only care about a LOCAL model's id; a remote
- * route reads as null here, exactly as the retired appStore mirrors did.
+ * The one answer to "which model is selected for this modality" on the phone: the shared
+ * reconciled selection. These are convenience reads for callers that only care about a LOCAL
+ * model's id; a remote route reads as null here, exactly as the retired appStore mirrors did.
+ * The persisted selection is a fact before the inventory has refreshed, so it is read directly.
  */
 export function activeLocalModelId(modality: ModelModality): string | null {
-  const model = mobileLLMService.active(modality).model;
-  return model && model.source === 'local' ? model.id : null;
+  return selectedLocalModelId(modality);
 }
 
 export function activeRouteIsRemote(modality: ModelModality): boolean {
-  return mobileLLMService.active(modality).model?.source === 'remote';
+  return selectedRouteIsRemote(modality);
 }
 
 const snapshotCache = new Map<ModelModality, ActiveModelSnapshot>();

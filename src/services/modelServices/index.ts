@@ -4,6 +4,8 @@ import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
+import { useModelSelectionStore } from '../../stores/modelSelectionStore';
+import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
   resolveSelectedTextModel,
   subscribeToModelState,
@@ -130,6 +132,8 @@ export function startMobileModelServices(): () => void {
     cleanups.push(useAppStore.subscribe(refresh));
     cleanups.push(useRemoteServerStore.subscribe(refresh));
     cleanups.push(useWhisperStore.subscribe(refresh));
+    cleanups.push(useModelSelectionStore.subscribe(refresh));
+    cleanups.push(useModelResidencyStore.subscribe(refresh));
     cleanups.push(subscribeToModelState(refresh));
     mobileModelDownloadCoordinator.hydrate().catch(error =>
       projectMobileModelServiceInitializationFailure('downloads', error),
