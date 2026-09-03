@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { answerTextForStreamingSpeech } from '@offgrid/speech';
 import { Message, Conversation, GenerationMeta } from '../types';
 import {
   stripStreamingControlTokens,
@@ -29,32 +30,6 @@ import {
   emitSyncMutation,
   messagePutMutation,
 } from '../services/sync/mutation';
-
-/**
- * The portion of the in-progress stream that is safe to SPEAK in voice mode —
- * never the reasoning/thinking. Models that stream reasoning on a separate
- * channel leave streamingMessage answer-only. Models that inline reasoning (e.g.
- * Qwen3, whose chat template injects the opening <think> so only a closing
- * </think> is emitted) are sliced at </think>; until that tag arrives we withhold
- * (return '') while thinking is enabled, so the thought process is never spoken
- * sentence-by-sentence. onStreamingEnd still speaks the final answer if nothing
- * streamed.
- */
-function speakableStreamingAnswer(
-  streamingMessage: string,
-  streamingReasoning: string,
-): string {
-  if (streamingReasoning.length > 0) return streamingMessage; // reasoning came separately
-  const closeIdx = streamingMessage.toLowerCase().lastIndexOf('</think>');
-  if (closeIdx !== -1)
-    return streamingMessage.slice(closeIdx + '</think>'.length);
-  // No close tag yet: inline reasoning may still be in progress. Withhold while
-  // thinking is enabled; otherwise the content is the answer and is safe to speak.
-  const { useAppStore } = require('./appStore');
-  return useAppStore.getState().settings?.thinkingEnabled
-    ? ''
-    : streamingMessage;
-}
 
 /** Derive conversation title from the first user message. */
 function deriveTitle(
@@ -348,12 +323,15 @@ export const useChatStore = create<ChatState>()(
         // Feed only the ANSWER to pro audio for real-time sentence-by-sentence
         // TTS (never the reasoning) — no-op unless voice mode + engine ready;
         // free builds register nothing.
+        const { useAppStore } = require('./appStore');
         callHook(
           HOOKS.audioOnStreamingToken,
-          speakableStreamingAnswer(
-            get().streamingMessage,
-            get().streamingReasoningContent,
-          ),
+          answerTextForStreamingSpeech({
+            content: get().streamingMessage,
+            reasoning: get().streamingReasoningContent,
+            thinkingEnabled:
+              useAppStore.getState().settings?.thinkingEnabled ?? false,
+          }),
         );
       },
 
