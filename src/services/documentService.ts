@@ -184,71 +184,67 @@ class DocumentService {
     fileName?: string,
     maxCharsOverride?: number,
   ): Promise<MediaAttachment | null> {
-    try {
-      console.log(
-        `[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`,
-      );
-      const name = fileName || filePath.split('/').pop() || 'document';
-      const isPdf = isPdfDocument(name);
-      console.log(`[DocumentService] isPdf: ${isPdf}`);
-      const typeAdmission = admitDocument(name, undefined, this.capabilities());
-      if (!typeAdmission.admitted) {
-        throw new Error(typeAdmission.reason);
-      }
-
-      const resolvedPath = await this.resolveContentUri(filePath, name);
-      console.log(`[DocumentService] Resolved path: ${resolvedPath}`);
-
-      // Verify the file exists and is accessible
-      let fileExists = false;
-      try {
-        fileExists = await RNFS.exists(resolvedPath);
-        console.log(`[DocumentService] File exists check: ${fileExists}`);
-      } catch (existsError) {
-        // RNFS.exists can fail on security-scoped URLs
-        console.error(`[DocumentService] exists() threw error:`, existsError);
-        throw new Error(
-          'Could not access file. Please try selecting the file again.',
-        );
-      }
-
-      if (!fileExists) {
-        throw new Error(`File not found: ${name}`);
-      }
-
-      const facts = await statFile(resolvedPath);
-      if (!facts) {
-        throw new Error(
-          'Could not determine file size. Please try selecting the file again.',
-        );
-      }
-      const fileSize = facts.size;
-      console.log(`[DocumentService] File size: ${fileSize} bytes`);
-      const admission = admitDocument(name, fileSize, this.capabilities());
-      if (!admission.admitted) {
-        throw new Error(admission.reason);
-      }
-
-      const maxChars =
-        maxCharsOverride ?? documentAttachmentCharBudget(this.contextLength());
-      const textContent = await this.readContent(resolvedPath, isPdf, maxChars);
-      const { id, uri } = await this.savePersistentCopy(
-        resolvedPath,
-        filePath,
-        name,
-      );
-
-      return {
-        id,
-        type: 'document',
-        uri,
-        fileName: name,
-        textContent,
-        fileSize,
-      };
-    } catch (error: any) {
-      throw error;
+    console.log(
+      `[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`,
+    );
+    const name = fileName || filePath.split('/').pop() || 'document';
+    const isPdf = isPdfDocument(name);
+    console.log(`[DocumentService] isPdf: ${isPdf}`);
+    const typeAdmission = admitDocument(name, undefined, this.capabilities());
+    if (!typeAdmission.admitted) {
+      throw new Error(typeAdmission.reason);
     }
+
+    const resolvedPath = await this.resolveContentUri(filePath, name);
+    console.log(`[DocumentService] Resolved path: ${resolvedPath}`);
+
+    // Verify the file exists and is accessible
+    let fileExists = false;
+    try {
+      fileExists = await RNFS.exists(resolvedPath);
+      console.log(`[DocumentService] File exists check: ${fileExists}`);
+    } catch (existsError) {
+      // RNFS.exists can fail on security-scoped URLs
+      console.error(`[DocumentService] exists() threw error:`, existsError);
+      throw new Error(
+        'Could not access file. Please try selecting the file again.',
+      );
+    }
+
+    if (!fileExists) {
+      throw new Error(`File not found: ${name}`);
+    }
+
+    const facts = await statFile(resolvedPath);
+    if (!facts) {
+      throw new Error(
+        'Could not determine file size. Please try selecting the file again.',
+      );
+    }
+    const fileSize = facts.size;
+    console.log(`[DocumentService] File size: ${fileSize} bytes`);
+    const admission = admitDocument(name, fileSize, this.capabilities());
+    if (!admission.admitted) {
+      throw new Error(admission.reason);
+    }
+
+    const maxChars =
+      maxCharsOverride ?? documentAttachmentCharBudget(this.contextLength());
+    const textContent = await this.readContent(resolvedPath, isPdf, maxChars);
+    const { id, uri } = await this.savePersistentCopy(
+      resolvedPath,
+      filePath,
+      name,
+    );
+
+    return {
+      id,
+      type: 'document',
+      uri,
+      fileName: name,
+      textContent,
+      fileSize,
+    };
   }
 
   /**
@@ -266,16 +262,9 @@ class DocumentService {
 
     const id = generateId();
 
-    // Write to persistent file so it can be opened from chat
-    let uri = '';
-    try {
-      await this.ensureAttachmentsDir();
-      const persistentPath = `${ATTACHMENTS_DIR}/${id}_${fileName}`;
-      await RNFS.writeFile(persistentPath, text, 'utf8');
-      uri = persistentPath;
-    } catch {
-      // Failed to write — uri stays empty, tap will be a no-op
-    }
+    await this.ensureAttachmentsDir();
+    const uri = `${ATTACHMENTS_DIR}/${id}_${fileName}`;
+    await RNFS.writeFile(uri, text, 'utf8');
 
     return {
       id,
