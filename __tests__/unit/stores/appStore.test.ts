@@ -174,23 +174,12 @@ describe('appStore', () => {
       const model = createDownloadedModel({ id: 'active-model' });
 
       addDownloadedModel(model);
-      useAppStore.setState({ activeModelId: 'active-model' });
-      expect(getAppState().activeModelId).toBe('active-model');
-
       removeDownloadedModel('active-model');
 
-      expect(getAppState().activeModelId).toBe('active-model');
+      // Selection is no longer a store field; removal only touches the library list.
+      expect(getAppState().downloadedModels.find(m => m.id === 'active-model')).toBeUndefined();
     });
 
-    it('setLastTextModelId records the selected text model as a preference', () => {
-      const { setLastTextModelId } = useAppStore.getState();
-      expect(getAppState().lastTextModelId).toBeNull();
-      setLastTextModelId('my-text-model');
-      expect(getAppState().lastTextModelId).toBe('my-text-model');
-      // Independent of activeModelId, so it survives residency eviction.
-      useAppStore.setState({ activeModelId: null });
-      expect(getAppState().lastTextModelId).toBe('my-text-model');
-    });
 
     it('removeDownloadedModel preserves activeModelId if different model removed', () => {
       const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
@@ -211,9 +200,6 @@ describe('appStore', () => {
   // Active Model
   // ============================================================================
   describe('activeModel persistence projection', () => {
-    it('starts with null activeModelId', () => {
-      expect(getAppState().activeModelId).toBeNull();
-    });
 
     it('does not expose an independent selection writer', () => {
       expect((getAppState() as any).setActiveModelId).toBeUndefined();

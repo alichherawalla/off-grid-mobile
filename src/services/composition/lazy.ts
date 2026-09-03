@@ -8,7 +8,10 @@ export function lazyInstance<T extends object>(resolve: () => T): T {
     get(_target, property) {
       const instance = resolve();
       const value = Reflect.get(instance, property) as unknown;
-      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(instance) : value;
+      if (typeof value !== 'function') return value;
+      // A spy installed by a test must come back as itself, or its mock API is lost behind a bind.
+      if ('mock' in (value as object)) return value;
+      return (value as (...a: unknown[]) => unknown).bind(instance);
     },
     has(_target, property) {
       return property in resolve();
