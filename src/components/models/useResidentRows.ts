@@ -8,6 +8,7 @@
  * into the four model rows shown by this sheet.
  */
 import { useSyncExternalStore } from 'react';
+import { ejectResidentForUser } from '../../services/modelServices/ejectModelsForUser';
 import { modelResidencyManager } from '../../services/modelServices/residencyBootstrap';
 import type { Resident, ResidentType } from '@offgrid/models';
 
@@ -43,7 +44,7 @@ export function useResidentRows(active: boolean): Partial<Record<ModelRowType, R
   return residentsByRow(modelResidencyManager.getResidents());
 }
 
-/** Eject one row's resident via the owning service (its registered unload runs; lazy-reload on next use). */
+/** Eject one row's resident via the owning service: running work stops first, then its registered unload runs. */
 export function ejectResident(resident: Resident): Promise<boolean> {
-  return modelResidencyManager.evictByKey(resident.key);
+  return ejectResidentForUser(resident.key);
 }
