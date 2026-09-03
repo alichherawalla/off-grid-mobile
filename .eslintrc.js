@@ -37,7 +37,7 @@ module.exports = {
     // layer from `@offgrid/models/workspace` (+ constants from `@offgrid/models/catalog`). Value
     // imports from the package root are the second pipeline being removed. Types stay free.
     '@typescript-eslint/no-restricted-imports': [
-      'warn',
+      'error',
       {
         paths: [
           {
@@ -178,7 +178,7 @@ module.exports = {
       ],
       rules: {
         'no-restricted-syntax': [
-          'warn',
+          'error',
           {
             selector:
               "Property[key.name=/^(maxTokens|temperature|topP|timeoutMs)$/][value.type='Literal'], Property[key.name='thinking'][value.type='Literal'][value.raw=/^(true|false)$/]",
@@ -188,6 +188,10 @@ module.exports = {
           {
             selector: "Literal[value=/^image\\/(png|jpe?g|webp)$/]",
             message: 'Class 3: image MIME types are an artifact fact owned by shared.',
+          },
+          {
+            selector: "Literal[value=/\\.(gguf|safetensors)$/i], Literal[regex.pattern=/\\\\.(gguf|safetensors)/]",
+            message: 'Class 3: model file types are an artifact fact owned by shared (isGgufFile, MODEL_FILE_EXTENSION).',
           },
         ],
       },
