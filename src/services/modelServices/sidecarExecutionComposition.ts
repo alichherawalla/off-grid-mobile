@@ -1,5 +1,5 @@
 import { classifierIntent } from '@offgrid/models';
-import type { GenerationMessage, GenerationService } from '@offgrid/models';
+import type { GenerationMessage, WorkspaceGenerationPort } from '@offgrid/models';
 import { EMBEDDING_MODEL_FILENAME } from '../adapters/native/embeddingRuntimeAdapter';
 import {
   registerMobileSidecarExecutionPort,
@@ -16,7 +16,7 @@ function embeddingRoute(modality: 'embedding'): string {
 }
 
 export function composeMobileSidecarExecution(
-  service: GenerationService,
+  service: WorkspaceGenerationPort,
   refresh: () => Promise<unknown>,
 ): () => void {
   return registerMobileSidecarExecutionPort({

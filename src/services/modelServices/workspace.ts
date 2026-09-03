@@ -115,6 +115,16 @@ export const mobileWorkspace = createModelWorkspace({
   generation: { tools: lazyTools, conversations: lazyConversations },
   remote: lazyRemote,
   remoteServerId: generateId,
+  // Ports for the services the facade composes on demand; resolved at call time (module cycles).
+  lifecycle: () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./modelLifecycleBootstrap') as typeof import('./modelLifecycleBootstrap')).mobileModelLifecyclePorts(),
+  memoryAdvisory: () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./modelMemoryAdvisory') as typeof import('./modelMemoryAdvisory')).mobileModelMemoryAdvisoryPorts(),
+  classifier: () =>
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../adapters/native/classifierExecutionAdapter') as typeof import('../adapters/native/classifierExecutionAdapter')).classifierExecutionAdapter,
   remoteInventory: {
     // Mobile has no remote executor for the derived text routes yet; shared skips a route whose
     // executor is null.

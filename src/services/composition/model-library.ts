@@ -9,8 +9,6 @@ import {
   ModelFileImportApplicationService,
   ModelLibraryCommandService,
   ModelLibraryRegistryService,
-  ModelLifecycleApplicationService,
-  ModelMemoryAdvisoryService,
   ModelMetadataRepairCommandService,
   VisionRepairApplicationService,
 } from '@offgrid/models';
@@ -40,16 +38,6 @@ const ports3 = (): typeof import('../modelServices/modelLibraryCommands') =>
 const ports4 = (): typeof import('../modelServices/imageDownloadRecoveryApplication') =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('../modelServices/imageDownloadRecoveryApplication') as typeof import('../modelServices/imageDownloadRecoveryApplication');
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports5 = (): typeof import('../modelServices/modelLifecycleBootstrap') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../modelServices/modelLifecycleBootstrap') as typeof import('../modelServices/modelLifecycleBootstrap');
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports6 = (): typeof import('../modelServices/modelMemoryAdvisory') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../modelServices/modelMemoryAdvisory') as typeof import('../modelServices/modelMemoryAdvisory');
 // Resolved at call time: this module reaches back into the composition, and an eager import
 // would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
 const ports7 = (): typeof import('../adapters/models/library/imageArchiveImportAdapter') =>
@@ -84,10 +72,10 @@ export const imageDownloadRecovery = once(
   (): MobileImageDownloadRecovery => new ImageDownloadRecoveryService(ports4().mobileImageDownloadRecoveryPorts()),
 );
 export const modelLifecycle = once(
-  () => new ModelLifecycleApplicationService(ports9().mobileWorkspace.residency, ports5().mobileModelLifecyclePorts()),
+  () => ports9().mobileWorkspace.lifecycle,
 );
 export const modelMemoryAdvisory = once(
-  () => new ModelMemoryAdvisoryService(ports9().mobileWorkspace.residency, ports6().mobileModelMemoryAdvisoryPorts()),
+  () => ports9().mobileWorkspace.memoryAdvisory,
 );
 export function chatModelReadiness(
   ports: ConstructorParameters<typeof ChatModelReadinessService>[0],
