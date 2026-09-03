@@ -157,6 +157,11 @@ module.exports = {
   },
   overrides: [
     {
+      // The composition root is the ONE place shared services are constructed with this app's ports.
+      files: ['src/services/modelServices/workspace.ts', 'src/services/composition/**/*.ts'],
+      rules: { '@typescript-eslint/no-restricted-imports': 'off' },
+    },
+    {
       files: ['scripts/physical-sync/**/*.mjs'],
       parserOptions: {
         ecmaVersion: 2022,
