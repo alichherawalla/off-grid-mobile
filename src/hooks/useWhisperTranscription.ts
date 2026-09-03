@@ -5,7 +5,7 @@ import {
   nextPartialTranscript,
   remainingTranscribingDisplayMs,
   shouldAbsorbRealtimeStart,
-} from '@offgrid/speech';
+} from '@offgrid/application';
 import { mobileTranscriptionRuntime } from '../services/modelServices/transcriptionRuntimePort';
 import { useWhisperStore } from '../stores/whisperStore';
 import logger from '../utils/logger';

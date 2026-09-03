@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { answerTextForStreamingSpeech } from '@offgrid/speech';
+import { answerTextForStreamingSpeech } from '@offgrid/application';
 import { Message, Conversation, GenerationMeta } from '../types';
 import {
   stripStreamingControlTokens,

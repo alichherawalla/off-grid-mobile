@@ -7,7 +7,7 @@ import type { RecordProvenance } from '@offgrid/sync';
 import {
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
   DEFAULT_SPEAKER_DRAIN_MS,
-} from '@offgrid/speech';
+} from '@offgrid/application';
 import {
   DEFAULT_IMAGE_GUIDANCE,
   MOBILE_LITERT_SETTINGS_DEFAULTS,

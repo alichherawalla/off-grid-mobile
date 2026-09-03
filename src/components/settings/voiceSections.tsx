@@ -9,7 +9,7 @@ import {
   DEFAULT_SPEAKER_DRAIN_MS,
   secondsLabel,
   type VoiceTurnMode,
-} from '@offgrid/speech';
+} from '@offgrid/application';
 import { SegmentedRow, type PillOption } from './segmentedRow';
 
 /**
