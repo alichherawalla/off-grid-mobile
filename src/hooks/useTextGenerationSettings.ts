@@ -9,7 +9,7 @@ import {
   textSettingLimits,
   updateTextContextLength,
   updateTextOutputTokens,
-} from '@offgrid/models';
+} from '@offgrid/application';
 
 export interface NumericSettingModel {
   key: string;

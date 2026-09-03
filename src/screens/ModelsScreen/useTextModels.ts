@@ -41,7 +41,7 @@ import {
   recommendedCatalogModels,
   trendingCatalogModels,
   uniformDownloadId,
-} from '@offgrid/models';
+} from '@offgrid/application';
 
 function mapCuratedModel(
   m: (typeof RECOMMENDED_MODELS)[number],
@@ -195,9 +195,10 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     setDownloadedModels(models);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadDownloadedModels();
+    // The model library is the lifecycle owner; this hydration runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

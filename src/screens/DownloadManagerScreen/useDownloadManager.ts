@@ -12,7 +12,7 @@ import {
   hardwareService,
   backgroundDownloadService,
 } from '../../services';
-import { visionRepairMessage } from '@offgrid/models';
+import { uniformDownloadId, visionRepairMessage } from '@offgrid/application';
 import { useVoiceDownloadItems } from './useVoiceDownloadItems';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
@@ -24,7 +24,6 @@ import {
 import logger from '../../utils/logger';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { retryModelDownload } from '../../services/modelDownloadControls';
-import { uniformDownloadId } from '@offgrid/models';
 import { setImageDownloadAlertSink } from '../../services/adapters/downloads/imageDownloadAdapter';
 import { useEffect } from 'react';
 
