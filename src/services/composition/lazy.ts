@@ -13,5 +13,19 @@ export function lazyInstance<T extends object>(resolve: () => T): T {
     has(_target, property) {
       return property in resolve();
     },
+    // Tests spy on methods; forward property writes and definitions to the real instance.
+    set(_target, property, value) {
+      return Reflect.set(resolve(), property, value);
+    },
+    defineProperty(_target, property, descriptor) {
+      return Reflect.defineProperty(resolve(), property, descriptor);
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(resolve(), property);
+      return descriptor ? { ...descriptor, configurable: true } : undefined;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(resolve());
+    },
   });
 }

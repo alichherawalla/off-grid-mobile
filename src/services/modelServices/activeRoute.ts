@@ -16,11 +16,34 @@ export function activeRouteIsRemote(modality: ModelModality): boolean {
   return mobileLLMService.active(modality).model?.source === 'remote';
 }
 
+const snapshotCache = new Map<ModelModality, ActiveModelSnapshot>();
+
+/** The same object while the route's facts are unchanged: React's external-store hook needs stable snapshots. */
+function stableActiveRoute(modality: ModelModality): ActiveModelSnapshot {
+  const next = mobileLLMService.active(modality);
+  const previous = snapshotCache.get(modality);
+  if (
+    previous &&
+    previous.selectedId === next.selectedId &&
+    previous.selectedRouteId === next.selectedRouteId &&
+    previous.ready === next.ready &&
+    previous.model?.id === next.model?.id &&
+    previous.model?.serverId === next.model?.serverId &&
+    previous.model?.source === next.model?.source &&
+    previous.model?.loaded === next.model?.loaded &&
+    previous.model?.name === next.model?.name
+  ) {
+    return previous;
+  }
+  snapshotCache.set(modality, next);
+  return next;
+}
+
 /** Reactive read of the shared active route for UI: re-renders when inventory or selection changes. */
 export function useActiveMobileRoute(modality: ModelModality): ActiveModelSnapshot {
   return useSyncExternalStore(
     listener => mobileLLMService.subscribe(listener),
-    () => mobileLLMService.active(modality),
-    () => mobileLLMService.active(modality),
+    () => stableActiveRoute(modality),
+    () => stableActiveRoute(modality),
   );
 }
