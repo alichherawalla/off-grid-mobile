@@ -1,9 +1,10 @@
-import type { GenerationChunk } from '@offgrid/models';
-import type { RealtimeTranscriptionResult } from './whisperService';
 import {
-  mobileGenerationService,
-  refreshMobileModelServices,
-} from './modelServices';
+  modelsFailureMessage,
+  type GenerationResult,
+} from '@offgrid/application';
+import type { RealtimeTranscriptionResult } from './whisperService';
+import { applicationFacade } from './applicationFacade';
+import logger from '../utils/logger';
 
 export interface MobileTranscriptionOptions {
   language?: string;
@@ -22,7 +23,8 @@ export async function startMobileRealtimeTranscription(
   onResult: (result: RealtimeTranscriptionResult) => void,
   options: { language?: string; maxLength?: number; onError?: (error: unknown) => void } = {},
 ): Promise<void> {
-  await refreshMobileModelServices();
+  const models = applicationFacade().models;
+  await models.refresh();
   const controller = new AbortController();
   activeRequests.add(controller);
   let started = false;
@@ -32,8 +34,10 @@ export async function startMobileRealtimeTranscription(
     resolveStarted = resolve;
     rejectStarted = reject;
   });
-  mobileGenerationService.generate(
-    {
+  const consume = async (): Promise<void> => {
+    try {
+      for await (const event of models.generate({
+        request: {
       operation: {
         type: 'transcription',
         audio: { type: 'microphone' },
@@ -42,9 +46,13 @@ export async function startMobileRealtimeTranscription(
       },
       profile: 'transcription',
       signal: controller.signal,
-    },
-    {
-      chunk: chunk => {
+        },
+      })) {
+        if (event.type === 'failed') {
+          throw new Error(modelsFailureMessage(event.failure));
+        }
+        if (event.type === 'chunk') {
+          const chunk = event.chunk;
         if (chunk.progress?.completed === chunk.progress?.total) {
           started = true;
           resolveStarted();
@@ -57,13 +65,20 @@ export async function startMobileRealtimeTranscription(
             recordingTime: chunk.output.recordingTime ?? 0,
           });
         }
-      },
-    },
-  ).catch(error => {
-    if (!started) rejectStarted?.(error);
-    else options.onError?.(error);
-  }).finally(() => {
-    activeRequests.delete(controller);
+        }
+      }
+      if (!started) {
+        rejectStarted?.(new Error('Realtime transcription ended before it started.'));
+      }
+    } catch (error) {
+      if (!started) rejectStarted?.(error);
+      else options.onError?.(error);
+    } finally {
+      activeRequests.delete(controller);
+    }
+  };
+  consume().catch(error => {
+    logger.error('Realtime transcription error callback failed', error);
   });
   await startup;
 }
@@ -73,14 +88,16 @@ export async function executeMobileTranscription(
   fileUri: string,
   options: MobileTranscriptionOptions = {},
 ): Promise<string> {
-  await refreshMobileModelServices();
+  const models = applicationFacade().models;
+  await models.refresh();
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });
   activeRequests.add(controller);
   try {
-    const result = await mobileGenerationService.generate(
-      {
+    let result: GenerationResult | null = null;
+    for await (const event of models.generate({
+      request: {
         operation: {
           type: 'transcription',
           audio: { type: 'audio', uri: fileUri, mimeType: 'audio/wav' },
@@ -89,14 +106,17 @@ export async function executeMobileTranscription(
         profile: 'transcription',
         signal: controller.signal,
       },
-      {
-        chunk: (chunk: GenerationChunk) => {
-          const progress = chunk.progress;
-          if (progress?.total) options.onProgress?.(progress.completed / progress.total);
-        },
-      },
-    );
-    if (result.output.type !== 'transcription') {
+    })) {
+      if (event.type === 'chunk') {
+        const progress = event.chunk.progress;
+        if (progress?.total) options.onProgress?.(progress.completed / progress.total);
+      } else if (event.type === 'failed') {
+        throw new Error(modelsFailureMessage(event.failure));
+      } else if (event.type === 'result') {
+        result = event.result;
+      }
+    }
+    if (!result || result.output.type !== 'transcription') {
       throw new TypeError('Transcription returned an invalid result');
     }
     return result.output.text;
