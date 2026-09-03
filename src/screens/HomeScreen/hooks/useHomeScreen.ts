@@ -26,10 +26,12 @@ import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
 import { useActiveLocalModelId, useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
-import { resolveAutoDiscoverMigration } from '@offgrid/models';
+import {
+  remoteServerModelOptions,
+  resolveAutoDiscoverMigration,
+} from '@offgrid/application';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
-import { remoteServerModelOptions } from '@offgrid/models';
 import { ejectAllModelsForUser } from '../../../services/modelServices/ejectModelsForUser';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.

@@ -12,7 +12,7 @@ import {
   REMOTE_LAN_PROVIDER_LABELS,
   remoteLanScanKinds,
   type RemoteLanProviderKind,
-} from '@offgrid/models';
+} from '@offgrid/application';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,

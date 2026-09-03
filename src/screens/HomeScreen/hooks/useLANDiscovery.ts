@@ -1,10 +1,12 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert, type AlertState } from '../../../components';
 import { applicationFacade } from '../../../services/applicationFacade';
-import { modelsFailureMessage } from '@offgrid/application';
-import type { DiscoveredRemoteServer } from '@offgrid/models';
+import {
+  modelsFailureMessage,
+  shouldAutoDiscoverRemoteModels,
+  type DiscoveredRemoteServer,
+} from '@offgrid/application';
 import { useAppStore } from '../../../stores/appStore';
-import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
 import type { HomeScreenNavigationProp } from './types';
 import logger from '../../../utils/logger';
 

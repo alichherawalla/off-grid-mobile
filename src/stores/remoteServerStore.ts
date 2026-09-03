@@ -12,7 +12,7 @@ import { RemoteServer, RemoteModel } from '../types';
 import {
   migrateRemoteServerConfiguration,
   type RemoteServerHealth,
-} from '@offgrid/models';
+} from '@offgrid/application';
 
 interface RemoteServerState {
   /** Configured remote servers */
