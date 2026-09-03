@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import { ToolCall, ToolResult } from './types';
-import type { RagSearchResult } from '../modelServices/bootstrap/ragBootstrap';
+import type { SearchResult } from '@offgrid/application';
 import logger from '../../utils/logger';
 import {
   braveSearchUrl,
@@ -153,6 +153,7 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   const result = await applicationFacade().rag.search(projectId, query);
   if (result.chunks.length === 0) return `No results found for "${query}" in the knowledge base.`;
   return result.chunks
-    .map((c: RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
+    .map((chunk: SearchResult['chunks'][number], index: number) =>
+      `[${index + 1}] ${chunk.name} (part ${chunk.position + 1}):\n${chunk.content}`)
     .join('\n\n---\n\n');
 }

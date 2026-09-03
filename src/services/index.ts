@@ -23,7 +23,6 @@ export { imageGenerationService } from './imageGenerationService';
 export type { ImageGenerationState } from './imageGenerationService';
 export { documentService } from './documentService';
 export { contextCompactionService } from './contextCompaction';
-export { ragService, retrievalService } from './modelServices/bootstrap/ragBootstrap';
 // Providers
 // HTTP Client
 // Remote Server Manager
