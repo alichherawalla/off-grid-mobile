@@ -10,6 +10,10 @@ import {
   isPrivateNetworkUrl,
   normalizeToolUrl,
   parseBraveResults,
+  htmlToMarkdown,
+  readUrlResultText,
+  WEB_TOOL_TIMEOUTS_MS,
+  formatFileSize,
 } from '@offgrid/models';
 
 function makeResult(call: ToolCall, start: number, opts: { content: string; error?: string }): ToolResult {
@@ -61,7 +65,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
 
 async function handleWebSearch(query: string): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), WEB_TOOL_TIMEOUTS_MS.search);
   try {
     const response = await fetch(braveSearchUrl(query), {
       signal: controller.signal,
@@ -90,7 +94,7 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
     parts.push(await collectDeviceSection('Memory', async () => {
       const total = await DeviceInfo.getTotalMemory();
       const used = await DeviceInfo.getUsedMemory();
-      return `Memory:\n  Total: ${formatBytes(total)}\n  Used: ${formatBytes(used)}\n  Available: ${formatBytes(total - used)}`;
+      return `Memory:\n  Total: ${formatFileSize(total)}\n  Used: ${formatFileSize(used)}\n  Available: ${formatFileSize(total - used)}`;
     }));
   }
 
@@ -98,7 +102,7 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
     parts.push(await collectDeviceSection('Storage', async () => {
       const free = await DeviceInfo.getFreeDiskStorage();
       const total = await DeviceInfo.getTotalDiskCapacity();
-      return `Storage:\n  Total: ${formatBytes(total)}\n  Free: ${formatBytes(free)}`;
+      return `Storage:\n  Total: ${formatFileSize(total)}\n  Free: ${formatFileSize(free)}`;
     }));
   }
 
@@ -120,51 +124,12 @@ async function handleGetDeviceInfo(infoType = 'all'): Promise<string> {
   return parts.join('\n\n');
 }
 
-function nodeToText(node: any): string {
-  if (node.nodeType === 3) return node.text ?? '';
-  const tag = (node.tagName ?? '').toLowerCase();
-  const skip = ['script','style','nav','header','footer','aside','noscript','iframe','form','button','figure','picture','img','video','audio','svg','canvas'];
-  if (skip.includes(tag)) return '';
-  const children = (node.childNodes ?? []).map(nodeToText).join('');
-  if (['h1','h2','h3'].includes(tag)) return `\n\n## ${children.trim()}\n`;
-  if (tag === 'h4' || tag === 'h5' || tag === 'h6') return `\n\n### ${children.trim()}\n`;
-  if (tag === 'p') return `\n\n${children.trim()}`;
-  if (tag === 'li') return `\n- ${children.trim()}`;
-  if (tag === 'br') return '\n';
-  if (tag === 'blockquote') return `\n> ${children.trim()}\n`;
-  if (tag === 'code' || tag === 'pre') return `\`${children.trim()}\``;
-  return children;
-}
-
-function htmlToMarkdown(html: string): string {
-  const { parse } = require('node-html-parser'); // NOSONAR
-  const root = parse(html);
-
-  // strip boilerplate
-  ['script','style','nav','header','footer','aside','noscript','iframe','form','button'].forEach(
-    tag => root.querySelectorAll(tag).forEach((el: any) => el.remove()),
-  );
-
-  // prefer semantic content containers
-  const content = root.querySelector('article')
-    ?? root.querySelector('[role="main"]')
-    ?? root.querySelector('main')
-    ?? root.querySelector('.post-content, .article-body, .entry-content, .content')
-    ?? root.querySelector('body')
-    ?? root;
-
-  return nodeToText(content)
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 async function handleReadUrl(rawUrl: string): Promise<string> {
-  const MAX_CHARS = 4000;
   const url = normalizeToolUrl(rawUrl);
   if (isPrivateNetworkUrl(url)) throw new Error('Blocked: cannot fetch private/local network URLs');
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), WEB_TOOL_TIMEOUTS_MS.read);
   try {
     // On-device fetch + parse (privacy-preserving — no third-party proxy)
     const response = await fetch(url, {
@@ -175,12 +140,7 @@ async function handleReadUrl(rawUrl: string): Promise<string> {
       },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    const html = await response.text();
-    const text = htmlToMarkdown(html);
-
-    if (!text) return `The page at ${url} returned no readable content.`;
-
-    return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n\n[Content truncated]` : text;
+    return readUrlResultText(htmlToMarkdown(await response.text()), { url });
   } catch (e: any) {
     logger.error(`[Tools] read_url FAILED for "${url}": ${e?.message || e}`);
     throw e;
@@ -195,10 +155,4 @@ async function handleSearchKnowledgeBase(query: string, projectId?: string): Pro
   return result.chunks
     .map((c: RagSearchResult, i: number) => `[${i + 1}] ${c.name} (part ${c.position + 1}):\n${c.content}`)
     .join('\n\n---\n\n');
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  return bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
