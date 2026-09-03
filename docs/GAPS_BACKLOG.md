@@ -2118,3 +2118,17 @@ the real workspace at the next touch.
 An empty `downloads.json` appeared in the desktop repo root after a vitest run: `desktop-model-download-service`
 persists to `path.join(modelsDir(), 'downloads.json')`, so some test hands it an empty `modelsDir`. Pin the models
 directory to a temp dir in that test (see "Desktop CI hermeticity"). The stray file was removed by hand.
+
+## Insecure redirect must be refused natively (open, 2026-09-03, review thread on #635)
+
+`src/services/httpClient.ts` rejects an HTTPS to HTTP credential downgrade only after XMLHttpRequest has
+followed the redirect, so a 307 to an HTTP target can carry the JSON body and Authorization before the
+check runs. Fix: a native redirect policy (OkHttp interceptor on Android, URLSession delegate on iOS) that
+refuses HTTPS to HTTP before forwarding. Device test on both platforms: an HTTPS endpoint returning 307 to an
+HTTP recorder; the recorder receives neither the body nor Authorization.
+
+## CI: fail fast when shared cannot be provisioned (open, 2026-09-03, review thread on #635)
+
+Fork pull requests get no secrets, so the shared checkout is skipped and `npm ci` fails on the
+`file:../shared/...` dependencies with an unrelated-looking error. Decision: forks are not supported (shared
+is not published). Make the checkout step fail with an explicit message when `PRO_SUBMODULE_PAT` is empty.
