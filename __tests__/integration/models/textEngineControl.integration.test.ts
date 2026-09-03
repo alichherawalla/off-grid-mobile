@@ -6,7 +6,6 @@ import { mobileWorkspace } from '../../../src/services/modelServices/workspace';
 import {
   localLiteRTInventoryAdapter,
   localLlamaInventoryAdapter,
-  mobileInventoryAdapters,
 } from '../../../src/services/modelServices/inventoryAdapters';
 import { useAppStore } from '../../../src/stores';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
