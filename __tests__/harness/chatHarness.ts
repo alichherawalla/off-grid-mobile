@@ -20,6 +20,7 @@
  *   await h.send('what is the capital of France', { text: 'Paris.' });  // types, presses send, awaits reply
  *   expect(h.view.queryByText(/Paris\./)).not.toBeNull();
  */
+import { activeLocalModelId } from '../../src/services/modelServices/activeRoute';
 import {
   installNativeBoundary,
   requireRTL,
@@ -180,7 +181,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   rtl.fireEvent.press(rows[0]);
   await rtl.waitFor(
     () => {
-      expect(useAppStore.getState().activeModelId).toBe('m');
+      // The selection is the shared active route; the store carries no selection field any more.
+      expect(activeLocalModelId('text')).toBe('m');
     },
     { timeout: 4000 },
   );
