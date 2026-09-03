@@ -1,4 +1,4 @@
-import { remoteServerModelOptions } from '@offgrid/models';
+import { remoteServerModelOptions } from '@offgrid/application';
 import type { RemoteModel, RemoteServer } from '../types';
 
 /**
