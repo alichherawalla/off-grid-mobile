@@ -6,7 +6,7 @@ import { MainTabParamList } from '../../navigation/types';
 import Icon from 'react-native-vector-icons/Feather';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { SPACING } from '../../constants';
-import { RECOMMENDED_MODELS } from '@offgrid/models';
+import { RECOMMENDED_MODELS } from '@offgrid/application';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useModelsScreen } from './useModelsScreen';
 import { createStyles } from './styles';

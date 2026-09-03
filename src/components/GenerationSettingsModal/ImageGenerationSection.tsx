@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { isFastClassifierModel } from '@offgrid/models';
+import { isFastClassifierModel } from '@offgrid/application';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AdvancedToggle } from '../AdvancedToggle';

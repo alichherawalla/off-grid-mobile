@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useThemedStyles, useTheme } from '../theme';
 import { CREDIBILITY_LABELS } from '../constants';
-import { QUANTIZATION_INFO } from '@offgrid/models';
+import { QUANTIZATION_INFO } from '@offgrid/application';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { needsVisionRepair } from '../utils/visionRepair';
 import { getMmProjFileSize } from '../utils/modelHelpers';
