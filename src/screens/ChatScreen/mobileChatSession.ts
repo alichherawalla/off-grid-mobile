@@ -278,7 +278,8 @@ function chatRequestDefaults(): ChatTurn['request']['request'] {
   const selected = state.downloadedModels.find(
     model => model.id === activeLocalModelId('text'),
   );
-  return chatGenerationRequestDefaults({
+  // The 'chat' profile carries the route policy (no silent fallback on a person's own turn) and timeout.
+  return { profile: 'chat', ...chatGenerationRequestDefaults({
     runtime: selected && isLiteRTModel(selected) ? 'litert' : 'standard',
     standard: {
       maxTokens: state.settings.maxTokens,
@@ -294,7 +295,7 @@ function chatRequestDefaults(): ChatTurn['request']['request'] {
     thinkingEnabled: state.settings.thinkingEnabled,
     reasoningBudget: state.settings.reasoningBudget,
     maxToolCalls: state.settings.maxToolCalls,
-  });
+  }) };
 }
 
 /** Generation, repository, and session options. Shared owns the turn lifecycle. */
@@ -391,7 +392,6 @@ export const mobileChatSession = {
         projectId: conversation?.projectId,
         userMessage: generationMessage(message),
         operation: recordedOperation,
-        allowFallback: false,
         request: chatRequestDefaults(),
       });
     } finally {
@@ -418,7 +418,6 @@ export const mobileChatSession = {
         conversationId,
         turnId,
         operation,
-        allowFallback: false,
         request: chatRequestDefaults(),
       });
     } finally {

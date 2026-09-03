@@ -26,7 +26,6 @@ export function composeMobileSidecarExecution(
         profile: options.profile,
         operation: { type: 'text' }, messages,
         reasoning: { enabled: false }, maxTokens: options.maxTokens,
-        allowFallback: false,
       }, { chunk: chunk => { if (chunk.content) options.onText?.(chunk.content); } });
       return result.content;
     },
@@ -34,7 +33,7 @@ export function composeMobileSidecarExecution(
       await refresh();
       const result = await service.generate({
         operation: { type: 'embedding', inputs },
-        routeId: embeddingRoute('embedding'), allowFallback: false,
+        routeId: embeddingRoute('embedding'), profile: 'embedding',
       });
       if (result.output.type !== 'embedding') throw new TypeError('Embedding returned an invalid result');
       return result.output.vectors;
@@ -43,7 +42,7 @@ export function composeMobileSidecarExecution(
       await refresh();
       const result = await service.generate({
         operation: { type: 'classifier', input, labels: ['image', 'text'] },
-        routeId, allowFallback: false,
+        routeId, profile: 'structured-step',
       });
       if (result.output.type !== 'classification') throw new TypeError('Classification returned an invalid result');
       return classifierIntent(result.output);

@@ -41,7 +41,7 @@ export async function executeMobileImageGeneration(
       {
         operation: { type: 'image', ...operation },
         routeId,
-        allowFallback: false,
+        profile: 'image-generation',
         signal: options.signal,
       },
       {

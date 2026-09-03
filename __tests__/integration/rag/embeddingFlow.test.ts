@@ -122,7 +122,7 @@ describe('Embedding Flow Integration', () => {
           inputs: ['Machine learning is a subset of artificial intelligence.\n\nDeep learning uses neural networks with many layers.'],
         },
         routeId: expect.any(String),
-        allowFallback: false,
+        profile: 'embedding',
       });
       expect(decodeModelRouteId(mockSharedGenerate.mock.calls[0][0].routeId)).toEqual({
         adapterId: 'mobile:local:llama.rn-sidecar:embedding',
@@ -229,7 +229,7 @@ describe('Embedding Flow Integration', () => {
       expect(mockSharedGenerate).toHaveBeenCalledWith({
         operation: { type: 'embedding', inputs: ['Old chunk one', 'Old chunk two'] },
         routeId: expect.any(String),
-        allowFallback: false,
+        profile: 'embedding',
       });
       expect(decodeModelRouteId(mockSharedGenerate.mock.calls[0][0].routeId)).toEqual({
         adapterId: 'mobile:local:llama.rn-sidecar:embedding',

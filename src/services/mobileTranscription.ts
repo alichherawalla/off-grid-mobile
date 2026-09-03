@@ -40,9 +40,8 @@ export async function startMobileRealtimeTranscription(
         language: options.language,
         maxLength: options.maxLength,
       },
-      allowFallback: false,
+      profile: 'transcription',
       signal: controller.signal,
-      timeoutMs: 60 * 60_000,
     },
     {
       chunk: chunk => {
@@ -87,7 +86,7 @@ export async function executeMobileTranscription(
           audio: { type: 'audio', uri: fileUri, mimeType: 'audio/wav' },
           language: options.language,
         },
-        allowFallback: false,
+        profile: 'transcription',
         signal: controller.signal,
       },
       {
