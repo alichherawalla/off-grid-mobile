@@ -5,7 +5,7 @@ import {
   isSupportingChatContext,
   splitInlineReasoning,
   type ChatStreamPreviewRow,
-} from '@offgrid/sync';
+} from '@offgrid/application';
 import { Message } from '../../types';
 import { visibleMessages } from '../../utils/visibleMessages';
 export type ChatMessageItem = Message & {

@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import {
   projectPersonalMeshActivationFailure,
   type PersonalMeshActivationFailureProjection,
-} from '@offgrid/sync';
+} from '@offgrid/application';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
