@@ -7,7 +7,7 @@ import { type AutoSetupCatalogBoundaries } from '../../../src/services/autoSetup
 import {
   createAutoSetupSession,
   type AutoSetupDownloadBoundaries,
-} from '../../../src/services/autoSetupService';
+} from '../../../src/services/composition/guided-setup';
 import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
 import type {
   DownloadProvider,

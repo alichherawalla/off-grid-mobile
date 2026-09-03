@@ -1,4 +1,4 @@
-// Wires @offgrid/sync's DiscoveryOrchestrator to the package's RN mDNS adapter (RnDiscovery), fed
+// Composition root: wires @offgrid/sync's DiscoveryOrchestrator to the package's RN mDNS adapter (RnDiscovery), fed
 // an injected react-native-zeroconf instance (Android NSD / iOS Bonjour). The orchestrator browses
 // for peers advertising `_offgrid._tcp.local` — the same service the desktop Node adapter uses, so
 // phone and laptop find each other — and either auto-reconnects a known device or surfaces a new

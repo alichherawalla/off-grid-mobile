@@ -1,9 +1,5 @@
 import { whisperService } from '../whisperService';
-import {
-  TranscriptionModelWorkflow,
-  WHISPER_MODELS,
-  type TranscriptionModelWorkflowState,
-} from '@offgrid/models';
+import { WHISPER_MODELS, type TranscriptionModelWorkflowState } from '@offgrid/models';
 import { mobileResidencyIntents } from './residencyIntents';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { selectLocalTranscriptionModelOnDemand } from './modelCommandApplication';
@@ -62,21 +58,15 @@ export const mobileTranscriptionRuntime = {
   ) => whisperService.isModelDownloaded(...args),
 };
 
-/** Shared workflow with Mobile native, filesystem, route, and UI projection ports. */
-export const transcriptionModelIntents = new TranscriptionModelWorkflow({
+/** Projection, route, and inventory ports the shared workflow needs beyond the runtime. */
+export const mobileTranscriptionWorkflowPorts = {
   state: () => requireProjection().state(),
-  project: patch => requireProjection().project(patch),
-  modelPath: modelId => mobileTranscriptionRuntime.modelPath(modelId),
-  loadedModelPath: () => mobileTranscriptionRuntime.loadedModelPath(),
-  download: (modelId, onProgress) =>
-    mobileTranscriptionRuntime.download(modelId, onProgress),
-  ensureLoaded: modelId => mobileTranscriptionRuntime.ensureLoaded(modelId),
-  unload: modelId => mobileTranscriptionRuntime.unload(modelId),
-  delete: modelId => mobileTranscriptionRuntime.delete(modelId),
-  listDownloaded: () => mobileTranscriptionRuntime.listDownloaded(),
-  isDownloaded: modelId => mobileTranscriptionRuntime.isDownloaded(modelId),
+  project: (patch: Partial<TranscriptionModelWorkflowState>) => requireProjection().project(patch),
   selectRoute: selectLocalTranscriptionModelOnDemand,
   refreshInventory: async () => {
     await lifecycleProjectionPort.refreshInventory();
   },
-});
+};
+
+/** Constructed in the composition root; re-exported so every caller keeps one import. */
+export { transcriptionModelIntents } from '../composition/transcription';

@@ -6,7 +6,7 @@ import {
   type RemoteServerEditorFailure,
   type RemoteServerEditorModelIds,
 } from '../../services/modelServices/remoteServerEditorApplication';
-import { remoteServerEditorApplication } from '../../services/modelServices/remoteServerEditorComposition';
+import { remoteServerEditorApplication } from '../../services/composition/remote-server-editor';
 import type {
   RemoteMediaModelIds,
   RemoteModel,

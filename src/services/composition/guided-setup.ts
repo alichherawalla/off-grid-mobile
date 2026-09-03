@@ -6,17 +6,17 @@ import {
   type GuidedSetupSession,
   type GuidedSetupTierPlan,
 } from '@offgrid/models';
-import { modelDownloadRegistry } from './modelServices/downloadRegistryBootstrap';
-import type { ModelDownload, ModelDownloadStartRequest } from './modelServices/downloadTypes';
-import { useAppStore } from '../stores';
+import { modelDownloadRegistry } from '../modelServices/downloadRegistryBootstrap';
+import type { ModelDownload, ModelDownloadStartRequest } from '../modelServices/downloadTypes';
+import { useAppStore } from '../../stores';
 import {
   loadAutoSetupCompatibleCatalog,
   type AutoSetupImagePayload,
   type AutoSetupSttPayload,
   type AutoSetupTextPayload,
   type AutoSetupCatalogBoundaries,
-} from './autoSetupCatalog';
-import { selectMobileModel } from './modelServices';
+} from '../autoSetupCatalog';
+import { selectMobileModel } from '../modelServices';
 
 export { guidedSetupDownloadId as autoSetupDownloadId } from '@offgrid/models';
 
@@ -66,7 +66,7 @@ function toDownloadRequest(item: GuidedSetupCandidate<SetupPayload>): ModelDownl
   return { modelType: 'stt', modelId: (item.payload as AutoSetupSttPayload).modelId };
 }
 
-/** Mobile composition root. Shared owns the complete Auto Setup use case. */
+/** Composition root: shared owns the complete Auto Setup use case; these are Mobile's ports. */
 export function createAutoSetupSession(
   boundaries: AutoSetupSessionBoundaries = {},
 ): AutoSetupSession {

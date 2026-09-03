@@ -393,13 +393,6 @@ class LLMService {
     this.isGenerating = false;
     if (stopFailure) throw stopFailure;
   }
-  /** Wait (bounded) until no completion is in flight. Returns true when idle. */
-  async waitForIdle(timeoutMs: number = 15000): Promise<boolean> {
-    if (!this.isGenerating) return true;
-    const active = this.activeCompletionPromise; // already swallow-wrapped, never rejects
-    if (active !== null) await Promise.race([active, new Promise((r) => setTimeout(r, timeoutMs))]);
-    return !this.isGenerating;
-  }
   async clearKVCache(clearData: boolean = false): Promise<void> {
     if (!this.context || this.isGenerating) return;
     try { await (this.context as any).clearCache(clearData); } catch (e) { logger.log('[LLM] Clear cache error:', e); }

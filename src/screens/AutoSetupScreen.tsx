@@ -12,7 +12,7 @@ import {
   createAutoSetupSession,
   type AutoSetupPlan,
   type AutoSetupSession,
-} from '../services/autoSetupService';
+} from '../services/composition/guided-setup';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 

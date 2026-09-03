@@ -9,7 +9,7 @@ import { ToolRoutingService } from '@offgrid/models';
 import {
   mobileToolEmbeddingCache,
   resetMobileToolEmbeddingCache,
-} from '../../../src/services/adapters/native/toolEmbeddingAdapter';
+} from '../../../src/services/composition/tools';
 
 const tool = (name: string, description = `does ${name}`) => ({
   name,
@@ -24,7 +24,7 @@ describe('toolEmbeddingRouter (F6 — persistent embedding cache)', () => {
   const mockEmbed = jest.fn<Promise<number[][]>, [readonly string[]]>();
   const select = (query: string, tools = TOOLS, topK = 4) => new ToolRoutingService({
     embedding: { embed: mockEmbed },
-    embeddingCache: mobileToolEmbeddingCache,
+    embeddingCache: mobileToolEmbeddingCache(),
   }).select({
     messages: [{ role: 'user', content: query }],
     builtInTools: [],

@@ -120,6 +120,33 @@ module.exports = {
             allowTypeImports: true,
           },
         ],
+        // Class 4, widened (HEXAGONAL_AUDIT_2026-09-03b M1, M10): a shared service class or a
+        // `create*` factory imported as a value outside the roots is app-side composition, whatever
+        // package it comes from; a deep entry of @offgrid/models is the second pipeline by another
+        // door. Types stay free. `pro/**` keeps these at warn until its own composition root lands.
+        patterns: [
+          {
+            group: ['@offgrid/models/*', '!@offgrid/models/workspace', '!@offgrid/models/catalog'],
+            message:
+              'Class 4: a deep entry of @offgrid/models bypasses the facade. Import from @offgrid/models, @offgrid/models/workspace, or @offgrid/models/catalog.',
+            allowTypeImports: true,
+          },
+          {
+            group: [
+              '@offgrid/models',
+              '@offgrid/sync',
+              '@offgrid/use',
+              '@offgrid/speech',
+              '@offgrid/rag',
+              '@offgrid/clipboard',
+            ],
+            importNamePattern:
+              '^(create[A-Z]\\w*(Resolver|Session|Workspace|Service|Coordinator|Adapter|Engine|Ports?|Application|Runtime|Controller|Manager|Registry|Client|Bridge|Transport|Queue|Cache|Workflow)|[A-Z]\\w*(Service|Engine|Bridge|Transport|Timer|Coordinator|Orchestrator|Manager|Registry|Workflow|Cache|Queue|Controller|Authority|Client|Channel))$',
+            message:
+              'Class 4: a shared service class or create* factory is constructed only in src/services/composition/** (or workspace.ts). Import the composed instance instead.',
+            allowTypeImports: true,
+          },
+        ],
       },
     ],
     // Code quality (built-in)
@@ -181,9 +208,17 @@ module.exports = {
           'error',
           {
             selector:
-              "Property[key.name=/^(maxTokens|temperature|topP|timeoutMs)$/][value.type='Literal'], Property[key.name='thinking'][value.type='Literal'][value.raw=/^(true|false)$/]",
+              "Property[key.name=/^(maxTokens|temperature|topP|timeoutMs|allowFallback|partialOutputPolicy|steps|cfg|sampler|seed)$/][value.type='Literal'], Property[key.name='thinking'][value.type='Literal'][value.raw=/^(true|false)$/]",
             message:
-              'Class 1: a generation parameter is a pipeline decision. Use a shared request builder.',
+              'Class 1: a generation parameter is a pipeline decision. Use a shared request builder or profile.',
+          },
+          {
+            // A computed literal (`60 * 60_000`) or a default parameter (`timeoutMs = 120_000`) is the
+            // same decision wearing a different node type.
+            selector:
+              "Property[key.name=/^(maxTokens|temperature|topP|timeoutMs)$/][value.type='BinaryExpression'], AssignmentPattern[left.name=/^(maxTokens|temperature|topP|timeoutMs)$/][right.type=/^(Literal|BinaryExpression)$/]",
+            message:
+              'Class 1: a generation parameter is a pipeline decision. Take it from a shared profile or policy; never compute or default it here.',
           },
           {
             selector: "Literal[value=/^image\\/(png|jpe?g|webp)$/]",

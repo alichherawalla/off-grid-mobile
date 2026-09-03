@@ -1,7 +1,7 @@
-import { createSelectedModelResolver, selectedModelId } from '@offgrid/models';
+import { selectedModelId } from '@offgrid/models';
 import type { DownloadedModel } from '../../types';
+import { selectedTextModel } from '../composition/selected-text-model';
 import { useAppStore } from '../../stores/appStore';
-import logger from '../../utils/logger';
 import { llmService } from '../llm';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { activeModelSnapshot } from './modelStateSnapshot';
@@ -21,16 +21,8 @@ import {
 } from './modelMemoryAdvisory';
 import { getResourceUsage as readResourceUsage } from './modelStateNativeProjection';
 
-const selectedTextModel = createSelectedModelResolver<DownloadedModel>({
-  read: () => {
-    const state = useAppStore.getState();
-    return { models: state.downloadedModels, selectedId: activeLocalModelId('text') };
-  },
-  warn: message => logger.warn(message),
-});
-
 export function resolveSelectedTextModel(): DownloadedModel | null {
-  return selectedTextModel();
+  return selectedTextModel()();
 }
 
 export function selectedTextModelId(): string | null {

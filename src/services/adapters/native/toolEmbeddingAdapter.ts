@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  PersistentToolEmbeddingCache,
-  type PersistedToolEmbedding,
-  type ToolEmbeddingExecutionPort,
+import type {
+  PersistedToolEmbedding,
+  ToolEmbeddingExecutionPort,
+  ToolEmbeddingStoragePort,
 } from '@offgrid/models';
 import logger from '../../../utils/logger';
 import { executeMobileEmbedding } from '../../mobileSidecarGeneration';
@@ -10,7 +10,7 @@ import { executeMobileEmbedding } from '../../mobileSidecarGeneration';
 const CACHE_STORAGE_KEY = 'tool-embedding-cache-v1';
 
 /** React Native persistence only. Shared owns identity, validation, ranking, and eviction. */
-export const mobileToolEmbeddingCache = new PersistentToolEmbeddingCache({
+export const mobileToolEmbeddingStorage: ToolEmbeddingStoragePort = {
   async read() {
     try {
       const raw = await AsyncStorage.getItem(CACHE_STORAGE_KEY);
@@ -39,13 +39,9 @@ export const mobileToolEmbeddingCache = new PersistentToolEmbeddingCache({
       logger.warn(`[ToolRouter] failed to persist embedding cache: ${String(error)}`);
     }
   },
-});
+};
 
 /** Native embedding execution port. It contains no routing or ranking policy. */
 export const mobileToolEmbeddingPort: ToolEmbeddingExecutionPort = {
   embed: inputs => executeMobileEmbedding([...inputs]),
 };
-
-export function resetMobileToolEmbeddingCache(): void {
-  mobileToolEmbeddingCache.clear();
-}

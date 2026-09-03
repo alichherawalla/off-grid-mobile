@@ -25,8 +25,8 @@ import {
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
-import { buildSyncEngine } from './engine';
-import { buildDiscovery } from './discovery';
+import { buildSyncEngine } from '../composition/sync-engine';
+import { buildDiscovery } from '../composition/sync-discovery';
 import { IosProximityAdapter } from './nativeProximity';
 import { nativeSyncLanAddress } from './nativeBlobChannel';
 import logger from '../../utils/logger';

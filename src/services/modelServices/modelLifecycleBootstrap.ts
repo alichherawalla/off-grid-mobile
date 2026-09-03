@@ -11,7 +11,7 @@ import type { ModelLifecycleApplicationService } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId, activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
-import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
+import { nativeModelLifecycle, mobileModelLoadTimeoutMs } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { estimateTextModelMemoryMB } from '../modelMemory';
@@ -116,7 +116,7 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
         handlers: {
           load: () => nativeModelLifecycle.loadTextModel(
             modelId,
-            command.timeoutMs ?? 120_000,
+            command.timeoutMs ?? mobileModelLoadTimeoutMs('text'),
             command.override || modelResidencyManager.hasSessionOverride(modelId),
           ),
           unload: () => nativeModelLifecycle.unloadTextModel(true),
@@ -130,7 +130,7 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
         spec: await imageSpec(modelId),
         routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
         handlers: {
-          load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? 180_000),
+          load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? mobileModelLoadTimeoutMs('image')),
           unload: () => nativeModelLifecycle.unloadImageModel(true),
         },
         forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
@@ -169,7 +169,7 @@ const lifecycleService = (): ModelLifecycleApplicationService => modelLifecycle(
 
 export async function loadTextModel(
   modelId: string,
-  timeoutMs = 120_000,
+  timeoutMs?: number,
   options?: LoadOptions,
 ): Promise<void> {
   const acquired = await lifecycleService().load('text', modelId, {
@@ -181,7 +181,7 @@ export async function loadTextModel(
 
 export async function loadImageModel(
   modelId: string,
-  timeoutMs = 180_000,
+  timeoutMs?: number,
   options?: LoadOptions,
 ): Promise<void> {
   const acquired = await lifecycleService().load('image', modelId, {

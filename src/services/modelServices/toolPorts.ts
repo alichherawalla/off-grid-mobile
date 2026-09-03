@@ -21,10 +21,8 @@ import { getToolExtensions } from '../tools/extensions';
 import { mobileTextEngineControl } from './textEngineControl';
 import { isMcpEnabled } from '../mcpContextBoost';
 import { executeMobileText } from '../mobileSidecarGeneration';
-import {
-  mobileToolEmbeddingCache,
-  mobileToolEmbeddingPort,
-} from '../adapters/native/toolEmbeddingAdapter';
+import { mobileToolEmbeddingPort } from '../adapters/native/toolEmbeddingAdapter';
+import { mobileToolEmbeddingCache } from '../composition/tools';
 import { clearMobileEphemeralTextState } from './generationAdapters';
 import type { ToolCall } from '../tools/types';
 
@@ -66,7 +64,7 @@ export const mobileToolExecutor: ToolExecutorPort = {
 export function mobileToolRoutingPorts(): ConstructorParameters<typeof ToolRoutingService>[0] {
   return {
     embedding: mobileToolEmbeddingPort,
-    embeddingCache: mobileToolEmbeddingCache,
+    embeddingCache: mobileToolEmbeddingCache(),
     modelSelection: generateToolRoutingText,
   };
 }

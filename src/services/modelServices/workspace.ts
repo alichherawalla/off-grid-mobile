@@ -116,7 +116,12 @@ export const mobileWorkspace = createModelWorkspace({
   remote: lazyRemote,
   remoteServerId: generateId,
   remoteInventory: {
-    adapterId: (modality, server) => mobileExecutionAdapterId('remote', server.id, modality),
+    // Mobile has no remote executor for the derived text routes yet; shared skips a route whose
+    // executor is null.
+    adapterId: (modality, server) =>
+      modality === 'classifier' || modality === 'tool_selection' || modality === 'computer_use'
+        ? null
+        : mobileExecutionAdapterId('remote', server.id, modality),
     status: server => remoteStatus(server.id),
   },
 });

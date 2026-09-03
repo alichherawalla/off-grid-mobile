@@ -12,7 +12,7 @@ import { ToolRoutingService } from '@offgrid/models';
 import {
   mobileToolEmbeddingCache,
   resetMobileToolEmbeddingCache,
-} from '../../../src/services/adapters/native/toolEmbeddingAdapter';
+} from '../../../src/services/composition/tools';
 
 type Tool = { type: 'function'; function: { name: string; description: string } };
 const TOOLS: Tool[] = [
@@ -29,7 +29,7 @@ describe('PR#453 — stale-dimension tool-embedding cache (red-flow)', () => {
     const embed = jest.fn(async (inputs: readonly string[]) => inputs.map(() => new Array(dim).fill(0.1)));
     const service = new ToolRoutingService({
       embedding: { embed },
-      embeddingCache: mobileToolEmbeddingCache,
+      embeddingCache: mobileToolEmbeddingCache(),
     });
     const select = (query: string) => service.select({
       messages: [{ role: 'user', content: query }],

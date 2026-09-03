@@ -1,6 +1,6 @@
 import type { ModelFile } from '../types';
 import { CATALOG, type ModelEntry } from '@offgrid/models/catalog';
-import { extractQuantization } from '@offgrid/models/quant';
+import { extractQuantization } from '@offgrid/models';
 import logger from '../utils/logger';
 
 export interface ModelFileDiscoveryPort {

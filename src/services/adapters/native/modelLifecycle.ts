@@ -16,6 +16,14 @@ import {
 type NativeLifecycleListener = () => void;
 
 /** Raw native engine lifecycle. Shared residency must admit a model before calling load. */
+/**
+ * How long one native load may take before it is abandoned. The ONE copy on the phone; the rule
+ * has no shared owner yet (a `modelLoadTimeoutMs(modality)` in @offgrid/models/runtime would replace it).
+ */
+export function mobileModelLoadTimeoutMs(modality: 'text' | 'image'): number {
+  return modality === 'text' ? 120_000 : 180_000;
+}
+
 class NativeModelLifecycle {
   private readonly listeners = new Set<NativeLifecycleListener>();
   private readonly loading = { text: false, image: false };
@@ -70,7 +78,7 @@ class NativeModelLifecycle {
 
   async loadTextModel(
     modelId: string,
-    timeoutMs = 120_000,
+    timeoutMs = mobileModelLoadTimeoutMs('text'),
     override = false,
   ): Promise<void> {
     const store = useAppStore.getState();
@@ -127,7 +135,7 @@ class NativeModelLifecycle {
     }
   }
 
-  async loadImageModel(modelId: string, timeoutMs = 180_000): Promise<void> {
+  async loadImageModel(modelId: string, timeoutMs = mobileModelLoadTimeoutMs('image')): Promise<void> {
     await hardwareService.getDeviceInfo();
     const store = useAppStore.getState();
     const model = store.downloadedImageModels.find(candidate => candidate.id === modelId);
