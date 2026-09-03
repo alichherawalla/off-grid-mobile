@@ -1198,6 +1198,24 @@ for (const file of files) {
         );
       }
       if (
+        fileName ===
+          'src/components/models/RemoteModelOptionsSection.tsx' &&
+        importsRuntimeValue(node) &&
+        (/(?:^|\/)(?:services\/modelServices|stores\/remoteServerStore)(?:\/index)?$/.test(
+          specifier,
+        ) ||
+          (/(?:^|\/)services(?:\/index)?$/.test(specifier) &&
+            runtimeNamedImports(node).includes('selectMobileModel')))
+      ) {
+        report(
+          'remote-model-options-use-models-facade',
+          fileName,
+          source,
+          node,
+          `import:${specifier}`,
+        );
+      }
+      if (
         specifier === '@offgrid/rag' &&
         importsRuntimeValue(node) &&
         !ragRuntimeImportOwners.has(fileName)

@@ -3,9 +3,10 @@ import { Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedPressable } from '../AnimatedPressable';
 import { SPACING, TYPOGRAPHY } from '../../constants';
-import { selectMobileModel } from '../../services/modelServices';
 import { remoteServerModelOptions } from '@offgrid/models';
-import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { modelsFailureMessage } from '@offgrid/application';
+import { applicationFacade } from '../../services/applicationFacade';
+import { useModelsProjection } from '../../hooks/useApplicationProjection';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
@@ -39,7 +40,7 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const servers = useRemoteServerStore(state => state.servers);
+  const servers = useModelsProjection().servers;
   const activeRoute = useActiveMobileModel(category).model;
   const activeServerId = activeRoute?.source === 'remote'
     ? activeRoute.serverId ?? null
@@ -73,12 +74,21 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
               setSelecting(key);
               setError(null);
               try {
-                await selectMobileModel({
-                  source: 'remote',
-                  hostId: option.serverId,
+                const routeId = applicationFacade().models.remoteModelRoute(
+                  option.serverId,
+                  option.id,
+                  category,
+                );
+                if (!routeId) {
+                  throw new Error('The selected server model is unavailable.');
+                }
+                const selected = await applicationFacade().models.select({
                   modality: category,
-                  modelId: option.id,
+                  modelId: routeId,
                 });
+                if (!selected.ok) {
+                  throw new Error(modelsFailureMessage(selected.failure));
+                }
                 onSelect?.();
               } catch (reason) {
                 setError(remoteSelectionFailureText(option.serverName, reason));
