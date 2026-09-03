@@ -1,10 +1,24 @@
+import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import type { RemoteModel, RemoteModelCategory, RemoteServer, ServerTestResult } from '../../types';
 import { testEndpointAndGetModels } from '../adapters/remote/serverDiscovery';
 import { getApiKeyImpl, storeApiKeyImpl } from '../adapters/remote/serverRuntime';
+import { applicationFacade } from '../applicationFacade';
 import { selectCanonicalModel } from './modelSelectionCommandPort';
 import { mobileRouteId } from './mobileRoute';
 import { shouldRecoverRemoteServers } from './remoteServerApplication';
 import { mobileRemoteServerApplication } from './workspace';
+
+class RemoteServerOperationError extends Error {
+  constructor(readonly failure: ModelsFailure) {
+    super(modelsFailureMessage(failure));
+    this.name = 'RemoteServerOperationError';
+  }
+}
+
+function requireSuccess<T>(outcome: { ok: true; value: T } | { ok: false; failure: ModelsFailure }): T {
+  if (!outcome.ok) throw new RemoteServerOperationError(outcome.failure);
+  return outcome.value;
+}
 
 /** Thin Mobile facade. Shared owns every remote-server decision and transaction. */
 class RemoteServerManager {
@@ -12,28 +26,32 @@ class RemoteServerManager {
     config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string },
   ): Promise<RemoteServer> {
     const { apiKey, ...server } = config;
-    return mobileRemoteServerApplication.save({
+    const outcome = await applicationFacade().models.saveRemoteServer({
       ...server, createdAt: new Date().toISOString(), credential: apiKey,
-    }) as Promise<RemoteServer>;
+    });
+    return requireSuccess(outcome) as RemoteServer;
   }
 
   async updateServer(
     id: string,
     updates: Partial<Omit<RemoteServer, 'id' | 'createdAt'>>,
   ): Promise<void> {
-    const existing = mobileRemoteServerApplication.get(id);
+    const existing = applicationFacade().models.remoteServer(id);
     if (!existing) throw new Error(`Server not found: ${id}`);
     const { apiKey, ...publicUpdates } = updates;
-    await mobileRemoteServerApplication.save({
+    const outcome = await applicationFacade().models.saveRemoteServer({
       ...existing, ...publicUpdates, id,
       credential: apiKey || undefined, clearCredential: apiKey === '',
     });
+    requireSuccess(outcome);
   }
 
-  removeServer(id: string): Promise<void> { return mobileRemoteServerApplication.remove(id); }
-  getServers(): RemoteServer[] { return mobileRemoteServerApplication.list() as RemoteServer[]; }
+  removeServer(id: string): Promise<void> { return applicationFacade().models.removeRemoteServer(id); }
+  getServers(): RemoteServer[] {
+    return [...applicationFacade().models.snapshot().servers] as RemoteServer[];
+  }
   getServer(id: string): RemoteServer | null {
-    return mobileRemoteServerApplication.get(id) as RemoteServer | null;
+    return applicationFacade().models.remoteServer(id) as RemoteServer | null;
   }
 
   async getServerWithApiKey(id: string): Promise<(RemoteServer & { apiKey?: string }) | null> {
@@ -44,13 +62,14 @@ class RemoteServerManager {
   }
 
   async testConnection(id: string): Promise<ServerTestResult> {
-    return mobileRemoteServerApplication.check(id) as Promise<ServerTestResult>;
+    return applicationFacade().models.checkRemoteServer(id) as Promise<ServerTestResult>;
   }
   testConnectionByEndpoint(endpoint: string, apiKey?: string): Promise<ServerTestResult> {
     return testEndpointAndGetModels(endpoint, apiKey);
   }
   async discoverModels(id: string): Promise<RemoteModel[]> {
-    return ((await mobileRemoteServerApplication.discover(id)).models ?? []) as RemoteModel[];
+    const outcome = await applicationFacade().models.discoverRemoteServers(id);
+    return (requireSuccess(outcome).models ?? []) as RemoteModel[];
   }
 
   setActiveRemoteTextModel(serverId: string, modelId: string): Promise<void> {
@@ -98,7 +117,7 @@ class RemoteServerManager {
     await mobileRemoteServerApplication.recover(shouldRecoverRemoteServers());
   }
   async clearAllServers(): Promise<void> {
-    for (const server of this.getServers()) await mobileRemoteServerApplication.remove(server.id);
+    for (const server of this.getServers()) await this.removeServer(server.id);
   }
   storeApiKey(serverId: string, apiKey: string): Promise<void> {
     return storeApiKeyImpl(serverId, apiKey);
