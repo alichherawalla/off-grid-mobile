@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { showAlert, hideAlert, type AlertState } from '../../../components';
-import { remoteServerManager } from '../../../services';
+import { applicationFacade } from '../../../services/applicationFacade';
+import { modelsFailureMessage } from '@offgrid/application';
 import type { DiscoveredRemoteServer } from '@offgrid/models';
 import { useAppStore } from '../../../stores/appStore';
 import { shouldAutoDiscoverRemoteModels } from '@offgrid/models';
@@ -19,13 +20,21 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
     const connectionFailures: string[] = [];
     for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
-      const added = await remoteServerManager.addServer({
+      const saved = await applicationFacade().models.saveRemoteServer({
         name: server.name,
         endpoint: server.endpoint,
         provider: 'openai-compatible',
       });
+      if (!saved.ok) {
+        const message = modelsFailureMessage(saved.failure);
+        logger.error(`[HomeScreen] Failed to save ${server.name}: ${message}`);
+        connectionFailures.push(`${server.name}: ${message}`);
+        continue;
+      }
       try {
-        const result = await remoteServerManager.testConnection(added.id);
+        const result = await applicationFacade().models.checkRemoteServer(
+          saved.value.id,
+        );
         if (!result.success) {
           connectionFailures.push(
             `${server.name}: ${result.error ?? 'Connection check failed'}`,
@@ -81,11 +90,15 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
       return;
     }
     logger.log('[HomeScreen] LAN auto-discovery enabled — scanning');
-    // remoteServerManager owns the scan + moved-server reconciliation (one source of truth); the
-    // hook only surfaces the genuinely-new servers it finds.
-    const { found } = await remoteServerManager.scanAndReconcile();
-    await addNewServersAndNotify(found);
-  }, [addNewServersAndNotify]);
+    const reconciled = await applicationFacade().models.reconcileRemoteServers();
+    if (!reconciled.ok) {
+      const message = modelsFailureMessage(reconciled.failure);
+      logger.error(`[HomeScreen] LAN discovery failed: ${message}`);
+      setAlertState(showAlert('Network Scan Failed', message));
+      return;
+    }
+    await addNewServersAndNotify([...reconciled.value.found]);
+  }, [addNewServersAndNotify, setAlertState]);
 
   return { runLANDiscovery };
 }
