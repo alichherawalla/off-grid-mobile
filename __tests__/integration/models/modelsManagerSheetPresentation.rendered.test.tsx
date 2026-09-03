@@ -28,7 +28,7 @@ describe('models manager sheet presentation', () => {
       />,
     );
 
-  it('presents a bounded viewport with every ready model row visible', async () => {
+  it('sizes to its rows (no fixed height, bounded by the screen) with every ready model row visible', async () => {
     const ui = renderSheet();
 
     await waitFor(() =>
@@ -37,8 +37,11 @@ describe('models manager sheet presentation', () => {
     const sheetStyle = StyleSheet.flatten(
       ui.getByTestId('app-sheet-surface').props.style,
     );
-    expect(sheetStyle.height).toBe(Dimensions.get('window').height * 0.55);
-    expect(sheetStyle.maxHeight).toBeUndefined();
+    // The sheet has no fixed height: it takes the height of its rows and is only capped by the screen,
+    // so there is no empty space below the last row.
+    expect(sheetStyle.height).toBeUndefined();
+    expect(sheetStyle.maxHeight).toBeLessThanOrEqual(Dimensions.get('window').height);
+    expect(sheetStyle.maxHeight).toBeGreaterThan(0);
     for (const type of ['text', 'image', 'voice', 'speech']) {
       expect(ui.getByTestId(`models-row-${type}`)).toBeTruthy();
     }

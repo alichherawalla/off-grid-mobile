@@ -127,10 +127,9 @@ type GenerationFailure = { error: unknown; retry?: () => Promise<void> };
 function presentGenerationError(deps: GenerationDeps, conversationId: string, { error, retry }: GenerationFailure): void {
   const message = error instanceof Error ? error.message : String(error || 'Failed to generate response');
   logger.error('[ChatGen] Generation failed', error);
-  if (retry && offerRunAnyway(error, retry)) {
-    deps.addMessage(conversationId, { role: 'assistant', content: message });
-    return;
-  }
+  // The refusal is shown once: the failure card carries the reason and the Run anyway action, so the
+  // same text is not also written into the conversation.
+  if (retry && offerRunAnyway(error, retry)) return;
   const contextFull = message.includes('too long')
     || message.includes('Exceeding the maximum number of tokens')
     || message.includes('Input token ids');
