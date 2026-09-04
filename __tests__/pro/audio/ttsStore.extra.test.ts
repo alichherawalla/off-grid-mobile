@@ -81,7 +81,7 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 }));
 
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { hardwareService } from '@offgrid/core/services/hardware';
 
 const getState = () => useTTSStore.getState();
@@ -139,9 +139,9 @@ describe('ttsStore — extra branch coverage', () => {
       .mockResolvedValue(undefined as unknown as ReturnType<typeof hardwareService.refreshMemoryInfo>);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // No pollution: reset the shared residency manager + restore all spies.
-    modelResidencyManager._reset();
+    await modelResidencyManager._reset();
     modelResidencyManager.setBudgetOverrideMB(null);
     jest.restoreAllMocks();
     jest.clearAllMocks();
@@ -178,7 +178,7 @@ describe('ttsStore — extra branch coverage', () => {
       modelResidencyManager.setBudgetOverrideMB(4000);
       const llmLease = await modelResidencyManager.acquire(
         { key: 'llm', type: 'text', sizeMB: 3800 },
-        { load: () => Promise.resolve(), unload: () => Promise.resolve() },
+        { load: () => Promise.resolve(), unload: () => Promise.resolve({reclaimed: true}) },
         { override: true },
       );
       await llmLease.release();
@@ -259,7 +259,7 @@ describe('ttsStore — extra branch coverage', () => {
       // tts's registered unload fn (which calls engine.release()).
       const llmLease = await modelResidencyManager.acquire(
         { key: 'llm', type: 'text', sizeMB: 1800 },
-        { load: async () => {}, unload: async () => {} },
+        { load: async () => {}, unload: async () => ({reclaimed: true}) },
         { override: true },
       );
       await llmLease.release();
