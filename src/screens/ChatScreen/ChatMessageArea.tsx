@@ -165,7 +165,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const voiceBusy = useModelResidencyBusy('voice');
   const preparingVoice = interfaceMode === 'audio' && voiceBusy;
   const tabNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { toolCountHintDismissed } = useAppStore();
+  const toolCountHintDismissed = useAppStore(s => s.toolCountHintDismissed);
   // Subscribe to Pro activation so this re-renders the moment a license is
   // activated. loadProFeatures() registers the tool extensions + the Pro Tools
   // screen in one pass; without this subscription the getToolExtensions() reads

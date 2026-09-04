@@ -119,44 +119,53 @@ export const useChatScreen = () => {
   const { imageGenState, isCompacting, queueCount, queuedTexts } =
     useChatRuntimeSubscriptions();
 
-  const {
-    downloadedModels,
-    settings,
-    downloadedImageModels,
-    setDownloadedImageModels,
-    setIsGeneratingImage: setAppIsGeneratingImage,
-    setImageGenerationStatus: setAppImageGenerationStatus,
-    removeImagesByConversationId,
-    loadedSettings,
-  } = useAppStore();
+  // One selector per fact. Subscribing to the WHOLE app store re-ran this hook (and rebuilt the
+  // screen model) on every unrelated app-store write - a download progress tick, an image model
+  // list refresh, a settings save from another screen.
+  const downloadedModels = useAppStore(s => s.downloadedModels);
+  const settings = useAppStore(s => s.settings);
+  const loadedSettings = useAppStore(s => s.loadedSettings);
+  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
+  // Actions are created once with the store, so each of these is a stable reference and never
+  // causes a render on its own. They are kept as separate selectors rather than bundled with the
+  // data above so nothing has to shallow-compare a mixed object of functions and live values.
+  const setDownloadedImageModels = useAppStore(s => s.setDownloadedImageModels);
+  const setAppIsGeneratingImage = useAppStore(s => s.setIsGeneratingImage);
+  const setAppImageGenerationStatus = useAppStore(s => s.setImageGenerationStatus);
+  const removeImagesByConversationId = useAppStore(
+    s => s.removeImagesByConversationId,
+  );
   const textModelEvicted = useModelResidencyStore(s => s.textModelEvicted);
 
   const discoveredModels = useDiscoveredRemoteModels();
 
-  const {
-    activeConversationId,
-    conversations,
-    createConversation,
-    addMessage,
-    updateMessageContent,
-    updateMessageTurnKind,
-    deleteMessagesAfter,
-    streamingMessage,
-    streamingReasoningContent,
-    streamingForConversationId,
-    isStreaming,
-    isThinking,
-    clearStreamingMessage,
-    deleteConversation,
-    setActiveConversation,
-    setConversationProject,
-  } = useChatStore();
-
-  const { projects, getProject } = useProjectStore();
-
-  const activeConversation = conversations.find(
-    c => c.id === activeConversationId,
+  const activeConversationId = useChatStore(s => s.activeConversationId);
+  // The conversation ITSELF, not the whole list. Appending a message to another thread used to
+  // hand this hook a new `conversations` array and re-render the entire screen.
+  const activeConversation = useChatStore(s =>
+    s.conversations.find(c => c.id === s.activeConversationId),
   );
+  const streamingForConversationId = useChatStore(
+    s => s.streamingForConversationId,
+  );
+  const isStreaming = useChatStore(s => s.isStreaming);
+  const isThinking = useChatStore(s => s.isThinking);
+  const streamingMessage = useChatStore(s => s.streamingMessage);
+  const streamingReasoningContent = useChatStore(
+    s => s.streamingReasoningContent,
+  );
+  const createConversation = useChatStore(s => s.createConversation);
+  const addMessage = useChatStore(s => s.addMessage);
+  const updateMessageContent = useChatStore(s => s.updateMessageContent);
+  const updateMessageTurnKind = useChatStore(s => s.updateMessageTurnKind);
+  const deleteMessagesAfter = useChatStore(s => s.deleteMessagesAfter);
+  const clearStreamingMessage = useChatStore(s => s.clearStreamingMessage);
+  const deleteConversation = useChatStore(s => s.deleteConversation);
+  const setActiveConversation = useChatStore(s => s.setActiveConversation);
+  const setConversationProject = useChatStore(s => s.setConversationProject);
+
+  const projects = useProjectStore(s => s.projects);
+  const getProject = useProjectStore(s => s.getProject);
 
   // Which text model is active, from the ONE hook that answers it (remote preferred over local, local
   // resolved by the shared model state). This screen used to re-derive it with its own copy of the rule,
