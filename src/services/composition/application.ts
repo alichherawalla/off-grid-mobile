@@ -13,6 +13,7 @@ import {
   prepareMobileRagDocument,
 } from '../adapters/rag/mobileRagPorts';
 import { mobileWorkspace } from '../modelServices/workspace';
+import { mobileModelEjectionPorts } from '../modelServices/ejectModelsForUser';
 import { modelsChatPort } from './chat';
 
 export type MobileApplicationExtensionPorts = Partial<
@@ -40,7 +41,11 @@ export function registerMobileApplicationPorts(
 
 function createMobileApplication(): OffGridApplication {
   return createOffGridApplication({
-    models: { workspace: mobileWorkspace, chat: modelsChatPort },
+    models: {
+      workspace: mobileWorkspace,
+      chat: modelsChatPort,
+      ejection: mobileModelEjectionPorts(),
+    },
     rag: {
       store: mobileRagStore,
       embeddings: mobileRagEmbeddings,
