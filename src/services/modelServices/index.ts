@@ -1,4 +1,4 @@
-import type { RuntimeModel } from '@offgrid/models';
+import type { RuntimeModel, WorkspaceGenerationPort } from '@offgrid/models';
 import { mobileVoiceGenerationService as voiceGeneration } from '../composition/generation';
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
@@ -33,7 +33,7 @@ import logger from '../../utils/logger';
 /** The one Mobile owner of model inventory, selection and canonical route identity. */
 export const mobileLLMService = mobileWorkspace.llm;
 
-mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
+mobileInventoryAdapters.forEach(adapter => mobileWorkspace.registerInventoryAdapter(adapter));
 registerLifecycleProjectionPort({
   // The full refresh: an inventory rebuild is only complete once the generation,
   // transcription, voice and sidecar adapters have been reconciled against it.
@@ -50,7 +50,13 @@ registerModelSelectionCommandPort({
     );
   },
 });
-const mobileGenerationService = mobileWorkspace.generation;
+// Adapters and generation go THROUGH the workspace's own API rather than reaching inside for its
+// composed generation owner - the same cut desktop took in `6eb863ba`. One less raw member read
+// keeping `ModelsPlatformPorts.workspace` alive.
+const mobileGenerationService: WorkspaceGenerationPort = {
+  generate: (request, events) => mobileWorkspace.generate(request, events),
+  registerAdapter: adapter => mobileWorkspace.registerGenerationAdapter(adapter),
+};
 /** Voice has its own queue so sentence playback can run while text is still streaming. */
 export const mobileVoiceGenerationService = voiceGeneration();
 const generationAdapterRegistrations = new Map<string, () => void>();
