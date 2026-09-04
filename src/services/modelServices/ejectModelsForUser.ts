@@ -1,5 +1,4 @@
 import type { ModelEjectionService } from '@offgrid/models';
-import { modelEjection } from '../composition/model-commands';
 import { imageGenerationService } from '../imageGenerationService';
 import { stopActiveMobileChatSession } from './chatSessionControl';
 import { ejectAllModels } from './modelLifecycleBootstrap';
@@ -14,7 +13,3 @@ export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEj
     evict: key => modelResidencyManager.evictWhenReleased(key),
   };
 }
-
-/** Eject one resident on a person's request; running work stops first (shared owns the order). */
-export const ejectResidentForUser = (key: string): Promise<boolean> =>
-  modelEjection().ejectResident(key);

@@ -8,9 +8,12 @@
  * the four model rows shown by this sheet.
  */
 import { useSyncExternalStore } from 'react';
-import { ejectResidentForUser } from '../../services/modelServices/ejectModelsForUser';
 import { applicationFacade } from '../../services/applicationFacade';
-import type { Resident, ResidentType } from '@offgrid/application';
+import {
+  modelsFailureMessage,
+  type Resident,
+  type ResidentType,
+} from '@offgrid/application';
 
 /** The manager sheet's modality rows. Defined HERE (the lower-level projection) rather than in
  *  ModelsManagerSheet so the hook doesn't import the component — that was a dependency cycle
@@ -48,6 +51,10 @@ export function useResidentRows(active: boolean): Partial<Record<ModelRowType, R
 }
 
 /** Eject one row's resident via the owning service: running work stops first, then its registered unload runs. */
-export function ejectResident(resident: Resident): Promise<boolean> {
-  return ejectResidentForUser(resident.key);
+export async function ejectResident(resident: Resident): Promise<boolean> {
+  const outcome = await applicationFacade().models.ejectResident({
+    key: resident.key,
+  });
+  if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  return outcome.value;
 }
