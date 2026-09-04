@@ -140,7 +140,7 @@ export const ProUnlockModal: React.FC<Props> = ({
         ) : (
           <>
             <Text style={styles.subtitle}>
-              Paste the license key from your email. It works on up to 5
+              Paste the license key from your email. It works on your licensed
               devices.
             </Text>
 
