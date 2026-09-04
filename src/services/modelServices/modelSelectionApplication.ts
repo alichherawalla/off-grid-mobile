@@ -1,4 +1,4 @@
-import { modelSelectionApplication } from '../composition/model-commands';
+import { modelSelectionApplication } from '../composition/model-selection';
 
-/** The shared model-selection application owner, composed in `../composition/model-commands`. */
+/** The shared model-selection application owner, composed in `../composition/model-selection`. */
 export const mobileModelSelectionService = modelSelectionApplication();

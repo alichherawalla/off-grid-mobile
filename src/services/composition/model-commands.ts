@@ -1,13 +1,9 @@
-// Composition root: shared model commands and selection over Mobile's store ports.
-import {
-  ModelCommandApplicationService,
-  ModelSelectionApplicationService,
-} from '@offgrid/models';
-import { once } from '@offgrid/models';
+// Composition root: shared model commands over Mobile's store ports. Selection lives in
+// `model-selection.ts` (re-exported here, so every existing import path resolves unchanged) because
+// the selection store reads it from below these command ports.
+import { ModelCommandApplicationService, once } from '@offgrid/models';
 import { mobileModelCommandPorts } from '../modelServices/modelCommandPorts';
-import { mobileModelSelectionProjection } from '../modelServices/modelSelectionProjection';
+
+export { modelSelectionApplication } from './model-selection';
 
 export const modelCommands = once(() => new ModelCommandApplicationService(mobileModelCommandPorts()));
-export const modelSelectionApplication = once(
-  () => new ModelSelectionApplicationService(mobileModelSelectionProjection),
-);
