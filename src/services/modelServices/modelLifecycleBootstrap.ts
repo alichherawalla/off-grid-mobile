@@ -6,6 +6,8 @@ import {
   unloadPersistentResident,
 } from '@offgrid/models';
 import type { ModelLifecycleApplicationService } from '@offgrid/models';
+import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
+import { applicationFacade } from '../applicationFacade';
 import { activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
 import { OverridableMemoryError } from '../modelLoadErrors';
@@ -35,30 +37,74 @@ function refusedLoad(override: boolean | undefined): Error {
     : new Error(refusal.message);
 }
 
-const lifecycleService = (): ModelLifecycleApplicationService => modelLifecycle();
-
-export async function loadTextModel(
-  modelId: string,
-  timeoutMs?: number,
-  options?: LoadOptions,
-): Promise<void> {
-  const acquired = await lifecycleService().load('text', modelId, {
-    override: !!options?.override,
-    timeoutMs,
-  });
-  if (!acquired) throw refusedLoad(options?.override);
+/**
+ * Turn the facade's typed failure back into the ERROR IDENTITY the app's readiness layer depends
+ * on. `isOverridableMemoryError` gates the whole "Run anyway" journey - `loadModelWithOverride`,
+ * `chatModelReadinessPort.isMemoryRefusal`, `ttsPlayback.isRetryable`, the image ports and the
+ * failure handler all branch on it - so a load that used to reject with an
+ * `OverridableMemoryError` must still reject with one.
+ *
+ * It round-trips faithfully: shared classifies an overridable native memory error as
+ * `memory_refused` carrying `overridable`, so the flag comes from the failure rather than being
+ * guessed. `not_ready` is the ADMISSION refusal - shared throws `NotLoaded` exactly where the old
+ * boolean was false - and keeps the shared refusal copy, which is product copy a caller renders.
+ */
+function loadRejection(
+  failure: ModelsFailure,
+  override: boolean | undefined,
+): Error {
+  if (failure.kind === 'memory_refused') {
+    return failure.overridable
+      ? new OverridableMemoryError(failure.reason)
+      : new Error(failure.reason);
+  }
+  if (failure.kind === 'not_ready') return refusedLoad(override);
+  return new Error(modelsFailureMessage(failure));
 }
 
-export async function loadImageModel(
+const lifecycleService = (): ModelLifecycleApplicationService => modelLifecycle();
+
+const models = () => applicationFacade().models;
+
+async function loadThrough(command: {
+  readonly modality: 'text' | 'image';
+  readonly modelId: string;
+  readonly timeoutMs?: number;
+  readonly override?: boolean;
+}): Promise<void> {
+  const outcome = await models().load({
+    modality: command.modality,
+    modelId: command.modelId,
+    override: !!command.override,
+    timeoutMs: command.timeoutMs,
+  });
+  if (!outcome.ok) throw loadRejection(outcome.failure, command.override);
+}
+
+export function loadTextModel(
   modelId: string,
   timeoutMs?: number,
   options?: LoadOptions,
 ): Promise<void> {
-  const acquired = await lifecycleService().load('image', modelId, {
-    override: !!options?.override,
+  return loadThrough({
+    modality: 'text',
+    modelId,
     timeoutMs,
+    override: options?.override,
   });
-  if (!acquired) throw refusedLoad(options?.override);
+}
+
+export function loadImageModel(
+  modelId: string,
+  timeoutMs?: number,
+  options?: LoadOptions,
+): Promise<void> {
+  return loadThrough({
+    modality: 'image',
+    modelId,
+    timeoutMs,
+    override: options?.override,
+  });
 }
 
 /**
@@ -98,14 +144,27 @@ export async function loadTranscriptionModel(
   }
 }
 
+/**
+ * `false` is a legitimate answer - nothing was loaded - so a FAILED unload must not be reported as
+ * one. The typed failure is thrown, which is what the old service did with a real error.
+ */
+async function unloadThrough(
+  modality: 'text' | 'image',
+  keepSelection: boolean,
+): Promise<boolean> {
+  const outcome = await models().unload({modality, keepSelection});
+  if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  return outcome.value;
+}
+
 export async function unloadTextModel(keepSelection = false): Promise<boolean> {
-  const unloaded = await lifecycleService().unload('text', keepSelection);
+  const unloaded = await unloadThrough('text', keepSelection);
   if (!keepSelection) useModelResidencyStore.getState().setTextModelEvicted(false);
   return unloaded;
 }
 
-export async function unloadImageModel(keepSelection = false): Promise<boolean> {
-  return lifecycleService().unload('image', keepSelection);
+export function unloadImageModel(keepSelection = false): Promise<boolean> {
+  return unloadThrough('image', keepSelection);
 }
 
 export async function unloadTranscriptionModel(
@@ -149,6 +208,9 @@ export async function ejectAllModels(): Promise<{ count: number }> {
   );
   const hasRemote = remoteModalities.length > 0;
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
+  // NOT `models.eject()`. This function IS the implementation behind it: mobile registers
+  // `ejectAll: ejectAllModels` as the facade's ejection port, so calling the facade here would
+  // recurse. See PROGRESS_B and WIRING_B #9 - the two ejects are different capabilities.
   const ejected = await lifecycleService().eject({
     localUnloads: {
       textUnloaded: () => unloadTextModel(true),
