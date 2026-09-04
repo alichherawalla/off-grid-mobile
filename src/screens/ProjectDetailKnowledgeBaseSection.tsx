@@ -4,7 +4,7 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  ScrollView,
+  FlatList,
   Platform,
 } from 'react-native';
 import { LoadingDots } from '../components/LoadingDots';
@@ -25,6 +25,8 @@ import { requireRagSuccess } from '../services/ragOutcome';
 import { writePastedNote } from '../services/adapters/rag/pastedNoteFileAdapter';
 import { useProjectRagDocuments } from '../hooks/useProjectRagDocuments';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
+
+const documentKey = (doc: RagDocument): string => doc.id;
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -252,10 +254,14 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           <Text style={styles.emptyStateText}>No documents added</Text>
         </View>
       ) : !documentsError ? (
-        <ScrollView style={styles.sectionList} nestedScrollEnabled>
-          {kbDocs.map(doc => (
+        <FlatList
+          style={styles.sectionList}
+          data={kbDocs}
+          keyExtractor={documentKey}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews={Platform.OS !== 'android'}
+          renderItem={({ item: doc }) => (
             <TouchableOpacity
-              key={doc.id}
               style={styles.kbDocRow}
               onPress={() => onDocumentPress(doc)}
               activeOpacity={0.7}
@@ -285,8 +291,8 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
                 <Icon name="trash-2" size={14} color={colors.error} />
               </TouchableOpacity>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        />
       ) : null}
 
       <PasteNoteSheet
