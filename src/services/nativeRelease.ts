@@ -1,3 +1,5 @@
+import type { ResidentReclaim } from '@offgrid/models';
+
 /**
  * What a native teardown ACHIEVED, in the engine wrappers' own terms.
  *
@@ -39,4 +41,16 @@ export function allReleased(
 ): NativeRelease {
   const refused = parts.find(part => !part.released);
   return refused ?? RELEASED;
+}
+
+/** Convert native release proof into the one truthful answer residency accepts. */
+export function nativeReleaseToResidentReclaim(
+  release: NativeRelease,
+): ResidentReclaim {
+  return release.released
+    ? { reclaimed: true }
+    : {
+        reclaimed: false,
+        reason: release.reason ?? 'the native runtime did not release the model',
+      };
 }
