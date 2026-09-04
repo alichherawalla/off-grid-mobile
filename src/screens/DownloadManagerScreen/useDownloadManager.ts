@@ -6,7 +6,7 @@ import {
   initialAlertState,
 } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore } from '../../stores/downloadStore';
+import { useDownloadStore, isActiveStatus } from '../../stores/downloadStore';
 import {
   modelLibrary,
   hardwareService,
@@ -44,14 +44,27 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
-  const { downloadedModels, downloadedImageModels } = useAppStore();
+  // Narrow selectors. A zero-argument `useAppStore()` re-rendered this whole screen for every
+  // unrelated store write - image-generation progress, chat state, a settings change - while a
+  // download was already re-rendering it on its own progress.
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const downloadedImageModels = useAppStore(state => state.downloadedImageModels);
 
   const downloads = useDownloadStore(state => state.downloads);
+  const hasActiveDownloads = useDownloadStore(state =>
+    Object.values(state.downloads).some(entry => isActiveStatus(entry.status)),
+  );
 
   // Downloads waiting for a concurrency slot live only in the service's queue (no
   // store row yet), so read them from their owner and show them as "Queued". Refresh
   // on store changes (a completing download drains the queue) and on a light poll.
   const [queuedItems, setQueuedItems] = useState<DownloadItem[]>([]);
+  // The reconciliation poll exists to reclaim a leaked concurrency slot so a stuck Queued download
+  // starts. Both halves matter: an active download can leak its slot, and a leaked slot with
+  // nothing active is exactly the stuck-queue case - the service's queue is the only record of it,
+  // which is why the first `refresh` below is what turns the timer on in that case. With neither,
+  // there is no slot to reclaim, so an idle Download Manager no longer wakes up once a second.
+  const shouldReconcile = hasActiveDownloads || queuedItems.length > 0;
   useEffect(() => {
     const refresh = () =>
       setQueuedItems(
@@ -61,23 +74,30 @@ export function useDownloadManager(): UseDownloadManagerResult {
     // truth so a leaked slot (e.g. a folded mmproj sidecar) is reclaimed and a stuck
     // Queued download starts — without waiting for a new start to trigger it.
     const reconcileAndRefresh = () => {
-      backgroundDownloadService.reconcileActiveIds().catch(() => {});
+      // Reported, not swallowed. A reconciliation that keeps failing is exactly why a Queued
+      // download never starts, and an empty catch made that invisible.
+      backgroundDownloadService.reconcileActiveIds().catch(error => {
+        logger.warn(
+          '[DownloadManager] download-slot reconciliation failed',
+          error,
+        );
+      });
       refresh();
     };
     refresh();
     // The service owns the queue and notifies on every control op (incl. cancelling a
     // queued start), so a cancel drops the "Queued" row immediately, not on the poll.
     const unsubscribe = modelDownloadRegistry.subscribe(refresh);
-    const t = setInterval(reconcileAndRefresh, 1000);
+    const t = shouldReconcile ? setInterval(reconcileAndRefresh, 1000) : null;
     return () => {
       unsubscribe();
-      clearInterval(t);
+      if (t !== null) clearInterval(t);
     };
-    // Mount once: the subscription already fires on every store change (that's what
-    // drains the queue) and the interval covers the rest. Depending on `downloads` here
-    // tore down + rebuilt the subscription and interval on EVERY progress tick — pure
-    // churn while a download runs — and refresh reads from the service, not `downloads`.
-  }, []);
+    // The ONLY dependency is whether there is a slot to reclaim. The subscription already fires
+    // on every store change (that's what drains the queue), so depending on `downloads` here tore
+    // down and rebuilt the subscription and the timer on EVERY progress tick - pure churn while a
+    // download runs - and `refresh` reads from the service, not from `downloads`.
+  }, [shouldReconcile]);
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } =
