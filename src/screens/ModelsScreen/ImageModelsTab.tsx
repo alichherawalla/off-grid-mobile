@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, type ListRenderItemInfo } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -43,7 +43,7 @@ interface ImageModelCardProps {
   handleCancelImageDownload: Props['handleCancelImageDownload'];
 }
 
-export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
+const ImageModelCard: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
@@ -102,11 +102,22 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   );
 };
 
+/**
+ * Memoized: the catalogue re-renders on every filter and query change, and each card owns a
+ * download-store subscription. Without this, one character re-ran that subscription for every
+ * row on screen.
+ */
+export const ImageModelCardItem = React.memo(ImageModelCard);
+ImageModelCardItem.displayName = 'ImageModelCardItem';
+
+/** Stable identity so the list does not remount while the catalogue is loading or errored. */
+const EMPTY_CATALOGUE: (HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] })[] = [];
+
 function shouldShowEmptyMessage({ loading, error, filtered, available }: { loading: boolean; error: string | null; filtered: any[]; available: any[] }): boolean {
   return !loading && !error && filtered.length === 0 && available.length > 0;
 }
 
-interface ScrollContentProps {
+interface ImageModelsListProps {
   showRecHint: boolean;
   showRecommendedOnly: boolean;
   setShowRecHint: (v: boolean) => void;
@@ -136,7 +147,7 @@ interface ScrollContentProps {
   imageSearchQuery: string;
 }
 
-const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
+const ImageModelsList: React.FC<ImageModelsListProps> = ({
   showRecHint, showRecommendedOnly, setShowRecHint,
   imageRec, ramGB, imageRecommendation,
   imageFiltersVisible, backendFilter, setBackendFilter,
@@ -160,9 +171,9 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
     emptyMessage = 'All available models are downloaded';
   }
 
-  return (
-    <ScrollView keyboardShouldPersistTaps="handled">
-      <View style={styles.imageModelsList}>
+  const header = useMemo(
+    () => (
+      <>
         {showRecHint && showRecommendedOnly && (
           <TouchableOpacity style={styles.recHint} onPress={() => setShowRecHint(false)} activeOpacity={0.7}>
             <Icon name="info" size={11} color={colors.primary} />
@@ -210,32 +221,56 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
             </TouchableOpacity>
           </View>
         )}
+      </>
+    ),
+    [
+      backendFilter, clearImageFilters, colors.primary, hasActiveImageFilters,
+      hfModelsError, hfModelsLoading, imageFilterExpanded, imageFiltersVisible,
+      imageRec, imageRecommendation, loadHFModels, ramGB, sdVersionFilter,
+      setBackendFilter, setImageFilterExpanded, setSdVersionFilter, setShowRecHint,
+      setStyleFilter, setUserChangedBackendFilter, showRecHint, showRecommendedOnly,
+      styles, styleFilter,
+    ],
+  );
 
-        {!hfModelsLoading && !hfModelsError && filteredHFModels.map(
-          (model, index) => {
-            const card = (
-              <ImageModelCardItem
-                key={model.id}
-                model={model}
-                index={index}
-                imageRec={imageRec}
-                isRecommendedModel={isRecommendedModel}
-                handleDownloadImageModel={handleDownloadImageModel}
-                handleCancelImageDownload={handleCancelImageDownload}
-              />
-            );
-            if (index === 0) {
-              return card;
-            }
-            return card;
-          }
-        )}
+  const footer = useMemo(
+    () =>
+      shouldShowEmptyMessage({ loading: hfModelsLoading, error: hfModelsError, filtered: filteredHFModels, available: availableHFModels })
+        ? <Text style={styles.allDownloadedText}>{emptyMessage}</Text>
+        : null,
+    [availableHFModels, emptyMessage, filteredHFModels, hfModelsError, hfModelsLoading, styles],
+  );
 
-        {shouldShowEmptyMessage({ loading: hfModelsLoading, error: hfModelsError, filtered: filteredHFModels, available: availableHFModels }) && (
-          <Text style={styles.allDownloadedText}>{emptyMessage}</Text>
-        )}
-      </View>
-    </ScrollView>
+  const renderItem = useCallback(
+    ({ item, index }: ListRenderItemInfo<HFImageModel & { _coreml?: boolean; _coremlFiles?: any[] }>) => (
+      <ImageModelCardItem
+        model={item}
+        index={index}
+        imageRec={imageRec}
+        isRecommendedModel={isRecommendedModel}
+        handleDownloadImageModel={handleDownloadImageModel}
+        handleCancelImageDownload={handleCancelImageDownload}
+      />
+    ),
+    [handleCancelImageDownload, handleDownloadImageModel, imageRec, isRecommendedModel],
+  );
+
+  const keyExtractor = useCallback(
+    (item: HFImageModel) => item.id,
+    [],
+  );
+
+  return (
+    <FlatList
+      data={hfModelsLoading || hfModelsError ? EMPTY_CATALOGUE : filteredHFModels}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      ListHeaderComponent={header}
+      ListFooterComponent={footer}
+      contentContainerStyle={styles.imageModelsList}
+      keyboardShouldPersistTaps="handled"
+      removeClippedSubviews
+    />
   );
 };
 
@@ -293,7 +328,7 @@ export const ImageModelsTab: React.FC<Props> = ({
         </View>
       </View>
 
-      <ImageModelsScrollContent
+      <ImageModelsList
         showRecHint={showRecHint}
         showRecommendedOnly={showRecommendedOnly}
         setShowRecHint={setShowRecHint}
