@@ -48,7 +48,7 @@ import { requireRagSuccess } from '../../ragOutcome';
 import { activeLocalModelId } from '../../modelServices/activeRoute';
 import { mobileImageChatGeneration } from '../../modelServices/imageChatGenerationPort';
 import { activeMobileRoute } from '../../modelServices/mobileLLMService';
-import { refreshMobileModelServices } from '../../modelServices';
+import { lifecycleProjectionPort } from '../../modelServices/lifecycleProjectionPort';
 import { mobileToolDefinitions } from '../../modelServices/toolPorts';
 
 export interface MobileChatCommandOptions {
@@ -165,7 +165,7 @@ export function mobileChatOperationPorts(
       });
     },
     refreshRoutes: async () => {
-      await refreshMobileModelServices();
+      await lifecycleProjectionPort.refreshInventory();
     },
     onClassificationError: error =>
       projectClassifierFailure('classification', error),
@@ -253,13 +253,13 @@ async function generateForSession(
   events: GenerationEvents = {},
 ): Promise<GenerationResult> {
   if (request.operation?.type !== 'image') {
-    await refreshMobileModelServices();
+    await lifecycleProjectionPort.refreshInventory();
     return generateChatWithModelsFacade(request, events);
   }
   const identity = request.identity;
   if (!identity?.conversationId)
     throw new Error('Image generation requires a conversation identity');
-  await refreshMobileModelServices();
+  await lifecycleProjectionPort.refreshInventory();
   const abort = () => {
     mobileImageChatGeneration.cancel().catch(() => undefined);
   };
