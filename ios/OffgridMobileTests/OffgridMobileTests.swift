@@ -788,6 +788,51 @@ final class DownloadManagerModuleTests: XCTestCase {
     waitForExpectations(timeout: 2)
   }
 
+  func testCancelDownloadWaitsForNativeTaskAcknowledgement() {
+    let session = URLSession(configuration: .ephemeral)
+    let task = session.downloadTask(with: URL(string: "https://127.0.0.1/offgrid-cancel-test")!)
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: "cancel-race",
+      fileName: "cancelled.bin",
+      modelId: "test/model",
+      totalBytes: 1,
+      bytesDownloaded: 0,
+      status: "running",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 1,
+      metadataJson: nil,
+      task: task,
+      taskIdentifier: task.taskIdentifier,
+      localUri: nil,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[info.downloadId] = info
+      self.module.taskToDownloadId[task.taskIdentifier] = info.downloadId
+    }
+
+    let cancelled = expectation(description: "native task cancellation acknowledged")
+    module.cancelDownload(
+      info.downloadId,
+      resolver: { _ in
+        XCTAssertTrue(task.state == .canceling || task.state == .completed)
+        XCTAssertNil(self.module.downloads[info.downloadId])
+        XCTAssertNil(self.module.taskToDownloadId[task.taskIdentifier])
+        cancelled.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("cancelDownload rejected: \(code ?? "") \(message ?? "")")
+        cancelled.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+    session.invalidateAndCancel()
+  }
+
   // MARK: moveCompletedDownload — unknown id
 
   func testMoveCompletedDownloadRejectsUnknownId() {

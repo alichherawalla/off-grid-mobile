@@ -802,22 +802,38 @@ extension DownloadManagerModule {
         reject("NOT_FOUND", "Download \(id) not found", nil)
         return
       }
+      let cancelled = DispatchGroup()
       if info.isMultiFile {
         for (_, fileTask) in info.fileTasks {
-          fileTask.task?.cancel()
-          self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
+          if let task = fileTask.task {
+            cancelled.enter()
+            task.cancel(byProducingResumeData: { _ in cancelled.leave() })
+          }
         }
-      } else {
-        info.task?.cancel()
-        if let taskId = info.taskIdentifier ?? info.task?.taskIdentifier {
-          self.taskToDownloadId.removeValue(forKey: taskId)
+      } else if let task = info.task {
+        cancelled.enter()
+        task.cancel(byProducingResumeData: { _ in cancelled.leave() })
+      }
+      cancelled.notify(queue: self.queue) {
+        self.queue.async(flags: .barrier) {
+          guard let current = self.downloads[id] else {
+            reject("CANCEL_RACE", "Download \(id) changed while cancellation was settling", nil)
+            return
+          }
+          if current.isMultiFile {
+            for (_, fileTask) in current.fileTasks {
+              self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
+            }
+          } else if let taskId = current.taskIdentifier ?? current.task?.taskIdentifier {
+            self.taskToDownloadId.removeValue(forKey: taskId)
+          }
+          self.downloads[id]?.status = "failed"
+          self.downloads.removeValue(forKey: id)
+          self.persistStateLocked()
+          NSLog("[DownloadManager] Download #%@ cancelled and removed", id)
+          resolve(nil)
         }
       }
-      self.downloads[id]?.status = "failed"
-      self.downloads.removeValue(forKey: id)
-      self.persistStateLocked()
-      NSLog("[DownloadManager] Download #%@ cancelled and removed", id)
-      resolve(nil)
     }
   }
 

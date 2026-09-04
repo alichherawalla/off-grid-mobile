@@ -413,10 +413,6 @@ class WorkerDownload(
             return request
         }
 
-        fun cancel(context: Context, downloadId: String) {
-            WorkManager.getInstance(context).cancelUniqueWork(workName(downloadId))
-        }
-
         fun workName(downloadId: String) = "download_$downloadId"
     }
 }

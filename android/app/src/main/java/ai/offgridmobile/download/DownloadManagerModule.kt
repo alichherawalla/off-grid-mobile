@@ -27,6 +27,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.UUID
 import ai.offgridmobile.SafePromise
@@ -158,14 +159,33 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
+                    val workName = WorkerDownload.workName(downloadId)
                     val download = downloadDao.getDownload(downloadId)
+                    workManager.cancelUniqueWork(workName)
+                    when (download?.status) {
+                        DownloadStatus.QUEUED,
+                        DownloadStatus.RUNNING,
+                        DownloadStatus.RETRYING,
+                        DownloadStatus.WAITING_FOR_NETWORK -> {
+                            withTimeout(5_000L) {
+                                workManager.getWorkInfosForUniqueWorkFlow(workName).first { rows ->
+                                    rows.isNotEmpty() && rows.all { it.state.isFinished }
+                                }
+                            }
+                        }
+                        DownloadStatus.COMPLETED,
+                        DownloadStatus.FAILED,
+                        DownloadStatus.CANCELLED,
+                        null -> Unit
+                    }
                     if (download != null) {
                         downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
                         val file = File(download.destination)
-                        if (file.exists()) file.delete()
+                        check(!file.exists() || file.delete()) {
+                            "Cancelled download file could not be removed"
+                        }
                     }
                 }
-                WorkerDownload.cancel(reactApplicationContext, downloadId)
                 workManager.pruneWork()
                 removeWorkObserver(downloadId)
                 SafePromise(promise, NAME).resolve(true)

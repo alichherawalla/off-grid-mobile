@@ -21,8 +21,14 @@ interface WaitForTransferInput {
   onProgress: (progress: { bytesDownloaded: number; totalBytes: number }) => void;
 }
 
-class NativeDownloadTransferAdapter implements DownloadTransferPort {
+interface TerminalOperation {
+  kind: 'cancel' | 'move';
+  promise: Promise<void>;
+}
+
+export class NativeDownloadTransferAdapter implements DownloadTransferPort {
   private readonly listeners = new Map<string, ListenerSet>();
+  private readonly terminalOperations = new Map<string, TerminalOperation>();
   private readonly subscriptions: Array<{ remove(): void }> = [];
 
   constructor() {
@@ -33,6 +39,10 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
       emitter.addListener('DownloadComplete', (event: Complete) => this.listeners.get(event.downloadId)?.complete(event)),
       emitter.addListener('DownloadError', (event: Failure) => this.listeners.get(event.downloadId)?.error(event)),
     );
+  }
+
+  isAvailable(): boolean {
+    return Boolean(native && typeof native.startDownload === 'function');
   }
 
   async start(input: Parameters<DownloadTransferPort['start']>[0]): Promise<{ transferId?: string }> {
@@ -92,8 +102,21 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
   }
 
   async cancel(transferId: string): Promise<void> {
-    if (!native) return;
-    await native.cancelDownload(transferId).catch(() => undefined);
+    this.assertAvailable();
+    const existing = this.terminalOperations.get(transferId);
+    if (existing) return existing.promise;
+    const cancellation = Promise.resolve()
+      .then(() => native.cancelDownload(transferId))
+      .then(() => undefined);
+    const terminal: TerminalOperation = { kind: 'cancel', promise: cancellation };
+    this.terminalOperations.set(transferId, terminal);
+    try {
+      await cancellation;
+    } finally {
+      if (this.terminalOperations.get(transferId) === terminal) {
+        this.terminalOperations.delete(transferId);
+      }
+    }
   }
 
   async excludeFromBackup(path: string): Promise<boolean> {
@@ -114,6 +137,7 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
     for (const subscription of this.subscriptions) subscription.remove();
     this.subscriptions.length = 0;
     this.listeners.clear();
+    this.terminalOperations.clear();
   }
 
   private waitForTransfer({
@@ -124,16 +148,28 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
   }: WaitForTransferInput): Promise<void> {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let abortRequested = false;
       const cleanup = () => {
         this.listeners.delete(transferId);
         signal.removeEventListener('abort', abort);
       };
       const abort = () => {
         if (settled) return;
-        settled = true;
-        this.cancel(transferId).catch(() => undefined);
-        cleanup();
-        reject(new Error('Download cancelled'));
+        abortRequested = true;
+        // A completion event transfers ownership to the move. Await that same
+        // terminal operation; a second native cancel cannot make the move safer.
+        if (this.terminalOperations.get(transferId)?.kind === 'move') return;
+        this.cancel(transferId).then(() => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error('Download cancelled'));
+        }, cause => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(cause);
+        });
       };
       this.listeners.set(transferId, {
         progress: event => onProgress({
@@ -141,25 +177,64 @@ class NativeDownloadTransferAdapter implements DownloadTransferPort {
           totalBytes: event.totalBytes,
         }),
         complete: () => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          Promise.resolve(native.moveCompletedDownload(transferId, destination)).then(() => resolve(), reject);
+          if (settled || this.terminalOperations.has(transferId)) return;
+          // Register the terminal operation before invoking the native move so
+          // abort and explicit cancellation always observe the same promise.
+          const terminalMove = Promise.resolve()
+            .then(() => native.moveCompletedDownload(transferId, destination))
+            .then(() => undefined);
+          const terminal: TerminalOperation = { kind: 'move', promise: terminalMove };
+          this.terminalOperations.set(transferId, terminal);
+          terminalMove.then(() => {
+            if (this.terminalOperations.get(transferId) === terminal) {
+              this.terminalOperations.delete(transferId);
+            }
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (abortRequested) reject(new Error('Download cancelled'));
+            else resolve();
+          }, cause => {
+            if (this.terminalOperations.get(transferId) === terminal) {
+              this.terminalOperations.delete(transferId);
+            }
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(cause);
+          });
         },
         error: event => {
-          if (settled) return;
+          if (settled || this.terminalOperations.has(transferId)) return;
           settled = true;
           cleanup();
           reject(new Error(event.reason ?? 'Download failed'));
         },
       });
       signal.addEventListener('abort', abort, { once: true });
-      native.startProgressPolling();
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+      try {
+        native.startProgressPolling();
+      } catch (cause) {
+        settled = true;
+        cleanup();
+        reject(cause);
+        return;
+      }
       Promise.resolve(native.getActiveDownloads()).then((rows: Array<{ downloadId?: string; id?: string; status?: string }> = []) => {
+        if (settled) return;
         const row = rows.find(item => String(item.downloadId ?? item.id) === transferId);
         if (row?.status === 'completed') this.listeners.get(transferId)?.complete({ downloadId: transferId });
         else if (row?.status === 'failed') this.listeners.get(transferId)?.error({ downloadId: transferId, reason: 'Download failed' });
-      }).catch(() => undefined);
+      }).catch(cause => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(cause);
+      });
     });
   }
 
