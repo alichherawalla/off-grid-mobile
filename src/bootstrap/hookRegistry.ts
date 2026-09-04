@@ -12,6 +12,7 @@ type HookFn = (...args: any[]) => any;
 
 const hooks: Record<string, HookFn> = {};
 const APPLICATION_STARTED_HOOK = 'application.started';
+const APPLICATION_STOPPING_HOOK = 'application.stopping';
 let applicationStarted = false;
 
 export function registerHook(name: string, fn: HookFn): () => void {
@@ -27,6 +28,9 @@ export function registerHook(name: string, fn: HookFn): () => void {
 /** Call a hook if registered; returns its result, or undefined when absent. */
 export function callHook<R = any>(name: string, ...args: any[]): R | undefined {
   if (name === APPLICATION_STARTED_HOOK) applicationStarted = true;
+  // Clear readiness before the stop owner runs. A registration made during or after shutdown must
+  // not replay the previous lifetime and start work against domains that are already stopping.
+  if (name === APPLICATION_STOPPING_HOOK) applicationStarted = false;
   const fn = hooks[name];
   return fn ? (fn(...args) as R) : undefined;
 }
@@ -44,7 +48,7 @@ export const HOOKS = {
    *  feature bundles may now start workflows that depend on those domains, but never their lifecycle. */
   applicationStarted: APPLICATION_STARTED_HOOK,
   /** () => void | Promise<void> — stop feature workflows before their application domains stop. */
-  applicationStopping: 'application.stopping',
+  applicationStopping: APPLICATION_STOPPING_HOOK,
   /** () => Promise<void> — re-run adoption of paired devices as remote servers (Pro sync). Fired by
    *  the Remote Servers "Scan network" action so one tap covers the LAN scan and the paired roster. */
   remoteServersAdoptPaired: 'remoteServers.adoptPaired',
