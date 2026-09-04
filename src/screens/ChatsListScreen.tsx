@@ -21,9 +21,9 @@ import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
 import { onnxImageGeneratorService } from '../services';
 import {
-  mobileModelCommands,
-  selectLocalTextModelOnDemand,
-} from '../services/modelServices/modelCommandApplication';
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../services/modelServices/modelFacadeCommands';
 import { Conversation, DownloadedModel } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
@@ -69,7 +69,9 @@ export const ChatsListScreen: React.FC = () => {
 
   const handleSelectTextModel = async (model: DownloadedModel) => {
     try {
-      await selectLocalTextModelOnDemand(model);
+      await selectModelRoute({
+        source: 'local', hostId: model.engine, modality: 'text', modelId: model.id,
+      });
       setShowModelSelector(false);
       navigation.navigate('Chat', {});
     } catch (error) {
@@ -80,7 +82,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadTextModel = async () => {
     setIsModelLoading(true);
     try {
-      await mobileModelCommands.unload('text');
+      await unloadAndClearModel('text');
     } finally {
       setIsModelLoading(false);
     }
@@ -89,7 +91,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadImageModel = async () => {
     setIsModelLoading(true);
     try {
-      await mobileModelCommands.unload('image');
+      await unloadAndClearModel('image');
     } finally {
       setIsModelLoading(false);
     }

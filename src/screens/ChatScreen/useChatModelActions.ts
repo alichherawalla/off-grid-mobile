@@ -2,9 +2,9 @@ import { Dispatch, SetStateAction, useEffect } from 'react';
 import { AlertState, showAlert } from '../../components';
 import { modelLibrary } from '../../services';
 import {
-  mobileModelCommands,
-  selectLocalTextModelOnDemand,
-} from '../../services/modelServices/modelCommandApplication';
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../../services/modelServices/modelFacadeCommands';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { useAppStore, useChatStore } from '../../stores';
 import { activeLocalModelId } from '../../services/modelServices/activeRoute';
@@ -219,7 +219,9 @@ export async function handleModelSelectFn(
   deps: ModelActionDeps,
   model: DownloadedModel,
 ): Promise<void> {
-  await selectLocalTextModelOnDemand(model);
+  await selectModelRoute({
+    source: 'local', hostId: model.engine, modality: 'text', modelId: model.id,
+  });
   deps.setShowModelSelector(false);
 }
 
@@ -237,7 +239,7 @@ export async function handleUnloadModelFn(
   deps.setIsModelLoading(true);
   deps.setLoadingModel(activeModel ?? null);
   try {
-    await mobileModelCommands.unload('text');
+    await unloadAndClearModel('text');
     if (deps.settings.showGenerationDetails && modelName) {
       addSystemMsg(deps, `Model unloaded: ${modelName}`);
     }

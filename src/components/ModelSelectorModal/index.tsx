@@ -19,7 +19,10 @@ import {
 } from '../../types';
 import { resolveSelectedTextModel } from '../../services';
 import { remoteServerModelOptions } from '@offgrid/application';
-import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
+import {
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../../services/modelServices/modelFacadeCommands';
 import {
   CustomAlert,
   AlertState,
@@ -70,12 +73,12 @@ export function savedImageModels(server: RemoteServer): RemoteModel[] {
 export function selectLocalImageModelOnDemand(
   model: ONNXImageModel,
 ): Promise<void> {
-  return mobileModelCommands.select({
+  return selectModelRoute({
     source: 'local',
     hostId: model.backend ?? 'image-runtime',
     modality: 'image',
     modelId: model.id,
-  }, { load: false });
+  });
 }
 
 interface ModelSelectorModalProps {
@@ -211,7 +214,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const handleUnloadImageModel = async () => {
     setIsLoadingImage(true);
     try {
-      await mobileModelCommands.unload('image');
+      await unloadAndClearModel('image');
       onUnloadImageModel?.();
     } catch (error) {
       logger.error('Failed to unload image model:', error);
@@ -227,7 +230,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     try {
       // Always go through the owner. It also waits for an in-flight local load,
       // which is not yet visible as a loaded native model.
-      await mobileModelCommands.select({
+      await selectModelRoute({
         source: 'remote',
         hostId: serverId,
         modality: 'text',
@@ -251,7 +254,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     serverId: string,
   ) => {
     try {
-      await mobileModelCommands.select({
+      await selectModelRoute({
         source: 'remote',
         hostId: serverId,
         modality: 'image',

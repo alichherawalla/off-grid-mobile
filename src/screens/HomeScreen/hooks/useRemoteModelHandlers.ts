@@ -1,19 +1,20 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
-import { mobileModelCommands } from '../../../services/modelServices/modelCommandApplication';
+import {
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../../../services/modelServices/modelFacadeCommands';
 import { RemoteModel } from '../../../types';
 import { LoadingState } from './types';
 import logger from '../../../utils/logger';
 
 interface RemoteModelHandlersParams {
-  activeModelId: string | null;
   setPickerType: (type: 'text' | 'image' | null) => void;
   setLoadingState: (state: LoadingState) => void;
   setAlertState: (state: any) => void;
 }
 
 export function useRemoteModelHandlers({
-  activeModelId,
   setPickerType,
   setLoadingState,
   setAlertState,
@@ -29,7 +30,7 @@ export function useRemoteModelHandlers({
     setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
     try {
       // Unload any active local model first — only one active model at a time
-        await mobileModelCommands.select({
+        await selectModelRoute({
           source: 'remote',
           hostId: model.serverId,
           modality: 'text',
@@ -51,14 +52,14 @@ export function useRemoteModelHandlers({
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
     },
-    [activeModelId, setPickerType, setLoadingState, setAlertState],
+    [setPickerType, setLoadingState, setAlertState],
   );
 
   const handleUnloadRemoteTextModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
-        await mobileModelCommands.unload('text');
+        await unloadAndClearModel('text');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
@@ -75,7 +76,7 @@ export function useRemoteModelHandlers({
         modelName: model.name,
       });
     try {
-        await mobileModelCommands.select({
+        await selectModelRoute({
           source: 'remote',
           hostId: model.serverId,
           modality: 'image',
@@ -99,7 +100,7 @@ export function useRemoteModelHandlers({
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
-      await mobileModelCommands.unload('image');
+      await unloadAndClearModel('image');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {

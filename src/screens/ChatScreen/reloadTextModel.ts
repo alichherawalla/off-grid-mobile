@@ -1,5 +1,5 @@
 import { hideAlert, showAlert, type AlertState } from '../../components';
-import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
+import { reloadLocalTextModel } from '../../services/modelServices/modelFacadeCommands';
 import logger from '../../utils/logger';
 import { initiateModelLoad } from './useChatModelActions';
 
@@ -39,14 +39,12 @@ export async function reloadTextModel({
   }
   logger.log('[ModelReload] reloading the active text model');
   try {
-    const result = await mobileModelCommands.reloadText(modelId, isRemote);
-    if (result === 'reloaded') {
-      const readiness = await initiateModelLoad(modelDeps, true);
-      if (!readiness.ok) {
-        throw new Error(`Reloaded model is not ready: ${readiness.reason}`);
-      }
+    await reloadLocalTextModel(modelId);
+    const readiness = await initiateModelLoad(modelDeps, true);
+    if (!readiness.ok) {
+      throw new Error(`Reloaded model is not ready: ${readiness.reason}`);
     }
-    logger.log(`[ModelReload] finished result=${result}`);
+    logger.log('[ModelReload] finished');
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     logger.error('[ModelReload] failed:', detail);

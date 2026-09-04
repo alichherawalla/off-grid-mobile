@@ -139,7 +139,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     handleSelectRemoteImageModel,
     handleUnloadRemoteImageModel,
   } = useRemoteModelHandlers({
-    activeModelId,
     setPickerType,
     setLoadingState,
     setAlertState,
