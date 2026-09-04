@@ -20,7 +20,6 @@ import {
   selectMobileRoute,
 } from './mobileLLMService';
 import { reconcileMobileGenerationAdapters } from './generationAdapters';
-import { mobileWorkspace } from './workspace';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
@@ -48,13 +47,19 @@ registerModelSelectionCommandPort({
     );
   },
 });
-// Registration comes from the facade's `models.adapters` seam. `generate` does NOT: the facade's
-// `generate(command)` streams `GenerationEvent`s, while this port's consumers await a
-// `GenerationResult` - collapsing the stream into a result here would make the app a second owner
-// of what a generation result IS (partial output, terminal event, failure). Requested as
-// WIRING_B #13; until then this one member keeps the workspace alive in this file.
+// Both members are facade seams now. `mainQueue.generate` is the awaited form of the same
+// operation `ModelsFacade.generate` streams - shared already held it, because the stream is a
+// projection OVER a promise, so this is not a second implementation of "fold a stream into a
+// result". That fold is domain policy (which event is terminal, what happens to partial output,
+// how a failure becomes a rejection) and is exactly what this app must not own.
+//
+// It rejects with `ModelsGenerationError` carrying a CLASSIFIED `ModelsFailure`, never a native
+// error, so no caller classifies. Nothing here had to change to accommodate that: every consumer
+// of this port - the sidecar text, embedding and classification paths and their six callers -
+// lets a rejection propagate, and none of them inspects an error. Verified rather than assumed.
 const mobileGenerationService: WorkspaceGenerationPort = {
-  generate: (request, events) => mobileWorkspace.generate(request, events),
+  generate: (request, events) =>
+    applicationFacade().models.mainQueue.generate(request, events),
   registerAdapter: adapter =>
     applicationFacade().models.adapters.registerGeneration(adapter),
 };
