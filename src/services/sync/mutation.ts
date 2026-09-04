@@ -1,6 +1,5 @@
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
-  CORE_SYNC_ENTITIES,
   createKnowledgeDocumentStateFields,
   createSharedFileStateFields,
   isRuntimeOnlyMessage,
@@ -12,13 +11,15 @@ import {
   decodeModelSettingPatch,
   encodeChangedModelSettings,
 } from '@offgrid/models';
-import type { KnowledgeDocumentSnapshot } from '@offgrid/application';
+import {
+  CORE_SYNC_ENTITIES,
+  type KnowledgeDocumentSnapshot,
+} from '@offgrid/application';
 import type { Conversation, Message, Project } from '../../types';
 import { serializeMessageContext } from './messageContext';
 
 // The committed-mutation contract (entity table in wire order, mutation shape) is shared with
 // Off Grid Desktop through @offgrid/sync; this module keeps only the Mobile record builders.
-export { CORE_SYNC_ENTITIES } from '@offgrid/sync';
 export type { CoreSyncEntity, SyncMutation } from '@offgrid/sync';
 
 export function modelSettingMutations(
