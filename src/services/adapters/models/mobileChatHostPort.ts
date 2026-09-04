@@ -21,6 +21,11 @@ import {
   type GenerationRequest,
   type GenerationResult,
 } from '@offgrid/application';
+import type {
+  CompactableGenerationMessage,
+  ContextCompactionService,
+  GenerationIntentService,
+} from '@offgrid/models';
 import { callHook, HOOKS } from '../../../bootstrap/hookRegistry';
 import { APP_CONFIG } from '../../../constants';
 import {
@@ -35,8 +40,8 @@ import logger from '../../../utils/logger';
 import { applicationFacade } from '../../applicationFacade';
 import { ensureDefaultClassifier } from '../../classifierProvisioning';
 import { mobileChatGenerationProjection } from '../../chatGenerationProjection';
-import { contextCompactionService } from '../../contextCompaction';
-import { intentClassifier } from '../../intentClassifier';
+import { mobileCompactionOptions } from '../../contextCompactionPorts';
+import { classifyMobileIntent, configuredClassifierModel } from '../../intentClassifierPorts';
 import { reportModelFailure } from '../../modelFailureHandler';
 import { modelInputAudioUris } from '../../modelMedia';
 import { requireRagSuccess } from '../../ragOutcome';
@@ -123,7 +128,10 @@ export function projectClassifierFailure(
   });
 }
 
-export function mobileChatOperationPorts(): ChatOperationApplicationPorts {
+/** The composition root passes the composed intent service; this module stays port-only. */
+export function mobileChatOperationPorts(
+  intent: GenerationIntentService,
+): ChatOperationApplicationPorts {
   return {
     inspect() {
       const state = useAppStore.getState();
@@ -150,15 +158,9 @@ export function mobileChatOperationPorts(): ChatOperationApplicationPorts {
       );
     },
     classify(text, input) {
-      const state = useAppStore.getState();
-      const classifierModel = state.settings.classifierModelId
-        ? state.downloadedModels.find(
-            model => model.id === state.settings.classifierModelId,
-          )
-        : null;
-      return intentClassifier.classifyIntent(text, {
+      return classifyMobileIntent(intent, text, {
         useLLM: input.useModel,
-        classifierModel,
+        classifierModel: configuredClassifierModel(),
         onStatusChange: input.onStatusChange,
       });
     },
@@ -335,6 +337,7 @@ export function mobileChatRequestDefaults(): ChatTurn['request']['request'] {
 export function mobileChatSessionPorts(
   rag: ChatRagPort,
   operation: ChatOperationPolicyPort,
+  compaction: ContextCompactionService<CompactableGenerationMessage>,
 ): [ChatGenerationPort, ChatSessionRepositoryPort, ChatSessionServiceOptions] {
   return [
     { generate: generateForSession },
@@ -364,11 +367,11 @@ export function mobileChatSessionPorts(
       },
       operation,
       compactionRetry: {
-        shouldRetry: ({ error }) =>
-          contextCompactionService.isContextFullError(error),
+        shouldRetry: ({ error }) => compaction.isCapacityError(error),
       },
       compaction: {
-        compact: context => contextCompactionService.compactChat(context),
+        compact: context =>
+          compaction.compactChat(context, mobileCompactionOptions(context)),
       },
       events: { publish: publishSessionEvent },
     },

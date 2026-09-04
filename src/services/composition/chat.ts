@@ -7,23 +7,32 @@ import {
   ContextCompactionService,
   GenerationIntentService,
   ImagePromptEnhancementService,
+  once,
   type CompactableGenerationMessage,
 } from '@offgrid/models';
-import { once } from '@offgrid/models';
 import type { ModelsChatPlatformPort } from '@offgrid/application';
+import {
+  invalidateMobileChatSession,
+  mobileChatContextPorts,
+  mobileChatOperationCommand,
+  mobileChatOperationPorts,
+  mobileChatQueueSnapshot,
+  mobileChatSessionPorts,
+  subscribeMobileChatQueue,
+  subscribeMobileChatSessionEvents,
+} from '../adapters/models/mobileChatHostPort';
+import { mobileContextCompactionPorts } from '../contextCompactionPorts';
 
-const chatPorts = (): typeof import('../adapters/models/mobileChatHostPort') =>
-  require('../adapters/models/mobileChatHostPort') as typeof import('../adapters/models/mobileChatHostPort');
-
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports2 = (): typeof import('../contextCompaction') =>
-  require('../contextCompaction') as typeof import('../contextCompaction');
-
-export const chatOperation = once(() => new ChatOperationApplicationService(chatPorts().mobileChatOperationPorts()));
-export const chatContext = once(() => new ChatContextApplicationService(chatPorts().mobileChatContextPorts()));
+export const contextCompaction = once(
+  () => new ContextCompactionService<CompactableGenerationMessage>(mobileContextCompactionPorts()),
+);
+export const generationIntent = once(() => new GenerationIntentService());
+export const chatOperation = once(
+  () => new ChatOperationApplicationService(mobileChatOperationPorts(generationIntent())),
+);
+export const chatContext = once(() => new ChatContextApplicationService(mobileChatContextPorts()));
 export const chatSession = once(() => new ChatSessionService(
-  ...chatPorts().mobileChatSessionPorts(
+  ...mobileChatSessionPorts(
     {
       augment: ({ identity, signal }) => chatContext().compose({
         conversationId: identity.conversationId,
@@ -33,27 +42,24 @@ export const chatSession = once(() => new ChatSessionService(
     },
     {
       resolve: input => chatOperation().resolve(
-        chatPorts().mobileChatOperationCommand(input),
+        mobileChatOperationCommand(input),
       ),
     },
+    contextCompaction(),
   ),
 ));
 export const modelsChatPort: ModelsChatPlatformPort = {
-  snapshot: () => chatPorts().mobileChatQueueSnapshot(),
-  subscribe: listener => chatPorts().subscribeMobileChatQueue(listener),
-  events: listener => chatPorts().subscribeMobileChatSessionEvents(listener),
+  snapshot: () => mobileChatQueueSnapshot(),
+  subscribe: listener => subscribeMobileChatQueue(listener),
+  events: listener => subscribeMobileChatSessionEvents(listener),
   send: command => chatSession().send(command),
   regenerate: command => chatSession().regenerate(command),
   edit: command => chatSession().edit(command),
   stop: (turnId, reason) => chatSession().stop(turnId, reason),
   stopConversation: (conversationId, reason) =>
     chatSession().stopConversation(conversationId, reason),
-  invalidate: conversationId => chatPorts().invalidateMobileChatSession(conversationId),
+  invalidate: conversationId => invalidateMobileChatSession(conversationId),
 };
-export const contextCompaction = once(
-  () => new ContextCompactionService<CompactableGenerationMessage>(ports2().mobileContextCompactionPorts()),
-);
-export const generationIntent = once(() => new GenerationIntentService());
 /** One enhancement service per request; its ports carry that request's chat card. */
 export function imagePromptEnhancement(
   ports: ConstructorParameters<typeof ImagePromptEnhancementService>[0],
