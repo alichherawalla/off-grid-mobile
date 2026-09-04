@@ -33,6 +33,9 @@ export function _clearHooksForTesting(): void {
 
 /** Known hook names, centralised so core and pro stay in sync. */
 export const HOOKS = {
+  /** () => void | Promise<void> — the application root has started every composed domain. Optional
+   *  feature bundles may now start workflows that depend on those domains, but never their lifecycle. */
+  applicationStarted: 'application.started',
   /** () => Promise<void> — re-run adoption of paired devices as remote servers (Pro sync). Fired by
    *  the Remote Servers "Scan network" action so one tap covers the LAN scan and the paired roster. */
   remoteServersAdoptPaired: 'remoteServers.adoptPaired',

@@ -45,7 +45,7 @@ import type {
 export type { HomeScreenNavigationProp, ModelPickerType, LoadingState };
 
 // Track if we've synced native state to avoid repeated calls
-let hasInitializedNativeSync = false;
+let hasInitializedNativeModelState = false;
 let lanDiscoveryState: 'idle' | 'scheduled' | 'complete' = 'idle';
 
 function deleteConversationWithAlert(
@@ -150,8 +150,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     let cancelled = false;
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
-      if (!hasInitializedNativeSync) {
-        hasInitializedNativeSync = true;
+      if (!hasInitializedNativeModelState) {
+        hasInitializedNativeModelState = true;
         syncWithNativeState();
       }
       if (lanDiscoveryState === 'idle') {

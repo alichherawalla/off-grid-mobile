@@ -23,6 +23,7 @@ import { createMobileModelLibraryFacadePorts } from '../modelServices/modelLibra
 import { createMobileApplicationDownloadPorts } from '../modelServices/applicationDownloadPorts';
 import type { MobileManagedArtifactIO } from '../modelServices/modelDownloadArtifactIO';
 import { modelsChatPort } from './chat';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 
 export type MobileApplicationExtensionPorts = Partial<
   Pick<OffGridPlatformPorts, 'sync' | 'speech' | 'automation' | 'use' | 'pro'>
@@ -171,7 +172,8 @@ export function startMobileApplication(): ReturnType<
   const current = getMobileApplication();
   starting ??= current
     .start()
-    .then(result => {
+    .then(async result => {
+      await callHook<Promise<void>>(HOOKS.applicationStarted);
       recoverDownloadJournal(current);
       return reportDegradedStart(result);
     }, error => {
