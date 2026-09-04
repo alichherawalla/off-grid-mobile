@@ -28,7 +28,12 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
     registerMobileApplicationPorts(pro.createMobileApplicationPorts);
   }
   if (typeof pro.configureProEntitlementProvider === 'function') {
-    pro.configureProEntitlementProvider(registerProEntitlementProvider);
+    pro.configureProEntitlementProvider(
+      registerProEntitlementProvider,
+      async () => {
+        await loadProFeatures(true);
+      },
+    );
   }
   logger.log('[BOOT-PRO] proEntitlementLifecycle.start');
   await proEntitlementLifecycle.start();
@@ -53,13 +58,10 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   useAppStore.getState().setHasRegisteredPro(credentialActive);
   useAppStore.getState().setHasSavedProCredential(credentialSaved);
   useAppStore.getState().setProActive(active);
-  useAppStore
-    .getState()
-    .setHasExpiredProCredential(expired);
+  useAppStore.getState().setHasExpiredProCredential(expired);
   // A credential is not access. If the roster last told us this device is deactivated, the paid bundle
   // must not load at all - loading it and then hiding the entry points leaves every Pro service running.
-  const admitted =
-    selectHasProAccess(useAppStore.getState()) || DEV_UNLOCK_PRO;
+  const admitted = selectHasProAccess(useAppStore.getState()) || DEV_UNLOCK_PRO;
   if (!expired && typeof pro.activateSyncBootstrap === 'function') {
     pro.activateSyncBootstrap({
       registerScreen,
