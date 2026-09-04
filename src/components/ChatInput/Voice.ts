@@ -3,10 +3,8 @@ import { useCallback, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore } from '../../stores';
 import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
-import {
-  mobileTranscriptionRuntime,
-  transcriptionModelIntents,
-} from '../../services/modelServices/transcriptionRuntimePort';
+import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
+import { transcriptionModelIntents } from '../../services/composition/transcription';
 import { supportsAudioInput } from '../../services/modelServices/modelState';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { recordingController } from '../../services/recordingController';
