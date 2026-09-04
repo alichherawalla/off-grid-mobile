@@ -31,7 +31,7 @@ describe('T023b (rendered) — Eject All frees every resident, sidecars included
     await h.placeImageModel({ backend: 'mnn' });
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
-    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
      
     await activeModelService.loadImageModel('sd');
     await h.setupWhisperModel();

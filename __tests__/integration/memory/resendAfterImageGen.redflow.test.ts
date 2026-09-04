@@ -8,25 +8,25 @@
  * than real free) is still refused — see aggressiveDirtyOverCommit.rendered. Runs the REAL
  * modelResidencyManager over the RAM-sensor stub (deviceMemory harness) with the device repro.
  */
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';
 
-afterEach(() => resetDeviceMemory());
+afterEach(async () => resetDeviceMemory());
 
 describe('M11 — resend after image-gen (co-reside under balanced)', () => {
   it('reloads the clean text model alongside the resident image model (co-reside, no swap)', async () => {
-    setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
+    await setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
     // Image gen just ran → the image model is dirty-resident.
     const imageLease = await modelResidencyManager.acquire(
       { key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
     await imageLease.release();
 
     // User resends a text turn → the clean text model reloads.
     const textLease = await modelResidencyManager.acquire(
       { key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: false },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
     await textLease.release();
     const { fits, evicted } = textLease;

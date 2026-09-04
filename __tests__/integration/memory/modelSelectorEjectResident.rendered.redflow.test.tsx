@@ -30,7 +30,7 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
     await h.placeImageModel({ backend: 'mnn' });
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
-    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
      

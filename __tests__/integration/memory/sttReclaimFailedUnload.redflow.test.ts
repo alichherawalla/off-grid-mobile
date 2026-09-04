@@ -8,14 +8,14 @@
  * but on the transcription-reclaim path. Real modelResidencyManager over the RAM
  * stub; only the native unload is faked (made to reject).
  */
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';
 
-afterEach(() => resetDeviceMemory());
+afterEach(async () => resetDeviceMemory());
 
 describe('STT reclaim — failed whisper unload over-commits (red-flow)', () => {
   it('keeps whisper resident when its unload rejects (does not count it as freed)', async () => {
-    setDeviceMemory({ platform: 'android', totalGB: 4, availGB: gbOf(500) }); // ≤6GB → reclaim path active
+    await setDeviceMemory({ platform: 'android', totalGB: 4, availGB: gbOf(500) }); // ≤6GB → reclaim path active
     const unload = jest.fn().mockResolvedValue(undefined);
     const lease = await modelResidencyManager.acquire(
       { key: 'whisper', type: 'transcription', modelId: 'base.en', sizeMB: 320, canEvict: () => true },

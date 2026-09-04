@@ -1,39 +1,46 @@
-import { renderHook, act } from '@testing-library/react-native';
-
-jest.mock('../../../src/services/modelServices/residencyBootstrap', () => {
-  const listeners = new Set<() => void>();
-  const state = { busy: false };
-  return {
-    modelResidencyManager: {
-      subscribe: (listener: () => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-      isBusy: (modality: string) => modality === 'voice' && state.busy,
-    },
-    __test: {
-      setBusy: (value: boolean) => {
-        state.busy = value;
-        listeners.forEach(listener => listener());
-      },
-    },
-  };
-});
-
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useModelResidencyBusy } from '../../../src/services/modelServices/useModelResidencyBusy';
-import * as residency from '../../../src/services/modelServices/residencyBootstrap';
-
-const setBusy = (residency as unknown as { __test: { setBusy: (value: boolean) => void } }).__test.setBusy;
+import { llmService } from '../../../src/services/llm';
+import { useAppStore } from '../../../src/stores/appStore';
+import {
+  modelApplication,
+  resetModelApplication,
+} from '../../harness/activeModelLifecycle';
+import { createDownloadedModel } from '../../utils/factories';
 
 describe('useModelResidencyBusy', () => {
-  it('follows the shared residency manager for the asked modality', () => {
-    const voice = renderHook(() => useModelResidencyBusy('voice'));
+  it('projects a real facade load only to the affected modality', async () => {
+    let finishLoad: (() => void) | undefined;
+    let loaded = false;
+    jest.spyOn(llmService, 'loadModel').mockImplementation(
+      () => new Promise<void>(resolve => {
+        finishLoad = () => {
+          loaded = true;
+          resolve();
+        };
+      }),
+    );
+    jest.spyOn(llmService, 'isModelLoaded').mockImplementation(() => loaded);
+    await resetModelApplication();
+    useAppStore.getState().addDownloadedModel(createDownloadedModel({id: 'busy-text'}));
+    await modelApplication().models.refresh();
+    const selected = await modelApplication().models.select({
+      modality: 'text',
+      modelId: 'busy-text',
+    });
+    expect(selected.ok).toBe(true);
+
     const text = renderHook(() => useModelResidencyBusy('text'));
+    const voice = renderHook(() => useModelResidencyBusy('voice'));
+    let loading!: Promise<unknown>;
+    act(() => {
+      loading = modelApplication().models.load({modality: 'text', modelId: 'busy-text'});
+    });
+
+    await waitFor(() => expect(text.result.current).toBe(true));
     expect(voice.result.current).toBe(false);
-    act(() => setBusy(true));
-    expect(voice.result.current).toBe(true);
-    expect(text.result.current).toBe(false);
-    act(() => setBusy(false));
-    expect(voice.result.current).toBe(false);
+    finishLoad?.();
+    await act(async () => { await loading; });
+    await waitFor(() => expect(text.result.current).toBe(false));
   });
 });

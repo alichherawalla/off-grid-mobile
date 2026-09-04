@@ -16,11 +16,17 @@ import { selectedLocalModelId } from '../../utils/testHelpers';
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../harness/activeModelLifecycle';
 import { resolveTextResidentSpec } from '../../../src/services/modelServices/modelLifecycleBootstrap';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { llmService } from '../../../src/services/llm';
 import { liteRTService } from '../../../src/services/litert';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { hardwareService } from '../../../src/services/hardware';
+import {
+  clearTextModelCache,
+  getPerformanceStats,
+  getResourceUsage,
+} from '../../../src/services/modelServices/modelState';
+import { modelApplication } from '../../harness/activeModelLifecycle';
 import {
   resetStores,
   flushPromises,
@@ -58,13 +64,13 @@ describe('ActiveModelService Integration', () => {
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
-    modelResidencyManager._reset();
+    await modelResidencyManager._reset();
 
     // Default mock implementations
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null);
     mockLlmService.loadModel.mockResolvedValue(undefined);
-    mockLlmService.unloadModel.mockResolvedValue(undefined);
+    mockLlmService.unloadModel.mockResolvedValue({released: true});
 
     mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
     mockLocalDreamService.loadModel.mockResolvedValue(true);
@@ -208,7 +214,7 @@ describe('ActiveModelService Integration', () => {
       arrangeLocalSelection('text', 'litert-1');
       // The active engine (LiteRT) reports a resident model; llama has nothing.
       jest.spyOn(liteRTService, 'isModelLoaded').mockReturnValue(true);
-      const liteUnload = jest.spyOn(liteRTService, 'unloadModel').mockResolvedValue(undefined);
+      const liteUnload = jest.spyOn(liteRTService, 'unloadModel').mockResolvedValue({released: true});
       mockLlmService.isModelLoaded.mockReturnValue(false);
 
       await activeModelService.unloadTextModel();
@@ -329,7 +335,7 @@ describe('ActiveModelService Integration', () => {
       useAppStore.setState({ downloadedModels: [model] });
 
       const listener = jest.fn();
-      const unsubscribe = activeModelService.subscribe(listener);
+      const unsubscribe = modelApplication().models.subscribe(listener);
 
       // Create a deferred promise to control loading
       let resolveLoad: () => void;
@@ -344,7 +350,10 @@ describe('ActiveModelService Integration', () => {
       // Should have been called with loading state
       expect(listener).toHaveBeenCalled();
       const loadingCall = listener.mock.calls.find(
-        call => call[0].text.isLoading === true
+        call => call[0].operations.active.some(
+          (operation: {kind: string; modality?: string}) =>
+            operation.kind === 'load' && operation.modality === 'text',
+        )
       );
       expect(loadingCall).toBeDefined();
 
@@ -354,7 +363,10 @@ describe('ActiveModelService Integration', () => {
 
       // Should have been called with loaded state
       const loadedCall = listener.mock.calls.find(
-        call => call[0].text.isLoading === false
+        call => !call[0].operations.active.some(
+          (operation: {kind: string; modality?: string}) =>
+            operation.kind === 'load' && operation.modality === 'text',
+        )
       );
       expect(loadedCall).toBeDefined();
 
@@ -759,7 +771,7 @@ describe('ActiveModelService Integration', () => {
       );
 
       expect(result).toBeDefined();
-      expect(result.totalRequiredMemoryGB).toBeGreaterThan(0);
+      expect(result.totalRequiredMemoryMB).toBeGreaterThan(0);
     });
   });
 
@@ -809,7 +821,7 @@ describe('ActiveModelService Integration', () => {
 
       mockLlmService.getPerformanceStats.mockReturnValue(expectedStats);
 
-      const stats = activeModelService.getPerformanceStats();
+      const stats = getPerformanceStats();
 
       expect(stats).toEqual(expectedStats);
       expect(mockLlmService.getPerformanceStats).toHaveBeenCalled();
@@ -827,8 +839,8 @@ describe('ActiveModelService Integration', () => {
       await activeModelService.loadImageModel('img-model');
 
       const info = activeModelService.getActiveModels();
-      expect(info.image.model?.id).toBe('img-model');
-      expect(info.image.isLoaded).toBe(true);
+      expect(info.image?.model?.id).toBe('img-model');
+      expect(info.image?.ready).toBe(true);
     });
 
     it('should report no models when none loaded', async () => {
@@ -840,10 +852,8 @@ describe('ActiveModelService Integration', () => {
 
       const info = activeModelService.getActiveModels();
 
-      expect(info.text.model).toBe(null);
-      expect(info.text.isLoaded).toBe(false);
-      expect(info.image.model).toBe(null);
-      expect(info.image.isLoaded).toBe(false);
+      expect(info.text?.ready ?? false).toBe(false);
+      expect(info.image?.ready ?? false).toBe(false);
     });
   });
 
@@ -969,7 +979,7 @@ describe('ActiveModelService Integration', () => {
         availableMemory: 5 * 1024 * 1024 * 1024,
       } as any);
 
-      const usage = await activeModelService.getResourceUsage();
+      const usage = await getResourceUsage();
 
       expect(usage.memoryTotal).toBe(8 * 1024 * 1024 * 1024);
       expect(usage.memoryAvailable).toBe(5 * 1024 * 1024 * 1024);
@@ -995,7 +1005,7 @@ describe('ActiveModelService Integration', () => {
       const result = await activeModelService.checkMemoryForModel('img-check', 'image');
 
       expect(result.canLoad).toBe(true);
-      expect(result.requiredMemoryGB).toBeGreaterThan(0);
+      expect(result.requiredMemoryMB).toBeGreaterThan(0);
     });
   });
 
@@ -1017,7 +1027,7 @@ describe('ActiveModelService Integration', () => {
       const result = await activeModelService.checkMemoryForDualModel(null, 'img-model');
 
       expect(result).toBeDefined();
-      expect(result.totalRequiredMemoryGB).toBeGreaterThan(0);
+      expect(result.totalRequiredMemoryMB).toBeGreaterThan(0);
     });
 
     it('handles null image model ID', async () => {
@@ -1037,7 +1047,7 @@ describe('ActiveModelService Integration', () => {
       const result = await activeModelService.checkMemoryForDualModel('text-model', null);
 
       expect(result).toBeDefined();
-      expect(result.totalRequiredMemoryGB).toBeGreaterThan(0);
+      expect(result.totalRequiredMemoryMB).toBeGreaterThan(0);
     });
   });
 
@@ -1051,7 +1061,7 @@ describe('ActiveModelService Integration', () => {
 
       await activeModelService.loadTextModel('cache-model');
 
-      await activeModelService.clearTextModelCache();
+      await clearTextModelCache();
 
       expect(mockLlmService.clearKVCache).toHaveBeenCalled();
     });
@@ -1179,7 +1189,7 @@ describe('ActiveModelService Integration', () => {
       });
       arrangeLocalSelection('text', 'text-est');
 
-      const usage = await activeModelService.getResourceUsage();
+      const usage = await getResourceUsage();
       // estimatedModelMemory should include text model memory
       expect(usage.estimatedModelMemory).toBeGreaterThan(0);
     });
@@ -1195,7 +1205,7 @@ describe('ActiveModelService Integration', () => {
       });
       arrangeLocalSelection('image', 'img-est');
 
-      const usage = await activeModelService.getResourceUsage();
+      const usage = await getResourceUsage();
       expect(usage.estimatedModelMemory).toBeGreaterThan(0);
     });
 
@@ -1217,7 +1227,7 @@ describe('ActiveModelService Integration', () => {
       arrangeLocalSelection('text', 'text-both');
       arrangeLocalSelection('image', 'img-both');
 
-      const usage = await activeModelService.getResourceUsage();
+      const usage = await getResourceUsage();
       // Should be sum of both model memories
       const textOnly = textModel.fileSize * 1.2;
       const imageOnly = imageModel.size * 1.3;
@@ -1253,7 +1263,7 @@ describe('ActiveModelService Integration', () => {
       const result = await activeModelService.checkMemoryForModel('text-check', 'text');
 
       // currentlyLoadedMemoryGB should include the image model
-      expect(result.currentlyLoadedMemoryGB).toBeGreaterThan(0);
+      expect(result.currentlyLoadedMemoryMB).toBeGreaterThan(0);
     });
 
     it('counts text model memory when checking image model', async () => {
@@ -1283,7 +1293,7 @@ describe('ActiveModelService Integration', () => {
       const result = await activeModelService.checkMemoryForModel('img-check', 'image');
 
       // currentlyLoadedMemoryGB should include the text model
-      expect(result.currentlyLoadedMemoryGB).toBeGreaterThan(0);
+      expect(result.currentlyLoadedMemoryMB).toBeGreaterThan(0);
     });
   });
 

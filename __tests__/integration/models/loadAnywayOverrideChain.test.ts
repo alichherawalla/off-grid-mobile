@@ -34,7 +34,7 @@ import { selectedLocalModelId } from '../../utils/testHelpers';
 
 import { useAppStore } from '../../../src/stores/appStore';
 import { activeModelService } from '../../harness/activeModelLifecycle';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { llmService } from '../../../src/services/llm';
 import { hardwareService } from '../../../src/services/hardware';
 import { loadModelWithOverride } from '../../../src/services/loadModelWithOverride';
@@ -99,6 +99,7 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
   const registerCleanVictim = async (sizeMB = 4000) => {
     const unload = jest.fn(async () => {
       reclaimed = true;
+      return {reclaimed: true as const};
     });
     // Model a runtime that became resident before available memory dropped.
     modelResidencyManager.setBudgetOverrideMB(null);
@@ -130,13 +131,13 @@ describe('Load Anyway override chain (UI helper → service → residency)', () 
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
-    modelResidencyManager._reset();
+    await modelResidencyManager._reset();
     reclaimed = false;
 
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null);
     mockLlmService.loadModel.mockResolvedValue(undefined);
-    mockLlmService.unloadModel.mockResolvedValue(undefined);
+    mockLlmService.unloadModel.mockResolvedValue({released: true});
 
     mockHardwareService.getDeviceInfo.mockResolvedValue(
       createDeviceInfo({ totalMemory: 12 * 1024 * 1024 * 1024 }),

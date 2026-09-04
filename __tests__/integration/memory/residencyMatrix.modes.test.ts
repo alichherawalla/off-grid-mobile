@@ -48,7 +48,7 @@
  * That row is tagged `oracle: 'M6'` and is EXPECTED-to-fail-on-HEAD only in aggressive; do NOT weaken it and
  * do NOT fix source here. The row×mode PASS/FAIL red list is the deliverable that drives the fix.
  */
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import type { LoadPolicy } from '../../../src/services/memoryBudget';
 import type { ResidentType } from '@offgrid/models';
 import { setDeviceMemory, resetDeviceMemory, makeResident } from '../../harness/deviceMemory';
@@ -272,11 +272,11 @@ const ROWS: Row[] = [
 const POLICIES: LoadPolicy[] = ['conservative', 'balanced', 'aggressive'];
 
 describe.each(POLICIES)('model residency matrix — %s policy', policy => {
-  afterEach(() => resetDeviceMemory());
+  afterEach(async () => resetDeviceMemory());
 
   it.each(ROWS.map(r => [r.name, r] as const))('%s', async (_name, row) => {
     // Seed the device RAM + policy and reset the REAL manager to empty.
-    setDeviceMemory({ ...row.deviceRAM, policy });
+    await setDeviceMemory({ ...row.deviceRAM, policy });
 
     // Seed residentsBefore into the REAL manager (as if already loaded). No row pins a resident:
     // the "pinned model blocks a 2nd heavy" case is dropped from the finalized model (the UI can't
@@ -295,7 +295,7 @@ describe.each(POLICIES)('model residency matrix — %s policy', policy => {
     // active policy), HONORS the fit verdict, and only then registers the model. So the resident set after
     // reflects exactly what the user would end up with in RAM.
     const load = jest.fn().mockResolvedValue(undefined);
-    const unload = jest.fn().mockResolvedValue(undefined);
+    const unload = jest.fn().mockResolvedValue({reclaimed: true as const});
     const lease = await modelResidencyManager.acquire(
       {
         key: row.incoming.key,

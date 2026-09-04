@@ -18,8 +18,11 @@ import { selectedLocalModelId } from '../utils/testHelpers';
  */
 
 import { useAppStore } from '../../src/stores/appStore';
-import { activeModelService } from '../harness/activeModelLifecycle';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import {
+  activeModelService,
+  modelResidencyManager,
+  resetModelApplication,
+} from '../harness/activeModelLifecycle';
 import { llmService } from '../../src/services/llm';
 import { liteRTService } from '../../src/services/litert';
 import { localDreamGeneratorService } from '../../src/services/localDreamGenerator';
@@ -41,17 +44,17 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
-    modelResidencyManager._reset();
+    await resetModelApplication();
 
     mockLlm.isModelLoaded.mockReturnValue(false);
     mockLlm.getLoadedModelPath.mockReturnValue(null);
     mockLlm.loadModel.mockResolvedValue(undefined);
-    mockLlm.unloadModel.mockResolvedValue(undefined);
+    mockLlm.unloadModel.mockResolvedValue({released: true});
     mockLlm.getMultimodalSupport.mockReturnValue(null);
 
     mockLiteRT.isModelLoaded.mockReturnValue(false);
     mockLiteRT.loadModel.mockResolvedValue(undefined);
-    mockLiteRT.unloadModel.mockResolvedValue(undefined);
+    mockLiteRT.unloadModel.mockResolvedValue({released: true});
     mockLiteRT.getActiveBackend.mockReturnValue('cpu');
     mockLiteRT.warmup.mockResolvedValue(undefined);
     mockLiteRT.supportsAudio.mockReturnValue(false);

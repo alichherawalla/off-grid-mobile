@@ -90,7 +90,7 @@ describe('ModelResidencyManager acquire leases', () => {
 
   it('loads once and retains a persistent resident after release', async () => {
     const load = jest.fn(async () => undefined);
-    const unload = jest.fn(async () => undefined);
+    const unload = jest.fn(async () => ({reclaimed: true as const}));
     const lease = await manager.acquire(
       { key: 'text', type: 'text', sizeMB: 400, lifecycle: 'persistent' },
       { load, unload },
@@ -104,7 +104,7 @@ describe('ModelResidencyManager acquire leases', () => {
   });
 
   it('unloads an operation resident when its final lease is released', async () => {
-    const unload = jest.fn(async () => undefined);
+    const unload = jest.fn(async () => ({reclaimed: true as const}));
     const lease = await manager.acquire(
       { key: 'classifier', type: 'classifier', sizeMB: 100, lifecycle: 'operation' },
       { load: async () => undefined, unload },
@@ -117,7 +117,7 @@ describe('ModelResidencyManager acquire leases', () => {
 
   it('does not load an already resident model twice', async () => {
     const load = jest.fn(async () => undefined);
-    const handlers = { load, unload: async () => undefined };
+    const handlers = { load, unload: async () => ({reclaimed: true as const}) };
     const first = await manager.acquire(
       { key: 'text', type: 'text', sizeMB: 400 },
       handlers,
@@ -136,11 +136,11 @@ describe('ModelResidencyManager acquire leases', () => {
   it('pins an active lease against eviction', async () => {
     const first = await manager.acquire(
       { key: 'text', type: 'text', sizeMB: 700 },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
     const blocked = await manager.acquire(
       { key: 'image', type: 'image', sizeMB: 700 },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
 
     expect(blocked).toMatchObject({ acquired: false, fits: false });
@@ -149,7 +149,7 @@ describe('ModelResidencyManager acquire leases', () => {
   });
 
   it('evicts an idle resident before loading a replacement', async () => {
-    const unloadText = jest.fn(async () => undefined);
+    const unloadText = jest.fn(async () => ({reclaimed: true as const}));
     const textLease = await manager.acquire(
       { key: 'text', type: 'text', sizeMB: 700 },
       { load: async () => undefined, unload: unloadText },
@@ -158,7 +158,7 @@ describe('ModelResidencyManager acquire leases', () => {
 
     const imageLease = await manager.acquire(
       { key: 'image', type: 'image', sizeMB: 700 },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
 
     expect(imageLease).toMatchObject({ acquired: true, evicted: ['text'] });
@@ -180,7 +180,7 @@ describe('ModelResidencyManager acquire leases', () => {
 
     const image = await manager.acquire(
       { key: 'image', type: 'image', sizeMB: 700 },
-      { load: loadImage, unload: async () => undefined },
+      { load: loadImage, unload: async () => ({reclaimed: true as const}) },
     );
 
     expect(image).toMatchObject({ acquired: false, reason: 'unload_failed' });
@@ -189,7 +189,7 @@ describe('ModelResidencyManager acquire leases', () => {
   });
 
   it('releases operation residents only after the final concurrent lease', async () => {
-    const unload = jest.fn(async () => undefined);
+    const unload = jest.fn(async () => ({reclaimed: true as const}));
     const spec: ResidentSpec = {
       key: 'stt',
       type: 'transcription',
@@ -215,7 +215,7 @@ describe('ModelResidencyManager acquire leases', () => {
     ] as const) {
       const lease = await manager.acquire(
         { key, type, sizeMB: 100 },
-        { load: async () => undefined, unload: async () => undefined },
+        { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
       );
       await lease.release();
     }

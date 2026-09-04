@@ -31,7 +31,7 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
     const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
     const { resolveTextResidentSpec } = require('../../../src/services/modelServices/modelLifecycleBootstrap');
-    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
      
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with

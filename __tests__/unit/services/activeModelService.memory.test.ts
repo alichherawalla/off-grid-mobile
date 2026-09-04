@@ -50,11 +50,11 @@ describe('ModelMemoryAdvisoryService', () => {
     const { manager, service } = subject();
     await manager.acquire(
       { key: 'text-route', modelId: 'text', type: 'text', sizeMB: 1024, residencyKey: 'mobile:text-engine' },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
     await manager.acquire(
       { key: 'old-image-route', modelId: 'old-image', type: 'image', sizeMB: 2048, residencyKey: 'mobile:image-engine' },
-      { load: async () => undefined, unload: async () => undefined },
+      { load: async () => undefined, unload: async () => ({reclaimed: true as const}) },
     );
 
     const result = await service.forSelection('image', 'image');

@@ -39,7 +39,7 @@ describe('T115 (rendered) — voice-note send reclaims idle STT on a tight devic
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
     const { hardwareService } = require('../../../src/services/hardware');
-    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
      
     const residentTypes = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type);
 

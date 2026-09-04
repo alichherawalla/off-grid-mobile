@@ -2,7 +2,6 @@ import { arrangeLocalSelection, selectedLocalModelId } from '../utils/testHelper
 import { useModelSelectionStore } from '../../src/stores/modelSelectionStore';
 import {
   LLMService,
-  ModelSelectionApplicationService,
   type RuntimeModel,
 } from '@offgrid/models';
 import { useAppStore } from '../../src/stores/appStore';
@@ -12,10 +11,10 @@ import {
   mobileRouteId,
 } from '../../src/services/modelServices/mobileRoute';
 import {
-  mobileModelSelectionProjection,
+  removeMobileServerSelection,
   readMobileModelSelection,
 } from '../../src/services/modelServices/modelSelectionProjection';
-import { mobileModelSelectionService } from '../../src/services/modelServices/modelSelectionApplication';
+import { mobileModelSelectionStore } from '../../src/services/modelServices/selectionStore';
 
 const localRoute = mobileRouteId({
   source: 'local', hostId: 'llama', modality: 'text', modelId: 'local/text.gguf',
@@ -75,9 +74,7 @@ describe('the Shared model selection authority and Mobile persistence projection
         provider: 'openai-compatible', createdAt: new Date(0).toISOString(),
       }],
     });
-    const service = new LLMService(
-      new ModelSelectionApplicationService(mobileModelSelectionProjection),
-    );
+    const service = new LLMService(mobileModelSelectionStore);
     service.registerAdapter({
       id: 'selection-authority-proof',
       async listModels() { return [
@@ -173,7 +170,7 @@ describe('the Shared model selection authority and Mobile persistence projection
       localRouteId: null, remoteRouteId: remoteRoute, rememberedLocalRouteId: localRoute,
     });
     expect(readMobileModelSelection('text')).toBe(remoteRoute);
-    await mobileModelSelectionService.remove({ modality: 'text', serverId: 'server-1' });
+    await removeMobileServerSelection('text', 'server-1');
     expect(selectedLocalModelId('text')).toBe('local/text.gguf');
     expect(readMobileModelSelection('text')).toBe(localRoute);
   });

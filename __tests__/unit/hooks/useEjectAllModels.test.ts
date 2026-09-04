@@ -22,19 +22,15 @@ import { arrangeLocalSelection } from '../../utils/testHelpers';
  * button appears the moment a model becomes active, which is the entire point of a reactive derivation. Zustand
  * needs no native module (its persistence goes through AsyncStorage, stood in for at the boundary already).
  *
- * The user ejection coordinator is still stood in for: it owns the stop-and-unload journey, and this hook's
- * contract is that it DELEGATES there. Performing native unloads is outside this hook fixture.
+ * The user ejection workflow is the real public application boundary. Native unloads remain the only
+ * uncontrollable boundary in the harness.
  */
 import { renderHook, act } from '@testing-library/react-native';
+import { resetModelApplication } from '../../harness/activeModelLifecycle';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 import { createDownloadedModel, createONNXImageModel } from '../../utils/factories';
 import { mobileRouteId, refreshMobileModelServices } from '../../../src/services/modelServices';
-import { mobileModelSelectionService } from '../../../src/services/modelServices/modelSelectionApplication';
-
-const mockEjectAll = jest.fn(async () => ({ count: 2 }));
-jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
-  ejectAllModelsForUser: () => mockEjectAll(),
-}));
+import { mobileModelSelectionStore } from '../../../src/services/modelServices/selectionStore';
 
 import { useEjectAllModels } from '../../../src/hooks/useEjectAllModels';
 
@@ -48,16 +44,17 @@ const nothingActive = (): void => {
   useRemoteServerStore.setState({ activeRemoteImageModelId: null });
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
   nothingActive();
+  await resetModelApplication();
 });
 
 async function activateLocalText(): Promise<void> {
   const model = createDownloadedModel({ id: 'gemma' });
   useAppStore.setState({ downloadedModels: [model] });
   await refreshMobileModelServices();
-  await mobileModelSelectionService.write('text', mobileRouteId({
+  await mobileModelSelectionStore.write('text', mobileRouteId({
     source: 'local', hostId: model.engine, modality: 'text', modelId: model.id,
   }));
   await refreshMobileModelServices();
@@ -67,7 +64,7 @@ async function activateLocalImage(): Promise<void> {
   const model = createONNXImageModel({ id: 'sdxl' });
   useAppStore.setState({ downloadedImageModels: [model] });
   await refreshMobileModelServices();
-  await mobileModelSelectionService.write('image', mobileRouteId({
+  await mobileModelSelectionStore.write('image', mobileRouteId({
     source: 'local', hostId: model.backend ?? 'image-runtime', modality: 'image', modelId: model.id,
   }));
   await refreshMobileModelServices();
@@ -103,8 +100,8 @@ describe('useEjectAllModels', () => {
     expect(result.current.hasActiveModel).toBe(true);
 
     await act(async () => {
-      await mobileModelSelectionService.write('text', null);
-      await mobileModelSelectionService.write('image', null);
+      await mobileModelSelectionStore.write('text', null);
+      await mobileModelSelectionStore.write('image', null);
       await refreshMobileModelServices();
     });
 
@@ -112,7 +109,7 @@ describe('useEjectAllModels', () => {
     expect(result.current.hasActiveModel).toBe(false);
   });
 
-  it('delegates the unload and reports how many were ejected', async () => {
+  it('reports zero when the selected model was not resident', async () => {
     await activateLocalText();
     const { result } = renderHook(() => useEjectAllModels());
 
@@ -121,9 +118,7 @@ describe('useEjectAllModels', () => {
       count = await result.current.ejectAll();
     });
 
-    // Delegated, not reimplemented: the service owns the unload sequence, and the count shown to the user has to
-    // be the one it reports rather than a guess made here.
-    expect(mockEjectAll).toHaveBeenCalled();
-    expect(count).toBe(2);
+    expect(count).toBe(0);
+    expect(result.current.isEjecting).toBe(false);
   });
 });

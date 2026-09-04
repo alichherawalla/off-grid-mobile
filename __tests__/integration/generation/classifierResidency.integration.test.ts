@@ -1,12 +1,12 @@
 import {
-  GenerationService,
-  LLMService,
-  ModelResidencyManager,
   type ModelInventoryAdapter,
   type ModelSelectionStore,
 } from '@offgrid/models';
+import { createOffGridApplication, modelsFailureMessage } from '@offgrid/application';
 import { reconcileMobileSidecarAdapters } from '../../../src/services/modelServices/sidecarGenerationAdapter';
 import { nativeModelLifecycle } from '../../../src/services/adapters/native/modelLifecycle';
+import { classifierExecutionAdapter } from '../../../src/services/adapters/native/classifierExecutionAdapter';
+import { registerApplicationFacade } from '../../../src/services/applicationFacade';
 
 const mockLifecycleEvents: string[] = [];
 
@@ -49,7 +49,6 @@ describe('Mobile classifier residency integration', () => {
         selectedRoute = routeId;
       },
     };
-    const models = new LLMService(selections);
     const inventory: ModelInventoryAdapter = {
       id: 'classifier-inventory',
       async listModels() {
@@ -70,16 +69,40 @@ describe('Mobile classifier residency integration', () => {
         }];
       },
     };
-    models.registerAdapter(inventory);
-    const routes = await models.refresh();
+    const application = createOffGridApplication({
+      models: {
+        selection: selections,
+        memory: {
+          current: () => ({ totalMB: 8_192, availableMB: 6_000, platform: 'mobile' as const }),
+        },
+        classifier: () => classifierExecutionAdapter,
+        inventoryAdapters: [inventory],
+        remote: {
+          configuration: {
+            read: () => ({version: 1, activeServerId: null, servers: []}),
+            write: async () => undefined,
+          },
+          credentials: {
+            read: async () => null,
+            write: async () => undefined,
+            remove: async () => undefined,
+          },
+          providers: {
+            register: async () => undefined,
+            unregister: async () => undefined,
+          },
+        },
+      },
+    });
+    registerApplicationFacade(() => application);
+    await application.models.refresh();
+    const routes = application.models.snapshot().inventory;
     const routeId = routes[0]?.routeId;
     if (!routeId) throw new Error('The classifier fixture needs a canonical route.');
-    await models.select('classifier', routeId);
+    const selected = await application.models.select({modality: 'classifier', modelId: routeId});
+    if (!selected.ok) throw new Error(modelsFailureMessage(selected.failure));
 
-    const residency = new ModelResidencyManager({
-      current: () => ({ totalMB: 8_192, availableMB: 6_000, platform: 'mobile' }),
-    });
-    const textLease = await residency.acquire(
+    const textLease = await application.models.residency.acquire(
       {
         key: 'text:active-route',
         modelId: 'active-text.gguf',
@@ -89,16 +112,22 @@ describe('Mobile classifier residency integration', () => {
       },
       {
         load: async () => undefined,
-        unload: async () => { mockLifecycleEvents.push('unload:text'); },
+        unload: async () => {
+          mockLifecycleEvents.push('unload:text');
+          return {reclaimed: true as const};
+        },
       },
     );
     await textLease.release();
 
-    const generation = new GenerationService(models, residency);
     const registrations = new Map<string, () => void>();
-    reconcileMobileSidecarAdapters(generation, models, registrations);
+    reconcileMobileSidecarAdapters(
+      {registerAdapter: adapter => application.models.adapters.registerGeneration(adapter)},
+      routes,
+      registrations,
+    );
 
-    const result = await generation.generate({
+    const result = await application.models.mainQueue.generate({
       operation: { type: 'classifier', input: 'A watercolor fox', labels: ['image', 'text'] },
       routeId,
       allowFallback: false,
@@ -121,6 +150,8 @@ describe('Mobile classifier residency integration', () => {
       120_000,
       false,
     );
-    expect(residency.getResidents()).toEqual([]);
+    expect(application.models.snapshot().residents).toEqual([]);
+    for (const unregister of registrations.values()) unregister();
+    await application.stop();
   });
 });

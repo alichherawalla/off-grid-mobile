@@ -1,95 +1,53 @@
-import { arrangeLocalSelection } from '../../utils/testHelpers';
-/**
- * Unit tests for activeModelService.supportsAudioInput().
- * This is the engine-agnostic dispatch point that decides whether the active
- * model accepts audio directly (LiteRT audio model, or llama.cpp audio mmproj),
- * letting Audio Mode skip Whisper STT without UI/hooks branching on engine type.
- */
-
-jest.mock('../../../src/stores/debugLogsStore', () => ({
-  useDebugLogsStore: { getState: jest.fn(() => ({ addLog: jest.fn() })) },
-}));
-jest.mock('../../../src/services/llm', () => ({
-  llmService: {
-    isModelLoaded: jest.fn(() => false),
-    getMultimodalSupport: jest.fn(() => null),
-    getPerformanceStats: jest.fn(() => undefined),
-  },
-}));
-jest.mock('../../../src/services/litert', () => ({
-  liteRTService: {
-    isModelLoaded: jest.fn(() => false),
-    supportsAudio: jest.fn(() => false),
-  },
-}));
-jest.mock('../../../src/services/localDreamGenerator', () => ({
-  localDreamGeneratorService: {},
-}));
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: {},
-}));
-jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
-  modelResidencyManager: { runExclusive: jest.fn() },
-}));
-jest.mock('../../../src/utils/logger', () => ({
-  __esModule: true,
-  default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}));
-
-import { activeModelService } from '../../harness/activeModelLifecycle';
-import { liteRTService } from '../../../src/services/litert';
-import { llmService } from '../../../src/services/llm';
+import {
+  activeModelService,
+  modelApplication,
+  resetModelApplication,
+} from '../../harness/activeModelLifecycle';
 import { useAppStore } from '../../../src/stores/appStore';
+import { createDownloadedModel } from '../../utils/factories';
 
-const mockedLiteRT = liteRTService as jest.Mocked<typeof liteRTService>;
-const mockedLlm = llmService as jest.Mocked<typeof llmService>;
-
-function setActiveModel(model: any) {
-  useAppStore.setState({
-    
-    downloadedModels: model ? [model] : []
+async function select(model: ReturnType<typeof createDownloadedModel> | null): Promise<void> {
+  useAppStore.setState({downloadedModels: model ? [model] : []});
+  await modelApplication().models.refresh();
+  const outcome = await modelApplication().models.select({
+    modality: 'text',
+    modelId: model?.id ?? null,
   });
-  arrangeLocalSelection('text', model?.id ?? null);
+  expect(outcome.ok).toBe(true);
 }
 
-describe('activeModelService.supportsAudioInput', () => {
-  beforeEach(() => jest.clearAllMocks());
+describe('Models facade audio-input capability', () => {
+  beforeEach(async () => resetModelApplication());
 
-  it('returns false when there is no active model', () => {
-    setActiveModel(null);
+  it('returns false when there is no active model', async () => {
+    await select(null);
     expect(activeModelService.supportsAudioInput()).toBe(false);
   });
 
-  it('returns true for a LiteRT model that reports audio support', () => {
-    setActiveModel({ id: 'm', engine: 'litert', liteRTAudio: true });
-    mockedLiteRT.supportsAudio.mockReturnValue(true);
+  it('projects audio input for a LiteRT audio model', async () => {
+    await select(createDownloadedModel({
+      id: 'audio-model',
+      engine: 'litert',
+      liteRTAudio: true,
+    }));
     expect(activeModelService.supportsAudioInput()).toBe(true);
   });
 
-  it('returns false for a LiteRT model without audio support', () => {
-    setActiveModel({ id: 'm', engine: 'litert', liteRTAudio: false });
-    mockedLiteRT.supportsAudio.mockReturnValue(false);
+  it('does not invent audio input for a LiteRT text-only model', async () => {
+    await select(createDownloadedModel({
+      id: 'text-model',
+      engine: 'litert',
+      liteRTAudio: false,
+    }));
     expect(activeModelService.supportsAudioInput()).toBe(false);
   });
 
-  it('returns true for a llama.cpp model whose mmproj reports audio', () => {
-    setActiveModel({ id: 'm', engine: 'llama' });
-    mockedLlm.isModelLoaded.mockReturnValue(true);
-    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: true, audio: true });
-    expect(activeModelService.supportsAudioInput()).toBe(true);
-  });
-
-  it('returns false for a llama.cpp vision-only model (no audio in mmproj)', () => {
-    setActiveModel({ id: 'm', engine: 'llama' });
-    mockedLlm.isModelLoaded.mockReturnValue(true);
-    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: true, audio: false });
-    expect(activeModelService.supportsAudioInput()).toBe(false);
-  });
-
-  it('returns false for a llama.cpp model that is not loaded yet', () => {
-    setActiveModel({ id: 'm', engine: 'llama' });
-    mockedLlm.isModelLoaded.mockReturnValue(false);
-    mockedLlm.getMultimodalSupport.mockReturnValue({ vision: true, audio: true });
+  it('does not infer audio input from a GGUF projector', async () => {
+    await select(createDownloadedModel({
+      id: 'vision-model',
+      engine: 'llama',
+      mmProjPath: '/models/mmproj.gguf',
+    }));
     expect(activeModelService.supportsAudioInput()).toBe(false);
   });
 });
