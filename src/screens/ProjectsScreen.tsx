@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore, useChatStore } from '../stores';
+import { projectChatCounts } from '../utils/projectConversations';
 import { Project } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 
@@ -35,14 +36,13 @@ export const ProjectsScreen: React.FC = () => {
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { projects, deleteProject } = useProjectStore();
-  const { conversations } = useChatStore();
+  const projects = useProjectStore(state => state.projects);
+  const deleteProject = useProjectStore(state => state.deleteProject);
+  const conversations = useChatStore(state => state.conversations);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  // Get chat count for a project
-  const getChatCount = (projectId: string) => {
-    return conversations.filter((c) => c.projectId === projectId).length;
-  };
+  // Every project's chat count in one pass, read per row in O(1).
+  const chatCounts = useMemo(() => projectChatCounts(conversations), [conversations]);
 
   const handleProjectPress = (project: Project) => {
     navigation.navigate('ProjectDetail', { projectId: project.id });
@@ -91,7 +91,7 @@ export const ProjectsScreen: React.FC = () => {
   };
 
   const renderProject = ({ item, index }: { item: Project; index: number }) => {
-    const chatCount = getChatCount(item.id);
+    const chatCount = chatCounts[item.id] ?? 0;
 
     return (
       <Swipeable
