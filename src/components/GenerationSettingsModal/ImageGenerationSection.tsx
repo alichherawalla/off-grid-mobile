@@ -22,7 +22,7 @@ import {
 const ImageModelPicker: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { downloadedImageModels } = useAppStore();
+  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
   const [showPicker, setShowPicker] = useState(false);
   // One answer to "which image model": the shared active route, local or a paired Mac's.
   const activeRoute = useActiveMobileModel('image').model;
@@ -123,14 +123,15 @@ const ImageModelPicker: React.FC = () => {
 
 const AutoDetectMethodToggle: React.FC = () => {
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const autoDetectMethod = useAppStore(s => s.settings.autoDetectMethod);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
   return (
     <View style={styles.modeToggleContainer}>
       <View style={styles.modeToggleInfo}>
         <Text style={styles.modeToggleLabel}>Detection Method</Text>
         <Text style={styles.modeToggleDesc}>
-          {settings.autoDetectMethod === 'pattern'
+          {autoDetectMethod === 'pattern'
             ? 'Fast keyword matching ("draw", "create image", etc.)'
             : 'Uses current text model for uncertain cases (slower)'}
         </Text>
@@ -139,7 +140,7 @@ const AutoDetectMethodToggle: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.modeButton,
-            settings.autoDetectMethod === 'pattern' && styles.modeButtonActive,
+            autoDetectMethod === 'pattern' && styles.modeButtonActive,
           ]}
           onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
           testID="auto-detect-method-pattern"
@@ -147,7 +148,7 @@ const AutoDetectMethodToggle: React.FC = () => {
           <Text
             style={[
               styles.modeButtonText,
-              settings.autoDetectMethod === 'pattern' &&
+              autoDetectMethod === 'pattern' &&
                 styles.modeButtonTextActive,
             ]}
           >
@@ -157,7 +158,7 @@ const AutoDetectMethodToggle: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.modeButton,
-            settings.autoDetectMethod === 'llm' && styles.modeButtonActive,
+            autoDetectMethod === 'llm' && styles.modeButtonActive,
           ]}
           onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
           testID="auto-detect-method-llm"
@@ -165,7 +166,7 @@ const AutoDetectMethodToggle: React.FC = () => {
           <Text
             style={[
               styles.modeButtonText,
-              settings.autoDetectMethod === 'llm' &&
+              autoDetectMethod === 'llm' &&
                 styles.modeButtonTextActive,
             ]}
           >
@@ -182,10 +183,11 @@ const AutoDetectMethodToggle: React.FC = () => {
 const ClassifierModelPicker: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { downloadedModels, settings } = useAppStore();
+  const downloadedModels = useAppStore(s => s.downloadedModels);
+  const classifierModelId = useAppStore(s => s.settings.classifierModelId);
   const [showPicker, setShowPicker] = useState(false);
   const classifierModel = downloadedModels.find(
-    m => m.id === settings.classifierModelId,
+    m => m.id === classifierModelId,
   );
 
   const handleSelectNone = () => {
@@ -217,7 +219,7 @@ const ClassifierModelPicker: React.FC = () => {
           <TouchableOpacity
             style={[
               styles.modelPickerItem,
-              !settings.classifierModelId && styles.modelPickerItemActive,
+              !classifierModelId && styles.modelPickerItemActive,
             ]}
             onPress={handleSelectNone}
           >
@@ -227,12 +229,12 @@ const ClassifierModelPicker: React.FC = () => {
                 No model switching needed
               </Text>
             </View>
-            {!settings.classifierModelId && (
+            {!classifierModelId && (
               <Icon name="check" size={18} color={colors.primary} />
             )}
           </TouchableOpacity>
           {downloadedModels.map(model => {
-            const isActive = settings.classifierModelId === model.id;
+            const isActive = classifierModelId === model.id;
             const handleSelect = () => {
               selectMobileModel({
                 source: 'local',
@@ -277,9 +279,10 @@ const ClassifierModelPicker: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const { settings } = useAppStore();
-  const isAutoMode = settings.imageGenerationMode === 'auto';
-  const isLlmDetect = settings.autoDetectMethod === 'llm';
+  const imageGenerationMode = useAppStore(s => s.settings.imageGenerationMode);
+  const autoDetectMethod = useAppStore(s => s.settings.autoDetectMethod);
+  const isAutoMode = imageGenerationMode === 'auto';
+  const isLlmDetect = autoDetectMethod === 'llm';
 
   return (
     <>
@@ -295,10 +298,12 @@ const ImageAdvancedSection: React.FC = () => {
 /** A first-level choice, not an advanced one: it decides whether a text model runs before every image. */
 const ImagePromptEnhancementToggle: React.FC = () => {
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings, downloadedModels } = useAppStore();
-  // Prompt enhancement runs a text model, so it needs one available.
-  const hasTextModel = downloadedModels.length > 0;
-  const enhanceOn = settings.enhanceImagePrompts && hasTextModel;
+  const enhanceImagePrompts = useAppStore(s => s.settings.enhanceImagePrompts);
+  const updateSettings = useAppStore(s => s.updateSettings);
+  // Prompt enhancement runs a text model, so it needs one available. Only the COUNT matters here,
+  // and it is compared in the selector, so adding a model wakes this row only when it crosses zero.
+  const hasTextModel = useAppStore(s => s.downloadedModels.length > 0);
+  const enhanceOn = enhanceImagePrompts && hasTextModel;
 
   return (
     <>
@@ -355,9 +360,11 @@ const ImagePromptEnhancementToggle: React.FC = () => {
 
 export const ImageGenerationSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const updateSettings = useAppStore(s => s.updateSettings);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const isAutoMode = settings.imageGenerationMode === 'auto';
+  const isAutoMode = useAppStore(
+    s => s.settings.imageGenerationMode === 'auto',
+  );
 
   return (
     <View style={styles.sectionCard}>

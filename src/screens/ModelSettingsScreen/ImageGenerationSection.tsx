@@ -18,16 +18,19 @@ import { createStyles } from './styles';
 const EnhanceImageToggle: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings, downloadedModels } = useAppStore();
+  const enhanceImagePrompts = useAppStore(s => s.settings?.enhanceImagePrompts);
+  const updateSettings = useAppStore(s => s.updateSettings);
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-  // Enhancement runs the prompt through a text model, so it needs one available.
-  const hasTextModel = downloadedModels.length > 0;
-  const enabled = (settings?.enhanceImagePrompts ?? false) && hasTextModel;
+  // Enhancement runs the prompt through a text model, so it needs one available. Only the
+  // BOOLEAN matters, and it is computed in the selector, so downloading a second model does not
+  // wake this row - it wakes only when the count crosses zero.
+  const hasTextModel = useAppStore(s => s.downloadedModels.length > 0);
+  const enabled = (enhanceImagePrompts ?? false) && hasTextModel;
 
   let description: string;
   if (!hasTextModel) {
     description = 'Download a text model to enable prompt enhancement';
-  } else if (settings?.enhanceImagePrompts) {
+  } else if (enhanceImagePrompts) {
     description = 'Text model refines your prompt before image generation (slower but better results)';
   } else {
     description = 'Use your prompt directly for image generation (faster)';
@@ -53,10 +56,11 @@ const EnhanceImageToggle: React.FC = () => {
 const ImageGpuSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const imageUseOpenCL = useAppStore(s => s.settings?.imageUseOpenCL);
+  const updateSettings = useAppStore(s => s.updateSettings);
   const { clearing, handleClearCache } = useClearGpuCache();
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-  const isOpenCL = settings?.imageUseOpenCL ?? true;
+  const isOpenCL = imageUseOpenCL ?? true;
 
   return (
     <>
@@ -91,15 +95,17 @@ const ImageGpuSection: React.FC = () => {
 
 const DetectionMethodRow: React.FC = () => {
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const imageGenerationMode = useAppStore(s => s.settings?.imageGenerationMode);
+  const autoDetectMethod = useAppStore(s => s.settings?.autoDetectMethod);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
-  if (settings?.imageGenerationMode !== 'auto') return null;
+  if (imageGenerationMode !== 'auto') return null;
 
   return (
     <View style={styles.settingSection}>
       <Text style={styles.settingLabel}>Detection Method</Text>
       <Text style={styles.settingDesc}>
-        {settings?.autoDetectMethod === 'pattern'
+        {autoDetectMethod === 'pattern'
           ? 'Fast keyword matching'
           : 'Uses text model for classification'}
       </Text>
@@ -108,7 +114,7 @@ const DetectionMethodRow: React.FC = () => {
           title="Pattern"
           variant="secondary"
           size="medium"
-          active={settings?.autoDetectMethod === 'pattern'}
+          active={autoDetectMethod === 'pattern'}
           onPress={() => updateSettings({ autoDetectMethod: 'pattern' })}
           style={styles.flex1}
         />
@@ -116,7 +122,7 @@ const DetectionMethodRow: React.FC = () => {
           title="LLM"
           variant="secondary"
           size="medium"
-          active={settings?.autoDetectMethod === 'llm'}
+          active={autoDetectMethod === 'llm'}
           onPress={() => updateSettings({ autoDetectMethod: 'llm' })}
           style={styles.flex1}
         />
@@ -128,7 +134,9 @@ const DetectionMethodRow: React.FC = () => {
 // ─── Advanced Section ────────────────────────────────────────────────────────
 
 const ImageAdvancedSection: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const imageGuidanceScale = useAppStore(s => s.settings?.imageGuidanceScale);
+  const imageThreads = useAppStore(s => s.settings?.imageThreads);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
   return (
     <>
@@ -136,7 +144,7 @@ const ImageAdvancedSection: React.FC = () => {
         testID="image-guidance-scale"
         label="Guidance Scale"
         description="Higher = follows prompt more strictly"
-        value={settings?.imageGuidanceScale || 7.5}
+        value={imageGuidanceScale || 7.5}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
@@ -145,7 +153,7 @@ const ImageAdvancedSection: React.FC = () => {
         testID="image-threads"
         label="Image Threads"
         description="CPU threads used for image generation (applies on next image model load)"
-        value={settings?.imageThreads ?? 4}
+        value={imageThreads ?? 4}
         min={1} max={8} step={1}
         onChange={(value) => updateSettings({ imageThreads: value })}
       />
@@ -163,10 +171,14 @@ const ImageAdvancedSection: React.FC = () => {
 export const ImageGenerationSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const imageSteps = useAppStore(s => s.settings?.imageSteps);
+  const imageWidth = useAppStore(s => s.settings?.imageWidth);
+  const updateSettings = useAppStore(s => s.updateSettings);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const isAutoMode = settings?.imageGenerationMode === 'auto';
+  const isAutoMode = useAppStore(
+    s => s.settings?.imageGenerationMode === 'auto',
+  );
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
 
   return (
@@ -205,7 +217,7 @@ export const ImageGenerationSection: React.FC = () => {
         testID="image-steps"
         label="Image Steps"
         description="More steps = better quality but slower (4-8 fast, 20-50 high quality)"
-        value={settings?.imageSteps || defaultImageSteps(Platform.OS)}
+        value={imageSteps || defaultImageSteps(Platform.OS)}
         min={4} max={MAX_IMAGE_STEPS} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
@@ -217,7 +229,7 @@ export const ImageGenerationSection: React.FC = () => {
         // Single source of truth for the floor: SD-class models render garbage below the
         // sweet spot (256), so both this screen and the chat modal (ImageQualitySliders) share
         // the SAME min/fallback — the surfaces can't diverge and a sub-256 value is unreachable.
-        value={Math.max(SWEET_SPOT_SIZE, settings?.imageWidth ?? SWEET_SPOT_SIZE)}
+        value={Math.max(SWEET_SPOT_SIZE, imageWidth ?? SWEET_SPOT_SIZE)}
         min={SWEET_SPOT_SIZE} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
