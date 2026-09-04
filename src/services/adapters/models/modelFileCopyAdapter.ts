@@ -17,30 +17,47 @@ export async function copyFileWithProgress(
     }
   }
 
+  // A RECURSIVE timeout, not `setInterval`: the poll body awaits two filesystem calls, and an
+  // interval fires again whether or not the previous tick finished. On a slow or busy filesystem
+  // that stacked overlapping `exists` + `stat` pairs against the very device the copy is competing
+  // for, and let a late tick report a size measured before an earlier one. One tick is in flight at
+  // a time, the next is scheduled only after it settles, and `polling` stops it for good.
   let polling = true;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const pollInterval = setInterval(async () => {
-    if (!polling) return;
+  const stopPolling = (): void => {
+    polling = false;
+    if (pollTimer !== null) clearTimeout(pollTimer);
+    pollTimer = null;
+  };
+
+  const pollOnce = async (): Promise<void> => {
     try {
-      const exists = await RNFS.exists(dest);
-      if (exists && totalBytes > 0) {
+      if (totalBytes > 0 && (await RNFS.exists(dest))) {
         const written = (await statFile(dest))?.size ?? 0;
-        const pct = Math.min(written / totalBytes, 0.99);
-        onProgress?.(pct);
+        onProgress?.(Math.min(written / totalBytes, 0.99));
       }
     } catch {
-      // poll errors are non-fatal
+      // A failed size read leaves progress where it was. The copy itself reports the real outcome.
     }
-  }, 500);
+    if (polling) pollTimer = setTimeout(schedulePoll, 500);
+  };
+
+  const schedulePoll = (): void => {
+    if (!polling) return;
+    pollOnce().catch(() => {
+      // pollOnce swallows its own failures; this only guards the scheduling call itself.
+    });
+  };
+
+  pollTimer = setTimeout(schedulePoll, 500);
 
   try {
     await RNFS.copyFile(source, dest);
-    polling = false;
-    clearInterval(pollInterval);
+    stopPolling();
     onProgress?.(1);
   } catch (error) {
-    polling = false;
-    clearInterval(pollInterval);
+    stopPolling();
     await RNFS.unlink(dest).catch(() => {});
     throw error;
   }
