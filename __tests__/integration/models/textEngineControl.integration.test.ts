@@ -2,7 +2,8 @@
  * Native file facts flow through Mobile inventory into the Shared text-engine control plane.
  * A llama vision label without a projector must fail closed before native generation.
  */
-import { mobileWorkspace } from '../../../src/services/modelServices/workspace';
+import { createModelWorkspace } from '@offgrid/models';
+import { mobileModelWorkspacePorts } from '../../../src/services/modelServices/workspace';
 import {
   localLiteRTInventoryAdapter,
   localLlamaInventoryAdapter,
@@ -69,8 +70,15 @@ describe('Mobile text-engine inventory boundary', () => {
         selections: { text: 'remote-text' },
       }],
     });
-    // Remote routes come from the workspace's own inventory adapter: one per selected model.
-    const models = await mobileWorkspace.refresh().then(() => mobileWorkspace.inventory('text'));
+    // Remote routes come from the workspace's own inventory adapter: one per selected model, built
+    // by shared from the `remoteInventory` ports this app supplies.
+    //
+    // Composed HERE from those ports rather than imported: the app no longer holds a
+    // `ModelWorkspace` instance, and this test's subject is what shared projects from mobile's
+    // ports, not the app's singleton. It is a test-scoped owner in Jest's own module registry, so
+    // it is not a second routing/residency owner on a device.
+    const workspace = createModelWorkspace(mobileModelWorkspacePorts);
+    const models = await workspace.refresh().then(() => workspace.inventory('text'));
     const selected = models.find(model => model.id === 'remote-text');
 
     // Shared projects a remote route's capabilities; what a server never declared stays unknown

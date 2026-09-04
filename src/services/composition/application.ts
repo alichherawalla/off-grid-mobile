@@ -15,7 +15,7 @@ import {
   mobileRagStore,
   prepareMobileRagDocument,
 } from '../adapters/rag/mobileRagPorts';
-import { mobileWorkspace } from '../modelServices/workspace';
+import { mobileModelWorkspacePorts } from '../modelServices/workspace';
 import { mobileModelEjectionPorts } from '../modelServices/ejectModelsForUser';
 import { mobileModelSettingsPorts } from '../modelServices/modelSettingsPorts';
 import { modelsChatPort } from './chat';
@@ -84,7 +84,9 @@ export function registerMobileApplicationPorts(
 function createMobileApplication(): OffGridApplication {
   return createOffGridApplication({
     models: {
-      workspace: mobileWorkspace,
+      // The workspace's own I/O, not a workspace: shared composes the single one from these. See
+      // `mobileModelWorkspacePorts` for why this app no longer holds the instance.
+      ...mobileModelWorkspacePorts,
       chat: modelsChatPort,
       ejection: mobileModelEjectionPorts(),
       settings: mobileModelSettingsPorts,

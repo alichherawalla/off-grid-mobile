@@ -1,7 +1,7 @@
 import {
   DERIVED_TEXT_MODALITIES,
   type DerivedTextModality,
-  createModelWorkspace,
+  type ModelWorkspacePorts,
   type RemoteServerApplicationPorts,
 } from '@offgrid/models';
 import { generateId } from '../../utils/generateId';
@@ -91,8 +91,15 @@ const memory = {
   },
 };
 
-/** The ONE shared facade Mobile composes its model layer from. Everything here is a port. */
-export const mobileWorkspace = createModelWorkspace({
+/**
+ * The I/O Mobile's model layer is composed FROM. Every member is a port; nothing here is an owner.
+ *
+ * This app used to build the `ModelWorkspace` itself and hand the instance to the composition root
+ * as `ModelsPlatformPorts.workspace`. It no longer holds one: shared's root composes the single
+ * workspace from these ports, so there is exactly one routing owner and one residency owner on the
+ * device - which is the whole point of the coexistence seam that arm existed to bridge.
+ */
+export const mobileModelWorkspacePorts: ModelWorkspacePorts = {
   selection: mobileModelSelectionStore,
   memory,
   residencyLogger: {
@@ -102,11 +109,11 @@ export const mobileWorkspace = createModelWorkspace({
   generation: { tools: mobileToolExecutor, conversations: mobileConversationPort },
   remote: lazyRemote,
   remoteServerId: generateId,
-  // Ports for the services the facade composes on demand. The lifecycle ports are handed the two
-  // residency reads they need at that moment: the workspace OWNS the residency manager, so this is
-  // where those reads legitimately come from, and it is why the ports no longer import the
-  // bootstrap alias back out of this module.
-  lifecycle: () => mobileModelLifecyclePorts(mobileWorkspace.residency),
+  // Ports for the services the facade composes on demand. Shared hands the lifecycle factory the
+  // two residency reads it needs - the workspace OWNS the residency manager, so that is where those
+  // reads legitimately come from - which is why this is a plain reference and not a closure over a
+  // workspace this file would have to hold.
+  lifecycle: mobileModelLifecyclePorts,
   memoryAdvisory: mobileModelMemoryAdvisoryPorts,
   classifier: () => classifierExecutionAdapter,
   remoteInventory: {
@@ -118,6 +125,4 @@ export const mobileWorkspace = createModelWorkspace({
         : mobileExecutionAdapterId('remote', server.id, modality),
     status: server => remoteStatus(server.id),
   },
-});
-
-/** Remote-server application, owned by the workspace. */
+};
