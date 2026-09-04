@@ -8,7 +8,7 @@ import { useAppStore } from '../stores';
 import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
 import { huggingFaceService } from './huggingface';
 import { startModelDownload } from './startModelDownload';
-import { selectMobileModel } from './modelServices';
+import { selectMobileModel } from './modelServices/selectionCommands';
 
 export type ClassifierModel = DownloadedModel & { hostId: string };
 

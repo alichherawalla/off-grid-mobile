@@ -3,7 +3,7 @@ import { activeMobileRoute } from '../modelServices/mobileLLMService';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { createRemoteServerEditorApplication } from '../modelServices/remoteServerEditorApplication';
 import { remoteServerManager } from '../modelServices/remoteServerController';
-import { selectRemoteMobileModel } from '../modelServices/index';
+import { selectRemoteMobileModel } from '../modelServices/selectionCommands';
 
 export const remoteServerEditorApplication = createRemoteServerEditorApplication({
   credentials: { read: serverId => remoteServerManager.getApiKey(serverId) },

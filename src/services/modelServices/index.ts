@@ -1,4 +1,4 @@
-import type { ActiveModelSnapshot, RuntimeModel } from '@offgrid/models';
+import type { RuntimeModel } from '@offgrid/models';
 import { mobileVoiceGenerationService as voiceGeneration } from '../composition/generation';
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
@@ -12,11 +12,7 @@ import {
   subscribeToModelState,
 } from './modelState';
 import { mobileInventoryAdapters } from './inventoryAdapters';
-import {
-  mobileRouteFacts,
-  mobileRouteId,
-  type MobileRouteFacts,
-} from './mobileRoute';
+import { mobileRouteFacts } from './mobileRoute';
 import {
   refreshMobileLLMServiceInventory,
   selectMobileRoute,
@@ -33,7 +29,6 @@ import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 import { mobileModelSelectionService } from './modelSelectionApplication';
 import { reportModelFailure } from '../modelFailureHandler';
 import logger from '../../utils/logger';
-import { applicationFacade } from '../applicationFacade';
 
 /** The one Mobile owner of model inventory, selection and canonical route identity. */
 export const mobileLLMService = mobileWorkspace.llm;
@@ -159,48 +154,6 @@ export function stopMobileModelServices(): void {
   );
 }
 
-/** The user picked a model. The application facade owns remote activation and route selection. */
-export async function selectMobileModel(facts: MobileRouteFacts): Promise<void> {
-  const selected = await applicationFacade().models.select({
-    modality: facts.modality,
-    modelId: mobileRouteId(facts),
-  });
-  if (!selected.ok) {
-    throw new Error(
-      selected.failure.kind === 'runtime'
-        ? selected.failure.message
-        : selected.failure.kind,
-    );
-  }
-  await refreshMobileModelServices();
-}
-
-/** Convenience intent for UI surfaces that select a discovered remote route. */
-export function selectRemoteMobileModel(
-  serverId: string,
-  modality: MobileRouteFacts['modality'],
-  modelId: string,
-): Promise<void> {
-  return selectMobileModel({ source: 'remote', hostId: serverId, modality, modelId });
-}
-
-export async function clearMobileModel(
-  modality: ActiveModelSnapshot['modality'],
-): Promise<void> {
-  const selected = await applicationFacade().models.select({
-    modality,
-    modelId: null,
-  });
-  if (!selected.ok) {
-    throw new Error(
-      selected.failure.kind === 'runtime'
-        ? selected.failure.message
-        : selected.failure.kind,
-    );
-  }
-  await refreshMobileModelServices();
-}
-
 /** Presentation adapter: recover the rich Mobile record after shared routing selected it. */
 export function mobileTextModelRecord(
   model: RuntimeModel | null,
@@ -220,4 +173,9 @@ export function mobileTextModelRecord(
 }
 
 export { mobileRouteId } from './mobileRoute';
+export {
+  clearMobileModel,
+  selectMobileModel,
+  selectRemoteMobileModel,
+} from './selectionCommands';
 export type { MobileRouteFacts } from './mobileRoute';

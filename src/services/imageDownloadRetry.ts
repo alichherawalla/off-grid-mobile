@@ -4,7 +4,7 @@ import { activeLocalModelId } from './modelServices/activeRoute';
 import type { DownloadEntry } from '../stores/downloadStore';
 import type { AlertState } from '../utils/alertState';
 import { executeMobileImageDownload } from './adapters/downloads/imageDownloadApplicationAdapter';
-import { selectMobileModel } from './modelServices';
+import { selectMobileModel } from './modelServices/selectionCommands';
 
 export function parseEntryMetadata(entry: DownloadEntry): Record<string, unknown> | null {
   const metadata = parseImageDownloadMetadata(entry.metadataJson);

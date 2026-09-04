@@ -16,7 +16,7 @@ import {
   type AutoSetupTextPayload,
   type AutoSetupCatalogBoundaries,
 } from '../autoSetupCatalog';
-import { selectMobileModel } from '../modelServices';
+import { selectMobileModel } from '../modelServices/selectionCommands';
 
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
