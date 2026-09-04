@@ -1,11 +1,16 @@
 import {
+  once,
   type DownloadOperationOwner,
   type ImageDownloadPlan,
 } from '@offgrid/models';
+import type { DownloadEntry } from '../../../stores/downloadStore';
 import { modelDownloadProjection } from '../../../stores/downloadStore';
 import { coordinatedDownloads } from '../../modelServices/coordinatedDownloadBridge';
-import { imageDownloadWorkflow } from '../../composition/downloads';
+import { createImageDownloadWorkflow } from '../../composition/downloads';
 
+const imageDownloadWorkflow = once(
+  () => createImageDownloadWorkflow<DownloadEntry>(modelDownloadProjection),
+);
 
 export function beginImageDownload(plan: ImageDownloadPlan): DownloadOperationOwner | undefined {
   return imageDownloadWorkflow().begin(plan, {

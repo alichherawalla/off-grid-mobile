@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { DownloadProjectionPort } from '@offgrid/application';
-import { modelDownloadProjectionController } from '../services/composition/downloads';
+import { createModelDownloadProjection } from '../services/composition/downloads';
 import type { ModelKey } from '../utils/modelKey';
 import type { DownloadStatus, DownloadEntry } from '../utils/downloadStatus';
 
@@ -42,8 +42,6 @@ export function mobileDownloadProjectionPorts(): DownloadProjectionPort<Download
   };
 }
 
-export const modelDownloadProjection = modelDownloadProjectionController();
-
 export const useDownloadStore = create<DownloadStoreState>((set) => {
   return {
     downloads: {},
@@ -74,3 +72,6 @@ export const useDownloadStore = create<DownloadStoreState>((set) => {
     remove: modelKey => modelDownloadProjection.remove(modelKey),
   };
 });
+
+export const modelDownloadProjection =
+  createModelDownloadProjection<DownloadEntry>(mobileDownloadProjectionPorts());

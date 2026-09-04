@@ -1,6 +1,5 @@
-import { queuedUniformId } from '@offgrid/models';
-import type { ModelDownloadRegistry } from '@offgrid/models';
-import { modelDownloadRegistry as composedRegistry } from '../composition/downloads';
+import { once, queuedUniformId } from '@offgrid/models';
+import { createModelDownloadRegistry } from '../composition/downloads';
 import logger from '../../utils/logger';
 import { coordinatedDownloads as backgroundDownloadService } from './coordinatedDownloadBridge';
 import type {
@@ -9,12 +8,17 @@ import type {
   DownloadModelType,
 } from './downloadTypes';
 
-export type MobileDownloadRegistry = ModelDownloadRegistry<
-  ModelDownloadStartRequest,
-  ModelDownloadReissueRequest
+export type MobileDownloadRegistry = ReturnType<
+  typeof createModelDownloadRegistry<
+    ModelDownloadStartRequest,
+    ModelDownloadReissueRequest
+  >
 >;
-type RegistryArguments = ConstructorParameters<
-  typeof ModelDownloadRegistry<ModelDownloadStartRequest, ModelDownloadReissueRequest>
+type RegistryArguments = Parameters<
+  typeof createModelDownloadRegistry<
+    ModelDownloadStartRequest,
+    ModelDownloadReissueRequest
+  >
 >;
 
 export function mobileDownloadRegistryLogger(): RegistryArguments[0] {
@@ -48,4 +52,12 @@ export function mobileDownloadRegistryPorts(): RegistryArguments[1] {
   };
 }
 
-export const modelDownloadRegistry: MobileDownloadRegistry = composedRegistry();
+const registry = once(
+  (): MobileDownloadRegistry =>
+    createModelDownloadRegistry(
+      mobileDownloadRegistryLogger(),
+      mobileDownloadRegistryPorts(),
+    ),
+);
+
+export const modelDownloadRegistry = registry();
