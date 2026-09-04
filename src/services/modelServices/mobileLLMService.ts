@@ -1,4 +1,5 @@
 import type { ActiveModelSnapshot, ModelModality, RuntimeModel } from '@offgrid/models';
+import { modelsFailureMessage } from '@offgrid/application';
 import { applicationFacade } from '../applicationFacade';
 
 // Route reads and selection transactions only. The composed routing port itself belongs to the
@@ -10,7 +11,8 @@ let refreshChain = Promise.resolve<RuntimeModel[]>([]);
 export function refreshMobileLLMServiceInventory() {
   refreshChain = refreshChain.catch(() => []).then(async () => {
     const models = applicationFacade().models;
-    await models.refresh();
+    const outcome = await models.refresh();
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
     return [...models.snapshot().inventory];
   });
   return refreshChain;

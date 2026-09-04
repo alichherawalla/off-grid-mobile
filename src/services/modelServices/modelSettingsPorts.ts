@@ -1,7 +1,6 @@
 import type { ModelsSettingsPort } from '@offgrid/application';
 import { APP_CONFIG } from '../../constants';
-import { useAppStore } from '../../stores/appStore';
-import type { AppSettings } from '../../types';
+import { useAppStore, type AppSettings } from '../../stores/appStore';
 import { emitCommittedModelSettings } from '../sync/mutation';
 
 /**
@@ -19,7 +18,11 @@ export const mobileModelSettingsPorts: ModelsSettingsPort = {
   // ONE store write of the whole committed record. Not a per-key `updateSettings`, whose own
   // portable-setting scan would publish a second time on top of the command's plan.
   write: async settings => {
-    useAppStore.getState().replaceCommittedSettings(settings as AppSettings);
+    const committed: AppSettings = {
+      ...useAppStore.getState().settings,
+      ...settings,
+    };
+    useAppStore.getState().replaceCommittedSettings(committed);
   },
   publish: async mutations => {
     emitCommittedModelSettings(mutations);

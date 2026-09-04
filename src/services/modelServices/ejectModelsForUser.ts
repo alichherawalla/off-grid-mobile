@@ -1,5 +1,4 @@
 import type { ModelEjectionService, ModelModality } from '@offgrid/models';
-import { imageGenerationService } from '../imageGenerationService';
 import { stopActiveMobileChatSession } from './chatSessionControl';
 import { activeRouteIsRemote } from './activeRoute';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
@@ -22,7 +21,6 @@ const EJECTABLE_MODALITIES = ['text', 'image', 'transcription', 'voice'] as cons
 export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEjectionService>[0] {
   return {
     cancelActiveGeneration: async () => { stopActiveMobileChatSession(); },
-    cancelActiveImageGeneration: () => imageGenerationService.cancelGeneration(),
     // The two local runtimes this device can unload. Shared counts the answers; it does not need to
     // know the names.
     localUnloads: {
@@ -33,6 +31,8 @@ export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEj
     remoteModalities: (): readonly ModelModality[] =>
       EJECTABLE_MODALITIES.filter(modality => activeRouteIsRemote(modality)),
     clearRemoteRoute: modality => lifecycleProjectionPort.selectRoute(modality, null),
-    refreshInventory: () => lifecycleProjectionPort.refreshInventory(),
+    refreshInventory: async () => {
+      await lifecycleProjectionPort.refreshInventory();
+    },
   };
 }

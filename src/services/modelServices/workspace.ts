@@ -94,10 +94,9 @@ const memory = {
 /**
  * The I/O Mobile's model layer is composed FROM. Every member is a port; nothing here is an owner.
  *
- * This app used to build the `ModelWorkspace` itself and hand the instance to the composition root
- * as `ModelsPlatformPorts.workspace`. It no longer holds one: shared's root composes the single
- * workspace from these ports, so there is exactly one routing owner and one residency owner on the
- * device - which is the whole point of the coexistence seam that arm existed to bridge.
+ * Mobile no longer builds or retains a `ModelWorkspace`. Shared's root composes the single workspace
+ * from these ports, and the platform contract cannot accept a workspace instance. The device
+ * therefore has one routing owner and one residency owner.
  */
 export const mobileModelWorkspacePorts: ModelWorkspacePorts = {
   selection: mobileModelSelectionStore,
