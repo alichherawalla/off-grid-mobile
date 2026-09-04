@@ -117,6 +117,16 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     lineHeight: 18,
   },
   buttonRow: { flexDirection: 'row' as const, gap: SPACING.sm },
+  draftActions: {
+    flexDirection: 'row' as const,
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  draftError: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.error,
+    marginTop: SPACING.xs,
+  },
   systemPromptContainer: {
     marginBottom: SPACING.md,
   },
