@@ -55,6 +55,12 @@ if (
 if (!proEntry.includes('registerHook(HOOKS.applicationStarted')) {
   findings.push('pro/index.ts: Sync dependents are not registered behind root startup');
 }
+if (
+  !rootApplication.includes('callHook<Promise<void>>(HOOKS.applicationStopping)') ||
+  !proEntry.includes('registerHook(HOOKS.applicationStopping')
+) {
+  findings.push('Mobile Sync dependents must stop before the application root stops');
+}
 
 for (const file of forbiddenFiles) {
   if (fs.existsSync(path.join(repoRoot, file))) {

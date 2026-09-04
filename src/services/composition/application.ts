@@ -185,6 +185,7 @@ export function startMobileApplication(): ReturnType<
 
 export async function stopMobileApplication(): Promise<void> {
   try {
+    await callHook<Promise<void>>(HOOKS.applicationStopping);
     await application?.stop();
   } finally {
     // Releasing the subscription drops the amplification cap with it, so a new session starts
