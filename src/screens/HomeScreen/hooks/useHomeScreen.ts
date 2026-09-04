@@ -27,12 +27,13 @@ import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
 import { useActiveLocalModelId, useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
 import {
+  modelsFailureMessage,
   remoteServerModelOptions,
   resolveAutoDiscoverMigration,
 } from '@offgrid/application';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
-import { ejectAllModelsForUser } from '../../../services/modelServices/ejectModelsForUser';
+import { applicationFacade } from '../../../services/applicationFacade';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
 import type {
@@ -264,7 +265,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       );
       try {
         // Single owning side-effect — same cancellation + unload path as Chat.
-        const { count } = await ejectAllModelsForUser();
+        const outcome = await applicationFacade().workflows.ejectModels();
+        if (!outcome.ok)
+          throw new Error(modelsFailureMessage(outcome.failure));
+        const { count } = outcome.value;
         if (count > 0) {
           setAlertState(
             showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`),

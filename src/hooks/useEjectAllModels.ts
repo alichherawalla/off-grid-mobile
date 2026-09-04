@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ejectAllModelsForUser } from '../services/modelServices/ejectModelsForUser';
+import { modelsFailureMessage } from '@offgrid/application';
+import { applicationFacade } from '../services/applicationFacade';
 import { useActiveMobileModel } from './useActiveMobileModel';
 
 /**
@@ -25,8 +26,9 @@ export function useEjectAllModels(): {
   const ejectAll = async (): Promise<number> => {
     setIsEjecting(true);
     try {
-      const { count } = await ejectAllModelsForUser();
-      return count;
+      const outcome = await applicationFacade().workflows.ejectModels();
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      return outcome.value.count;
     } finally {
       setIsEjecting(false);
     }
