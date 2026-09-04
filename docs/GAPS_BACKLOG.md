@@ -2188,28 +2188,65 @@ Deletion condition: expose the required typed commands, Outcomes, events, and na
 registry, native-engine, and persistence ports in Mobile; migrate all callers; delete the app-level
 service composition; and make the model architecture gate reject any reconstruction.
 
-## Cold-start download recovery is unreachable: `hydrateDownloads` is not on `ModelsFacade` (open, 2026-09-04)
 
-Mobile's app-owned download hydration chain (`downloadHydration`, `restoreQueuedDownloads`,
-`reattachTextDownloadRecovery`, `reconcileImageDownloadsAtBootstrap`) was deleted when the download
-control plane moved into `@offgrid/application`. Its replacement is the facade's own idempotent
-`hydrateDownloads()`, which re-observes every restored handle. `scripts/verify-model-architecture.mjs`
-gates for exactly that call in `App.tsx` (rule `image-download-recovery-starts-at-bootstrap`).
+## A `ModelsFacade` outbound port re-enters the application facade (open, 2026-09-04)
 
-Mobile cannot make the call. `hydrateDownloads` is present on the runtime facade object
-(`shared/packages/application/dist/index.mjs`) but is NOT declared on the public `ModelsFacade`
-contract (`shared/packages/application/src/contracts/models.ts`), so it is absent from
-`dist/index.d.ts` and `applicationFacade().models.hydrateDownloads()` is a type error.
-`ModelsFacade` hand-lists `download`, `downloadAndWait`, `retryDownload`, `cancelDownload`,
-`removeDownload`, `clearDownload` and `clearInactiveDownloads` from `ModelsDownloadCommands`;
-`hydrateDownloads` was simply not added alongside them.
+**Verdict: fix-the-guard.** The rule is stated in the ejection port's own header
+(`src/services/modelServices/ejectModelsForUser.ts:18`): "no implementation of a `ModelsFacade`
+outbound port may call back into the facade." Two ports handed to `createOffGridApplication`
+(`src/services/composition/application.ts:89`) break it, so the call graph runs
+facade -> shared service -> app adapter -> facade, and the workflow is app-owned while appearing
+to be Shared's.
 
-Impact, and it is user-visible: a download interrupted by an app kill is never recovered on the next
-cold start. Nothing reports it, because an empty download list is indistinguishable from a list that
-was never read. The architecture gate is correspondingly RED on this one rule - deliberately left red
-rather than deleted, because the rule is right and the missing symbol is the defect.
+The chat port, directly - `src/services/adapters/models/mobileChatHostPort.ts`:
+- `:211` `applicationFacade().rag.listDocuments(projectId)`
+- `:218` `applicationFacade().rag.buildContext(projectId, query)`
+- `:282` `applicationFacade().models.lookup(request.routeId)`
 
-Deletion condition: declare `hydrateDownloads(): Promise<Outcome<void, ModelsFailure>>` on
-`ModelsFacade`, rebuild shared, then call it from `App.tsx` off the boot gate (it reads the native
-download DB, which contends with in-flight writes badly enough to blank launch) with its refusal
-logged, not dropped. Verify by killing the app mid-download and confirming the row returns.
+The first two are CROSS-DOMAIN: a Models outbound port reaching the RAG domain, which makes the
+chat port the composition point for two domains instead of one. `:282` is same-domain and less
+severe - a read-only projection lookup - but it is the same back-edge.
+
+All three are reads, not commands, so none of them can deadlock the bounded model-control lane.
+That bounds the impact; it does not make the shape correct.
+
+Owner: the Mobile chat/RAG composition. The likely shape is for Shared's chat host contract to
+receive retrieval as an inbound dependency composed once at the root, rather than each port
+reaching sideways for it.
+
+Deletion condition: no module reachable as a `ModelsFacade` outbound port implementation calls
+`applicationFacade()`; retrieval reaches the chat host as a declared dependency; and the model
+architecture gate rejects the reconstruction of either back-edge.
+
+## Two gates disagree about the ejection back-edge - it needs a design ruling (open, 2026-09-04)
+
+**Verdict: instrument-and-revisit.** This is not debt to burn down; it is a contradiction between
+two rules, and one of them has to lose.
+
+`src/services/modelServices/ejectModelsForUser.ts` imports no facade, and its header calls that
+"the enforceable form" of the no-back-edge rule. The property does not survive one import hop:
+
+- the port's `localUnloads.textUnloaded` / `imageUnloaded` (`ejectModelsForUser.ts:27-28`)
+- -> `unloadTextModel` / `unloadImageModel` (`src/services/modelServices/modelLifecycleBootstrap.ts`)
+- -> `unloadThrough` -> `models().unload(...)`, where
+  `const models = () => applicationFacade().models` (`modelLifecycleBootstrap.ts:79`)
+
+So shared's `ModelEjectionService.ejectAllForUser`
+(`shared/packages/models/src/runtime/ejection-service.ts:69-79`) calls this port, which calls the
+facade back.
+
+The contradiction: `scripts/verify-model-architecture.mjs:857` REQUIRES that back-edge.
+`modelLifecycleBootstrap.ts` must match `applicationFacade` plus `.load(`/`.unload(` to satisfy
+`model-lifecycle-transaction-is-shared`, whose reasoning is that a typed facade command is MORE
+shared than a directly held service. By that rule the re-entry is the correct answer. By the
+ejection port's rule it is a violation. Both cannot hold.
+
+Not a deadlock, and this was checked rather than assumed: the facade's `eject`
+(`shared/packages/application/src/models/lifecycle-controller.ts:479-497`) only wraps `run()` in
+started/succeeded/failed events. It does not take the model-control lane, so the nested `unload`
+acquires the lane on its own and cannot wait on the eject that invoked it.
+
+Deletion condition: rule which principle governs an outbound port that needs a shared transaction -
+either the port receives the unload primitive as an inbound dependency (no facade reach), or the
+no-back-edge rule is narrowed to commands that share the control lane. Then make the two gates
+agree, and delete whichever rule loses.
