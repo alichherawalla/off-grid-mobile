@@ -80,15 +80,17 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const [memoryInfo, setMemoryInfo] = useState<ResourceUsage | null>(null);
   const isFirstMount = useRef(true);
 
-  const {
-    downloadedModels,
-    setDownloadedModels,
-    downloadedImageModels,
-    setDownloadedImageModels,
-    deviceInfo,
-    setDeviceInfo,
-    generatedImages,
-  } = useAppStore();
+  // The chat store was already narrowed here (see below) but the APP store was not, so Home still
+  // re-rendered on every settings keystroke, every download tick and every shared-file write.
+  // Four reads for the four facts it renders; the setters are actions and are read at call time.
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const downloadedImageModels = useAppStore(
+    state => state.downloadedImageModels,
+  );
+  const deviceInfo = useAppStore(state => state.deviceInfo);
+  const generatedImages = useAppStore(state => state.generatedImages);
+  const { setDownloadedModels, setDownloadedImageModels, setDeviceInfo } =
+    useAppStore.getState();
   // Selection is read from the shared active route, never from a store mirror.
   const activeModelId = useActiveLocalModelId('text');
   const activeImageModelId = useActiveLocalModelId('image');

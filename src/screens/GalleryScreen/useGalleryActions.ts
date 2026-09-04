@@ -20,7 +20,8 @@ export const formatDate = (dateStr: string): string => {
 };
 
 export const useGalleryActions = (conversationId: string | undefined) => {
-  const { generatedImages, removeGeneratedImage } = useAppStore();
+  const generatedImages = useAppStore(s => s.generatedImages);
+  const { removeGeneratedImage } = useAppStore.getState();
   const conversations = useChatStore(s => s.conversations);
 
   const [isSelectMode, setIsSelectMode] = useState(false);

@@ -29,8 +29,13 @@ export const ProjectEditScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { getProject, createProject, updateProject } = useProjectStore();
-  const existingProject = projectId ? getProject(projectId) : null;
+  // The form renders one project, so it subscribes to that ONE project rather than the store: a
+  // project edited on another device no longer re-renders a form the user is typing into, and
+  // `getProject` could not have done this because it reads through `get()` and never re-renders.
+  const existingProject = useProjectStore(
+    s => (projectId ? s.projects.find(p => p.id === projectId) : null) ?? null,
+  );
+  const { createProject, updateProject } = useProjectStore.getState();
 
 
   const [formData, setFormData] = useState({

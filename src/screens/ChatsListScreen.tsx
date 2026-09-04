@@ -42,7 +42,9 @@ export const ChatsListScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const conversations = useChatStore(s => s.conversations);
   const { deleteConversation, setActiveConversation } = useChatStore.getState();
-  const { getProject } = useProjectStore();
+  // `getProject` reads through `get()`, so selecting the FUNCTION would never re-render this list
+  // when a project is renamed. The rows render project names, so the rows subscribe to the projects.
+  const projects = useProjectStore(s => s.projects);
   const { removeImagesByConversationId } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -127,7 +129,9 @@ export const ChatsListScreen: React.FC = () => {
   );
 
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
-    const project = item.projectId ? getProject(item.projectId) : null;
+    const project = item.projectId
+      ? projects.find(candidate => candidate.id === item.projectId)
+      : null;
     // The preview line comes from the shared rule, so this list and the Mac's read the same.
     const preview = previewLine(item.messages);
 

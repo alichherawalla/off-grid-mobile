@@ -24,7 +24,8 @@ export function useModelsScreen() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ fraction: number; fileName: string } | null>(null);
 
-  const { addDownloadedModel } = useAppStore();
+  // Action only. A whole-store read here re-ran the Models screen on every unrelated app write.
+  const { addDownloadedModel } = useAppStore.getState();
 
   const text = useTextModels(setAlertState);
   const image = useImageModels(setAlertState);

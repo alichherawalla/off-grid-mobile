@@ -153,7 +153,10 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     ? activeRoute.id
     : null;
 
-  const { presentModelIds, error: whisperError } = useWhisperStore();
+  // Two facts. `downloadProgressById` changes on every download tick and this tab does not read
+  // it, so a whole-store read re-rendered the whole model list per tick.
+  const presentModelIds = useWhisperStore(s => s.presentModelIds);
+  const whisperError = useWhisperStore(s => s.error);
 
   // In-flight STT state from the SINGLE owner (canonical download tracker + whisper-store
   // fallback), shared with the Home "Speech" picker so the two surfaces can never disagree.

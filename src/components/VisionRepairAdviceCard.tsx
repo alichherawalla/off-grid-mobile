@@ -33,7 +33,7 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
   const [dismissed, setDismissed] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const { downloadedModels } = useAppStore();
+  const downloadedModels = useAppStore(s => s.downloadedModels);
   const activeModelId = useActiveLocalModelId('text');
 
   const activeModel = downloadedModels.find(m => m.id === activeModelId);

@@ -22,7 +22,8 @@ export const ImageGenAdviceCard: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const [dismissed, setDismissed] = useState(false);
-  const { settings, downloadedImageModels } = useAppStore();
+  const settings = useAppStore(s => s.settings);
+  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
   const activeImageModelId = useActiveLocalModelId('image');
   const backend = downloadedImageModels.find(m => m.id === activeImageModelId)?.backend;
 

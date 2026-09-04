@@ -105,7 +105,8 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
-  const { downloadedModels, downloadedImageModels } = useAppStore();
+  const downloadedModels = useAppStore(s => s.downloadedModels);
+  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
   const activeImageModelId = useActiveLocalModelId('image');
   const activeModelId = useActiveLocalModelId('text');
   // "Currently loaded" comes from the ONE reactive source (ActiveModelService's loaded state, projected to
@@ -120,7 +121,8 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // under a different id still marks its row instead of leaving the sheet looking empty.
   const selectedModelPath =
     resolveSelectedTextModel()?.filePath ?? null;
-  const { servers, serverHealth } = useRemoteServerStore();
+  const servers = useRemoteServerStore(s => s.servers);
+  const serverHealth = useRemoteServerStore(s => s.serverHealth);
   const activeTextRoute = useActiveMobileModel('text').model;
   const activeImageRoute = useActiveMobileModel('image').model;
   const activeRemoteTextModelId = remoteModelId(activeTextRoute);

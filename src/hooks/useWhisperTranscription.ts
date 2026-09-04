@@ -73,8 +73,12 @@ export const useWhisperTranscription = ({
   const transcribingStartTime = useRef<number | null>(null);
   const pendingResult = useRef<string | null>(null);
 
-  const { isModelLoaded, isModelLoading, transcriptionLanguage } =
-    useWhisperStore();
+  // The mic hook lives on the chat input, and this store is written DURING transcription -
+  // `downloadProgressById` per download tick, `error`, `presentModelIds`. A whole-store read woke
+  // the input for all of it; three narrow reads wake it only for the three facts it uses.
+  const isModelLoaded = useWhisperStore(s => s.isModelLoaded);
+  const isModelLoading = useWhisperStore(s => s.isModelLoading);
+  const transcriptionLanguage = useWhisperStore(s => s.transcriptionLanguage);
 
   // On unmount, stop any in-flight realtime session. Without this the mic kept
   // capturing after the user navigated away without releasing the button — the

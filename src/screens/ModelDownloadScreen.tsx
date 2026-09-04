@@ -60,7 +60,8 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { deviceInfo, setDeviceInfo, setModelRecommendation } = useAppStore();
+  const deviceInfo = useAppStore(s => s.deviceInfo);
+  const { setDeviceInfo, setModelRecommendation } = useAppStore.getState();
   const servers = [...useModelsProjection().servers] as RemoteServer[];
   const discoveredModels = useDiscoveredRemoteModels();
 

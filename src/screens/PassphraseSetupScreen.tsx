@@ -38,7 +38,9 @@ export const PassphraseSetupScreen: React.FC<PassphraseSetupScreenProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { setEnabled } = useAuthStore();
+  // Action only: nothing here RENDERS auth state, so subscribing to the store made this screen
+  // re-render for every unlock attempt and every passphrase change elsewhere.
+  const { setEnabled } = useAuthStore.getState();
 
   const validatePassphrase = (passphrase: string): string | null => {
     if (passphrase.length < 6) {

@@ -34,13 +34,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
+  // The lock screen is a PASSPHRASE INPUT. It renders one number; the rest are actions and
+  // getters, read at call time, so a keystroke elsewhere in the auth state cannot re-render it.
+  const failedAttempts = useAuthStore(s => s.failedAttempts);
   const {
-    failedAttempts,
     recordFailedAttempt,
     resetFailedAttempts,
     checkLockout,
     getLockoutRemaining,
-  } = useAuthStore();
+  } = useAuthStore.getState();
 
   // Check and update lockout timer
   useEffect(() => {
