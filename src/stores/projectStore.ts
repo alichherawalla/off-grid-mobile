@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project } from '../types';
 import { generateId } from '../utils/generateId';
+import { workflowFailureMessage } from '@offgrid/application';
 import { applicationFacade } from '../services/applicationFacade';
 import { useChatStore } from './chatStore';
 import {
@@ -131,7 +132,10 @@ export const useProjectStore = create<ProjectState>()(
         const projectExists = get().projects.some(project => project.id === id);
         if (!projectExists) return;
 
-        await applicationFacade().workflows.deleteProject(id);
+        const outcome = await applicationFacade().workflows.deleteProject(id);
+        // A partial sync or RAG cleanup keeps the local records: dropping them here would
+        // orphan chats against a project the mesh still holds. Surface the typed failure.
+        if (!outcome.ok) throw new Error(workflowFailureMessage(outcome.failure));
         // The shared workflow has completed durable sync and RAG cleanup. Now remove local
         // references together so no chat points at a missing project.
         useChatStore.getState().unfileConversationsForProject(id);
