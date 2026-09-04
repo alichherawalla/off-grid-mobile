@@ -6,7 +6,6 @@ import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { serverDiscoveredModels } from '../../stores/remoteServerProjection';
-import { useWhisperStore } from '../../stores/whisperStore';
 import { useModelSelectionStore } from '../../stores/modelSelectionStore';
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
@@ -23,12 +22,11 @@ import { reconcileMobileGenerationAdapters } from './generationAdapters';
 import { reconcileMobileTranscriptionAdapters } from './transcriptionGenerationAdapter';
 import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
-import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
 import { registerMobileMemoryWarningRecovery } from './memoryWarningRecovery';
 import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
-import { mobileModelSelectionService } from './modelSelectionApplication';
+import { removeMobileServerSelection } from './modelSelectionProjection';
 import { reportModelFailure } from '../modelFailureHandler';
 import logger from '../../utils/logger';
 
@@ -43,7 +41,7 @@ registerModelSelectionCommandPort({
   async removeServer(serverId) {
     await Promise.all(
       (['text', 'image', 'transcription', 'voice', 'embedding'] as const).map(
-        modality => mobileModelSelectionService.remove({ modality, serverId }),
+        modality => removeMobileServerSelection(modality, serverId),
       ),
     );
   },
@@ -80,7 +78,7 @@ let started = false;
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
 const cleanups: Array<() => void> = [];
 
-type ModelServiceInitializationStage = 'inventory' | 'downloads' | 'shutdown';
+type ModelServiceInitializationStage = 'inventory';
 
 export function projectMobileModelServiceInitializationFailure(
   stage: ModelServiceInitializationStage,
@@ -89,11 +87,7 @@ export function projectMobileModelServiceInitializationFailure(
   logger.error(`[ModelServices] ${stage} initialization failed`, error);
   reportModelFailure('text', error, {
     id: `mobile-model-services-${stage}`,
-    title: stage === 'downloads'
-      ? 'Model downloads are unavailable'
-      : stage === 'shutdown'
-        ? 'Model services did not stop cleanly'
-        : 'Model services are unavailable',
+    title: 'Model services are unavailable',
     message: error instanceof Error
       ? error.message
       : 'Off Grid could not initialize the model service.',
@@ -199,10 +193,6 @@ export function startMobileModelServices(): () => void {
       state => state.servers,
       state => state.serverHealth,
     ]));
-    cleanups.push(whenChanged(useWhisperStore, refresh, [
-      state => state.presentModelIds,
-      state => state.downloadedModelId,
-    ]));
     cleanups.push(whenChanged(useModelSelectionStore, refresh, [
       state => state.entries,
     ]));
@@ -212,9 +202,6 @@ export function startMobileModelServices(): () => void {
     // Purpose-built for exactly this: it already fires only on the model-state facts that matter.
     cleanups.push(subscribeToModelState(refresh));
     cleanups.push(registerMobileMemoryWarningRecovery());
-    mobileModelDownloadCoordinator.hydrate().catch(error =>
-      projectMobileModelServiceInitializationFailure('downloads', error),
-    );
     refreshMobileModelServices().catch(consumeAlreadyProjectedFailure);
   }
   return stopMobileModelServices;
@@ -224,9 +211,6 @@ export function stopMobileModelServices(): void {
   if (!started) return;
   started = false;
   for (const cleanup of cleanups.splice(0)) cleanup();
-  mobileModelDownloadCoordinator.shutdown().catch(error =>
-    projectMobileModelServiceInitializationFailure('shutdown', error),
-  );
 }
 
 /** Presentation adapter: recover the rich Mobile record after shared routing selected it. */

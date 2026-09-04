@@ -6,16 +6,9 @@
 import {
   ClassifierProvisioningService,
   ImageArchiveImportService,
-  ImageDownloadRecoveryService,
-  ModelLibraryCommandService,
   once,
 } from '@offgrid/models';
 import type { ModelFile } from '../../types';
-import { mobileModelLibraryCommandPorts } from '../modelServices/modelLibraryCommandPorts';
-import {
-  mobileImageDownloadRecoveryPorts,
-  type MobileImageDownloadRecovery,
-} from '../modelServices/imageDownloadRecoveryPorts';
 import { mobileImageArchiveImportPorts } from '../adapters/models/library/imageArchiveImportPorts';
 import {
   mobileClassifierProvisioningPorts,
@@ -27,15 +20,8 @@ export {
   modelFileImport,
   modelLibraryRegistry,
   visionMetadataRepair,
-  visionRepairApplication,
 } from './model-library-services';
 
-export const modelLibraryCommands = once(
-  () => new ModelLibraryCommandService(mobileModelLibraryCommandPorts()),
-);
-export const imageDownloadRecovery = once(
-  (): MobileImageDownloadRecovery => new ImageDownloadRecoveryService(mobileImageDownloadRecoveryPorts()),
-);
 export const imageArchiveImport = once(
   () => new ImageArchiveImportService(mobileImageArchiveImportPorts()),
 );

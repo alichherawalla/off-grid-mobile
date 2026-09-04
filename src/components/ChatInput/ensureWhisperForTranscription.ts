@@ -1,4 +1,4 @@
-import type { WhisperLoadResult } from '../../stores/whisperStore';
+type WhisperLoadResult = 'loaded' | 'blocked' | 'error';
 
 /**
  * Decide how to get whisper resident for a voice-turn transcription — pure so it's

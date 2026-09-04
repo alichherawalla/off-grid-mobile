@@ -3,6 +3,7 @@ import {
   catalogModelKind,
   decodeModelRouteId,
   reconcileModelSelection,
+  selectionProjectionAfterRemoval,
   selectedRemoteModelName,
   type ModelModality,
   type ModelSelectionProjectionPort,
@@ -117,6 +118,12 @@ function projectionFromEntry(
 // entry for a modality; the result is written into the selection store so it never runs again.
 // ---------------------------------------------------------------------------------------------
 
+function consumeLegacyWhisperModelId(): string | null {
+  const modelId = useWhisperStore.getState().downloadedModelId;
+  if (modelId) useWhisperStore.setState({ downloadedModelId: null });
+  return modelId;
+}
+
 interface LegacyStores {
   app: ReturnType<typeof useAppStore.getState>;
   remote: ReturnType<typeof useRemoteServerStore.getState>;
@@ -187,7 +194,7 @@ function legacyImageEntry(stores: LegacyStores): PersistedSelectionEntry | null 
 }
 
 function legacyTranscriptionEntry(stores: LegacyStores): PersistedSelectionEntry | null {
-  const modelId = useWhisperStore.getState().downloadedModelId;
+  const modelId = consumeLegacyWhisperModelId();
   const localRouteId = modelId
     ? mobileRouteId({ source: 'local', hostId: 'whisper.rn', modality: 'transcription', modelId })
     : null;
@@ -313,11 +320,6 @@ async function writeMobileSelectionProjection(
         : {}),
   });
   switch (modality) {
-    case 'transcription':
-      useWhisperStore.setState({
-        downloadedModelId: local?.modelId ?? null, isModelLoaded: false, error: null,
-      });
-      break;
     case 'voice':
       await selectMobileLocalVoiceRoute(projection.localRouteId);
       break;
@@ -335,3 +337,20 @@ export const mobileModelSelectionProjection: ModelSelectionProjectionPort = {
   read: readMobileSelectionProjection,
   write: writeMobileSelectionProjection,
 };
+
+export async function removeMobileServerSelection(
+  modality: ModelModality,
+  serverId: string,
+): Promise<boolean> {
+  const persisted = mobileModelSelectionProjection.read(modality);
+  const selectedRouteId = reconcileModelSelection(modality, persisted).selectedRouteId;
+  const update = selectionProjectionAfterRemoval({
+    modality,
+    selectedRouteId,
+    removedServerId: serverId,
+    localFallback: persisted.localFallbacks?.[0] ?? null,
+  });
+  if (!update) return false;
+  await mobileModelSelectionProjection.write(modality, update);
+  return true;
+}

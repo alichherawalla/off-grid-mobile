@@ -7,9 +7,6 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
-import { transcriptionModelIntents } from '../../services/composition/transcription';
-import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { presentProgress } from '../../utils/progressPresentation';
 import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
@@ -17,13 +14,21 @@ import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { ModelFailureCard } from '../ModelFailureCard';
 import { reportModelFailure } from '../../services/modelFailureHandler';
 import logger from '../../utils/logger';
+import { modelsFailureMessage } from '@offgrid/application';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
+import {
+  downloadTranscriptionModel,
+  refreshTranscriptionModels,
+  removeTranscriptionModel,
+  selectTranscriptionModel,
+} from '../../services/transcriptionModelApplication';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
 };
 
-type WhisperPickerOperation = 'select' | 'reconcile';
+type WhisperPickerOperation = 'download' | 'select' | 'delete' | 'reconcile';
 
 function reportWhisperPickerFailure(
   operation: WhisperPickerOperation,
@@ -51,23 +56,25 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const downloadedModelId = activeRoute?.source === 'local'
     ? activeRoute.id
     : null;
-  const isModelLoading = useWhisperStore(s => s.isModelLoading);
-  const presentModelIds = useWhisperStore(s => s.presentModelIds);
-  const whisperError = useWhisperStore(s => s.error);
-  const downloadModel = (modelId: string) => transcriptionModelIntents.downloadModel(modelId);
-  const selectModel = (modelId: string) => transcriptionModelIntents.selectModel(modelId);
-  const deleteModelById = (modelId: string) => transcriptionModelIntents.deleteModel(modelId);
+  const transcription = useTranscriptionModelsProjection();
+  const isModelLoading = transcription.models.some(row => row.loading);
+  const whisperError = transcription.operation?.failure
+    ? modelsFailureMessage(transcription.operation.failure)
+    : null;
 
   // In-flight download state from the SINGLE owner the Transcription tab also reads, so the picker
   // and the tab can never disagree (the picker used to read only whisperStore.downloadProgressById
   // and missed downloads tracked in the canonical store — device 2026-07-15).
-  const { stateFor, anyDownloading } = useSttDownloadState();
+  const { stateFor, anyDownloading } = useSttDownloadState(transcription);
 
   useEffect(() => {
     if (visible && !anyDownloading) {
-      transcriptionModelIntents.reconcileDisk().catch(error =>
-        reportWhisperPickerFailure('reconcile', error),
-      );
+      refreshTranscriptionModels().then(outcome => {
+        if (!outcome.ok) reportWhisperPickerFailure(
+          'reconcile',
+          modelsFailureMessage(outcome.failure),
+        );
+      }, error => reportWhisperPickerFailure('reconcile', error));
     }
   }, [visible, anyDownloading]);
 
@@ -94,9 +101,8 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
           onSelect={onClose}
         />
         <Text style={styles.sectionLabel}>On-device models</Text>
-        {mobileTranscriptionRuntime.models.map(m => {
+        {transcription.models.map(({ catalog: m, installed: present }) => {
           const active = downloadedModelId === m.id;
-          const present = presentModelIds.includes(m.id);
           // Per-model in-flight state from the shared owner: this row's own progress, disabled only
           // while it is busy — several models can download at once, each with its own percentage.
           const dl = stateFor(m.id);
@@ -120,13 +126,21 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
                 if (present) {
                   if (!active) {
                     try {
-                      await selectModel(m.id);
+                      const outcome = await selectTranscriptionModel(m.id);
+                      if (!outcome.ok) reportWhisperPickerFailure(
+                        'select',
+                        modelsFailureMessage(outcome.failure),
+                      );
                     } catch (error) {
                       reportWhisperPickerFailure('select', error);
                     }
                   }
                 } else {
-                  await downloadModel(m.id);
+                  const outcome = await downloadTranscriptionModel(m.id);
+                  if (!outcome.ok) reportWhisperPickerFailure(
+                    'download',
+                    modelsFailureMessage(outcome.failure),
+                  );
                 }
               }}
             >
@@ -174,7 +188,14 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
                     <AnimatedPressable
                       hapticType="selection"
                       hitSlop={8}
-                      onPress={() => deleteModelById(m.id)}
+                      onPress={() => {
+                        removeTranscriptionModel(m.id).then(outcome => {
+                          if (!outcome.ok) reportWhisperPickerFailure(
+                            'delete',
+                            modelsFailureMessage(outcome.failure),
+                          );
+                        }, error => reportWhisperPickerFailure('delete', error));
+                      }}
                     >
                       <Icon name="trash-2" size={16} color={colors.textMuted} />
                     </AnimatedPressable>

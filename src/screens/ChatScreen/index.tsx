@@ -37,7 +37,7 @@ import {
 } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
-import { useWhisperStore } from '../../stores/whisperStore';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 
 function countConversationImages(conv: Conversation | undefined): number {
@@ -66,7 +66,7 @@ export const ChatScreen: React.FC = () => {
   const [whisperOpen, setWhisperOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const voiceSummary = useUiModeStore(s => s.voiceSummary);
-  const whisperModelId = useWhisperStore(s => s.downloadedModelId);
+  const whisperModelId = useTranscriptionModelsProjection().selectedModelId;
   const remoteLabels = useActiveRemoteModelLabels();
   const modelLabels: Record<ModelRowType, string> = {
     text: chat.activeModelName ?? chat.activeModel?.name ?? '—',

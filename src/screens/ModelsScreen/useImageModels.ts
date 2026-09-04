@@ -6,13 +6,11 @@ import {
   useEffect,
 } from 'react';
 import { Platform } from 'react-native';
-import { AlertState } from '../../components/CustomAlert';
-import { useActiveLocalModelId } from '../../hooks/useActiveMobileModel';
+import { AlertState, hideAlert, showAlert } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import {
   modelLibrary,
   hardwareService,
-  selectMobileModel,
 } from '../../services';
 import {
   fetchAvailableModels,
@@ -26,15 +24,16 @@ import {
   ImageModelDescriptor,
 } from './types';
 import {
-  startImageModelDownload as downloadImageModel,
-  type ImageDownloadDeps,
-} from '../../services/imageModelDownloadOwner';
-import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
+  imageDownloadCompatibility,
+  modelsFailureMessage,
+} from '@offgrid/application';
+import { applicationFacade } from '../../services/applicationFacade';
+import { publicImageDownloadRequest } from '../../services/adapters/models/downloads/publicImageDownloadRequest';
+import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import {
   filterImageCatalog,
   isRecommendedImageCatalogModel,
   recommendedImageBackendFilter,
-  uniformDownloadId,
 } from '@offgrid/application';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
@@ -64,31 +63,6 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const setDownloadedImageModels = useAppStore(
     state => state.setDownloadedImageModels,
   );
-  const addDownloadedImageModel = useAppStore(
-    state => state.addDownloadedImageModel,
-  );
-  const triedImageGen = useAppStore(
-    state => state.onboardingChecklist.triedImageGen,
-  );
-  const activeImageModelId = useActiveLocalModelId('image');
-
-  const makeDeps = useCallback(
-    (): ImageDownloadDeps => ({
-      addDownloadedImageModel,
-      activeImageModelId,
-      selectActiveImageModel: model =>
-        selectMobileModel({
-          source: 'local',
-          hostId: model.backend ?? 'image-runtime',
-          modality: 'image',
-          modelId: model.id,
-        }),
-      setAlertState,
-      triedImageGen,
-    }),
-    [addDownloadedImageModel, activeImageModelId, setAlertState, triedImageGen],
-  );
-
   const loadDownloadedImageModels = useCallback(async () => {
     const models = await modelLibrary.getDownloadedImageModels();
     setDownloadedImageModels(models);
@@ -211,15 +185,66 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
 
   // Stable identities so a memoized card is not invalidated by every parent render.
   const handleDownloadImageModel = useCallback(
-    (modelInfo: ImageModelDescriptor) =>
-      downloadImageModel(modelInfo, makeDeps()),
-    [makeDeps],
+    async (modelInfo: ImageModelDescriptor) => {
+      const start = async () => {
+        const outcome = await applicationFacade().models.download(
+          publicImageDownloadRequest(modelInfo),
+        );
+        if (!outcome.ok) {
+          setAlertState(showAlert(
+            'Download Failed',
+            getUserFacingDownloadMessage(modelsFailureMessage(outcome.failure)),
+          ));
+        }
+      };
+      const facts = modelInfo.backend === 'qnn' && Platform.OS === 'android'
+        ? await hardwareService.getSoCInfo()
+        : undefined;
+      const compatibility = imageDownloadCompatibility(modelInfo, {
+        platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'other',
+        ...(facts ? { hasNpu: facts.hasNPU, qnnVariant: facts.qnnVariant } : {}),
+      });
+      if (compatibility.status === 'blocked') {
+        setAlertState(showAlert('Incompatible Model', compatibility.message));
+        return;
+      }
+      if (compatibility.status === 'confirmation-required') {
+        setAlertState(showAlert('Incompatible Model', compatibility.message, [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Download Anyway', style: 'destructive', onPress: async () => {
+              setAlertState(hideAlert());
+              await start();
+            },
+          },
+        ]));
+        return;
+      }
+      await start();
+    },
+    [setAlertState],
   );
 
   const handleCancelImageDownload = useCallback(
-    (modelId: string) =>
-      modelDownloadRegistry.cancel(uniformDownloadId('image', modelId)),
-    [],
+    async (modelId: string) => {
+      try {
+        const row = applicationFacade().models.snapshot().downloads.find(
+          download => download.modelType === 'image' && download.modelId === modelId,
+        );
+        if (!row) return;
+        const outcome = await applicationFacade().models.cancelDownload({
+          downloadId: row.downloadId,
+          removePartial: true,
+        });
+        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      } catch (error) {
+        setAlertState(showAlert(
+          'Cancel Failed',
+          error instanceof Error ? error.message : String(error),
+        ));
+      }
+    },
+    [setAlertState],
   );
 
   return {

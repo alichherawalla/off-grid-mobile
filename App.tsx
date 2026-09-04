@@ -16,9 +16,9 @@ import {
 } from './src/services';
 import logger from './src/utils/logger';
 import { useAppStore, useAuthStore, useRemoteServerStore } from './src/stores';
-import { transcriptionModelIntents } from './src/services/modelServices/transcriptionRuntimePort';
 import { useDebugLogsStore } from './src/stores/debugLogsStore';
 import { useWhisperStore } from './src/stores/whisperStore';
+import { useModelSelectionStore } from './src/stores/modelSelectionStore';
 import {
   initDebugLogFile,
   appendDebugLine,
@@ -26,9 +26,6 @@ import {
 } from './src/utils/debugLogFile';
 import { startStartupMemoryProbe } from './src/services/startupMemoryProbe';
 import { loadProFeatures } from './src/bootstrap/loadProFeatures';
-import { hydrateDownloadStore } from './src/services/downloadHydration';
-import { initActiveDownloadPersistence } from './src/services/activeDownloadPersistence';
-import { restoreQueuedDownloads } from './src/services/restoreQueuedDownloads';
 import { createLoadPolicySync } from './src/services/loadPolicySync';
 import {
   startMobileApplication,
@@ -43,13 +40,10 @@ import {
   startNetworkReconnectWatcher,
   stopNetworkReconnectWatcher,
 } from './src/services/networkReconnect';
-import { registerCoreDownloadProviders } from './src/services/modelServices/downloadBootstrap';
-import { reconcileImageDownloadsAtBootstrap } from './src/services/modelServices/imageDownloadRecoveryApplication';
-import { useDownloadListeners } from './src/hooks/useDownloads';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useSlot, SLOTS } from './src/bootstrap/slotRegistry';
 import { useAppState } from './src/hooks/useAppState';
-import { useDownloadStore } from './src/stores/downloadStore';
+import { applicationFacade } from './src/services/applicationFacade';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import {
   InitializingSurface,
@@ -119,13 +113,10 @@ const ensureWhisperStoreHydrated = async () => {
   }
 };
 
-const reconcileTranscriptionSelection = async () => {
-  await ensureWhisperStoreHydrated();
-  try {
-    await transcriptionModelIntents.reconcileDisk();
-  } catch (error) {
-    logger.error('[App] Whisper disk reconciliation failed:', error);
-  }
+const ensureModelSelectionStoreHydrated = async () => {
+  const persistApi = useModelSelectionStore.persist;
+  if (!persistApi?.hasHydrated || !persistApi.rehydrate) return;
+  if (!persistApi.hasHydrated()) await persistApi.rehydrate();
 };
 
 function stopMobileRuntime(loadPolicySync: ReturnType<typeof createLoadPolicySync>): void {
@@ -144,7 +135,6 @@ function App() {
     },
     [],
   );
-  useDownloadListeners();
   // Reactive: when Pro is activated at runtime (license key → loadProFeatures),
   // the appRoot slot (TTS engine bridge) registers and this re-renders to mount
   // it live — no restart needed.
@@ -165,31 +155,6 @@ function App() {
     setLastBackgroundTime,
   } = useAuthStore();
 
-  const reattachTextDownloadRecovery = useCallback(async () => {
-    const restoredIds = await modelLibrary.restoreInProgressDownloads();
-    modelLibrary.startBackgroundDownloadPolling();
-    restoredIds.forEach(downloadId => {
-      modelLibrary.watchDownload(
-        downloadId,
-        async () => {
-          const models = await modelLibrary.getDownloadedModels();
-          setDownloadedModels(models);
-          useDownloadStore
-            .getState()
-            .remove(
-              useDownloadStore.getState().downloadIdIndex[downloadId] ?? '',
-            );
-        },
-        (error: Error) => {
-          logger.error('[App] Restored text download failed:', error);
-          useDownloadStore
-            .getState()
-            .setStatus(downloadId, 'failed', { message: error.message });
-        },
-      );
-    });
-  }, [setDownloadedModels]);
-
   // Handle app state changes for auto-lock
   useAppState({
     onBackground: useCallback(() => {
@@ -199,29 +164,10 @@ function App() {
       }
     }, [authEnabled, setLastBackgroundTime, setLocked]),
     onForeground: useCallback(() => {
-      // Rebuild the unified store before reattaching JS listeners so restored
-      // progress events map onto current download entries instead of racing hydration.
-      // NOTE: restoreQueuedDownloads() is intentionally NOT called here — on a foreground
-      // resume the process was never killed, so backgroundDownloadService.startQueue (the
-      // in-memory FIFO) is still the live source of truth for queued items. Replaying the
-      // persisted queue here would DOUBLE-issue starts that are still waiting in memory.
-      // Restore is a cold-start-only concern (the queue owner is gone only after a kill).
-      hydrateDownloadStore()
-        .catch(error => {
-          logger.error(
-            '[App] Failed to hydrate download store on foreground:',
-            error,
-          );
-        })
-        .finally(() => {
-          reattachTextDownloadRecovery().catch(error => {
-            logger.error(
-              '[App] Failed to restore text downloads on foreground:',
-              error,
-            );
-          });
-        });
-    }, [reattachTextDownloadRecovery]),
+      applicationFacade().models.refresh().then(outcome => {
+        if (!outcome.ok) logger.error('[App] Failed to refresh models on foreground', outcome.failure);
+      }).catch(error => logger.error('[App] Failed to refresh models on foreground', error));
+    }, []),
   });
 
   const ensureAppStoreHydrated = useCallback(async () => {
@@ -231,84 +177,6 @@ function App() {
       await persistApi.rehydrate();
     }
   }, []);
-
-  /**
-   * Download-state recovery — the chain that reads/repairs the native download DB. Ordered
-   * internally exactly as before (hydrate → reattach → register providers → restore queued →
-   * image reconcile → model-list refresh), but NOT awaited by the boot gate: under heavy
-   * download I/O the Room read alone stalled ~10s (write-lock contention) and blanked boot.
-   * Screens read reactive stores, so recovered rows/models appear when this lands.
-   */
-  const recoverDownloadState = useCallback(() => {
-    (async () => {
-      // Persist the in-flight download set for the rest of the session (idempotent) BEFORE the first
-      // hydrate, so a download started this run is durably recorded and can be stranded as a
-      // failed/retriable card — not vanish — if the app is hard-killed mid-transfer (iOS URLSession).
-      initActiveDownloadPersistence();
-      await hydrateDownloadStore().catch(error => {
-        logger.error(
-          '[App] Failed to hydrate download store during startup:',
-          error,
-        );
-      });
-      await reattachTextDownloadRecovery();
-
-      // Register the core download providers so the unified service is reactive for
-      // any screen (registration only subscribes — no writes). NOTE: do NOT call
-      // modelDownloadService.reconcile() here yet — the existing reattachTextDownload
-      // Recovery (above) + the image-resume path are still the owners of post-launch
-      // recovery, and running provider reconcile() alongside them = two writers to
-      // downloadStore (a download one restores, the other strands). reconcile()
-      // becomes the SINGLE owner only once the Download Manager consumes the service
-      // and the old recovery paths are folded into the providers.
-      registerCoreDownloadProviders();
-
-      // Re-surface QUEUED downloads that never started before an app kill. A queued item (waiting for
-      // one of the 3 concurrency slots) has no native row, so hydrateDownloadStore can't recover it —
-      // it lives only in the durably-persisted queue. restore replays it through the owning provider's
-      // real start (re-creating the pending row + watch); items auto-start as slots free. Runs AFTER
-      // provider registration (restore dispatches to the providers) and hydrate (so it dedupes against
-      // any native row that DID start). Fire-and-forget: a failure must not abort launch.
-      await restoreQueuedDownloads().catch(error => {
-        logger.error(
-          '[App] Failed to restore queued downloads during startup:',
-          error,
-        );
-      });
-
-      await reconcileImageDownloadsAtBootstrap().catch(error => {
-        logger.error(
-          '[App] Failed to resume image downloads during startup:',
-          error,
-        );
-      });
-
-      // Reconcile image model directories that finished extracting on disk but whose AsyncStorage
-      // registration was lost to an app kill. Reads the (just-hydrated) download store, so it lives
-      // in this chain; the closing refreshModelLists republishes any recovered models to the UI.
-      const activeImageModelIds = new Set(
-        Object.values(useDownloadStore.getState().downloads)
-          .filter(e => e.modelType === 'image')
-          .map(e => e.modelId.replace('image:', '')),
-      );
-      await modelLibrary
-        .reconcileFinishedImageDownloads(activeImageModelIds)
-        .catch(error => {
-          logger.error('[App] Image model reconciliation failed:', error);
-        });
-      logger.log('[BOOT] refresh model lists');
-      const { textModels, imageModels } =
-        await modelLibrary.refreshModelLists();
-      setDownloadedModels(textModels);
-      setDownloadedImageModels(imageModels);
-    })().catch(error => {
-      logger.error('[App] Download-state recovery failed:', error);
-    });
-  }, [
-    reattachTextDownloadRecovery,
-    setDownloadedModels,
-    setDownloadedImageModels,
-  ]);
 
   const initializeApp = useCallback(
     async (
@@ -324,13 +192,6 @@ function App() {
         // manager (single owner of the runtime load policy) now that settings are
         // hydrated, and keep it in sync for the app's lifetime.
         loadPolicySync.start();
-
-        // Download-state recovery runs OFF the boot gate (fire-and-forget, order preserved
-        // inside recoverDownloadState below): with many WorkManager downloads mid-flight the
-        // native Room DB read (getActiveDownloads) sat ~9.5s behind write-lock contention
-        // (device 2026-07-13, 9 active downloads) and the WHOLE app was hostage to it. The
-        // download rows/badges are reactive projections — they fill in when recovery lands.
-        recoverDownloadState();
 
         // Phase 1: Quick initialization - get app ready to show UI
         // Initialize hardware detection
@@ -349,11 +210,8 @@ function App() {
         logger.log('[BOOT] cleanup mmproj entries');
         await modelLibrary.cleanupMMProjEntries();
 
-        // Scan for any models that may have been downloaded externally or
-        // while the app was killed. hydrateDownloadStore (called on cold start
-        // and foreground resume) repopulates in-flight downloads directly
-        // from the native Room DB, replacing the old metadata-callback +
-        // syncBackgroundDownloads recovery path.
+        // Publish the installed library cache used by legacy presentation surfaces. The
+        // application root separately hydrates and recovers its one durable download owner.
         const { textModels, imageModels } =
           await modelLibrary.refreshModelLists();
         setDownloadedModels(textModels);
@@ -364,11 +222,13 @@ function App() {
         logger.log('[BOOT] remote server hydrate');
         await ensureRemoteServerStoreHydrated();
 
-        // The Shared workflow must see the persisted transcription selection before it compares
-        // that selection with disk inventory. Running this after the UI mounted allowed AsyncStorage
-        // to restore a missing model after reconciliation had already cleared it.
-        logger.log('[BOOT] transcription selection reconcile');
-        await reconcileTranscriptionSelection();
+        // Hydrate the one selection store before Shared reconciles disk-backed inventory. The old
+        // Whisper store is read only as an upgrade source when the selection store has no STT row.
+        logger.log('[BOOT] model selection hydrate');
+        await Promise.all([
+          ensureModelSelectionStoreHydrated(),
+          ensureWhisperStoreHydrated(),
+        ]);
 
         try {
           // Pro supplies optional domain ports before core creates the single application root.
@@ -437,7 +297,6 @@ function App() {
     [
       authEnabled,
       ensureAppStoreHydrated,
-      recoverDownloadState,
       setDeviceInfo,
       setDownloadedImageModels,
       setDownloadedModels,

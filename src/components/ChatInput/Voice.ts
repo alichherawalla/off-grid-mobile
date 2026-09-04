@@ -2,9 +2,7 @@ import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useCallback, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore } from '../../stores';
-import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
-import { mobileTranscriptionRuntime } from '../../services/modelServices/transcriptionRuntimePort';
-import { transcriptionModelIntents } from '../../services/composition/transcription';
+import { releaseModel } from '../../services/modelServices/modelFacadeCommands';
 import { supportsAudioInput } from '../../services/modelServices/modelState';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { recordingController } from '../../services/recordingController';
@@ -26,6 +24,8 @@ import {
   stopVoiceRecording,
   useVoiceControllerEffects,
 } from './voiceControllerEffects';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
+import { loadTranscriptionModel } from '../../services/transcriptionModelApplication';
 
 interface UseVoiceInputParams {
   conversationId?: string | null;
@@ -75,23 +75,40 @@ function visibleTranscriptionFailure(outcome: TranscriptionOutcome): string {
 /** Build the one readiness boundary shared by realtime and file transcription. */
 function createWhisperReadiness(
   downloadedModelId: string | null,
+  selectedModelLoaded: boolean,
   remoteTranscriptionAvailable: boolean,
 ): () => Promise<boolean> {
   if (remoteTranscriptionAvailable) return async () => true;
   return () =>
     ensureWhisperForTranscription({
       isSelectedModelLoaded: () =>
-        !!downloadedModelId &&
-        mobileTranscriptionRuntime.isSelectedModelLoaded(downloadedModelId),
+        !!downloadedModelId && selectedModelLoaded,
       hasDownloadedModel: () => !!downloadedModelId,
-      loadWhisper: () => transcriptionModelIntents.loadModel(),
-      freeGenerationModels: () =>
-        mobileModelCommands.release(['text', 'image']),
+      loadWhisper: async () => {
+        const outcome = await loadTranscriptionModel(downloadedModelId ?? undefined);
+        if (outcome.ok) return 'loaded';
+        return outcome.failure.kind === 'memory_refused' ? 'blocked' : 'error';
+      },
+      freeGenerationModels: async () => {
+        await releaseModel('text');
+        await releaseModel('image');
+      },
     });
 }
 
 function useRemoteTranscriptionAvailable(): boolean {
   return useActiveMobileModel('transcription').model?.source === 'remote';
+}
+
+function useSelectedTranscriptionModel(): {
+  readonly modelId: string | null;
+  readonly loaded: boolean;
+} {
+  const projection = useTranscriptionModelsProjection();
+  return {
+    modelId: projection.selectedModelId,
+    loaded: projection.models.some(row => row.selected && row.loaded),
+  };
 }
 
 function settleVoiceIntent(intent: Promise<unknown>, label: string): void {
@@ -122,7 +139,8 @@ export function useVoiceInput({
   onAudioAttachmentRef.current = onAudioAttachment;
   const onAutoSendRef = useRef(onAutoSend);
   onAutoSendRef.current = onAutoSend;
-  const downloadedModelId = useWhisperStore(state => state.downloadedModelId);
+  const { modelId: downloadedModelId, loaded: selectedModelLoaded } = useSelectedTranscriptionModel();
+  // Language is a user preference, not model lifecycle state. It stays outside the Models snapshot.
   const transcriptionLanguage = useWhisperStore(
     state => state.transcriptionLanguage,
   );
@@ -146,6 +164,7 @@ export function useVoiceInput({
 
   const ensureWhisper = createWhisperReadiness(
     downloadedModelId,
+    selectedModelLoaded,
     remoteTranscriptionAvailable,
   );
 

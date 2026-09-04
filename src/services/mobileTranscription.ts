@@ -24,7 +24,8 @@ export async function startMobileRealtimeTranscription(
   options: { language?: string; maxLength?: number; onError?: (error: unknown) => void } = {},
 ): Promise<void> {
   const models = applicationFacade().models;
-  await models.refresh();
+  const refreshed = await models.refresh();
+  if (!refreshed.ok) throw new Error(modelsFailureMessage(refreshed.failure));
   const controller = new AbortController();
   activeRequests.add(controller);
   let started = false;
@@ -89,7 +90,8 @@ export async function executeMobileTranscription(
   options: MobileTranscriptionOptions = {},
 ): Promise<string> {
   const models = applicationFacade().models;
-  await models.refresh();
+  const refreshed = await models.refresh();
+  if (!refreshed.ok) throw new Error(modelsFailureMessage(refreshed.failure));
   const controller = new AbortController();
   const abort = () => controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });

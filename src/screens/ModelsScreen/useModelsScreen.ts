@@ -4,7 +4,8 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import { showAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
 import { useAppStore } from '../../stores';
-import { useDownloadStore, isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
+import { isActiveStatus, isFailedStatus } from '../../stores/downloadStore';
+import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { ModelTab, NavigationProp } from './types';
 import { initialFilterState } from './constants';
@@ -143,18 +144,13 @@ export function useModelsScreen() {
     }
   };
 
-  const activeDownloadCount = useDownloadStore(state =>
-    Object.values(state.downloads).filter(
-      d => isActiveStatus(d.status),
-    ).length,
-  );
+  const downloads = useModelDownloadsProjection();
+  const activeDownloadCount = downloads.filter(d => isActiveStatus(d.status)).length;
   // The icon badge answers "is there download work outstanding?" — so it counts active AND
   // failed/retriable (a failed download needs a retry or remove and must not be invisible).
-  const downloadBadgeCount = useDownloadStore(state =>
-    Object.values(state.downloads).filter(
-      d => isActiveStatus(d.status) || isFailedStatus(d.status),
-    ).length,
-  );
+  const downloadBadgeCount = downloads.filter(
+    d => isActiveStatus(d.status) || isFailedStatus(d.status),
+  ).length;
   const totalModelCount =
     text.downloadedModels.length +
     image.downloadedImageModels.length +

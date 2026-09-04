@@ -26,16 +26,21 @@ import {
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
-import { useWhisperStore } from '../../stores';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
-import { WHISPER_MODELS } from '@offgrid/application';
+import { modelsFailureMessage, WHISPER_MODELS } from '@offgrid/application';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
-import { transcriptionModelIntents } from '../../services/composition/transcription';
 import { ModelFailureCard } from '../../components/ModelFailureCard';
 import { reportModelFailure } from '../../services/modelFailureHandler';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
+import {
+  downloadTranscriptionModel,
+  refreshTranscriptionModels,
+  removeTranscriptionModel,
+  selectTranscriptionModel,
+} from '../../services/transcriptionModelApplication';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
@@ -153,25 +158,31 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     ? activeRoute.id
     : null;
 
-  // Two facts. `downloadProgressById` changes on every download tick and this tab does not read
-  // it, so a whole-store read re-rendered the whole model list per tick.
-  const presentModelIds = useWhisperStore(s => s.presentModelIds);
-  const whisperError = useWhisperStore(s => s.error);
+  const transcription = useTranscriptionModelsProjection();
+  const presentModelIds = React.useMemo(
+    () => transcription.models.filter(row => row.installed).map(row => row.catalog.id),
+    [transcription.models],
+  );
+  const whisperError = transcription.operation?.failure
+    ? modelsFailureMessage(transcription.operation.failure)
+    : null;
 
   // In-flight STT state from the SINGLE owner (canonical download tracker + whisper-store
   // fallback), shared with the Home "Speech" picker so the two surfaces can never disagree.
   // A failed entry reports active=false, so a stuck "downloading" bar can't linger while the
   // Download Manager shows "failed" — the model just becomes downloadable again. Disk probes
   // are deferred until nothing is downloading so an in-flight file isn't mistaken for absent.
-  const { stateFor: downloadStateFor, anyDownloading } = useSttDownloadState();
+  const { stateFor: downloadStateFor, anyDownloading } = useSttDownloadState(transcription);
 
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
   useEffect(() => {
     if (!anyDownloading) {
-      transcriptionModelIntents.reconcileDisk().catch(
-        reportTranscriptionReconcileFailure,
-      );
+      refreshTranscriptionModels().then(outcome => {
+        if (!outcome.ok) reportTranscriptionReconcileFailure(
+          modelsFailureMessage(outcome.failure),
+        );
+      }, reportTranscriptionReconcileFailure);
     }
   }, [anyDownloading]);
 
@@ -181,9 +192,11 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   useFocusEffect(
     useCallback(() => {
       if (!anyDownloading) {
-        transcriptionModelIntents.reconcileDisk().catch(
-          reportTranscriptionReconcileFailure,
-        );
+        refreshTranscriptionModels().then(outcome => {
+          if (!outcome.ok) reportTranscriptionReconcileFailure(
+            modelsFailureMessage(outcome.failure),
+          );
+        }, reportTranscriptionReconcileFailure);
       }
     }, [anyDownloading]),
   );
@@ -202,9 +215,10 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     // The store owns downloadingId (set/cleared in downloadModel), so a download
     // started here — or from the chat voice button — shows progress on this tab.
       try {
-        await transcriptionModelIntents.downloadModel(id);
-      } catch (err) {
-        logger.error('[Transcription] download failed:', err);
+        const outcome = await downloadTranscriptionModel(id);
+        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      } catch (error) {
+        reportTranscriptionReconcileFailure(error);
       }
     },
     [],
@@ -213,9 +227,10 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   const handleSelect = useCallback(
     async (id: string) => {
       try {
-        await transcriptionModelIntents.selectModel(id);
-      } catch (err) {
-        logger.error('[Transcription] select failed:', err);
+        const outcome = await selectTranscriptionModel(id);
+        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      } catch (error) {
+        reportTranscriptionReconcileFailure(error);
       }
     },
     [],
@@ -234,7 +249,11 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
               style: 'destructive',
               onPress: () => {
                 setAlertState(hideAlert());
-                transcriptionModelIntents.deleteModel(id);
+                removeTranscriptionModel(id).then(outcome => {
+                  if (!outcome.ok) reportTranscriptionReconcileFailure(
+                    modelsFailureMessage(outcome.failure),
+                  );
+                }, reportTranscriptionReconcileFailure);
               },
             },
           ],

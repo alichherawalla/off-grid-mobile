@@ -1,4 +1,4 @@
-import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, stripModelFileExtension, uniformDownloadId } from '@offgrid/application';
+import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, isModelDownloadInProgress, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, modelsFailureMessage, stripModelFileExtension } from '@offgrid/application';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform, type ListRenderItemInfo } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
@@ -8,27 +8,27 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
-import { CustomAlert, hideAlert, showAlert, AlertState } from '../../components/CustomAlert';
+import { CustomAlert, hideAlert, showAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
-import { useDownloadStore, isActiveStatus, isQueuedStatus } from '../../stores/downloadStore';
+import { isQueuedStatus } from '../../stores/downloadStore';
 import { makeModelKey } from '../../utils/modelKey';
 import { modelSupportsNpuGpu, isAccelerableQuant } from '../../utils/acceleration';
-import { aggregateActiveDownloads } from '../../utils/downloadAggregate';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
 import { SORT_OPTIONS } from './constants';
 import { formatNumber, getTextModelCompatibility } from './utils';
 import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED } from './litertRecommended';
 import { repairDownloadedVisionMetadata } from '../../services/modelServices/modelMetadataRepairCommand';
-import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
+import { applicationFacade } from '../../services/applicationFacade';
+import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 import { huggingFaceService } from '../../services/huggingface';
-
+import { aggregateTextModelDownloads, buildFileDownloadHandler } from './modelDownloadProjection';
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
 }
@@ -58,29 +58,6 @@ type DetailProps = Pick<Props,
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
-// Build the file card's onDownload handler. The curated confirm-download warning is the
-// registry's single DEVICE-AWARE decision (curatedLiteRTDownloadWarning), never re-derived here.
-function buildFileDownloadHandler({ s, fileName, sizeBytes, ramGB, proceedDownload, setAlertState }: {
-  s: { downloaded: boolean; progress: unknown; hasFailed: boolean };
-  fileName: string;
-  sizeBytes: number; ramGB: number;
-  proceedDownload: () => void;
-  setAlertState: (state: AlertState) => void;
-}): (() => void) | undefined {
-  if (s.downloaded || s.progress || s.hasFailed) return undefined;
-  return () => {
-    const warning = curatedLiteRTDownloadWarning(fileName, sizeBytes, ramGB);
-    if (warning) {
-      setAlertState(showAlert(warning.title, warning.message, [
-        { text: 'Cancel', style: 'cancel', onPress: () => setAlertState(hideAlert()) },
-        { text: 'Download anyway', style: 'default', onPress: () => { setAlertState(hideAlert()); proceedDownload(); } },
-      ]));
-      return;
-    }
-    proceedDownload();
-  };
-}
-
 const ModelDetailView: React.FC<DetailProps> = ({
   selectedModel, modelFiles, isLoadingFiles, filterState, ramGB,
   alertState, setAlertState, onBack,
@@ -105,20 +82,20 @@ const ModelDetailView: React.FC<DetailProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModel.id, modelFiles]);
 
-  const storeDownloads = useDownloadStore(state => state.downloads);
+  const downloads = useModelDownloadsProjection();
 
   const getFileCardState = (item: ModelFile) => {
     const modelKey = makeModelKey(selectedModel.id, item.name);
-    const entry = storeDownloads[modelKey];
+    const entry = downloads.find(row => row.modelType === 'text' && row.modelId === modelKey);
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const repairingVision = isRepairingVisionModel(`${selectedModel.id}/${item.name}`);
     let progress = entry ? {
-      progress: entry.progress,
-      bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
-      totalBytes: entry.combinedTotalBytes,
-      bytesPerSecond: entry.bytesPerSecond,
+      progress: entry.totalBytes > 0 ? entry.bytesDownloaded / entry.totalBytes : 0,
+      bytesDownloaded: entry.bytesDownloaded,
+      totalBytes: entry.totalBytes,
+      bytesPerSecond: undefined,
       status: entry.status,
     } : undefined;
 
@@ -126,9 +103,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
     if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
       progress = undefined;
     }
-    const canCancel   = !!entry && isActiveStatus(entry.status);
+    const canCancel   = !!entry && isModelDownloadInProgress(entry.status);
     const hasFailed   = entry?.status === 'failed';
-    const errorMessage = hasFailed ? (entry?.errorMessage ?? 'Download failed') : undefined;
+    const errorMessage = hasFailed ? (entry?.reason ?? 'Download failed') : undefined;
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel, hasFailed, errorMessage };
   };
 
@@ -137,19 +114,33 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const proceedDownload = () => {
       handleDownload(selectedModel, item);
     };
-    const onDownload = buildFileDownloadHandler({ s, fileName: item.name, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
+    const onDownload = buildFileDownloadHandler({
+      state: s,
+      fileName: item.name,
+      sizeBytes: item.size,
+      ramGB,
+      warning: curatedLiteRTDownloadWarning,
+      proceed: proceedDownload,
+      setAlertState,
+    });
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? stripModelFileExtension(item.name);
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
-    const storeEntry = storeDownloads[s.downloadKey];
-    // Retry routes through the single owner (modelDownloadRegistry → textProvider): the provider owns
-    // the platform decision AND the lost-downloadId case, so the failed card renders Retry regardless
-    // of downloadId — gating on it here made iOS retry unreachable.
-    const failedState = s.hasFailed && s.errorMessage && storeEntry ? {
+    const download = downloads.find(row => row.modelType === 'text' && row.modelId === s.downloadKey);
+    const retry = async () => {
+      if (!download) return;
+      const outcome = await applicationFacade().models.retryDownload({ downloadId: download.downloadId });
+      if (!outcome.ok) {
+        setAlertState(showAlert('Retry Failed', modelsFailureMessage(outcome.failure)));
+      }
+    };
+    const failedState = s.hasFailed && s.errorMessage && download ? {
       errorMessage: s.errorMessage,
-      bytesDownloaded: storeEntry.bytesDownloaded,
-      totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
-      onRetry: () => { modelDownloadRegistry.retry(uniformDownloadId('text', s.downloadKey)).catch(() => {}); },
+      bytesDownloaded: download.bytesDownloaded,
+      totalBytes: download.totalBytes,
+      onRetry: () => { retry().catch(error => {
+        setAlertState(showAlert('Retry Failed', error instanceof Error ? error.message : String(error)));
+      }); },
       onRemove: () => handleCancelDownload(s.downloadKey),
     } : undefined;
     return <ModelCard
@@ -268,10 +259,11 @@ const ModelListItemRow: React.FC<ModelListItemProps> = ({ item, index, focusTrig
   const onPress = useMemo(() => onDownload ?? (() => onSelect(item)), [onDownload, onSelect, item]);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
-  // Aggregate ALL in-flight entries for this model (main+mmproj / grouped LiteRT) into
-  // cumulative progress/bytes + a download count, so the card shows total, not one entry.
-  const downloads = useDownloadStore(s => s.downloads);
-  const agg = React.useMemo(() => aggregateActiveDownloads(downloads, item.id), [downloads, item.id]);
+  const downloads = useModelDownloadsProjection();
+  const agg = React.useMemo(
+    () => aggregateTextModelDownloads(downloads, item.id),
+    [downloads, item.id],
+  );
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
@@ -364,11 +356,12 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           handleDownload(model, file);
         };
         const guardedDownload = buildFileDownloadHandler({
-          s: { downloaded: false, progress: null, hasFailed: false },
+          state: { downloaded: false, progress: null, hasFailed: false },
           fileName: file.name,
           sizeBytes: file.size,
           ramGB,
-          proceedDownload: startDownload,
+          warning: curatedLiteRTDownloadWarning,
+          proceed: startDownload,
           setAlertState,
         });
         return (

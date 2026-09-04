@@ -4,7 +4,6 @@ import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useDownloadStore } from '../../stores/downloadStore';
 import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
@@ -47,13 +46,16 @@ export type DownloadItem = {
 export { formatBytes } from '../../utils/formatBytes';
 
 export function getStatusText(status: string): string {
-  if (status === 'running') return 'Downloading...';
-  if (status === 'pending') return 'Queued';
+  if (status === 'running' || status === 'downloading') return 'Downloading...';
+  if (status === 'pending' || status === 'queued') return 'Queued';
   if (status === 'paused') return 'Paused';
+  if (status === 'verifying') return 'Verifying...';
+  if (status === 'processing') return 'Preparing...';
   if (status === 'retrying') return 'Retrying connection...';
   if (status === 'waiting_for_network') return 'Waiting for network';
   if (status === 'failed') return 'Needs attention';
   if (status === 'unknown') return 'Stuck - Remove & retry';
+  if (status === 'interrupted') return 'Interrupted';
   return status;
 }
 
@@ -77,8 +79,9 @@ interface ActiveDownloadCardProps {
 export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const needsAttention = item.status === 'failed' || item.status === 'interrupted';
   const progressColor =
-    item.status === 'failed'
+    needsAttention
       ? colors.error
       : item.status === 'retrying' || item.status === 'waiting_for_network'
         ? colors.warning
@@ -97,7 +100,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
   const getStatusIcon = () => downloadStatusIcon(item.status);
 
   const getStatusIconColor = () => {
-    if (item.status === 'failed') return colors.error;
+    if (needsAttention) return colors.error;
     if (item.status === 'retrying') return colors.warning;
     if (item.status === 'waiting_for_network') return colors.warning;
     return colors.textMuted;
@@ -110,7 +113,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
           <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
         </View>
-        {item.status === 'failed' ? (
+        {needsAttention ? (
           <View style={styles.failedActionsRow}>
             {isRetryable(item.reasonCode) && (
               <TouchableOpacity
@@ -133,7 +136,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
               <Text style={styles.removeButtonText}>Remove</Text>
             </TouchableOpacity>
           </View>
-        ) : (
+        ) : item.modelType !== 'tts' ? (
           <TouchableOpacity
             style={styles.cancelButton}
             testID="remove-download-button"
@@ -141,7 +144,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           >
             <Icon name="x" size={20} color={colors.error} />
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
       <View style={styles.progressContainer}>
         <View style={styles.progressBarBackground}>
@@ -164,8 +167,8 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             )}
             {/* Queued is icon-only (clock) — the word is redundant next to it. Other states
                 (failed/retrying/network) keep their explanatory text. */}
-            {item.status !== 'pending' && !!getStatusLabel(item) && (
-              <Text style={[styles.statusText, item.status === 'failed' && { color: colors.error }]}>
+            {item.status !== 'pending' && item.status !== 'queued' && !!getStatusLabel(item) && (
+              <Text style={[styles.statusText, needsAttention && { color: colors.error }]}>
                 {getStatusLabel(item)}
               </Text>
             )}
@@ -205,19 +208,6 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const needsVisionRepair = checkNeedsVisionRepair(item);
-  // A vision repair drives a live download-store row keyed on the completed
-  // model's modelKey (`repo/file` = item.modelId). Read it so the SAME
-  // determinate progress bar the normal download shows lights up during the
-  // ~900MB mmproj re-download, instead of a bare indeterminate spinner (OD2).
-  const repairEntry = useDownloadStore(s => s.downloads[item.modelId]);
-  const showRepairProgress = isRepairingVision && !!repairEntry;
-  const repairProgress = repairEntry ? presentProgress({
-    progress: repairEntry.progress,
-    bytesDownloaded: repairEntry.bytesDownloaded,
-    totalBytes: repairEntry.totalBytes,
-    bytesPerSecond: repairEntry.bytesPerSecond,
-    status: repairEntry.status,
-  }) : undefined;
   const completedMeta = [
     item.author,
     formatBytes(item.fileSize),
@@ -258,16 +248,6 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           <Icon name="trash-2" size={18} color={colors.error} />
         </TouchableOpacity>
       </View>
-      {showRepairProgress && (
-        <View style={styles.progressContainer} testID="repair-vision-progress">
-          <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: `${Math.round(repairEntry.progress * 100)}%` as const, backgroundColor: colors.primary }]} />
-          </View>
-          <Text style={styles.progressText}>
-            {[repairProgress?.percentageText, repairProgress?.detailText].filter(Boolean).join(' · ')}
-          </Text>
-        </View>
-      )}
       {isRepairingVision && (
         <View style={styles.repairingBadge} testID="repairing-vision-badge">
           <LoadingDots color={colors.primary} />

@@ -5,7 +5,7 @@
 import type { ClassifierProvisioningService } from '@offgrid/models';
 import type { DownloadedModel, ModelFile } from '../types';
 import { useAppStore } from '../stores';
-import { modelLibrary } from './modelServices/bootstrap/modelLibraryBootstrap';
+import { nativeDownloadTransferAdapter } from './adapters/downloads/nativeDownloadTransferAdapter';
 import { huggingFaceService } from './huggingface';
 import { startModelDownload } from './startModelDownload';
 import { selectMobileModel } from './modelServices/selectionCommands';
@@ -24,7 +24,7 @@ export function mobileClassifierProvisioningPorts(): ConstructorParameters<typeo
         hostId: model.engine,
       })),
       backgroundDownloadSupported:
-        modelLibrary.isBackgroundDownloadSupported?.() === true,
+        nativeDownloadTransferAdapter.isAvailable(),
     };
   },
   discover: repository => huggingFaceService.getModelFiles(repository),

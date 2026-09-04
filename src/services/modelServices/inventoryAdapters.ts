@@ -9,13 +9,13 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from './activeRoute';
 import { rememberedLocalTextModelId } from './modelSelectionProjection';
-import { useWhisperStore } from '../../stores/whisperStore';
 import type {
   DownloadedModel,
 } from '../../types';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
 import { whisperService } from '../whisperService';
+import { listDownloadedModels } from '../whisperModelFiles';
 import { WHISPER_MODELS, projectLiteRTCapabilities } from '@offgrid/models';
 import {
   getActiveModels,
@@ -172,10 +172,9 @@ const localImageInventoryAdapter: ModelInventoryAdapter = {
 const localWhisperInventoryAdapter: ModelInventoryAdapter = {
   id: 'mobile-local-whisper-inventory',
   async listModels() {
-    const state = useWhisperStore.getState();
-    const ids = new Set(state.presentModelIds);
-    if (state.downloadedModelId) ids.add(state.downloadedModelId);
-    return [...ids].map(modelId => {
+    const downloaded = await listDownloadedModels();
+    const selectedModelId = activeLocalModelId('transcription');
+    return downloaded.map(({ modelId }) => {
       const model = WHISPER_MODELS.find(candidate => candidate.id === modelId);
       const identity: MobileRouteFacts = {
         source: 'local',
@@ -183,7 +182,7 @@ const localWhisperInventoryAdapter: ModelInventoryAdapter = {
         modality: 'transcription',
         modelId,
       };
-      const selected = state.downloadedModelId === modelId;
+      const selected = selectedModelId === modelId;
       return runtime(identity, {
         name: model?.name ?? modelId,
         kind: 'transcription',
@@ -193,10 +192,9 @@ const localWhisperInventoryAdapter: ModelInventoryAdapter = {
         ready: true,
         loaded:
           selected &&
-          state.isModelLoaded &&
+          whisperService.isModelLoaded() &&
           whisperService.getLoadedModelPath() === whisperService.getModelPath(modelId),
-        loading: selected && state.isModelLoading,
-        error: selected ? state.error ?? undefined : undefined,
+        loading: false,
       });
     });
   },

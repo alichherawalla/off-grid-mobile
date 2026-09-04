@@ -3,32 +3,17 @@ import logger from '../../../utils/logger';
 import {
   DownloadedModel,
   ModelFile,
-  BackgroundDownloadInfo,
   ONNXImageModel,
-  PersistedDownloadInfo,
 } from '../../../types';
 import { APP_CONFIG } from '../../../constants';
 import { useAppStore } from '../../../stores/appStore';
-import { coordinatedDownloads as backgroundDownloadService } from '../coordinatedDownloadBridge';
-import {
-  BackgroundDownloadMetadataCallback,
-  BackgroundDownloadContext,
-  DownloadProgressCallback,
-  DownloadCompleteCallback,
-  DownloadErrorCallback,
-} from '../../adapters/models/library/types';
+import { nativeDownloadTransferAdapter } from '../../adapters/downloads/nativeDownloadTransferAdapter';
 import type { TransferredModelManifest } from '@offgrid/sync';
 import { registerTransferredModelFile } from '../../adapters/models/library/transferAdmissionAdapter';
 import {
-  performBackgroundDownload,
-  watchBackgroundDownload,
-  syncCompletedBackgroundDownloads,
   getOrphanedTextFiles,
   getOrphanedImageDirs,
-  mmProjLocalName,
-} from '../../adapters/models/library/downloadArtifactAdapter';
-import { syncCompletedImageDownloads as syncCompletedImageDownloadsHelper } from '../../adapters/models/library/imageDownloadRecoveryAdapter';
-import { restoreInProgressDownloads } from '../../adapters/models/library/downloadRestoreAdapter';
+} from '../../adapters/models/library/orphanedModelScan';
 import {
   deleteOrphanedFile as scanDeleteOrphanedFile,
   cleanupMMProjEntries as scanCleanupMMProjEntries,
@@ -44,7 +29,6 @@ import {
 } from '../../adapters/models/library/localModelImportAdapter';
 import {
   type VisionRepairApplicationIntent,
-  type VisionRepairApplicationResult,
   type VisionRepairOutcome,
 } from '@offgrid/models';
 import type { ModelLibraryRegistryService } from '@offgrid/models';
@@ -53,8 +37,7 @@ import type {
   RepairOpts,
   VisionRepairContext,
 } from '../../adapters/models/library/visionRepairAdapter';
-import { startCoordinatedTextFinalizer } from '../../adapters/models/library/coordinatedTextFinalizer';
-import { executeVisionRepairIntent } from '../../adapters/models/library/visionRepairApplicationAdapter';
+import { VisionRepairReconciliationPendingError } from '../../adapters/models/library/visionRepairAdapter';
 import { modelLibraryRegistry } from '../../composition/model-library-services';
 class ModelLibraryBootstrap {
   private readonly modelsDir: string;
@@ -63,9 +46,6 @@ class ModelLibraryBootstrap {
     DownloadedModel,
     ONNXImageModel
   >;
-  private backgroundDownloadMetadataCallback: BackgroundDownloadMetadataCallback | null =
-    null;
-  private readonly backgroundDownloadContext: Map<string, BackgroundDownloadContext> = new Map();
 
   constructor() {
     this.modelsDir = `${RNFS.DocumentDirectoryPath}/${APP_CONFIG.modelStorageDir}`;
@@ -78,13 +58,12 @@ class ModelLibraryBootstrap {
     if (!(await RNFS.exists(this.imageModelsDir)))
       await RNFS.mkdir(this.imageModelsDir);
     const exclude = (p: string) =>
-      backgroundDownloadService.excludeFromBackup(p);
+      nativeDownloadTransferAdapter.excludeFromBackup(p);
     await Promise.all([
       exclude(this.modelsDir),
       exclude(this.imageModelsDir),
       exclude(`${RNFS.DocumentDirectoryPath}/${APP_CONFIG.whisperStorageDir}`),
     ]);
-    startCoordinatedTextFinalizer(this.modelsDir);
   }
 
   /**
@@ -149,177 +128,6 @@ class ModelLibraryBootstrap {
     await scanDeleteOrphanedFile(filePath);
   }
 
-  setBackgroundDownloadMetadataCallback(
-    callback: BackgroundDownloadMetadataCallback,
-  ): void {
-    this.backgroundDownloadMetadataCallback = callback;
-  }
-
-  isBackgroundDownloadSupported(): boolean {
-    return backgroundDownloadService.isAvailable();
-  }
-
-  async downloadModelBackground(
-    modelId: string,
-    file: ModelFile,
-    onProgress?: DownloadProgressCallback,
-  ): Promise<BackgroundDownloadInfo> {
-    if (!this.isBackgroundDownloadSupported()) {
-      throw new Error('Background downloads not supported on this platform');
-    }
-    await this.initialize();
-    return performBackgroundDownload({
-      modelId,
-      file,
-      modelsDir: this.modelsDir,
-      backgroundDownloadContext: this.backgroundDownloadContext,
-      backgroundDownloadMetadataCallback:
-        this.backgroundDownloadMetadataCallback,
-      onProgress,
-    });
-  }
-
-  watchDownload(
-    downloadId: string,
-    onComplete?: DownloadCompleteCallback,
-    onError?: DownloadErrorCallback,
-  ): void {
-    watchBackgroundDownload({
-      downloadId,
-      modelsDir: this.modelsDir,
-      backgroundDownloadContext: this.backgroundDownloadContext,
-      backgroundDownloadMetadataCallback:
-        this.backgroundDownloadMetadataCallback,
-      onComplete,
-      onError,
-    });
-  }
-
-  // Called after retrying a failed mmproj sidecar. The mmproj error handler
-  // sets ctx.mmProjCompleted=true and nulls ctx.mmProjLocalPath so finalization
-  // can proceed as text-only. If the user then retries and the native mmproj
-  // download restarts, these flags must be reset so watchBackgroundDownload
-  // registers a fresh onComplete listener and tryFinalize waits for the sidecar.
-  resetMmProjForRetry(downloadId: string): void {
-    const ctx = this.backgroundDownloadContext.get(downloadId);
-    if (!ctx || !('file' in ctx) || 'operation' in ctx || !ctx.mmProjDownloadId)
-      return;
-    ctx.mmProjCompleted = false;
-    ctx.mmProjCompleteHandled = false;
-    if (!ctx.mmProjLocalPath && ctx.file.mmProjFile) {
-      ctx.mmProjLocalPath = `${this.modelsDir}/${mmProjLocalName(
-        ctx.file.name,
-        ctx.file.mmProjFile?.name,
-      )}`;
-    }
-  }
-
-  private async cleanupCancelledTextArtifacts(
-    ctx: Extract<BackgroundDownloadContext, { file: ModelFile }>,
-  ): Promise<void> {
-    const cleanupTargets = [ctx.localPath, ctx.mmProjLocalPath].filter(
-      (path): path is string => !!path,
-    );
-
-    await Promise.all(
-      cleanupTargets.map(async targetPath => {
-        try {
-          const exists = await RNFS.exists(targetPath);
-          if (!exists) return;
-          await RNFS.unlink(targetPath);
-          logger.warn(
-            `[ModelManagerDownload] removed cancelled artifact ${targetPath}`,
-          );
-        } catch (error) {
-          logger.warn(
-            `[ModelManagerDownload] failed to remove cancelled artifact ${targetPath}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      }),
-    );
-  }
-
-  async cancelBackgroundDownload(downloadId: string): Promise<void> {
-    if (!this.isBackgroundDownloadSupported()) {
-      throw new Error('Background downloads not supported on this platform');
-    }
-    const ctx = this.backgroundDownloadContext.get(downloadId);
-    if (ctx && 'operation' in ctx) {
-      await ctx.operation.cancel();
-      await this.cleanupCancelledTextArtifacts(ctx);
-      this.backgroundDownloadContext.delete(downloadId);
-      this.backgroundDownloadMetadataCallback?.(downloadId, null);
-      return;
-    }
-    if (ctx && 'file' in ctx && ctx.mmProjDownloadId) {
-      await backgroundDownloadService
-        .cancelDownload(ctx.mmProjDownloadId)
-        .catch(() => {});
-    }
-
-    await backgroundDownloadService.cancelDownload(downloadId);
-    if (ctx && 'file' in ctx) {
-      await this.cleanupCancelledTextArtifacts(ctx);
-    }
-    this.backgroundDownloadMetadataCallback?.(downloadId, null);
-  }
-
-  async syncBackgroundDownloads(
-    persistedDownloads: Record<string, PersistedDownloadInfo>,
-    clearDownloadCallback: (downloadId: string) => void,
-  ): Promise<DownloadedModel[]> {
-    if (!this.isBackgroundDownloadSupported()) return [];
-    await this.initialize();
-    return syncCompletedBackgroundDownloads({
-      persistedDownloads,
-      modelsDir: this.modelsDir,
-      clearDownloadCallback,
-    });
-  }
-  async syncCompletedImageDownloads(
-    persistedDownloads: Record<string, PersistedDownloadInfo>,
-    clearDownloadCallback: (downloadId: string) => void,
-  ): Promise<ONNXImageModel[]> {
-    if (!this.isBackgroundDownloadSupported()) return [];
-    await this.initialize();
-    return syncCompletedImageDownloadsHelper({
-      imageModelsDir: this.imageModelsDir,
-      persistedDownloads,
-      clearDownloadCallback,
-      getDownloadedImageModels: () => this.getDownloadedImageModels(),
-      addDownloadedImageModel: model => this.addDownloadedImageModel(model),
-    });
-  }
-
-  async restoreInProgressDownloads(
-    onProgress?: DownloadProgressCallback,
-  ): Promise<string[]> {
-    if (!this.isBackgroundDownloadSupported()) return [];
-    await this.initialize();
-    return restoreInProgressDownloads({
-      modelsDir: this.modelsDir,
-      backgroundDownloadContext: this.backgroundDownloadContext,
-      backgroundDownloadMetadataCallback:
-        this.backgroundDownloadMetadataCallback,
-      onProgress,
-    });
-  }
-
-  async getActiveBackgroundDownloads(): Promise<BackgroundDownloadInfo[]> {
-    if (!this.isBackgroundDownloadSupported()) return [];
-    return backgroundDownloadService.getActiveDownloads();
-  }
-  startBackgroundDownloadPolling(): void {
-    if (this.isBackgroundDownloadSupported())
-      backgroundDownloadService.startProgressPolling();
-  }
-
-  stopBackgroundDownloadPolling(): void {
-    if (this.isBackgroundDownloadSupported())
-      backgroundDownloadService.stopProgressPolling();
-  }
   /** @see visionRepairService.repairVision - the one rule every surface repairs a model through. */
   async repairVision(
     model: DownloadedModel,
@@ -343,12 +151,41 @@ class ModelLibraryBootstrap {
   /** Typed application boundary used by every UI repair surface. */
   async executeVisionRepair(
     intent: VisionRepairApplicationIntent<DownloadedModel, ModelFile>,
-  ): Promise<VisionRepairApplicationResult<DownloadedModel[]>> {
-    return executeVisionRepairIntent(
-      this.visionContext(),
-      () => this.getDownloadedModels(),
-      intent,
-    );
+  ): Promise<
+    | { status: 'completed'; outcome: VisionRepairOutcome; projection: DownloadedModel[] }
+    | { status: 'installed-reconciliation-pending'; message: string; projection: DownloadedModel[] }
+    | { status: 'failed'; error: string }
+  > {
+    try {
+      const outcome = intent.type === 'repair-model'
+        ? await this.repairVision(intent.model)
+        : await this.repairProjectorIntent(intent.modelId, intent.file);
+      const projection = await this.getDownloadedModels();
+      useAppStore.getState().setDownloadedModels(projection);
+      return { status: 'completed', outcome, projection };
+    } catch (cause) {
+      if (cause instanceof VisionRepairReconciliationPendingError) {
+        const projection = await this.getDownloadedModels();
+        useAppStore.getState().setDownloadedModels(projection);
+        return {
+          status: 'installed-reconciliation-pending',
+          message: cause.message,
+          projection,
+        };
+      }
+      return {
+        status: 'failed',
+        error: cause instanceof Error ? cause.message : String(cause),
+      };
+    }
+  }
+
+  private async repairProjectorIntent(
+    modelId: string,
+    file: ModelFile,
+  ): Promise<VisionRepairOutcome> {
+    await this.repairMmProj(modelId, file);
+    return { kind: 'repaired', repoId: modelId };
   }
 
   async markVisionModel(modelId: string): Promise<boolean> {

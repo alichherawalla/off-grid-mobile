@@ -26,7 +26,7 @@ import {
 } from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
-import { useWhisperStore } from '../../stores/whisperStore';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { SLOTS, useSlot } from '../../bootstrap/slotRegistry';
 import { useOpenSync } from '../../hooks/useOpenSync';
@@ -101,9 +101,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [whisperOpen, setWhisperOpen] = React.useState(false);
   const [voiceOpen, setVoiceOpen] = React.useState(false);
   const transcriptionRoute = useActiveMobileModel('transcription').model;
-  const whisperPresentCount = useWhisperStore(
-    s => s.presentModelIds?.length ?? 0,
-  );
+  const whisperPresentCount = useTranscriptionModelsProjection().models.filter(
+    model => model.installed,
+  ).length;
   const voiceSummary = useUiModeStore(s => s.voiceSummary);
   const remoteLabels = useActiveRemoteModelLabels();
 

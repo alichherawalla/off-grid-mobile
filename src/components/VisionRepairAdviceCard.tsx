@@ -57,6 +57,11 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
         model: activeModel,
       });
       if (repairResult.status === 'failed') throw new Error(repairResult.error);
+      if (repairResult.status === 'installed-reconciliation-pending') {
+        setResult(repairResult.message);
+        onRepaired?.();
+        return;
+      }
       const outcome = repairResult.outcome;
       const [, body] = visionRepairMessage(outcome, activeModel.name);
       setResult(body);

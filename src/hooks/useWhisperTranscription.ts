@@ -13,6 +13,7 @@ import {
   cancelMobileTranscription,
   startMobileRealtimeTranscription,
 } from '../services/mobileTranscription';
+import { useTranscriptionModelsProjection } from './useTranscriptionModelsProjection';
 
 /** Safely call a state setter only if the component is still mounted. */
 const useMountedRef = () => {
@@ -76,8 +77,9 @@ export const useWhisperTranscription = ({
   // The mic hook lives on the chat input, and this store is written DURING transcription -
   // `downloadProgressById` per download tick, `error`, `presentModelIds`. A whole-store read woke
   // the input for all of it; three narrow reads wake it only for the three facts it uses.
-  const isModelLoaded = useWhisperStore(s => s.isModelLoaded);
-  const isModelLoading = useWhisperStore(s => s.isModelLoading);
+  const transcriptionModels = useTranscriptionModelsProjection();
+  const isModelLoaded = transcriptionModels.models.some(row => row.selected && row.loaded);
+  const isModelLoading = transcriptionModels.models.some(row => row.selected && row.loading);
   const transcriptionLanguage = useWhisperStore(s => s.transcriptionLanguage);
 
   // On unmount, stop any in-flight realtime session. Without this the mic kept
@@ -88,10 +90,12 @@ export const useWhisperTranscription = ({
     () => () => {
       cancelMobileTranscription();
       if (mobileTranscriptionRuntime.isTranscribing()) {
-        void mobileTranscriptionRuntime.forceReset();
+        mobileTranscriptionRuntime.forceReset().catch(cause => {
+          logger.error('[Whisper] Unmount reset failed:', cause);
+        });
       }
     },
-    [],
+    [mountedRef],
   );
 
   // NOTE: whisper is NOT eager-loaded here. It is warmed once at launch by
@@ -140,7 +144,7 @@ export const useWhisperTranscription = ({
       setPartialResult('');
       transcribingStartTime.current = null;
     }
-  }, []);
+  }, [mountedRef]);
 
   // One short tail gives Whisper enough silence to close the phrase without
   // making every manual stop feel blocked.
@@ -193,7 +197,7 @@ export const useWhisperTranscription = ({
         transcribingStartTime.current = null;
       }
     }
-  }, []);
+  }, [mountedRef]);
 
   const clearResult = useCallback(() => {
     setFinalResult('');
@@ -338,8 +342,8 @@ export const useWhisperTranscription = ({
     }
   }, [
     ensureModelReady,
-    stopRecording,
     finalizeTranscription,
+    mountedRef,
     transcriptionLanguage,
   ]);
 
@@ -375,7 +379,7 @@ export const useWhisperTranscription = ({
 
   return {
     isRecording,
-    isModelLoaded: isModelLoaded || mobileTranscriptionRuntime.isModelLoaded(),
+    isModelLoaded,
     isModelLoading,
     isStartingRecording,
     isTranscribing,

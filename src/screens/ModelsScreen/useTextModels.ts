@@ -10,14 +10,14 @@ import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
-import { useDownloadStore } from '../../stores/downloadStore';
 import {
   hardwareService,
   huggingFaceService,
   modelLibrary,
 } from '../../services';
 import { startModelDownload } from '../../services/startModelDownload';
-import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
+import { applicationFacade } from '../../services/applicationFacade';
+import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 import { modelSupportsNpuGpu } from '../../utils/acceleration';
 import { ModelInfo, ModelFile, DownloadedModel } from '../../types';
 import {
@@ -36,6 +36,7 @@ import {
 } from './constants';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
+import { downloadedModelMatchesFile } from './modelDownloadProjection';
 import {
   catalogModelFiles,
   resolveModelFiles,
@@ -47,9 +48,8 @@ import {
   queryCatalogModels,
   recommendedCatalogModels,
   trendingCatalogModels,
-  uniformDownloadId,
+  modelsFailureMessage,
 } from '@offgrid/application';
-
 function mapCuratedModel(
   m: (typeof RECOMMENDED_MODELS)[number],
   details: Record<string, ModelInfo>,
@@ -97,7 +97,6 @@ async function fetchRecommendedModelDetails(): Promise<
   );
   return details;
 }
-
 function useCatalogCollections(input: {
   filterState: FilterState;
   searchResults: ModelInfo[];
@@ -178,18 +177,6 @@ function useCatalogCollections(input: {
 }
 
 // Resolve a catalog file to its on-disk model by the FILE, not the composite id: the
-// restart catch-up / recovery scans register the SAME file under a different id
-// (`recovered_…` or a bare name), so matching only `${modelId}/${fileName}` made a
-// recovered quant look "not downloaded" and fell through to the wrong sibling quant. A
-// file name is unique within the models dir, so it is the stable key.
-function matchesFile(
-  m: DownloadedModel,
-  modelId: string,
-  fileName: string,
-): boolean {
-  return m.fileName === fileName || m.id === `${modelId}/${fileName}`;
-}
-
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -205,8 +192,16 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [recommendedModelDetails, setRecommendedModelDetails] = useState<
     Record<string, ModelInfo>
   >({});
-  const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
-  const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
+  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, boolean>>({});
+  const setRepairingVision = useCallback((id: string, repairing: boolean) => {
+    setRepairingVisionIds(current => {
+      if (repairing) return { ...current, [id]: true };
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
+  const modelDownloads = useModelDownloadsProjection();
 
   // Narrow selectors: no whole-store subscription while the user is typing.
   const downloadedModels = useAppStore(state => state.downloadedModels);
@@ -325,7 +320,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferredSearchQuery]);
 
-  // Auto-search when searchable filters change (type/size/org) even with empty query
   // Uses runSearch directly to avoid collapsing the expanded filter dimension
   useEffect(() => {
     if (
@@ -366,6 +360,8 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         file,
       });
       if (result.status === 'failed') throw new Error(result.error);
+      if (result.status === 'installed-reconciliation-pending')
+        return setAlertState(showAlert('Vision Installed', result.message));
       setAlertState(
         showAlert(
           'Vision Repaired',
@@ -413,25 +409,37 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   }, [setAlertState]);
 
   const handleCancelDownload = useCallback(async (modelKey: string) => {
-    await modelDownloadRegistry.cancel(uniformDownloadId('text', modelKey));
-  }, []);
+    const download = modelDownloads.find(
+      row => row.modelType === 'text' && row.modelId === modelKey,
+    );
+    if (!download) return;
+    const outcome = await applicationFacade().models.cancelDownload({
+      downloadId: download.downloadId,
+    });
+    if (!outcome.ok) {
+      setAlertState(showAlert('Cancel Failed', modelsFailureMessage(outcome.failure)));
+    }
+  }, [modelDownloads, setAlertState]);
 
   const handleDeleteModel = useCallback(
     async (modelId: string) => {
       if (!downloadedModels.some(model => model.id === modelId)) return;
-      await modelDownloadRegistry.remove(uniformDownloadId('text', modelId));
+      const outcome = await applicationFacade().models.remove(modelId);
+      if (!outcome.ok) {
+        setAlertState(showAlert('Delete Failed', modelsFailureMessage(outcome.failure)));
+      }
     },
-    [downloadedModels],
+    [downloadedModels, setAlertState],
   );
   const isModelDownloaded = useCallback(
     (modelId: string, fileName: string) =>
-      downloadedModels.some(m => matchesFile(m, modelId, fileName)),
+      downloadedModels.some(m => downloadedModelMatchesFile(m, modelId, fileName)),
     [downloadedModels],
   );
 
   const getDownloadedModel = useCallback(
     (modelId: string, fileName: string): DownloadedModel | undefined =>
-      downloadedModels.find(m => matchesFile(m, modelId, fileName)),
+      downloadedModels.find(m => downloadedModelMatchesFile(m, modelId, fileName)),
     [downloadedModels],
   );
 

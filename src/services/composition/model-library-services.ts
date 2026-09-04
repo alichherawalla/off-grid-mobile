@@ -8,11 +8,9 @@ import {
   ModelFileImportApplicationService,
   ModelLibraryRegistryService,
   ModelMetadataRepairCommandService,
-  VisionRepairApplicationService,
 } from '@offgrid/models';
-import type { DownloadedModel, ModelFile, ONNXImageModel } from '../../types';
+import type { DownloadedModel, ONNXImageModel } from '../../types';
 import { mobileModelLibraryRegistryPorts } from '../modelServices/bootstrap/registryPorts';
-import type { MobileVisionRepairApplication } from '../adapters/models/library/visionRepairPorts';
 
 export function modelLibraryRegistry(
   modelsDir: string,
@@ -29,11 +27,6 @@ export function chatModelReadiness(
   ports: ConstructorParameters<typeof ChatModelReadinessService>[0],
 ): ChatModelReadinessService {
   return new ChatModelReadinessService(ports);
-}
-export function visionRepairApplication(
-  ports: ConstructorParameters<typeof VisionRepairApplicationService<DownloadedModel, ModelFile, DownloadedModel[]>>[0],
-): MobileVisionRepairApplication {
-  return new VisionRepairApplicationService<DownloadedModel, ModelFile, DownloadedModel[]>(ports);
 }
 export function modelFileImport(
   ports: ConstructorParameters<typeof ModelFileImportApplicationService<DownloadedModel>>[0],

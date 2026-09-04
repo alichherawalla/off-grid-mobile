@@ -68,11 +68,6 @@ export const HOOKS = {
   audioAugmentPrompt: 'audio.augmentPrompt',
   /** (language: string) => void — keep the active speech voice aligned with STT. */
   audioSelectLanguage: 'audio.selectLanguage',
-  /** () => Promise<Array<{ engineId: string; name: string; sizeBytes: number }>>
-   *  — downloaded TTS (voice) models, surfaced in the Download Manager. */
-  downloadsListVoiceModels: 'downloads.listVoiceModels',
-  /** (engineId: string) => Promise<void> — delete a downloaded TTS voice model. */
-  downloadsDeleteVoiceModel: 'downloads.deleteVoiceModel',
   /** (mutation: SyncMutation) => void — a core data owner committed a record
    *  change. Pro records it in the state-sync op-log; free builds do nothing. */
   syncRecordLocalMutation: 'sync.recordLocalMutation',

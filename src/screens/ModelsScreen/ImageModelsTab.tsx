@@ -7,8 +7,8 @@ import { ModelCard } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
-import { useDownloadStore, isActiveStatus, isQueuedStatus, isDownloadingStatus } from '../../stores/downloadStore';
-import { makeImageModelKey } from '../../utils/modelKey';
+import { isModelDownloadInProgress } from '@offgrid/application';
+import { useModelDownloadEntry } from '../../hooks/useModelDownloadsProjection';
 import { imageBackendLabel } from '../../utils/imageBackend';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
@@ -50,23 +50,13 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
   const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
-  // Single source of truth: live download status read from useDownloadStore
-  // via the stable image:<id> modelKey. Replaces drilled imageModelDownloading
-  // and imageModelProgress props.
-  const entry = useDownloadStore(s => s.downloads[makeImageModelKey(model.id)]);
-  // Classify with the SAME shared predicate the Download Manager uses (isActiveStatus).
-  // The old `status !== 'completed' && status !== 'cancelled'` bucketed a *failed* row
-  // as "downloading", so a kill-orphaned download showed a fake "downloading 0%" here
-  // while the Download Manager (correctly) showed it failed → Retry/Remove. One rule,
-  // one source of truth: a failed/interrupted row is NOT active, so the card offers a
-  // fresh download (which routes through retryEntry) instead of lying about progress.
-  // Active = queued OR transferring (gates the download/cancel affordance). Split
-  // queued vs downloading via the shared classifier so a queued image renders the
-  // clock — same rule as every other tab, no per-surface re-derivation.
-  const isActive = !!entry && isActiveStatus(entry.status);
-  const isQueued = !!entry && isQueuedStatus(entry.status);
-  const isDownloading = !!entry && isDownloadingStatus(entry.status);
-  const progressValue = entry?.progress ?? 0;
+  const entry = useModelDownloadEntry('image', model.id);
+  const isActive = !!entry && isModelDownloadInProgress(entry.status);
+  const isQueued = entry?.status === 'queued';
+  const isDownloading = entry?.status === 'downloading';
+  const progressValue = entry && entry.totalBytes > 0
+    ? entry.bytesDownloaded / entry.totalBytes
+    : 0;
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
   return (
@@ -88,9 +78,9 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
         isQueued={isQueued}
         downloadProgress={progressValue}
         downloadBytes={entry ? {
-          downloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
-          total: entry.combinedTotalBytes || entry.totalBytes || model.size,
-          bytesPerSecond: entry.bytesPerSecond,
+          downloaded: entry.bytesDownloaded,
+          total: entry.totalBytes || model.size,
+          bytesPerSecond: undefined,
         } : undefined}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}

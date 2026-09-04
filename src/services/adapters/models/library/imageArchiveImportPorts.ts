@@ -7,9 +7,8 @@ import { useAppStore } from '../../../../stores/appStore';
 import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
 import { getDirectorySize } from '../../filesystem/directorySize';
 import { modelLibrary } from '../../../modelServices/bootstrap/modelLibraryBootstrap';
-import { mobileModelSelectionService } from '../../../modelServices/modelSelectionApplication';
 import { readMobileModelSelection } from '../../../modelServices/modelSelectionProjection';
-import { mobileRouteId } from '../../../modelServices/mobileRoute';
+import { selectMobileModel } from '../../../modelServices/selectionCommands';
 import { refreshMobileLLMServiceInventory } from '../../../modelServices/mobileLLMService';
 
 /** Filesystem, registry, and selection ports. Shared owns the import transaction. */
@@ -35,12 +34,12 @@ export function mobileImageArchiveImportPorts(): ConstructorParameters<typeof Im
   },
   currentSelection: async () => readMobileModelSelection('image'),
   async activate(model) {
-    await mobileModelSelectionService.write('image', mobileRouteId({
+    await selectMobileModel({
       source: 'local',
       hostId: model.backend ?? 'image-runtime',
       modality: 'image',
       modelId: model.id,
-    }));
+    });
   },
   async refresh() {
     useAppStore.getState().setDownloadedImageModels(await modelLibrary.getDownloadedImageModels());

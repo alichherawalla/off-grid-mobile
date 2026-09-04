@@ -1,13 +1,19 @@
 import {
   createGuidedSetupSession,
+  guidedSetupDownloadId,
   guidedSetupTierFromLoadingMode,
   guidedSetupTierToLoadingMode,
   type GuidedSetupCandidate,
+  type GuidedSetupDownloadProjection,
   type GuidedSetupSession,
   type GuidedSetupTierPlan,
 } from '@offgrid/models';
-import { modelDownloadRegistry } from '../modelServices/downloadRegistryBootstrap';
-import type { ModelDownload, ModelDownloadStartRequest } from '../modelServices/downloadTypes';
+import type { ModelDownloadStartRequest } from '../modelServices/downloadTypes';
+import {
+  createWhisperPublicDownloadRequest,
+  modelsFailureMessage,
+  WHISPER_MODELS,
+} from '@offgrid/application';
 import { useAppStore } from '../../stores';
 import {
   loadAutoSetupCompatibleCatalog,
@@ -17,19 +23,52 @@ import {
   type AutoSetupCatalogBoundaries,
 } from '../autoSetupCatalog';
 import { selectMobileModel } from '../modelServices/selectionCommands';
+import { applicationFacade } from '../applicationFacade';
+import {
+  mobileTextDownloadRequest,
+} from '../modelServices/modelDownloadRequests';
+import { publicImageDownloadRequest } from '../adapters/models/downloads/publicImageDownloadRequest';
 
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
-  list: () => Promise<ModelDownload[]>;
+  list: () => Promise<GuidedSetupDownloadProjection[]>;
   cancel: (id: string) => Promise<void>;
   subscribe: (listener: () => void) => () => void;
 }
 
+function publicRequest(request: ModelDownloadStartRequest) {
+  if (request.modelType === 'text') {
+    return mobileTextDownloadRequest(request.modelId, request.file);
+  }
+  if (request.modelType === 'image') return publicImageDownloadRequest(request.model);
+  const model = WHISPER_MODELS.find(candidate => candidate.id === request.modelId);
+  if (!model) throw new Error(`Unknown transcription model: ${request.modelId}`);
+  return createWhisperPublicDownloadRequest(model);
+}
+
 const productionDownloads: AutoSetupDownloadBoundaries = {
-  start: request => modelDownloadRegistry.start(request),
-  list: () => modelDownloadRegistry.list(),
-  cancel: id => modelDownloadRegistry.cancel(id),
-  subscribe: listener => modelDownloadRegistry.subscribe(listener),
+  async start(request) {
+    const outcome = await applicationFacade().models.download(publicRequest(request));
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  },
+  list: async () => applicationFacade().models.snapshot().downloads.map(row => ({
+    id: guidedSetupDownloadId({ kind: row.modelType ?? 'text', id: row.modelId }),
+    status: row.status,
+    progress: row.totalBytes > 0 ? row.bytesDownloaded / row.totalBytes : 0,
+    ...(row.reason ? { error: row.reason } : {}),
+  })),
+  async cancel(id) {
+    const row = applicationFacade().models.snapshot().downloads.find(candidate =>
+      guidedSetupDownloadId({ kind: candidate.modelType ?? 'text', id: candidate.modelId }) === id,
+    );
+    if (!row) return;
+    const outcome = await applicationFacade().models.cancelDownload({
+      downloadId: row.downloadId,
+      removePartial: true,
+    });
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  },
+  subscribe: listener => applicationFacade().models.watch(snapshot => snapshot.downloads, listener),
 };
 
 export type AutoSetupSession = GuidedSetupSession<

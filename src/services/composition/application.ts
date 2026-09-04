@@ -18,11 +18,14 @@ import {
 import { mobileModelWorkspacePorts } from '../modelServices/workspace';
 import { mobileModelEjectionPorts } from '../modelServices/ejectModelsForUser';
 import { mobileModelSettingsPorts } from '../modelServices/modelSettingsPorts';
+import { createMobileModelLibraryFacadePorts } from '../modelServices/modelLibraryFacadePorts';
+import { createMobileApplicationDownloadPorts } from '../modelServices/applicationDownloadPorts';
+import type { MobileManagedArtifactIO } from '../modelServices/modelDownloadArtifactIO';
 import { modelsChatPort } from './chat';
 
 export type MobileApplicationExtensionPorts = Partial<
   Pick<OffGridPlatformPorts, 'sync' | 'speech' | 'automation' | 'use' | 'pro'>
->;
+> & { readonly modelDownloads?: MobileManagedArtifactIO };
 
 export type MobileApplicationPortsFactory =
   () => MobileApplicationExtensionPorts;
@@ -82,6 +85,7 @@ export function registerMobileApplicationPorts(
 }
 
 function createMobileApplication(): OffGridApplication {
+  const { modelDownloads, ...extensionPorts } = extensionPortsFactory?.() ?? {};
   return createOffGridApplication({
     models: {
       // The workspace's own I/O, not a workspace: shared composes the single one from these. See
@@ -89,6 +93,8 @@ function createMobileApplication(): OffGridApplication {
       ...mobileModelWorkspacePorts,
       chat: modelsChatPort,
       ejection: mobileModelEjectionPorts(),
+      library: createMobileModelLibraryFacadePorts(modelDownloads),
+      downloads: createMobileApplicationDownloadPorts(modelDownloads),
       settings: mobileModelSettingsPorts,
     },
     rag: {
@@ -97,7 +103,7 @@ function createMobileApplication(): OffGridApplication {
       extraction: mobileRagExtraction,
       prepareDocument: prepareMobileRagDocument,
     },
-    ...extensionPortsFactory?.(),
+    ...extensionPorts,
     newId: generateId,
   });
 }

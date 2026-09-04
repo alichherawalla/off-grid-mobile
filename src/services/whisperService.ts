@@ -21,7 +21,6 @@ import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
 import * as whisperModelFiles from './whisperModelFiles';
 import { RealtimeStartBarrier } from './realtimeStartBarrier';
-import { WhisperModelDownloads } from './whisperModelDownloads';
 
 export interface RealtimeTranscriptionResult {
   text: string;
@@ -40,7 +39,6 @@ class WhisperService {
   private isReleasingContext: boolean = false;
   private contextReleasePromise = Promise.resolve<NativeRelease>(RELEASED);
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
-  private readonly modelDownloads = new WhisperModelDownloads();
 
   getModelsDir(): string {
     return whisperModelFiles.getModelsDir();
@@ -55,12 +53,6 @@ class WhisperService {
     return whisperModelFiles.isModelDownloaded(modelId);
   }
 
-  async downloadModel(
-    modelId: string,
-    onProgress?: (progress: number) => void,
-  ): Promise<string> {
-    return this.modelDownloads.downloadModel(modelId, onProgress);
-  }
   /** List every downloaded ggml whisper model on disk (for the Download Manager). */
   async listDownloadedModels(): Promise<
     Array<{
@@ -70,11 +62,7 @@ class WhisperService {
       filePath: string;
     }>
   > {
-    return this.modelDownloads.listDownloadedModels();
-  }
-
-  async deleteModel(modelId: string): Promise<void> {
-    return this.modelDownloads.deleteModel(modelId);
+    return whisperModelFiles.listDownloadedModels();
   }
 
   /**
@@ -388,8 +376,11 @@ class WhisperService {
       // restores the NATIVE session but leaves this owner's `mode` stuck at 'record', so
       // the next TTS ensurePlayback() early-returns and playback is silent after
       // dictation. restorePlaybackAfterRecording resets mode + re-asserts playback
-      // (iOS only; Android is a no-op). Best-effort — never throw into the stop path.
-      audioSessionManager.restorePlaybackAfterRecording().catch(() => {});
+      // (iOS only; Android is a no-op). A restore failure must stay visible even though it does not
+      // replace the transcription stop result.
+      await audioSessionManager.restorePlaybackAfterRecording().catch(error => {
+        logger.error('[WhisperService] Audio session restore failed:', error);
+      });
     }
   }
 

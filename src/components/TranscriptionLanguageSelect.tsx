@@ -3,6 +3,7 @@ import { transcriptionLanguages } from '@offgrid/application';
 import { useWhisperStore } from '../stores/whisperStore';
 import { SettingsOptionSelect } from './SettingsOptionSelect';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import { useTranscriptionModelsProjection } from '../hooks/useTranscriptionModelsProjection';
 
 interface TranscriptionLanguageSelectProps {
   testID?: string;
@@ -12,7 +13,7 @@ interface TranscriptionLanguageSelectProps {
 export const TranscriptionLanguageSelect: React.FC<TranscriptionLanguageSelectProps> = ({
   testID = 'transcription-language-select',
 }) => {
-  const downloadedModelId = useWhisperStore((state) => state.downloadedModelId);
+  const downloadedModelId = useTranscriptionModelsProjection().selectedModelId;
   const language = useWhisperStore((state) => state.transcriptionLanguage);
   const setLanguage = useWhisperStore((state) => state.setTranscriptionLanguage);
   const languages = useMemo(

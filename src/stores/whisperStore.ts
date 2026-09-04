@@ -1,37 +1,24 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  registerTranscriptionModelProjection,
-  type MobileTranscriptionLoadResult,
-} from '../services/modelServices/transcriptionProjectionPort';
-
-export type WhisperLoadResult = MobileTranscriptionLoadResult;
 
 export interface WhisperState {
+  /** Upgrade input only. New selection writes go to the canonical model-selection store. */
   downloadedModelId: string | null;
-  presentModelIds: string[];
-  downloadProgressById: Record<string, number>;
-  isModelLoading: boolean;
-  isModelLoaded: boolean;
-  error: string | null;
   transcriptionLanguage: string;
-  clearError: () => void;
-  setTranscriptionLanguage: (language: string) => void;
+  setTranscriptionLanguage(language: string): void;
 }
 
-/** Persisted UI projection. Shared TranscriptionModelWorkflow owns every action. */
+/**
+ * Transcription preferences only. Model selection, inventory, downloads, readiness, loading, and
+ * failures live in the Models facade. `downloadedModelId` remains only until an old profile has
+ * moved its value into the canonical selection store.
+ */
 export const useWhisperStore = create<WhisperState>()(
   persist(
     set => ({
       downloadedModelId: null,
-      presentModelIds: [],
-      downloadProgressById: {},
-      isModelLoading: false,
-      isModelLoaded: false,
-      error: null,
       transcriptionLanguage: 'en',
-      clearError: () => set({ error: null }),
       setTranscriptionLanguage: transcriptionLanguage =>
         set({ transcriptionLanguage }),
     }),
@@ -45,33 +32,3 @@ export const useWhisperStore = create<WhisperState>()(
     },
   ),
 );
-
-registerTranscriptionModelProjection({
-  state: () => {
-    const state = useWhisperStore.getState();
-    return {
-      selectedModelId: state.downloadedModelId,
-      presentModelIds: state.presentModelIds,
-      downloadProgressById: state.downloadProgressById,
-      isModelLoading: state.isModelLoading,
-      isModelLoaded: state.isModelLoaded,
-      error: state.error,
-    };
-  },
-  project: patch =>
-    useWhisperStore.setState({
-      ...(patch.presentModelIds !== undefined
-        ? { presentModelIds: [...patch.presentModelIds] }
-        : {}),
-      ...(patch.downloadProgressById !== undefined
-        ? { downloadProgressById: { ...patch.downloadProgressById } }
-        : {}),
-      ...(patch.isModelLoading !== undefined
-        ? { isModelLoading: patch.isModelLoading }
-        : {}),
-      ...(patch.isModelLoaded !== undefined
-        ? { isModelLoaded: patch.isModelLoaded }
-        : {}),
-      ...(patch.error !== undefined ? { error: patch.error } : {}),
-    }),
-});
