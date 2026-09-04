@@ -33,7 +33,7 @@ import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
 import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
-import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
+import { transcriptionModelIntents } from '../../services/composition/transcription';
 import { ModelFailureCard } from '../../components/ModelFailureCard';
 import { reportModelFailure } from '../../services/modelFailureHandler';
 

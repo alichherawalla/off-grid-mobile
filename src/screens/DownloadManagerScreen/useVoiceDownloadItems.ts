@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AlertState, showAlert } from '../../components/CustomAlert';
 import { whisperService } from '../../services';
 import { useWhisperStore } from '../../stores';
-import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
+import { transcriptionModelIntents } from '../../services/composition/transcription';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { modelDownloadRegistry } from '../../services/modelServices/downloadRegistryBootstrap';
 import { isModelDownloadInProgress } from '@offgrid/application';

@@ -49,6 +49,3 @@ export const mobileTranscriptionWorkflowPorts = {
     await lifecycleProjectionPort.refreshInventory();
   },
 };
-
-/** Constructed in the composition root; re-exported so every caller keeps one import. */
-export { transcriptionModelIntents } from '../composition/transcription';

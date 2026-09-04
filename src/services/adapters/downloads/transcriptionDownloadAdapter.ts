@@ -12,7 +12,7 @@
 import { whisperService } from '../../whisperService';
 import { coordinatedDownloads as backgroundDownloadService } from '../../modelServices/coordinatedDownloadBridge';
 import { useDownloadStore, isActiveStatus } from '../../../stores/downloadStore';
-import { transcriptionModelIntents } from '../../modelServices/transcriptionRuntimePort';
+import { transcriptionModelIntents } from '../../composition/transcription';
 import logger from '../../../utils/logger';
 import { downloadRetryPolicy, mapDownloadStoreStatus, uniformDownloadId } from '@offgrid/models';
 import type { DownloadProvider, ModelDownload } from '../../modelServices/downloadTypes';

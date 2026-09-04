@@ -32,7 +32,7 @@ import {
 } from './states';
 import { deriveVoiceButtonState } from './derive';
 import { useWhisperStore } from '../../stores';
-import { transcriptionModelIntents } from '../../services/modelServices/transcriptionRuntimePort';
+import { transcriptionModelIntents } from '../../services/composition/transcription';
 import logger from '../../utils/logger';
 import {
   buildVoiceRecordGesture,
