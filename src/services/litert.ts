@@ -17,6 +17,7 @@ import {
   normalizedLiteRTSampler,
   planLiteRTConversation,
 } from '@offgrid/models';
+import { notReleased, RELEASED, type NativeRelease } from './nativeRelease';
 import logger from '../utils/logger';
 import { summarizeSession, runCompaction } from './liteRTCompaction';
 
@@ -466,8 +467,14 @@ class LiteRTService {
   // unloadModel — expensive: closes Conversation + Engine
   // ---------------------------------------------------------------------------
 
-  async unloadModel(): Promise<void> {
-    if (!this.isAvailable()) return;
+  /**
+   * Answers whether the ENGINE let go, because residency admits the next model into memory it
+   * believes was reclaimed. The native error used to be logged as "(ignored)" and `loaded` was
+   * cleared regardless, so a busy engine still holding its weights reported the same success as a
+   * clean teardown.
+   */
+  async unloadModel(): Promise<NativeRelease> {
+    if (!this.isAvailable()) return RELEASED;
     logger.log(TAG, 'unloadModel');
     this.clearSubscriptions();
     this.currentToolCallHandler = null;
@@ -479,9 +486,13 @@ class LiteRTService {
     this.configuredMaxTokens = 4096;
     try {
       await LiteRTModule.unloadModel();
+      return RELEASED;
     } catch (e) {
-      logger.log(TAG, `unloadModel — error (ignored): ${String(e)}`);
+      logger.warn(`${TAG} unloadModel — the engine did not release: ${String(e)}`);
+      return notReleased(e);
     } finally {
+      // Still cleared: this wrapper's own bookkeeping is invalid either way. What changed is that
+      // the CALLER is now told whether the memory went with it.
       this.loaded = false;
       this.modelSupportsAudio = false;
       this.activeBackend = null;

@@ -15,6 +15,7 @@ import {
   realtimeStartPlan,
   realtimeStopDecision,
 } from '@offgrid/speech';
+import { notReleased, RELEASED, type NativeRelease } from './nativeRelease';
 import logger from '../utils/logger';
 import { audioSessionManager } from './audioSessionManager';
 import { audioRecorderService } from './audioRecorderService';
@@ -37,7 +38,7 @@ class WhisperService {
   private stopFn: (() => Promise<void>) | null = null;
   private readonly realtimeStart = new RealtimeStartBarrier();
   private isReleasingContext: boolean = false;
-  private contextReleasePromise: Promise<void> = Promise.resolve();
+  private contextReleasePromise = Promise.resolve<NativeRelease>(RELEASED);
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
   private readonly modelDownloads = new WhisperModelDownloads();
 
@@ -114,8 +115,9 @@ class WhisperService {
     }
   }
 
-  async unloadModel(): Promise<void> {
-    if (!this.context) return;
+  /** Answers whether the engine LET GO: residency admits the next model into this memory. */
+  async unloadModel(): Promise<NativeRelease> {
+    if (!this.context) return RELEASED;
     // Stop active transcription to prevent SIGSEGV on freed context
     if (this.isTranscribing || this.stopFn) {
       logger.log(
@@ -124,25 +126,23 @@ class WhisperService {
       await this.stopTranscription();
       await this.transcriptionFullyStopped;
     }
-    if (this.isReleasingContext) {
-      logger.log(
-        '[WhisperService] Context release already in progress, skipping',
-      );
-      return;
-    }
+    // A skip must not read as success: answer with the in-flight release's own result.
+    if (this.isReleasingContext) return this.contextReleasePromise;
     this.isReleasingContext = true;
     this.contextReleasePromise = (async () => {
       try {
         await this.context!.release();
+        return RELEASED;
       } catch (error) {
         logger.error('[WhisperService] Error releasing context:', error);
+        return notReleased(error);
       } finally {
         this.context = null;
         this.currentModelPath = null;
         this.isReleasingContext = false;
       }
     })();
-    await this.contextReleasePromise;
+    return this.contextReleasePromise;
   }
   isModelLoaded(): boolean {
     return this.context !== null;

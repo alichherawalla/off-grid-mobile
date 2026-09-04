@@ -1,6 +1,7 @@
 import {
   modelResidentSpec,
   modelLoadTimeoutMs,
+  type ResidentReclaim,
   type ResidentSpec,
   WHISPER_MODELS,
 } from '@offgrid/models';
@@ -15,6 +16,27 @@ import { hardwareService } from '../hardware';
 import { estimateTextModelMemoryMB } from '../modelMemory';
 import { mobileRouteId } from './mobileRoute';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
+import type { NativeRelease } from '../nativeRelease';
+
+/**
+ * The one place mobile's native teardown answer becomes residency's answer.
+ *
+ * Residency admits the next model into memory it believes was reclaimed, so `reclaimed: true` may
+ * only mean the engine actually let go. `reason` is carried for the report and is never matched
+ * on - the boolean is the gating fact, and a refusal makes admission answer `unload_failed`
+ * instead of overcommitting.
+ */
+async function asReclaim(
+  release: Promise<NativeRelease>,
+): Promise<ResidentReclaim> {
+  const outcome = await release;
+  return outcome.released
+    ? { reclaimed: true }
+    : {
+        reclaimed: false,
+        reason: outcome.reason ?? 'the engine did not release the model',
+      };
+}
 
 /**
  * The ONLY two things a resident spec needs from residency: what is already resident, and whether
@@ -123,7 +145,7 @@ export function mobileModelLifecyclePorts(
             command.timeoutMs ?? modelLoadTimeoutMs('text'),
             command.override || residency.hasSessionOverride(modelId),
           ),
-          unload: () => nativeModelLifecycle.unloadTextModel(true),
+          unload: () => asReclaim(nativeModelLifecycle.unloadTextModel(true)),
         },
       };
     }
@@ -135,7 +157,7 @@ export function mobileModelLifecyclePorts(
         routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
         handlers: {
           load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? modelLoadTimeoutMs('image')),
-          unload: () => nativeModelLifecycle.unloadImageModel(true),
+          unload: () => asReclaim(nativeModelLifecycle.unloadImageModel(true)),
         },
         forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
       };
@@ -161,9 +183,11 @@ export function mobileModelLifecyclePorts(
     return {
       key: spec.key,
       hadRuntime: !!modelId,
-      unload: () => text
-        ? nativeModelLifecycle.unloadTextModel(true)
-        : nativeModelLifecycle.unloadImageModel(true),
+      unload: () => asReclaim(
+        text
+          ? nativeModelLifecycle.unloadTextModel(true)
+          : nativeModelLifecycle.unloadImageModel(true),
+      ),
     };
   },
   selectRoute: (modality, routeId) => lifecycleProjectionPort.selectRoute(modality, routeId),

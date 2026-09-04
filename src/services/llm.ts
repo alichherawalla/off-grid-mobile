@@ -25,6 +25,7 @@ import {
   describeGpuFallback, isTruncatedResult, llamaReasoningMetadata,
 } from './llmHelpers';
 import { awaitMemoryReclaim } from './memoryBudget';
+import { notReleased, RELEASED, type NativeRelease } from './nativeRelease';
 import { applicationFacade } from './applicationFacade';
 import { hardwareService } from './hardware';
 import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
@@ -231,14 +232,22 @@ class LLMService {
     } catch (e) { logger.warn('[LLM] Error detecting tool calling support:', e); return false; }
   }
   /** Internal unload without acquiring the mutex (used by loadModel which already holds it). */
-  private async doUnloadModel(): Promise<void> {
-    if (!this.context) return;
+  private async doUnloadModel(): Promise<NativeRelease> {
+    if (!this.context) return RELEASED;
+    let release: NativeRelease = RELEASED;
     if (this.isGenerating) {
       try { await this.context.stopCompletion(); } catch (e) { logger.log('[LLM] Stop during unload:', e); }
       this.isGenerating = false;
     }
     if (this.activeCompletionPromise !== null) { await this.activeCompletionPromise; this.activeCompletionPromise = null; }
-    try { await this.context.release(); } catch (e) { logger.warn('[LLM] Error releasing context (bridge may be torn down):', e); }
+    try {
+      await this.context.release();
+    } catch (e) {
+      logger.warn('[LLM] Error releasing context (bridge may be torn down):', e);
+      // The context is still held by the engine. Residency must NOT admit the next model into
+      // this memory, so the refusal is carried out rather than logged and forgotten.
+      release = notReleased(e);
+    }
     // The unload is not DONE until the native memory (weights + GPU/HTP buffers) is actually reclaimed.
     // context.release() returns before the OS frees those pages, so a reload that immediately loaded the
     // new context stacked BOTH models' memory at once → OOM/crash under pressure (device 2026-07-14: a
@@ -246,10 +255,12 @@ class LLMService {
     await awaitMemoryReclaim(() => hardwareService.getProcessMemory());
     useAppStore.getState().setModelMaxContext(null);
     Object.assign(this, { context: null, currentModelPath: null, nativeConversationId: null, multimodalSupport: null, multimodalInitialized: false, toolCallingSupported: false, thinkingSupported: false, gpuEnabled: false, gpuReason: '', gpuDevices: [], activeGpuLayers: 0, requestedGpuLayers: 0, gpuAttemptFailed: false });
+    return release;
   }
-  async unloadModel(): Promise<void> {
+  /** Answers whether the engine let go - see `nativeRelease`. */
+  async unloadModel(): Promise<NativeRelease> {
     const mutex = this.acquireContextMutex();
-    try { await mutex.ready; await this.doUnloadModel(); } finally { mutex.release(); }
+    try { await mutex.ready; return await this.doUnloadModel(); } finally { mutex.release(); }
   }
   isModelLoaded(): boolean { return this.context !== null; }
   getLoadedModelPath(): string | null { return this.currentModelPath; }

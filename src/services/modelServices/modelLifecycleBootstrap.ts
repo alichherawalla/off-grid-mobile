@@ -124,8 +124,18 @@ export async function loadTranscriptionModel(
           observer.onLoaded?.();
         },
         unload: async () => {
-          await whisperService.unloadModel();
+          // The observer is told either way - the app's own bookkeeping is invalid whatever the
+          // engine did - but residency is told the TRUTH, because it admits the next model into
+          // this memory.
+          const release = await whisperService.unloadModel();
           observer.onUnloaded?.();
+          return release.released
+            ? { reclaimed: true }
+            : {
+                reclaimed: false,
+                reason:
+                  release.reason ?? 'whisper did not release its context',
+              };
         },
       },
     });

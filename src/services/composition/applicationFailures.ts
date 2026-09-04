@@ -62,6 +62,21 @@ function modelsFailure(event: ModelsEvent): FailureReport | null {
         operationId: event.operationId,
         failure: event.failure,
       });
+    case 'residency_reclaim_failed':
+      // Caught by the derived guard, not by hand: `ResidentReclaimFailure` is a different shape
+      // from `ModelsFailure`, but the field is still called `failure`, so `FailureEvent<ModelsEvent>`
+      // included it and this switch stopped compiling until it was named. Which is the guard
+      // working - this event did not exist when the switch was written.
+      //
+      // The correlation identity is the resident KEY and the reclaim PATH, not an operation id:
+      // the sweeps that reclaim (a memory warning, an admission eviction) have no caller to
+      // report to. `reclaimed: false` means residency is STILL counting that memory, so the line
+      // names an overcommit risk rather than a completed failure.
+      return report(event.type, {
+        resident: event.failure.key,
+        path: event.failure.path,
+        reason: event.failure.reason,
+      });
     case 'generation_failed':
       return report(event.type, {
         operationId: event.operationId,

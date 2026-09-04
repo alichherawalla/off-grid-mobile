@@ -5,6 +5,7 @@ import { llmService } from '../../llm';
 import { liteRTService } from '../../litert';
 import { localDreamGeneratorService as imageEngine } from '../../localDreamGenerator';
 import { ImageModelIncompleteError } from '../../modelLoadErrors';
+import { allReleased, notReleased, RELEASED, type NativeRelease } from '../../nativeRelease';
 import { useAppStore } from '../../../stores/appStore';
 import { activeLocalModelId } from '../../modelServices/activeRoute';
 import { validateImageModelDir } from '../../../utils/imageModelIntegrity';
@@ -107,21 +108,32 @@ class NativeModelLifecycle {
     await this.textLoadPromise;
   }
 
-  async unloadTextModel(keepSelection = false): Promise<void> {
+  /**
+   * Answers whether the ENGINES let go. `released: true` also covers "nothing was loaded": a
+   * resident whose engine holds nothing must be dropped from residency, not kept - reporting a
+   * refusal there would strand a phantom and refuse admission for ever.
+   */
+  async unloadTextModel(keepSelection = false): Promise<NativeRelease> {
     if (this.textLoadPromise) await this.textLoadPromise;
     const loadedEngines = [llmService, liteRTService].filter(
       engine => engine.isModelLoaded(),
     );
     const isLoaded = loadedEngines.length > 0;
-    if (!activeLocalModelId('text') && !this.loadedTextModelId && !isLoaded) return;
+    if (!activeLocalModelId('text') && !this.loadedTextModelId && !isLoaded) {
+      return RELEASED;
+    }
     this.loading.text = true;
     this.changed();
     try {
-      for (const engine of loadedEngines) await engine.unloadModel();
+      // Every loaded engine must have let go. Text can have both resident at once, so one engine
+      // refusing is the whole answer - the other's success does not free the memory it holds.
+      const releases: NativeRelease[] = [];
+      for (const engine of loadedEngines) releases.push(await engine.unloadModel());
       this.loadedTextModelId = null;
       const residency = useModelResidencyStore.getState();
       residency.setLoadedTextModelId(null);
       residency.setTextModelEvicted(keepSelection && isLoaded);
+      return allReleased(releases);
     } finally {
       this.loading.text = false;
       this.changed();
@@ -180,16 +192,25 @@ class NativeModelLifecycle {
       this.loadedImageModelThreads !== (useAppStore.getState().settings?.imageThreads ?? 4);
   }
 
-  async unloadImageModel(_keepSelection = false): Promise<void> {
+  /** Answers whether the engine let go. See `unloadTextModel` for the "nothing loaded" rule. */
+  async unloadImageModel(_keepSelection = false): Promise<NativeRelease> {
     if (this.imageLoadPromise) await this.imageLoadPromise;
     const isLoaded = await imageEngine.isModelLoaded();
-    if (!activeLocalModelId('image') && !this.loadedImageModelId && !isLoaded) return;
+    if (!activeLocalModelId('image') && !this.loadedImageModelId && !isLoaded) {
+      return RELEASED;
+    }
     this.loading.image = true;
     this.changed();
     try {
-      if (isLoaded) await imageEngine.unloadModel();
+      // The image engine ALREADY answered - `unloadModel()` returns a boolean and has done all
+      // along - and that answer was being discarded. A `false` from the native module means the
+      // diffusion weights are still resident.
+      const released = isLoaded ? await imageEngine.unloadModel() : true;
       this.loadedImageModelId = null;
       this.loadedImageModelThreads = null;
+      return released
+        ? RELEASED
+        : notReleased('the image engine did not release its model');
     } finally {
       this.loading.image = false;
       this.changed();
