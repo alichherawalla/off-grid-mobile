@@ -8,6 +8,8 @@ import {
 } from '@offgrid/models';
 import { generateId } from '../../utils/generateId';
 import { mobileModelSelectionStore } from './selectionStore';
+import { mobileModelLifecyclePorts } from './modelLifecyclePorts';
+import { mobileModelMemoryAdvisoryPorts } from './modelMemoryAdvisoryPorts';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { Platform } from 'react-native';
 import { hardwareService } from '../hardware';
@@ -113,11 +115,9 @@ export const mobileWorkspace = createModelWorkspace({
   generation: { tools: lazyTools, conversations: lazyConversations },
   remote: lazyRemote,
   remoteServerId: generateId,
-  // Ports for the services the facade composes on demand; resolved at call time (module cycles).
-  lifecycle: () =>
-    (require('./modelLifecycleBootstrap') as typeof import('./modelLifecycleBootstrap')).mobileModelLifecyclePorts(),
-  memoryAdvisory: () =>
-    (require('./modelMemoryAdvisory') as typeof import('./modelMemoryAdvisory')).mobileModelMemoryAdvisoryPorts(),
+  // Ports for the services the facade composes on demand.
+  lifecycle: mobileModelLifecyclePorts,
+  memoryAdvisory: mobileModelMemoryAdvisoryPorts,
   classifier: () =>
     (require('../adapters/native/classifierExecutionAdapter') as typeof import('../adapters/native/classifierExecutionAdapter')).classifierExecutionAdapter,
   remoteInventory: {
