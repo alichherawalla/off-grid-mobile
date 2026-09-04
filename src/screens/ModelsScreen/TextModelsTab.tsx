@@ -1,6 +1,6 @@
 import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, stripModelFileExtension, uniformDownloadId } from '@offgrid/application';
-import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform } from 'react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform, type ListRenderItemInfo } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
@@ -40,38 +40,26 @@ function getEmptyText(hasSearched: boolean, hasActiveFilters: boolean): string {
 }
 
 type Props = Pick<ModelsScreenViewModel,
-  | 'searchQuery' | 'setSearchQuery'
-  | 'isLoading' | 'isRefreshing'
-  | 'hasSearched'
-  | 'selectedModel' | 'setSelectedModel'
-  | 'modelFiles' | 'setModelFiles'
-  | 'isLoadingFiles'
-  | 'filterState'
-  | 'textFiltersVisible' | 'setTextFiltersVisible'
+  | 'searchQuery' | 'setSearchQuery' | 'isLoading' | 'isRefreshing' | 'hasSearched'
+  | 'selectedModel' | 'setSelectedModel' | 'modelFiles' | 'setModelFiles' | 'isLoadingFiles'
+  | 'filterState' | 'textFiltersVisible' | 'setTextFiltersVisible'
   | 'filteredResults' | 'recommendedAsModelInfo' | 'trendingAsModelInfo'
-  | 'ramGB' | 'deviceRecommendation'
-  | 'hasActiveFilters'
-  | 'downloadedModels'
-  | 'alertState' | 'setAlertState'
-  | 'focusTrigger'
-  | 'handleSearch' | 'handleRefresh'
+  | 'ramGB' | 'deviceRecommendation' | 'hasActiveFilters' | 'downloadedModels'
+  | 'alertState' | 'setAlertState' | 'focusTrigger' | 'handleSearch' | 'handleRefresh'
   | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
-  | 'clearFilters'
-  | 'toggleFilterDimension' | 'toggleOrg'
+  | 'clearFilters' | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
   | 'isModelDownloaded' | 'getDownloadedModel' | 'isRepairingVisionModel'
 > & { onboarding?: boolean };
 
 type DetailProps = Pick<Props,
-  | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB'
-  | 'alertState' | 'setAlertState'
+  | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB' | 'alertState' | 'setAlertState'
   | 'getDownloadedModel' | 'isModelDownloaded' | 'isRepairingVisionModel'
   | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
 > & { selectedModel: ModelInfo; onBack: () => void; };
 
-// Build the file card's onDownload handler. Whether to show the curated confirm-download
-// warning is the registry's single DEVICE-AWARE decision (curatedLiteRTDownloadWarning),
-// shared with the onboarding screen — never a static per-model flag re-derived here.
+// Build the file card's onDownload handler. The curated confirm-download warning is the
+// registry's single DEVICE-AWARE decision (curatedLiteRTDownloadWarning), never re-derived here.
 function buildFileDownloadHandler({ s, fileName, sizeBytes, ramGB, proceedDownload, setAlertState }: {
   s: { downloaded: boolean; progress: unknown; hasFailed: boolean };
   fileName: string;
@@ -104,13 +92,10 @@ const ModelDetailView: React.FC<DetailProps> = ({
   // Shared decides which devices lack a LiteRT GPU path; this screen only shows the sentence.
   const liteRTGpuNotice = liteRTGpuUnsupportedNotice({ platform: Platform.OS, deviceModel: DeviceInfo.getModel() });
 
-  // Pre-set the next pending (Download Manager icon) so it fires regardless of
-  // how the user dismisses step 9 (button or backdrop tap).
-
-  // Heal the durable vision flag from the authoritative catalog: this screen KNOWS a model is vision (its
-  // repo ships an mmproj → modelFiles carry mmProjFile), so persist isVisionModel:true onto any downloaded
-  // record that lost it (old link-cleanup bug). The Download Manager has no catalog, so this makes the
-  // RECORD the single source both surfaces read — the wrench then shows consistently (device 2026-07-14).
+  // Heal the durable vision flag from the authoritative catalog: this screen KNOWS a model is vision
+  // (its repo ships an mmproj → modelFiles carry mmProjFile), so persist isVisionModel:true onto any
+  // downloaded record that lost it. The Download Manager has no catalog, so the RECORD is the single
+  // source both surfaces read — the wrench then shows consistently (device 2026-07-14).
   useEffect(() => {
     repairDownloadedVisionMetadata({
       modelId: selectedModel.id,
@@ -129,15 +114,13 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
     const repairingVision = isRepairingVisionModel(`${selectedModel.id}/${item.name}`);
-    let progress = entry
-      ? {
-        progress: entry.progress,
-        bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
-        totalBytes: entry.combinedTotalBytes,
-        bytesPerSecond: entry.bytesPerSecond,
-        status: entry.status,
-      }
-      : undefined;
+    let progress = entry ? {
+      progress: entry.progress,
+      bytesDownloaded: entry.bytesDownloaded + (entry.mmProjBytesDownloaded ?? 0),
+      totalBytes: entry.combinedTotalBytes,
+      bytesPerSecond: entry.bytesPerSecond,
+      status: entry.status,
+    } : undefined;
 
     // For completed downloads, discard if size doesn't match expected
     if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
@@ -159,19 +142,16 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const displayName = liteRTMeta?.displayName ?? stripModelFileExtension(item.name);
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
     const storeEntry = storeDownloads[s.downloadKey];
-    // Retry routes through the single owner (modelDownloadRegistry → textProvider): Android resumes the
-    // native row, iOS re-issues from the entry's metadata. The provider owns the platform decision AND
-    // the lost-downloadId case (a rehydrated app-killed entry can have no downloadId), so the failed
-    // card must render its Retry regardless of downloadId — gating on it here made iOS retry unreachable.
-    const failedState = s.hasFailed && s.errorMessage && storeEntry
-      ? {
-        errorMessage: s.errorMessage,
-        bytesDownloaded: storeEntry.bytesDownloaded,
-        totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
-        onRetry: () => { modelDownloadRegistry.retry(uniformDownloadId('text', s.downloadKey)).catch(() => {}); },
-        onRemove: () => handleCancelDownload(s.downloadKey),
-      }
-      : undefined;
+    // Retry routes through the single owner (modelDownloadRegistry → textProvider): the provider owns
+    // the platform decision AND the lost-downloadId case, so the failed card renders Retry regardless
+    // of downloadId — gating on it here made iOS retry unreachable.
+    const failedState = s.hasFailed && s.errorMessage && storeEntry ? {
+      errorMessage: s.errorMessage,
+      bytesDownloaded: storeEntry.bytesDownloaded,
+      totalBytes: storeEntry.combinedTotalBytes || storeEntry.totalBytes,
+      onRetry: () => { modelDownloadRegistry.retry(uniformDownloadId('text', s.downloadKey)).catch(() => {}); },
+      onRemove: () => handleCancelDownload(s.downloadKey),
+    } : undefined;
     return <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
@@ -276,11 +256,16 @@ const DeviceBanner: React.FC<{ ramGB: number; rec: { maxParameters: number; reco
 
 interface ModelListItemProps {
   item: ModelInfo; index: number; focusTrigger: number;
-  isDownloaded: boolean; isTrending: boolean; onPress: () => void;
-  onDownload?: () => void;
+  isDownloaded: boolean; isTrending: boolean;
+  // The row takes the STABLE handlers and closes over its own item, so a memoized row is
+  // not invalidated by a fresh arrow per parent render (which is what a keystroke causes).
+  onSelect: (model: ModelInfo) => void;
+  onDirectDownload?: (model: ModelInfo) => void;
 }
-const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onPress, onDownload }) => {
+const ModelListItemRow: React.FC<ModelListItemProps> = ({ item, index, focusTrigger, isDownloaded, isTrending, onSelect, onDirectDownload }) => {
   const { isCompatible, incompatibleReason } = getTextModelCompatibility(item);
+  const onDownload = useMemo(() => (onDirectDownload ? () => onDirectDownload(item) : undefined), [onDirectDownload, item]);
+  const onPress = useMemo(() => onDownload ?? (() => onSelect(item)), [onDownload, onSelect, item]);
   const isLiteRTParent = item.id === LITERT_PARENT_ID;
   const recommended = isLiteRTParent ? LITERT_PARENT_RECOMMENDED : undefined;
   // Aggregate ALL in-flight entries for this model (main+mmproj / grouped LiteRT) into
@@ -292,6 +277,11 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
   return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} onDownload={isCompatible ? onDownload : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>;
 };
+
+// Memoized: every row owns a download-store subscription, so without this one character
+// re-ran that subscription for every row on screen.
+const ModelListItem = React.memo(ModelListItemRow);
+ModelListItem.displayName = 'ModelListItem';
 
 function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void): void {
   setSelectedModel(null);
@@ -339,26 +329,29 @@ export const TextModelsTab: React.FC<Props> = (props) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const downloadRecommendedFile = async (item: ModelInfo) => {
+  const downloadRecommendedFile = useCallback(async (item: ModelInfo) => {
     const files = await fetchModelFiles([item], huggingFaceService);
     const file = files[item.id]?.[0];
-    if (!file) {
-      setAlertState(showAlert('Download unavailable', 'No compatible Q4_K_M file was found.'));
-      return;
-    }
+    if (!file) { setAlertState(showAlert('Download unavailable', 'No compatible Q4_K_M file was found.')); return; }
     await handleDownload(item, file);
-  };
+  }, [handleDownload, setAlertState]);
 
-  const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => {
-    const directDownload = onboarding
-      ? () => { downloadRecommendedFile(item).catch(() => undefined); }
-      : undefined;
-    return (
-      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
-    );
-  };
+  const onDirectDownload = useCallback((item: ModelInfo) => {
+    downloadRecommendedFile(item).catch(() => undefined);
+  }, [downloadRecommendedFile]);
 
-  const onboardingLiteRTCards = onboarding && Platform.OS === 'android'
+  // Derived lookups memoized once per data change instead of rebuilt for every row on
+  // every render, so a keystroke does not rescan the downloaded/trending lists N times.
+  const downloadedModelIds = useMemo(() => downloadedModels.map(m => m.id), [downloadedModels]);
+  const trendingModelIds = useMemo(() => new Set(trendingAsModelInfo.map(t => t.id)), [trendingAsModelInfo]);
+
+  const renderModelItem = useCallback(({ item, index }: ListRenderItemInfo<ModelInfo>) => (
+    <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModelIds.some(id => id.startsWith(item.id))} isTrending={trendingModelIds.has(item.id)} onSelect={handleSelectModel} onDirectDownload={onboarding ? onDirectDownload : undefined} />
+  ), [downloadedModelIds, focusTrigger, handleSelectModel, onDirectDownload, onboarding, trendingModelIds]);
+
+  const keyExtractor = useCallback((item: ModelInfo) => item.id, []);
+
+  const onboardingLiteRTCards = useMemo(() => onboarding && Platform.OS === 'android'
     ? buildCuratedLiteRTFiles()
       .filter(file =>
         !fileExceedsBudget(file.size, ramGB) ||
@@ -392,9 +385,22 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           />
         );
       })
-    : null;
+    : null, [handleDownload, onboarding, ramGB, setAlertState]);
 
-  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles);
+  const listData = useMemo(() => hasSearched
+    ? filteredResults
+    : [...(!onboarding && Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo],
+  [filteredResults, hasSearched, onboarding, recommendedAsModelInfo]);
+
+  const listHeader = useMemo(() => hasSearched ? null : (
+    <><DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />{onboardingLiteRTCards}</>
+  ), [deviceRecommendation, hasSearched, onboardingLiteRTCards, ramGB, recommendedAsModelInfo.length, styles]);
+
+  const listEmpty = useMemo(() => (
+    <Card style={styles.emptyCard}><Text style={styles.emptyText}>{getEmptyText(hasSearched, hasActiveFilters)}</Text></Card>
+  ), [hasActiveFilters, hasSearched, styles]);
+
+  const onBack = useCallback(() => applyBackNavigation(setSelectedModel, setModelFiles), [setModelFiles, setSelectedModel]);
 
   if (selectedModel) {
     return (
@@ -474,23 +480,15 @@ export const TextModelsTab: React.FC<Props> = (props) => {
         </View>
       ) : (
         <FlatList
-          data={hasSearched ? filteredResults : [...(!onboarding && Platform.OS === 'android' ? [LITERT_RECOMMENDED_MODEL] : []), ...recommendedAsModelInfo]}
+          data={listData}
           renderItem={renderModelItem}
-          keyExtractor={item => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           testID="models-list"
+          keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-          ListHeaderComponent={hasSearched ? null : (
-            <>
-              <DeviceBanner ramGB={ramGB} rec={deviceRecommendation} showTitle={recommendedAsModelInfo.length > 0} styles={styles} />
-              {onboardingLiteRTCards}
-            </>
-          )}
-          ListEmptyComponent={
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyText}>{getEmptyText(hasSearched, hasActiveFilters)}</Text>
-            </Card>
-          }
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={listEmpty}
         />
       )}
     </>

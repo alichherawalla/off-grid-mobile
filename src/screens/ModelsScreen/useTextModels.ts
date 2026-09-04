@@ -1,4 +1,11 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import {
+  useState,
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { showAlert, AlertState } from '../../components/CustomAlert';
@@ -170,6 +177,19 @@ function useCatalogCollections(input: {
   };
 }
 
+// Resolve a catalog file to its on-disk model by the FILE, not the composite id: the
+// restart catch-up / recovery scans register the SAME file under a different id
+// (`recovered_…` or a bare name), so matching only `${modelId}/${fileName}` made a
+// recovered quant look "not downloaded" and fell through to the wrong sibling quant. A
+// file name is unique within the models dir, so it is the stable key.
+function matchesFile(
+  m: DownloadedModel,
+  modelId: string,
+  fileName: string,
+): boolean {
+  return m.fileName === fileName || m.id === `${modelId}/${fileName}`;
+}
+
 export function useTextModels(setAlertState: (s: AlertState) => void) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -188,12 +208,17 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const repairingVisionIds = useDownloadStore(s => s.repairingVisionIds);
   const setRepairingVision = useDownloadStore(s => s.setRepairingVision);
 
-  const { downloadedModels, setDownloadedModels } = useAppStore();
+  // Narrow selectors: no whole-store subscription while the user is typing.
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const setDownloadedModels = useAppStore(state => state.setDownloadedModels);
 
-  const loadDownloadedModels = async () => {
+  // Monotonic op id: an in-flight search resolving after a newer one is discarded.
+  const searchOperationRef = useRef(0);
+
+  const loadDownloadedModels = useCallback(async () => {
     const models = await modelLibrary.getDownloadedModels();
     setDownloadedModels(models);
-  };
+  }, [setDownloadedModels]);
 
   useEffect(() => {
     loadDownloadedModels();
@@ -229,56 +254,76 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     }, [selectedModel]),
   );
 
-  const runSearch = async () => {
-    const hasQuery = searchQuery.trim().length > 0;
-    const hasTypeFilter = filterState.type !== 'all';
-    const hasOrgFilter = filterState.orgs.length > 0;
-    const hasSizeFilter = filterState.size !== 'all';
-    if (!hasQuery && !hasTypeFilter && !hasOrgFilter && !hasSizeFilter) {
-      setHasSearched(false);
-      setSearchResults([]);
-      return;
-    }
-    let pipelineTag: string | undefined;
-    let effectiveQuery = searchQuery.trim();
-    if (filterState.type === 'vision') pipelineTag = VISION_PIPELINE_TAG;
-    else if (filterState.type === 'code' && !effectiveQuery)
-      effectiveQuery = CODE_FALLBACK_QUERY;
-    setIsLoading(true);
-    setHasSearched(true);
-    try {
-      const results = await huggingFaceService.searchModels(effectiveQuery, {
-        limit: 30,
-        pipelineTag,
-      });
-      setSearchResults(results);
-    } catch {
-      setAlertState(
-        showAlert('Search Error', 'Failed to search models. Please try again.'),
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const runSearch = useCallback(
+    async (query: string) => {
+      const trimmed = query.trim();
+      const hasQuery = trimmed.length > 0;
+      const hasTypeFilter = filterState.type !== 'all';
+      const hasOrgFilter = filterState.orgs.length > 0;
+      const hasSizeFilter = filterState.size !== 'all';
+      if (!hasQuery && !hasTypeFilter && !hasOrgFilter && !hasSizeFilter) {
+        // Clearing supersedes anything already in flight, or a slow earlier request
+        // would land and repopulate a list the user has just emptied.
+        searchOperationRef.current += 1;
+        setHasSearched(false);
+        setSearchResults([]);
+        return;
+      }
+      let pipelineTag: string | undefined;
+      let effectiveQuery = trimmed;
+      if (filterState.type === 'vision') pipelineTag = VISION_PIPELINE_TAG;
+      else if (filterState.type === 'code' && !effectiveQuery)
+        effectiveQuery = CODE_FALLBACK_QUERY;
+      const operationId = ++searchOperationRef.current;
+      setIsLoading(true);
+      setHasSearched(true);
+      try {
+        const results = await huggingFaceService.searchModels(effectiveQuery, {
+          limit: 30,
+          pipelineTag,
+        });
+        if (operationId !== searchOperationRef.current) return;
+        setSearchResults(results);
+      } catch {
+        if (operationId !== searchOperationRef.current) return;
+        setAlertState(
+          showAlert(
+            'Search Error',
+            'Failed to search models. Please try again.',
+          ),
+        );
+      } finally {
+        if (operationId === searchOperationRef.current) setIsLoading(false);
+      }
+    },
+    [filterState, setAlertState],
+  );
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     Keyboard.dismiss();
     setFilterState(prev => ({ ...prev, expandedDimension: null }));
-    await runSearch();
-  };
+    await runSearch(searchQuery);
+  }, [runSearch, searchQuery]);
+
+  // The field stays immediate (local state — a keystroke touches no store, AsyncStorage,
+  // native bridge or network); the Hugging Face debounce is keyed off the DEFERRED query,
+  // so the character paints before the search is scheduled.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!deferredSearchQuery.trim()) {
+      // Supersede any in-flight request before emptying the list.
+      searchOperationRef.current += 1;
       setHasSearched(false);
       setSearchResults([]);
       return;
     }
     const timer = setTimeout(() => {
-      runSearch();
+      runSearch(deferredSearchQuery);
     }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery]);
+  }, [deferredSearchQuery]);
 
   // Auto-search when searchable filters change (type/size/org) even with empty query
   // Uses runSearch directly to avoid collapsing the expanded filter dimension
@@ -289,11 +334,11 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
       filterState.orgs.length === 0
     )
       return;
-    runSearch();
+    runSearch(searchQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterState.type, filterState.size, filterState.orgs.length]);
 
-  const handleSelectModel = async (model: ModelInfo) => {
+  const handleSelectModel = useCallback(async (model: ModelInfo) => {
     setSelectedModel(model);
     setIsLoadingFiles(true);
     try {
@@ -309,9 +354,9 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     } finally {
       setIsLoadingFiles(false);
     }
-  };
+  }, [setAlertState]);
 
-  const handleRepairMmProj = async (model: ModelInfo, file: ModelFile) => {
+  const handleRepairMmProj = useCallback(async (model: ModelInfo, file: ModelFile) => {
     const modelDownloadId = `${model.id}/${file.name}`;
     setRepairingVision(modelDownloadId, true);
     try {
@@ -332,12 +377,14 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     } finally {
       setRepairingVision(modelDownloadId, false);
     }
-  };
+  }, [setAlertState, setRepairingVision]);
 
-  const isRepairingVisionModel = (modelDownloadId: string) =>
-    !!repairingVisionIds[modelDownloadId];
+  const isRepairingVisionModel = useCallback(
+    (modelDownloadId: string) => !!repairingVisionIds[modelDownloadId],
+    [repairingVisionIds],
+  );
 
-  const handleDownload = async (model: ModelInfo, file: ModelFile) => {
+  const handleDownload = useCallback(async (model: ModelInfo, file: ModelFile) => {
     // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
     // mechanism + one duplicate guard. This screen owns only its completion/error UI.
     await startModelDownload(model.id, file, {
@@ -363,40 +410,34 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
           ),
         ),
     });
-  };
+  }, [setAlertState]);
 
-  const handleCancelDownload = async (modelKey: string) => {
+  const handleCancelDownload = useCallback(async (modelKey: string) => {
     await modelDownloadRegistry.cancel(uniformDownloadId('text', modelKey));
-  };
+  }, []);
 
-  const handleDeleteModel = async (modelId: string) => {
-    if (!downloadedModels.some(model => model.id === modelId)) return;
-    await modelDownloadRegistry.remove(uniformDownloadId('text', modelId));
-  };
-  // Resolve a catalog file to its on-disk model by the FILE, not the composite id.
-  // The download path registers `${modelId}/${fileName}`, but the restart catch-up /
-  // recovery scans register the SAME file under a different id (`recovered_…` or a bare
-  // name). Matching only the composite id made a recovered quant (e.g. a Q4_0 finalized
-  // after an app kill) look "not downloaded", so its file row fell through to whichever
-  // sibling quant WAS registered under the expected id (the Q4_K_M) — loading the wrong
-  // quant. A file name is unique within the models dir, so it's the stable key.
-  const matchesFile = (m: DownloadedModel, modelId: string, fileName: string) =>
-    m.fileName === fileName || m.id === `${modelId}/${fileName}`;
-
-  const isModelDownloaded = (modelId: string, fileName: string) =>
-    downloadedModels.some(m => matchesFile(m, modelId, fileName));
-
-  const getDownloadedModel = (
-    modelId: string,
-    fileName: string,
-  ): DownloadedModel | undefined =>
-    downloadedModels.find(m => matchesFile(m, modelId, fileName));
-
-  // Filter actions
-  const clearFilters = useCallback(
-    () => setFilterState(initialFilterState),
-    [],
+  const handleDeleteModel = useCallback(
+    async (modelId: string) => {
+      if (!downloadedModels.some(model => model.id === modelId)) return;
+      await modelDownloadRegistry.remove(uniformDownloadId('text', modelId));
+    },
+    [downloadedModels],
   );
+  const isModelDownloaded = useCallback(
+    (modelId: string, fileName: string) =>
+      downloadedModels.some(m => matchesFile(m, modelId, fileName)),
+    [downloadedModels],
+  );
+
+  const getDownloadedModel = useCallback(
+    (modelId: string, fileName: string): DownloadedModel | undefined =>
+      downloadedModels.find(m => matchesFile(m, modelId, fileName)),
+    [downloadedModels],
+  );
+
+  // Filter actions. Every value setter collapses the expanded dimension, so that rule
+  // lives once in patchFilter instead of being repeated per setter.
+  const clearFilters = useCallback(() => setFilterState(initialFilterState), []);
   const toggleFilterDimension = useCallback((dim: FilterDimension) => {
     setFilterState(prev => ({
       ...prev,
@@ -411,31 +452,16 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
         : [...prev.orgs, orgKey],
     }));
   }, []);
-  const setTypeFilter = useCallback(
-    (type: ModelTypeFilter) =>
-      setFilterState(prev => ({ ...prev, type, expandedDimension: null })),
+  const patchFilter = useCallback(
+    (patch: Partial<FilterState>) =>
+      setFilterState(prev => ({ ...prev, ...patch, expandedDimension: null })),
     [],
   );
-  const setSourceFilter = useCallback(
-    (source: CredibilityFilter) =>
-      setFilterState(prev => ({ ...prev, source, expandedDimension: null })),
-    [],
-  );
-  const setSizeFilter = useCallback(
-    (size: SizeFilter) =>
-      setFilterState(prev => ({ ...prev, size, expandedDimension: null })),
-    [],
-  );
-  const setQuantFilter = useCallback(
-    (quant: string) =>
-      setFilterState(prev => ({ ...prev, quant, expandedDimension: null })),
-    [],
-  );
-  const setSortOption = useCallback(
-    (sort: SortOption) =>
-      setFilterState(prev => ({ ...prev, sort, expandedDimension: null })),
-    [],
-  );
+  const setTypeFilter = useCallback((type: ModelTypeFilter) => patchFilter({ type }), [patchFilter]);
+  const setSourceFilter = useCallback((source: CredibilityFilter) => patchFilter({ source }), [patchFilter]);
+  const setSizeFilter = useCallback((size: SizeFilter) => patchFilter({ size }), [patchFilter]);
+  const setQuantFilter = useCallback((quant: string) => patchFilter({ quant }), [patchFilter]);
+  const setSortOption = useCallback((sort: SortOption) => patchFilter({ sort }), [patchFilter]);
 
   const {
     ramGB,
@@ -451,45 +477,16 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   });
 
   return {
-    searchQuery,
-    setSearchQuery,
-    isLoading,
-    isRefreshing,
-    setIsRefreshing,
-    hasSearched,
-    selectedModel,
-    setSelectedModel,
-    modelFiles,
-    setModelFiles,
-    isLoadingFiles,
-    filterState,
-    setFilterState,
-    textFiltersVisible,
-    setTextFiltersVisible,
-    downloadedModels,
-    hasActiveFilters,
-    ramGB,
-    deviceRecommendation,
-    filteredResults,
-    recommendedAsModelInfo,
-    trendingAsModelInfo,
-    handleSearch,
-    handleSelectModel,
-    handleDownload,
-    handleRepairMmProj,
-    handleCancelDownload,
-    handleDeleteModel,
-    loadDownloadedModels,
-    clearFilters,
-    toggleFilterDimension,
-    toggleOrg,
-    setTypeFilter,
-    setSourceFilter,
-    setSizeFilter,
-    setQuantFilter,
-    setSortOption,
-    isModelDownloaded,
-    getDownloadedModel,
+    searchQuery, setSearchQuery, isLoading, isRefreshing, setIsRefreshing,
+    hasSearched, selectedModel, setSelectedModel, modelFiles, setModelFiles,
+    isLoadingFiles, filterState, setFilterState, textFiltersVisible,
+    setTextFiltersVisible, downloadedModels, hasActiveFilters, ramGB,
+    deviceRecommendation, filteredResults, recommendedAsModelInfo,
+    trendingAsModelInfo, handleSearch, handleSelectModel, handleDownload,
+    handleRepairMmProj, handleCancelDownload, handleDeleteModel,
+    loadDownloadedModels, clearFilters, toggleFilterDimension, toggleOrg,
+    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
+    setSortOption, isModelDownloaded, getDownloadedModel,
     isRepairingVisionModel,
   };
 }
