@@ -1,5 +1,5 @@
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useMemo } from 'react';
 import {
   NavigationProp,
   useNavigation,
@@ -16,6 +16,7 @@ import { useDiscoveredRemoteModels } from '../../hooks/useDiscoveredRemoteModels
 import { useActiveTextCapabilities } from '../../hooks/useActiveTextCapabilities';
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
+import { useHasActiveStreamText } from './useActiveStreamText';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useMobileModelInventory } from '../../hooks/useMobileModelInventory';
@@ -150,10 +151,9 @@ export const useChatScreen = () => {
   );
   const isStreaming = useChatStore(s => s.isStreaming);
   const isThinking = useChatStore(s => s.isThinking);
-  const streamingMessage = useChatStore(s => s.streamingMessage);
-  const streamingReasoningContent = useChatStore(
-    s => s.streamingReasoningContent,
-  );
+  // Whether the live reply has text yet - NOT the text. The text is its own projection, read by the
+  // one row that draws it (useActiveStreamText), so a ~20/sec token flush never reaches this hook.
+  const hasStreamingText = useHasActiveStreamText();
   const createConversation = useChatStore(s => s.createConversation);
   const addMessage = useChatStore(s => s.addMessage);
   const updateMessageContent = useChatStore(s => s.updateMessageContent);
@@ -287,19 +287,35 @@ export const useChatScreen = () => {
   // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
   const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
   const localDeviceId = useSyncIdentityStore(s => s.localDeviceId);
-  const displayMessages = getDisplayMessages(
-    activeConversation?.messages || [],
-    {
+  // The domain projection: WHICH rows exist. Memoized on its real inputs so a render caused by
+  // something else (a modal opening, the keyboard) hands FlatList the same array back.
+  const displayMessages = useMemo(
+    () =>
+      getDisplayMessages(activeConversation?.messages || [], {
+        isThinking,
+        // Token-free by design. `hasStreamingText` says the live row belongs in the list; the row
+        // itself reads the text, so the list is rebuilt once per turn instead of once per flush.
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        hasStreamingText,
+        isStreamingForThisConversation,
+        isModelLoading,
+        loadingModelName: loadingModel?.name,
+        isGeneratingForThisConversation,
+        remotePreviews,
+        localDeviceId,
+      }),
+    [
+      activeConversation?.messages,
       isThinking,
-      streamingMessage,
-      streamingReasoningContent,
+      hasStreamingText,
       isStreamingForThisConversation,
       isModelLoading,
-      loadingModelName: loadingModel?.name,
+      loadingModel?.name,
       isGeneratingForThisConversation,
       remotePreviews,
       localDeviceId,
-    },
+    ],
   );
 
   const animateLastN = useChatPresentationLifecycle(
