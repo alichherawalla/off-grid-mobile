@@ -1,12 +1,7 @@
 import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
+import { modelsFailureMessage } from '@offgrid/application';
 import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
-import {
-  activeMobileModel,
-  clearMobileModel,
-  mobileLLMService,
-  refreshMobileModelServices,
-  selectMobileModel,
-} from '../../../src/services/modelServices';
+import { getMobileApplication } from '../../../src/services/composition/application';
 import { mobileTextEngineControl } from '../../../src/services/modelServices/textEngineControl';
 import { useAppStore, useRemoteServerStore } from '../../../src/stores';
 import { createDownloadedModel } from '../../utils/factories';
@@ -105,7 +100,7 @@ describe('canonical Mobile text route authority', () => {
     expect(active.model).toMatchObject({ id: modelId, source: 'remote', ready: false });
     expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
     expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
-    expect(mobileLLMService.resolveRoute({ modality: 'text', routeId: active.selectedId!, allowFallback: false }))
+    expect(models().resolve({ modality: 'text', routeId: active.selectedId!, allowFallback: false }))
       .toMatchObject({ selected: null, candidates: [], requested: { ready: false } });
     const conversationId = setupWithConversation({ modelId });
     const user = useChatStore.getState().addMessage(conversationId, {
@@ -159,3 +154,27 @@ describe('canonical Mobile text route authority', () => {
     expect(activeMobileModel('embedding').model).toBeNull();
   });
 });
+  const models = () => getMobileApplication().models;
+  const activeMobileModel = (modality: 'text' | 'embedding') => {
+    const active = models().snapshot().active[modality];
+    if (!active) throw new Error(`Missing ${modality} projection.`);
+    return active;
+  };
+  const refreshMobileModelServices = () => models().refresh();
+  const clearMobileModel = async (modality: 'text' | 'embedding') => {
+    const outcome = await models().select({modality, modelId: null});
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  };
+  const selectMobileModel = async (selection: {
+    source: 'local' | 'remote';
+    hostId: string;
+    modality: 'text' | 'embedding';
+    modelId: string;
+  }) => {
+    await models().refresh();
+    const route = selection.source === 'remote'
+      ? models().remoteModelRoute(selection.hostId, selection.modelId, selection.modality)
+      : models().resolveRoute(selection.modality, selection.modelId);
+    const outcome = await models().select({modality: selection.modality, modelId: route ?? selection.modelId});
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  };

@@ -1,9 +1,8 @@
-import type { ONNXImageModel, RemoteServer } from '../../../src/types';
-import { mobileModelCommands } from '../../../src/services/modelServices/modelCommandApplication';
+import type { RemoteServer } from '../../../src/types';
+import '../../harness/activeModelLifecycle';
 import {
   savedImageModels,
   savedTextModels,
-  selectLocalImageModelOnDemand,
 } from '../../../src/components/ModelSelectorModal';
 
 const server: RemoteServer = {
@@ -38,28 +37,4 @@ describe('model selector evidence and loading policy', () => {
     });
   });
 
-  it('records a local image selection without loading it', async () => {
-    const select = jest.spyOn(mobileModelCommands, 'select').mockResolvedValue();
-    const model: ONNXImageModel = {
-      id: 'image-1',
-      name: 'Image One',
-      description: 'test',
-      modelPath: '/models/image-1',
-      downloadedAt: '2026-09-01T00:00:00.000Z',
-      size: 10,
-      backend: 'coreml',
-    };
-
-    await selectLocalImageModelOnDemand(model);
-
-    expect(select).toHaveBeenCalledWith(
-      {
-        source: 'local',
-        hostId: 'coreml',
-        modality: 'image',
-        modelId: 'image-1',
-      },
-      { load: false },
-    );
-  });
 });

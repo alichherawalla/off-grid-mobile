@@ -528,10 +528,10 @@ describe('useModelsScreen', () => {
       require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
-      const { mobileModelSelectionService } = require(
-        '../../../../src/services/modelServices/modelSelectionApplication'
+      const { mobileModelSelectionStore } = require(
+        '../../../../src/services/modelServices/selectionStore'
       );
-      const writeSelection = jest.spyOn(mobileModelSelectionService, 'write');
+      const writeSelection = jest.spyOn(mobileModelSelectionStore, 'write');
 
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
       useAppStore.mockReturnValue({
@@ -558,11 +558,11 @@ describe('useModelsScreen', () => {
       require('../../../../src/services');
       const { useAppStore } = require('../../../../src/stores');
       const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
-      const { mobileModelSelectionService } = require(
-        '../../../../src/services/modelServices/modelSelectionApplication'
+      const { mobileModelSelectionStore } = require(
+        '../../../../src/services/modelServices/selectionStore'
       );
       const RNFS = require('react-native-fs');
-      const writeSelection = jest.spyOn(mobileModelSelectionService, 'write');
+      const writeSelection = jest.spyOn(mobileModelSelectionStore, 'write');
 
       const mockSetActiveImageModelId = jest.fn();
       mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
@@ -779,3 +779,4 @@ describe('useModelsScreen', () => {
     });
   });
 });
+import '../../../harness/activeModelLifecycle';

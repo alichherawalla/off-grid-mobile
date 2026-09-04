@@ -22,13 +22,15 @@ import { selectedLocalModelId } from '../../utils/testHelpers';
  */
 
 import { useAppStore } from '../../../src/stores/appStore';
-import { activeModelService } from '../../harness/activeModelLifecycle';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import {
+  activeModelService,
+  modelApplication,
+  modelResidencyManager,
+} from '../../harness/activeModelLifecycle';
 import { llmService } from '../../../src/services/llm';
 import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
 import { hardwareService } from '../../../src/services/hardware';
 import { isOverridableMemoryError } from '../../../src/services/modelLoadErrors';
-import { isResidentType } from '../../harness/modelResidency';
 import { resetStores } from '../../utils/testHelpers';
 import { createDownloadedModel, createONNXImageModel, createDeviceInfo } from '../../utils/factories';
 
@@ -127,13 +129,13 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
-    modelResidencyManager._reset();
+    await modelResidencyManager._reset();
     modelResidencyManager.setLoadPolicy('balanced');
 
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null);
     mockLlmService.loadModel.mockResolvedValue(undefined);
-    mockLlmService.unloadModel.mockResolvedValue(undefined);
+    mockLlmService.unloadModel.mockResolvedValue({released: true});
     mockLlmService.getMultimodalSupport.mockReturnValue(null as any);
 
     mockLocalDreamService.isModelLoaded.mockResolvedValue(false);
@@ -163,7 +165,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     expect(check.canLoad).toBe(false);
     expect(check.severity).toBe('critical');
     // It counted the resident image model — that's why it over-counts and blocks.
-    expect(check.currentlyLoadedMemoryGB).toBeGreaterThan(0);
+    expect(check.currentlyLoadedMemoryMB).toBeGreaterThan(0);
   });
 
   /**
@@ -182,9 +184,9 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
 
     expect(mockLlmService.loadModel).toHaveBeenCalled();
     expect(selectedLocalModelId('text')).toBe('txt');
-    expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
+    expect(modelApplication().models.snapshot().residents.some(({type}) => type === 'text')).toBe(true);
     // The image model was evicted to make room (evict-then-measure).
-    expect(isResidentType(modelResidencyManager, 'image')).toBe(false);
+    expect(modelApplication().models.snapshot().residents.some(({type}) => type === 'image')).toBe(false);
     expect(mockLocalDreamService.unloadModel).toHaveBeenCalled();
   });
 
@@ -205,7 +207,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     // acquisition, so entering a chat never loads a large model eagerly.
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
     expect(selectedLocalModelId('text')).toBe('txt');
-    expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
+    expect(modelApplication().models.snapshot().residents.some(({type}) => type === 'text')).toBe(false);
     // And it was NOT blocked by a hard "Insufficient Memory" gate before loading.
     const blocked = deps.setAlertState.mock.calls.find(
       (c: any) => c[0]?.title === 'Insufficient Memory',
@@ -229,7 +231,7 @@ describe('Chat <-> Home text-model selection parity (OD3)', () => {
     await activeModelService.loadTextModel('too-big').catch((e: unknown) => { caught = e; });
     expect(isOverridableMemoryError(caught)).toBe(true);
     expect(mockLlmService.loadModel).not.toHaveBeenCalled();
-    expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
+    expect(modelApplication().models.snapshot().residents.some(({type}) => type === 'text')).toBe(false);
   });
 
   /**

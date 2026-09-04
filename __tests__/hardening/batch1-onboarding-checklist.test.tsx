@@ -38,7 +38,7 @@ import {
   refreshMobileModelServices,
 } from '../../src/services/modelServices';
 import { selectRemoteMobileModel } from '../../src/services/modelServices';
-import { mobileModelSelectionService } from '../../src/services/modelServices/modelSelectionApplication';
+import { mobileModelSelectionStore } from '../../src/services/modelServices/selectionStore';
 import { remoteServerManager } from '../../src/services/remoteServerManager';
 
 const stepById = (steps: any[], id: string) => steps.find((s) => s.id === id);
@@ -46,7 +46,7 @@ const stepById = (steps: any[], id: string) => steps.find((s) => s.id === id);
 describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real stores)', () => {
   beforeEach(async () => {
     resetStores();
-    await refreshMobileModelServices();
+    await resetModelApplication();
   });
 
   // ── case 6: after onboarding, step 1 (Download a Model) is the active/first
@@ -75,7 +75,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
 
     // Step 2: Load a Model → active step becomes "sentMessage" (case 20).
     await act(async () => {
-      await mobileModelSelectionService.write('text', mobileRouteId({
+      await mobileModelSelectionStore.write('text', mobileRouteId({
         source: 'local', hostId: 'llama', modality: 'text', modelId: 'm-1',
       }));
       await refreshMobileModelServices();
@@ -128,7 +128,7 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel({ id: 'm-1' })); });
     await act(async () => {
       await refreshMobileModelServices();
-      await mobileModelSelectionService.write('text', mobileRouteId({
+      await mobileModelSelectionStore.write('text', mobileRouteId({
         source: 'local', hostId: 'llama', modality: 'text', modelId: 'm-1',
       }));
       await refreshMobileModelServices();
@@ -274,3 +274,4 @@ describe('BATCH1 onboarding checklist — useOnboardingSteps (real hook + real s
     expect(merged.checklistDismissed).toBe(false);
   });
 });
+import { resetModelApplication } from '../harness/activeModelLifecycle';

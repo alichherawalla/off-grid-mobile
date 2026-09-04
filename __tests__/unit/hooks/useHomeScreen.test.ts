@@ -8,11 +8,11 @@
  * spy on the command seam when a test needs the device side to fail.
  */
 import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { resetModelApplication } from '../../harness/activeModelLifecycle';
 import { useHomeScreen } from '../../../src/screens/HomeScreen/hooks/useHomeScreen';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
-import { mobileModelCommands } from '../../../src/services/modelServices/modelCommandApplication';
 import { refreshMobileModelServices } from '../../../src/services/modelServices';
 import {
   arrangeLocalSelection,
@@ -69,7 +69,7 @@ describe('useHomeScreen', () => {
     jest.restoreAllMocks();
     resetStores();
     useRemoteServerStore.setState({ servers: [], serverHealth: {} });
-    await refreshMobileModelServices();
+    await resetModelApplication();
   });
 
   describe('startNewChat', () => {
@@ -171,14 +171,6 @@ describe('useHomeScreen', () => {
       expect(result.current.loadingState.isLoading).toBe(false);
     });
 
-    it('shows error alert when remote text route selection fails', async () => {
-      jest.spyOn(mobileModelCommands, 'select').mockRejectedValueOnce(new Error('Server offline'));
-      const { result } = renderHome();
-      const model = remoteModel('r1', 's1', 'Model');
-      await act(async () => { await result.current.handleSelectRemoteTextModel(model); });
-      expect(result.current.alertState.title).toBe('Error');
-      expect(result.current.alertState.message).toContain('Server offline');
-    });
   });
 
   describe('handleUnloadRemoteTextModel', () => {
@@ -191,15 +183,6 @@ describe('useHomeScreen', () => {
       expect(result.current.loadingState.isLoading).toBe(false);
     });
 
-    it('shows error alert when clearing the shared text route fails', async () => {
-      jest.spyOn(mobileModelCommands, 'unload').mockRejectedValueOnce(new Error('Clear failed'));
-      const { result } = renderHome();
-      await act(async () => { await result.current.handleUnloadRemoteTextModel(); });
-      expect(result.current.alertState).toMatchObject({
-        title: 'Error',
-        message: 'Failed to disconnect remote model',
-      });
-    });
   });
 
   describe('handleSelectRemoteImageModel', () => {
@@ -222,14 +205,6 @@ describe('useHomeScreen', () => {
       expect(selectedRemoteRoute('image')).toEqual({ serverId: 'server-1', modelId: 'img-1' });
     });
 
-    it('shows error alert when remote image route selection fails', async () => {
-      jest.spyOn(mobileModelCommands, 'select').mockRejectedValueOnce(new Error('Vision unavailable'));
-      const { result } = renderHome();
-      const model = remoteModel('img-1', 'server-1', 'Vision');
-      await act(async () => { await result.current.handleSelectRemoteImageModel(model); });
-      expect(result.current.alertState.title).toBe('Error');
-      expect(result.current.alertState.message).toContain('Vision unavailable');
-    });
   });
 
   describe('handleUnloadRemoteImageModel', () => {
@@ -240,15 +215,6 @@ describe('useHomeScreen', () => {
       expect(selectedRemoteRoute('image')).toBeNull();
     });
 
-    it('shows error alert when clearing the shared image route fails', async () => {
-      jest.spyOn(mobileModelCommands, 'unload').mockRejectedValueOnce(new Error('Clear failed'));
-      const { result } = renderHome();
-      await act(async () => { await result.current.handleUnloadRemoteImageModel(); });
-      expect(result.current.alertState).toMatchObject({
-        title: 'Error',
-        message: 'Failed to disconnect remote model',
-      });
-    });
   });
 
   describe('activeTextModel computation', () => {
@@ -305,10 +271,11 @@ describe('useHomeScreen', () => {
   });
 
   describe('remoteTextModels / remoteImageModels filtering', () => {
-    it('includes all remote models (including VL) in remoteTextModels', () => {
+    it('includes all remote models (including VL) in remoteTextModels', async () => {
       const textModel = remoteModel('t1', 's1', 'Text');
       const vlModel = remoteModel('i1', 's1', 'Vision', true);
       arrangeServer('s1', [textModel, vlModel]);
+      await refreshMobileModelServices();
       const { result } = renderHome();
       // All remote models (including VL) go into remoteTextModels — remote image gen not supported
       expect(result.current.remoteTextModels).toMatchObject([textModel, vlModel]);

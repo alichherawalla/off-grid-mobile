@@ -110,22 +110,6 @@ jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
   ejectAllModelsForUser: () => mockEjectAll(),
 }));
 
-jest.mock('../../../src/services/modelServices/modelCommandApplication', () => {
-  // The real command application (selection, pending-route reads); only the native unload is faked.
-  const actual = jest.requireActual('../../../src/services/modelServices/modelCommandApplication');
-  return {
-    ...actual,
-    mobileModelCommands: {
-      select: (intent: any, options?: any) => actual.mobileModelCommands.select(intent, options),
-      pending: (modality: any) => actual.mobileModelCommands.pending(modality),
-      subscribe: (listener: any) => actual.mobileModelCommands.subscribe(listener),
-      unload: (modality: string) =>
-        modality === 'text' ? mockUnloadTextModel() : mockUnloadImageModel(),
-    },
-  };
-});
-
-
 
 jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {

@@ -1,4 +1,4 @@
-import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { arrangeLocalSelection, selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * ChatsListScreen Tests
  *
@@ -13,12 +13,12 @@ import { arrangeLocalSelection } from '../../utils/testHelpers';
 
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { resetModelApplication } from '../../harness/activeModelLifecycle';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
 import { selectMobileModel } from '../../../src/services/modelServices';
-import type { ModelCommandApplicationService } from '@offgrid/models';
 import {
   createConversation,
   createMessage,
@@ -29,11 +29,6 @@ import {
 
 // Mock navigation
 const mockNavigate = jest.fn();
-type ModelCommandSelect = ModelCommandApplicationService['select'];
-const mockModelCommandSelect = jest.fn<
-  ReturnType<ModelCommandSelect>,
-  Parameters<ModelCommandSelect>
->(async () => undefined);
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {
@@ -54,19 +49,6 @@ jest.mock('../../../src/hooks/useFocusTrigger', () => ({
   useFocusTrigger: () => 0,
 }));
 
-jest.mock('../../../src/services/modelServices/modelCommandApplication', () => ({
-  mobileModelCommands: {
-    select: mockModelCommandSelect,
-    unload: jest.fn(async () => undefined),
-  },
-  selectLocalTextModelOnDemand: (model: { id: string; engine: string }) =>
-    mockModelCommandSelect({
-      source: 'local',
-      hostId: model.engine,
-      modality: 'text',
-      modelId: model.id,
-    }, { load: false }),
-}));
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
   AnimatedEntry: ({ children }: any) => children,
@@ -175,9 +157,10 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 import { ChatsListScreen } from '../../../src/screens/ChatsListScreen';
 
 describe('ChatsListScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
+    await resetModelApplication();
   });
 
   // ==========================================================================
@@ -223,12 +206,7 @@ describe('ChatsListScreen', () => {
       fireEvent.press(getByText('New'));
       fireEvent.press(getByText('Choose local model'));
 
-      await waitFor(() => expect(mockModelCommandSelect).toHaveBeenCalledWith({
-        source: 'local',
-        hostId: 'llama',
-        modality: 'text',
-        modelId: 'local-text',
-      }, { load: false }));
+      await waitFor(() => expect(selectedLocalModelId('text')).toBe('local-text'));
       expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });

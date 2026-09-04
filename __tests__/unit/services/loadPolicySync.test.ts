@@ -14,7 +14,7 @@
  */
 import { loadPolicyFromSettings } from '@offgrid/models';
 import { createLoadPolicySync, startLoadPolicySync } from '../../../src/services/loadPolicySync';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { useAppStore } from '../../../src/stores';
 
 describe('loadPolicyFromSettings (the one setting→policy mapping)', () => {
