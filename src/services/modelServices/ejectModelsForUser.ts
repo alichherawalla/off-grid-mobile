@@ -15,10 +15,6 @@ export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEj
   };
 }
 
-/** Mobile supplies cancellation and native teardown ports; Shared owns their order. */
-export const ejectAllModelsForUser = (): Promise<{ count: number }> =>
-  modelEjection().ejectAllForUser();
-
 /** Eject one resident on a person's request; running work stops first (shared owns the order). */
 export const ejectResidentForUser = (key: string): Promise<boolean> =>
   modelEjection().ejectResident(key);
