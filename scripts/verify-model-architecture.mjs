@@ -498,16 +498,38 @@ for (const file of files) {
     );
   }
 
+  // This asserted `.models.hydrateDownloads(` in App.tsx and was therefore UNSATISFIABLE:
+  // `hydrateDownloads` is deliberately private to `@offgrid/application` - absent from
+  // `dist/index.d.ts`, and two shared tests pin it that way
+  // (`packages/application/test/models-download-owner.test.mjs:156` and `:696`). A rule that can
+  // only be satisfied by breaking a boundary is a broken rule, so it was red for two days over
+  // behavior that was never missing.
+  //
+  // Hydration IS reached at bootstrap, through the PUBLIC inventory refresh:
+  //   App.tsx `await refreshMobileModelServices()` (in `initializeApp`, the mount path)
+  //     -> src/services/modelServices/index.ts:126 refreshMobileModelServices
+  //     -> src/services/modelServices/mobileLLMService.ts:14 `applicationFacade().models.refresh()`
+  //     -> shared packages/application/src/models/projector-repair-facade.ts:24-30, whose `refresh`
+  //        awaits `owner.hydrate()`, then `deps.hydrateDownloads()`, then `reconcile`.
+  // The coordinator and ports that hydration needs are CONSTRUCTOR dependencies of the downloads
+  // controller, not start()-time ones, so the boot refresh takes the real hydration path even
+  // though it runs before `startMobileApplication()`.
+  //
+  // So the rule now checks the boot call that owns that chain. It deliberately does NOT match
+  // `.models.refresh(` on its own: App.tsx's other `models.refresh()` is inside `onForeground`,
+  // which fires only on a background->active AppState transition (`src/hooks/useAppState.ts:13-19`)
+  // and never at mount - so that spelling would let a foreground-only refresh satisfy a rule about
+  // bootstrap.
   if (
     fileName === 'App.tsx' &&
-    !/\.models\.hydrateDownloads\s*\(/.test(text)
+    !/\brefreshMobileModelServices\s*\(/.test(text)
   ) {
     report(
       'image-download-recovery-starts-at-bootstrap',
       fileName,
       source,
       source,
-      'bootstrap does not hydrate the facade-owned download journal',
+      'bootstrap does not run the inventory refresh that hydrates the facade-owned download journal',
     );
   }
 
