@@ -4,8 +4,8 @@ import {
   type GenerationAdapter,
   type GenerationChunk,
   type GenerationRequest,
+  type RuntimeModel,
 } from '@offgrid/models';
-import type { WorkspaceRoutingPort } from '@offgrid/models';
 import { classifierExecution } from '../composition/generation';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { embeddingService } from '../adapters/native/embeddingRuntimeAdapter';
@@ -66,11 +66,11 @@ function adapter(id: string): GenerationAdapter {
 
 export function reconcileMobileSidecarAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: WorkspaceRoutingPort,
+  inventory: readonly RuntimeModel[],
   registrations: Map<string, () => void>,
 ): void {
   const modalities = new Set(['embedding', 'classifier']);
-  const supported = new Set(models.list()
+  const supported = new Set(inventory
     .filter(model => modalities.has(model.modality))
     .map(model => model.adapterId));
   for (const [id, unregister] of registrations) {

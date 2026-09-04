@@ -16,7 +16,6 @@ import {
   type RuntimeModel,
   classifyRuntimeError,
 } from '@offgrid/models';
-import type { WorkspaceRoutingPort } from '@offgrid/models';
 import type { GenerationMeta, MediaAttachment, Message } from '../../types';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { modelResidencyManager } from './residencyBootstrap';
@@ -433,13 +432,13 @@ export const mobileGenerationResidency: ModelResidencyLifecyclePort = modelResid
 
 export function reconcileMobileGenerationAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: WorkspaceRoutingPort,
+  inventory: readonly RuntimeModel[],
   registrations: Map<string, () => void>,
 ): void {
   const supported = new Map<string, RuntimeModel['modality']>([
     [mobileExecutionAdapterId('local', 'llama', 'text'), 'text'],
     [mobileExecutionAdapterId('local', 'litert', 'text'), 'text'],
-    ...models.list()
+    ...inventory
       .filter(model =>
         (model.source === 'remote' && model.modality === 'text')
         || model.modality === 'image')

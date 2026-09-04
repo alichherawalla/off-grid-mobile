@@ -1,5 +1,7 @@
 import type { RuntimeModel, WorkspaceGenerationPort } from '@offgrid/models';
 import { mobileVoiceGenerationService as voiceGeneration } from '../composition/generation';
+import { applicationFacade } from '../applicationFacade';
+import { lazyInstance } from '../composition/lazy';
 import type { DownloadedModel, RemoteModel } from '../../types';
 import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
@@ -30,10 +32,6 @@ import { mobileModelSelectionService } from './modelSelectionApplication';
 import { reportModelFailure } from '../modelFailureHandler';
 import logger from '../../utils/logger';
 
-/** The one Mobile owner of model inventory, selection and canonical route identity. */
-export const mobileLLMService = mobileWorkspace.llm;
-
-mobileInventoryAdapters.forEach(adapter => mobileWorkspace.registerInventoryAdapter(adapter));
 registerLifecycleProjectionPort({
   // The full refresh: an inventory rebuild is only complete once the generation,
   // transcription, voice and sidecar adapters have been reconciled against it.
@@ -50,15 +48,23 @@ registerModelSelectionCommandPort({
     );
   },
 });
-// Adapters and generation go THROUGH the workspace's own API rather than reaching inside for its
-// composed generation owner - the same cut desktop took in `6eb863ba`. One less raw member read
-// keeping `ModelsPlatformPorts.workspace` alive.
+// Registration comes from the facade's `models.adapters` seam. `generate` does NOT: the facade's
+// `generate(command)` streams `GenerationEvent`s, while this port's consumers await a
+// `GenerationResult` - collapsing the stream into a result here would make the app a second owner
+// of what a generation result IS (partial output, terminal event, failure). Requested as
+// WIRING_B #13; until then this one member keeps the workspace alive in this file.
 const mobileGenerationService: WorkspaceGenerationPort = {
   generate: (request, events) => mobileWorkspace.generate(request, events),
-  registerAdapter: adapter => mobileWorkspace.registerGenerationAdapter(adapter),
+  registerAdapter: adapter =>
+    applicationFacade().models.adapters.registerGeneration(adapter),
 };
-/** Voice has its own queue so sentence playback can run while text is still streaming. */
-export const mobileVoiceGenerationService = voiceGeneration();
+/**
+ * Voice has its own queue so sentence playback can run while text is still streaming.
+ *
+ * Resolved LAZILY: this module can be imported before the composition root has registered the
+ * facade, and a module-scope `voiceGeneration()` would then throw at import time.
+ */
+export const mobileVoiceGenerationService = lazyInstance(voiceGeneration);
 const generationAdapterRegistrations = new Map<string, () => void>();
 const transcriptionAdapterRegistrations = new Map<string, () => void>();
 const voiceAdapterRegistrations = new Map<string, () => void>();
@@ -98,28 +104,32 @@ export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
   const refreshInventory = () => refreshMobileLLMServiceInventory();
   refreshChain = refreshChain
     .then(refreshInventory, refreshInventory)
-    .then(models => {
+    .then(inventory => {
+      // The reconcilers now take the INVENTORY ROWS the refresh just produced, not a routing
+      // port. They only ever asked "which adapter ids does the inventory publish", and this is
+      // the answer the refresh already has in hand - so no second listing, and no re-copy of
+      // every row, which `llm.list()` did on every call.
       reconcileMobileGenerationAdapters(
         mobileGenerationService,
-        mobileLLMService,
+        inventory,
         generationAdapterRegistrations,
       );
       reconcileMobileTranscriptionAdapters(
         mobileGenerationService,
-        mobileLLMService,
+        inventory,
         transcriptionAdapterRegistrations,
       );
       reconcileMobileVoiceAdapters(
         mobileVoiceGenerationService,
-        mobileLLMService,
+        inventory,
         voiceAdapterRegistrations,
       );
       reconcileMobileSidecarAdapters(
         mobileGenerationService,
-        mobileLLMService,
+        inventory,
         sidecarAdapterRegistrations,
       );
-      return models;
+      return inventory;
     })
     .catch(error => {
       projectMobileModelServiceInitializationFailure('inventory', error);
@@ -134,6 +144,14 @@ composeMobileSidecarExecution(mobileGenerationService, refreshMobileModelService
 export function startMobileModelServices(): () => void {
   if (!started) {
     started = true;
+    // Inventory adapters register HERE rather than at module scope, for two reasons: the facade is
+    // not configured during this module's import, and each registration now returns its own
+    // unregister - so `stopMobileModelServices` actually unregisters them, which the old
+    // module-scope `forEach` never did.
+    const adapters = applicationFacade().models.adapters;
+    for (const adapter of mobileInventoryAdapters) {
+      cleanups.push(adapters.registerInventory(adapter));
+    }
     const refresh = () => {
       refreshMobileModelServices().catch(consumeAlreadyProjectedFailure);
     };

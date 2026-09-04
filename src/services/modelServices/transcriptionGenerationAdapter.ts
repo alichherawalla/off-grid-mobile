@@ -9,7 +9,6 @@ import {
   type GenerationRequest,
   type RuntimeModel,
 } from '@offgrid/models';
-import type { WorkspaceRoutingPort } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { remoteMediaRuntime } from '../adapters/remote/mediaRuntime';
 import { whisperService } from '../whisperService';
@@ -285,12 +284,11 @@ function adapter(id: string): GenerationAdapter {
 /** Register only the concrete transcription routes currently published by Mobile inventory. */
 export function reconcileMobileTranscriptionAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: WorkspaceRoutingPort,
+  inventory: readonly RuntimeModel[],
   registrations: Map<string, () => void>,
 ): void {
   const supported = new Set(
-    models
-      .list()
+    inventory
       .filter(model => model.modality === 'transcription')
       .map(model => model.adapterId),
   );

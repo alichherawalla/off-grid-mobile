@@ -6,7 +6,6 @@ import {
   type RuntimeModel,
   classifyStreamingRuntimeError,
 } from '@offgrid/models';
-import type { WorkspaceRoutingPort } from '@offgrid/models';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { synthesizeRemoteVoiceFile } from '../adapters/remote/voicePlayback';
 
@@ -99,11 +98,13 @@ function voiceAdapter(id: string): GenerationAdapter {
 /** Keep voice execution adapters aligned with the routes published by inventory. */
 export function reconcileMobileVoiceAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },
-  models: WorkspaceRoutingPort,
+  inventory: readonly RuntimeModel[],
   registrations: Map<string, () => void>,
 ): void {
   const supported = new Set(
-    models.list('voice').map(model => model.adapterId),
+    inventory
+      .filter(model => model.modality === 'voice')
+      .map(model => model.adapterId),
   );
   for (const [id, unregister] of registrations) {
     if (supported.has(id)) continue;

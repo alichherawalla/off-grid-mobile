@@ -1,11 +1,11 @@
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
+  ejectModelResidency,
   ensurePersistentResident,
   modelLoadRefusal,
   runIndependentUnloads,
   unloadPersistentResident,
 } from '@offgrid/models';
-import type { ModelLifecycleApplicationService } from '@offgrid/models';
 import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import { applicationFacade } from '../applicationFacade';
 import { activeRouteIsRemote } from './activeRoute';
@@ -14,7 +14,6 @@ import { OverridableMemoryError } from '../modelLoadErrors';
 import { whisperService } from '../whisperService';
 import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
-import { modelLifecycle } from '../composition/model-runtime';
 import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './residentSpecs';
 
 export { resolveTextResidentSpec, resolveTranscriptionResidentSpec };
@@ -61,8 +60,6 @@ function loadRejection(
   if (failure.kind === 'not_ready') return refusedLoad(override);
   return new Error(modelsFailureMessage(failure));
 }
-
-const lifecycleService = (): ModelLifecycleApplicationService => modelLifecycle();
 
 const models = () => applicationFacade().models;
 
@@ -210,14 +207,24 @@ export async function ejectAllModels(): Promise<{ count: number }> {
   logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
   // NOT `models.eject()`. This function IS the implementation behind it: mobile registers
   // `ejectAll: ejectAllModels` as the facade's ejection port, so calling the facade here would
-  // recurse. See PROGRESS_B and WIRING_B #9 - the two ejects are different capabilities.
-  const ejected = await lifecycleService().eject({
+  // recurse - the trap now recorded on `ModelsFacade.eject` itself.
+  //
+  // So it calls SHARED's workflow directly instead of the workspace's lifecycle service.
+  // `ejectModelResidency` is the same function that service delegated to, and `ejectedModelCount`
+  // inside it stays the one owner of what "ejected" counts - nothing about the policy moved into
+  // the app. The two things the service added on top, clearing remote routes and the inventory
+  // refresh, are mobile's own `lifecycleProjectionPort`, which mobile already registers.
+  const ejected = await ejectModelResidency({
+    manager: modelResidencyManager,
     localUnloads: {
       textUnloaded: () => unloadTextModel(true),
       imageUnloaded: () => unloadImageModel(true),
     },
     remoteModalities,
+    clearRemoteRoute: modality =>
+      lifecycleProjectionPort.selectRoute(modality, null),
   });
+  await lifecycleProjectionPort.refreshInventory();
   logger.log(`[MODEL-SM] ejectAll → done count=${ejected.count}`);
   return { count: ejected.count };
 }
