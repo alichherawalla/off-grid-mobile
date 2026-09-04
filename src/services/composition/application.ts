@@ -15,6 +15,7 @@ import {
 } from '../adapters/rag/mobileRagPorts';
 import { mobileWorkspace } from '../modelServices/workspace';
 import { mobileModelEjectionPorts } from '../modelServices/ejectModelsForUser';
+import { mobileModelSettingsPorts } from '../modelServices/modelSettingsPorts';
 import { modelsChatPort } from './chat';
 
 export type MobileApplicationExtensionPorts = Partial<
@@ -72,6 +73,7 @@ function createMobileApplication(): OffGridApplication {
       workspace: mobileWorkspace,
       chat: modelsChatPort,
       ejection: mobileModelEjectionPorts(),
+      settings: mobileModelSettingsPorts,
     },
     rag: {
       store: mobileRagStore,

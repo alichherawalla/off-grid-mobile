@@ -157,6 +157,12 @@ export interface AppState extends ProAccessSlice {
   settings: AppSettings;
   modelSettingProvenance: Record<string, RecordProvenance>;
   updateSettings: (settings: Partial<AppSettings>) => void;
+  /**
+   * Persist one COMMITTED settings record, whole, in a single write. The shared settings command has
+   * already normalized, validated, diffed and published it, so this must not run the portable-setting
+   * scan `updateSettings` runs - that would publish the same change a second time.
+   */
+  replaceCommittedSettings: (settings: AppSettings) => void;
   applySyncedModelSetting: (
     wireKey: string,
     fields: Record<string, unknown>,
@@ -302,6 +308,7 @@ export const useAppStore = create<AppState>()(
         set({ settings: after });
         emitChangedModelSettings(before, after);
       },
+      replaceCommittedSettings: settings => set({ settings }),
       applySyncedModelSetting: (wireKey, fields, provenance) => {
         const patch = mobileModelSettingPatch(wireKey, fields);
         if (patch) {

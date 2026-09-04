@@ -10,6 +10,7 @@ import {
 import {
   decodeModelSettingPatch,
   encodeChangedModelSettings,
+  type EncodedModelSetting,
 } from '@offgrid/models';
 import {
   CORE_SYNC_ENTITIES,
@@ -22,16 +23,20 @@ import { serializeMessageContext } from './messageContext';
 // Off Grid Desktop through @offgrid/sync; this module keeps only the Mobile record builders.
 export type { CoreSyncEntity, SyncMutation } from '@offgrid/sync';
 
-export function modelSettingMutations(
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
-): SyncMutation[] {
-  return encodeChangedModelSettings('mobile', before, after).map(setting => ({
+function modelSettingMutation(setting: EncodedModelSetting): SyncMutation {
+  return {
     entity: CORE_SYNC_ENTITIES.modelSetting,
     entityId: setting.wireKey,
     kind: 'put',
     fields: { version: setting.version, value_json: setting.valueJson },
-  }));
+  };
+}
+
+export function modelSettingMutations(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): SyncMutation[] {
+  return encodeChangedModelSettings('mobile', before, after).map(modelSettingMutation);
 }
 
 export function mobileModelSettingPatch(
@@ -153,4 +158,15 @@ export function emitChangedModelSettings(
   for (const mutation of modelSettingMutations(before, after)) {
     emitSyncMutation(mutation);
   }
+}
+
+/**
+ * Publish the mutations a COMMITTED settings save planned. Shared decided which portable keys moved
+ * and encoded them once, so nothing is re-diffed here - this is the publish half of the settings
+ * command's port, not a store subscriber.
+ */
+export function emitCommittedModelSettings(
+  mutations: readonly EncodedModelSetting[],
+): void {
+  for (const setting of mutations) emitSyncMutation(modelSettingMutation(setting));
 }

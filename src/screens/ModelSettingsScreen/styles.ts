@@ -127,6 +127,11 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.error,
     marginTop: SPACING.xs,
   },
+  draftWarning: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.warning,
+    marginTop: SPACING.xs,
+  },
   systemPromptContainer: {
     marginBottom: SPACING.md,
   },

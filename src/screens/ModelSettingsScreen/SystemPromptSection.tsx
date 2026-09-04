@@ -1,33 +1,47 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, TextInput } from 'react-native';
+import { modelsFailureMessage } from '@offgrid/application';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { APP_CONFIG } from '../../constants';
+import { applicationFacade } from '../../services/applicationFacade';
 import { useCommittedTextDraft } from '../../hooks/useCommittedTextDraft';
 import { Button } from '../../components';
 import { createStyles } from './styles';
 
-const FALLBACK_PROMPT = 'You are a helpful AI assistant.';
-
 /**
- * A LEAF draft component. Typing moves local state only: the committed prompt reaches the store
- * once, on Save, so a character can no longer trigger a settings replacement, an AsyncStorage
- * write, or a per-keystroke sync mutation. Partial text never becomes cross-device state.
+ * A LEAF draft component. Typing moves local state only; the prompt is committed once, on Save,
+ * through the ONE typed settings command - so shared normalizes it (CRLF folded, whitespace
+ * trimmed, a cleared prompt restored to this device's default), refuses a bad value atomically,
+ * and publishes at most one mutation for a change that actually moved. A draft that differs from
+ * the committed prompt only in typing noise now publishes nothing at all.
  */
 export const SystemPromptSection: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  // Narrow selectors: this section re-renders for the prompt alone, not for every setting.
+  // Narrow selector: this section re-renders for the committed prompt alone, not for every setting.
   const committed = useAppStore(
-    state => state.settings?.systemPrompt ?? FALLBACK_PROMPT,
+    state => state.settings?.systemPrompt ?? APP_CONFIG.defaultSystemPrompt,
   );
-  const updateSettings = useAppStore(state => state.updateSettings);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
-  const commit = useCallback(
-    (systemPrompt: string) => {
-      updateSettings({ systemPrompt });
-    },
-    [updateSettings],
-  );
+  const commit = useCallback(async (systemPrompt: string) => {
+    const outcome = await applicationFacade().models.settings.save({
+      patch: { systemPrompt },
+    });
+    if (!outcome.ok) {
+      // Thrown so the draft survives with the command's own message; nothing was committed.
+      throw new Error(modelsFailureMessage(outcome.failure));
+    }
+    // The value IS committed on this device. A failed publish is a sync warning, never a rollback.
+    setSyncWarning(
+      outcome.value.syncFailure
+        ? `Saved on this device. Your other devices did not get it: ${modelsFailureMessage(
+            outcome.value.syncFailure,
+          )}`
+        : null,
+    );
+  }, []);
 
   const draft = useCommittedTextDraft(committed, commit);
 
@@ -49,6 +63,11 @@ export const SystemPromptSection: React.FC = () => {
       {draft.error ? (
         <Text style={styles.draftError} accessibilityLiveRegion="polite">
           {draft.error}
+        </Text>
+      ) : null}
+      {!draft.error && syncWarning ? (
+        <Text style={styles.draftWarning} accessibilityLiveRegion="polite">
+          {syncWarning}
         </Text>
       ) : null}
       {draft.isDirty ? (
