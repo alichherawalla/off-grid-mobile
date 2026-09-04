@@ -34,7 +34,8 @@ export async function executeMobileImageGeneration(
   options: SharedImageGenerationOptions,
 ): Promise<GeneratedImage> {
   const models = applicationFacade().models;
-  await models.refresh();
+  const refreshed = await models.refresh();
+  if (!refreshed.ok) throw new Error(modelsFailureMessage(refreshed.failure));
   const { routeId, ...operation } = input;
   let result: GenerationResult | null = null;
   for await (const event of models.generate({
