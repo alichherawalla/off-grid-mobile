@@ -106,6 +106,138 @@ function assignedSelectionKeys(node) {
   return keys;
 }
 
+/**
+ * ---- residency-admission-has-one-owner -----------------------------------------------------------
+ *
+ * THE INVARIANT: every LOCAL model that can stay resident in memory loads through
+ * `ModelResidencyManager`, which owns admission, co-residency, eviction, leases, budgeting,
+ * overrides and reclaim failures. Platform code performs the native load/unload ONLY as an adapter
+ * the manager invokes, and never decides residency policy. Call direction is fixed:
+ * app -> `ModelsFacade` -> residency manager -> native adapter.
+ *
+ * WHY A GATE AND NOT A COMMENT: `src/services/adapters/native/modelLoaders.ts` states this
+ * invariant in its own header. The claim is TRUE at HEAD - its one caller goes through the manager -
+ * and nothing stopped the next call site from making it false, while the comment kept reassuring
+ * every reader either way. A true claim with no enforcement decays into a false one silently, and
+ * the comment is what makes the decay invisible. This is the desktop rule, same shape.
+ *
+ * HOW IT MATCHES: on the engine MODULE, never on a receiver name - an earlier scan of ours anchored
+ * on a receiver and was blind to every injected facade, i.e. every hexagonal file. It records the
+ * bindings a file gets from an engine module (static, namespace, or `const { x } = await
+ * import(...)`) and only then looks at lifecycle member calls on those bindings, so renaming the
+ * binding cannot evade it.
+ *
+ * BLIND SPOTS - stated because a gate that silently misses a bypass is as bad as the comment:
+ * an INJECTED PORT (a file handed an engine port as a parameter has no import to anchor on; this is
+ * also how the legitimate path works, and the import graph is what narrows it); a RE-EXPORT CHAIN;
+ * a COMPUTED MEMBER `engine[name]()`; anything outside TypeScript. And the short-lived-process
+ * carve-out is where it is weakest: a process INTENDED to exit can survive a kill and still hold
+ * model memory, so that carve-out must mean PROVEN exited - which is a runtime fact this rule cannot
+ * see. Do not widen it on the strength of a comment.
+ */
+const residencyEngineModules = new Map([
+  ['services/llm', 'llama text engine'],
+  ['services/litert', 'LiteRT text engine'],
+  ['services/localDreamGenerator', 'ONNX image engine'],
+]);
+/** Members that CHANGE residency. Deliberately not generation members: those consume, not admit. */
+const residencyLifecycleMembers = new Set([
+  'loadModel',
+  'unloadModel',
+  'initialize',
+  'release',
+  'warm',
+  'evict',
+  'unload',
+  'load',
+]);
+/**
+ * The only files that may touch a native lifecycle member, each because the manager invokes it or
+ * composes what it invokes. SHORT by design: if this needs to grow, the call direction is wrong.
+ */
+const residencyAdapterFiles = new Set([
+  'src/services/adapters/native/modelLoaders.ts',
+  'src/services/adapters/native/modelLifecycle.ts',
+  'src/services/modelServices/textEnginePorts.ts',
+]);
+const engineModuleFor = specifier => {
+  for (const [suffix, label] of residencyEngineModules) {
+    const bare = suffix.split('/').at(-1);
+    if (specifier.endsWith(`/${bare}`) || specifier === `./${bare}` || specifier.endsWith(suffix)) {
+      return label;
+    }
+  }
+  return null;
+};
+
+function checkResidencyAdmission(fileName, source) {
+  if (residencyAdapterFiles.has(fileName)) return;
+  if ([...residencyEngineModules.keys()].some(suffix => fileName === `src/${suffix}.ts`)) return;
+  const bindings = new Map();
+  const bind = (name, label) => {
+    if (name) bindings.set(name, label);
+  };
+  const collect = node => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const label = engineModuleFor(node.moduleSpecifier.text);
+      if (label && node.importClause) {
+        const named = node.importClause.namedBindings;
+        if (named && ts.isNamedImports(named)) {
+          for (const element of named.elements) bind(element.name.text, label);
+        }
+        if (named && ts.isNamespaceImport(named)) bind(named.name.text, label);
+        if (node.importClause.name) bind(node.importClause.name.text, label);
+      }
+    }
+    if (ts.isVariableDeclaration(node) && node.initializer) {
+      const initializer = ts.isAwaitExpression(node.initializer)
+        ? node.initializer.expression
+        : node.initializer;
+      if (
+        ts.isCallExpression(initializer) &&
+        initializer.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        initializer.arguments[0] &&
+        ts.isStringLiteral(initializer.arguments[0])
+      ) {
+        const label = engineModuleFor(initializer.arguments[0].text);
+        if (label) {
+          if (ts.isObjectBindingPattern(node.name)) {
+            for (const element of node.name.elements) {
+              if (ts.isIdentifier(element.name)) bind(element.name.text, label);
+            }
+          } else if (ts.isIdentifier(node.name)) {
+            bind(node.name.text, label);
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(source);
+  if (bindings.size === 0) return;
+  const inspect = node => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        bindings.has(callee.expression.text) &&
+        residencyLifecycleMembers.has(callee.name.text)
+      ) {
+        report(
+          'residency-admission-has-one-owner',
+          fileName,
+          source,
+          node,
+          `native lifecycle call outside the residency adapter: ${callee.expression.text}.${callee.name.text}() on the ${bindings.get(callee.expression.text)}`,
+        );
+      }
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+}
+
 function report(rule, file, source, node, detail) {
   findings.push({ rule, file, line: lineOf(source, node), detail });
 }
@@ -114,6 +246,7 @@ for (const file of files) {
   const text = fs.readFileSync(file, 'utf8');
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const fileName = relative(file);
+  checkResidencyAdmission(fileName, source);
   const isUi = /^src\/(components|hooks|screens)\//.test(fileName);
   const isAdapter =
     /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(
