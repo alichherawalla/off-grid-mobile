@@ -5,6 +5,7 @@ import {
   type OffGridPlatformPorts,
 } from '@offgrid/application';
 import { generateId } from '../../utils/generateId';
+import logger from '../../utils/logger';
 import { registerApplicationFacade } from '../applicationFacade';
 import {
   mobileRagEmbeddings,
@@ -25,6 +26,32 @@ export type MobileApplicationPortsFactory =
 
 let extensionPortsFactory: MobileApplicationPortsFactory | null = null;
 let application: OffGridApplication | null = null;
+let releaseFailureObserver: (() => void) | null = null;
+
+function observeApplicationFailures(value: OffGridApplication): void {
+  releaseFailureObserver ??= value.events(({domain, event}) => {
+    if (
+      (domain !== 'rag' && domain !== 'sync') ||
+      event.type !== 'operation_failed'
+    ) {
+      return;
+    }
+    logger.error('[Application] Domain operation failed', {
+      domain,
+      operation: event.operation,
+      failure: event.failure,
+    });
+  });
+}
+
+function reportDegradedStart(
+  result: Awaited<ReturnType<OffGridApplication['start']>>,
+): Awaited<ReturnType<OffGridApplication['start']>> {
+  for (const {domain, reason} of result.degraded) {
+    logger.error('[Application] Domain startup degraded', {domain, reason});
+  }
+  return result;
+}
 
 /** Register optional paid-domain ports before any consumer starts the application. */
 export function registerMobileApplicationPorts(
@@ -59,6 +86,7 @@ function createMobileApplication(): OffGridApplication {
 
 export function getMobileApplication(): OffGridApplication {
   application ??= createMobileApplication();
+  observeApplicationFailures(application);
   return application;
 }
 
@@ -69,7 +97,11 @@ let starting: ReturnType<OffGridApplication['start']> | null = null;
 export function startMobileApplication(): ReturnType<
   OffGridApplication['start']
 > {
-  starting ??= getMobileApplication().start();
+  const current = getMobileApplication();
+  starting ??= current.start().then(reportDegradedStart, error => {
+    logger.error('[Application] Startup failed', error);
+    throw error;
+  });
   return starting;
 }
 
@@ -77,6 +109,8 @@ export async function stopMobileApplication(): Promise<void> {
   try {
     await application?.stop();
   } finally {
+    releaseFailureObserver?.();
+    releaseFailureObserver = null;
     starting = null;
   }
 }
