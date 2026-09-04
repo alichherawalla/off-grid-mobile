@@ -14,8 +14,7 @@ export function mobileLoadPolicyPorts(): LoadPolicyTransitionPorts {
       const outcome = await applicationFacade().models.eject();
       if (!outcome.ok) {
         throw new Error(
-          `Load-policy ejection failed (${outcome.failure.kind})`,
-          { cause: outcome.failure },
+          `Load-policy ejection failed: ${JSON.stringify(outcome.failure)}`,
         );
       }
       return outcome.value;
