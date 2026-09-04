@@ -1,4 +1,4 @@
-import { initLlama, LlamaContext } from 'llama.rn';
+import { LlamaContext } from 'llama.rn';
 import {
   cumulativeTextDelta,
   chatTemplateSupportsReasoning,
@@ -12,7 +12,6 @@ import {
   nativeBackendForLoad,
   type ModelReasoningMetadata,
 } from '@offgrid/models';
-import type { NativeLoadService } from '@offgrid/models';
 import { nativeTextLoad } from './composition/text-load';
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
@@ -20,7 +19,7 @@ import { APP_CONFIG } from '../constants';
 import { Message } from '../types';
 import { MultimodalSupport, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
-import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from './llmNativeLog';
+import { ensureNativeLogCapture, resetNativeLogCapture } from './llmNativeLog';
 
 import { HTP_ENABLED } from '../config/featureFlags';
 
@@ -104,11 +103,6 @@ export interface ContextInitResult {
   gpuAttemptFailed: boolean;
   actualLength: number;
 }
-/** Safely release a context, swallowing errors (used during fallback cleanup). */
-async function safeRelease(ctx: LlamaContext | null): Promise<void> {
-  if (!ctx) return;
-  try { await ctx.release(); } catch (e) { logger.warn('[LLM] Error releasing context during fallback:', e); }
-}
 /** Native llama.rn port. Shared owns timeout and fallback policy/workflow. */
 export async function initContextWithFallback(
   params: object,
@@ -137,25 +131,6 @@ export async function initContextWithFallback(
     gpuLayers: nGpuLayers,
   });
 }
-/** llama.rn init/release and log capture. Shared owns the fallback ladder. */
-export function mobileNativeLoadPorts(): ConstructorParameters<typeof NativeLoadService<LlamaContext>>[0] {
-  return {
-    initialize: input => initLlama({
-      ...input.params,
-      n_ctx: input.contextLength,
-      n_gpu_layers: input.gpuLayers,
-    } as any),
-    release: context => safeRelease(context),
-    nativeFailureDetail: recentNativeLog,
-    reportAttempt: attempt => logger.log(
-      `[LLM] ${attempt.kind}: ${attempt.backend} init (ctx=${attempt.contextLength}, gpu_layers=${attempt.gpuLayers})`,
-    ),
-    reportFailure: (attempt, error: any) => logger.warn(
-      `[LLM] ${attempt.kind} failed (${attempt.backend}, ctx=${attempt.contextLength}): ${error?.message || String(error)}`,
-    ),
-  };
-}
-
 export interface GpuInfo {
   gpuEnabled: boolean;
   gpuReason: string;
