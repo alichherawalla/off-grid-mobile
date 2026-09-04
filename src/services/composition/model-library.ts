@@ -1,7 +1,6 @@
 // Composition root: shared model-library services over Mobile's registry, filesystem, and native
 // lifecycle ports (each exported as a function from its former site).
 import {
-  ArtifactVerificationService,
   ChatModelReadinessService,
   ClassifierProvisioningService,
   ImageArchiveImportService,
@@ -18,11 +17,6 @@ import type { ClassifierModel } from '../classifierProvisioning';
 import type { MobileVisionRepairApplication } from '../adapters/models/library/visionRepairApplicationAdapter';
 import { MemoryOverrideService, once } from '@offgrid/models';
 
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports1 = (): typeof import('../adapters/models/artifactVerificationFilePort') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../adapters/models/artifactVerificationFilePort') as typeof import('../adapters/models/artifactVerificationFilePort');
 // Resolved at call time: this module reaches back into the composition, and an eager import
 // would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
 const ports2 = (): typeof import('../modelServices/bootstrap/registryPorts') =>
@@ -102,15 +96,6 @@ export function modelFileImport(
 export const imageArchiveImport = once(
   () => new ImageArchiveImportService(ports7().mobileImageArchiveImportPorts()),
 );
-/** Verification over the React Native filesystem; a caller may add a checksum port. */
-export const artifactVerification = once(
-  () => new ArtifactVerificationService(ports1().mobileArtifactVerificationFiles),
-);
-export function artifactVerificationWith(
-  extra: Partial<ConstructorParameters<typeof ArtifactVerificationService>[0]>,
-): ArtifactVerificationService {
-  return new ArtifactVerificationService({ ...ports1().mobileArtifactVerificationFiles, ...extra });
-}
 export const classifierProvisioning = once(
   () => new ClassifierProvisioningService<ModelFile, ClassifierModel>(ports8().mobileClassifierProvisioningPorts()),
 );

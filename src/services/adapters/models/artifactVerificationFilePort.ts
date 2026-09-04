@@ -1,6 +1,5 @@
 import { Buffer } from 'buffer';
 import type { ArtifactVerificationFilePort } from '@offgrid/models';
-import { artifactVerification } from '../../composition/model-library';
 import RNFS from 'react-native-fs';
 import { statFile } from '../../../utils/fileStat';
 
@@ -20,5 +19,3 @@ export const mobileArtifactVerificationFiles: ArtifactVerificationFilePort = {
     await RNFS.unlink(path);
   },
 };
-
-export const mobileArtifactVerification = artifactVerification();

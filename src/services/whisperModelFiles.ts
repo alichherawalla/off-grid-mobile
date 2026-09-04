@@ -8,7 +8,7 @@
 import RNFS from 'react-native-fs';
 import { artifactVerificationError } from '@offgrid/models';
 import logger from '../utils/logger';
-import { mobileArtifactVerification } from './adapters/models/artifactVerificationFilePort';
+import { artifactVerification } from './composition/artifact-verification';
 
 /**
  * Minimum valid model file size in bytes (10 MB).
@@ -47,7 +47,7 @@ export async function listDownloadedModels(): Promise<
   const verified = await Promise.all(
     entries.map(async file => ({
       file,
-      verification: await mobileArtifactVerification.verify({
+      verification: await artifactVerification().verify({
         path: file.path,
         name: file.name,
         origin: 'inventory',
@@ -82,7 +82,7 @@ export async function validateModelFile(modelPath: string): Promise<void> {
     format: 'whisper' as const,
     origin: 'runtime' as const,
   };
-  const result = await mobileArtifactVerification.verify(request);
+  const result = await artifactVerification().verify(request);
   if (!result.valid) {
     throw new Error(artifactVerificationError(request, result));
   }

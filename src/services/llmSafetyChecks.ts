@@ -4,7 +4,7 @@ import {
   runWithNativeInferenceRecovery,
 } from '@offgrid/models';
 import logger from '../utils/logger';
-import { mobileArtifactVerification } from './adapters/models/artifactVerificationFilePort';
+import { artifactVerification } from './composition/artifact-verification';
 
 /**
  * GGUF magic number — first 4 bytes of every valid GGUF file.
@@ -26,7 +26,7 @@ export async function validateModelFile(
       origin: 'runtime' as const,
       removeInvalid: false,
     };
-    const result = await mobileArtifactVerification.verify(request);
+    const result = await artifactVerification().verify(request);
     if (result.valid) {
       logger.log(
         `[LLM] Model file size: ${(result.sizeBytes / (1024 * 1024)).toFixed(1)}MB (${result.sizeBytes} bytes)`,
