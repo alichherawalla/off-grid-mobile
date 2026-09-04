@@ -24,7 +24,10 @@ import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
 import { useChatScreen } from './useChatScreen';
-import { MessageRenderer } from './MessageRenderer';
+import {
+  useChatRowRenderer,
+  useChatScrollTracker,
+} from './useChatListCallbacks';
 import { NoModelScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 import { ChatMessageArea } from './ChatMessageArea';
@@ -185,6 +188,13 @@ export const ChatScreen: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interfaceMode]);
 
+  // Both stable, and both declared BEFORE the no-model early return so the hook order never varies.
+  const handleScroll = useChatScrollTracker(
+    isNearBottomRef,
+    chat.setShowScrollToBottom,
+  );
+  const renderItem = useChatRowRenderer(chat);
+
   const alertEl = (
     <CustomAlert
       visible={chat.alertState.visible}
@@ -217,32 +227,6 @@ export const ChatScreen: React.FC = () => {
   // Model loading is shown inline (a "Loading model" bar above the input via
   // ChatMessageArea), so the chat stays visible while a text/image model loads —
   // no full-screen takeover.
-
-  const handleScroll = (event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distFromBottom =
-      contentSize.height - layoutMeasurement.height - contentOffset.y;
-    isNearBottomRef.current = distFromBottom < 100;
-    chat.setShowScrollToBottom(!isNearBottomRef.current);
-  };
-
-  const renderItem = ({ item, index }: { item: any; index: number }) => (
-    <MessageRenderer
-      item={item}
-      index={index}
-      displayMessagesLength={chat.displayMessages.length}
-      animateLastN={chat.animateLastN}
-      imageModelLoaded={chat.imageModelLoaded}
-      isStreaming={chat.isStreaming}
-      isGeneratingImage={chat.isGeneratingImage}
-      showGenerationDetails={chat.settings.showGenerationDetails}
-      onCopy={chat.handleCopyMessage}
-      onRetry={chat.handleRetryMessage}
-      onEdit={chat.handleEditMessage}
-      onGenerateImage={chat.handleGenerateImageFromMessage}
-      onImagePress={chat.handleImagePress}
-    />
-  );
 
   const imageCount = countConversationImages(chat.activeConversation);
 

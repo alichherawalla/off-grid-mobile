@@ -149,6 +149,16 @@ const ModelStatusBar: React.FC<{
   return null;
 };
 
+// FlatList is a PureComponent: an inline literal or arrow here is a NEW prop on every render, so
+// it re-renders every mounted cell. These do not depend on render state, so they are declared once.
+const keyExtractor = (item: { id: string }) => item.id;
+const dismissKeyboard = () => Keyboard.dismiss();
+const MAINTAIN_VISIBLE_CONTENT_POSITION = {
+  minIndexForVisible: 0,
+  autoscrollToTopThreshold: 100,
+};
+const REMOVE_CLIPPED_SUBVIEWS = Platform.OS !== 'android';
+
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   flatListRef,
   isNearBottomRef,
@@ -223,6 +233,33 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const handleRepairVision = activeModelRepoId
     ? () => tabNav.navigate('DownloadManager')
     : undefined;
+  // Both depend only on refs, so they are created once and the list never sees a changed prop.
+  const handleContentSizeChange = React.useCallback(
+    (_width: number, height: number) => {
+      if (!hasScrolledRef.current && height > 0) {
+        // Initial layout: force scroll to bottom regardless of isNearBottom
+        flatListRef.current?.scrollToEnd({ animated: false });
+        hasScrolledRef.current = true;
+      } else if (isNearBottomRef.current) {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }
+    },
+    [flatListRef, isNearBottomRef],
+  );
+  const handleListLayout = React.useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      const newHeight = event.nativeEvent.layout.height;
+      const prevHeight = flatListHeightRef.current;
+      flatListHeightRef.current = newHeight;
+      if (prevHeight > 0 && newHeight < prevHeight) {
+        setTimeout(
+          () => flatListRef.current?.scrollToEnd({ animated: true }),
+          50,
+        );
+      }
+    },
+    [flatListRef],
+  );
   const scrollToBottomStyle = useMemo(
     () => [styles.scrollToBottomContainer, { bottom: inputHeight + 8 }],
     [styles.scrollToBottomContainer, inputHeight],
@@ -258,39 +295,18 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           ref={flatListRef}
           data={chat.displayMessages}
           renderItem={renderItem}
-          keyExtractor={item => item.id}
+          keyExtractor={keyExtractor}
           extraData={interfaceMode}
           contentContainerStyle={styles.messageList}
           onScroll={handleScroll}
-          onContentSizeChange={(_w, h) => {
-            if (!hasScrolledRef.current && h > 0) {
-              // Initial layout: force scroll to bottom regardless of isNearBottom
-              flatListRef.current?.scrollToEnd({ animated: false });
-              hasScrolledRef.current = true;
-            } else if (isNearBottomRef.current) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-            }
-          }}
-          onLayout={e => {
-            const newHeight = e.nativeEvent.layout.height;
-            const prevHeight = flatListHeightRef.current;
-            flatListHeightRef.current = newHeight;
-            if (prevHeight > 0 && newHeight < prevHeight) {
-              setTimeout(
-                () => flatListRef.current?.scrollToEnd({ animated: true }),
-                50,
-              );
-            }
-          }}
+          onContentSizeChange={handleContentSizeChange}
+          onLayout={handleListLayout}
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          onTouchStart={() => Keyboard.dismiss()}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-            autoscrollToTopThreshold: 100,
-          }}
-          removeClippedSubviews={Platform.OS !== 'android'}
+          onTouchStart={dismissKeyboard}
+          maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
+          removeClippedSubviews={REMOVE_CLIPPED_SUBVIEWS}
         />
       )}
       {chat.showScrollToBottom && chat.displayMessages.length > 0 && (
