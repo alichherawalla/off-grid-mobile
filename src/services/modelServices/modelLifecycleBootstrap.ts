@@ -1,6 +1,5 @@
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
-  ejectModelResidency,
   ensurePersistentResident,
   modelLoadRefusal,
   runIndependentUnloads,
@@ -9,7 +8,6 @@ import {
 } from '@offgrid/models';
 import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import { applicationFacade } from '../applicationFacade';
-import { activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { whisperService } from '../whisperService';
@@ -223,33 +221,3 @@ export async function unloadAllModels(
   });
 }
 
-export async function ejectAllModels(): Promise<{ count: number }> {
-  // Which modalities a remote route answers is the active route's fact, per modality.
-  const remoteModalities = (['text', 'image', 'transcription', 'voice'] as const).filter(modality =>
-    activeRouteIsRemote(modality),
-  );
-  const hasRemote = remoteModalities.length > 0;
-  logger.log(`[MODEL-SM] ejectAll → start hasRemote=${hasRemote}`);
-  // NOT `models.eject()`. This function IS the implementation behind it: mobile registers
-  // `ejectAll: ejectAllModels` as the facade's ejection port, so calling the facade here would
-  // recurse - the trap now recorded on `ModelsFacade.eject` itself.
-  //
-  // So it calls SHARED's workflow directly instead of the workspace's lifecycle service.
-  // `ejectModelResidency` is the same function that service delegated to, and `ejectedModelCount`
-  // inside it stays the one owner of what "ejected" counts - nothing about the policy moved into
-  // the app. The two things the service added on top, clearing remote routes and the inventory
-  // refresh, are mobile's own `lifecycleProjectionPort`, which mobile already registers.
-  const ejected = await ejectModelResidency({
-    manager: applicationFacade().models.residency,
-    localUnloads: {
-      textUnloaded: () => unloadTextModel(true),
-      imageUnloaded: () => unloadImageModel(true),
-    },
-    remoteModalities,
-    clearRemoteRoute: modality =>
-      lifecycleProjectionPort.selectRoute(modality, null),
-  });
-  await lifecycleProjectionPort.refreshInventory();
-  logger.log(`[MODEL-SM] ejectAll → done count=${ejected.count}`);
-  return { count: ejected.count };
-}

@@ -1,21 +1,38 @@
-import type { ModelEjectionService } from '@offgrid/models';
+import type { ModelEjectionService, ModelModality } from '@offgrid/models';
 import { imageGenerationService } from '../imageGenerationService';
 import { stopActiveMobileChatSession } from './chatSessionControl';
-import { ejectAllModels } from './modelLifecycleBootstrap';
+import { activeRouteIsRemote } from './activeRoute';
+import { lifecycleProjectionPort } from './lifecycleProjectionPort';
+import { unloadImageModel, unloadTextModel } from './modelLifecycleBootstrap';
+
+const EJECTABLE_MODALITIES = ['text', 'image', 'transcription', 'voice'] as const;
 
 /**
- * Cancellation and native teardown ports. Shared owns their order.
+ * The platform half of full ejection. PRIMITIVES ONLY - shared owns the order.
  *
- * Genuine platform operations only. Per-resident eviction is NOT here: it is residency's own
- * capability, supplied to the ejection service by the composer. An earlier version of this file
- * implemented it by calling `models.evictWhenReleased`, which closed a control loop - facade, out to
- * this adapter, back into the facade - and made an app adapter a hop inside shared's coordination.
- * The port no longer carries the member, so that cannot be written here again.
+ * Two earlier versions of this file were the wrong level. One implemented `evict(key)` by calling
+ * `models.evictWhenReleased`; the other supplied `ejectAll`, which assembled
+ * `ejectModelResidency` and reached back through `applicationFacade().models.residency` to run it.
+ * Both made the call graph run facade -> shared service -> this adapter -> facade, so the workflow
+ * was owned here while appearing to be shared's. Neither member exists on the port now.
+ *
+ * The rule: no implementation of a `ModelsFacade` outbound port may call back into the facade. This
+ * file imports no facade at all, which is the enforceable form of that.
  */
 export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEjectionService>[0] {
   return {
     cancelActiveGeneration: async () => { stopActiveMobileChatSession(); },
     cancelActiveImageGeneration: () => imageGenerationService.cancelGeneration(),
-    ejectAll: ejectAllModels,
+    // The two local runtimes this device can unload. Shared counts the answers; it does not need to
+    // know the names.
+    localUnloads: {
+      textUnloaded: () => unloadTextModel(true),
+      imageUnloaded: () => unloadImageModel(true),
+    },
+    // Which modalities a remote server answers is the active route's fact, per modality.
+    remoteModalities: (): readonly ModelModality[] =>
+      EJECTABLE_MODALITIES.filter(modality => activeRouteIsRemote(modality)),
+    clearRemoteRoute: modality => lifecycleProjectionPort.selectRoute(modality, null),
+    refreshInventory: () => lifecycleProjectionPort.refreshInventory(),
   };
 }
