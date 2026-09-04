@@ -11,7 +11,7 @@
  */
 import { Platform } from 'react-native';
 import { hardwareService } from '../../src/services/hardware';
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
+import { modelResidencyManager, resetModelApplication } from './activeModelLifecycle';
 import type { LoadPolicy } from '../../src/services/memoryBudget';
 import type { ResidentSpec } from '@offgrid/models';
 
@@ -26,21 +26,20 @@ export interface DeviceMemory {
 }
 
 /** Seed the device's RAM + platform + policy and reset the REAL residency manager to empty. */
-export function setDeviceMemory(d: DeviceMemory): void {
+export async function setDeviceMemory(d: DeviceMemory): Promise<void> {
   Object.defineProperty(Platform, 'OS', { value: d.platform, configurable: true });
   jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(d.totalGB);
   jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(d.availGB);
   jest.spyOn(hardwareService, 'refreshMemoryInfo').mockResolvedValue(undefined as never);
-  modelResidencyManager._reset();
-  modelResidencyManager.setBudgetOverrideMB(null);
+  await resetModelApplication();
   modelResidencyManager.setLoadPolicy(d.policy ?? 'balanced');
 }
 
 /** Restore Platform.OS + spies after a test. */
-export function resetDeviceMemory(): void {
+export async function resetDeviceMemory(): Promise<void> {
   Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
   jest.restoreAllMocks();
-  modelResidencyManager._reset();
+  await resetModelApplication();
 }
 
 const MB = 1 / 1024; // GB per MB, for readable specs
