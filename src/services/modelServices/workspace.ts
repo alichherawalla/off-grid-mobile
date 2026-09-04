@@ -2,31 +2,20 @@ import {
   DERIVED_TEXT_MODALITIES,
   type DerivedTextModality,
   createModelWorkspace,
-  type ConversationPort,
   type RemoteServerApplicationPorts,
-  type ToolExecutorPort,
 } from '@offgrid/models';
 import { generateId } from '../../utils/generateId';
 import { mobileModelSelectionStore } from './selectionStore';
+import { mobileConversationPort, mobileToolExecutor } from './toolExecutorPorts';
 import { mobileModelLifecyclePorts } from './modelLifecyclePorts';
 import { mobileModelMemoryAdvisoryPorts } from './modelMemoryAdvisoryPorts';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { Platform } from 'react-native';
 import { hardwareService } from '../hardware';
+import { remoteTextTransportRegistry } from '../adapters/providers/registry';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { classifierExecutionAdapter } from '../adapters/native/classifierExecutionAdapter';
 import logger from '../../utils/logger';
-
-// Tool and conversation ports are resolved at call time: their modules reach back into this
-// composition (text engine, generation adapters), and a module-level import would form a cycle.
-const lazyTools: ToolExecutorPort = {
-  prepare: (call, context) => toolPorts().mobileToolExecutor.prepare?.(call, context) ?? call,
-  execute: (call, context) => toolPorts().mobileToolExecutor.execute(call, context),
-};
-const lazyConversations: ConversationPort = {
-  append: (identity, message) => toolPorts().mobileConversationPort.append(identity, message),
-};
-function toolPorts(): typeof import('./toolPorts') {
-  return require('./toolPorts') as typeof import('./toolPorts');
-}
 
 // Remote-server I/O reaches transports and stores that in turn reach this composition, so it is
 // resolved at call time as well. Every member delegates; nothing is decided here.
@@ -76,10 +65,8 @@ const lazyRemote: RemotePorts = {
   },
 };
 
-// Remote reachability, read at call time from the transport registry and server health.
+// Remote reachability, from the transport registry and server health.
 function remoteStatus(serverId: string): { ready: boolean; error?: string } {
-  const { remoteTextTransportRegistry } = require('../adapters/providers/registry') as typeof import('../adapters/providers/registry');
-  const { useRemoteServerStore } = require('../../stores/remoteServerStore') as typeof import('../../stores/remoteServerStore');
   const unhealthy = useRemoteServerStore.getState().serverHealth[serverId]?.status === 'unhealthy';
   return {
     ready: !!remoteTextTransportRegistry.get(serverId),
@@ -112,14 +99,13 @@ export const mobileWorkspace = createModelWorkspace({
     debug: (message, details) => logger.log(`[ModelResidency] ${message}`, details),
     warn: (message, details) => logger.warn(`[ModelResidency] ${message}`, details),
   },
-  generation: { tools: lazyTools, conversations: lazyConversations },
+  generation: { tools: mobileToolExecutor, conversations: mobileConversationPort },
   remote: lazyRemote,
   remoteServerId: generateId,
   // Ports for the services the facade composes on demand.
   lifecycle: mobileModelLifecyclePorts,
   memoryAdvisory: mobileModelMemoryAdvisoryPorts,
-  classifier: () =>
-    (require('../adapters/native/classifierExecutionAdapter') as typeof import('../adapters/native/classifierExecutionAdapter')).classifierExecutionAdapter,
+  classifier: () => classifierExecutionAdapter,
   remoteInventory: {
     // Mobile has no remote executor for the derived text routes yet; shared skips a route whose
     // executor is null.
