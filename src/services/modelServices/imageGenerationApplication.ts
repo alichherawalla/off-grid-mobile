@@ -20,7 +20,7 @@ import type { ActiveImageModel } from '../imageGenerationTypes';
 import { localDreamGeneratorService } from '../localDreamGenerator';
 import { reportModelFailure } from '../modelFailureHandler';
 import { executeMobileImageGeneration } from '../sharedImageGeneration';
-import { refreshMobileModelServices } from './index';
+import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { mobileResidencyIntents } from './residencyIntents';
 import {
   cancelActiveImageGenerationAtBoundary,
@@ -53,7 +53,7 @@ export function mobileImageGenerationApplicationPorts(): ImageGenerationApplicat
 > {
   return {
     async refreshInventory() {
-      await refreshMobileModelServices();
+      await lifecycleProjectionPort.refreshInventory();
     },
     createId: generateId,
     resolveSettings(request) {

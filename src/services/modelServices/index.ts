@@ -38,7 +38,9 @@ import { applicationFacade } from '../applicationFacade';
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({
-  refreshInventory: refreshMobileLLMServiceInventory,
+  // The full refresh: an inventory rebuild is only complete once the generation,
+  // transcription, voice and sidecar adapters have been reconciled against it.
+  refreshInventory: () => refreshMobileModelServices(),
   selectRoute: selectMobileRoute,
 });
 registerModelSelectionCommandPort({

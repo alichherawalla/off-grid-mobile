@@ -20,10 +20,6 @@ import { getToolsAsOpenAISchema } from '../tools';
 import { getToolExtensions } from '../tools/extensions';
 import { mobileTextEngineControl } from './textEngineControl';
 import { isMcpEnabled } from '../mcpContextBoost';
-import { executeMobileText } from '../mobileSidecarGeneration';
-import { mobileToolEmbeddingPort } from '../adapters/native/toolEmbeddingAdapter';
-import { mobileToolEmbeddingCache } from '../composition/tools';
-import { clearMobileEphemeralTextState } from './generationAdapters';
 import type { ToolCall } from '../tools/types';
 
 function toolCall(
@@ -60,15 +56,6 @@ export const mobileToolExecutor: ToolExecutorPort = {
   },
 };
 
-/** Embedding engine, cache, and model-selection text ports. Shared owns routing. */
-export function mobileToolRoutingPorts(): ConstructorParameters<typeof ToolRoutingService>[0] {
-  return {
-    embedding: mobileToolEmbeddingPort,
-    embeddingCache: mobileToolEmbeddingCache(),
-    modelSelection: generateToolRoutingText,
-  };
-}
-
 const toolRoutingService = (): ToolRoutingService => toolRouting();
 
 /** Build one shared schema projection from Mobile's raw tool registries. */
@@ -104,17 +91,6 @@ export async function mobileToolDefinitions(
     logger.warn(`[SharedTools] ${result.strategy} selection failed (${result.fallbackReason}); using all tools`);
   }
   return result.tools;
-}
-
-async function generateToolRoutingText(system: string, user: string): Promise<string> {
-  try {
-    return await executeMobileText([
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ], { profile: 'tool-routing' });
-  } finally {
-    await clearMobileEphemeralTextState();
-  }
 }
 
 function contentText(content: string | GenerationContentPart[]): string {
