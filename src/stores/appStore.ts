@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
@@ -36,6 +36,7 @@ import {
 } from '../services/sync/mutation';
 import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
 import { migratePersistedState } from './appStoreMigrations';
+import { changedSliceStorage } from './persistence/changedSliceStorage';
 import { defaultImageSteps, SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 
 type OnboardingChecklist = {
@@ -253,6 +254,52 @@ export const DEFAULT_SETTINGS: AppSettings = {
   liteRTMaxTokens: MOBILE_LITERT_SETTINGS_DEFAULTS.maxTokens,
 };
 
+/**
+ * The durable slice of the app store: settings, onboarding, counters, Pro admission and the
+ * generated-image gallery.
+ *
+ * Everything else the store holds is ephemeral projection state - the model load flag, the image
+ * generation flag/progress/status/preview - and is never reloaded.
+ */
+const persistedAppSlice = (state: AppState) => ({
+  themeMode: state.themeMode,
+  hasCompletedOnboarding: state.hasCompletedOnboarding,
+  onboardingChecklist: state.onboardingChecklist,
+  checklistDismissed: state.checklistDismissed,
+  settings: state.settings,
+  modelSettingProvenance: state.modelSettingProvenance,
+  generatedImages: state.generatedImages,
+  textGenerationCount: state.textGenerationCount,
+  imageGenerationCount: state.imageGenerationCount,
+  hasEngagedSharePrompt: state.hasEngagedSharePrompt,
+  hasRegisteredPro: state.hasRegisteredPro,
+  // Persisted so an eviction STICKS. Without it every relaunch starts at 'unknown', which grants
+  // access, and a device the owner removed is Pro again for as long as the roster takes to answer -
+  // or forever, if it never does because the app is offline.
+  proDeviceAdmission: state.proDeviceAdmission,
+  devProDisabled: state.devProDisabled,
+  proBannerDismissed: state.proBannerDismissed,
+  desktopPromoDismissed: state.desktopPromoDismissed,
+  proAhaTriggeredBy: state.proAhaTriggeredBy,
+  loadedSettings: state.loadedSettings,
+});
+
+export type PersistedAppSlice = ReturnType<typeof persistedAppSlice>;
+
+/**
+ * Ephemeral state shares this store with the gallery, so a plain JSON storage re-serialised every
+ * generated image on every transient `set`. Every durable update above replaces its field with a
+ * new value, so a reference compare writes exactly when durable state moves and never for a
+ * progress tick, a model load flag, or a status line.
+ */
+const appPersistStorage = changedSliceStorage<PersistedAppSlice>(
+  () => AsyncStorage,
+  (previous, next) =>
+    (Object.keys(next) as (keyof PersistedAppSlice)[]).every(
+      key => previous[key] === next[key],
+    ),
+);
+
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -414,34 +461,13 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'local-llm-app-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: appPersistStorage,
       merge: (persisted, current) =>
         migratePersistedState(persisted, current, {
           defaultSettings: DEFAULT_SETTINGS,
           documentsPath: RNFS.DocumentDirectoryPath,
         }),
-      partialize: state => ({
-        themeMode: state.themeMode,
-        hasCompletedOnboarding: state.hasCompletedOnboarding,
-        onboardingChecklist: state.onboardingChecklist,
-        checklistDismissed: state.checklistDismissed,
-        settings: state.settings,
-        modelSettingProvenance: state.modelSettingProvenance,
-        generatedImages: state.generatedImages,
-        textGenerationCount: state.textGenerationCount,
-        imageGenerationCount: state.imageGenerationCount,
-        hasEngagedSharePrompt: state.hasEngagedSharePrompt,
-        hasRegisteredPro: state.hasRegisteredPro,
-        // Persisted so an eviction STICKS. Without it every relaunch starts at 'unknown', which grants
-        // access, and a device the owner removed is Pro again for as long as the roster takes to answer -
-        // or forever, if it never does because the app is offline.
-        proDeviceAdmission: state.proDeviceAdmission,
-        devProDisabled: state.devProDisabled,
-        proBannerDismissed: state.proBannerDismissed,
-        desktopPromoDismissed: state.desktopPromoDismissed,
-        proAhaTriggeredBy: state.proAhaTriggeredBy,
-        loadedSettings: state.loadedSettings,
-      }),
+      partialize: persistedAppSlice,
     },
   ),
 );
