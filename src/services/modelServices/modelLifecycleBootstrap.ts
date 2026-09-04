@@ -13,7 +13,7 @@ import { whisperService } from '../whisperService';
 import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { modelLifecycle } from '../composition/model-runtime';
-import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './modelLifecyclePorts';
+import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './residentSpecs';
 
 export { resolveTextResidentSpec, resolveTranscriptionResidentSpec };
 

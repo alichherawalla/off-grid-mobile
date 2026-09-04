@@ -102,8 +102,11 @@ export const mobileWorkspace = createModelWorkspace({
   generation: { tools: mobileToolExecutor, conversations: mobileConversationPort },
   remote: lazyRemote,
   remoteServerId: generateId,
-  // Ports for the services the facade composes on demand.
-  lifecycle: mobileModelLifecyclePorts,
+  // Ports for the services the facade composes on demand. The lifecycle ports are handed the two
+  // residency reads they need at that moment: the workspace OWNS the residency manager, so this is
+  // where those reads legitimately come from, and it is why the ports no longer import the
+  // bootstrap alias back out of this module.
+  lifecycle: () => mobileModelLifecyclePorts(mobileWorkspace.residency),
   memoryAdvisory: mobileModelMemoryAdvisoryPorts,
   classifier: () => classifierExecutionAdapter,
   remoteInventory: {

@@ -4,17 +4,39 @@ import {
   type ResidentSpec,
   WHISPER_MODELS,
 } from '@offgrid/models';
-import type { ModelLifecycleApplicationService } from '@offgrid/models';
+import type {
+  ModelLifecycleApplicationService,
+  ModelResidencyManager,
+} from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from './activeRoute';
 import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { hardwareService } from '../hardware';
 import { estimateTextModelMemoryMB } from '../modelMemory';
 import { mobileRouteId } from './mobileRoute';
-import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 
-export async function resolveTextResidentSpec(modelId: string): Promise<ResidentSpec> {
+/**
+ * The ONLY two things a resident spec needs from residency: what is already resident, and whether
+ * this model has a session memory override.
+ *
+ * It is a parameter rather than an import because residency is created BY the workspace
+ * (`createModelWorkspace` builds the manager from the memory source and logger this app supplies),
+ * and the workspace composes these ports. Importing the live manager here made that a cycle -
+ * lifecycle ports -> residency bootstrap -> workspace -> lifecycle ports - and the bootstrap's
+ * `require('./workspace')` was the edge that closed it. Taking the reads as an argument points the
+ * dependency the way composition already runs: the workspace has the manager when it builds these
+ * ports, so it hands them the two reads and nothing here has to go looking for it.
+ */
+export type ResidencyReads = Pick<
+  ModelResidencyManager,
+  'getResidents' | 'hasSessionOverride'
+>;
+
+export async function textResidentSpec(
+  modelId: string,
+  residency: ResidencyReads,
+): Promise<ResidentSpec> {
   const store = useAppStore.getState();
   const model = store.downloadedModels.find(candidate => candidate.id === modelId);
   if (!model) throw new Error('Model not found');
@@ -31,10 +53,13 @@ export async function resolveTextResidentSpec(modelId: string): Promise<Resident
     sizeMB: await estimateTextModelMemoryMB(model, store.settings),
     dirtyMemory: model.engine === 'litert',
     residencyKey: 'mobile:text-engine',
-  }, modelResidencyManager.getResidents());
+  }, residency.getResidents());
 }
 
-async function imageSpec(modelId: string): Promise<ResidentSpec> {
+async function imageSpec(
+  modelId: string,
+  residency: ResidencyReads,
+): Promise<ResidentSpec> {
   await hardwareService.getDeviceInfo();
   const model = useAppStore.getState().downloadedImageModels.find(
     candidate => candidate.id === modelId,
@@ -55,10 +80,13 @@ async function imageSpec(modelId: string): Promise<ResidentSpec> {
     ),
     dirtyMemory: true,
     residencyKey: 'mobile:image-engine',
-  }, modelResidencyManager.getResidents());
+  }, residency.getResidents());
 }
 
-export function resolveTranscriptionResidentSpec(modelId: string): ResidentSpec {
+export function transcriptionResidentSpec(
+  modelId: string,
+  residency: ResidencyReads,
+): ResidentSpec {
   const model = WHISPER_MODELS.find(candidate => candidate.id === modelId);
   if (!model) throw new Error(`Unknown transcription model: ${modelId}`);
   const routeId = mobileRouteId({
@@ -74,24 +102,26 @@ export function resolveTranscriptionResidentSpec(modelId: string): ResidentSpec 
     sizeMB: model.size,
     residencyKey: 'mobile:transcription-engine',
     lifecycle: 'persistent',
-  }, modelResidencyManager.getResidents());
+  }, residency.getResidents());
 }
 
 /** Native load/unload handlers and route projection. Shared owns the lifecycle. */
-export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelLifecycleApplicationService>[1] {
+export function mobileModelLifecyclePorts(
+  residency: ResidencyReads,
+): ConstructorParameters<typeof ModelLifecycleApplicationService>[1] {
   return {
   async resolveLoad(modality, modelId, command) {
     if (modality === 'text') {
       const model = useAppStore.getState().downloadedModels.find(candidate => candidate.id === modelId);
       if (!model) throw new Error('Model not found');
       return {
-        spec: await resolveTextResidentSpec(modelId),
+        spec: await textResidentSpec(modelId, residency),
         routeId: mobileRouteId({ source: 'local', hostId: model.engine, modality, modelId }),
         handlers: {
           load: () => nativeModelLifecycle.loadTextModel(
             modelId,
             command.timeoutMs ?? modelLoadTimeoutMs('text'),
-            command.override || modelResidencyManager.hasSessionOverride(modelId),
+            command.override || residency.hasSessionOverride(modelId),
           ),
           unload: () => nativeModelLifecycle.unloadTextModel(true),
         },
@@ -101,7 +131,7 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
       const model = useAppStore.getState().downloadedImageModels.find(candidate => candidate.id === modelId);
       if (!model) throw new Error('Model not found');
       return {
-        spec: await imageSpec(modelId),
+        spec: await imageSpec(modelId, residency),
         routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
         handlers: {
           load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? modelLoadTimeoutMs('image')),
@@ -118,14 +148,16 @@ export function mobileModelLifecyclePorts(): ConstructorParameters<typeof ModelL
       ? nativeModelLifecycle.getState().loadedTextModelId ?? activeLocalModelId('text')
       : nativeModelLifecycle.getState().loadedImageModelId ?? activeLocalModelId('image');
     const spec = modelId
-      ? (text ? await resolveTextResidentSpec(modelId) : await imageSpec(modelId))
+      ? (text
+          ? await textResidentSpec(modelId, residency)
+          : await imageSpec(modelId, residency))
       : modelResidentSpec({
           modality,
           modelId: 'untracked',
           routeId: 'untracked',
           sizeMB: 0,
           residencyKey: text ? 'mobile:text-engine' : 'mobile:image-engine',
-        }, modelResidencyManager.getResidents());
+        }, residency.getResidents());
     return {
       key: spec.key,
       hadRuntime: !!modelId,
