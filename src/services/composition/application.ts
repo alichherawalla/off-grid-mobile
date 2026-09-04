@@ -1,6 +1,7 @@
 /** Mobile composition root. Shared owns the application and domain behavior; this file supplies I/O. */
 import {
   createOffGridApplication,
+  modelsFailureMessage,
   observeApplicationFailures,
   type NormalizedFailure,
   type OffGridApplication,
@@ -121,14 +122,62 @@ registerApplicationFacade(getMobileApplication);
 
 let starting: ReturnType<OffGridApplication['start']> | null = null;
 
+/**
+ * Recover the durable download journal once per application lifetime.
+ *
+ * A download interrupted by an app kill is only re-observed when something calls the PUBLIC
+ * inventory refresh: shared's `refresh` awaits its own private `hydrateDownloads()` before
+ * reconciling (`packages/application/src/models/projector-repair-facade.ts`). Hydration is a
+ * durable-recovery concern for the whole app lifetime, so the STARTUP LIFECYCLE owns it here -
+ * not a component effect, which would tie recovery to a render tree.
+ *
+ * Deliberately NOT awaited by `startMobileApplication`. It reads the native download database,
+ * which contends with in-flight writes, and the first screen must never wait on it.
+ *
+ * A refusal is reported, never dropped: the domain emits its own typed failure event (which the
+ * failure observer writes), and this adds the one fact the event cannot carry - that the missing
+ * work was cold-start recovery - as a late degradation on the snapshot, cleared on success so a
+ * later retry is not shadowed by a stale entry.
+ */
+function recoverDownloadJournal(current: OffGridApplication): void {
+  const report = (reason: string | null) =>
+    current.reportDegraded({
+      domain: 'models',
+      source: 'download recovery',
+      reason,
+    });
+  current.models
+    .refresh()
+    .then(outcome => {
+      if (outcome.ok) return report(null);
+      logger.error(
+        '[Application] Cold-start download recovery failed',
+        outcome.failure,
+      );
+      report(modelsFailureMessage(outcome.failure));
+    })
+    .catch(error => {
+      logger.error(
+        '[Application] Cold-start download recovery threw',
+        error,
+      );
+      report(error instanceof Error ? error.message : String(error));
+    });
+}
+
 export function startMobileApplication(): ReturnType<
   OffGridApplication['start']
 > {
   const current = getMobileApplication();
-  starting ??= current.start().then(reportDegradedStart, error => {
-    logger.error('[Application] Startup failed', error);
-    throw error;
-  });
+  starting ??= current
+    .start()
+    .then(result => {
+      recoverDownloadJournal(current);
+      return reportDegradedStart(result);
+    }, error => {
+      logger.error('[Application] Startup failed', error);
+      throw error;
+    });
   return starting;
 }
 

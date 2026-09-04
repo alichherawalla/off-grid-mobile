@@ -515,21 +515,25 @@ for (const file of files) {
   // controller, not start()-time ones, so the boot refresh takes the real hydration path even
   // though it runs before `startMobileApplication()`.
   //
-  // So the rule now checks the boot call that owns that chain. It deliberately does NOT match
-  // `.models.refresh(` on its own: App.tsx's other `models.refresh()` is inside `onForeground`,
-  // which fires only on a background->active AppState transition (`src/hooks/useAppState.ts:13-19`)
-  // and never at mount - so that spelling would let a foreground-only refresh satisfy a rule about
-  // bootstrap.
+  // The rule now names the STARTUP LIFECYCLE as the owner. Cold-start recovery is a durable
+  // concern for the whole app lifetime, so a component effect is the wrong owner - it would tie
+  // recovery to a render tree. `startMobileApplication` owns it, unawaited, because the refresh
+  // reads the native download database and the first screen must not wait on it.
+  //
+  // The rule deliberately does NOT accept App.tsx as the owner. App.tsx's own `models.refresh()`
+  // sits inside `onForeground`, which fires only on a background->active AppState transition
+  // (`src/hooks/useAppState.ts:13-19`) and never at mount, so a rule pointed at that file would be
+  // satisfied by a foreground-only refresh.
   if (
-    fileName === 'App.tsx' &&
-    !/\brefreshMobileModelServices\s*\(/.test(text)
+    fileName === 'src/services/composition/application.ts' &&
+    !/\.models\s*\n?\s*\.refresh\s*\(|\.models\.refresh\s*\(/.test(text)
   ) {
     report(
       'image-download-recovery-starts-at-bootstrap',
       fileName,
       source,
       source,
-      'bootstrap does not run the inventory refresh that hydrates the facade-owned download journal',
+      'application startup does not run the public refresh that hydrates the download journal',
     );
   }
 
