@@ -1,5 +1,5 @@
 import { classifyToolsNeeded, type GenerationIntent } from '@offgrid/models';
-import { generationIntent } from './composition/chat';
+import { generationIntent } from './composition/chat-services';
 import { classifyMobileIntent, type ClassifyOptions } from './intentClassifierPorts';
 
 /** Consumer-facing handle on the composed generation-intent service. */

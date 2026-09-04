@@ -1,5 +1,5 @@
 import type { ImagePromptEnhancementService } from '@offgrid/models';
-import { imagePromptEnhancement } from './composition/chat';
+import { imagePromptEnhancement } from './composition/chat-services';
 import { PROMPT_ENHANCEMENT_STATUS } from '@offgrid/sync';
 import { useAppStore, useChatStore } from '../stores';
 import logger from '../utils/logger';

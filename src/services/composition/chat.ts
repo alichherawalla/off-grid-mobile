@@ -4,11 +4,7 @@ import {
   ChatContextApplicationService,
   ChatOperationApplicationService,
   ChatSessionService,
-  ContextCompactionService,
-  GenerationIntentService,
-  ImagePromptEnhancementService,
   once,
-  type CompactableGenerationMessage,
 } from '@offgrid/models';
 import type { ModelsChatPlatformPort } from '@offgrid/application';
 import {
@@ -21,12 +17,11 @@ import {
   subscribeMobileChatQueue,
   subscribeMobileChatSessionEvents,
 } from '../adapters/models/mobileChatHostPort';
-import { mobileContextCompactionPorts } from '../contextCompactionPorts';
+import { contextCompaction, generationIntent } from './chat-services';
 
-export const contextCompaction = once(
-  () => new ContextCompactionService<CompactableGenerationMessage>(mobileContextCompactionPorts()),
-);
-export const generationIntent = once(() => new GenerationIntentService());
+// Re-exported so the existing import paths keep resolving; the owner is `chat-services`.
+export { contextCompaction, generationIntent, imagePromptEnhancement } from './chat-services';
+
 export const chatOperation = once(
   () => new ChatOperationApplicationService(mobileChatOperationPorts(generationIntent())),
 );
@@ -60,9 +55,3 @@ export const modelsChatPort: ModelsChatPlatformPort = {
     chatSession().stopConversation(conversationId, reason),
   invalidate: conversationId => invalidateMobileChatSession(conversationId),
 };
-/** One enhancement service per request; its ports carry that request's chat card. */
-export function imagePromptEnhancement(
-  ports: ConstructorParameters<typeof ImagePromptEnhancementService>[0],
-): ImagePromptEnhancementService {
-  return new ImagePromptEnhancementService(ports);
-}

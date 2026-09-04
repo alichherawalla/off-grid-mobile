@@ -5,7 +5,7 @@ import type {
   ContextCompactionService,
   GenerationMessage,
 } from '@offgrid/models';
-import { contextCompaction } from './composition/chat';
+import { contextCompaction } from './composition/chat-services';
 import { mobileCompactionOptions } from './contextCompactionPorts';
 
 const sharedCompaction = (): ContextCompactionService<CompactableGenerationMessage> => contextCompaction();
