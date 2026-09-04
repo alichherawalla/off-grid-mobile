@@ -99,6 +99,29 @@ function consumeAlreadyProjectedFailure(): void {
   // rejection only to prevent an unhandled promise rejection.
 }
 
+/**
+ * Run `refresh` when one of `slices` MOVED, and not otherwise.
+ *
+ * `!==` is the whole comparison, deliberately: for the collections here it is reference identity,
+ * which every one of these stores already replaces on a real change, so identity IS the revision
+ * and no counter has to be introduced or kept in step. For a primitive it is the value.
+ *
+ * `watch(selector)` is the equivalent on the application FACADE and is the right tool for a
+ * snapshot slice. These five are app STORES, not the facade, so this is the store-side form of the
+ * same rule rather than a second mechanism.
+ */
+function whenChanged<State>(
+  store: {
+    subscribe(listener: (state: State, previous: State) => void): () => void;
+  },
+  run: () => void,
+  slices: ReadonlyArray<(state: State) => unknown>,
+): () => void {
+  return store.subscribe((state, previous) => {
+    if (slices.some(read => read(state) !== read(previous))) run();
+  });
+}
+
 /** Serialize inventory rebuilds so an older store snapshot cannot win a race. */
 export function refreshMobileModelServices(): Promise<RuntimeModel[]> {
   const refreshInventory = () => refreshMobileLLMServiceInventory();
@@ -155,11 +178,32 @@ export function startMobileModelServices(): () => void {
     const refresh = () => {
       refreshMobileModelServices().catch(consumeAlreadyProjectedFailure);
     };
-    cleanups.push(useAppStore.subscribe(refresh));
-    cleanups.push(useRemoteServerStore.subscribe(refresh));
-    cleanups.push(useWhisperStore.subscribe(refresh));
-    cleanups.push(useModelSelectionStore.subscribe(refresh));
-    cleanups.push(useModelResidencyStore.subscribe(refresh));
+    // A full inventory rebuild per store WRITE was the worst subscription in the app: five
+    // whole-store listeners, so typing one character into any settings field - or a transfer
+    // progress tick, or a health poll - relisted every inventory adapter, reconciled four adapter
+    // sets, and republished the snapshot. Now each store is watched for only the facts the
+    // inventory is actually BUILT from, compared by identity, which is the revision - a settings
+    // object that changed for an unrelated key does not move `settings.classifierModelId`.
+    cleanups.push(whenChanged(useAppStore, refresh, [
+      state => state.downloadedModels,
+      state => state.downloadedImageModels,
+      state => state.settings.classifierModelId,
+    ]));
+    cleanups.push(whenChanged(useRemoteServerStore, refresh, [
+      state => state.servers,
+      state => state.serverHealth,
+    ]));
+    cleanups.push(whenChanged(useWhisperStore, refresh, [
+      state => state.presentModelIds,
+      state => state.downloadedModelId,
+    ]));
+    cleanups.push(whenChanged(useModelSelectionStore, refresh, [
+      state => state.entries,
+    ]));
+    cleanups.push(whenChanged(useModelResidencyStore, refresh, [
+      state => state.loadedTextModelId,
+    ]));
+    // Purpose-built for exactly this: it already fires only on the model-state facts that matter.
     cleanups.push(subscribeToModelState(refresh));
     mobileModelDownloadCoordinator.hydrate().catch(error =>
       projectMobileModelServiceInitializationFailure('downloads', error),
