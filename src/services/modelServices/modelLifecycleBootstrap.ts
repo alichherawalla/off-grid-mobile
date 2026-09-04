@@ -5,6 +5,7 @@ import {
   modelLoadRefusal,
   runIndependentUnloads,
   unloadPersistentResident,
+  type ResidentReclaim,
 } from '@offgrid/models';
 import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import { applicationFacade } from '../applicationFacade';
@@ -12,6 +13,7 @@ import { activeRouteIsRemote } from './activeRoute';
 import logger from '../../utils/logger';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { whisperService } from '../whisperService';
+import type { NativeRelease } from '../nativeRelease';
 import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './residentSpecs';
@@ -27,6 +29,25 @@ export type TranscriptionLoadResult = 'loaded' | 'blocked' | 'error';
 interface TranscriptionLifecycleObserver {
   onLoaded?(): void;
   onUnloaded?(): void;
+}
+
+/**
+ * Whisper's teardown, as residency's answer. The observer is told either way - the app's own
+ * bookkeeping is invalid whatever the engine did - but residency is told the TRUTH, because it
+ * admits the next model into this memory.
+ */
+async function reclaimFrom(
+  release: Promise<NativeRelease>,
+  observer: TranscriptionLifecycleObserver,
+): Promise<ResidentReclaim> {
+  const outcome = await release;
+  observer.onUnloaded?.();
+  return outcome.released
+    ? { reclaimed: true }
+    : {
+        reclaimed: false,
+        reason: outcome.reason ?? 'whisper did not release its context',
+      };
 }
 
 function refusedLoad(override: boolean | undefined): Error {
@@ -123,20 +144,7 @@ export async function loadTranscriptionModel(
           await whisperService.loadModel(modelPath);
           observer.onLoaded?.();
         },
-        unload: async () => {
-          // The observer is told either way - the app's own bookkeeping is invalid whatever the
-          // engine did - but residency is told the TRUTH, because it admits the next model into
-          // this memory.
-          const release = await whisperService.unloadModel();
-          observer.onUnloaded?.();
-          return release.released
-            ? { reclaimed: true }
-            : {
-                reclaimed: false,
-                reason:
-                  release.reason ?? 'whisper did not release its context',
-              };
-        },
+        unload: () => reclaimFrom(whisperService.unloadModel(), observer),
       },
     });
     if (!acquired) return 'blocked';
@@ -186,17 +194,25 @@ export async function unloadTranscriptionModel(
       );
   if (!resident && !whisperService.isModelLoaded()) return false;
   const key = resident?.key ?? 'transcription';
-  const unloaded = await unloadPersistentResident({
+  // `nativeUnload` now ANSWERS, so this path can finally report what the last one could not: the
+  // helper's parameter is `() => Promise<ResidentReclaim>` and its result is a
+  // `ResidentUnloadOutcome`, so a whisper context the engine refused to release is carried through
+  // instead of being flattened into a boolean.
+  const outcome = await unloadPersistentResident({
     manager: modelResidencyManager,
     key,
-    nativeUnload: async () => {
-      await whisperService.unloadModel();
-      observer.onUnloaded?.();
-    },
+    nativeUnload: () => reclaimFrom(whisperService.unloadModel(), observer),
   });
   observer.onUnloaded?.();
   await lifecycleProjectionPort.refreshInventory();
-  return unloaded;
+  if (!outcome.reclaimed) {
+    logger.warn(
+      `[TranscriptionLifecycle] whisper did not release its context: ${
+        outcome.reason ?? 'no reason given'
+      }`,
+    );
+  }
+  return outcome.reclaimed;
 }
 
 export async function unloadAllModels(

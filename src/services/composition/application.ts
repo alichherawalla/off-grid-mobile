@@ -1,16 +1,14 @@
 /** Mobile composition root. Shared owns the application and domain behavior; this file supplies I/O. */
 import {
   createOffGridApplication,
+  observeApplicationFailures,
+  type NormalizedFailure,
   type OffGridApplication,
   type OffGridPlatformPorts,
 } from '@offgrid/application';
 import { generateId } from '../../utils/generateId';
 import logger from '../../utils/logger';
 import { registerApplicationFacade } from '../applicationFacade';
-import {
-  observeApplicationFailures,
-  resetFailureReporting,
-} from './applicationFailures';
 import {
   mobileRagEmbeddings,
   mobileRagExtraction,
@@ -32,6 +30,24 @@ export type MobileApplicationPortsFactory =
 let extensionPortsFactory: MobileApplicationPortsFactory | null = null;
 let application: OffGridApplication | null = null;
 let releaseFailureObserver: (() => void) | null = null;
+
+/**
+ * The ONLY thing this app still owns about failure reporting: where the line goes.
+ *
+ * Everything else - which streams carry failures, the four events whose failure is a status or an
+ * outcome rather than a field, each domain's correlation identity, the amplification cap and the
+ * exhaustiveness that stops a new failure event being dropped - is `@offgrid/application`'s, and is
+ * now shared with desktop instead of written twice. This replaced 358 lines here.
+ */
+const writeFailure = (failure: NormalizedFailure): void => {
+  logger.error(`[${failure.domain}] ${failure.summary}`, {
+    ...failure.fields,
+    event: failure.event,
+    operation: failure.operation,
+    identity: failure.identity,
+    identityKind: failure.identityKind,
+  });
+};
 
 /**
  * Kept ALONGSIDE the observer, deliberately, and not a duplicate of it: the domains the app
@@ -86,7 +102,10 @@ function createMobileApplication(): OffGridApplication {
 
 export function getMobileApplication(): OffGridApplication {
   application ??= createMobileApplication();
-  releaseFailureObserver ??= observeApplicationFailures(application);
+  releaseFailureObserver ??= observeApplicationFailures(
+    application,
+    writeFailure,
+  );
   return application;
 }
 
@@ -109,9 +128,10 @@ export async function stopMobileApplication(): Promise<void> {
   try {
     await application?.stop();
   } finally {
+    // Releasing the subscription drops the amplification cap with it, so a new session starts
+    // counting from zero without this file owning a reset.
     releaseFailureObserver?.();
     releaseFailureObserver = null;
-    resetFailureReporting();
     starting = null;
   }
 }
