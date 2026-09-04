@@ -229,8 +229,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isStartingRecording ||
     isTranscribing;
 
-  const { settings: appSettings, updateSettings: updateAppSettings } = useAppStore();
-  const thinkingEnabled = appSettings.thinkingEnabled;
+  // Narrow selectors: the composer must not re-render when an unrelated app-store field
+  // changes (a settings edit, a generated image, a download counter) while a transcript is
+  // on screen.
+  const thinkingEnabled = useAppStore(state => state.settings.thinkingEnabled);
+  const updateAppSettings = useAppStore(state => state.updateSettings);
 
   const handleThinkingToggle = () => {
     triggerHaptic('impactLight');
