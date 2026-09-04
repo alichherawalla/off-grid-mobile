@@ -1,7 +1,6 @@
 import {
   modelResidentSpec,
   modelLoadTimeoutMs,
-  type ResidentReclaim,
   type ResidentSpec,
   WHISPER_MODELS,
 } from '@offgrid/models';
@@ -16,7 +15,7 @@ import { hardwareService } from '../hardware';
 import { estimateTextModelMemoryMB } from '../modelMemory';
 import { mobileRouteId } from './mobileRoute';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
-import type { NativeRelease } from '../nativeRelease';
+import { nativeReleaseToResidentReclaim } from '../nativeRelease';
 
 /**
  * The one place mobile's native teardown answer becomes residency's answer.
@@ -26,18 +25,6 @@ import type { NativeRelease } from '../nativeRelease';
  * on - the boolean is the gating fact, and a refusal makes admission answer `unload_failed`
  * instead of overcommitting.
  */
-async function asReclaim(
-  release: Promise<NativeRelease>,
-): Promise<ResidentReclaim> {
-  const outcome = await release;
-  return outcome.released
-    ? { reclaimed: true }
-    : {
-        reclaimed: false,
-        reason: outcome.reason ?? 'the engine did not release the model',
-      };
-}
-
 /**
  * The ONLY two things a resident spec needs from residency: what is already resident, and whether
  * this model has a session memory override.
@@ -151,7 +138,10 @@ export function mobileModelLifecyclePorts(
             command.timeoutMs ?? modelLoadTimeoutMs('text'),
             command.override || residency.hasSessionOverride(modelId),
           ),
-          unload: () => asReclaim(nativeModelLifecycle.unloadTextModel(true)),
+          unload: async () =>
+            nativeReleaseToResidentReclaim(
+              await nativeModelLifecycle.unloadTextModel(true),
+            ),
         },
       };
     }
@@ -163,7 +153,10 @@ export function mobileModelLifecyclePorts(
         routeId: mobileRouteId({ source: 'local', hostId: model.backend ?? 'image-runtime', modality, modelId }),
         handlers: {
           load: () => nativeModelLifecycle.loadImageModel(modelId, command.timeoutMs ?? modelLoadTimeoutMs('image')),
-          unload: () => asReclaim(nativeModelLifecycle.unloadImageModel(true)),
+          unload: async () =>
+            nativeReleaseToResidentReclaim(
+              await nativeModelLifecycle.unloadImageModel(true),
+            ),
         },
         forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
       };
@@ -189,11 +182,12 @@ export function mobileModelLifecyclePorts(
     return {
       key: spec.key,
       hadRuntime: !!modelId,
-      unload: () => asReclaim(
-        text
-          ? nativeModelLifecycle.unloadTextModel(true)
-          : nativeModelLifecycle.unloadImageModel(true),
-      ),
+      unload: async () =>
+        nativeReleaseToResidentReclaim(
+          await (text
+            ? nativeModelLifecycle.unloadTextModel(true)
+            : nativeModelLifecycle.unloadImageModel(true)),
+        ),
     };
   },
   selectRoute: (modality, routeId) => lifecycleProjectionPort.selectRoute(modality, routeId),

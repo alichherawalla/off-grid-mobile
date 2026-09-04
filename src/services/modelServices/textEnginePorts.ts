@@ -2,16 +2,15 @@ import type { TextEngineApplicationService } from '@offgrid/models';
 import logger from '../../utils/logger';
 import { liteRTService } from '../litert';
 import { llmService } from '../llm';
+import { nativeReleaseToResidentReclaim } from '../nativeRelease';
 import { activeMobileRoute } from './mobileLLMService';
 
 /**
  * Native text-runtime ports. Shared owns route, capability, and lifecycle policy.
  *
- * On `unload`: these two are the TEXT-ENGINE port, not a residency handler, so `ResidentReclaim`
- * is not their contract - `TextEngineApplicationService` declares `unload(): Promise<void>` and
- * reports through `onBoundaryError`. What they must not do is DISCARD the engine's answer, and they
- * no longer do: both engine wrappers now return a `NativeRelease` and it is passed straight
- * through, so the moment shared's text-engine contract carries it, this side already does.
+ * On `unload`, the engine wrappers return native release proof. This adapter converts that proof
+ * through the same mapping as every residency port. A refusal stays a refusal; it is never reduced
+ * to the absence of a thrown error.
  *
  * The residency path for these same engines is `modelLifecyclePorts`, where the answer IS mapped to
  * `ResidentReclaim` and does gate admission. What is still lost is inside shared's `unloadAll`,
@@ -25,7 +24,8 @@ export function mobileTextEnginePorts(): ConstructorParameters<typeof TextEngine
       id: 'litert',
       isAvailable: () => liteRTService.isAvailable(),
       isLoaded: () => liteRTService.isModelLoaded(),
-      unload: () => liteRTService.unloadModel(),
+      unload: async () =>
+        nativeReleaseToResidentReclaim(await liteRTService.unloadModel()),
       stop: () => liteRTService.stopGeneration(),
       invalidateConversation: () => liteRTService.invalidateConversation(),
       // Every supported Mobile LiteRT bundle is a curated Gemma 4 bundle.
@@ -35,7 +35,8 @@ export function mobileTextEnginePorts(): ConstructorParameters<typeof TextEngine
       id: 'llama',
       isAvailable: () => true,
       isLoaded: () => llmService.isModelLoaded(),
-      unload: () => llmService.unloadModel(),
+      unload: async () =>
+        nativeReleaseToResidentReclaim(await llmService.unloadModel()),
       stop: () => llmService.stopGeneration(),
       prepareConversation: id => llmService.prepareConversationBoundary(id),
       invalidateConversation: () => llmService.clearKVCache(true),

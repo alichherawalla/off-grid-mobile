@@ -4,14 +4,16 @@ import {
   modelLoadRefusal,
   runIndependentUnloads,
   unloadPersistentResident,
-  type ResidentReclaim,
 } from '@offgrid/models';
 import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import { applicationFacade } from '../applicationFacade';
 import logger from '../../utils/logger';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { whisperService } from '../whisperService';
-import type { NativeRelease } from '../nativeRelease';
+import {
+  nativeReleaseToResidentReclaim,
+  type NativeRelease,
+} from '../nativeRelease';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './residentSpecs';
 
@@ -36,15 +38,10 @@ interface TranscriptionLifecycleObserver {
 async function reclaimFrom(
   release: Promise<NativeRelease>,
   observer: TranscriptionLifecycleObserver,
-): Promise<ResidentReclaim> {
+): Promise<ReturnType<typeof nativeReleaseToResidentReclaim>> {
   const outcome = await release;
   observer.onUnloaded?.();
-  return outcome.released
-    ? { reclaimed: true }
-    : {
-        reclaimed: false,
-        reason: outcome.reason ?? 'whisper did not release its context',
-      };
+  return nativeReleaseToResidentReclaim(outcome);
 }
 
 function refusedLoad(override: boolean | undefined): Error {
@@ -220,4 +217,3 @@ export async function unloadAllModels(
     imageUnloaded: () => unloadImageModel(keepSelection),
   });
 }
-
