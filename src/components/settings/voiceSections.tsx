@@ -45,10 +45,17 @@ const SILENCE_OPTIONS = delayOptions(SILENCE_AFTER_SPEECH_CHOICES_MS);
 const DRAIN_OPTIONS = delayOptions(SPEAKER_DRAIN_CHOICES_MS);
 
 export const VoiceTurnSettings: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
-  const current = settings.voiceTurnMode ?? 'silence';
-  const silenceMs = settings.voiceSilenceAfterSpeechMs ?? DEFAULT_SILENCE_AFTER_SPEECH_MS;
-  const drainMs = settings.voiceSpeakerDrainMs ?? DEFAULT_SPEAKER_DRAIN_MS;
+  const voiceTurnMode = useAppStore(s => s.settings.voiceTurnMode);
+  const voiceSilenceAfterSpeechMs = useAppStore(
+    s => s.settings.voiceSilenceAfterSpeechMs,
+  );
+  const voiceSpeakerDrainMs = useAppStore(
+    s => s.settings.voiceSpeakerDrainMs,
+  );
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const current = voiceTurnMode ?? 'silence';
+  const silenceMs = voiceSilenceAfterSpeechMs ?? DEFAULT_SILENCE_AFTER_SPEECH_MS;
+  const drainMs = voiceSpeakerDrainMs ?? DEFAULT_SPEAKER_DRAIN_MS;
   return (
     <>
       <SegmentedRow<VoiceTurnMode>

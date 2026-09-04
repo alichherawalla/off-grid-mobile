@@ -15,16 +15,25 @@ export const GPU_LAYERS_MAX = 99;
 export const CACHE_TYPE_OPTIONS: CacheType[] = ['f16', 'q8_0', 'q4_0'];
 
 export function useTextGenerationAdvanced() {
-  const { settings, updateSettings } = useAppStore();
+  // FIVE settings fields, read one at a time. `useAppStore()` woke every advanced-settings row on
+  // every store write - a finished download, a generated image, a device-info refresh - and, worse,
+  // on every character and every slider step of ANY other setting, because one whole-store read
+  // cannot tell which field moved.
+  const flashAttn = useAppStore(s => s.settings?.flashAttn);
+  const cacheType = useAppStore(s => s.settings?.cacheType);
+  const gpuLayers = useAppStore(s => s.settings?.gpuLayers);
+  const inferenceBackend = useAppStore(s => s.settings?.inferenceBackend);
+  const nThreads = useAppStore(s => s.settings?.nThreads);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
-  const isFlashAttnOn = settings?.flashAttn ?? true;
-  const isQuantizedCache = (settings?.cacheType ?? 'q8_0') !== 'f16';
-  const currentCacheType: CacheType = settings?.cacheType ?? 'q8_0';
-  const gpuLayersEffective = Math.min(settings?.gpuLayers ?? 1, GPU_LAYERS_MAX);
+  const isFlashAttnOn = flashAttn ?? true;
+  const isQuantizedCache = (cacheType ?? 'q8_0') !== 'f16';
+  const currentCacheType: CacheType = cacheType ?? 'q8_0';
+  const gpuLayersEffective = Math.min(gpuLayers ?? 1, GPU_LAYERS_MAX);
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
-  const isGpuEnabled = (settings?.inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
+  const isGpuEnabled = (inferenceBackend ?? defaultBackend) !== INFERENCE_BACKENDS.CPU;
   const isAndroid = Platform.OS === 'android';
-  const selectedBackend = settings?.inferenceBackend ?? INFERENCE_BACKENDS.CPU;
+  const selectedBackend = inferenceBackend ?? INFERENCE_BACKENDS.CPU;
   // OpenCL and HTP force f16 in the native loader, so lock the UI to match — single
   // source in llmHelpers shared with the loader and the generation-details recorder.
   const gpuForcesF16 = backendForcesF16Cache(selectedBackend);
@@ -33,26 +42,26 @@ export function useTextGenerationAdvanced() {
   const [resolvedThreadCount, setResolvedThreadCount] = useState<number | null>(null);
 
   useEffect(() => {
-    if (settings?.nThreads !== 0) return;
+    if (nThreads !== 0) return;
     hardwareService.getRecommendedThreadCount().then(setResolvedThreadCount);
-  }, [settings?.nThreads]);
+  }, [nThreads]);
 
-  const cpuThreadsSliderValue = settings?.nThreads && settings.nThreads > 0 ? settings.nThreads : 1;
-  const cpuThreadsDisplayValue = settings?.nThreads === 0
+  const cpuThreadsSliderValue = nThreads && nThreads > 0 ? nThreads : 1;
+  const cpuThreadsDisplayValue = nThreads === 0
     ? (resolvedThreadCount != null ? `Auto (${resolvedThreadCount})` : 'Auto')
     : String(cpuThreadsSliderValue);
 
-  const handleFlashAttnToggle = (flashAttn: boolean) => {
-    if (!flashAttn && isQuantizedCache) {
+  const handleFlashAttnToggle = (next: boolean) => {
+    if (!next && isQuantizedCache) {
       updateSettings({ flashAttn: false, cacheType: 'f16' });
     } else {
-      updateSettings({ flashAttn: flashAttn });
+      updateSettings({ flashAttn: next });
     }
   };
 
   const handleCacheTypeChange = (ct: CacheType) => {
     if (cacheDisabled) return;
-    const updates: Partial<typeof settings> = { cacheType: ct };
+    const updates: Parameters<typeof updateSettings>[0] = { cacheType: ct };
     if (ct !== 'f16' && !isFlashAttnOn) {
       updates.flashAttn = true;
     }
@@ -60,9 +69,8 @@ export function useTextGenerationAdvanced() {
   };
 
   return {
-    // State
-    settings,
-    updateSettings,
+    // Derived state only. `settings` and `updateSettings` were re-exported wholesale and NO caller
+    // read them from here, so returning them only invited a whole-store read back in.
     isFlashAttnOn,
     isQuantizedCache,
     currentCacheType,
