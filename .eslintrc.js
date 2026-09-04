@@ -248,10 +248,31 @@ module.exports = {
       rules: { '@typescript-eslint/no-restricted-imports': 'off' },
     },
     {
-      files: ['scripts/physical-sync/**/*.mjs'],
+      // The ESM parser was scoped to `scripts/physical-sync/**` only, so `scripts/*.mjs` sat on
+      // the default (non-module) parser where the first `import` is a syntax error - which meant
+      // the ARCHITECTURE GATE ITSELF (`verify-model-architecture.mjs`) was the one file in this
+      // repo that nothing linted. Widened to the top-level scripts, which is where the two gates
+      // and the release notifier live, rather than duplicated into a second override.
+      //
+      // NOT widened to `scripts/**`: `scripts/e2e/**` and `scripts/ios/**` are also unparsed and
+      // carry 5 real errors behind that, but they are test/harness infrastructure this seat may
+      // not edit. Recorded in PROGRESS_B rather than silenced with an exclusion, because the
+      // finding is real and belongs to whoever owns those scripts.
+      files: ['scripts/*.mjs', 'scripts/physical-sync/**/*.mjs'],
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
+      },
+      rules: {
+        // Structural rules only, and for the same reason the test override below relaxes the same
+        // four: a verification gate is one long flat list of INDEPENDENT rule checks, and
+        // splitting it into modules scatters what has to be read together to know what is
+        // enforced. Every correctness rule stays on - which is the point of linting this file at
+        // all, and it immediately found a real shadowed binding in the allowlist loop.
+        'max-lines': 'off',
+        'max-lines-per-function': 'off',
+        'max-params': 'off',
+        complexity: 'off',
       },
     },
     {

@@ -615,17 +615,43 @@ for (const file of files) {
     );
   }
 
-  if (
-    fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts' &&
-    !/\bModelLifecycleApplicationService\b/.test(text)
-  ) {
-    report(
-      'model-lifecycle-transaction-is-shared',
-      fileName,
-      source,
-      source,
-      'adapter:missing-shared-application-service',
-    );
+  if (fileName === 'src/services/modelServices/modelLifecycleBootstrap.ts') {
+    // This was a PRESENCE CHECK on the literal `ModelLifecycleApplicationService`, and the file
+    // stopped naming that class when load/unload moved to the Models FACADE commands
+    // (`models().load` / `.unload`, typed Outcomes) and eject moved to shared's
+    // `ejectModelResidency`. The transaction became MORE shared, not less - a typed command
+    // instead of a directly held service - so the rule was measuring the wrong thing, not
+    // catching drift.
+    //
+    // It now has two halves, reported separately so a future failure says WHICH one broke:
+    //   1. the file must REACH the shared transaction through one of its sanctioned owners;
+    //   2. the file must not ORCHESTRATE the native lifecycle itself, which is what "the
+    //      transaction is shared" actually forbids. That half has teeth the name check never had:
+    //      the old rule would have passed a file that imported the class and then drove
+    //      `nativeModelLifecycle` around it.
+    // Native load/unload belongs to `modelLifecyclePorts`, which shared invokes as an adapter.
+    const reachesSharedTransaction =
+      /\bModelLifecycleApplicationService\b/.test(text) ||
+      /\bejectModelResidency\b/.test(text) ||
+      (/\bapplicationFacade\b/.test(text) && /\.(?:load|unload)\(/.test(text));
+    if (!reachesSharedTransaction) {
+      report(
+        'model-lifecycle-transaction-is-shared',
+        fileName,
+        source,
+        source,
+        'adapter:no-shared-transaction-owner',
+      );
+    }
+    if (/\bnativeModelLifecycle\b/.test(text)) {
+      report(
+        'model-lifecycle-transaction-is-shared',
+        fileName,
+        source,
+        source,
+        'adapter:local-native-lifecycle-orchestration',
+      );
+    }
   }
 
   if (fileName === 'src/services/engines.ts') {
@@ -1846,8 +1872,8 @@ for (const finding of findings) {
 }
 const stale = [...allowlist.values()].filter(entry => !used.has(entry.key));
 
-for (const finding of findings.filter(finding =>
-  allowlist.has(keyOf(finding)),
+for (const finding of findings.filter(candidate =>
+  allowlist.has(keyOf(candidate)),
 )) {
   const debt = allowlist.get(keyOf(finding));
   console.warn(
