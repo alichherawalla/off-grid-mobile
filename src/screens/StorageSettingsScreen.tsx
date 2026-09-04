@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,21 +27,30 @@ export const StorageSettingsScreen: React.FC = () => {
   const [availableStorage, setAvailableStorage] = useState(0);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const {
-    downloadedModels,
-    downloadedImageModels,
-  } = useAppStore();
-  const { conversations } = useChatStore();
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const downloadedImageModels = useAppStore(
+    state => state.downloadedImageModels,
+  );
+  // The screen shows only the count, so it subscribes to the count. A number compares equal across a
+  // streamed reply, so a token appended to a conversation does not redraw this screen.
+  const conversationCount = useChatStore(state => state.conversations.length);
   const downloads = useDownloadStore(s => s.downloads);
   const removeFromStore = useDownloadStore(s => s.remove);
 
-  const imageStorageUsed = downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0);
+  const imageStorageUsed = useMemo(
+    () => downloadedImageModels.reduce((total, m) => total + (m.size || 0), 0),
+    [downloadedImageModels],
+  );
 
   // A "stale" entry is a store entry missing the basic fields needed to
   // display or finalize it. Now sourced from the unified download store.
-  const staleDownloads = Object.values(downloads).filter(entry => {
-    return !entry.modelId || !entry.fileName || !entry.combinedTotalBytes;
-  });
+  const staleDownloads = useMemo(
+    () =>
+      Object.values(downloads).filter(
+        entry => !entry.modelId || !entry.fileName || !entry.combinedTotalBytes,
+      ),
+    [downloads],
+  );
 
   const loadStorageInfo = useCallback(async () => {
     const used = await modelLibrary.getStorageUsed();
@@ -144,7 +153,7 @@ export const StorageSettingsScreen: React.FC = () => {
               <Icon name="message-circle" size={18} color={colors.primary} />
               <Text style={styles.infoLabel}>Conversations</Text>
             </View>
-            <Text style={styles.infoValue}>{conversations.length}</Text>
+            <Text style={styles.infoValue}>{conversationCount}</Text>
           </View>
         </Card>
 
