@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { generateRandomSeed } from '../utils/generateId';
 import logger from '../utils/logger';
+import { shouldLogProgressStep } from './image/progressDiagnostics';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
 
@@ -120,7 +121,10 @@ class LocalDreamGeneratorService {
     return this.getEmitter().addListener(
       'LocalDreamProgress',
       (event: { step: number; totalSteps: number; progress: number; previewPath?: string }) => {
-        logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
+        // Sampled, not per step: logging every event is a write storm on the JS thread.
+        if (shouldLogProgressStep(event.step, event.totalSteps)) {
+          logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
+        }
         onProgress?.({
           step: event.step,
           totalSteps: event.totalSteps,
