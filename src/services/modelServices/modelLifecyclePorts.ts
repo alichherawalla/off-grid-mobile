@@ -7,7 +7,7 @@ import {
 } from '@offgrid/models';
 import type {
   ModelLifecycleApplicationService,
-  ModelResidencyManager,
+  Resident,
 } from '@offgrid/models';
 import { useAppStore } from '../../stores/appStore';
 import { activeLocalModelId } from './activeRoute';
@@ -50,10 +50,16 @@ async function asReclaim(
  * dependency the way composition already runs: the workspace has the manager when it builds these
  * ports, so it hands them the two reads and nothing here has to go looking for it.
  */
-export type ResidencyReads = Pick<
-  ModelResidencyManager,
-  'getResidents' | 'hasSessionOverride'
->;
+/**
+ * Declared structurally rather than as `Pick<ModelResidencyManager, ...>`, because these two facts
+ * are now SNAPSHOT branches (`residents`, `sessionOverrides`) and a caller should be able to answer
+ * them from the snapshot without holding the manager. `readonly Resident[]` is the snapshot's own
+ * shape; the manager's `Resident[]` still satisfies it, so composition sites are unchanged.
+ */
+export interface ResidencyReads {
+  getResidents(): readonly Resident[];
+  hasSessionOverride(modelId?: string): boolean;
+}
 
 export async function textResidentSpec(
   modelId: string,

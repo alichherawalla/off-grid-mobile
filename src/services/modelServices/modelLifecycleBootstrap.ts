@@ -14,7 +14,6 @@ import logger from '../../utils/logger';
 import { OverridableMemoryError } from '../modelLoadErrors';
 import { whisperService } from '../whisperService';
 import type { NativeRelease } from '../nativeRelease';
-import { modelResidencyManager } from './residencyBootstrap';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
 import { resolveTextResidentSpec, resolveTranscriptionResidentSpec } from './residentSpecs';
 
@@ -137,7 +136,7 @@ export async function loadTranscriptionModel(
     const spec = resolveTranscriptionResidentSpec(modelId);
     const modelPath = whisperService.getModelPath(modelId);
     const acquired = await ensurePersistentResident({
-      manager: modelResidencyManager,
+      manager: applicationFacade().models.residency,
       spec,
       handlers: {
         load: async () => {
@@ -189,7 +188,7 @@ export async function unloadTranscriptionModel(
   const selectedModelId = modelId;
   const resident = selectedModelId
     ? resolveTranscriptionResidentSpec(selectedModelId)
-    : modelResidencyManager.getResidents().find(
+    : applicationFacade().models.snapshot().residents.find(
         candidate => candidate.type === 'transcription',
       );
   if (!resident && !whisperService.isModelLoaded()) return false;
@@ -199,7 +198,7 @@ export async function unloadTranscriptionModel(
   // `ResidentUnloadOutcome`, so a whisper context the engine refused to release is carried through
   // instead of being flattened into a boolean.
   const outcome = await unloadPersistentResident({
-    manager: modelResidencyManager,
+    manager: applicationFacade().models.residency,
     key,
     nativeUnload: () => reclaimFrom(whisperService.unloadModel(), observer),
   });
@@ -241,7 +240,7 @@ export async function ejectAllModels(): Promise<{ count: number }> {
   // the app. The two things the service added on top, clearing remote routes and the inventory
   // refresh, are mobile's own `lifecycleProjectionPort`, which mobile already registers.
   const ejected = await ejectModelResidency({
-    manager: modelResidencyManager,
+    manager: applicationFacade().models.residency,
     localUnloads: {
       textUnloaded: () => unloadTextModel(true),
       imageUnloaded: () => unloadImageModel(true),

@@ -2,31 +2,43 @@ import type { ResidentSpec } from '@offgrid/models';
 import {
   textResidentSpec,
   transcriptionResidentSpec,
+  type ResidencyReads,
 } from './modelLifecyclePorts';
-import { modelResidencyManager } from './residencyBootstrap';
+import { applicationFacade } from '../applicationFacade';
 
 /**
- * The two resident specs, bound to the LIVE residency manager.
+ * The two resident specs, bound to the residency facts on the models SNAPSHOT.
  *
  * `modelLifecyclePorts` takes its residency reads as an argument so the workspace can hand them
- * over when it composes the lifecycle ports; that is what points the dependency the right way and
- * removes the cycle. But several callers outside that composition - the lifecycle bootstrap, and
- * the residency intents behind it - only ever want the spec for the manager the app is actually
- * running, and making each of them reach for the manager would spread the same lookup across the
- * app. This module is the ONE place that binds the port to that instance.
+ * over when it composes the lifecycle ports; that is what points the dependency the right way. The
+ * callers outside that composition - the lifecycle bootstrap and the residency intents behind it -
+ * still want the facts for the residency the app is actually running, and this module is the ONE
+ * place that binds them.
  *
- * It sits BELOW nothing and above the bootstrap on purpose: it depends on the manager, so nothing
- * the workspace composes may depend on it, and nothing here is re-exported back into the
- * composition path.
+ * It used to bind them to the live `ModelResidencyManager` instance, reached through a module-level
+ * accessor. That accessor was not a second owner - it re-exported the workspace's own manager - but
+ * it let any feature reach the owner directly, which made the fixed call direction
+ * (app -> facade -> manager -> native adapter) unenforceable by construction. Both facts are
+ * snapshot branches, so nothing here needs the instance: `residents` was already on the snapshot
+ * and `sessionOverrides` was added for exactly this reader.
+ *
+ * Read fresh per call rather than captured: a spec resolved from a stale resident list would key a
+ * model against a residency that has since changed underneath it.
  */
+const snapshotResidencyReads: ResidencyReads = {
+  getResidents: () => applicationFacade().models.snapshot().residents,
+  hasSessionOverride: modelId =>
+    !!modelId && applicationFacade().models.snapshot().sessionOverrides.includes(modelId),
+};
+
 export function resolveTextResidentSpec(
   modelId: string,
 ): Promise<ResidentSpec> {
-  return textResidentSpec(modelId, modelResidencyManager);
+  return textResidentSpec(modelId, snapshotResidencyReads);
 }
 
 export function resolveTranscriptionResidentSpec(
   modelId: string,
 ): ResidentSpec {
-  return transcriptionResidentSpec(modelId, modelResidencyManager);
+  return transcriptionResidentSpec(modelId, snapshotResidencyReads);
 }

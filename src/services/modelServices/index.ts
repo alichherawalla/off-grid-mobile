@@ -25,6 +25,7 @@ import { reconcileMobileVoiceAdapters } from './voiceGenerationAdapter';
 import { reconcileMobileSidecarAdapters } from './sidecarGenerationAdapter';
 import { mobileModelDownloadCoordinator } from './modelDownloadCoordinator';
 import { registerLifecycleProjectionPort } from './lifecycleProjectionPort';
+import { registerMobileMemoryWarningRecovery } from './memoryWarningRecovery';
 import { composeMobileSidecarExecution } from './sidecarExecutionComposition';
 import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 import { mobileModelSelectionService } from './modelSelectionApplication';
@@ -210,6 +211,7 @@ export function startMobileModelServices(): () => void {
     ]));
     // Purpose-built for exactly this: it already fires only on the model-state facts that matter.
     cleanups.push(subscribeToModelState(refresh));
+    cleanups.push(registerMobileMemoryWarningRecovery());
     mobileModelDownloadCoordinator.hydrate().catch(error =>
       projectMobileModelServiceInitializationFailure('downloads', error),
     );
