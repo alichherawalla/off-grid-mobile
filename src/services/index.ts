@@ -31,4 +31,3 @@ export { contextCompactionService } from './contextCompaction';
 // HTTP Client
 // Remote Server Manager
 export { remoteServerManager } from './remoteServerManager';
-export { remoteServerModelOptions } from '@offgrid/models';

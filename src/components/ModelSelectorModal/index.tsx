@@ -17,7 +17,8 @@ import {
   RemoteModel,
   RemoteServer,
 } from '../../types';
-import { resolveSelectedTextModel, remoteServerModelOptions } from '../../services';
+import { resolveSelectedTextModel } from '../../services';
+import { remoteServerModelOptions } from '@offgrid/application';
 import { mobileModelCommands } from '../../services/modelServices/modelCommandApplication';
 import {
   CustomAlert,

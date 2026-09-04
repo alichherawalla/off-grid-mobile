@@ -7,8 +7,8 @@ import { LoadingDots } from '../components/LoadingDots';
 import { SLOTS, useSlot } from '../bootstrap/slotRegistry';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import type { RootStackParamList } from '../navigation/types';
+import { guidedSetupDownloadId } from '@offgrid/application';
 import {
-  autoSetupDownloadId,
   createAutoSetupSession,
   type AutoSetupPlan,
   type AutoSetupSession,
@@ -55,7 +55,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
     snapshot.plans.find(plan => plan.tier === snapshot.selectedTier) ??
     snapshot.plans[0];
   const selectedOutcomes =
-    selected?.items.map(item => snapshot.outcomes[autoSetupDownloadId(item)]) ??
+    selected?.items.map(item => snapshot.outcomes[guidedSetupDownloadId(item)]) ??
     [];
   const progress =
     selectedOutcomes.length === 0
@@ -141,7 +141,7 @@ export const AutoSetupScreen: React.FC<Props> = ({
                         <Text style={styles.itemSize}>
                           {formatBytes(item.sizeBytes)}
                           {outcomeLabel(
-                            snapshot.outcomes[autoSetupDownloadId(item)],
+                            snapshot.outcomes[guidedSetupDownloadId(item)],
                           )}
                         </Text>
                       </View>

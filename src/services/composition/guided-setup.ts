@@ -18,8 +18,6 @@ import {
 } from '../autoSetupCatalog';
 import { selectMobileModel } from '../modelServices';
 
-export { guidedSetupDownloadId as autoSetupDownloadId } from '@offgrid/models';
-
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
   list: () => Promise<ModelDownload[]>;
