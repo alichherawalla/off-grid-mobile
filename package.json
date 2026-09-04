@@ -3,6 +3,12 @@
   "version": "0.0.107",
   "private": true,
   "scripts": {
+    "build:shared": "npm --prefix ../shared run build",
+    "verify:shared-contract": "node scripts/verify-shared-consumer-contract.mjs",
+    "prepare:shared": "npm run build:shared && npm run verify:shared-contract",
+    "prestart": "npm run prepare:shared",
+    "preandroid": "npm run prepare:shared",
+    "preios": "npm run prepare:shared",
     "android": "react-native run-android --mode=debug --appId ai.offgridmobile.dev",
     "ios": "react-native run-ios",
     "ios:device": "./scripts/ios-device.sh",
