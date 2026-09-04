@@ -39,6 +39,22 @@ const files = ['src', 'pro']
   .map(directory => path.join(repoRoot, directory))
   .filter(fs.existsSync)
   .flatMap(sourceFiles);
+const rootApplication = fs.readFileSync(
+  path.join(repoRoot, 'src/services/composition/application.ts'),
+  'utf8',
+);
+const proEntry = fs.readFileSync(path.join(repoRoot, 'pro/index.ts'), 'utf8');
+
+if (
+  !rootApplication.includes('callHook<Promise<void>>(HOOKS.applicationStarted)') ||
+  rootApplication.indexOf('.start()') >
+    rootApplication.indexOf('callHook<Promise<void>>(HOOKS.applicationStarted)')
+) {
+  findings.push('src/services/composition/application.ts: dependent startup must follow root start');
+}
+if (!proEntry.includes('registerHook(HOOKS.applicationStarted')) {
+  findings.push('pro/index.ts: Sync dependents are not registered behind root startup');
+}
 
 for (const file of forbiddenFiles) {
   if (fs.existsSync(path.join(repoRoot, file))) {
