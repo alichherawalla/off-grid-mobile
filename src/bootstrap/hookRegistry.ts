@@ -11,9 +11,14 @@
 type HookFn = (...args: any[]) => any;
 
 const hooks: Record<string, HookFn> = {};
+const APPLICATION_STARTED_HOOK = 'application.started';
+let applicationStarted = false;
 
 export function registerHook(name: string, fn: HookFn): () => void {
   hooks[name] = fn;
+  // Readiness is state, not an edge. A paid bundle can activate after the root has already started;
+  // replay only this lifecycle fact so its dependent workflows are not stranded until a restart.
+  if (name === APPLICATION_STARTED_HOOK && applicationStarted) fn();
   return () => {
     if (hooks[name] === fn) delete hooks[name];
   };
@@ -21,6 +26,7 @@ export function registerHook(name: string, fn: HookFn): () => void {
 
 /** Call a hook if registered; returns its result, or undefined when absent. */
 export function callHook<R = any>(name: string, ...args: any[]): R | undefined {
+  if (name === APPLICATION_STARTED_HOOK) applicationStarted = true;
   const fn = hooks[name];
   return fn ? (fn(...args) as R) : undefined;
 }
@@ -29,13 +35,14 @@ export function _clearHooksForTesting(): void {
   for (const key of Object.keys(hooks)) {
     delete hooks[key];
   }
+  applicationStarted = false;
 }
 
 /** Known hook names, centralised so core and pro stay in sync. */
 export const HOOKS = {
   /** () => void | Promise<void> — the application root has started every composed domain. Optional
    *  feature bundles may now start workflows that depend on those domains, but never their lifecycle. */
-  applicationStarted: 'application.started',
+  applicationStarted: APPLICATION_STARTED_HOOK,
   /** () => Promise<void> — re-run adoption of paired devices as remote servers (Pro sync). Fired by
    *  the Remote Servers "Scan network" action so one tap covers the LAN scan and the paired roster. */
   remoteServersAdoptPaired: 'remoteServers.adoptPaired',
