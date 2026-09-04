@@ -139,7 +139,8 @@ class AudioRecorderService {
 
   async startRecording(): Promise<void> {
     if (this.isRecording) {
-      await this.stopRecording().catch(() => {});
+      // Do not start a second recorder when the previous recorder could not stop truthfully.
+      await this.stopRecording();
     }
     const hasPermission = await this.requestPermissions();
     if (!hasPermission) {
@@ -177,7 +178,9 @@ class AudioRecorderService {
       this.recorder = null;
       // Recording never started — hand the session back to playback so it isn't
       // left stranded in record mode.
-      audioSessionManager.restorePlaybackAfterRecording().catch(() => {});
+      audioSessionManager.restorePlaybackAfterRecording().catch(error => {
+        logger.error('[AudioRecorder] Audio session restore after failed start failed:', error);
+      });
       throw new Error(`Recording failed to start: ${startResult.errorMessage ?? startResult.error ?? startResult.status}`);
     }
   }
@@ -206,7 +209,9 @@ class AudioRecorderService {
     this.isRecording = false;
     this.recorder = null;
     // Best-effort session restore (fire-and-forget — keep this method sync).
-    audioSessionManager.restorePlaybackAfterRecording().catch(() => {});
+    audioSessionManager.restorePlaybackAfterRecording().catch(error => {
+      logger.error('[AudioRecorder] Audio session restore after cancellation failed:', error);
+    });
   }
 
   isCurrentlyRecording(): boolean {
