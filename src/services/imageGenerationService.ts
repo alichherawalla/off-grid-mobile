@@ -2,7 +2,6 @@ import {
   isImageApplicationInFlight,
   type ImageApplicationSnapshot,
 } from '@offgrid/models';
-import { useAppStore } from '../stores/appStore';
 import type { GeneratedImage } from '../types';
 import logger from '../utils/logger';
 import { imagePhaseTransitionLog } from './imageGenerationHelpers';
@@ -46,11 +45,12 @@ class ImageGenerationService {
         logger.log(imagePhaseTransitionLog(this.previousPhase, state));
         this.previousPhase = state.phase;
       }
-      const appStore = useAppStore.getState();
-      appStore.setIsGeneratingImage(state.isGenerating);
-      appStore.setImageGenerationProgress(state.progress);
-      appStore.setImageGenerationStatus(state.status);
-      appStore.setImagePreviewPath(state.previewPath);
+      // One native event, one atomic projection update: `state` is a whole new immutable
+      // snapshot handed to every subscriber. Nothing here writes the app store - the phase,
+      // progress, status and preview are transient, only this projection owns them, and mirroring
+      // them into the persisted store notified every unrelated app-store subscriber (the chat
+      // screen subscribes to the whole store) and re-serialised the generated-image gallery on
+      // every diffusion step.
       for (const listener of this.listeners) listener(state);
     });
   }
