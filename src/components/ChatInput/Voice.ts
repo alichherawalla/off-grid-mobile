@@ -14,7 +14,12 @@ import { useSilenceEndpoint, type SilenceEndpoint } from './useSilenceEndpoint';
 import { finaliseRecording, type RecordedAudio } from './finaliseRecording';
 import { useVoiceSessionDriver } from './useVoiceSessionDriver';
 import { voiceSession } from '../../services/voiceSession';
-import { resolveTranscription } from './transcriptionOutcome';
+import {
+  transcriptionOutcomeFrom,
+  transcriptionOutcomeMessage,
+  transcriptionShouldDispatch,
+  type TranscriptionOutcome,
+} from '@offgrid/application';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
 import { executeMobileTranscription } from '../../services/mobileTranscription';
@@ -51,6 +56,22 @@ async function stopAndFinalise(
     silence.silenceBeforeSpeech(),
     silence.silenceAfterSpeech(),
   );
+}
+
+function recordedTranscriptionOutcome(
+  modelReady: boolean,
+  transcript: string,
+  durationSeconds: number,
+): TranscriptionOutcome {
+  return transcriptionOutcomeFrom({
+    audioBytes: durationSeconds > 0 ? 1 : 0,
+    modelReady,
+    cleanedText: transcript,
+  });
+}
+
+function visibleTranscriptionFailure(outcome: TranscriptionOutcome): string {
+  return transcriptionOutcomeMessage(outcome) ?? 'Transcription was cancelled.';
 }
 
 /** Build the one readiness boundary shared by realtime and file transcription. */
@@ -269,8 +290,8 @@ export function useVoiceInput({
             '[Voice] transcription error:',
           );
           // NEVER dispatch an empty transcript — that misroutes to the text model.
-          const outcome = resolveTranscription(whisperReady, transcript);
-          if (outcome.dispatch) {
+          const outcome = recordedTranscriptionOutcome(whisperReady, transcript, durationSeconds);
+          if (transcriptionShouldDispatch(outcome)) {
             onAutoSendRef.current(outcome.text, {
               uri: path,
               format,
@@ -280,7 +301,7 @@ export function useVoiceInput({
             // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
             // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
             // output. A person tapping the mic resumes it.
-            presentTranscriptionFailure(outcome.message, setDirectError);
+            presentTranscriptionFailure(visibleTranscriptionFailure(outcome), setDirectError);
           }
         } else {
           // CHAT mode: STT is dictation-into-the-input-box on EVERY engine — the SAME behavior a non-audio
@@ -292,14 +313,14 @@ export function useVoiceInput({
             path,
             '[Voice] chat-mode dictation transcription error:',
           );
-          const outcome = resolveTranscription(whisperReady, transcript);
-          if (outcome.dispatch) {
+          const outcome = recordedTranscriptionOutcome(whisperReady, transcript, durationSeconds);
+          if (transcriptionShouldDispatch(outcome)) {
             onTranscriptRef.current(outcome.text);
           } else {
             // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
             // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
             // output. A person tapping the mic resumes it.
-            presentTranscriptionFailure(outcome.message, setDirectError);
+            presentTranscriptionFailure(visibleTranscriptionFailure(outcome), setDirectError);
           }
         }
       }
@@ -337,8 +358,8 @@ export function useVoiceInput({
       setIsTranscribingFile(false);
       recordingConversationIdRef.current = null;
       // NEVER dispatch an empty transcript — that misroutes to the text model.
-      const outcome = resolveTranscription(whisperReady, transcript);
-      if (outcome.dispatch) {
+      const outcome = recordedTranscriptionOutcome(whisperReady, transcript, durationSeconds);
+      if (transcriptionShouldDispatch(outcome)) {
         if (onAutoSendRef.current) {
           onAutoSendRef.current(outcome.text, {
             uri: path,
@@ -355,7 +376,7 @@ export function useVoiceInput({
           onTranscriptRef.current(outcome.text);
         }
       } else {
-        presentTranscriptionFailure(outcome.message, setDirectError);
+        presentTranscriptionFailure(visibleTranscriptionFailure(outcome), setDirectError);
       }
     } catch (err) {
       setIsAudioModeRecording(false);
