@@ -1,4 +1,10 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import {
+  useState,
+  useCallback,
+  useDeferredValue,
+  useMemo,
+  useEffect,
+} from 'react';
 import { Platform } from 'react-native';
 import { AlertState } from '../../components/CustomAlert';
 import { useActiveLocalModelId } from '../../hooks/useActiveMobileModel';
@@ -52,27 +58,36 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
   const [showRecHint, setShowRecHint] = useState(true);
 
-  const {
-    downloadedImageModels,
-    setDownloadedImageModels,
-    addDownloadedImageModel,
-    onboardingChecklist,
-  } = useAppStore();
+  // Narrow selectors: this screen must not re-render for an unrelated app-store field
+  // (settings, generated images, download counters) while the catalogue is on screen.
+  const downloadedImageModels = useAppStore(state => state.downloadedImageModels);
+  const setDownloadedImageModels = useAppStore(
+    state => state.setDownloadedImageModels,
+  );
+  const addDownloadedImageModel = useAppStore(
+    state => state.addDownloadedImageModel,
+  );
+  const triedImageGen = useAppStore(
+    state => state.onboardingChecklist.triedImageGen,
+  );
   const activeImageModelId = useActiveLocalModelId('image');
 
-  const makeDeps = (): ImageDownloadDeps => ({
-    addDownloadedImageModel,
-    activeImageModelId,
-    selectActiveImageModel: model =>
-      selectMobileModel({
-        source: 'local',
-        hostId: model.backend ?? 'image-runtime',
-        modality: 'image',
-        modelId: model.id,
-      }),
-    setAlertState,
-    triedImageGen: onboardingChecklist.triedImageGen,
-  });
+  const makeDeps = useCallback(
+    (): ImageDownloadDeps => ({
+      addDownloadedImageModel,
+      activeImageModelId,
+      selectActiveImageModel: model =>
+        selectMobileModel({
+          source: 'local',
+          hostId: model.backend ?? 'image-runtime',
+          modality: 'image',
+          modelId: model.id,
+        }),
+      setAlertState,
+      triedImageGen,
+    }),
+    [addDownloadedImageModel, activeImageModelId, setAlertState, triedImageGen],
+  );
 
   const loadDownloadedImageModels = useCallback(async () => {
     const models = await modelLibrary.getDownloadedImageModels();
@@ -156,24 +171,33 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
     [imageRec],
   );
 
+  // The field stays immediate; the catalogue scan runs against the deferred query, so a
+  // keystroke paints before the whole catalogue is re-filtered and re-rendered.
+  const deferredImageSearchQuery = useDeferredValue(imageSearchQuery);
+
+  const downloadedImageModelIds = useMemo(
+    () => new Set(downloadedImageModels.map(model => model.id)),
+    [downloadedImageModels],
+  );
+
   const filteredHFModels = useMemo(() => {
     return filterImageCatalog({
       models: availableHFModels,
       backend: backendFilter,
       style: styleFilter,
       version: sdVersionFilter,
-      query: imageSearchQuery,
+      query: deferredImageSearchQuery,
       recommendedOnly: showRecommendedOnly,
       recommendation: imageRec,
-      downloadedIds: new Set(downloadedImageModels.map(model => model.id)),
+      downloadedIds: downloadedImageModelIds,
     });
   }, [
     availableHFModels,
     backendFilter,
     styleFilter,
     sdVersionFilter,
-    downloadedImageModels,
-    imageSearchQuery,
+    downloadedImageModelIds,
+    deferredImageSearchQuery,
     imageRec,
     showRecommendedOnly,
   ]);
@@ -185,11 +209,18 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const imageRecommendation =
     imageRec?.bannerText ?? 'Loading recommendation...';
 
-  const handleDownloadImageModel = (modelInfo: ImageModelDescriptor) =>
-    downloadImageModel(modelInfo, makeDeps());
+  // Stable identities so a memoized card is not invalidated by every parent render.
+  const handleDownloadImageModel = useCallback(
+    (modelInfo: ImageModelDescriptor) =>
+      downloadImageModel(modelInfo, makeDeps()),
+    [makeDeps],
+  );
 
-  const handleCancelImageDownload = (modelId: string) =>
-    modelDownloadRegistry.cancel(uniformDownloadId('image', modelId));
+  const handleCancelImageDownload = useCallback(
+    (modelId: string) =>
+      modelDownloadRegistry.cancel(uniformDownloadId('image', modelId)),
+    [],
+  );
 
   return {
     availableHFModels,
