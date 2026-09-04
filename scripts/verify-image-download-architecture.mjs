@@ -7,12 +7,23 @@ import ts from 'typescript'
 
 const repoRoot = path.resolve(import.meta.dirname, '..')
 const applicationFiles = [
+  'src/screens/ModelsScreen/useImageModels.ts',
+  'src/services/adapters/models/downloads/publicImageDownloadRequest.ts',
+  'src/services/modelServices/applicationDownloadPorts.ts',
+]
+const deletedOwners = [
   'src/services/imageDownloadActions.ts',
   'src/services/imageDownloadResume.ts',
   'src/services/imageDownloadRetry.ts',
   'src/services/imageModelDownloadOwner.ts',
 ]
 const violations = []
+
+for (const relative of deletedOwners) {
+  if (fs.existsSync(path.join(repoRoot, relative))) {
+    violations.push({ file: relative, line: 1, detail: 'legacy image download owner still exists' })
+  }
+}
 
 for (const relative of applicationFiles) {
   const absolute = path.join(repoRoot, relative)

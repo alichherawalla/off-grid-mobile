@@ -2152,3 +2152,38 @@ discovered server to prove the identity the saved record carries. Discovery does
 so a Mac that changes IP shows up as "found" for the person to adopt instead of moving silently. Fix: the
 Desktop gateway advertises its device id (mDNS TXT / `/v1/models` header), LAN discovery carries it as
 `DiscoveredRemoteServer.identity`, and `save` persists it on the record; then genuine moves auto-adopt.
+
+## Mobile Pro still owns four Sync application control planes (open, 2026-09-04)
+
+`pro/sync/stateSyncService.ts`, `clipboardSyncService.ts`,
+`knowledgeDocumentSyncService.ts`, and `sharedFileSyncService.ts` are not platform adapters. They
+own durable state, mutation admission, retry and startup policy, lifecycle state, forwarding rules,
+failure handling, and render-facing projections. Their composition modules construct these services
+beside `applicationFacade().sync`, so importing the facade has not completed the ownership cutover.
+
+Impact: Mobile can still diverge from Desktop and `@offgrid/application`; UI consumers can call an
+app-owned business service instead of typed application commands and structurally shared read-only
+projections. This keeps duplicate control planes alive and prevents architecture gates from proving
+the stated north star.
+
+Deletion condition: move the portable state-sync, clipboard-sync, knowledge-document, and
+shared-file workflows and state machines behind the Shared Sync/Application owner; leave Mobile Pro
+with React Native filesystem, clipboard, transport, database, and entitlement adapters only; expose
+typed Outcomes, correlated lifecycle events, bounded work, and narrow projections; migrate every
+production caller; delete the four app-owned service classes and their superseded stores; add gates
+that prevent their reconstruction; and verify the public journeys with real-boundary integration
+tests before live and packaged verification.
+
+## Mobile composes model application services outside `@offgrid/application` (open, 2026-09-04)
+
+`src/services/composition/model-commands.ts`, `model-library.ts`,
+`model-library-services.ts`, and `model-selection.ts` construct application services from
+`@offgrid/models`. These are Shared implementations, but Mobile still owns their construction and
+consumes them beside `ModelsFacade`. That leaves more than one public application interface for
+selection, lifecycle, library removal, repair, import, transfer registration, readiness, and image
+recovery.
+
+Deletion condition: expose the required typed commands, Outcomes, events, and narrow projections on
+`ModelsFacade`; compose each portable owner once inside Shared; leave only React Native filesystem,
+registry, native-engine, and persistence ports in Mobile; migrate all callers; delete the app-level
+service composition; and make the model architecture gate reject any reconstruction.

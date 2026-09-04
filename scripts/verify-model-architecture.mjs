@@ -39,6 +39,23 @@ const lineOf = (source, node) =>
   source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 const keyOf = finding => `${finding.rule}|${finding.file}|${finding.detail}`;
 const findings = [];
+const forbiddenModelOwnerExports = new Set([
+  'createModelWorkspace',
+  'ModelResidencyManager',
+]);
+const forbiddenAppModelServices = new Set([
+  'ModelDownloadCoordinator',
+  'ModelDownloadRegistry',
+  'ModelCommandApplicationService',
+  'ModelLibraryCommandService',
+  'ModelSelectionApplicationService',
+]);
+const forbiddenDownloadControlPlaneModules = [
+  'modelDownloadCoordinator',
+  'downloadRegistryBootstrap',
+  'coordinatedDownloadBridge',
+  'ttsDownloadProvider',
+];
 const selectionProjectionKeys = new Set([
   'activeModelId',
   'lastTextModelId',
@@ -238,8 +255,210 @@ function checkResidencyAdmission(fileName, source) {
   inspect(source);
 }
 
+/** The application root is the only owner allowed to construct the workspace or residency manager. */
+function checkModelOwnerConstruction(fileName, source) {
+  const inspect = node => {
+    if (
+      ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) &&
+      node.moduleSpecifier.text.startsWith('@offgrid/models') &&
+      node.importClause &&
+      !node.importClause.isTypeOnly &&
+      node.importClause.namedBindings &&
+      ts.isNamedImports(node.importClause.namedBindings)
+    ) {
+      for (const element of node.importClause.namedBindings.elements) {
+        const imported = (element.propertyName ?? element.name).text;
+        if (!element.isTypeOnly && forbiddenModelOwnerExports.has(imported)) {
+          report(
+            'application-root-owns-model-workspace',
+            fileName,
+            source,
+            element,
+            `runtime import of ${imported}`,
+          );
+        }
+      }
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer
+    ) {
+      const initializer = ts.isAwaitExpression(node.initializer)
+        ? node.initializer.expression
+        : node.initializer;
+      if (
+        ts.isCallExpression(initializer) &&
+        initializer.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        initializer.arguments[0] &&
+        ts.isStringLiteral(initializer.arguments[0]) &&
+        initializer.arguments[0].text.startsWith('@offgrid/models')
+      ) {
+        for (const element of node.name.elements) {
+          const imported = element.propertyName && ts.isIdentifier(element.propertyName)
+            ? element.propertyName.text
+            : ts.isIdentifier(element.name)
+              ? element.name.text
+              : '';
+          if (forbiddenModelOwnerExports.has(imported)) {
+            report(
+              'application-root-owns-model-workspace',
+              fileName,
+              source,
+              element,
+              `dynamic runtime import of ${imported}`,
+            );
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+}
+
+/** Apps supply I/O ports. They do not construct a second model/download application layer. */
+function checkAppModelControlPlanes(fileName, source) {
+  const forbiddenBindings = new Map();
+  const modelNamespaces = new Set();
+  const inspect = node => {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const specifier = node.moduleSpecifier.text;
+      const localOwner = forbiddenDownloadControlPlaneModules.find(name => specifier.includes(name));
+      if (localOwner && importsRuntimeValue(node)) {
+        report(
+          'models-facade-is-the-only-app-control-plane',
+          fileName,
+          source,
+          node,
+          `runtime import of deleted app control plane ${localOwner}`,
+        );
+      }
+      if (specifier.startsWith('@offgrid/models')) {
+        const named = node.importClause?.namedBindings;
+        if (named && ts.isNamespaceImport(named)) modelNamespaces.add(named.name.text);
+        if (named && ts.isNamedImports(named)) {
+          for (const element of named.elements) {
+            const imported = (element.propertyName ?? element.name).text;
+            if (!element.isTypeOnly && forbiddenAppModelServices.has(imported)) {
+              forbiddenBindings.set(element.name.text, imported);
+            }
+          }
+        }
+      }
+    }
+    if (ts.isVariableDeclaration(node) && node.initializer) {
+      const initializer = ts.isAwaitExpression(node.initializer)
+        ? node.initializer.expression
+        : node.initializer;
+      const importedModule = ts.isCallExpression(initializer)
+        && initializer.expression.kind === ts.SyntaxKind.ImportKeyword
+        && initializer.arguments[0]
+        && ts.isStringLiteral(initializer.arguments[0])
+        ? initializer.arguments[0].text
+        : null;
+      const localOwner = importedModule
+        ? forbiddenDownloadControlPlaneModules.find(name => importedModule.includes(name))
+        : undefined;
+      if (localOwner) {
+        report(
+          'models-facade-is-the-only-app-control-plane',
+          fileName,
+          source,
+          node,
+          `dynamic runtime import of deleted app control plane ${localOwner}`,
+        );
+      }
+      if (importedModule?.startsWith('@offgrid/models') && ts.isIdentifier(node.name)) {
+        modelNamespaces.add(node.name.text);
+      }
+      if (importedModule?.startsWith('@offgrid/models') && ts.isObjectBindingPattern(node.name)) {
+        for (const element of node.name.elements) {
+          const imported = element.propertyName && ts.isIdentifier(element.propertyName)
+            ? element.propertyName.text
+            : ts.isIdentifier(element.name) ? element.name.text : '';
+          if (forbiddenAppModelServices.has(imported) && ts.isIdentifier(element.name)) {
+            forbiddenBindings.set(element.name.text, imported);
+          }
+        }
+      }
+    }
+    if (
+      ts.isNewExpression(node)
+      && (
+        (ts.isIdentifier(node.expression) && forbiddenBindings.has(node.expression.text))
+        || (
+          ts.isPropertyAccessExpression(node.expression)
+          && ts.isIdentifier(node.expression.expression)
+          && modelNamespaces.has(node.expression.expression.text)
+          && forbiddenAppModelServices.has(node.expression.name.text)
+        )
+      )
+    ) {
+      const owner = ts.isIdentifier(node.expression)
+        ? forbiddenBindings.get(node.expression.text)
+        : node.expression.name.text;
+      report(
+        'models-facade-is-the-only-app-control-plane',
+        fileName,
+        source,
+        node,
+        `app constructs ${owner}`,
+      );
+    }
+    if (
+      ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'require'
+      && node.arguments[0]
+      && ts.isStringLiteral(node.arguments[0])
+    ) {
+      const localOwner = forbiddenDownloadControlPlaneModules.find(
+        name => node.arguments[0].text.includes(name),
+      );
+      if (localOwner) {
+        report(
+          'models-facade-is-the-only-app-control-plane',
+          fileName,
+          source,
+          node,
+          `dynamic runtime import of deleted app control plane ${localOwner}`,
+        );
+      }
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(source);
+}
+
 function report(rule, file, source, node, detail) {
   findings.push({ rule, file, line: lineOf(source, node), detail });
+}
+
+const controlPlaneNegativeProbes = [
+  "import { ModelDownloadCoordinator as Owner } from '@offgrid/models'; new Owner({});",
+  "import * as Models from '@offgrid/models'; new Models.ModelDownloadRegistry({});",
+  "const { ModelSelectionApplicationService: Owner } = await import('@offgrid/models'); new Owner({});",
+  "const Models = await import('@offgrid/models'); new Models.ModelCommandApplicationService({});",
+  "const legacy = await import('./services/modelServices/coordinatedDownloadBridge'); void legacy;",
+];
+for (const [index, probe] of controlPlaneNegativeProbes.entries()) {
+  const source = ts.createSourceFile(`negative-probe-${index}.ts`, probe, ts.ScriptTarget.Latest, true);
+  const before = findings.length;
+  checkAppModelControlPlanes(`negative-probe-${index}.ts`, source);
+  const detected = findings.splice(before).some(
+    finding => finding.rule === 'models-facade-is-the-only-app-control-plane',
+  );
+  if (!detected) {
+    report(
+      'architecture-gate-self-test',
+      `negative-probe-${index}.ts`,
+      source,
+      source,
+      'control-plane rule did not reject a renamed or dynamic bypass',
+    );
+  }
 }
 
 for (const file of files) {
@@ -247,6 +466,8 @@ for (const file of files) {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const fileName = relative(file);
   checkResidencyAdmission(fileName, source);
+  checkModelOwnerConstruction(fileName, source);
+  checkAppModelControlPlanes(fileName, source);
   const isUi = /^src\/(components|hooks|screens)\//.test(fileName);
   const isAdapter =
     /^src\/services\/(adapters|modelServices\/.*Adapter|.*Provider)/i.test(
@@ -279,14 +500,14 @@ for (const file of files) {
 
   if (
     fileName === 'App.tsx' &&
-    !/\breconcileImageDownloadsAtBootstrap\s*\(/.test(text)
+    !/\.models\.hydrateDownloads\s*\(/.test(text)
   ) {
     report(
       'image-download-recovery-starts-at-bootstrap',
       fileName,
       source,
       source,
-      'bootstrap does not resume image downloads',
+      'bootstrap does not hydrate the facade-owned download journal',
     );
   }
 
@@ -1027,7 +1248,7 @@ for (const file of files) {
 
   if (
     fileName === 'src/screens/ModelsScreen/useTextModels.ts' &&
-    /(?:modelDownloadProjection|cancelBackgroundDownload|deleteModel\s*\(|mobileResidencyIntents)/.test(
+    /(?:cancelBackgroundDownload|deleteModel\s*\(|mobileResidencyIntents)/.test(
       text,
     )
   ) {
