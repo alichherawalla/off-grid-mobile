@@ -1,33 +1,158 @@
 // Composition root: shared remote discovery services over Mobile's HTTP and device ports.
 import {
+  detectRemoteToolCallingCapability,
+  detectRemoteVisionCapability,
+  once,
+  projectRemoteTextModels,
   RemoteCapabilityDiscoveryApplicationService,
   RemoteLanDiscoveryApplicationService,
   RemoteProviderDiscoveryApplicationService,
+  remoteLanScanKinds,
+  type RemoteTextDiscoveryCandidate,
 } from '@offgrid/models';
-import { once } from '@offgrid/models';
-
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports1 = (): typeof import('../adapters/remote/modelCapabilityDiscovery') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../adapters/remote/modelCapabilityDiscovery') as typeof import('../adapters/remote/modelCapabilityDiscovery');
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports2 = (): typeof import('../adapters/remote/serverDiscovery') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../adapters/remote/serverDiscovery') as typeof import('../adapters/remote/serverDiscovery');
-// Resolved at call time: this module reaches back into the composition, and an eager import
-// would form a cycle (jest evaluates modules eagerly; Metro happens to tolerate it).
-const ports3 = (): typeof import('../networkDiscovery') =>
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../networkDiscovery') as typeof import('../networkDiscovery');
+import type { RemoteModel, RemoteServer, ServerTestResult } from '../../types';
+import { useAppStore } from '../../stores';
+import logger from '../../utils/logger';
+import {
+  mobileRemoteCapabilityPorts,
+  type RemoteModelInfo,
+} from '../adapters/remote/modelCapabilityDiscovery';
+import {
+  mobileRemoteProviderDiscoveryPorts,
+  RemoteModelDiscoveryError,
+} from '../adapters/remote/serverDiscovery';
+import {
+  mobileLanDiscoveryPorts,
+  type DiscoveredServer,
+} from '../networkDiscovery';
 
 export const remoteCapabilityDiscovery = once(
-  () => new RemoteCapabilityDiscoveryApplicationService(ports1().mobileRemoteCapabilityPorts()),
+  () =>
+    new RemoteCapabilityDiscoveryApplicationService(
+      mobileRemoteCapabilityPorts(),
+    ),
 );
+
+async function mapTextModels(input: {
+  candidates: readonly RemoteTextDiscoveryCandidate[];
+  capabilityBaseUrl: string;
+  serverId: string;
+}): Promise<RemoteModel[]> {
+  const probedEntries = await Promise.all(
+    input.candidates.map(
+      async candidate =>
+        [
+          candidate.id,
+          await fetchModelCapabilities(input.capabilityBaseUrl, candidate.id, {
+            vision: detectRemoteVisionCapability,
+            toolCalling: detectRemoteToolCallingCapability,
+          }),
+        ] as const,
+    ),
+  );
+  return projectRemoteTextModels({
+    candidates: input.candidates,
+    serverId: input.serverId,
+    probed: new Map(probedEntries),
+    now: new Date().toISOString(),
+  });
+}
+
 export const remoteProviderDiscovery = once(
-  () => new RemoteProviderDiscoveryApplicationService(ports2().mobileRemoteProviderDiscoveryPorts()),
+  () =>
+    new RemoteProviderDiscoveryApplicationService(
+      mobileRemoteProviderDiscoveryPorts(mapTextModels),
+    ),
 );
 export const remoteLanDiscovery = once(
-  () => new RemoteLanDiscoveryApplicationService(ports3().mobileLanDiscoveryPorts()),
+  () => new RemoteLanDiscoveryApplicationService(mobileLanDiscoveryPorts()),
 );
+
+export function fetchModelCapabilities(
+  endpoint: string,
+  modelId: string,
+  nameBasedDetect: {
+    vision: (id: string) => boolean;
+    toolCalling: (id: string) => boolean;
+  },
+): Promise<RemoteModelInfo> {
+  return remoteCapabilityDiscovery().discover({
+    endpoint,
+    modelId,
+    fallbackVision: nameBasedDetect.vision(modelId),
+    fallbackToolCalling: nameBasedDetect.toolCalling(modelId),
+  });
+}
+
+async function discoverServer(server: RemoteServer): Promise<ServerTestResult> {
+  const result = await remoteProviderDiscovery().discover({
+    serverId: server.id,
+    endpoint: server.endpoint,
+    apiKey: server.apiKey,
+    expectedModelManagement: server.modelManagement,
+  });
+  return {
+    success: result.success,
+    ...(result.error ? { error: result.error } : {}),
+    latency: result.latency,
+    models: result.models,
+    selections: result.selections,
+    catalog: result.catalog,
+    modelManagement: result.modelManagement,
+    serverInfo: result.serverInfo,
+  };
+}
+
+export async function testServerConnection(
+  server: RemoteServer,
+): Promise<ServerTestResult> {
+  try {
+    return await discoverServer(server);
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+export function testEndpointAndGetModels(
+  endpoint: string,
+  apiKey?: string,
+): Promise<ServerTestResult> {
+  return testServerConnection({
+    id: 'temp',
+    name: 'temp',
+    endpoint,
+    provider: 'openai-compatible',
+    createdAt: new Date().toISOString(),
+    apiKey,
+  });
+}
+
+export async function fetchModelsFromServer(
+  server: RemoteServer,
+): Promise<RemoteModel[]> {
+  const result = await discoverServer(server);
+  if (!result.success) {
+    throw new RemoteModelDiscoveryError(
+      result.error ?? 'Remote server model discovery failed.',
+    );
+  }
+  return result.models ?? [];
+}
+
+export function discoverLANServers(
+  onLog?: (message: string) => void,
+  onFound?: (server: DiscoveredServer) => void,
+  onProgress?: (done: number, total: number) => void,
+): Promise<DiscoveredServer[]> {
+  return remoteLanDiscovery().discover(
+    message => {
+      logger.warn('[Discovery]', message);
+      onLog?.(message);
+    },
+    onFound,
+    { kinds: remoteLanScanKinds(useAppStore.getState().settings), onProgress },
+  );
+}

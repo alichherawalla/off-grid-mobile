@@ -1,22 +1,14 @@
 /** Mobile transport adapter for Shared remote-provider discovery. */
 
-import type { RemoteModel, RemoteServer, ServerTestResult } from '../../../types';
-import { fetchModelCapabilities } from './modelCapabilityDiscovery';
 import { readOffGridDesktopModelEvidence } from './offGridDesktopModels';
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
-  detectRemoteToolCallingCapability,
-  detectRemoteVisionCapability,
   displayRemoteModelName,
-  projectRemoteTextModels,
   remoteAuthorizationHeaders,
   type RemoteProviderProbe,
   type RemoteProviderProbeEvidence,
-  type RemoteTextDiscoveryCandidate,
 } from '@offgrid/models';
 import type { RemoteProviderDiscoveryApplicationService } from '@offgrid/models';
-
-import { remoteProviderDiscovery as composedProviderDiscovery } from '../../composition/remote';
 
 export const displayModelName = displayRemoteModelName;
 
@@ -65,97 +57,25 @@ async function probeRemoteProvider(
   }
 }
 
-async function mapTextModels(input: {
-  candidates: readonly RemoteTextDiscoveryCandidate[];
-  capabilityBaseUrl: string;
-  serverId: string;
-}): Promise<RemoteModel[]> {
-  const probedEntries = await Promise.all(input.candidates.map(async candidate => [
-    candidate.id,
-    await fetchModelCapabilities(input.capabilityBaseUrl, candidate.id, {
-      vision: detectRemoteVisionCapability,
-      toolCalling: detectRemoteToolCallingCapability,
-    }),
-  ] as const));
-  return projectRemoteTextModels({
-    candidates: input.candidates,
-    serverId: input.serverId,
-    probed: new Map(probedEntries),
-    now: new Date().toISOString(),
-  });
-}
-
 /** Transport, Desktop evidence, and capability mapping ports. Shared owns discovery. */
-export function mobileRemoteProviderDiscoveryPorts(): ConstructorParameters<typeof RemoteProviderDiscoveryApplicationService>[0] {
+export function mobileRemoteProviderDiscoveryPorts(
+  mapTextModels: ConstructorParameters<
+    typeof RemoteProviderDiscoveryApplicationService
+  >[0]['mapTextModels'],
+): ConstructorParameters<typeof RemoteProviderDiscoveryApplicationService>[0] {
   return {
-  probe: probeRemoteProvider,
-  readDesktop: (input, timeoutMs) => readOffGridDesktopModelEvidence({
-    endpoint: input.endpoint,
-    apiKey: input.apiKey,
-  }, timeoutMs),
-  mapTextModels,
-  authorizationHeaders: remoteAuthorizationHeaders,
-  now: Date.now,
-  timestamp: () => new Date().toISOString(),
-};
-}
-
-const remoteProviderDiscovery = (): RemoteProviderDiscoveryApplicationService => composedProviderDiscovery();
-
-async function discoverServer(server: RemoteServer): Promise<ServerTestResult> {
-  const result = await remoteProviderDiscovery().discover({
-    serverId: server.id,
-    endpoint: server.endpoint,
-    apiKey: server.apiKey,
-    expectedModelManagement: server.modelManagement,
-  });
-  return {
-    success: result.success,
-    ...(result.error ? { error: result.error } : {}),
-    latency: result.latency,
-    models: result.models,
-    selections: result.selections,
-    catalog: result.catalog,
-    modelManagement: result.modelManagement,
-    serverInfo: result.serverInfo,
+    probe: probeRemoteProvider,
+    readDesktop: (input, timeoutMs) =>
+      readOffGridDesktopModelEvidence(
+        {
+          endpoint: input.endpoint,
+          apiKey: input.apiKey,
+        },
+        timeoutMs,
+      ),
+    mapTextModels,
+    authorizationHeaders: remoteAuthorizationHeaders,
+    now: Date.now,
+    timestamp: () => new Date().toISOString(),
   };
-}
-
-export async function testServerConnection(
-  server: RemoteServer,
-): Promise<ServerTestResult> {
-  try {
-    return await discoverServer(server);
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-export async function testEndpointAndGetModels(
-  endpoint: string,
-  apiKey?: string,
-): Promise<ServerTestResult> {
-  return testServerConnection({
-    id: 'temp',
-    name: 'temp',
-    endpoint,
-    provider: 'openai-compatible',
-    createdAt: new Date().toISOString(),
-    apiKey,
-  });
-}
-
-export async function fetchModelsFromServer(
-  server: RemoteServer,
-): Promise<RemoteModel[]> {
-  const result = await discoverServer(server);
-  if (!result.success) {
-    throw new RemoteModelDiscoveryError(
-      result.error ?? 'Remote server model discovery failed.',
-    );
-  }
-  return result.models ?? [];
 }

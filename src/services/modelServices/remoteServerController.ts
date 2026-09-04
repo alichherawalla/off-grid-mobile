@@ -1,6 +1,6 @@
 import { modelsFailureMessage, type ModelsFailure } from '@offgrid/application';
 import type { RemoteModel, RemoteModelCategory, RemoteServer, ServerTestResult } from '../../types';
-import { testEndpointAndGetModels } from '../adapters/remote/serverDiscovery';
+import { testEndpointAndGetModels } from '../composition/remote';
 import { getApiKeyImpl, storeApiKeyImpl } from '../adapters/remote/serverRuntime';
 import { applicationFacade } from '../applicationFacade';
 import { selectCanonicalModel } from './modelSelectionCommandPort';

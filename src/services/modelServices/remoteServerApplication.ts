@@ -9,11 +9,11 @@ import {
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useAppStore } from '../../stores/appStore';
 import { remoteTextTransportRegistry } from '../adapters/providers/registry';
-import { discoverLANServers } from '../networkDiscovery';
 import {
+  discoverLANServers,
   fetchModelsFromServer,
   testServerConnection,
-} from '../adapters/remote/serverDiscovery';
+} from '../composition/remote';
 import {
   createProviderForServerImpl,
   getApiKeyImpl,

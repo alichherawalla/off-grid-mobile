@@ -8,7 +8,6 @@ import {
 } from '@offgrid/models';
 import type { RemoteCapabilityDiscoveryApplicationService } from '@offgrid/models';
 import logger from '../../../utils/logger';
-import { remoteCapabilityDiscovery } from '../../composition/remote';
 
 export type RemoteModelInfo = RemoteModelCapabilityInfo;
 
@@ -41,46 +40,10 @@ async function execute(
 }
 
 /** Raw HTTP probe as the discovery port. */
-export function mobileRemoteCapabilityPorts(): ConstructorParameters<typeof RemoteCapabilityDiscoveryApplicationService>[0] {
+export function mobileRemoteCapabilityPorts(): ConstructorParameters<
+  typeof RemoteCapabilityDiscoveryApplicationService
+>[0] {
   return { execute };
-}
-
-const discovery = (): RemoteCapabilityDiscoveryApplicationService => remoteCapabilityDiscovery();
-
-export function fetchRemoteModelInfo(
-  endpoint: string,
-  modelName: string,
-): Promise<RemoteModelInfo> {
-  return discovery().ollama(endpoint, modelName);
-}
-
-export function fetchLmStudioModelInfo(
-  endpoint: string,
-  modelId: string,
-): Promise<RemoteModelInfo> {
-  return discovery().lmStudio(endpoint, modelId);
-}
-
-export function fetchLlamaCppProps(
-  endpoint: string,
-): Promise<RemoteModelInfo | null> {
-  return discovery().llamaCpp(endpoint);
-}
-
-export function fetchModelCapabilities(
-  endpoint: string,
-  modelId: string,
-  nameBasedDetect: {
-    vision: (id: string) => boolean;
-    toolCalling: (id: string) => boolean;
-  },
-): Promise<RemoteModelInfo> {
-  return discovery().discover({
-    endpoint,
-    modelId,
-    fallbackVision: nameBasedDetect.vision(modelId),
-    fallbackToolCalling: nameBasedDetect.toolCalling(modelId),
-  });
 }
 
 export function isGenerativeModel(modelId: string): boolean {
