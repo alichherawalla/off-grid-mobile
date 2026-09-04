@@ -2187,3 +2187,29 @@ Deletion condition: expose the required typed commands, Outcomes, events, and na
 `ModelsFacade`; compose each portable owner once inside Shared; leave only React Native filesystem,
 registry, native-engine, and persistence ports in Mobile; migrate all callers; delete the app-level
 service composition; and make the model architecture gate reject any reconstruction.
+
+## Cold-start download recovery is unreachable: `hydrateDownloads` is not on `ModelsFacade` (open, 2026-09-04)
+
+Mobile's app-owned download hydration chain (`downloadHydration`, `restoreQueuedDownloads`,
+`reattachTextDownloadRecovery`, `reconcileImageDownloadsAtBootstrap`) was deleted when the download
+control plane moved into `@offgrid/application`. Its replacement is the facade's own idempotent
+`hydrateDownloads()`, which re-observes every restored handle. `scripts/verify-model-architecture.mjs`
+gates for exactly that call in `App.tsx` (rule `image-download-recovery-starts-at-bootstrap`).
+
+Mobile cannot make the call. `hydrateDownloads` is present on the runtime facade object
+(`shared/packages/application/dist/index.mjs`) but is NOT declared on the public `ModelsFacade`
+contract (`shared/packages/application/src/contracts/models.ts`), so it is absent from
+`dist/index.d.ts` and `applicationFacade().models.hydrateDownloads()` is a type error.
+`ModelsFacade` hand-lists `download`, `downloadAndWait`, `retryDownload`, `cancelDownload`,
+`removeDownload`, `clearDownload` and `clearInactiveDownloads` from `ModelsDownloadCommands`;
+`hydrateDownloads` was simply not added alongside them.
+
+Impact, and it is user-visible: a download interrupted by an app kill is never recovered on the next
+cold start. Nothing reports it, because an empty download list is indistinguishable from a list that
+was never read. The architecture gate is correspondingly RED on this one rule - deliberately left red
+rather than deleted, because the rule is right and the missing symbol is the defect.
+
+Deletion condition: declare `hydrateDownloads(): Promise<Outcome<void, ModelsFailure>>` on
+`ModelsFacade`, rebuild shared, then call it from `App.tsx` off the boot gate (it reads the native
+download DB, which contends with in-flight writes badly enough to blank launch) with its refusal
+logged, not dropped. Verify by killing the app mid-download and confirming the row returns.
