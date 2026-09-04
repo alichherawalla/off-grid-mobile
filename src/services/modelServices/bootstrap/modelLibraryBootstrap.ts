@@ -55,7 +55,7 @@ import type {
 } from '../../adapters/models/library/visionRepairAdapter';
 import { startCoordinatedTextFinalizer } from '../../adapters/models/library/coordinatedTextFinalizer';
 import { executeVisionRepairIntent } from '../../adapters/models/library/visionRepairApplicationAdapter';
-import { modelLibraryRegistry } from '../../composition/model-library';
+import { modelLibraryRegistry } from '../../composition/model-library-services';
 class ModelLibraryBootstrap {
   private readonly modelsDir: string;
   private readonly imageModelsDir: string;

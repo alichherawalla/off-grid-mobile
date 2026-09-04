@@ -1,6 +1,6 @@
 import { visionMetadataRepairIds } from '@offgrid/models';
 import type { ModelMetadataRepairCommandService } from '@offgrid/models';
-import { visionMetadataRepair } from '../composition/model-library';
+import { visionMetadataRepair } from '../composition/model-library-services';
 import type { DownloadedModel, ModelFile } from '../../types';
 import { modelLibrary } from './bootstrap/modelLibraryBootstrap';
 

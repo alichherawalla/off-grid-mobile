@@ -2,7 +2,7 @@ import type {
   VisionRepairApplicationIntent,
   VisionRepairApplicationResult,
 } from '@offgrid/models';
-import { visionRepairApplication } from '../../../composition/model-library';
+import { visionRepairApplication } from '../../../composition/model-library-services';
 import type { DownloadedModel, ModelFile } from '../../../../types';
 import type { VisionRepairContext } from './visionRepairAdapter';
 import { mobileVisionRepairPorts } from './visionRepairPorts';

@@ -17,7 +17,7 @@ import {
   buildDownloadedModel,
   persistDownloadedModel,
 } from './modelRegistryStorageAdapter';
-import { modelFileImport } from '../../../composition/model-library';
+import { modelFileImport } from '../../../composition/model-library-services';
 
 export interface MobileModelFileImportInput {
   modelsDir: string;

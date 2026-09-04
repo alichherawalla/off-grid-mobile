@@ -1,5 +1,5 @@
 import type { ChatModelReadinessFacts, ChatModelReadinessService } from '@offgrid/models';
-import { chatModelReadiness } from '../composition/model-library';
+import { chatModelReadiness } from '../composition/model-library-services';
 import type { DownloadedModel } from '../../types';
 import { isLiteRTModel } from '../../types';
 import { getActiveModels } from './modelState';
