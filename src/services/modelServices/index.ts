@@ -18,7 +18,6 @@ import {
   type MobileRouteFacts,
 } from './mobileRoute';
 import {
-  mobileLLMService,
   refreshMobileLLMServiceInventory,
   selectMobileRoute,
 } from './mobileLLMService';
@@ -35,6 +34,9 @@ import { mobileModelSelectionService } from './modelSelectionApplication';
 import { reportModelFailure } from '../modelFailureHandler';
 import logger from '../../utils/logger';
 import { applicationFacade } from '../applicationFacade';
+
+/** The one Mobile owner of model inventory, selection and canonical route identity. */
+export const mobileLLMService = mobileWorkspace.llm;
 
 mobileInventoryAdapters.forEach(adapter => mobileLLMService.registerAdapter(adapter));
 registerLifecycleProjectionPort({

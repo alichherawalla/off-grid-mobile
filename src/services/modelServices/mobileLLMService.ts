@@ -1,12 +1,9 @@
-import type { ActiveModelSnapshot, ModelModality, RuntimeModel, WorkspaceRoutingPort } from '@offgrid/models';
-import { lazyInstance } from '../composition/lazy';
+import type { ActiveModelSnapshot, ModelModality, RuntimeModel } from '@offgrid/models';
 import { applicationFacade } from '../applicationFacade';
 
-/** The single Mobile owner of model inventory, selection, and canonical route identity. */
-// Resolved on first use: the workspace module may still be initializing when this module loads.
-export const mobileLLMService: WorkspaceRoutingPort = lazyInstance(
-  () => (require('./workspace') as typeof import('./workspace')).mobileWorkspace.llm,
-);
+// Route reads and selection transactions only. The composed routing port itself belongs to the
+// composition that builds the workspace (`modelServices/index.ts`); pulling it in here made every
+// consumer of a route read depend on the workspace, which is what closed the workspace cycle.
 let refreshChain = Promise.resolve<RuntimeModel[]>([]);
 
 /** Serialize canonical inventory rebuilds so an older platform snapshot cannot win a race. */
