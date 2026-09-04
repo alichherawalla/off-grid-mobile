@@ -26,7 +26,7 @@ import { writePastedNote } from '../services/adapters/rag/pastedNoteFileAdapter'
 import { useProjectRagDocuments } from '../hooks/useProjectRagDocuments';
 import { isPickerStuck } from '../utils/pickerErrorUtils';
 
-const documentKey = (doc: RagDocument): string => doc.id;
+const documentKey = (doc: RagDocument): string => String(doc.id);
 
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;

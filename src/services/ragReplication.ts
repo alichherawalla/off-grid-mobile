@@ -17,20 +17,20 @@ import { applicationFacade } from './applicationFacade';
  * should keep using the facade stream directly and say why.
  */
 export async function* replicatedRagDocuments(): AsyncGenerator<KnowledgeDocumentSnapshot> {
-  let failure: RagFailure | null = null;
+  const terminal: { failure: RagFailure | null } = { failure: null };
   const release = applicationFacade().rag.events(event => {
     if (
       event.type === 'operation_failed' &&
       event.operation === 'sync_all_documents'
     ) {
-      failure ??= event.failure;
+      terminal.failure ??= event.failure;
     }
   });
   try {
     for await (const document of applicationFacade().rag.sync.allDocuments()) {
       // The event lands before the iterator ends, so stop rather than yield a document read after
       // the stream had already given up.
-      if (failure) break;
+      if (terminal.failure) break;
       yield document;
     }
   } finally {
@@ -38,5 +38,5 @@ export async function* replicatedRagDocuments(): AsyncGenerator<KnowledgeDocumen
   }
   // Reached only when the consumer drained the stream: a consumer that broke out early gets its
   // own control flow back, not someone else's error.
-  if (failure) throw new Error(failure.message);
+  if (terminal.failure) throw new Error(terminal.failure.message);
 }
