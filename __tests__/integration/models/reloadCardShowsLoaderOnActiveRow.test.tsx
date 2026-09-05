@@ -83,8 +83,10 @@ describe('model selector loader during an active-model reload', () => {
         .queryByTestId('model-row-loading'),
     ).toBeNull();
 
-    finishNativeLoad();
-    await reload;
+    await h.rtl.act(async () => {
+      finishNativeLoad();
+      await reload;
+    });
     await h.rtl.waitFor(() =>
       expect(view.queryByTestId('model-row-loading')).toBeNull(),
     );
