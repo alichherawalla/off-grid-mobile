@@ -9,6 +9,11 @@ const fs = require('node:fs');
 // genuinely absent (open-core CI without the PAT) do we ignore those suites and map
 // @offgrid/pro to the null stub, so the open-core suite still runs and stays green.
 const proExists = fs.existsSync(path.resolve(__dirname, 'pro/package.json'));
+// A shard is one coverage producer, not the aggregate. It must write coverage without deciding
+// whether the whole product meets its gate. The unsharded suite remains the single threshold owner.
+const isCoverageCollectionShard = process.argv.some(
+  argument => argument === '--shard' || argument.startsWith('--shard='),
+);
 
 // Suites under THIS repo's __tests__ that import @offgrid/pro. Ignored ONLY when pro is
 // absent. When Pro exists, its own suites are part of this repository-level gate too.
@@ -31,7 +36,7 @@ const proDependentTestPaths = [
   '__tests__/unit/tools/mcpPresets.test.ts',
 ];
 
-module.exports = {
+const jestConfig = {
   preset: 'react-native',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
@@ -170,3 +175,7 @@ module.exports = {
     },
   },
 };
+
+if (isCoverageCollectionShard) delete jestConfig.coverageThreshold;
+
+module.exports = jestConfig;
