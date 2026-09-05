@@ -1,8 +1,8 @@
 const PRO_COVERAGE_THRESHOLD = Object.freeze({
-  statements: 75,
-  branches: 75,
-  functions: 75,
-  lines: 75,
+  statements: 80,
+  branches: 80,
+  functions: 80,
+  lines: 80,
 });
 
 /** Do not ask Jest to gate a Pro source group that is absent in open-core checkouts. */

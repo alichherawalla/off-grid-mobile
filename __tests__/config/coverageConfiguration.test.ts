@@ -6,6 +6,7 @@ const { proCoverageThreshold } = require('../../scripts/jestCoverageThresholds')
 
 describe('workspace coverage configuration', () => {
   it('runs Mobile without force-exit and limits Shared coverage to Mobile consumers', () => {
+    expect(packageManifest.scripts['test:js']).not.toContain('--forceExit');
     const command = packageManifest.scripts['test:coverage:workspace'];
     expect(command).not.toContain('--forceExit');
     expect(command).toContain('--consumers=mobile,mobile-pro');
@@ -15,10 +16,10 @@ describe('workspace coverage configuration', () => {
     expect(proCoverageThreshold(false)).toEqual({});
     expect(proCoverageThreshold(true)).toEqual({
       './pro': {
-        statements: 75,
-        branches: 75,
-        functions: 75,
-        lines: 75,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
       },
     });
   });

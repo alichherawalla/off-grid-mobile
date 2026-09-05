@@ -82,9 +82,8 @@ jobs:
           # Node 26, pinned by the TEST gate and now shared by all of them. The RAG/knowledge-base
           # suites run a REAL in-memory database via node's built-in `node:sqlite`
           # (__tests__/harness/sqliteFake.ts). That module is absent on Node 20 and flag-gated on
-          # Node 22. On Node 24 it loads but its native teardown SEGFAULTs the process under jest's
-          # --forceExit (exit 139) — reproduced locally: the full suite exits 139 on Node 24 and
-          # exits 0 on Node 26. Node 26's node:sqlite fixes that teardown crash.
+          # Node 22. Node 26 provides the stable node:sqlite lifecycle used by the real database
+          # journeys, including normal Jest teardown without forced process termination.
           node-version: '26'
           cache: 'npm'
 
@@ -188,14 +187,14 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run knip
 
-      - name: Run Jest tests
+      - name: Run Mobile and Shared consumer coverage
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         env:
           # The serial RN + jsdom suite retains more than Node's default 2 GB heap before
           # coverage is written. The macOS runner has 14 GB; keep enough headroom for native
           # tooling while allowing the complete suite to finish without weakening the gate.
           NODE_OPTIONS: --max-old-space-size=8192
-        run: npx jest --coverage --forceExit --runInBand
+        run: npm run test:coverage:workspace
 
       - name: Install Android NDK
         # Configuring the native modules (op-sqlite etc.) needs the pinned NDK; the macOS
