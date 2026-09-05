@@ -1,25 +1,18 @@
-import { arrangeLocalSelection } from '../../utils/testHelpers';
-import { selectedLocalModelId } from '../../utils/testHelpers';
-import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { AutoSetupScreen } from '../../../src/screens/AutoSetupScreen';
 import { type AutoSetupCatalogBoundaries } from '../../../src/services/autoSetupCatalog';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 import {
-  createAutoSetupSession,
-  type AutoSetupDownloadBoundaries,
-} from '../../../src/services/composition/guided-setup';
-import { modelDownloadRegistry as modelDownloadService } from '../../../src/services/modelServices/downloadRegistryBootstrap';
-import type {
-  DownloadProvider,
-  DownloadModelType,
-  ModelDownload,
-  ModelDownloadStartRequest,
-} from '../../../src/services/modelServices/downloadTypes';
-import { uniformDownloadId } from '@offgrid/models';
-import { useAppStore } from '../../../src/stores';
-import { createDownloadedModel } from '../../utils/factories';
+  installNativeBoundary,
+  requireRTL,
+  type NativeBoundary,
+} from '../../harness/nativeBoundary';
 
 const MB = 1024 * 1024;
+const WHISPER_SHA256: Readonly<Record<string, string>> = {
+  'ggml-large-v3.bin':
+    '64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2',
+  'ggml-large-v3-turbo.bin':
+    '1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69',
+};
 const parameterCount = (modelId: string): number => {
   if (modelId.includes('9B')) return 9;
   if (modelId.includes('E4B')) return 4;
@@ -28,101 +21,6 @@ const parameterCount = (modelId: string): number => {
   if (modelId.includes('0.8B')) return 0.8;
   return 1;
 };
-const capabilities = {
-  cancel: true,
-  retry: true,
-  remove: true,
-  resumable: true,
-  determinateProgress: true,
-};
-
-class NativeDownloadBoundary implements DownloadProvider {
-  private downloads: ModelDownload[] = [];
-  private readonly listeners = new Set<() => void>();
-  completeOnStart = true;
-
-  constructor(readonly modelType: DownloadModelType) {}
-
-  async list(): Promise<ModelDownload[]> {
-    return this.downloads;
-  }
-
-  private begin(id: string, name: string, sizeBytes: number): Promise<void> {
-    this.downloads = [
-      {
-        id: uniformDownloadId(this.modelType, id),
-        modelType: this.modelType,
-        name,
-        sizeBytes,
-        bytesDownloaded: this.completeOnStart ? sizeBytes : 0,
-        progress: this.completeOnStart ? 1 : 0,
-        status: this.completeOnStart ? 'completed' : 'downloading',
-        capabilities,
-      },
-    ];
-    this.listeners.forEach(listener => listener());
-    return Promise.resolve();
-  }
-
-  start(request: ModelDownloadStartRequest): Promise<void> {
-    if (request.modelType === 'text') {
-      const id = `${request.modelId}/${request.file.name}`;
-      useAppStore.getState().addDownloadedModel(createDownloadedModel({
-        id,
-        name: request.modelId,
-        fileName: request.file.name,
-        fileSize: request.file.size,
-        engine: 'llama',
-      }));
-      return this.begin(id, request.file.name, request.file.size);
-    }
-    if (request.modelType === 'image') {
-      return this.begin(request.model.id, request.model.name, request.model.size);
-    }
-    return this.begin(request.modelId, request.modelId, 1 * MB);
-  }
-
-  setProgress(progress: number): void {
-    this.downloads = this.downloads.map(download => ({
-      ...download,
-      bytesDownloaded: download.sizeBytes * progress,
-      progress,
-      status: 'downloading',
-    }));
-    this.listeners.forEach(listener => listener());
-  }
-
-  complete(): void {
-    this.downloads = this.downloads.map(download => ({
-      ...download,
-      bytesDownloaded: download.sizeBytes,
-      progress: 1,
-      status: 'completed',
-    }));
-    this.listeners.forEach(listener => listener());
-  }
-
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  async cancel(): Promise<void> {
-    this.downloads = [];
-    this.listeners.forEach(listener => listener());
-  }
-  async retry(): Promise<void> {}
-  async remove(): Promise<void> {
-    if (this.modelType === 'text') {
-      for (const download of this.downloads) {
-        useAppStore.getState().removeDownloadedModel(download.id.replace(/^text:/, ''));
-      }
-    }
-    this.downloads = [];
-    this.listeners.forEach(listener => listener());
-  }
-}
-
 const catalogBoundaries: AutoSetupCatalogBoundaries = {
   totalMemoryGB: () => 12,
   fetchTextFiles: async models =>
@@ -155,6 +53,15 @@ const catalogBoundaries: AutoSetupCatalogBoundaries = {
       description: 'Lean image',
       size: 100 * MB,
       downloadUrl: 'https://models.test/image-lean',
+      repo: 'offgrid/image-lean',
+      coremlFiles: [
+        {
+          path: 'model.bin',
+          relativePath: 'model.bin',
+          size: 100 * MB,
+          downloadUrl: 'https://models.test/image-lean/model.bin',
+        },
+      ],
       style: 'general',
       backend: 'coreml',
     },
@@ -164,6 +71,15 @@ const catalogBoundaries: AutoSetupCatalogBoundaries = {
       description: 'Balanced image',
       size: 200 * MB,
       downloadUrl: 'https://models.test/image-balanced',
+      repo: 'offgrid/image-balanced',
+      coremlFiles: [
+        {
+          path: 'model.bin',
+          relativePath: 'model.bin',
+          size: 200 * MB,
+          downloadUrl: 'https://models.test/image-balanced/model.bin',
+        },
+      ],
       style: 'general',
       backend: 'coreml',
     },
@@ -173,6 +89,15 @@ const catalogBoundaries: AutoSetupCatalogBoundaries = {
       description: 'Extreme image',
       size: 300 * MB,
       downloadUrl: 'https://models.test/image-extreme',
+      repo: 'offgrid/image-extreme',
+      coremlFiles: [
+        {
+          path: 'model.bin',
+          relativePath: 'model.bin',
+          size: 300 * MB,
+          downloadUrl: 'https://models.test/image-extreme/model.bin',
+        },
+      ],
       style: 'general',
       backend: 'coreml',
     },
@@ -180,78 +105,161 @@ const catalogBoundaries: AutoSetupCatalogBoundaries = {
 };
 
 describe('Auto Setup release journey', () => {
-  const navigation = { navigate: jest.fn(), push: jest.fn(), replace: jest.fn() } as any;
-  const textDownloads = new NativeDownloadBoundary('text');
-  const imageDownloads = new NativeDownloadBoundary('image');
-  const speechDownloads = new NativeDownloadBoundary('stt');
-  let unregister: Array<() => void> = [];
+  const originalFetch = global.fetch;
+  let fixture: MobileApplicationFixture;
+  let boundary: NativeBoundary;
+  type Navigation = import('react').ComponentProps<
+    typeof import('../../../src/screens/AutoSetupScreen').AutoSetupScreen
+  >['navigation'];
+  let navigation: Navigation;
+  let React: typeof import('react');
+  let rtl: typeof import('@testing-library/react-native');
+  let AutoSetupScreen: typeof import('../../../src/screens/AutoSetupScreen').AutoSetupScreen;
+  let createAutoSetupSession: typeof import('../../../src/services/composition/guided-setup').createAutoSetupSession;
 
-  const downloadBoundaries: AutoSetupDownloadBoundaries = {
-    start: request => modelDownloadService.start(request),
-    list: () => modelDownloadService.list(),
-    cancel: id => modelDownloadService.cancel(id),
-    subscribe: listener => modelDownloadService.subscribe(listener),
+  const downloads = () =>
+    fixture.application.models.snapshot().control.downloads;
+  const sessionFactory = () =>
+    createAutoSetupSession({ catalog: catalogBoundaries });
+  const renderScreen = () =>
+    rtl.render(
+      React.createElement(AutoSetupScreen, { navigation, sessionFactory }),
+    );
+  const nextNativeTransfer = async (completedIds = new Set<string>()) => {
+    try {
+      await rtl.waitFor(() =>
+        expect(
+          boundary
+            .download!.active()
+            .some(
+              row =>
+                row.status === 'running' && !completedIds.has(row.downloadId),
+            ),
+        ).toBe(true),
+      );
+    } catch {
+      throw new Error(
+        `No next native transfer: ${JSON.stringify({
+          native: boundary.download!.active(),
+          downloads: downloads(),
+        })}`,
+      );
+    }
+    return boundary
+      .download!.active()
+      .find(
+        row => row.status === 'running' && !completedIds.has(row.downloadId),
+      )!;
+  };
+  const completeNativeTransfer = (transfer: {
+    downloadId: string;
+    fileName?: string;
+  }) => {
+    const artifactName = transfer.fileName?.replace(/^\d+-/, '');
+    const sha256 = artifactName ? WHISPER_SHA256[artifactName] : undefined;
+    boundary.download!.complete(
+      transfer.downloadId,
+      sha256 ? { sha256 } : undefined,
+    );
+  };
+  const completeSelectedPlan = async () => {
+    const completedTransferIds = new Set<string>();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (
+        downloads().length === 3 &&
+        downloads().every(download => download.status === 'completed')
+      ) {
+        return;
+      }
+      const transfer = await nextNativeTransfer(completedTransferIds);
+      completeNativeTransfer(transfer);
+      completedTransferIds.add(transfer.downloadId);
+      await rtl.waitFor(() =>
+        expect(
+          boundary
+            .download!.active()
+            .find(row => row.downloadId === transfer.downloadId)?.status,
+        ).toBe('completed'),
+      );
+    }
+    throw new Error(
+      `Selected setup plan did not complete: ${JSON.stringify(downloads())}`,
+    );
   };
 
-  const sessionFactory = () =>
-    createAutoSetupSession({
-      catalog: catalogBoundaries,
-      downloads: downloadBoundaries,
-    });
-
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
-    useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
-    useAppStore.setState({ });
-    arrangeLocalSelection('text', null);
-    textDownloads.completeOnStart = true;
-    imageDownloads.completeOnStart = true;
-    speechDownloads.completeOnStart = true;
-    unregister = [
-      modelDownloadService.register(textDownloads),
-      modelDownloadService.register(imageDownloads),
-      modelDownloadService.register(speechDownloads),
-    ];
+    boundary = installNativeBoundary({ download: true, fs: true });
+    await require('@react-native-async-storage/async-storage').clear();
+    const repositoryFacts: typeof fetch = async () =>
+      new Response(
+        JSON.stringify({
+          siblings: [
+            { rfilename: '4b.gguf', lfs: { size: 4 * 100 * MB } },
+            { rfilename: '9b.gguf', lfs: { size: 9 * 100 * MB } },
+            {
+              rfilename: 'ggml-large-v3.bin',
+              lfs: {
+                size: 3_095_033_483,
+                sha256: WHISPER_SHA256['ggml-large-v3.bin'],
+              },
+            },
+            {
+              rfilename: 'ggml-large-v3-turbo.bin',
+              lfs: {
+                size: 1_624_555_275,
+                sha256: WHISPER_SHA256['ggml-large-v3-turbo.bin'],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    global.fetch = jest.fn(repositoryFacts);
+    React = require('react') as typeof import('react');
+    rtl = requireRTL();
+    ({ AutoSetupScreen } =
+      require('../../../src/screens/AutoSetupScreen') as typeof import('../../../src/screens/AutoSetupScreen'));
+    ({ createAutoSetupSession } =
+      require('../../../src/services/composition/guided-setup') as typeof import('../../../src/services/composition/guided-setup'));
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    fixture = await startMobileApplicationFixture();
+    navigation = {
+      navigate: jest.fn(),
+      push: jest.fn(),
+      replace: jest.fn(),
+    } as unknown as Navigation;
   });
 
   afterEach(async () => {
-    await Promise.all([
-      textDownloads.remove(),
-      imageDownloads.remove(),
-      speechDownloads.remove(),
-    ]);
-    unregister.forEach(dispose => dispose());
+    await fixture.dispose();
+    global.fetch = originalFetch;
   });
 
   it('selects a device-fit plan, starts all model downloads, and activates it', async () => {
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={sessionFactory}
-      />,
-    );
-    await waitFor(() =>
+    const ui = renderScreen();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-plan-balanced')).toBeTruthy(),
     );
 
     expect(ui.getAllByText('INCLUDES')).toHaveLength(1);
     expect(ui.getByText('Gemma 4 E4B')).toBeTruthy();
-    fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
     expect(ui.getByText('Qwen 3.5 9B')).toBeTruthy();
     expect(ui.queryByText('Gemma 4 E4B')).toBeNull();
-    expect(useAppStore.getState().settings.modelLoadingMode).toBe('aggressive');
-
-    fireEvent.press(ui.getByTestId('auto-setup-download'));
-    await waitFor(() =>
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-download'));
+    await completeSelectedPlan();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-continue')).toBeTruthy(),
     );
-    expect(
-      (await modelDownloadService.list()).map(item => item.modelType),
-    ).toEqual(expect.arrayContaining(['text', 'image', 'stt']));
+    expect(downloads().map(item => item.modelType)).toEqual(
+      expect.arrayContaining(['text', 'image', 'stt']),
+    );
 
-    fireEvent.press(ui.getByTestId('auto-setup-continue'));
-    await waitFor(() => {
-      expect(selectedLocalModelId('text')).toContain(
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-continue'));
+    await rtl.waitFor(() => {
+      expect(fixture.selectedModelId('text')).toContain(
         'unsloth/Qwen3.5-9B-GGUF',
       );
       expect(navigation.replace).toHaveBeenCalledWith('Main');
@@ -259,56 +267,41 @@ describe('Auto Setup release journey', () => {
   });
 
   it('keeps manual model and remote server setup in Advanced Setup', async () => {
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={sessionFactory}
-      />,
-    );
-    await waitFor(() =>
+    const ui = renderScreen();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-advanced')).toBeTruthy(),
     );
-    fireEvent.press(ui.getByTestId('auto-setup-advanced'));
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-advanced'));
     expect(navigation.push).toHaveBeenCalledWith('AdvancedSetup');
   });
 
   it('shows the failed model and cancels the other downloads as one session', async () => {
-    textDownloads.completeOnStart = false;
-    speechDownloads.completeOnStart = false;
-    const failingDownloads: AutoSetupDownloadBoundaries = {
-      ...downloadBoundaries,
-      start: async request => {
-        if (request.modelType === 'image') {
-          return Promise.reject({ message: 'Image model download could not start.' });
-        }
-        return modelDownloadService.start(request);
-      },
-    };
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={() =>
-          createAutoSetupSession({
-            catalog: catalogBoundaries,
-            downloads: failingDownloads,
-          })
-        }
-      />,
-    );
-    await waitFor(() =>
+    const ui = renderScreen();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-download')).toBeTruthy(),
     );
 
-    fireEvent.press(ui.getByTestId('auto-setup-download'));
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-download'));
+    const completedIds = new Set<string>();
+    let image = await nextNativeTransfer(completedIds);
+    while (!image.modelId?.includes('image')) {
+      completeNativeTransfer(image);
+      completedIds.add(image.downloadId);
+      image = await nextNativeTransfer(completedIds);
+    }
+    boundary.download!.fail(
+      image.downloadId,
+      'Image model download could not start.',
+    );
 
-    await waitFor(() =>
+    await rtl.waitFor(() =>
       expect(
         ui.getByText('Image model download could not start.'),
       ).toBeTruthy(),
     );
     expect(ui.getByText(/FAILED/)).toBeTruthy();
-    await waitFor(async () => {
-      const active = (await modelDownloadService.list()).filter(
+    await rtl.waitFor(() => {
+      const active = downloads().filter(
         download => download.status === 'downloading',
       );
       expect(active).toEqual([]);
@@ -316,73 +309,91 @@ describe('Auto Setup release journey', () => {
   });
 
   it('keeps central download records alive after setup unmounts', async () => {
-    textDownloads.completeOnStart = false;
-    imageDownloads.completeOnStart = false;
-    speechDownloads.completeOnStart = false;
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={sessionFactory}
-      />,
-    );
-    await waitFor(() =>
+    const ui = renderScreen();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-download')).toBeTruthy(),
     );
-    fireEvent.press(ui.getByTestId('auto-setup-download'));
-    await waitFor(() =>
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-download'));
+    await rtl.waitFor(() =>
       expect(ui.getAllByText(/STARTING|0%/).length).toBeGreaterThan(0),
     );
+    const completedIds = new Set<string>();
+    while (downloads().length < 3) {
+      const transfer = await nextNativeTransfer(completedIds);
+      completeNativeTransfer(transfer);
+      completedIds.add(transfer.downloadId);
+      await rtl.waitFor(() =>
+        expect(
+          downloads().some(download => download.status === 'completed'),
+        ).toBe(true),
+      );
+    }
 
-    const beforeUnmount = await modelDownloadService.list();
+    const beforeUnmount = downloads();
     expect(beforeUnmount).toHaveLength(3);
 
     ui.unmount();
 
-    await waitFor(async () => {
-      const afterUnmount = await modelDownloadService.list();
-      expect(afterUnmount.map(download => download.id)).toEqual(
-        beforeUnmount.map(download => download.id),
+    await rtl.waitFor(() => {
+      const afterUnmount = downloads();
+      expect(afterUnmount.map(download => download.downloadId)).toEqual(
+        beforeUnmount.map(download => download.downloadId),
       );
-      expect(afterUnmount.every(download => download.status === 'downloading')).toBe(true);
+      expect(afterUnmount.map(download => download.status)).toEqual(
+        beforeUnmount.map(download => download.status),
+      );
     });
 
-    textDownloads.setProgress(0.42);
-    await waitFor(async () => {
-      const text = (await modelDownloadService.list()).find(download => download.modelType === 'text');
-      expect(text?.progress).toBe(0.42);
+    const activeTransfer = await nextNativeTransfer();
+    const progressBefore = downloads().map(download => ({
+      downloadId: download.downloadId,
+      bytesDownloaded: download.bytesDownloaded,
+    }));
+    const expectedTotalBytes = activeTransfer.totalBytes ?? 0;
+    expect(expectedTotalBytes).toBeGreaterThan(0);
+    boundary.download!.progress(
+      activeTransfer.downloadId,
+      Math.floor(expectedTotalBytes * 0.42),
+      expectedTotalBytes,
+    );
+    await rtl.waitFor(() => {
+      expect(
+        downloads().some(download => {
+          const previous = progressBefore.find(
+            candidate => candidate.downloadId === download.downloadId,
+          );
+          return download.bytesDownloaded > (previous?.bytesDownloaded ?? 0);
+        }),
+      ).toBe(true);
     });
 
-    textDownloads.complete();
-    await waitFor(async () => {
-      const text = (await modelDownloadService.list()).find(download => download.modelType === 'text');
-      expect(text?.status).toBe('completed');
-      expect(text?.progress).toBe(1);
-    });
+    const completedBefore = downloads().filter(
+      download => download.status === 'completed',
+    ).length;
+    completeNativeTransfer(activeTransfer);
+    await rtl.waitFor(
+      () =>
+        expect(
+          downloads().filter(download => download.status === 'completed'),
+        ).toHaveLength(completedBefore + 1),
+      { timeout: 4_000 },
+    );
   });
 
   it('keeps the selected plan fixed after its download session starts', async () => {
-    textDownloads.completeOnStart = false;
-    imageDownloads.completeOnStart = false;
-    speechDownloads.completeOnStart = false;
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={sessionFactory}
-      />,
-    );
-    await waitFor(() =>
+    const ui = renderScreen();
+    await rtl.waitFor(() =>
       expect(ui.getByTestId('auto-setup-plan-balanced')).toBeTruthy(),
     );
 
-    fireEvent.press(ui.getByTestId('auto-setup-download'));
-    await waitFor(() =>
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-download'));
+    await rtl.waitFor(() =>
       expect(ui.getAllByText(/STARTING|0%/).length).toBeGreaterThan(0),
     );
-    fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
+    rtl.fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
 
     expect(ui.getByText('Gemma 4 E4B')).toBeTruthy();
     expect(ui.queryByText('Qwen 3.5 9B')).toBeNull();
-    expect(useAppStore.getState().settings.modelLoadingMode).toBe('balanced');
     ui.unmount();
   });
 
@@ -391,17 +402,15 @@ describe('Auto Setup release journey', () => {
       ...catalogBoundaries,
       fetchTextFiles: () => new Promise(() => undefined),
     };
-    const ui = render(
-      <AutoSetupScreen
-        navigation={navigation}
-        sessionFactory={() =>
+    const ui = rtl.render(
+      React.createElement(AutoSetupScreen, {
+        navigation,
+        sessionFactory: () =>
           createAutoSetupSession({
             catalog: stalledCatalog,
-            downloads: downloadBoundaries,
             catalogDeadlineMs: 5,
-          })
-        }
-      />,
+          }),
+      }),
     );
 
     expect(

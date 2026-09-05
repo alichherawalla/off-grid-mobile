@@ -58,19 +58,25 @@ export async function loadAutoSetupCompatibleCatalog(
       files: (files[model.id] ?? []).map(file => ({
         name: file.name,
         size: file.size,
-        mmProjFile: file.mmProjFile ? { size: file.mmProjFile.size } : undefined,
+        mmProjFile: file.mmProjFile
+          ? { size: file.mmProjFile.size }
+          : undefined,
         payload: { modelId: model.id, file },
       })),
     })),
-    image: imageModels.map(model => ({
-      id: model.id,
-      name: model.name,
-      backend: model.backend,
-      variant: model.variant,
-      size: model.size,
-      artifacts: model.coremlFiles ?? model.huggingFaceFiles,
-      payload: model,
-    })),
+    image: imageModels.map(model => {
+      const id = model.repo ?? model.huggingFaceRepo ?? model.id;
+      const payload = id === model.id ? model : { ...model, id };
+      return {
+        id,
+        name: model.name,
+        backend: model.backend,
+        variant: model.variant,
+        size: model.size,
+        artifacts: model.coremlFiles ?? model.huggingFaceFiles,
+        payload,
+      };
+    }),
     stt: WHISPER_MODELS.map(model => ({
       id: model.id,
       name: model.name,
