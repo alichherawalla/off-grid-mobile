@@ -231,6 +231,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     { type: 'file', path: 'FastModel_qnn2.28_8gen2.zip', size: 500_000_000 },
   ];
   let treeResponse: Array<Record<string, unknown>> = [];
+  let treeHangs = false;
   const networkFetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.includes('/api/models?')) {
@@ -240,6 +241,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
       });
     }
     if (url.includes('/tree/')) {
+      if (treeHangs) return new Promise<Response>(() => {});
       const response = url.includes('xororz/sd-mnn')
         ? imageMnnBoundaryFiles
         : url.includes('xororz/sd-qnn')
@@ -306,6 +308,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     searchResponse = [];
     searchFails = false;
     treeResponse = [];
+    treeHangs = false;
     networkFetch.mockClear();
     realRTL.cleanup();
   });
@@ -1041,6 +1044,67 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     expect(networkFetch).not.toHaveBeenCalled();
     expect(view.getByText(/Recommended for your device/)).toBeTruthy();
   });
+
+  it('shows loading spinner when files are loading', async () => {
+    treeHangs = true;
+    const view = await openModelDetail('test-org/Loading Model');
+    await realRTL.waitFor(() => expect(view.getByTestId('model-detail-screen')).toBeTruthy());
+    expect(view.getByLabelText('Working')).toBeTruthy();
+  });
+
+  it('filters files in detail view by quant filter', async () => {
+    treeResponse = [
+      rawFile('model-Q4_K_M.gguf', 2_000_000_000),
+      rawFile('model-Q8_0.gguf', 4_000_000_000),
+    ];
+    searchResponse = [rawModel('test-org/Quant Model')];
+    const view = await openFilter(/^Quant [▴▾]$/);
+    await realRTL.waitFor(() => expect(view.getByText('Q4_K_M')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Q4_K_M'));
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'quant');
+    await realRTL.waitFor(() => expect(view.getByText('Quant Model')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('model-card-0'));
+    await realRTL.waitFor(() => expect(view.getByText('model-Q4_K_M')).toBeTruthy());
+    expect(view.queryByText('model-Q8_0')).toBeNull();
+  });
+
+  it('pressing back returns to model list and clears files', async () => {
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 2_000_000_000)];
+    const view = await openModelDetail('test-org/Back Navigation Model');
+    await realRTL.waitFor(() => expect(view.getByText('model-Q4_K_M')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByLabelText('Back'));
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    expect(view.queryByText('model-Q4_K_M')).toBeNull();
+  });
+
+  it('triggers HuggingFace search with "coder" keyword when code filter is set and query is empty', async () => {
+    const view = await openFilter(/Type/);
+    await realRTL.waitFor(() => expect(view.getByText('Code')).toBeTruthy());
+    networkFetch.mockClear();
+    realRTL.fireEvent.press(view.getByText('Code'));
+    await realRTL.waitFor(() =>
+      expect(networkFetch).toHaveBeenCalledWith(
+        expect.stringContaining(`search=${CODE_FALLBACK_QUERY}`),
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('shows formatted download count in detail view', async () => {
+    searchResponse = [rawModel('test-org/Popular Model', 'test-org', {
+      downloads: 1_500_000,
+      likes: 2_500,
+    })];
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 2_000_000_000)];
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'popular');
+    await realRTL.waitFor(() => expect(view.getByText('Popular Model')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('model-card-0'));
+    await realRTL.waitFor(() => {
+      expect(view.getByText('1.5M downloads')).toBeTruthy();
+      expect(view.getByText('2.5K likes')).toBeTruthy();
+    });
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -1210,128 +1274,19 @@ describe('ModelsScreen', () => {
   // ============================================================================
   describe('model detail view interactions', () => {
     it('triggers download when download button pressed on file card', async () => {
-      const files = [
+      mockSearchModels.mockResolvedValue([
+        createModelInfo({ id: 'test-org/test-model-3B', name: 'Test Model', author: 'test-org' }),
+      ]);
+      mockGetModelFiles.mockResolvedValue([
         createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ];
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-          files: [],
-        }),
       ]);
-      mockGetModelFiles.mockResolvedValue(files);
-
       const { getByTestId, getByText } = renderModelsScreen();
-
       await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
+      fireEvent.changeText(getByTestId('search-input'), 'test');
       await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-
-      // Tap on model card to enter detail view
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      // Wait for file cards to load
-      await waitFor(() => {
-        expect(getByTestId('file-card-0-download-btn')).toBeTruthy();
-      });
-
-      // Press download button
-      await act(async () => {
-        fireEvent.press(getByTestId('file-card-0-download-btn'));
-      });
-    });
-
-    it('shows loading spinner when files are loading', async () => {
-      // Make getModelFiles hang
-      mockGetModelFiles.mockReturnValue(new Promise(() => {}));
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-          files: [],
-        }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-
-      // Verify model detail screen is shown (navigation happened)
-      // Files are intentionally loading forever, so we just verify the screen renders
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy(), { timeout: 3000 });
-
-      // Verify loading state is shown (ActivityIndicator or similar)
-      // The test passes if we get here without timing out
-      expect(getByTestId('model-detail-screen')).toBeTruthy();
-    }, 15000);
-
-    it('filters files in detail view by quant filter', async () => {
-      const files = [
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-        createModelFile({ name: 'model-Q8_0.gguf', size: 4000000000 }),
-      ];
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-          files: [],
-        }),
-      ]);
-      mockGetModelFiles.mockResolvedValue(files);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Set quant filter to Q4_K_M before searching
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Quant/));
-      });
-      await waitFor(() => expect(getByText('Q4_K_M')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Q4_K_M'));
-      });
-
-      // Search and select model
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      // Q4_K_M file should show, Q8_0 should be filtered out
-      await waitFor(() => {
-        expect(getByText('model-Q4_K_M')).toBeTruthy();
-      });
+      fireEvent.press(getByText('Test Model'));
+      await waitFor(() => expect(getByTestId('file-card-0-download-btn')).toBeTruthy());
+      fireEvent.press(getByTestId('file-card-0-download-btn'));
     });
 
     it('shows downloaded indicator on already-downloaded file', async () => {
@@ -1435,41 +1390,6 @@ describe('ModelsScreen', () => {
   // Detail view - back button returns to list
   // ============================================================================
   describe('detail view navigation', () => {
-    it('pressing back returns to model list and clears files', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-        }),
-      ]);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ]);
-
-      const { getByTestId, getByText, getByLabelText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      // Press back
-      await act(async () => {
-        fireEvent.press(getByLabelText('Back'));
-      });
-
-      // Should return to main list
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-    });
   });
   // ============================================================================
   // handleDownload - covers the download handler branches
@@ -1519,73 +1439,11 @@ describe('ModelsScreen', () => {
   // handleSearch with filters
   // ============================================================================
   describe('handleSearch with active filters', () => {
-    it('triggers HuggingFace search with "coder" keyword when code filter is set and query is empty', async () => {
-      const { getByText, getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText(/Recommended for your device/)).toBeTruthy();
-      });
-
-      // Open filter bar
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      // Select Code type filter
-      await act(async () => {
-        fireEvent.press(getByText(/^Type/));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('Code'));
-      });
-
-      await waitFor(() => {
-        expect(mockSearchModels).toHaveBeenCalledWith(
-          CODE_FALLBACK_QUERY,
-          expect.objectContaining({ limit: 30 }),
-        );
-      });
-    });
   });
 
   // ============================================================================
   // formatNumber utility
   // ============================================================================
   describe('formatNumber display', () => {
-    it('shows formatted download count in detail view', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/popular-3B',
-          name: 'Popular Model',
-          author: 'test-org',
-          downloads: 1500000,
-          likes: 2500,
-        }),
-      ]);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'popular');
-      });
-      await waitFor(() => expect(getByText('Popular Model')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Popular Model'));
-      });
-
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      // Should show formatted numbers
-      await waitFor(() => {
-        expect(getByText(/1.5M downloads/)).toBeTruthy();
-        expect(getByText(/2.5K likes/)).toBeTruthy();
-      });
-    });
   });
 });
