@@ -220,8 +220,10 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
   let RealModelsScreen: typeof ModelsScreen;
   let RealNavigationContainer: typeof NavigationContainer;
   let RealReact: typeof React;
+  let realNativeBoundary: import('../../harness/nativeBoundary').NativeBoundary;
   let originalFetch: typeof global.fetch;
   let searchResponse: Array<Record<string, unknown>> = [];
+  let searchFails = false;
   const imageMnnBoundaryFiles: Array<Record<string, unknown>> = [
     { type: 'file', path: 'StableDiffusionV1.zip', size: 500_000_000 },
     { type: 'file', path: 'AnimeGenerator.zip', size: 500_000_000 },
@@ -234,7 +236,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     const url = String(input);
     if (url.includes('/api/models?')) {
       return new Response(JSON.stringify(searchResponse), {
-        status: 200,
+        status: searchFails ? 503 : 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -272,7 +274,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     }
     const { installNativeBoundary, requireRTL, GB } =
       require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
-    const nativeBoundary = installNativeBoundary({
+    realNativeBoundary = installNativeBoundary({
       download: true,
       fs: true,
       whisper: true,
@@ -285,7 +287,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.getHardware.mockResolvedValue('qcom');
     DeviceInfo.getModel.mockReturnValue('Snapdragon test device');
-    nativeBoundary.diffusion.module.getSoCModel = jest.fn().mockResolvedValue('SM8550');
+    realNativeBoundary.diffusion.module.getSoCModel = jest.fn().mockResolvedValue('SM8550');
     originalFetch = global.fetch;
     global.fetch = networkFetch as typeof global.fetch;
     realRTL = requireRTL();
@@ -303,6 +305,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
 
   afterEach(() => {
     searchResponse = [];
+    searchFails = false;
     treeResponse = [];
     networkFetch.mockClear();
     realRTL.cleanup();
@@ -902,6 +905,68 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
       expect(view.getByText('Stable Diffusion V1 (GPU)')).toBeTruthy();
     });
   });
+
+  it('shows import button', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('import-local-model')).toBeTruthy());
+  });
+
+  it('triggers file picker on import press', async () => {
+    const picker = require('@react-native-documents/picker');
+    picker.pick.mockRejectedValueOnce({ code: 'OPERATION_CANCELED' });
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByTestId('import-local-model'));
+    await realRTL.waitFor(() => expect(picker.pick).toHaveBeenCalled());
+  });
+
+  it('shows import button when not importing', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('import-local-model')).toBeTruthy());
+  });
+
+  it('calls file picker when import button pressed', async () => {
+    const picker = require('@react-native-documents/picker');
+    picker.pick.mockRejectedValueOnce({ code: 'OPERATION_CANCELED' });
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByTestId('import-local-model'));
+    await realRTL.waitFor(() => expect(picker.pick).toHaveBeenCalled());
+  });
+
+  it('handles search network error gracefully', async () => {
+    searchFails = true;
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText('Search Error')).toBeTruthy());
+    expect(view.getByTestId('models-screen')).toBeTruthy();
+  });
+
+  it('handles API error gracefully during search', async () => {
+    searchFails = true;
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() =>
+      expect(view.getByText('Failed to search models. Please try again.')).toBeTruthy(),
+    );
+    expect(view.getByTestId('models-screen')).toBeTruthy();
+  });
+
+  it('pulls to refresh reloads downloaded models', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('models-list')).toBeTruthy());
+    const storage = require('@react-native-async-storage/async-storage');
+    const { RefreshControl } = require('react-native');
+    storage.getItem.mockClear();
+    realRTL.fireEvent(view.UNSAFE_getByType(RefreshControl), 'refresh');
+    await realRTL.waitFor(() => expect(storage.getItem).toHaveBeenCalled());
+  });
+
+  it('resets text filters when switching to image tab', async () => {
+    const view = await openTextFilters();
+    await realRTL.waitFor(() => expect(view.getByText(/Org/)).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Image Models'));
+    realRTL.fireEvent.press(view.getByText('Text Models'));
+    await realRTL.waitFor(() => expect(view.queryByText('Qwen')).toBeNull());
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -958,34 +1023,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Import Local Model
-  // ============================================================================
-  describe('import local model', () => {
-    it('shows import button', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('import-local-model')).toBeTruthy();
-      });
-    });
-
-    it('triggers file picker on import press', async () => {
-      const { pick } = require('@react-native-documents/picker');
-      pick.mockRejectedValue({ code: 'OPERATION_CANCELED' });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByTestId('import-local-model'));
-      });
-
-      // Should have tried to open file picker
-      expect(pick).toHaveBeenCalled();
-    });
-  });
-
   // ============================================================================
   // Recommended Models & Constants
   // ============================================================================
@@ -1074,56 +1111,7 @@ describe('ModelsScreen', () => {
       expect(totalSize).toBe(4500000000);
     });
   });
-
-  // ============================================================================
-  // Search error handling
-  // ============================================================================
-  describe('search error handling', () => {
-    it('handles search network error gracefully', async () => {
-      mockSearchModels.mockRejectedValue(new Error('Network error'));
-
-      const { getByTestId } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      // Screen should still be rendered (no crash)
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-    });
   });
-
-  // ============================================================================
-  // Import flow
-  // ============================================================================
-  describe('import flow', () => {
-    it('shows import button when not importing', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('import-local-model')).toBeTruthy();
-      });
-    });
-
-    it('calls file picker when import button pressed', async () => {
-      const { pick } = require('@react-native-documents/picker');
-      pick.mockRejectedValue({ code: 'OPERATION_CANCELED' });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('import-local-model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('import-local-model'));
-      });
-
-      expect(pick).toHaveBeenCalled();
-    });
-  });
-
-
   // ============================================================================
   // Downloaded model indicators
   // ============================================================================
@@ -1142,28 +1130,6 @@ describe('ModelsScreen', () => {
         expect(getByTestId('models-screen')).toBeTruthy();
       });
     });
-  });
-  // ============================================================================
-  // Refresh
-  // ============================================================================
-  describe('refresh', () => {
-    it('pulls to refresh reloads downloaded models', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-list')).toBeTruthy();
-      });
-
-      // Pull to refresh triggers handleRefresh
-      await act(async () => {
-        fireEvent(getByTestId('models-list'), 'refresh');
-      });
-
-      // Should reload downloaded models
-      expect(mockGetDownloadedModels).toHaveBeenCalled();
-    });
-  });
-
   // ============================================================================
   // Bring Your Own Model (constants/logic)
   // Model detail view - download and file filtering
@@ -1347,37 +1313,6 @@ describe('ModelsScreen', () => {
       await waitFor(() => expect(getByTestId('import-local-model')).toBeTruthy());
     });
   });
-
-  // ============================================================================
-  // Tab switching resets filters
-  // ============================================================================
-  describe('tab switching resets state', () => {
-    it('resets text filters when switching to image tab', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Open text filters
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await waitFor(() => expect(getByText(/Org/)).toBeTruthy());
-
-      // Switch to image tab
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Switch back to text tab
-      await act(async () => {
-        fireEvent.press(getByText('Text Models'));
-      });
-
-      // Filters should be closed (not visible)
-      // Filter bar is hidden after tab switch
-    });
-  });
-
   // ============================================================================
   // Search results with code models
   // ============================================================================
@@ -1529,29 +1464,6 @@ describe('ModelsScreen', () => {
       // Recommended models that match downloaded IDs should be filtered out
     });
   });
-
-  // ============================================================================
-  // Search error handling (covers catch branch)
-  // ============================================================================
-  describe('search error display', () => {
-    it('handles API error gracefully during search', async () => {
-      mockSearchModels.mockRejectedValue(new Error('Network timeout'));
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      // Should not crash - error is handled
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-    });
-  });
-
   // ============================================================================
   // Detail view - back button returns to list
   // ============================================================================
