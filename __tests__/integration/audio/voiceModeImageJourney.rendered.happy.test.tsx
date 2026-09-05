@@ -23,11 +23,11 @@ describe('T084 (rendered) — voice-mode image journey (STT → route → image 
     await h.setupWhisperModel();
     h.render();
     // Place + load (activate) an image model via the real path — hasImageModel=true, imageMode stays 'auto'.
-    await h.placeImageModel({ backend: 'mnn' });
+    const imageModel = await h.placeImageModel({ backend: 'mnn' });
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
      
-    await activeModelService.loadImageModel('sd');
+    await activeModelService.loadImageModel(imageModel.id);
 
     // Voice mode, then voice-send "draw a dog" → the pattern router → IMAGE.
     await h.enterVoiceMode();
