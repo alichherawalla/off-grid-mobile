@@ -18,8 +18,8 @@
  * RED on HEAD: the refusal throws a plain Error → isOverridableMemoryError === false → the failure store is
  * empty (speak bailed silently); no card, no Load Anyway.
  */
-import { modelResidencyManager } from '@offgrid/core/services/modelServices/residencyBootstrap';
 import { setDeviceMemory, resetDeviceMemory } from '../../harness/deviceMemory';
+import { getMobileApplication } from '../../../src/services/composition/application';
 import { ttsRegistry } from '../../../pro/audio/engine';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import { useModelFailureStore } from '../../../src/stores/modelFailureStore';
@@ -60,21 +60,21 @@ function makeFakeEngine() {
 }
 
 describe('TTS speak-path memory refusal is overridable (Load Anyway) — red-flow', () => {
-  afterEach(() => {
-    resetDeviceMemory();
+  afterEach(async () => {
+    await resetDeviceMemory();
     useModelFailureStore.getState().clear();
   });
 
   it('surfaces a dismissible tts failure card with Load Anyway (not a silent bail)', async () => {
     // 12GB device. The voice model is a sidecar; the evict-everything force (override → singleModel)
     // evicts every evictable PEER sidecar to free maximum RAM before loading.
-    setDeviceMemory({ platform: 'ios', totalGB: 12, availGB: 0.2, policy: 'balanced' });
+    await setDeviceMemory({ platform: 'ios', totalGB: 12, availGB: 0.2, policy: 'balanced' });
     useModelFailureStore.getState().clear();
 
     // A resident peer sidecar (whisper) whose NATIVE unload REJECTS — the override force tries to evict it
     // to free room, the native unload fails, so makeRoomFor returns { fits:false } even under override.
     // This is the reachable device refusal on the evict-everything speak-turn force.
-    const resident = await modelResidencyManager.acquire(
+    const resident = await getMobileApplication().models.residency.acquire(
       {
         key: 'transcription:test-whisper',
         modelId: 'test-whisper',
