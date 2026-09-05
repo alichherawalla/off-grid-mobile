@@ -64,6 +64,12 @@ function ramGb(node: { props?: { children?: unknown } }): string {
   return bare[1];
 }
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 describe('RAM display agreement — picker label matches the residency chip for the same model', () => {
   it('shows the SAME GB figure on the manager-sheet chip and the picker "Currently Loaded" label (GPU backend)', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
@@ -99,6 +105,11 @@ describe('RAM display agreement — picker label matches the residency chip for 
       React.createElement(HomeScreen, { navigation: nav }),
     ));
     await rtl.waitFor(() => { expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0); }, { timeout: 10000 });
+
+    // The real Mobile composition root: the Shared model inventory only knows the downloaded model
+    // once the real local adapter has listed it, which is what selection resolves the route against.
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
 
     // GESTURE: select the text model the way a user does — open the picker, tap the row.
     rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));

@@ -1,59 +1,112 @@
 /**
- * RED-FLOW (integration) — the audio bubble's Play button must speak the SINGLE-SOURCE speech text.
- *
- * commit 592bc456 made prepareMessageForSpeech (= stripMarkdownForSpeech(stripControlTokens(content)))
- * the ONE transform every speech caller routes through, so the spoken text can never diverge. The audio
- * bubble's Play/re-synth handler instead hand-composed its own transform — stripMarkdownForSpeech(transcript)
- * ONLY, skipping stripControlTokens. So a transcript that still carries control/reasoning tokens (a raw
- * <think>…</think> block, a tool-call block) would be spoken aloud with those tokens, and the transform is
- * defined twice (drift risk) instead of once.
- *
- * This mounts the REAL AudioMessageBubble, arrives at the Play control via a real tap, and asserts the text
- * the bubble DISPATCHES to the TTS service equals prepareMessageForSpeech(transcript) for a markdown +
- * control-token input — the single source of truth.
- *
- * RED on HEAD: the bubble dispatches stripMarkdownForSpeech(transcript), which leaves the <think> block in
- * → ≠ prepareMessageForSpeech(transcript).
+ * The audio bubble must route one canonical, speech-safe transcript through the real
+ * Mobile Pro playback path. Only the native TTS runtime is replaced here; Mobile,
+ * Pro, Shared playback policy, the store projection, and the rendered control remain real.
  */
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
-import { AudioMessageBubble } from '@offgrid/pro/audio/ui/AudioMessageBubble';
-import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
-import { prepareMessageForSpeech } from '@offgrid/core/utils/messageContent';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { AudioMessageBubble } from '../../../pro/audio/ui/AudioMessageBubble';
+import { prepareMessageForSpeech } from '../../../src/utils/messageContent';
+import { ttsRegistry } from '../../../pro/audio/engine';
+import { useTTSStore } from '../../../pro/audio/ttsStore';
+import type {
+  TTSEngine,
+  TTSSpeakOptions,
+} from '../../../pro/audio/engine/types';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
-// The file player decodes real audio off a native module — the one genuine IO boundary. Stub the decode.
-jest.mock('@offgrid/pro/audio/audioFilePlayer', () => ({
-  decodeFileWaveform: jest.fn(async () => [] as number[]),
-}));
+const ENGINE_ID = 'speech-text-boundary';
 
-const initialTTSState = useTTSStore.getState();
-afterEach(() => {
-  jest.clearAllMocks();
-  useTTSStore.setState(initialTTSState, true);
-});
+function nativeSpeechBoundary(
+  spoken: Array<{ text: string; options?: TTSSpeakOptions }>,
+): TTSEngine {
+  const voice = {
+    id: 'voice',
+    label: 'Voice',
+    metadata: { languageCode: 'en' },
+  };
+  return {
+    id: ENGINE_ID,
+    displayName: 'Speech Text Boundary',
+    capabilities: {
+      streaming: true,
+      voiceCloning: false,
+      pauseResume: true,
+      generateAndSave: false,
+      peakRamMB: 1,
+    },
+    on: () => () => {},
+    off: () => {},
+    once: () => () => {},
+    getPhase: () => 'ready',
+    getLastDownloadError: () => null,
+    isSupported: () => true,
+    initialize: async () => {},
+    release: async () => {},
+    destroy: async () => {},
+    getRequiredAssets: () => [],
+    checkAssetStatus: async () => [],
+    downloadAssets: async () => {},
+    deleteAssets: async () => {},
+    getOverallDownloadProgress: () => 1,
+    isFullyDownloaded: () => true,
+    getBridgeComponent: () => null,
+    getVoices: () => [voice],
+    getActiveVoice: () => voice,
+    setVoice: async () => {},
+    speak: async (text, options) => {
+      spoken.push({ text, options });
+    },
+    generateAndSave: async () => {
+      throw new Error('The test native boundary does not support saved audio.');
+    },
+    stop: () => {},
+    pause: () => {},
+    resume: () => {},
+    setSpeed: () => {},
+  };
+}
 
-describe('audio bubble Play speaks the single-source speech text (red-flow)', () => {
-  it('dispatches prepareMessageForSpeech(transcript) — control tokens stripped, not just markdown', () => {
-    // A raw transcript with a reasoning block AND markdown — exactly the content a speech caller must
-    // never voice verbatim.
-    const transcript = '<think>internal reasoning the user must not hear</think>\n## Answer\nThe **capital** is `Paris`.';
+describe('audio bubble Play speaks the single-source speech text', () => {
+  let fixture: MobileApplicationFixture;
+  const spoken: Array<{ text: string; options?: TTSSpeakOptions }> = [];
 
-    // Capture what the bubble DISPATCHES to the TTS service (the intent the View hands the store).
-    let dispatchedText: string | undefined;
-    useTTSStore.setState({
-      play: async (_messageId: string, opts: { text: string }) => { dispatchedText = opts.text; },
-    } as never);
+  beforeAll(async () => {
+    ttsRegistry.register(ENGINE_ID, () => nativeSpeechBoundary(spoken));
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    fixture = await startMobileApplicationFixture({ pro: true });
+    await useTTSStore.getState().setEngine(ENGINE_ID);
+  });
 
-    // No audioPath → the fileless synth (re-synth) path: tapping Play calls play(id, { text: <speech text> }).
-    const { getByLabelText } = render(
-      <AudioMessageBubble messageId="m1" audioPath="" waveformData={[]} durationSeconds={0} transcript={transcript} />,
+  afterAll(async () => {
+    await useTTSStore.getState().releaseEngine();
+    await ttsRegistry.unregister(ENGINE_ID);
+    await fixture.dispose();
+  });
+
+  beforeEach(() => {
+    spoken.length = 0;
+  });
+
+  it('removes control tokens and markdown before speech reaches the native runtime', async () => {
+    const transcript =
+      '<think>internal reasoning the user must not hear</think>\n## Answer\nThe **capital** is `Paris`.';
+
+    const view = render(
+      React.createElement(AudioMessageBubble, {
+        messageId: 'm1',
+        audioPath: '',
+        waveformData: [],
+        durationSeconds: 0,
+        transcript,
+      }),
     );
 
-    fireEvent.press(getByLabelText('Play'));
+    fireEvent.press(view.getByLabelText('Play'));
 
-    // The bubble must speak the SINGLE-SOURCE output. RED on HEAD: it dispatched stripMarkdownForSpeech only,
-    // so the <think> block is still present → ≠ prepareMessageForSpeech(transcript).
-    expect(dispatchedText).toBe(prepareMessageForSpeech(transcript));
-    expect(dispatchedText).not.toMatch(/internal reasoning/); // the reasoning block must be gone
+    await waitFor(() => expect(spoken).toHaveLength(1));
+    expect(spoken[0]?.text).toBe(prepareMessageForSpeech(transcript));
+    expect(spoken[0]?.text).not.toMatch(/internal reasoning/);
   });
 });

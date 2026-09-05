@@ -366,6 +366,18 @@ export interface LlamaFake {
   releaseMultimodalHold(): void;
   /** True while a held load is parked INSIDE the multimodal check (the window is open). */
   multimodalHoldActive(): boolean;
+  /** Make context.release() AND releaseContext() REJECT, as a native unload that genuinely fails does
+   *  (llama.rn surfaces the native error; the context stays resident and its memory is NOT reclaimed).
+   *  Persistent until cleared. */
+  scriptReleaseFailure(fail?: boolean): void;
+  /** HOLD the next context.release() open until releaseUnload() — a native unload is not instant on a
+   *  device (freeing a multi-GB context takes real time), so the in-flight unload window is observable.
+   *  One-shot; the usual deferred free still runs once released. */
+  holdNextUnload(): void;
+  /** Release an unload held via holdNextUnload(). No-op if nothing is held. */
+  releaseUnload(): void;
+  /** True while an unload is parked INSIDE native context.release(). */
+  unloadHeld(): boolean;
   /** react-native module object to inject for 'llama.rn'. */
   module: Record<string, jest.Mock>;
   calls: { completion: unknown[][]; clearCache: boolean[] };
@@ -400,6 +412,11 @@ function makeLlamaFake(
   let mmHoldPending = false;
   let mmHoldEngaged = false;
   let mmHoldRelease: (() => void) | null = null;
+  // Unload boundary: a native release can take real time (hold) and can genuinely fail (script).
+  let releaseFails = false;
+  let unloadHoldPending = false;
+  let unloadHoldEngaged = false;
+  let unloadHoldRelease: (() => void) | null = null;
 
   const context: Record<string, jest.Mock> = {
     // Faithful to llama.rn: completion(params, onToken) STREAMS token-by-token through the callback
@@ -555,6 +572,17 @@ function makeLlamaFake(
     // returns (device-faithful), not synchronously. Defer the free so the reclaim barrier captures the
     // still-high footprint as its baseline and then observes the drop on a later poll (as on device).
     release: jest.fn(async () => {
+      if (unloadHoldPending) {
+        unloadHoldPending = false;
+        unloadHoldEngaged = true;
+        await new Promise<void>(res => {
+          unloadHoldRelease = res;
+        });
+        unloadHoldEngaged = false;
+      }
+      if (releaseFails) {
+        throw new Error('Failed to release context');
+      }
       setTimeout(() => onRelease?.(), 50);
     }),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
@@ -626,7 +654,11 @@ function makeLlamaFake(
       return context;
     }),
     loadLlamaModelInfo: jest.fn(async () => modelInfo),
-    releaseContext: jest.fn().mockResolvedValue(undefined),
+    releaseContext: jest.fn(async () => {
+      if (releaseFails) {
+        throw new Error('Failed to release context');
+      }
+    }),
     completion: jest.fn().mockResolvedValue({ text: '' }),
     stopCompletion: jest.fn().mockResolvedValue(undefined),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
@@ -668,6 +700,18 @@ function makeLlamaFake(
       f?.();
     },
     multimodalHoldActive: () => mmHoldEngaged,
+    scriptReleaseFailure: (fail = true) => {
+      releaseFails = fail;
+    },
+    holdNextUnload: () => {
+      unloadHoldPending = true;
+    },
+    releaseUnload: () => {
+      const f = unloadHoldRelease;
+      unloadHoldRelease = null;
+      f?.();
+    },
+    unloadHeld: () => unloadHoldEngaged,
   };
 }
 
@@ -692,6 +736,14 @@ export interface DiffusionFake {
   generationHeld(): boolean;
   /** How many times native cancelGeneration was asked for — the far side of the user's STOP. */
   cancelCount(): number;
+  /** HOLD the next unloadModel open until releaseUnload() — freeing a diffusion model on a device takes
+   *  real time, so the in-flight unload window is observable rather than closing in the same tick.
+   *  One-shot. */
+  holdNextUnload(): void;
+  /** Release an unload held via holdNextUnload(). No-op if nothing is held. */
+  releaseUnload(): void;
+  /** True while an unload is parked inside native unloadModel. */
+  unloadHeld(): boolean;
 }
 
 function makeDiffusionFake(
@@ -702,11 +754,26 @@ function makeDiffusionFake(
   let holdNext = false;
   let held: (() => void) | null = null;
   let cancels = 0;
+  let unloadHoldPending = false;
+  let unloadHoldEngaged = false;
+  let unloadHoldRelease: (() => void) | null = null;
   const module: Record<string, jest.Mock> = {
     isModelLoaded: jest.fn().mockResolvedValue(true),
     getLoadedModelPath: jest.fn().mockResolvedValue(null),
     loadModel: jest.fn().mockResolvedValue(true),
-    unloadModel: jest.fn().mockResolvedValue(true),
+    // Freeing a diffusion model is not instant on a device. A scripted hold parks the caller inside
+    // native unloadModel until releaseUnload(), so the in-flight unload is observable.
+    unloadModel: jest.fn(async () => {
+      if (unloadHoldPending) {
+        unloadHoldPending = false;
+        unloadHoldEngaged = true;
+        await new Promise<void>(res => {
+          unloadHoldRelease = res;
+        });
+        unloadHoldEngaged = false;
+      }
+      return true;
+    }),
     // Faithful to native: cancel RELEASES an in-flight generation rather than rejecting it. The held
     // promise then settles, which is how the app's own cancel path unwinds on a device.
     cancelGeneration: jest.fn(() => {
@@ -764,6 +831,15 @@ function makeDiffusionFake(
     },
     generationHeld: () => held !== null,
     cancelCount: () => cancels,
+    holdNextUnload: () => {
+      unloadHoldPending = true;
+    },
+    releaseUnload: () => {
+      const f = unloadHoldRelease;
+      unloadHoldRelease = null;
+      f?.();
+    },
+    unloadHeld: () => unloadHoldEngaged,
   };
 }
 

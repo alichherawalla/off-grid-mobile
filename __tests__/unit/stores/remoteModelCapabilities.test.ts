@@ -8,12 +8,29 @@ jest.mock('../../../src/utils/logger', () => ({
 }));
 
 import {
-  fetchRemoteModelInfo,
-  fetchLmStudioModelInfo,
-  fetchLlamaCppProps,
-  fetchModelCapabilities,
+  mobileRemoteCapabilityPorts,
   isGenerativeModel,
 } from '../../../src/services/adapters/remote/modelCapabilityDiscovery';
+import { RemoteCapabilityDiscoveryApplicationService } from '@offgrid/models';
+
+const capabilityDiscovery = new RemoteCapabilityDiscoveryApplicationService(
+  mobileRemoteCapabilityPorts(),
+);
+const fetchRemoteModelInfo = (endpoint: string, modelId: string) =>
+  capabilityDiscovery.ollama(endpoint, modelId);
+const fetchLmStudioModelInfo = (endpoint: string, modelId: string) =>
+  capabilityDiscovery.lmStudio(endpoint, modelId);
+const fetchLlamaCppProps = (endpoint: string) => capabilityDiscovery.llamaCpp(endpoint);
+const fetchModelCapabilities = (
+  endpoint: string,
+  modelId: string,
+  detect: { vision(id: string): boolean; toolCalling(id: string): boolean },
+) => capabilityDiscovery.discover({
+  endpoint,
+  modelId,
+  fallbackVision: detect.vision(modelId),
+  fallbackToolCalling: detect.toolCalling(modelId),
+});
 
 function mockFetch(response: Partial<Response> & { ok: boolean }) {
   globalThis.fetch = jest.fn().mockResolvedValue(response);

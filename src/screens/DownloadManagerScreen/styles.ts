@@ -96,10 +96,14 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
   },
-  cancelButton: {
-    padding: SPACING.sm,
+  downloadActionsRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     marginRight: -SPACING.sm,
     marginTop: -SPACING.xs,
+  },
+  downloadActionButton: {
+    padding: SPACING.sm,
   },
   repairButton: {
     padding: SPACING.sm,

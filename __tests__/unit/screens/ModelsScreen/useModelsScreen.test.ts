@@ -51,10 +51,13 @@ const mockImportSelectedModelFiles = jest.fn().mockResolvedValue({
   status: 'imported',
   model: { id: 'model-1', name: 'Test Model' },
 });
-jest.mock('../../../../src/services/adapters/models/library/modelFileImportApplicationAdapter', () => ({
-  importSelectedModelFiles: (...args: unknown[]) =>
-    mockImportSelectedModelFiles(...args),
-}));
+jest.mock(
+  '../../../../src/services/adapters/models/library/modelFileImportApplicationAdapter',
+  () => ({
+    importSelectedModelFiles: (...args: unknown[]) =>
+      mockImportSelectedModelFiles(...args),
+  }),
+);
 
 // Mock CustomAlert
 jest.mock('../../../../src/components/CustomAlert', () => ({
@@ -82,7 +85,14 @@ jest.mock('../../../../src/screens/ModelsScreen/useTextModels', () => ({
     modelFiles: [],
     setModelFiles: jest.fn(),
     isLoadingFiles: false,
-    filterState: { orgs: [], type: 'all', source: 'all', size: 'all', quant: 'all', expandedDimension: null },
+    filterState: {
+      orgs: [],
+      type: 'all',
+      source: 'all',
+      size: 'all',
+      quant: 'all',
+      expandedDimension: null,
+    },
     setFilterState: jest.fn(),
     textFiltersVisible: false,
     setTextFiltersVisible: jest.fn(),
@@ -150,23 +160,6 @@ jest.mock('../../../../src/screens/ModelsScreen/useImageModels', () => ({
   })),
 }));
 
-// Mock useAppStore
-jest.mock('../../../../src/stores', () => ({
-  useAppStore: jest.fn(() => ({
-    addDownloadedModel: jest.fn(),
-    activeImageModelId: null,
-    setActiveImageModelId: jest.fn(),
-    addDownloadedImageModel: jest.fn(),
-  })),
-}));
-
-const mockDownloads: Record<string, any> = {};
-jest.mock('../../../../src/stores/downloadStore', () => ({
-  useDownloadStore: jest.fn((selector?: any) =>
-    selector ? selector({ downloads: mockDownloads }) : { downloads: mockDownloads }),
-  isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
-}));
-
 // Mock the filesystem-facing model library port. Import policy stays in the real helper.
 jest.mock('../../../../src/services', () => ({
   modelLibrary: {
@@ -187,13 +180,18 @@ jest.mock('../../../../src/utils/coreMLModelUtils', () => ({
 }));
 
 describe('useModelsScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
-    Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
-    const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
-    realAppStore.setState({ downloadedImageModels: [] });
-    require('../../../../src/stores/modelSelectionStore').useModelSelectionStore.setState({ entries: {} });
+    const { useAppStore } = require('../../../../src/stores/appStore');
+    const app = useAppStore.getState();
+    app.downloadedImageModels.forEach((model: { id: string }) =>
+      app.removeDownloadedImageModel(model.id),
+    );
+    const {
+      mobileModelSelectionStore,
+    } = require('../../../../src/services/modelServices/selectionStore');
+    await mobileModelSelectionStore.write('image', null);
   });
 
   describe('initial state', () => {
@@ -238,7 +236,9 @@ describe('useModelsScreen', () => {
     });
 
     it('shows alert for invalid file type', async () => {
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.pdf', name: 'test.pdf' }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://test.pdf', name: 'test.pdf' },
+      ]);
       const { result } = renderHook(() => useModelsScreen());
 
       await act(async () => {
@@ -277,11 +277,17 @@ describe('useModelsScreen', () => {
 
   describe('handleRefresh', () => {
     it('calls refresh methods', async () => {
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
 
       const mockLoadDownloadedModels = jest.fn().mockResolvedValue(undefined);
-      const mockLoadDownloadedImageModels = jest.fn().mockResolvedValue(undefined);
+      const mockLoadDownloadedImageModels = jest
+        .fn()
+        .mockResolvedValue(undefined);
       const mockLoadHFModels = jest.fn().mockResolvedValue(undefined);
       const mockSetIsRefreshing = jest.fn();
 
@@ -315,55 +321,30 @@ describe('useModelsScreen', () => {
     });
   });
 
-  describe('totalModelCount', () => {
-    it('calculates total from text and image models including in-progress downloads', () => {
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
-
-      useTextModels.mockReturnValue({
-        downloadedModels: [{ id: '1' }, { id: '2' }],
-      });
-
-      useImageModels.mockReturnValue({
-        downloadedImageModels: [{ id: '4' }],
-      });
-
-      mockDownloads['org/repo/file.gguf'] = { status: 'running' };
-
-      const { result } = renderHook(() => useModelsScreen());
-
-      // 2 text + 1 image + 1 in-progress = 4
-      expect(result.current.totalModelCount).toBe(4);
-    });
-  });
-
   describe('handleImportLocalModel - GGUF success path', () => {
     it('imports single GGUF file successfully (object-arg signature)', async () => {
-      const { useAppStore } = require('../../../../src/stores');
-
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 4000 }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://test.gguf', name: 'test.gguf', size: 4000 },
+      ]);
       mockImportSelectedModelFiles.mockResolvedValueOnce({
         status: 'imported',
         model: { id: 'gguf-1', name: 'Test GGUF Model' },
       });
-      useAppStore.mockReturnValue({
-        addDownloadedModel: jest.fn(),
-        activeImageModelId: null,
-        setActiveImageModelId: jest.fn(),
-        addDownloadedImageModel: jest.fn(),
-      });
-
       const { result } = renderHook(() => useModelsScreen());
 
       await act(async () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(mockImportSelectedModelFiles).toHaveBeenCalledWith(expect.objectContaining({
-        modelsDir: '/models/text',
-        artifacts: [{ uri: 'file://test.gguf', name: 'test.gguf', sizeBytes: 4000 }],
-        onProgress: expect.any(Function),
-      }));
+      expect(mockImportSelectedModelFiles).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelsDir: '/models/text',
+          artifacts: [
+            { uri: 'file://test.gguf', name: 'test.gguf', sizeBytes: 4000 },
+          ],
+          onProgress: expect.any(Function),
+        }),
+      );
       expect(result.current.alertState.visible).toBe(true);
       expect(result.current.alertState.title).toBe('Success');
       expect(result.current.isImporting).toBe(false);
@@ -375,32 +356,46 @@ describe('useModelsScreen', () => {
 
       // Keep the canonical command pending so the second UI intent must be ignored.
       let resolveImport!: (v: any) => void;
-      const hangingImport = new Promise(r => { resolveImport = r; });
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.gguf', name: 'test.gguf', size: 100 }]);
+      const hangingImport = new Promise(r => {
+        resolveImport = r;
+      });
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://test.gguf', name: 'test.gguf', size: 100 },
+      ]);
       mockImportSelectedModelFiles.mockReturnValueOnce(hangingImport);
 
       // Start first import — pick returns, isImporting becomes true, import hangs
-      const firstImport = act(() => { result.current.handleImportLocalModel(); });
+      const firstImport = act(() => {
+        result.current.handleImportLocalModel();
+      });
 
       // Give the first import time to set isImporting=true
       await act(async () => {});
 
       // Second call should bail early because isImporting is now true
-      await act(async () => { await result.current.handleImportLocalModel(); });
+      await act(async () => {
+        await result.current.handleImportLocalModel();
+      });
 
       // pick should only have been called once
       expect(mockPick).toHaveBeenCalledTimes(1);
 
       // Resolve the hanging import to clean up
-      act(() => { resolveImport({ id: 'x', name: 'X' }); });
+      act(() => {
+        resolveImport({ id: 'x', name: 'X' });
+      });
       await firstImport;
     });
 
     it('shows "Invalid File" alert when a non-gguf/non-zip file is selected', async () => {
-      mockPick.mockResolvedValueOnce([{ uri: 'file://doc.pdf', name: 'doc.pdf', size: 100 }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://doc.pdf', name: 'doc.pdf', size: 100 },
+      ]);
       const { result } = renderHook(() => useModelsScreen());
 
-      await act(async () => { await result.current.handleImportLocalModel(); });
+      await act(async () => {
+        await result.current.handleImportLocalModel();
+      });
 
       expect(result.current.alertState.visible).toBe(true);
       expect(result.current.alertState.title).toBe('Invalid File');
@@ -414,7 +409,9 @@ describe('useModelsScreen', () => {
       ]);
       const { result } = renderHook(() => useModelsScreen());
 
-      await act(async () => { await result.current.handleImportLocalModel(); });
+      await act(async () => {
+        await result.current.handleImportLocalModel();
+      });
 
       expect(result.current.alertState.title).toBe('Invalid File');
     });
@@ -427,7 +424,9 @@ describe('useModelsScreen', () => {
       ]);
       const { result } = renderHook(() => useModelsScreen());
 
-      await act(async () => { await result.current.handleImportLocalModel(); });
+      await act(async () => {
+        await result.current.handleImportLocalModel();
+      });
 
       expect(result.current.alertState.title).toBe('Too Many Files');
       expect(result.current.isImporting).toBe(false);
@@ -437,21 +436,18 @@ describe('useModelsScreen', () => {
   describe('handleImportImageModelZip', () => {
     it('imports image model zip successfully on iOS', async () => {
       const { modelLibrary } = require('../../../../src/services');
-      const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
 
       // Set Platform.OS to ios
       (Platform as any).OS = 'ios';
 
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'TestModel.zip', size: 0 }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://test.zip', name: 'TestModel.zip', size: 0 },
+      ]);
       modelLibrary.addDownloadedImageModel.mockResolvedValueOnce(undefined);
-      useAppStore.mockReturnValue({
-        addDownloadedModel: jest.fn(),
-        activeImageModelId: null,
-        setActiveImageModelId: jest.fn(),
-        addDownloadedImageModel: jest.fn(),
-      });
-      RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
+      RNFS.readDir.mockResolvedValueOnce([
+        { name: 'model.mnn', isDirectory: () => false },
+      ]);
 
       const { result } = renderHook(() => useModelsScreen());
 
@@ -465,12 +461,18 @@ describe('useModelsScreen', () => {
 
     it('imports image model zip with CoreML mlmodelc', async () => {
       const { modelLibrary } = require('../../../../src/services');
-      const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
+      const {
+        resolveCoreMLModelDir,
+      } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
       (Platform as any).OS = 'ios';
-      mockPick.mockResolvedValueOnce([{ uri: 'file://coreml.zip', name: 'CoreMLModel.zip', size: 0 }]);
-      RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mlmodelc', isDirectory: () => true }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://coreml.zip', name: 'CoreMLModel.zip', size: 0 },
+      ]);
+      RNFS.readDir.mockResolvedValueOnce([
+        { name: 'model.mlmodelc', isDirectory: () => true },
+      ]);
       resolveCoreMLModelDir.mockResolvedValueOnce('/resolved/coreml');
       modelLibrary.addDownloadedImageModel.mockResolvedValueOnce(undefined);
 
@@ -485,11 +487,15 @@ describe('useModelsScreen', () => {
 
     it('imports image model zip with nested mlmodelc directory', async () => {
       require('../../../../src/services');
-      const { resolveCoreMLModelDir } = require('../../../../src/utils/coreMLModelUtils');
+      const {
+        resolveCoreMLModelDir,
+      } = require('../../../../src/utils/coreMLModelUtils');
       const RNFS = require('react-native-fs');
 
       (Platform as any).OS = 'ios';
-      mockPick.mockResolvedValueOnce([{ uri: 'file://nested.zip', name: 'NestedCoreML.zip' }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://nested.zip', name: 'NestedCoreML.zip' },
+      ]);
       // First check has no mlmodelc but has directory
       RNFS.readDir.mockResolvedValueOnce([
         { name: 'subdir', isDirectory: () => true },
@@ -510,7 +516,9 @@ describe('useModelsScreen', () => {
       const RNFS = require('react-native-fs');
 
       (Platform as any).OS = 'android';
-      mockPick.mockResolvedValueOnce([{ uri: 'file://qnn.zip', name: 'QNNModel.zip' }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://qnn.zip', name: 'QNNModel.zip' },
+      ]);
       RNFS.readDir.mockResolvedValueOnce([
         { name: 'model.bin', isDirectory: () => false },
       ]);
@@ -526,21 +534,22 @@ describe('useModelsScreen', () => {
 
     it('sets active image model id when none is active', async () => {
       require('../../../../src/services');
-      const { useAppStore } = require('../../../../src/stores');
       const RNFS = require('react-native-fs');
-      const { mobileModelSelectionStore } = require(
-        '../../../../src/services/modelServices/selectionStore'
-      );
-      const writeSelection = jest.spyOn(mobileModelSelectionStore, 'write');
+      const {
+        readMobileModelSelection,
+      } = require('../../../../src/services/modelServices/modelSelectionProjection');
+      const { decodeModelRouteId } = require('@offgrid/models');
+      const {
+        startMobileModelServices,
+      } = require('../../../../src/services/modelServices');
+      await startMobileModelServices();
 
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
-      useAppStore.mockReturnValue({
-        addDownloadedModel: jest.fn(),
-        activeImageModelId: null,
-        setActiveImageModelId: jest.fn(),
-        addDownloadedImageModel: jest.fn(),
-      });
-      RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
+      mockPick.mockResolvedValueOnce([
+        { uri: 'file://test.zip', name: 'Test.zip' },
+      ]);
+      RNFS.readDir.mockResolvedValueOnce([
+        { name: 'model.mnn', isDirectory: () => false },
+      ]);
 
       const { result } = renderHook(() => useModelsScreen());
 
@@ -548,61 +557,62 @@ describe('useModelsScreen', () => {
         await result.current.handleImportLocalModel();
       });
 
-      expect(writeSelection).toHaveBeenCalledWith(
-        'image',
-        expect.any(String),
+      const selection = readMobileModelSelection('image');
+      expect(selection).not.toBeNull();
+      const selected = decodeModelRouteId(selection);
+      expect(selected).toEqual(
+        expect.objectContaining({
+          adapterId: expect.stringContaining(':local:'),
+          modelId: expect.stringMatching(/^local_Test_/),
+        }),
       );
     });
 
     it('does not set active image model id when one is already active', async () => {
       require('../../../../src/services');
-      const { useAppStore } = require('../../../../src/stores');
-      const { useAppStore: realAppStore } = require('../../../../src/stores/appStore');
-      const { mobileModelSelectionStore } = require(
-        '../../../../src/services/modelServices/selectionStore'
-      );
+      const {
+        readMobileModelSelection,
+      } = require('../../../../src/services/modelServices/modelSelectionProjection');
+      const {
+        startMobileModelServices,
+      } = require('../../../../src/services/modelServices');
       const RNFS = require('react-native-fs');
-      const writeSelection = jest.spyOn(mobileModelSelectionStore, 'write');
+      await startMobileModelServices();
 
-      const mockSetActiveImageModelId = jest.fn();
-      mockPick.mockResolvedValueOnce([{ uri: 'file://test.zip', name: 'Test.zip' }]);
-      useAppStore.mockReturnValue({
-        addDownloadedModel: jest.fn(),
-        activeImageModelId: 'existing-model-id',
-        setActiveImageModelId: mockSetActiveImageModelId,
-        addDownloadedImageModel: jest.fn(),
-      });
-      realAppStore.setState({
-        downloadedImageModels: [{
-          id: 'existing-model-id',
-          name: 'Existing',
-          backend: 'mnn',
-        } as any],
-      });
-      // The persisted selection, as the app writes it through the one selection owner.
-      const { useModelSelectionStore } = require('../../../../src/stores/modelSelectionStore');
-      const { mobileRouteId } = require('../../../../src/services/modelServices/mobileRoute');
-      useModelSelectionStore.getState().setEntry('image', {
-        localRouteId: mobileRouteId({
-          source: 'local', hostId: 'mnn', modality: 'image', modelId: 'existing-model-id',
-        }),
-        remoteRouteId: null,
-      });
-      RNFS.readDir.mockResolvedValueOnce([{ name: 'model.mnn', isDirectory: () => false }]);
+      mockPick
+        .mockResolvedValueOnce([{ uri: 'file://first.zip', name: 'First.zip' }])
+        .mockResolvedValueOnce([
+          { uri: 'file://second.zip', name: 'Second.zip' },
+        ]);
+      RNFS.readDir
+        .mockResolvedValueOnce([
+          { name: 'model.mnn', isDirectory: () => false },
+        ])
+        .mockResolvedValueOnce([
+          { name: 'model.mnn', isDirectory: () => false },
+        ]);
 
       const { result } = renderHook(() => useModelsScreen());
 
       await act(async () => {
         await result.current.handleImportLocalModel();
       });
+      const firstSelection = readMobileModelSelection('image');
+      expect(firstSelection).not.toBeNull();
 
-      expect(writeSelection).not.toHaveBeenCalled();
+      await act(async () => {
+        await result.current.handleImportLocalModel();
+      });
+
+      expect(readMobileModelSelection('image')).toBe(firstSelection);
     });
   });
 
   describe('handleDownload callback', () => {
     it('calls text.handleDownload directly with correct args', () => {
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const mockHandleDownload = jest.fn();
 
       useTextModels.mockReturnValue({
@@ -619,8 +629,18 @@ describe('useModelsScreen', () => {
       });
 
       const { result } = renderHook(() => useModelsScreen());
-      const mockModel: any = { id: 'model-id', name: 'Test', author: 'Test', files: [] };
-      const mockFile: any = { name: 'url', size: 100, quantization: 'Q4', downloadUrl: 'http://test' };
+      const mockModel: any = {
+        id: 'model-id',
+        name: 'Test',
+        author: 'Test',
+        files: [],
+      };
+      const mockFile: any = {
+        name: 'url',
+        size: 100,
+        quantization: 'Q4',
+        downloadUrl: 'http://test',
+      };
 
       act(() => {
         result.current.handleDownload(mockModel, mockFile);
@@ -632,32 +652,55 @@ describe('useModelsScreen', () => {
     it('starts a download even when 2+ are already active (no "Starting more can affect performance" gate)', () => {
       // The concurrency cap + FIFO queue in backgroundDownloadService owns this now,
       // so a 3rd+ start just queues. The old caller-side alert must be gone.
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const { showAlert } = require('../../../../src/components/CustomAlert');
       const mockHandleDownload = jest.fn();
-      mockDownloads['a/x/a.gguf'] = { status: 'running' };
-      mockDownloads['b/y/b.gguf'] = { status: 'running' };
       useTextModels.mockReturnValue({
-        downloadedModels: [], setIsRefreshing: jest.fn(),
+        downloadedModels: [],
+        setIsRefreshing: jest.fn(),
         loadDownloadedModels: jest.fn().mockResolvedValue(undefined),
-        hasSearched: false, searchQuery: '', handleSearch: jest.fn(),
-        handleDownload: mockHandleDownload, downloadProgress: {},
-        setFilterState: jest.fn(), setTextFiltersVisible: jest.fn(),
+        hasSearched: false,
+        searchQuery: '',
+        handleSearch: jest.fn(),
+        handleDownload: mockHandleDownload,
+        downloadProgress: {},
+        setFilterState: jest.fn(),
+        setTextFiltersVisible: jest.fn(),
       });
 
       const { result } = renderHook(() => useModelsScreen());
-      const mockModel: any = { id: 'model-id', name: 'Test', author: 'Test', files: [] };
-      const mockFile: any = { name: 'url', size: 100, quantization: 'Q4', downloadUrl: 'http://test' };
-      act(() => { result.current.handleDownload(mockModel, mockFile); });
+      const mockModel: any = {
+        id: 'model-id',
+        name: 'Test',
+        author: 'Test',
+        files: [],
+      };
+      const mockFile: any = {
+        name: 'url',
+        size: 100,
+        quantization: 'Q4',
+        downloadUrl: 'http://test',
+      };
+      act(() => {
+        result.current.handleDownload(mockModel, mockFile);
+      });
 
       expect(mockHandleDownload).toHaveBeenCalledWith(mockModel, mockFile);
-      expect(showAlert).not.toHaveBeenCalledWith('Downloads Already Active', expect.anything(), expect.anything());
+      expect(showAlert).not.toHaveBeenCalledWith(
+        'Downloads Already Active',
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 
   describe('handleDownloadImageModel callback', () => {
     it('calls image.handleDownloadImageModel directly with correct args', () => {
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
       const mockHandleDownloadImageModel = jest.fn();
 
       useImageModels.mockReturnValue({
@@ -672,8 +715,13 @@ describe('useModelsScreen', () => {
 
       const { result } = renderHook(() => useModelsScreen());
       const mockImageModel: any = {
-        id: 'img-model', name: 'Test Model', description: 'Test',
-        downloadUrl: 'http://test', size: 100, style: 'default', backend: 'mnn',
+        id: 'img-model',
+        name: 'Test Model',
+        description: 'Test',
+        downloadUrl: 'http://test',
+        size: 100,
+        style: 'default',
+        backend: 'mnn',
       };
 
       act(() => {
@@ -686,8 +734,12 @@ describe('useModelsScreen', () => {
 
   describe('useEffect - load HF models on image tab', () => {
     it('loads HF models when switching to image tab with empty models', () => {
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const mockLoadHFModels = jest.fn();
 
       useTextModels.mockReturnValue({
@@ -719,8 +771,12 @@ describe('useModelsScreen', () => {
     });
 
     it('does not load HF models if already loading', () => {
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const mockLoadHFModels = jest.fn();
 
       useTextModels.mockReturnValue({
@@ -749,8 +805,12 @@ describe('useModelsScreen', () => {
     });
 
     it('does not load HF models if models already exist', () => {
-      const { useImageModels } = require('../../../../src/screens/ModelsScreen/useImageModels');
-      const { useTextModels } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
       const mockLoadHFModels = jest.fn();
 
       useTextModels.mockReturnValue({
@@ -776,6 +836,82 @@ describe('useModelsScreen', () => {
 
       // Should not load since models exist
       expect(mockLoadHFModels).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('totalModelCount', () => {
+    it('calculates installed models plus a real Shared in-progress download projection', async () => {
+      const { installNativeBoundary, requireRTL } =
+        require('../../../harness/nativeBoundary') as typeof import('../../../harness/nativeBoundary');
+      const boundary = installNativeBoundary({ download: true, fs: true });
+      boundary.download!.seedActive({
+        downloadId: 'native-model-transfer',
+        modelId: 'org/repo',
+        fileName: 'file.gguf',
+        modelType: 'text',
+        status: 'running',
+        bytesDownloaded: 20,
+        totalBytes: 100,
+      });
+      const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+        require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+      await seedMobileDownloadJournal([
+        {
+          manifest: {
+            id: 'org/repo/file.gguf',
+            modelId: 'org/repo',
+            kind: 'text',
+            revision: 'main',
+            artifacts: [
+              {
+                id: 'primary',
+                name: 'file.gguf',
+                role: 'primary',
+                required: true,
+                localName: 'file.gguf',
+                url: 'https://example.test/file.gguf',
+                sizeBytes: 100,
+              },
+            ],
+          },
+          phase: 'downloading',
+          artifacts: [
+            {
+              artifactId: 'primary',
+              phase: 'downloading',
+              transferId: 'native-model-transfer',
+              bytesDownloaded: 20,
+              totalBytes: 100,
+            },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+          attempt: 1,
+        },
+      ]);
+      const fixture = await startMobileApplicationFixture();
+      const {
+        useTextModels,
+      } = require('../../../../src/screens/ModelsScreen/useTextModels');
+      const {
+        useImageModels,
+      } = require('../../../../src/screens/ModelsScreen/useImageModels');
+      const { useModelsScreen: useModelsScreenFresh } =
+        require('../../../../src/screens/ModelsScreen/useModelsScreen') as typeof import('../../../../src/screens/ModelsScreen/useModelsScreen');
+      useTextModels.mockReturnValue({
+        downloadedModels: [{ id: '1' }, { id: '2' }],
+      });
+      useImageModels.mockReturnValue({
+        downloadedImageModels: [{ id: '4' }],
+      });
+      const { renderHook: renderFreshHook } = requireRTL();
+      const mounted = renderFreshHook(() => useModelsScreenFresh());
+
+      expect(mounted.result.current.activeDownloadCount).toBe(1);
+      expect(mounted.result.current.totalModelCount).toBe(4);
+
+      mounted.unmount();
+      await fixture.dispose();
     });
   });
 });

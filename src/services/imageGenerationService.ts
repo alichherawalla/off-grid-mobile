@@ -34,12 +34,15 @@ function project(snapshot: ImageApplicationSnapshot<GeneratedImage>): ImageGener
 }
 
 class ImageGenerationService {
-  private readonly application = imageGenerationApplication();
+  private application: ReturnType<typeof imageGenerationApplication> | null = null;
   private readonly listeners = new Set<ImageGenerationListener>();
   private previousPhase: ImageGenerationState['phase'] = 'idle';
 
-  constructor() {
-    this.application.onChange(snapshot => {
+  /** Resolve the facade seam only after the composition root has registered it. */
+  private ensureApplication(): ReturnType<typeof imageGenerationApplication> {
+    if (this.application) return this.application;
+    const application = imageGenerationApplication();
+    application.onChange(snapshot => {
       const state = project(snapshot);
       if (state.phase !== this.previousPhase) {
         logger.log(imagePhaseTransitionLog(this.previousPhase, state));
@@ -53,10 +56,12 @@ class ImageGenerationService {
       // every diffusion step.
       for (const listener of this.listeners) listener(state);
     });
+    this.application = application;
+    return application;
   }
 
   getState(): ImageGenerationState {
-    return project(this.application.status());
+    return project(this.ensureApplication().status());
   }
 
   isGeneratingFor(conversationId: string): boolean {
@@ -74,11 +79,11 @@ class ImageGenerationService {
     params: GenerateImageParams,
     opts?: { override?: boolean },
   ): Promise<GeneratedImage | null> {
-    return this.application.start(params, { force: opts?.override });
+    return this.ensureApplication().start(params, { force: opts?.override });
   }
 
   async cancelGeneration(): Promise<void> {
-    await this.application.cancel();
+    await this.ensureApplication().cancel();
   }
 }
 

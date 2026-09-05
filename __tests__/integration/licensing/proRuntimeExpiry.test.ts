@@ -14,7 +14,14 @@ import { registerSettingsSection } from '../../../src/components/settings/sectio
 import { registerHook } from '../../../src/bootstrap/hookRegistry';
 import { registerSlot } from '../../../src/bootstrap/slotRegistry';
 import { activate, deactivate } from '../../../pro';
-import { syncService } from '../../../pro/sync/syncService';
+import {createMobileApplicationPorts} from '../../../pro/composition/application';
+import {Platform} from 'react-native';
+import {
+  getMobileApplication,
+  registerMobileApplicationPorts,
+  startMobileApplication,
+  stopMobileApplication,
+} from '../../../src/services/composition/application';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -31,6 +38,16 @@ jest.mock('react-native-zeroconf', () => {
 });
 
 describe('the Pro runtime when access expires', () => {
+  const platform = Platform.OS;
+
+  beforeAll(() => {
+    Object.defineProperty(Platform, 'OS', {value: 'android', configurable: true});
+    registerMobileApplicationPorts(createMobileApplicationPorts);
+  });
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', {value: platform, configurable: true});
+  });
+
   beforeEach(() => {
     _clearHooksForTesting();
     _clearSlotsForTesting();
@@ -42,7 +59,7 @@ describe('the Pro runtime when access expires', () => {
     await deactivate();
     // The restricted Sync bootstrap intentionally survives Pro deactivation. This test starts that
     // process, so it must also await and stop it before Jest removes the native boundary.
-    await syncService.stop();
+    await stopMobileApplication();
     _clearHooksForTesting();
     _clearSlotsForTesting();
     _clearScreensForTesting();
@@ -57,6 +74,7 @@ describe('the Pro runtime when access expires', () => {
       registerSlot,
       registerHook,
     });
+    await startMobileApplication();
 
     expect(getRegisteredScreens().map(screen => screen.name)).toEqual(
       expect.arrayContaining(['Sync', 'Clipboard', 'McpServers']),
@@ -77,6 +95,6 @@ describe('the Pro runtime when access expires', () => {
     expect(callHook('audio.canSpeak')).toBeUndefined();
     // Restricted Sync remains available so this device can reclaim access from
     // a licensed peer. All paid Sync surfaces above are still removed.
-    expect(syncService.isRunning()).toBe(true);
+    expect(getMobileApplication().sync.snapshot().running).toBe(true);
   });
 });

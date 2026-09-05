@@ -1,4 +1,5 @@
 import React from 'react';
+import { NativeModules } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   fireEvent,
@@ -47,20 +48,12 @@ import {
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
-import {
-  registerScreen,
-  _clearScreensForTesting,
-} from '../../../src/navigation/screenRegistry';
-import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
-import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
-import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -77,6 +70,8 @@ import {
   createLicensedMesh,
   installLicensedPhone,
 } from '../../harness/licensedMesh';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+import { ProximityAir } from '../../utils/proximityNativeBoundary';
 
 /** This phone's fingerprint, which is also the sync device id its installation registers under. */
 const PHONE_FINGERPRINT = 'fp-this-phone';
@@ -114,6 +109,7 @@ const nativeTcpBoundary = TcpSocket as unknown as RnTcpModule;
 const mesh = createLicensedMesh();
 
 describe('Pro mobile model transfer journey', () => {
+  let applicationFixture: MobileApplicationFixture;
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let remoteTransfers: FileTransferManager | undefined;
   let ui: ReturnType<typeof render> | undefined;
@@ -123,10 +119,6 @@ describe('Pro mobile model transfer journey', () => {
     modelTransferFsBoundary.reset();
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
-    _clearScreensForTesting();
-    _clearSectionsForTesting();
-    registerScreen({ name: 'Sync', component: SyncScreen });
-    registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     useAppStore.getState().setOnboardingComplete(true);
     // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
     useAppStore.getState().setProActive(true);
@@ -143,6 +135,28 @@ describe('Pro mobile model transfer journey', () => {
       name: 'This phone',
       platform: 'ios',
     });
+    if (!applicationFixture) {
+      NativeModules.SyncProximityModule = new ProximityAir().device({
+        id: PHONE_FINGERPRINT,
+        name: 'This phone',
+        platform: 'ios',
+      });
+      const { startMobileApplicationFixture } =
+        require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+      applicationFixture = await startMobileApplicationFixture({ pro: true });
+      const reconciliation =
+        await applicationFixture.application.sync.reconcileEntitlement(
+          'manual',
+        );
+      if (!reconciliation.ok) {
+        throw new Error(JSON.stringify(reconciliation.failure));
+      }
+      const discoverable =
+        await applicationFixture.application.sync.setDiscoverable(true);
+      if (!discoverable.ok) {
+        throw new Error(JSON.stringify(discoverable.failure));
+      }
+    }
   });
 
   afterEach(async () => {
@@ -150,10 +164,11 @@ describe('Pro mobile model transfer journey', () => {
     ui?.unmount();
     await remoteTransfers?.dispose();
     await remote?.engine.stop();
-    await syncService.stop();
     await modelTransferService.stop();
-    _clearScreensForTesting();
-    _clearSectionsForTesting();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
   });
 
   it('receives, rejects, and sends a GGUF through Settings to Sync', async () => {
@@ -165,18 +180,14 @@ describe('Pro mobile model transfer journey', () => {
       host: '127.0.0.1',
       port: 0,
     };
-    // A licensed Mac holds an installation on the licence. The phone's saved-device list is built from
-    // the licence roster, so without it the peer pairs successfully and then shows up nowhere.
-    mesh.register({
-      id: remoteDevice.id,
-      name: remoteDevice.name,
-      platform: remoteDevice.platform,
-    });
     let returnedModel: Buffer | undefined;
     let returnedFileName: string | undefined;
 
     remote = buildSyncEngine({
-      pairingEntitlement: mesh.peer(),
+      pairingEntitlement: mesh.joiner({
+        name: remoteDevice.name,
+        platform: remoteDevice.platform,
+      }),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       onMessage: (deviceId, message) => {
@@ -215,8 +226,6 @@ describe('Pro mobile model transfer journey', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
     modelTransferService.start();
-    await syncService.start();
-
     ui = render(
       <>
         <ProRoot />
@@ -239,6 +248,17 @@ describe('Pro mobile model transfer journey', () => {
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
     }
+    const mobilePairingCommitted = new Promise<void>(resolve => {
+      const unsubscribe = applicationFixture.application.sync.subscribe(
+        snapshot => {
+          if (!snapshot.paired.some(device => device.id === remoteDevice.id)) {
+            return;
+          }
+          unsubscribe();
+          resolve();
+        },
+      );
+    });
     const pairing = remote.engine.pair(
       {
         ...mobile,
@@ -248,6 +268,12 @@ describe('Pro mobile model transfer journey', () => {
       await pairingCodeOnScreen(ui),
     );
     await pairing;
+    await mobilePairingCommitted;
+    const pairedRoster =
+      await applicationFixture.application.sync.reconcileEntitlement('manual');
+    if (!pairedRoster.ok) {
+      throw new Error(JSON.stringify(pairedRoster.failure));
+    }
     // Waited on the OUTCOME rather than the progress sheet. A correct pairing over an in-memory
     // transport finishes in a couple of milliseconds, so the sheet has been and gone before any
     // assertion can see it - and a test that waits for a flash of UI fails for a reason that has
@@ -261,6 +287,11 @@ describe('Pro mobile model transfer journey', () => {
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
+    // A successful pairing closes its own sheet: `visiblePairingAttempt` in
+    // shared/packages/sync/src/pairing/attempt.ts deliberately never surfaces a `paired` attempt,
+    // so there is no Dismiss for the user to press. Assert the sheet is gone rather than pressing
+    // a button the product does not show.
+    expect(ui.queryByTestId('pairing-attempt-sheet')).toBeNull();
 
     const payload = Buffer.alloc(96 * 1024 + 4, 0x5a);
     payload.write('GGUF', 0, 'ascii');

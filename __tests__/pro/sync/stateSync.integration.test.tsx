@@ -1,9 +1,13 @@
 import React from 'react';
+import {NativeModules} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
+import {
+  CORE_SYNC_ENTITIES,
+} from '@offgrid/application';
 import {
   OpLog,
   StateSync,
@@ -15,7 +19,6 @@ import {
   type Materializer,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
-import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
   registerScreen,
   _clearScreensForTesting,
@@ -31,19 +34,13 @@ import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import {
-  CORE_SYNC_ENTITIES,
   type SyncMutation,
 } from '../../../src/services/sync/mutation';
-import { syncService } from '../../../pro/sync/syncService';
 import {
   STATE_CHANNEL,
   stateSyncService,
 } from '../../../pro/sync/stateSyncService';
 import { useTaskRunStore } from '../../../pro/tasks/taskRunStore';
-import { useSyncStore } from '../../../pro/sync/syncStore';
-import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
-import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -54,6 +51,12 @@ import {
   createLicensedMesh,
   installLicensedPhone,
 } from '../../harness/licensedMesh';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+
+jest.mock('@op-engineering/op-sqlite', () => {
+  const {createRealSqliteModule} = require('../../harness/sqliteFake');
+  return createRealSqliteModule();
+});
 
 /** This phone's fingerprint, which is also the sync device id its installation registers under. */
 const PHONE_FINGERPRINT = 'fp-this-phone';
@@ -90,18 +93,34 @@ class RemoteRecords implements Materializer {
 
 /** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
 const mesh = createLicensedMesh();
+let AppNavigator: typeof import('../../../src/navigation/AppNavigator').AppNavigator;
+let SyncScreen: typeof import('../../../pro/ui/SyncScreen').SyncScreen;
+let SyncSharingSettingsScreen: typeof import('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen').SyncSharingSettingsScreen;
+let ProRoot: typeof import('../../../pro/ui/ProRoot').ProRoot;
 
 describe('Pro mobile state sync journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(() => {
+    const {registerMobileApplicationPorts} = require('../../../src/services/composition/application') as typeof import('../../../src/services/composition/application');
+    const {createMobileApplicationPorts} = require('../../../pro/composition/application') as typeof import('../../../pro/composition/application');
+    registerMobileApplicationPorts(createMobileApplicationPorts);
+    ({AppNavigator} = require('../../../src/navigation/AppNavigator') as typeof import('../../../src/navigation/AppNavigator'));
+    ({SyncScreen} = require('../../../pro/ui/SyncScreen') as typeof import('../../../pro/ui/SyncScreen'));
+    ({SyncSharingSettingsScreen} = require('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen') as typeof import('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen'));
+    ({ProRoot} = require('../../../pro/ui/ProRoot') as typeof import('../../../pro/ui/ProRoot'));
+  });
 
   beforeEach(async () => {
+    (require('@op-engineering/op-sqlite') as {reset(): void}).reset();
     mesh.reset();
     _clearHooksForTesting();
     await stateSyncService.stop();
-    await syncService.stop();
-    await AsyncStorage.clear();
+    await applicationFixture?.application.sync.stop();
     resetDiscoveryBoundaries();
+    await AsyncStorage.clear();
     _clearScreensForTesting();
     _clearSectionsForTesting();
     registerScreen({ name: 'Sync', component: SyncScreen });
@@ -115,11 +134,7 @@ describe('Pro mobile state sync journey', () => {
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
-    useSyncStore.getState().reset();
     useChatStore.getState().clearAllConversations();
-    for (const project of useProjectStore.getState().projects) {
-      useProjectStore.getState().deleteProject(project.id);
-    }
     registerHook(HOOKS.syncRecordLocalMutation, (mutation: SyncMutation) => {
       stateSyncService.recordMutation(mutation);
     });
@@ -131,7 +146,23 @@ describe('Pro mobile state sync journey', () => {
       name: 'This phone',
       platform: 'ios',
     });
+    const {ProximityAir} = require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+    if (!applicationFixture) {
+      const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+      applicationFixture = await startMobileApplicationFixture({pro: true});
+    } else {
+      await applicationFixture.application.sync.start();
+    }
+    const browsing = await applicationFixture.application.sync.setBrowsing(true);
+    if (!browsing.ok) throw new Error('Could not enable device discovery.');
+    const discoverable = await applicationFixture.application.sync.setDiscoverable(true);
+    if (!discoverable.ok) throw new Error('Could not enable device advertising.');
   });
 
   afterEach(async () => {
@@ -140,9 +171,14 @@ describe('Pro mobile state sync journey', () => {
     _clearHooksForTesting();
     await stateSyncService.stop();
     await remote?.engine.stop();
-    await syncService.stop();
+    await applicationFixture?.application.sync.stop();
+    delete NativeModules.SyncProximityModule;
     _clearScreensForTesting();
     _clearSectionsForTesting();
+  });
+
+  afterAll(async () => {
+    await applicationFixture?.dispose();
   });
 
   it('converges state and honors visible sharing controls through the rendered app', async () => {
@@ -233,7 +269,6 @@ describe('Pro mobile state sync journey', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
     await stateSyncService.start();
-    await syncService.start();
 
     ui = render(
       <>
@@ -246,7 +281,13 @@ describe('Pro mobile state sync journey', () => {
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
 
-    const mobile = useSyncStore.getState().thisDevice;
+    let reconciliation!: ReturnType<typeof applicationFixture.application.sync.reconcileEntitlement>;
+    act(() => {
+      reconciliation = applicationFixture.application.sync.reconcileEntitlement('manual');
+    });
+
+    const sync = applicationFixture.application.sync.snapshot();
+    const mobile = sync.self;
     const discovery = getDiscoveryBoundaries().at(-1);
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
@@ -269,6 +310,9 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.queryByTestId('sync-scanning')).toBeNull();
     expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
     expect(discovery.publishedPort).toBeGreaterThan(0);
+    if (!(await reconciliation).ok) {
+      throw new Error('Entitlement reconciliation failed.');
+    }
 
     // The peer presents the code this phone is showing, which is the whole confirmation.
     const firstPairing = remote.engine.pair(
@@ -492,7 +536,7 @@ describe('Pro mobile state sync journey', () => {
     );
     await remote.engine.stop();
     await waitFor(() =>
-      expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
+      expect(applicationFixture!.application.sync.snapshot().connections[remoteDevice.id]).not.toBe('connected'),
     );
 
     fireEvent(
@@ -517,7 +561,7 @@ describe('Pro mobile state sync journey', () => {
     await remote.engine.start(0);
     // Read from the store rather than the screen: this part of the journey is on another screen, and
     // the store holds the same code the Sync screen renders.
-    const currentCode = useSyncStore.getState().pairingCode.code;
+    const currentCode = applicationFixture.application.sync.snapshot().pairingCode?.code;
     if (!currentCode)
       throw new Error('the phone has not issued a pairing code');
     await remote.engine.pair(
@@ -525,7 +569,7 @@ describe('Pro mobile state sync journey', () => {
       currentCode,
     );
     await waitFor(() =>
-      expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
+      expect(applicationFixture!.application.sync.snapshot().connections[remoteDevice.id]).toBe('connected'),
     );
 
     const winningTemperature =
@@ -583,9 +627,13 @@ describe('Pro mobile state sync journey', () => {
     const slowStartup = new Promise<void>(resolve => {
       releaseSlowStartup = resolve;
     });
+    const reconciliation =
+      await applicationFixture.application.sync.reconcileEntitlement('manual');
+    if (!reconciliation.ok) {
+      throw new Error('Entitlement reconciliation failed.');
+    }
     await stateSyncService.start(slowStartup);
-    await syncService.start();
-    expect(syncService.isRunning()).toBe(true);
+    expect(applicationFixture.application.sync.snapshot().running).toBe(true);
 
     const remoteDevice: DeviceInfo = {
       id: 'desktop-task-owner',
@@ -669,15 +717,15 @@ describe('Pro mobile state sync journey', () => {
     });
     remoteState = new StateSync({
       oplog: remoteLog,
-      send: (deviceId, message) => {
-        remote!.engine.sendApp(deviceId, STATE_CHANNEL, message);
-      },
+      send: (deviceId, message) =>
+        remote!.engine.sendApp(deviceId, STATE_CHANNEL, message),
     });
     await remote.engine.start(0);
 
-    const mobile = useSyncStore.getState().thisDevice;
+    const sync = applicationFixture.application.sync.snapshot();
+    const mobile = sync.self;
     const discovery = getDiscoveryBoundaries().at(-1);
-    const pairingCode = useSyncStore.getState().pairingCode.code;
+    const pairingCode = sync.pairingCode?.code;
     if (!mobile || !discovery?.publishedPort || !pairingCode) {
       throw new Error(
         'Mobile Sync did not become available during slow startup',
@@ -688,7 +736,7 @@ describe('Pro mobile state sync journey', () => {
       pairingCode,
     );
     await waitFor(() =>
-      expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
+      expect(applicationFixture!.application.sync.snapshot().connections[remoteDevice.id]).toBe('connected'),
     );
     await waitFor(() =>
       expect(useTaskRunStore.getState().runs[task.taskId]).toMatchObject({

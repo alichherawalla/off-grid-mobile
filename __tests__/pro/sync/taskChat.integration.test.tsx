@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
+  OpLog,
   TASK_RUN_ENTITY,
   TASK_VISUAL_STEP_ENTITY,
   taskVisualStepId,
@@ -11,6 +12,7 @@ import { projectNotificationCenter } from '../../../pro/sync/notificationCenter'
 import { useTaskRunStore } from '../../../pro/tasks/taskRunStore';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { useChatStore } from '../../../src/stores/chatStore';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -30,6 +32,8 @@ const origin = {
   originDeviceId: 'desktop-1',
   originDeviceName: 'Office Mac',
 };
+let applicationFixture: MobileApplicationFixture;
+let stateLog: OpLog;
 
 const runningComputerTask = {
   version: 1 as const,
@@ -69,37 +73,50 @@ const runningComputerTask = {
   updatedAt: 20,
 };
 
-function putConversation(materializer: MobileStateMaterializer): void {
-  materializer.put(
-    'conversation',
-    runningComputerTask.conversationId,
-    {
-      title: runningComputerTask.title,
-      created_at: new Date(10).toISOString(),
-      updated_at: new Date(20).toISOString(),
-      project_id: null,
-    },
-    origin,
-  );
+function putConversation(): void {
+  stateLog.record('conversation', runningComputerTask.conversationId, 'put', {
+    title: runningComputerTask.title,
+    created_at: new Date(10).toISOString(),
+    updated_at: new Date(20).toISOString(),
+    project_id: null,
+  });
   useChatStore
     .getState()
     .setActiveConversation(runningComputerTask.conversationId);
 }
 
 describe('synced Web Use and Computer Use task in chat', () => {
-  const materializer = new MobileStateMaterializer();
+  beforeAll(async () => {
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(() => {
+    let operationSequence = 0;
+    stateLog = new OpLog({
+      deviceId: origin.originDeviceId,
+      deviceName: origin.originDeviceName,
+      materializer: new MobileStateMaterializer(),
+      uuid: () => `task-chat-op-${++operationSequence}`,
+      now: () => Date.now(),
+    });
     useChatStore.getState().clearAllConversations();
-    materializer.remove(TASK_RUN_ENTITY, runningComputerTask.taskId);
-    materializer.remove(TASK_RUN_ENTITY, 'task-web-1');
-    materializer.remove(
+    stateLog.record(TASK_RUN_ENTITY, runningComputerTask.taskId, 'delete');
+    stateLog.record(TASK_RUN_ENTITY, 'task-web-1', 'delete');
+    stateLog.record(
       TASK_VISUAL_STEP_ENTITY,
       taskVisualStepId('task-web-1', 1),
+      'delete',
     );
-    materializer.remove(
+    stateLog.record(
       TASK_VISUAL_STEP_ENTITY,
       taskVisualStepId('task-web-1', 2),
+      'delete',
     );
     useSyncStore.getState().setThisDevice({
       id: 'phone-1',
@@ -110,15 +127,15 @@ describe('synced Web Use and Computer Use task in chat', () => {
       port: 0,
     });
     useSyncStore.getState().setConnectedDeviceIds(['desktop-1']);
-    putConversation(materializer);
+    putConversation();
   });
 
   it('shows the live Computer Use screen, cursor, and working controls in its chat', async () => {
-    materializer.put(
+    stateLog.record(
       TASK_RUN_ENTITY,
       runningComputerTask.taskId,
+      'put',
       runningComputerTask,
-      origin,
     );
     const screen = render(
       <TaskChatCard
@@ -177,23 +194,18 @@ describe('synced Web Use and Computer Use task in chat', () => {
       ];
 
     act(() =>
-      materializer.put(
-        TASK_RUN_ENTITY,
-        runningComputerTask.taskId,
-        {
-          ...runningComputerTask,
-          status: 'paused',
-          phase: 'paused',
-          updatedAt: 30,
-          latestControlResult: {
-            controlId: request!.controlId,
-            kind: 'pause',
-            outcome: 'applied',
-            respondedAt: 30,
-          },
+      stateLog.record(TASK_RUN_ENTITY, runningComputerTask.taskId, 'put', {
+        ...runningComputerTask,
+        status: 'paused',
+        phase: 'paused',
+        updatedAt: 30,
+        latestControlResult: {
+          controlId: request!.controlId,
+          kind: 'pause',
+          outcome: 'applied',
+          respondedAt: 30,
         },
-        origin,
-      ),
+      }),
     );
     expect(screen.getByText('Resume')).toBeTruthy();
     expect(screen.queryByText('Pause requested')).toBeNull();
@@ -201,49 +213,39 @@ describe('synced Web Use and Computer Use task in chat', () => {
   });
 
   it('shows a failed Web Use task with a clear recovery and no live controls', () => {
-    materializer.put(
-      TASK_RUN_ENTITY,
-      'task-web-1',
-      {
-        ...runningComputerTask,
-        taskId: 'task-web-1',
-        kind: 'web_use',
-        title: 'Find a flight to Pune',
-        status: 'failed',
-        phase: 'failed',
-        summary: 'No booking was made.',
-        failure: {
-          code: 'desktop_offline',
-          message: 'Office Mac disconnected before the task finished.',
-          recoverable: true,
-          recoveryAction: 'reconnect',
-        },
-        finishedAt: 30,
-        updatedAt: 30,
+    stateLog.record(TASK_RUN_ENTITY, 'task-web-1', 'put', {
+      ...runningComputerTask,
+      taskId: 'task-web-1',
+      kind: 'web_use',
+      title: 'Find a flight to Pune',
+      status: 'failed',
+      phase: 'failed',
+      summary: 'No booking was made.',
+      failure: {
+        code: 'desktop_offline',
+        message: 'Office Mac disconnected before the task finished.',
+        recoverable: true,
+        recoveryAction: 'reconnect',
       },
-      origin,
-    );
+      finishedAt: 30,
+      updatedAt: 30,
+    });
     for (const sequence of [1, 2]) {
       const visualStepId = taskVisualStepId('task-web-1', sequence);
-      materializer.put(
-        TASK_VISUAL_STEP_ENTITY,
+      stateLog.record(TASK_VISUAL_STEP_ENTITY, visualStepId, 'put', {
+        version: 1,
         visualStepId,
-        {
-          version: 1,
-          visualStepId,
-          taskId: 'task-web-1',
-          conversationId: runningComputerTask.conversationId,
+        taskId: 'task-web-1',
+        conversationId: runningComputerTask.conversationId,
+        sequence,
+        executionDevice: runningComputerTask.executionDevice,
+        actionLabel: sequence === 1 ? 'Opened search' : 'Checked results',
+        frame: {
+          ...runningComputerTask.frame,
           sequence,
-          executionDevice: runningComputerTask.executionDevice,
-          actionLabel: sequence === 1 ? 'Opened search' : 'Checked results',
-          frame: {
-            ...runningComputerTask.frame,
-            sequence,
-            capturedAt: sequence * 1_000,
-          },
+          capturedAt: sequence * 1_000,
         },
-        origin,
-      );
+      });
     }
 
     const screen = render(

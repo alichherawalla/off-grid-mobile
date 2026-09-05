@@ -34,19 +34,35 @@ import { StyleSheet } from 'react-native';
 import { setupChatScreen } from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,
-  useFocusEffect: () => {}, useIsFocused: () => true,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
 }));
 
 /** Flatten a rendered node's resolved style into a single object. */
-function flatStyle(node: { props?: { style?: unknown } }): Record<string, unknown> {
-  return (StyleSheet.flatten(node.props?.style as never) ?? {}) as Record<string, unknown>;
+function flatStyle(node: {
+  props?: { style?: unknown };
+}): Record<string, unknown> {
+  return (StyleSheet.flatten(node.props?.style as never) ?? {}) as Record<
+    string,
+    unknown
+  >;
 }
 
 describe('T086 (rendered) — voice-mode thinking block matches voice-note bubble width + left-aligns (B27)', () => {
   it('renders the thinking block at the voice-note bubble width and left-aligned, not full-width/edge-to-edge', async () => {
-    const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, pro: true });
+    const h = await setupChatScreen({
+      engine: 'litert',
+      platform: 'android',
+      whisper: true,
+      pro: true,
+    });
     await h.setupWhisperModel();
     h.render();
     await h.enterVoiceMode();
@@ -54,24 +70,39 @@ describe('T086 (rendered) — voice-mode thinking block matches voice-note bubbl
     // Voice-send a request whose reply THINKS: the litert turn emits reasoning + the answer, so the
     // completed assistant message carries reasoningContent → AudioModeThinkingBlock renders.
     await h.voiceSend('explain briefly why the sky is blue', {
-      reasoning: 'The user is asking about Rayleigh scattering. Shorter wavelengths scatter more.',
-      content: 'Sunlight scatters off air molecules, and blue scatters most, so the sky looks blue.',
+      reasoning:
+        'The user is asking about Rayleigh scattering. Shorter wavelengths scatter more.',
+      content:
+        'Sunlight scatters off air molecules, and blue scatters most, so the sky looks blue.',
     });
 
     // Pre-condition: BOTH the thinking block AND the voice-note bubble must actually be on screen (so a
     // false green can't hide behind an absent node). Wait for the reply's audio bubble, then the block.
-    const audioBubble = await h.rtl.waitFor(() => {
-      const msgs = h.useChatStore.getState().getActiveConversation?.()?.messages ?? [];
-      const reply = [...msgs].reverse().find((m: { role: string }) => m.role === 'assistant');
-      const node = reply ? h.view!.queryByTestId(`audio-bubble-${(reply as { id: string }).id}`) : null;
-      expect(node).not.toBeNull();
-      return node!;
-    }, { timeout: 8000 });
-    const thinkingBlock = await h.rtl.waitFor(() => {
-      const node = h.view!.queryByTestId('thinking-block');
-      expect(node).not.toBeNull();
-      return node!;
-    }, { timeout: 8000 });
+    const audioBubble = await h.rtl.waitFor(
+      () => {
+        const msgs =
+          h.useChatStore.getState().getActiveConversation?.()?.messages ?? [];
+        const reply = [...msgs]
+          .reverse()
+          .find((m: { role: string }) => m.role === 'assistant');
+        const node = reply
+          ? h.view!.queryByTestId(
+              `audio-bubble-${(reply as { id: string }).id}`,
+            )
+          : null;
+        expect(node).not.toBeNull();
+        return node!;
+      },
+      { timeout: 8000 },
+    );
+    const thinkingBlock = await h.rtl.waitFor(
+      () => {
+        const node = h.view!.queryByTestId('thinking-block');
+        expect(node).not.toBeNull();
+        return node!;
+      },
+      { timeout: 8000 },
+    );
 
     // The voice-note bubble's rendered width + alignment (the shape the thinking block must match).
     const bubbleStyle = flatStyle(audioBubble as never);
@@ -91,7 +122,10 @@ describe('T086 (rendered) — voice-mode thinking block matches voice-note bubbl
     let constrainingStyle: Record<string, unknown> = {};
     for (let d = 0; n && d < 8; d++, n = n.parent) {
       const s = flatStyle(n as never);
-      if (s.width === bubbleWidth) { constrainingStyle = s; break; } // the 88% wrapper (== bubble)
+      if (s.width === bubbleWidth) {
+        constrainingStyle = s;
+        break;
+      } // the 88% wrapper (== bubble)
     }
 
     // B27 #1 — EFFECTIVE width equals the voice-note bubble: the constraining wrapper is 88% (== bubble)

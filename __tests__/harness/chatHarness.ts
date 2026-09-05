@@ -20,7 +20,6 @@
  *   await h.send('what is the capital of France', { text: 'Paris.' });  // types, presses send, awaits reply
  *   expect(h.view.queryByText(/Paris\./)).not.toBeNull();
  */
-import { selectedLocalModelId } from '../utils/testHelpers';
 import {
   installNativeBoundary,
   requireRTL,
@@ -93,8 +92,6 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
   const React = require('react');
   const rtl = requireRTL();
-  const { hardwareService } = require('../../src/services/hardware');
-  const { useAppStore, useChatStore } = require('../../src/stores');
 
   // BOUNDARY (not a gesture): a downloaded model = a persisted record (@local_llm/downloaded_models) + the
   // file on disk — exactly what a real download leaves. Downloading is native and can't be gestured in jest,
@@ -103,10 +100,6 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const AsyncStorage =
     require('@react-native-async-storage/async-storage').default ??
     require('@react-native-async-storage/async-storage');
-  const {
-    activeModelService,
-  } = require('../harness/activeModelLifecycle');
-  const { HomeScreen } = require('../../src/screens/HomeScreen');
 
   const docs = boundary.fs!.DocumentDirectoryPath;
   const fileName =
@@ -134,20 +127,36 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     '@local_llm/downloaded_models',
     JSON.stringify([model]),
   );
+  await AsyncStorage.setItem(
+    'local-llm-app-storage',
+    JSON.stringify({
+      state: {
+        hasCompletedOnboarding: true,
+        checklistDismissed: true,
+        onboardingChecklist: {
+          downloadedModel: true,
+          loadedModel: true,
+          sentMessage: true,
+          triedImageGen: true,
+          exploredSettings: true,
+          createdProject: true,
+        },
+      },
+      version: 0,
+    }),
+  );
+
+  const { hardwareService } = require('../../src/services/hardware');
+  const { useAppStore, useChatStore } = require('../../src/stores');
   await hardwareService.refreshMemoryInfo();
 
-  // Boundary: dismiss the onboarding spotlight tour. When a whisper model is present the voice-hint
-  // spotlight (step 12) fires and wraps the send button in an AttachStep, which intercepts the composer
-  // gesture in tests. The tour is unrelated to any behavior under test, so mark it done up front.
+  // This fixture represents a returning user. The completed checklist is seeded at the durable
+  // profile boundary before the real store hydrates, so spotlight steps cannot intercept chat
+  // gestures and the journey never manufactures application state with a direct store write.
 
-  useAppStore.setState({ checklistDismissed: true });
-
-  // Activate PRO (audio/voice mode header toggle, audio layout, TTS, MCP) via the real bootstrap BEFORE any
-  // screen mounts, so pro slots render in Home + ChatScreen. Reusable seam (proHarness.installPro).
-  if (opts.pro) {
-    const { installPro } = require('./proHarness');
-    await installPro();
-  }
+  const {startMobileApplicationFixture} = require('./mobileApplicationFixture') as typeof import('./mobileApplicationFixture');
+  const applicationFixture = await startMobileApplicationFixture({pro: opts.pro});
+  const {HomeScreen} = require('../../src/screens/HomeScreen');
 
   // GESTURE: mount the real Home screen — its REAL hydration loads the record — then open the picker and TAP
   // the model row. The real handleSelectTextModel sets it active (no setState activeModelId shortcut).
@@ -182,7 +191,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   await rtl.waitFor(
     () => {
       // The selection is the shared active route; the store carries no selection field any more.
-      expect(selectedLocalModelId('text')).toBe('m');
+      expect(applicationFixture.application.models.snapshot().active.text?.model?.id).toBe('m');
     },
     { timeout: 4000 },
   );
@@ -199,9 +208,17 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
   if (!opts.deferInitialLoad) {
-    await activeModelService.loadTextModel('m');
-    const { refreshMobileModelServices } = require('../../src/services/modelServices');
-    await refreshMobileModelServices();
+    const {modelsFailureMessage} = require('@offgrid/application') as typeof import('@offgrid/application');
+    const outcome = await applicationFixture.application.models.load({
+      modality: 'text',
+      modelId: applicationFixture.selectedModelId('text'),
+    });
+    if (!outcome.ok) {
+      throw new Error(
+        `Model load failed: ${outcome.failure.kind}: ${modelsFailureMessage(outcome.failure)}`,
+      );
+    }
+    await applicationFixture.refreshModels();
   }
 
   // Stop any generation this suite leaves in flight, on THIS module graph, before the next suite resets
@@ -214,7 +231,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     const { mobileChatSession } = require('../../src/screens/ChatScreen/mobileChatSession');
     (
       globalThis as unknown as { __GEN_CLEANUP__?: () => Promise<void> }
-    ).__GEN_CLEANUP__ = async () => { mobileChatSession.stop(); };
+    ).__GEN_CLEANUP__ = async () => {
+      mobileChatSession.stop();
+      await applicationFixture.dispose();
+    };
   }
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
@@ -288,9 +308,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
 
     /**
-     * Place a DOWNLOADED image model (the native/disk boundary — downloading can't be gestured in jest). It
-     * is NOT activated here: activation is a real gesture (cycleImageMode's toggle sets activeImageModelId
-     * when an image model is downloaded). Settles first so the mount's hydration has cleared the empty disk.
+     * Import an image-model archive through the real Mobile adapter and Shared transaction. The harness
+     * controls only the picked archive, extracted files, and native unzip boundary; registry, selection,
+     * refresh, and application projection remain production behavior.
      */
     async placeImageModel(
       imgOpts: {
@@ -302,42 +322,49 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     ) {
       const {
         id = 'sd',
-        modelPath: imgModelPath = '/models/sd',
         backend = 'coreml',
         size,
       } = imgOpts;
 
-      const { createONNXImageModel } = require('../utils/factories');
-      const imgModel = createONNXImageModel({
-        id,
-        name: 'SD',
-        modelPath: imgModelPath,
-        backend,
-        ...(size != null ? { size } : {}),
+      const archiveName = `${id}-${backend}.zip`;
+      const sourceUri = `/external/${archiveName}`;
+      boundary.fs!.seedTextFile(sourceUri, 'PK', 1024);
+      const zip = require('react-native-zip-archive') as {unzip: jest.Mock};
+      zip.unzip.mockImplementation(async (_archive: string, destination: string) => {
+        const seedFile = (name: string, bytes = 8 * 1024 * 1024) =>
+          boundary.fs!.seedFile(`${destination}/${name}`, bytes);
+        if (backend === 'mnn' || backend === 'qnn') {
+          ['pos_emb.bin', 'token_emb.bin', 'tokenizer.json'].forEach(name => seedFile(name));
+          if (backend === 'mnn') {
+            [
+              'unet.mnn',
+              'unet.mnn.weight',
+              'vae_decoder.mnn',
+              'vae_decoder.mnn.weight',
+              'clip_v2.mnn',
+              'clip_v2.mnn.weight',
+            ].forEach(name => seedFile(name));
+          } else {
+            ['unet.bin', 'vae_decoder.bin', 'clip_v2.mnn'].forEach(name => seedFile(name));
+          }
+        } else {
+          boundary.fs!.seedDir(`${destination}/model.mlmodelc`);
+          seedFile('model.mlmodelc/model.bin', size ?? 8 * 1024 * 1024);
+        }
+        return destination;
       });
-      // A downloaded+extracted image model IS its file set on disk (the boundary) — seed the exact files the
-      // real integrity gate + native load require, so the REAL load path runs (mnn/qnn validate the dir;
-      // coreml doesn't). No pre-marking-loaded shortcut.
-      const seedFile = (name: string) =>
-        boundary.fs!.seedFile(`${imgModelPath}/${name}`, 8 * 1024 * 1024);
-      if (backend === 'mnn' || backend === 'qnn') {
-        ['pos_emb.bin', 'token_emb.bin', 'tokenizer.json'].forEach(seedFile);
-        if (backend === 'mnn')
-          [
-            'unet.mnn',
-            'unet.mnn.weight',
-            'vae_decoder.mnn',
-            'vae_decoder.mnn.weight',
-            'clip_v2.mnn',
-            'clip_v2.mnn.weight',
-          ].forEach(seedFile);
-        else ['unet.bin', 'vae_decoder.bin', 'clip_v2.mnn'].forEach(seedFile);
-      } else {
-        seedFile('model.mlmodelc'); // coreml: a non-empty dir
+
+      const {importMobileImageArchive} = require('../../src/services/adapters/models/library/imageArchiveImportAdapter') as typeof import('../../src/services/adapters/models/library/imageArchiveImportAdapter');
+      const imported = await importMobileImageArchive({sourceUri, fileName: archiveName});
+      if (imported.status !== 'imported') {
+        throw new Error(`Image model import failed during ${imported.stage}: ${imported.error}`);
       }
-      await this.settle(50); // let the mount's hydration finish clearing the (empty) disk list
-      this.useAppStore.setState({ downloadedImageModels: [imgModel] }); // downloaded (boundary), NOT active
-      return imgModel;
+      await applicationFixture.refreshModels();
+      const projected = applicationFixture.application.models
+        .snapshot()
+        .inventory.find(candidate => candidate.id === imported.model.id);
+      if (!projected) throw new Error('Imported image model was not published to the application inventory.');
+      return imported.model;
     },
 
     /**
@@ -526,18 +553,23 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       const {
         TranscriptionModelsTab,
       } = require('../../src/screens/ModelsScreen/TranscriptionModelsTab');
-      const { useWhisperStore } = require('../../src/stores/whisperStore');
-      const { transcriptionModelIntents } = require('../../src/services/modelServices/transcriptionRuntimePort');
+      const { createTranscriptionModelsSelector } = require('@offgrid/application') as typeof import('@offgrid/application');
+      const { refreshTranscriptionModels } = require('../../src/services/transcriptionModelApplication') as typeof import('../../src/services/transcriptionModelApplication');
+      const selectTranscriptionModels = createTranscriptionModelsSelector();
 
       boundary.fs!.seedFile(
         `${docs}/whisper-models/ggml-${modelId}.bin`,
         75 * 1024 * 1024,
       );
-      await transcriptionModelIntents.reconcileDisk(); // real disk scan → present
+      const refreshed = await refreshTranscriptionModels();
+      expect(refreshed.ok).toBe(true); // real disk scan → Shared inventory projection
       const t = rtl.render(React.createElement(TranscriptionModelsTab, {}));
       await rtl.waitFor(
         () => {
-          expect(useWhisperStore.getState().presentModelIds).toContain(modelId);
+          const row = selectTranscriptionModels(
+            applicationFixture.application.models.snapshot(),
+          ).models.find(candidate => candidate.catalog.id === modelId);
+          expect(row?.installed).toBe(true);
         },
         { timeout: 4000 },
       );
@@ -546,7 +578,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       );
       await rtl.waitFor(
         () => {
-          expect(useWhisperStore.getState().downloadedModelId).toBe(modelId);
+          expect(
+            selectTranscriptionModels(
+              applicationFixture.application.models.snapshot(),
+            ).selectedModelId,
+          ).toBe(modelId);
         },
         { timeout: 4000 },
       );

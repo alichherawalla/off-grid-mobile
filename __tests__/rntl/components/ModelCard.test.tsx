@@ -826,6 +826,27 @@ describe('ModelCard', () => {
       expect(getByTestId('card-cancel')).toBeTruthy();
     });
 
+    it.each([
+      ['queued', { isQueued: true }],
+      ['paused', { isPaused: true }],
+    ])('keeps the cancel action available while %s', (_label, state) => {
+      const onDownload = jest.fn();
+      const onCancel = jest.fn();
+      const { queryByTestId, getByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={false}
+          {...state}
+          onDownload={onDownload}
+          onCancel={onCancel}
+          testID="card"
+        />
+      );
+
+      expect(queryByTestId('card-download')).toBeNull();
+      expect(getByTestId('card-cancel')).toBeTruthy();
+    });
+
     it('does not show select button when model is active', () => {
       const onSelect = jest.fn();
       const { toJSON } = render(

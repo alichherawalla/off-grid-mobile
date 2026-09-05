@@ -19,13 +19,18 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
      
-    const { activeModelService } = require('../../harness/activeModelLifecycle');
+    const {
+      activeModelService,
+      modelApplication,
+      modelResidencyManager,
+      resetModelApplication,
+    } = require('../../harness/activeModelLifecycle');
     const {
       refreshMobileModelServices,
       selectMobileModel,
     } = require('../../../src/services/modelServices');
-    const { modelResidencyManager } = require('@offgrid/core/services/modelServices/residencyBootstrap');
     const { mobileTextEngineControl } = require('../../../src/services/modelServices/textEngineControl');
+    const { commitModelsList } = require('../../../src/services/adapters/models/library/modelRegistryStorageAdapter');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
      
@@ -33,8 +38,9 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
     const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
-    useAppStore.setState({ downloadedModels: [model] });
+    await commitModelsList([model]);
     arrangeLocalSelection('text', null);
+    await resetModelApplication();
     await refreshMobileModelServices();
 
     // Load — becomes ready + resident.
@@ -53,8 +59,9 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     expect(mobileTextEngineControl.isReady(model.id)).toBe(false);
     expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
 
-    // Delete — removed from the library.
-    useAppStore.getState().removeDownloadedModel('llm');
+    // Delete through the Shared application workflow — removed from the library.
+    const removed = await modelApplication().models.remove('llm');
+    expect(removed.ok).toBe(true);
     expect(useAppStore.getState().downloadedModels.find((m: { id: string }) => m.id === 'llm')).toBeUndefined();
   });
 });

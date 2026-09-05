@@ -227,6 +227,15 @@ failed transfer stopped existing the moment the view reset, and the surface conf
 When you fix durability, fix the READ at the same time: persisting a failure while the renderer still
 hardcodes `status: 'completed'` converts a lost record into a durable lie.
 
+## Hexagonal architecture (standing rule, 2026-09-02)
+
+For ALL packages in `shared`: every business rule lives in the shared `@offgrid/*` package. Desktop and
+mobile are dumb components or consumers - I/O adapters, composition roots, and UI. Nothing else. Before
+writing a rule in an app, ask "is this a decision or I/O?": a decision goes to shared with a node test,
+the app keeps only the port. A rule found in an app file is a defect to move, not a style choice.
+
+Every change follows FPT (first-principles thinking), SSOT, SOLID, DRY, SRP, and Clean architecture.
+
 ## Shared owns model business logic (the apps never duplicate it)
 
 The point of the shared monorepo is that Desktop and Mobile never carry two copies of one rule.

@@ -1,4 +1,5 @@
 import { arrangeRemoteSelection, resetStores as resetStoresForSelection } from '../../utils/testHelpers';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 /**
  * Real-behavior tests for pro/mcp/mcpService.ts — the MCP orchestration layer.
  *
@@ -92,6 +93,7 @@ import type { McpServerConfig, McpTool } from '@offgrid/pro/mcp/types';
 // The SAME NeedsAuthorizationError class the service imports (from the mocked oauth
 // module) — required so the service's `err instanceof NeedsAuthorizationError` matches.
 const { NeedsAuthorizationError } = require('../../../pro/mcp/oauth');
+let applicationFixture: MobileApplicationFixture;
 
 const tool = (
   name: string,
@@ -116,6 +118,15 @@ function resetStores() {
   });
   resetStoresForSelection();
 }
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();

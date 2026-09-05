@@ -167,6 +167,13 @@ describe('the files this phone offers the rest of the mesh', () => {
    */
   function loadModuleGraph(): void {
     jest.resetModules();
+    // Recompose the real application after every reset. Pro supplies native Sync
+    // ports; Shared owns the facade and the file-sync rules exercised below.
+    const application =
+      require('../../../src/services/composition/application') as typeof import('../../../src/services/composition/application');
+    const pro =
+      require('../../../pro/composition/application') as typeof import('../../../pro/composition/application');
+    application.registerMobileApplicationPorts(pro.createMobileApplicationPorts);
     fs = require('react-native-fs').default;
     useSyncStore = require('../../../pro/sync/syncStore').useSyncStore;
     useAppStore = require('../../../src/stores/appStore').useAppStore;

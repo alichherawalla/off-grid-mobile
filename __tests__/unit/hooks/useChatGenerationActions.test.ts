@@ -4,16 +4,15 @@
  * shared/packages/models/test/image-runtime-policy.test.mjs
  * shared/packages/models/test/chat-session.test.mjs
  */
-import {
-  handleSelectProjectFn,
-  handleSendFn,
-} from '../../../src/screens/ChatScreen/useChatGenerationActions';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+import {installNativeBoundary} from '../../harness/nativeBoundary';
 
-jest.mock('../../../src/services/huggingface', () => ({ huggingFaceService: {} }));
-jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({ modelLibrary: {} }));
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
-  coordinatedDownloads: { isAvailable: jest.fn(() => false) },
-}));
+let fixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
+});
 
 function deps(overrides: Record<string, unknown> = {}): any {
   return {
@@ -25,7 +24,13 @@ function deps(overrides: Record<string, unknown> = {}): any {
 
 describe('chat action UI boundary', () => {
   it('shows model selection when send has no active route', async () => {
-    const input = deps();
+    installNativeBoundary({download: true, fs: true});
+    const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    fixture = await startMobileApplicationFixture();
+    const {handleSendFn} = require('../../../src/screens/ChatScreen/useChatGenerationActions') as typeof import('../../../src/screens/ChatScreen/useChatGenerationActions');
+    const input = deps({
+      hasActiveModel: Boolean(fixture.application.models.snapshot().active.text?.model),
+    });
     await handleSendFn(input, { text: 'hello', setDebugInfo: jest.fn() });
     expect(input.setAlertState).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'No Model Selected', visible: true }),
@@ -33,6 +38,7 @@ describe('chat action UI boundary', () => {
   });
 
   it('projects a project selection and closes the selector', () => {
+    const {handleSelectProjectFn} = require('../../../src/screens/ChatScreen/useChatGenerationActions') as typeof import('../../../src/screens/ChatScreen/useChatGenerationActions');
     const setConversationProject = jest.fn();
     const setShowProjectSelector = jest.fn();
     handleSelectProjectFn(

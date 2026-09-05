@@ -9,11 +9,7 @@ import {
   type GuidedSetupTierPlan,
 } from '@offgrid/models';
 import type { ModelDownloadStartRequest } from '../modelServices/downloadTypes';
-import {
-  createWhisperPublicDownloadRequest,
-  modelsFailureMessage,
-  WHISPER_MODELS,
-} from '@offgrid/application';
+import { modelsFailureMessage } from '@offgrid/application';
 import { useAppStore } from '../../stores';
 import {
   loadAutoSetupCompatibleCatalog,
@@ -22,12 +18,12 @@ import {
   type AutoSetupTextPayload,
   type AutoSetupCatalogBoundaries,
 } from '../autoSetupCatalog';
-import { selectMobileModel } from '../modelServices/selectionCommands';
 import { applicationFacade } from '../applicationFacade';
-import {
-  mobileTextDownloadRequest,
-} from '../modelServices/modelDownloadRequests';
+import { makeModelKey } from '../../utils/modelKey';
+import { mobileImageDownloadSelection } from '../adapters/models/modelControlCatalogPort';
+import { mobileTextDownloadRequest } from '../modelServices/modelDownloadRequests';
 import { publicImageDownloadRequest } from '../adapters/models/downloads/publicImageDownloadRequest';
+import { downloadTranscriptionModel } from '../transcriptionModelApplication';
 
 export interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
@@ -36,39 +32,85 @@ export interface AutoSetupDownloadBoundaries {
   subscribe: (listener: () => void) => () => void;
 }
 
-function publicRequest(request: ModelDownloadStartRequest) {
+function controlRequest(request: ModelDownloadStartRequest) {
   if (request.modelType === 'text') {
-    return mobileTextDownloadRequest(request.modelId, request.file);
+    const metadataJson = mobileTextDownloadRequest(
+      request.modelId,
+      request.file,
+    ).metadataJson;
+    return {
+      modelId: makeModelKey(request.modelId, request.file.name),
+      selection: {
+        repositoryId: request.modelId,
+        fileName: request.file.name,
+        ...(metadataJson ? { metadataJson } : {}),
+      },
+    };
   }
-  if (request.modelType === 'image') return publicImageDownloadRequest(request.model);
-  const model = WHISPER_MODELS.find(candidate => candidate.id === request.modelId);
-  if (!model) throw new Error(`Unknown transcription model: ${request.modelId}`);
-  return createWhisperPublicDownloadRequest(model);
+  if (request.modelType === 'image') {
+    const selection = mobileImageDownloadSelection(request.model);
+    if (!selection) throw new Error('The image model source is incomplete.');
+    const metadataJson = publicImageDownloadRequest(request.model).metadataJson;
+    return {
+      modelId: `image:${request.model.id}`,
+      selection: { ...selection, ...(metadataJson ? { metadataJson } : {}) },
+    };
+  }
+  return null;
 }
 
 const productionDownloads: AutoSetupDownloadBoundaries = {
   async start(request) {
-    const outcome = await applicationFacade().models.download(publicRequest(request));
-    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
-  },
-  list: async () => applicationFacade().models.snapshot().downloads.map(row => ({
-    id: guidedSetupDownloadId({ kind: row.modelType ?? 'text', id: row.modelId }),
-    status: row.status,
-    progress: row.totalBytes > 0 ? row.bytesDownloaded / row.totalBytes : 0,
-    ...(row.reason ? { error: row.reason } : {}),
-  })),
-  async cancel(id) {
-    const row = applicationFacade().models.snapshot().downloads.find(candidate =>
-      guidedSetupDownloadId({ kind: candidate.modelType ?? 'text', id: candidate.modelId }) === id,
-    );
-    if (!row) return;
-    const outcome = await applicationFacade().models.cancelDownload({
-      downloadId: row.downloadId,
-      removePartial: true,
+    // Transcription downloads have exactly one owner: the shared Whisper download
+    // request (createWhisperPublicDownloadRequest), reached through the transcription
+    // application service. Nothing here re-invents the whisper download identity.
+    if (request.modelType !== 'text' && request.modelType !== 'image') {
+      const queued = await downloadTranscriptionModel(request.modelId);
+      if (!queued.ok) throw new Error(modelsFailureMessage(queued.failure));
+      return;
+    }
+    const selected = controlRequest(request);
+    if (!selected) throw new Error('The model download source is incomplete.');
+    const outcome = await applicationFacade().models.control({
+      type: 'queue-download',
+      ...selected,
     });
     if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
   },
-  subscribe: listener => applicationFacade().models.watch(snapshot => snapshot.downloads, listener),
+  list: async () =>
+    applicationFacade()
+      .models.snapshot()
+      .control.downloads.map(row => ({
+        id: guidedSetupDownloadId({
+          kind: row.modelType ?? 'text',
+          id: row.modelId,
+        }),
+        status: row.status,
+        progress: row.totalBytes > 0 ? row.bytesDownloaded / row.totalBytes : 0,
+        ...(row.reason ? { error: row.reason } : {}),
+      })),
+  async cancel(id) {
+    const row = applicationFacade()
+      .models.snapshot()
+      .control.downloads.find(
+        candidate =>
+          guidedSetupDownloadId({
+            kind: candidate.modelType ?? 'text',
+            id: candidate.modelId,
+          }) === id,
+      );
+    if (!row) return;
+    const outcome = await applicationFacade().models.control({
+      type: 'cancel-download',
+      modelId: row.downloadId,
+    });
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  },
+  subscribe: listener =>
+    applicationFacade().models.watch(
+      snapshot => snapshot.control.downloads,
+      listener,
+    ),
 };
 
 export type AutoSetupSession = GuidedSetupSession<
@@ -90,9 +132,14 @@ export interface AutoSetupSessionBoundaries {
   catalogDeadlineMs?: number;
 }
 
-type SetupPayload = AutoSetupTextPayload | AutoSetupImagePayload | AutoSetupSttPayload;
+type SetupPayload =
+  | AutoSetupTextPayload
+  | AutoSetupImagePayload
+  | AutoSetupSttPayload;
 
-function toDownloadRequest(item: GuidedSetupCandidate<SetupPayload>): ModelDownloadStartRequest {
+function toDownloadRequest(
+  item: GuidedSetupCandidate<SetupPayload>,
+): ModelDownloadStartRequest {
   if (item.kind === 'text') {
     const payload = item.payload as AutoSetupTextPayload;
     return { modelType: 'text', modelId: payload.modelId, file: payload.file };
@@ -100,7 +147,10 @@ function toDownloadRequest(item: GuidedSetupCandidate<SetupPayload>): ModelDownl
   if (item.kind === 'image') {
     return { modelType: 'image', model: item.payload as AutoSetupImagePayload };
   }
-  return { modelType: 'stt', modelId: (item.payload as AutoSetupSttPayload).modelId };
+  return {
+    modelType: 'stt',
+    modelId: (item.payload as AutoSetupSttPayload).modelId,
+  };
 }
 
 /** Composition root: shared owns the complete Auto Setup use case; these are Mobile's ports. */
@@ -114,9 +164,10 @@ export function createAutoSetupSession(
     startDownload: item => downloads.start(toDownloadRequest(item)),
     cancelDownload: id => downloads.cancel(id),
     subscribeDownloads: listener => downloads.subscribe(listener),
-    loadTier: () => guidedSetupTierFromLoadingMode(
-      useAppStore.getState().settings.modelLoadingMode,
-    ),
+    loadTier: () =>
+      guidedSetupTierFromLoadingMode(
+        useAppStore.getState().settings.modelLoadingMode,
+      ),
     saveTier: tier => {
       useAppStore.getState().updateSettings({
         modelLoadingMode: guidedSetupTierToLoadingMode(tier),
@@ -124,16 +175,12 @@ export function createAutoSetupSession(
     },
     activate: async item => {
       if (item.kind !== 'text') return;
-      const selected = useAppStore.getState().downloadedModels.find(
-        model => model.id === item.id,
-      );
-      if (!selected) throw new Error('The downloaded text model is not available');
-      await selectMobileModel({
-        source: 'local',
-        hostId: selected.engine,
-        modality: 'text',
-        modelId: selected.id,
+      const outcome = await applicationFacade().models.control({
+        type: 'activate',
+        surface: 'text',
+        modelId: item.id,
       });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
     },
     catalogDeadlineMs: boundaries.catalogDeadlineMs,
   });

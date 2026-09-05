@@ -19,6 +19,12 @@ import { arrangeLocalSelection } from '../../utils/testHelpers';
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 describe('model selector loader — the spinner follows what is being loaded', () => {
    
   const load = () => {
@@ -71,6 +77,8 @@ describe('model selector loader — the spinner follows what is being loaded', (
 
   it('shows no spinner when the user taps a row, because tapping starts no load', async () => {
     const { React, rtl, ModelSelectorModal } = load();
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
     const onSelectModel = jest.fn();
     const view = rtl.render(
       React.createElement(ModelSelectorModal, { ...props, onSelectModel }),

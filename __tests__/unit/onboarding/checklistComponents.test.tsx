@@ -4,18 +4,40 @@
  */
 
 import React from 'react';
-import { render, act, renderHook, waitFor } from '@testing-library/react-native';
+import {
+  render,
+  act,
+  renderHook,
+  waitFor,
+} from '@testing-library/react-native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createDownloadedModel } from '../../utils/factories';
-import { refreshMobileModelServices, selectMobileModel } from '../../../src/services/modelServices';
+import {
+  refreshMobileModelServices,
+  selectMobileModel,
+} from '../../../src/services/modelServices';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+
+let applicationFixture: MobileApplicationFixture;
+
+beforeAll(async () => {
+  const { startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture();
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 // ─── ProgressBar ────────────────────────────────────────────────────
 describe('ProgressBar', () => {
-
-  const { ProgressBar } = require('../../../src/components/checklist/ProgressBar');
+  const {
+    ProgressBar,
+  } = require('../../../src/components/checklist/ProgressBar');
 
   const baseTheme = {
     progressTrackColor: '#ccc',
@@ -27,26 +49,35 @@ describe('ProgressBar', () => {
   };
 
   it('renders completed/total text', () => {
-    const { getByText } = render(<ProgressBar completed={3} total={6} theme={baseTheme} />);
+    const { getByText } = render(
+      <ProgressBar completed={3} total={6} theme={baseTheme} />,
+    );
     expect(getByText('3/6')).toBeTruthy();
   });
 
   it('renders 0/0 when total is 0', () => {
-    const { getByText } = render(<ProgressBar completed={0} total={0} theme={baseTheme} />);
+    const { getByText } = render(
+      <ProgressBar completed={0} total={0} theme={baseTheme} />,
+    );
     expect(getByText('0/0')).toBeTruthy();
   });
 
   it('renders fully completed state', () => {
-    const { getByText } = render(<ProgressBar completed={6} total={6} theme={baseTheme} />);
+    const { getByText } = render(
+      <ProgressBar completed={6} total={6} theme={baseTheme} />,
+    );
     expect(getByText('6/6')).toBeTruthy();
   });
 });
 
 // ─── Animations ─────────────────────────────────────────────────────
 describe('checklist animations', () => {
-
-  const { useStaggeredEntrance, useCheckmark, useStrikethrough, useProgressAnimation } =
-    require('../../../src/components/checklist/animations');
+  const {
+    useStaggeredEntrance,
+    useCheckmark,
+    useStrikethrough,
+    useProgressAnimation,
+  } = require('../../../src/components/checklist/animations');
 
   const spring = { damping: 24, stiffness: 140 };
 
@@ -90,8 +121,9 @@ describe('checklist animations', () => {
 
 // ─── useOnboardingSteps ─────────────────────────────────────────────
 describe('useOnboardingSteps', () => {
-
-  const { useOnboardingSteps } = require('../../../src/components/checklist/useOnboardingSteps');
+  const {
+    useOnboardingSteps,
+  } = require('../../../src/components/checklist/useOnboardingSteps');
 
   beforeEach(() => resetStores());
 
@@ -103,24 +135,39 @@ describe('useOnboardingSteps', () => {
   });
 
   it('marks downloadedModel as completed when models exist', async () => {
-    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel()); });
+    act(() => {
+      useAppStore.getState().addDownloadedModel(createDownloadedModel());
+    });
     const { result } = renderHook(() => useOnboardingSteps());
     await act(refreshMobileModelServices);
     await waitFor(() => {
-      const step = result.current.steps.find((s: any) => s.id === 'downloadedModel');
+      const step = result.current.steps.find(
+        (s: any) => s.id === 'downloadedModel',
+      );
       expect(step.completed).toBe(true);
       expect(result.current.completedCount).toBe(1);
     });
   });
 
   it('marks loadedModel as completed when a real local route is selected', async () => {
-    act(() => { useAppStore.getState().addDownloadedModel(createDownloadedModel({ id: 'model-1' })); });
+    act(() => {
+      useAppStore
+        .getState()
+        .addDownloadedModel(createDownloadedModel({ id: 'model-1' }));
+    });
     const { result } = renderHook(() => useOnboardingSteps());
     await act(async () => {
-      await selectMobileModel({ source: 'local', hostId: 'llama', modality: 'text', modelId: 'model-1' });
+      await selectMobileModel({
+        source: 'local',
+        hostId: 'llama',
+        modality: 'text',
+        modelId: 'model-1',
+      });
     });
     await waitFor(() => {
-      const step = result.current.steps.find((s: any) => s.id === 'loadedModel');
+      const step = result.current.steps.find(
+        (s: any) => s.id === 'loadedModel',
+      );
       expect(step.completed).toBe(true);
     });
   });
@@ -128,7 +175,9 @@ describe('useOnboardingSteps', () => {
   it('marks sentMessage as completed when a conversation has messages', () => {
     act(() => {
       const convId = useChatStore.getState().createConversation('m1', 'Test');
-      useChatStore.getState().addMessage(convId, { role: 'user', content: 'hi' });
+      useChatStore
+        .getState()
+        .addMessage(convId, { role: 'user', content: 'hi' });
     });
     const { result } = renderHook(() => useOnboardingSteps());
     const step = result.current.steps.find((s: any) => s.id === 'sentMessage');
@@ -137,26 +186,37 @@ describe('useOnboardingSteps', () => {
 
   it('disables triedImageGen when no model is loaded', () => {
     const { result } = renderHook(() => useOnboardingSteps());
-    const step = result.current.steps.find((s: any) => s.id === 'triedImageGen');
+    const step = result.current.steps.find(
+      (s: any) => s.id === 'triedImageGen',
+    );
     expect(step.disabled).toBe(true);
   });
 
   it('marks createdProject when 5+ projects exist', () => {
     act(() => {
       for (let i = 0; i < 5; i++) {
-        useProjectStore.getState().createProject({ name: `Project ${i}`, description: '', systemPrompt: '' });
+        useProjectStore
+          .getState()
+          .createProject({
+            name: `Project ${i}`,
+            description: '',
+            systemPrompt: '',
+          });
       }
     });
     const { result } = renderHook(() => useOnboardingSteps());
-    const step = result.current.steps.find((s: any) => s.id === 'createdProject');
+    const step = result.current.steps.find(
+      (s: any) => s.id === 'createdProject',
+    );
     expect(step.completed).toBe(true);
   });
 });
 
 // ─── useChecklistTheme ──────────────────────────────────────────────
 describe('useChecklistTheme', () => {
-
-  const { useChecklistTheme } = require('../../../src/components/checklist/useOnboardingSteps');
+  const {
+    useChecklistTheme,
+  } = require('../../../src/components/checklist/useOnboardingSteps');
 
   it('returns a theme object with all required properties', () => {
     const { result } = renderHook(() => useChecklistTheme());
@@ -169,8 +229,9 @@ describe('useChecklistTheme', () => {
 
 // ─── useAutoDismiss ─────────────────────────────────────────────────
 describe('useAutoDismiss', () => {
-
-  const { useAutoDismiss } = require('../../../src/components/checklist/useOnboardingSteps');
+  const {
+    useAutoDismiss,
+  } = require('../../../src/components/checklist/useOnboardingSteps');
 
   beforeEach(() => {
     jest.useFakeTimers();
@@ -182,19 +243,25 @@ describe('useAutoDismiss', () => {
   it('dismisses checklist after 3s when all steps completed', () => {
     renderHook(() => useAutoDismiss(6, 6));
     expect(useAppStore.getState().checklistDismissed).toBe(false);
-    act(() => { jest.advanceTimersByTime(3000); });
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
     expect(useAppStore.getState().checklistDismissed).toBe(true);
   });
 
   it('does NOT dismiss when not all steps completed', () => {
     renderHook(() => useAutoDismiss(3, 6));
-    act(() => { jest.advanceTimersByTime(5000); });
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
     expect(useAppStore.getState().checklistDismissed).toBe(false);
   });
 
   it('does NOT dismiss when total is 0', () => {
     renderHook(() => useAutoDismiss(0, 0));
-    act(() => { jest.advanceTimersByTime(5000); });
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
     expect(useAppStore.getState().checklistDismissed).toBe(false);
   });
 });

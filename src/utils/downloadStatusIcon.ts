@@ -15,7 +15,7 @@ export const QUEUED_ICON: DownloadStatusIcon = 'clock';
 export const PAUSED_ICON: DownloadStatusIcon = 'pause-circle';
 
 export function downloadStatusIcon(status: string): DownloadStatusIcon | null {
-  if (status === 'pending') return QUEUED_ICON;
+  if (status === 'pending' || status === 'queued') return QUEUED_ICON;
   if (status === 'paused') return PAUSED_ICON;
   if (status === 'failed') return 'alert-circle';
   if (status === 'retrying') return 'refresh-cw';

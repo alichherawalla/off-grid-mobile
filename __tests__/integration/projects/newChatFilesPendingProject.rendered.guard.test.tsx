@@ -13,7 +13,12 @@ import { createProject } from '../../utils/factories';
 
 let mockRouteProjectId = 'proj-1';
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => jest.fn()) }),
+  useNavigation: () => ({
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+    setOptions: jest.fn(),
+    addListener: jest.fn(() => jest.fn()),
+  }),
   useRoute: () => ({ params: { projectId: mockRouteProjectId } }),
   useFocusEffect: jest.fn(),
   useIsFocused: () => true,
@@ -22,35 +27,50 @@ jest.mock('@react-navigation/native', () => ({
 describe('Q10 (rendered) — new chat files a pending project', () => {
   it('lists the new conversation under the pending project after first send', async () => {
     mockRouteProjectId = 'proj-1';
-    const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-     
-    const React = require('react');
-    const { render } = require('../../harness/nativeBoundary').requireRTL();
-    const { llmService } = require('../../../src/services/llm');
-    const { hardwareService } = require('../../../src/services/hardware');
-    const { handleSendFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
-    const { useProjectStore } = require('../../../src/stores');
-    const { ProjectChatsScreen } = require('../../../src/screens/ProjectChatsScreen');
-     
+    installNativeBoundary({
+      ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB },
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    const fixture = await startMobileApplicationFixture();
 
-    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    await llmService.loadModel('/models/small.gguf');
+    try {
+      const React = require('react');
+      const { render } = require('../../harness/nativeBoundary').requireRTL();
+      const {
+        handleSendFn,
+      } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+      const { useProjectStore } = require('../../../src/stores');
+      const {
+        ProjectChatsScreen,
+      } = require('../../../src/screens/ProjectChatsScreen');
 
-    useProjectStore.setState({ projects: [createProject({ id: 'proj-1', name: 'Research' })] });
-    // Brand-new chat: no active conversation, but the user picked a project (pendingProjectId).
-    const { deps } = makeGenDeps({ activeConversationId: null, pendingProjectId: 'proj-1' });
+      useProjectStore.setState({
+        projects: [createProject({ id: 'proj-1', name: 'Research' })],
+      });
+      // Brand-new chat: no active conversation, but the user picked a project (pendingProjectId).
+      const { deps } = makeGenDeps({
+        activeConversationId: null,
+        pendingProjectId: 'proj-1',
+      });
 
-    // Precondition: the project has no chats yet (empty state renders).
-    const before = render(React.createElement(ProjectChatsScreen, {}));
-    expect(before.getByText('No chats yet')).toBeTruthy();
-    before.unmount();
+      // Precondition: the project has no chats yet (empty state renders).
+      const before = render(React.createElement(ProjectChatsScreen, {}));
+      expect(before.getByText('No chats yet')).toBeTruthy();
+      before.unmount();
 
-    await handleSendFn(deps, { text: 'hello there', startGeneration: async () => {}, setDebugInfo: () => {} });
+      await handleSendFn(deps, {
+        text: 'hello there',
+        startGeneration: async () => {},
+        setDebugInfo: () => {},
+      });
 
-    const view = render(React.createElement(ProjectChatsScreen, {}));
-    // The freshly-sent chat is filed under the project and shows in its list (titled from the first message).
-    expect(view.queryByText('No chats yet')).toBeNull();
-    expect(view.getByText('hello there')).toBeTruthy();
+      const view = render(React.createElement(ProjectChatsScreen, {}));
+      // The freshly-sent chat is filed under the project and shows in its list (titled from the first message).
+      expect(view.queryByText('No chats yet')).toBeNull();
+      expect(view.getByText('hello there')).toBeTruthy();
+    } finally {
+      await fixture.dispose();
+    }
   });
 });

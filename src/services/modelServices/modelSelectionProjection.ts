@@ -292,6 +292,11 @@ export function selectedRouteIsRemote(modality: ModelModality): boolean {
   return Boolean(selectedRoute(modality)?.serverId);
 }
 
+/** The selected remote server identity, read from the canonical persisted selection. */
+export function selectedRemoteServerId(modality: ModelModality): string | null {
+  return selectedRoute(modality)?.serverId ?? null;
+}
+
 function rawRoute(routeId: string | null | undefined) {
   const route = routeId ? decodeModelRouteId(routeId) : null;
   if (routeId && !route) throw new Error('The selected model route is invalid');

@@ -21,8 +21,19 @@
  * probes the disk) runs, the REAL recommended list matches downloaded rows by id-prefix, and the REAL
  * ModelCard renders the mark. The N is EMERGENT from the seeded boundary, not programmed.
  */
-import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
+import {
+  installNativeBoundary,
+  requireRTL,
+} from '../../harness/nativeBoundary';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 import { createDownloadedModel } from '../../utils/factories';
+
+let applicationFixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = null;
+});
 
 // Three recommended-model ids that render within the harness device budget. A downloaded
 // row whose id STARTS WITH a recommended id makes that recommended card render its downloaded mark
@@ -35,13 +46,13 @@ const RECOMMENDED_IDS = [
 
 async function mountWithNDownloaded(n: number) {
   const boundary = installNativeBoundary({ fs: true });
-   
+
   const React = require('react');
   const { render, waitFor } = requireRTL();
-  const AsyncStorage = require('@react-native-async-storage/async-storage').default
-    ?? require('@react-native-async-storage/async-storage');
+  const AsyncStorage =
+    require('@react-native-async-storage/async-storage').default ??
+    require('@react-native-async-storage/async-storage');
   const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
-   
 
   const docs = boundary.fs!.DocumentDirectoryPath;
   // Seed N downloaded models: a file on the in-memory disk + a persisted record whose id is prefixed by
@@ -51,9 +62,21 @@ async function mountWithNDownloaded(n: number) {
     const fileName = `${recId.split('/').pop()}-Q4_K_M.gguf`;
     const filePath = `${docs}/models/${fileName}`;
     boundary.fs!.seedFile(filePath, 500 * 1024 * 1024);
-    return createDownloadedModel({ id: `${recId}/${fileName}`, name: `Downloaded ${i}`, engine: 'llama', filePath, fileName });
+    return createDownloadedModel({
+      id: `${recId}/${fileName}`,
+      name: `Downloaded ${i}`,
+      engine: 'llama',
+      filePath,
+      fileName,
+    });
   });
-  await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify(rows));
+  await AsyncStorage.setItem(
+    '@local_llm/downloaded_models',
+    JSON.stringify(rows),
+  );
+  const { startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture();
 
   const view = render(React.createElement(ModelsScreen, {}));
   return { view, waitFor };
@@ -65,10 +88,17 @@ describe('T012 (rendered) — ModelsScreen reflects N downloaded models', () => 
     const { view, waitFor } = await mountWithNDownloaded(N);
 
     // The recommended list is present (it renders on mount, no search needed).
-    await waitFor(() => { expect(view.getByTestId('models-list')).not.toBeNull(); });
-    // The count of downloaded marks the user sees on ModelsScreen must equal N.
     await waitFor(() => {
-      expect(view.queryAllByTestId(/^model-card-\d+-downloaded$/).length).toBe(N);
-    }, { timeout: 4000 });
+      expect(view.getByTestId('models-list')).not.toBeNull();
+    });
+    // The count of downloaded marks the user sees on ModelsScreen must equal N.
+    await waitFor(
+      () => {
+        expect(
+          view.queryAllByTestId(/^model-card-\d+-downloaded$/).length,
+        ).toBe(N);
+      },
+      { timeout: 4000 },
+    );
   });
 });

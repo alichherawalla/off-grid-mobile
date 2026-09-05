@@ -9,7 +9,12 @@
 import { setupChatScreen } from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
   useRoute: () => require('../../harness/chatHarness').routeHolder,
   useFocusEffect: () => {},
   useIsFocused: () => true,
@@ -17,40 +22,59 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('selected Whisper model identity', () => {
   it('loads the newly downloaded model before the next transcription', async () => {
-    const h = await setupChatScreen({ engine: 'llama', whisper: true, download: true });
+    const h = await setupChatScreen({
+      engine: 'llama',
+      whisper: true,
+      download: true,
+    });
     await h.setupWhisperModel('tiny.en');
+    const artifactSha256 = 'a'.repeat(64);
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        siblings: [
+          {
+            rfilename: 'ggml-large-v3-turbo.bin',
+            lfs: { size: 809 * 1024 * 1024, sha256: artifactSha256 },
+          },
+        ],
+      }),
+    } as Response);
 
     const React = require('react');
-    const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
-    const { useWhisperStore } = require('../../../src/stores/whisperStore');
+    const {
+      TranscriptionModelsTab,
+    } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
+    const { createTranscriptionModelsSelector } =
+      require('@offgrid/application') as typeof import('@offgrid/application');
+    const { applicationFacade } =
+      require('../../../src/services/applicationFacade') as typeof import('../../../src/services/applicationFacade');
     const { whisperService } = require('../../../src/services/whisperService');
+    const selectTranscriptionModels = createTranscriptionModelsSelector();
     const modelTab = h.rtl.render(React.createElement(TranscriptionModelsTab));
 
     // Large v3 Turbo is catalogue index 8. Download it through the real model-card action.
     await h.rtl.act(async () => {
-      h.rtl.fireEvent.press(modelTab.getByTestId('transcription-model-card-8-download'));
+      h.rtl.fireEvent.press(
+        modelTab.getByTestId('transcription-model-card-8-download'),
+      );
       await Promise.resolve();
     });
-    await h.rtl.waitFor(() => { expect(h.boundary.download!.active()).toHaveLength(1); });
+    await h.rtl.waitFor(() => {
+      expect(h.boundary.download!.active()).toHaveLength(1);
+    });
     const row = h.boundary.download!.active()[0];
-    await h.rtl.act(async () => { await Promise.resolve(); });
     await h.rtl.act(async () => {
-      h.boundary.fs!.seedFile(
-        '/docs/whisper-models/ggml-large-v3-turbo.bin',
-        809 * 1024 * 1024,
-      );
-      h.boundary.download!.events.emit('DownloadComplete', {
-        downloadId: row.downloadId,
-        fileName: row.fileName,
-        modelId: row.modelId,
-        bytesDownloaded: row.totalBytes ?? 1,
-        totalBytes: row.totalBytes ?? 1,
-        status: 'completed',
-        localUri: '/docs/whisper-models/ggml-large-v3-turbo.bin',
-      });
+      await Promise.resolve();
+    });
+    await h.rtl.act(async () => {
+      h.boundary.download!.complete(row.downloadId, { sha256: artifactSha256 });
     });
     await h.rtl.waitFor(() => {
-      expect(useWhisperStore.getState().downloadedModelId).toBe('large-v3-turbo');
+      expect(
+        selectTranscriptionModels(applicationFacade().models.snapshot())
+          .selectedModelId,
+      ).toBe('large-v3-turbo');
     });
     modelTab.unmount();
 
@@ -58,9 +82,12 @@ describe('selected Whisper model identity', () => {
     // Large v3 Turbo before whisper.rn starts capturing.
     h.render();
     await h.tapMic();
-    await h.rtl.waitFor(() => {
-      expect(h.boundary.whisper!.hasRealtimeSubscriber()).toBe(true);
-    }, { timeout: 4000 });
+    await h.rtl.waitFor(
+      () => {
+        expect(h.boundary.whisper!.hasRealtimeSubscriber()).toBe(true);
+      },
+      { timeout: 4000 },
+    );
 
     const initCalls = h.boundary.whisper!.module.initWhisper.mock.calls;
     const lastLoadedPath = initCalls[initCalls.length - 1]?.[0]?.filePath;

@@ -22,7 +22,7 @@ function getImageAuthor(backend?: string): string {
 
 /** Facade projection row to presentation data. No registry or platform-store read. */
 export function facadeDownloadToActiveItem(
-  entry: ModelsSnapshot['downloads'][number],
+  entry: ModelsSnapshot['control']['downloads'][number],
 ): DownloadItem {
   const modelType = entry.modelType;
   if (modelType !== 'text' && modelType !== 'image' && modelType !== 'stt' && modelType !== 'tts') {

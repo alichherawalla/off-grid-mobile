@@ -35,10 +35,11 @@ describe('T062 (voice-mode) — resend of an image request re-draws, not text (D
 
     // Place + load (activate) an image model via the REAL load path — hasImageModel=true, imageMode stays
     // 'auto'. Matches the device (auto + pattern classifier routes "draw a dog" → image; log part28/38).
-    await h.placeImageModel({ backend: 'mnn' });
+    // 57ee10c1: the harness composes the real application root and the import adapter owns the model id.
+    const imageModel = await h.placeImageModel({ backend: 'mnn' });
      
     const { activeModelService } = require('../../harness/activeModelLifecycle');
-    await activeModelService.loadImageModel('sd');
+    await activeModelService.loadImageModel(imageModel.id);
 
     // Switch to Voice mode via the chat-input quick-settings, then VOICE-send "draw a dog" → IMAGE.
     await h.enterVoiceMode();

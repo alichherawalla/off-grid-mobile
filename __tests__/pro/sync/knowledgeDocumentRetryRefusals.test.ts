@@ -16,6 +16,8 @@
  * that is the point.
  */
 import { installRealSqlite } from '../../harness/sqliteFake';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const { createNativeTcpBoundary } = require('../../utils/nativeSyncBoundaries');
@@ -43,6 +45,8 @@ const describePro = proIsPresent() ? describe : describe.skip;
 const THE_MAC = 'the-mac';
 const DOC_PATH = '/docs/contract.txt';
 const CONTENTS = 'the indexed contents of a contract';
+let applicationFixture: MobileApplicationFixture;
+let projectSequence = 0;
 
 type Harness = {
   service: {
@@ -60,11 +64,6 @@ type Harness = {
 
 /** Index a real document into a real knowledge base, and return the handles the cases need. */
 async function indexedDocument(): Promise<Harness> {
-  installRealSqlite();
-  // Register the real Mobile sidecar composition before RAG asks for an
-  // embedding. The suite uses the same public application seam as the app.
-  require('../../../src/services/modelServices');
-  const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
   const {
     knowledgeDocumentSyncService,
   } = require('../../../pro/sync/knowledgeDocumentSyncService');
@@ -78,13 +77,18 @@ async function indexedDocument(): Promise<Harness> {
   );
   await modelTransferFsBoundary.module.writeFile(DOC_PATH, CONTENTS, 'utf8');
 
-  await ragService.indexDocument({
-    projectId: 'p1',
-    filePath: DOC_PATH,
+  const indexed = await applicationFixture.application.rag.addDocument({
+    projectId: `p${++projectSequence}`,
+    path: DOC_PATH,
     fileName: 'contract.txt',
-    fileSize: CONTENTS.length,
+    size: CONTENTS.length,
   });
-  const [document] = await ragService.getAllDocumentsForSync();
+  if (!indexed.ok) throw new Error(indexed.failure.message);
+  const documents = [];
+  for await (const document of applicationFixture.application.rag.sync.allDocuments()) {
+    documents.push(document);
+  }
+  const document = documents.at(-1);
   if (!document) throw new Error('the document was not indexed');
 
   return {
@@ -99,6 +103,24 @@ const failureFor = (h: Harness): { status: string; error?: string } | undefined 
   h.service.getTransferActivitySnapshot().find(entry => entry.syncId === h.syncId);
 
 describePro('retrying a knowledge document that no longer matches what was indexed', () => {
+  beforeAll(async () => {
+    installNativeBoundary({ llama: true });
+    installRealSqlite();
+    const ReactNative = require('react-native');
+    const { ProximityAir } = require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    ReactNative.NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: 'knowledge-retry-phone',
+      name: 'This phone',
+      platform: 'ios',
+    });
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   it('refuses when the file has been deleted, and says so', async () => {
     const h = await indexedDocument();
     await h.fs.module.unlink(h.sourcePath);

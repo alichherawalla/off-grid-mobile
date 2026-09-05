@@ -9,7 +9,6 @@ import {
 } from '@offgrid/application';
 import { generateId } from '../../utils/generateId';
 import logger from '../../utils/logger';
-import { registerApplicationFacade } from '../applicationFacade';
 import {
   mobileRagEmbeddings,
   mobileRagExtraction,
@@ -19,11 +18,15 @@ import {
 import { mobileModelWorkspacePorts } from '../modelServices/workspace';
 import { mobileModelEjectionPorts } from '../modelServices/ejectModelsForUser';
 import { mobileModelSettingsPorts } from '../modelServices/modelSettingsPorts';
+import { mobileModelActivationHostPort } from '../modelServices/modelActivationHostPort';
 import { createMobileModelLibraryFacadePorts } from '../modelServices/modelLibraryFacadePorts';
 import { createMobileApplicationDownloadPorts } from '../modelServices/applicationDownloadPorts';
+import { createMobileModelControlPort } from '../adapters/models/modelControlCatalogPort';
+import { autoSetupImageCatalogProvider } from '../autoSetupImageCatalogProvider';
 import type { MobileManagedArtifactIO } from '../modelServices/modelDownloadArtifactIO';
 import { modelsChatPort } from './chat';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import { mobileCoreSpeechPorts } from '../adapters/speech/mobileSpeechInputPorts';
 
 export type MobileApplicationExtensionPorts = Partial<
   Pick<OffGridPlatformPorts, 'sync' | 'speech' | 'automation' | 'use' | 'pro'>
@@ -97,7 +100,9 @@ function createMobileApplication(): OffGridApplication {
       ejection: mobileModelEjectionPorts(),
       library: createMobileModelLibraryFacadePorts(modelDownloads),
       downloads: createMobileApplicationDownloadPorts(modelDownloads),
+      control: createMobileModelControlPort(() => autoSetupImageCatalogProvider.load()),
       settings: mobileModelSettingsPorts,
+      activation: mobileModelActivationHostPort,
     },
     rag: {
       store: mobileRagStore,
@@ -105,6 +110,7 @@ function createMobileApplication(): OffGridApplication {
       extraction: mobileRagExtraction,
       prepareDocument: prepareMobileRagDocument,
     },
+    speech: mobileCoreSpeechPorts,
     ...extensionPorts,
     newId: generateId,
   });
@@ -119,9 +125,20 @@ export function getMobileApplication(): OffGridApplication {
   return application;
 }
 
-registerApplicationFacade(getMobileApplication);
-
 let starting: ReturnType<OffGridApplication['start']> | null = null;
+
+function mobileModelServices(): Pick<
+  typeof import('../modelServices'),
+  | 'startMobileModelServices'
+  | 'stopMobileModelServices'
+  | 'refreshMobileModelServices'
+> {
+  // Deferred because modelServices resolves this composition root through applicationFacade().
+  // getMobileApplication() has created the root before this function is called, so both sides use
+  // the same application instead of depending on an App.tsx import side effect.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../modelServices') as typeof import('../modelServices');
+}
 
 /**
  * Recover the durable download journal once per application lifetime.
@@ -170,22 +187,28 @@ export function startMobileApplication(): ReturnType<
   OffGridApplication['start']
 > {
   const current = getMobileApplication();
-  starting ??= current
-    .start()
-    .then(async result => {
+  starting ??= (async () => {
+    const modelServices = mobileModelServices();
+    modelServices.startMobileModelServices();
+    await modelServices.refreshMobileModelServices();
+    try {
+      const result = await current.start();
       await callHook<Promise<void>>(HOOKS.applicationStarted);
       recoverDownloadJournal(current);
       return reportDegradedStart(result);
-    }, error => {
+    } catch (error) {
+      modelServices.stopMobileModelServices();
       logger.error('[Application] Startup failed', error);
       throw error;
-    });
+    }
+  })();
   return starting;
 }
 
 export async function stopMobileApplication(): Promise<void> {
   try {
     await callHook<Promise<void>>(HOOKS.applicationStopping);
+    mobileModelServices().stopMobileModelServices();
     await application?.stop();
   } finally {
     // Releasing the subscription drops the amplification cap with it, so a new session starts
@@ -193,5 +216,23 @@ export async function stopMobileApplication(): Promise<void> {
     releaseFailureObserver?.();
     releaseFailureObserver = null;
     starting = null;
+    // The memo must never outlive the application it holds. `stop()` is terminal - a stopped
+    // download coordinator refuses every later call - so keeping the instance here handed the next
+    // `getMobileApplication()` a dead root that no `start()` could revive. Dropping it restores the
+    // module invariant: the memo either holds a live application or holds nothing.
+    application = null;
   }
+}
+
+/**
+ * Stop the running application and compose a fresh one.
+ *
+ * The lifecycle completion of `start`/`stop`: `stop()` is terminal, so any caller that must run the
+ * app again after tearing it down - a session or workspace change, a recovery from a failed start,
+ * a re-registration of extension ports - needs a NEW root, and only the module that owns the memo
+ * can supply one. Returns the fresh application so the caller never re-resolves a stale reference.
+ */
+export async function resetMobileApplication(): Promise<OffGridApplication> {
+  await stopMobileApplication();
+  return getMobileApplication();
 }

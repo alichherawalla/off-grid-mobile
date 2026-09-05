@@ -3,12 +3,12 @@
  * Download Manager. STT installation comes from the transcription selector;
  * TTS installation and transfer state come from the ModelsFacade projection.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { AlertState, showAlert } from '../../components/CustomAlert';
 import {
   modelsFailureMessage,
-  type ModelsSnapshot,
   type TranscriptionModelsSnapshot,
+  type ModelsSnapshot,
 } from '@offgrid/application';
 import { DownloadItem, formatBytes } from './items';
 import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
@@ -17,10 +17,10 @@ import logger from '../../utils/logger';
 import { applicationFacade } from '../../services/applicationFacade';
 import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 
-async function loadItems(
+function projectItems(
   transcription: TranscriptionModelsSnapshot,
-  downloads: ModelsSnapshot['downloads'],
-): Promise<DownloadItem[]> {
+  downloads: ModelsSnapshot['control']['downloads'],
+): DownloadItem[] {
   const items: DownloadItem[] = [];
 
   for (const row of transcription.models) {
@@ -34,23 +34,16 @@ async function loadItems(
     }
   }
 
-  try {
-    // The same facade projection drives this manager and the Voice Models panel.
-    const tts = downloads.filter(d => d.modelType === 'tts');
-    for (const d of tts) {
-      const engineId = d.modelId;
-      if (d.status === 'completed') {
-        items.push({
-          type: 'completed', modelType: 'tts', modelId: engineId, fileName: d.fileName,
-          author: 'Voice', quantization: '', fileSize: d.totalBytes,
-          bytesDownloaded: d.totalBytes, progress: 1, status: 'completed', name: d.fileName,
-          downloadId: d.downloadId,
-        });
-      }
+  // The same facade projection drives this manager and the Voice Models panel.
+  for (const d of downloads.filter(row => row.modelType === 'tts')) {
+    if (d.status === 'completed') {
+      items.push({
+        type: 'completed', modelType: 'tts', modelId: d.modelId, fileName: d.fileName,
+        author: 'Voice', quantization: '', fileSize: d.totalBytes,
+        bytesDownloaded: d.totalBytes, progress: 1, status: 'completed', name: d.fileName,
+        downloadId: d.downloadId,
+      });
     }
-  } catch (error) {
-    logger.error('[Downloads] Voice model inventory failed', error);
-    throw error;
   }
 
   return items;
@@ -73,25 +66,17 @@ async function deleteItem(item: DownloadItem): Promise<void> {
 
 export interface VoiceDownloadItems {
   voiceItems: DownloadItem[];
-  refreshVoiceItems: () => Promise<void>;
-  /** Build the confirm-delete alert for a tts/stt item; deletes + refreshes on confirm. */
+  /** Build the confirm-delete alert. The facade projection publishes the result. */
   buildDeleteAlert: (item: DownloadItem) => AlertState;
 }
 
 export function useVoiceDownloadItems(onAlertClose: () => void): VoiceDownloadItems {
-  const [voiceItems, setVoiceItems] = useState<DownloadItem[]>([]);
   const transcription = useTranscriptionModelsProjection();
   const downloads = useModelDownloadsProjection();
-
-  const refreshVoiceItems = useCallback(async () => {
-    setVoiceItems(await loadItems(transcription, downloads));
-  }, [downloads, transcription]);
-
-  useEffect(() => {
-    refreshVoiceItems().catch(error => {
-      logger.error('[Downloads] Voice inventory refresh failed', error);
-    });
-  }, [refreshVoiceItems]);
+  const voiceItems = useMemo(
+    () => projectItems(transcription, downloads),
+    [downloads, transcription],
+  );
 
   const buildDeleteAlert = useCallback((item: DownloadItem): AlertState => {
     const kind = item.modelType === 'tts' ? 'Voice' : 'Transcription';
@@ -105,13 +90,12 @@ export function useVoiceDownloadItems(onAlertClose: () => void): VoiceDownloadIt
           onPress: () => {
             onAlertClose();
             deleteItem(item)
-              .then(refreshVoiceItems)
               .catch(error => logger.error('[Downloads] Model delete failed', error));
           },
         },
       ],
     );
-  }, [onAlertClose, refreshVoiceItems]);
+  }, [onAlertClose]);
 
-  return { voiceItems, refreshVoiceItems, buildDeleteAlert };
+  return { voiceItems, buildDeleteAlert };
 }

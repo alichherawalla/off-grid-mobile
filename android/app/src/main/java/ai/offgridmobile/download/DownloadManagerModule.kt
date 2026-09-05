@@ -33,6 +33,12 @@ import java.io.File
 import java.util.UUID
 import ai.offgridmobile.SafePromise
 
+internal fun applyStoppedPartialPolicy(destination: String, retainPartial: Boolean): Boolean {
+    if (retainPartial) return true
+    val partial = File(destination)
+    return !partial.exists() || partial.delete()
+}
+
 class DownloadManagerModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
@@ -128,11 +134,9 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Every start gets a fresh id and therefore a fresh `destination`, so the partial a cancel
-     * (= Shared's pause) left behind is unreachable by name. Move it under the new destination
-     * when the caller asked to resume - the worker then continues it by Range - and delete it
-     * when the caller asked for a fresh download of the same artifact, so a true cancel does
-     * not leak the file. Either way the cancelled row has served its purpose and goes.
+     * Every start gets a fresh id and destination. A resumable Shared stop leaves one CANCELLED
+     * row and its partial file. Move that file under the new destination only when Shared requests
+     * resume. A fresh start removes any older retained partial for the same artifact.
      */
     private suspend fun adoptOrDiscardCancelledPartial(url: String, fileName: String, destination: String, resume: Boolean) {
         val cancelled = downloadDao.getAllDownloads().first()
@@ -186,40 +190,66 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /**
+     * Stop one native worker and apply the partial-byte policy selected by Shared.
+     * Return one explicit terminal fact: stopped, completed, or not-found.
+     */
     @ReactMethod
-    fun cancelDownload(downloadId: String, promise: Promise) {
+    fun stopDownload(downloadId: String, retainPartial: Boolean, promise: Promise) {
+        stopDownloadInternal(downloadId, retainPartial, promise)
+    }
+
+    private fun stopDownloadInternal(downloadId: String, retainPartial: Boolean, promise: Promise) {
         scope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val outcome = withContext(Dispatchers.IO) {
                     val workName = WorkerDownload.workName(downloadId)
                     val download = downloadDao.getDownload(downloadId)
+                        ?: return@withContext "not-found"
+                    // Persist the stop request before WorkManager interrupts the worker. The worker
+                    // reads this verdict when its coroutine stops, so it cannot silently requeue a
+                    // pause or cancel. The conditional update also makes a completed verdict win.
+                    if (downloadDao.markStopRequested(downloadId, DownloadReason.USER_CANCELLED) == 0) {
+                        return@withContext if (downloadDao.getDownload(downloadId)?.status == DownloadStatus.COMPLETED) {
+                            "completed"
+                        } else {
+                            "not-found"
+                        }
+                    }
                     workManager.cancelUniqueWork(workName)
-                    when (download?.status) {
+                    when (download.status) {
                         DownloadStatus.QUEUED,
                         DownloadStatus.RUNNING,
                         DownloadStatus.RETRYING,
                         DownloadStatus.WAITING_FOR_NETWORK -> {
                             withTimeout(5_000L) {
                                 workManager.getWorkInfosForUniqueWorkFlow(workName).first { rows ->
-                                    rows.isNotEmpty() && rows.all { it.state.isFinished }
+                                    rows.isEmpty() || rows.all { it.state.isFinished }
                                 }
                             }
                         }
                         DownloadStatus.COMPLETED,
                         DownloadStatus.FAILED,
-                        DownloadStatus.CANCELLED,
-                        null -> Unit
+                        DownloadStatus.CANCELLED -> Unit
                     }
-                    if (download != null) {
-                        // The partial at `destination` is kept: Shared pauses through this same
-                        // cancel, and a later startDownload(resume=true) adopts the bytes. A fresh
-                        // start (resume=false) for the same artifact discards them instead.
+                    val terminal = downloadDao.getDownload(downloadId)
+                    if (terminal?.status == DownloadStatus.COMPLETED) {
+                        return@withContext "completed"
+                    }
+                    if (retainPartial) {
+                        // Keep the row and file so a later start(resume=true) can adopt the bytes.
                         downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
+                    } else {
+                        if (!applyStoppedPartialPolicy(download.destination, retainPartial = false)) {
+                            throw IllegalStateException("Could not delete partial download")
+                        }
+                        terminal?.let { downloadDao.deleteDownload(it) }
                     }
+                    "stopped"
                 }
                 workManager.pruneWork()
                 removeWorkObserver(downloadId)
-                SafePromise(promise, NAME).resolve(true)
+                SafePromise(promise, NAME).resolve(outcome)
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("CANCEL_ERROR", "Failed to cancel download: ${e.message}", e)
             }

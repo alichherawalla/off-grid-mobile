@@ -1,119 +1,172 @@
 /**
- * Image download provider coverage for list, retry, cancellation, removal, and
- * interrupted multi-file recovery. The UI supplies only its alert sink.
+ * Shared image download lifecycle as projected on Mobile. Mirrors sttDownloadProvider.test.ts:
+ * the durable journal is seeded at the native boundary, the REAL Mobile composition root runs,
+ * commands go through the public Shared facade, and the assertion lands on the reactive projection
+ * (Shared `models.watch` -> Mobile downloadStore). Multi-file (huggingface) image downloads are the
+ * interesting case: two artifacts, one aggregated projection.
  */
-jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({ modelLibrary: { deleteImageModel: jest.fn(async () => {}) } }));
-jest.mock('../../harness/activeModelLifecycle', () => ({ activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) } }));
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({ coordinatedDownloads: { cancelDownload: jest.fn(async () => {}), retryDownload: jest.fn(async () => {}), startProgressPolling: jest.fn(), getActiveDownloads: jest.fn(async () => []) } }));
-const mockRetryImageDownload = jest.fn(async (_entry: any, _sink: any) => {});
-jest.mock('../../../src/services/imageDownloadRetry', () => ({ retryImageDownload: (entry: any, sink: any) => mockRetryImageDownload(entry, sink) }));
-jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
+import type {PersistedModelDownload} from '@offgrid/models';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+import {installNativeBoundary} from '../../harness/nativeBoundary';
 
-import { Platform } from 'react-native';
-import { imageProvider, setImageDownloadAlertSink } from '../../../src/services/adapters/downloads/imageDownloadAdapter';
-import { useDownloadStore } from '../../../src/stores/downloadStore';
-import { useAppStore } from '../../../src/stores';
-import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
+const MODEL_ID = 'image:sdxl';
+const REPO = 'acme/sdxl-mobile';
+const PRIMARY_FILE = 'unet.bin';
+const AUX_FILE = 'vae.bin';
+const DOWNLOAD_ID = `${MODEL_ID}/${PRIMARY_FILE}`;
+const PRIMARY_TRANSFER = 'native-image-primary';
+const AUX_TRANSFER = 'native-image-aux';
+const IMAGE_METADATA = {
+  imageDownloadType: 'multifile',
+  imageModelName: 'SDXL Mobile',
+  imageModelDescription: 'Two-file diffusion model',
+  imageModelSize: 200,
+  imageModelRepo: REPO,
+  imageModelHuggingFaceFiles: [
+    {path: PRIMARY_FILE, size: 100, relativePath: PRIMARY_FILE},
+    {path: AUX_FILE, size: 100, relativePath: AUX_FILE},
+  ],
+};
 
-const mockBg = backgroundDownloadService as unknown as { cancelDownload: jest.Mock; retryDownload: jest.Mock; startProgressPolling: jest.Mock };
-const setPlatform = (os: 'ios' | 'android') => { (Platform as any).OS = os; };
+let fixture: MobileApplicationFixture | null = null;
 
-const entry = (over: any = {}) => ({
-  modelKey: 'image:sdxl/m', downloadId: 'dl-img', modelId: 'image:sdxl', fileName: 'SDXL',
-  quantization: '', modelType: 'image', status: 'running', bytesDownloaded: 30, totalBytes: 100,
-  combinedTotalBytes: 100, progress: 0.3, createdAt: 1, ...over,
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
 });
 
-const originalOS = Platform.OS;
-beforeEach(() => {
-  jest.clearAllMocks();
-  setPlatform(originalOS as 'ios' | 'android');
-  setImageDownloadAlertSink();
-  useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
-  useAppStore.setState({ downloadedImageModels: [] } as any);
-  useDownloadStore.getState().add(entry());
-});
-afterAll(() => { setPlatform(originalOS as 'ios' | 'android'); });
+interface ArtifactSeed {
+  transferId?: string;
+  bytes?: number;
+  phase?: PersistedModelDownload['phase'];
+}
 
-describe('imageProvider', () => {
-  it('lists an in-flight image download (downloading), id without the image: prefix dup', async () => {
-    const d = (await imageProvider.list()).find(x => x.id === 'image:sdxl');
-    expect(d?.status).toBe('downloading');
-    expect(d?.progress).toBe(0.3);
+const record = (
+  phase: PersistedModelDownload['phase'] = 'downloading',
+  options: {primary?: ArtifactSeed; aux?: ArtifactSeed; updatedAt?: number} = {},
+): PersistedModelDownload => {
+  const artifact = (id: string, seed: ArtifactSeed = {}) => ({
+    artifactId: id,
+    phase: seed.phase ?? phase,
+    ...(seed.transferId ? {transferId: seed.transferId} : {}),
+    bytesDownloaded: seed.bytes ?? 50,
+    totalBytes: 100,
+  });
+  return {
+    manifest: {
+      id: DOWNLOAD_ID,
+      modelId: MODEL_ID,
+      kind: 'image',
+      revision: 'main',
+      artifacts: [
+        {id: 'primary', name: PRIMARY_FILE, role: 'primary', required: true, localName: PRIMARY_FILE,
+          url: `https://huggingface.co/${REPO}/resolve/main/${PRIMARY_FILE}`, sizeBytes: 100},
+        {id: 'aux', name: AUX_FILE, role: 'aux', required: true, localName: AUX_FILE,
+          url: `https://huggingface.co/${REPO}/resolve/main/${AUX_FILE}`, sizeBytes: 100},
+      ],
+      // The catalog facts a real image download journals; retry rebuilds its request from them.
+      metadata: {displayName: 'SDXL Mobile', catalogEntry: true, publicMetadataJson: JSON.stringify(IMAGE_METADATA)},
+    },
+    phase,
+    artifacts: [artifact('primary', options.primary), artifact('aux', options.aux)],
+    createdAt: 1,
+    updatedAt: options.updatedAt ?? 1,
+    attempt: options.updatedAt ?? 1,
+  };
+};
+
+async function start(records: readonly PersistedModelDownload[]): Promise<void> {
+  const {seedMobileDownloadJournal, startMobileApplicationFixture} =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal(records);
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
+}
+
+function projected() {
+  const {useDownloadStore} = require('../../../src/stores/downloadStore') as typeof import('../../../src/stores/downloadStore');
+  return Object.values(useDownloadStore.getState().downloads);
+}
+
+function seedBothTransfers(boundary: ReturnType<typeof installNativeBoundary>, bytes: {primary: number; aux: number}) {
+  boundary.download!.seedActive({downloadId: PRIMARY_TRANSFER, modelId: MODEL_ID, fileName: PRIMARY_FILE, modelType: 'image', status: 'running', bytesDownloaded: bytes.primary, totalBytes: 100});
+  boundary.download!.seedActive({downloadId: AUX_TRANSFER, modelId: MODEL_ID, fileName: AUX_FILE, modelType: 'image', status: 'running', bytesDownloaded: bytes.aux, totalBytes: 100});
+}
+
+describe('Shared image download lifecycle', () => {
+  it('reactively projects one multi-file image download with aggregated determinate progress', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedBothTransfers(boundary, {primary: 100, aux: 20});
+    await start([record('downloading', {
+      primary: {transferId: PRIMARY_TRANSFER, bytes: 100, phase: 'completed'},
+      aux: {transferId: AUX_TRANSFER, bytes: 20},
+    })]);
+    expect(projected()).toEqual([expect.objectContaining({
+      modelId: MODEL_ID,
+      modelType: 'image',
+      status: 'downloading',
+      bytesDownloaded: 120,
+      totalBytes: 200,
+      progress: 0.6,
+    })]);
   });
 
-  it('lists completed image models from appStore', async () => {
-    useAppStore.setState({ downloadedImageModels: [{ id: 'other', name: 'Other', size: 500, modelPath: '/p' }] } as any);
-    const done = (await imageProvider.list()).find(d => d.id === 'image:other');
-    expect(done?.status).toBe('completed');
+  it('keeps one projection for the newest durable attempt', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedBothTransfers(boundary, {primary: 70, aux: 0});
+    await start([
+      record('failed', {primary: {bytes: 10}, aux: {bytes: 0}, updatedAt: 1}),
+      record('downloading', {primary: {transferId: PRIMARY_TRANSFER, bytes: 70}, aux: {transferId: AUX_TRANSFER, bytes: 0}, updatedAt: 2}),
+    ]);
+    expect(projected()).toHaveLength(1);
+    expect(projected()[0]).toEqual(expect.objectContaining({modelId: MODEL_ID, status: 'downloading'}));
   });
 
-  it('cancels a synthetic multi-file transfer in the service layer', async () => {
-    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
-    useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl' }));
-    await imageProvider.cancel('image:sdxl');
-    expect(useDownloadStore.getState().downloads['image:sdxl/m']).toBeUndefined();
-    expect(mockBg.cancelDownload).not.toHaveBeenCalled();
+  it('cancels every native transfer of the image download and keeps a clearable cancelled projection', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedBothTransfers(boundary, {primary: 50, aux: 50});
+    await start([record('downloading', {primary: {transferId: PRIMARY_TRANSFER}, aux: {transferId: AUX_TRANSFER}})]);
+    const outcome = await fixture!.application.models.cancelDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true, value: true}));
+    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(PRIMARY_TRANSFER, false);
+    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(AUX_TRANSFER, false);
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, status: 'cancelled'})]);
   });
 
-  it('falls back to a native cancel when no UI op is registered', async () => {
-    await imageProvider.cancel('image:sdxl');
-    expect(mockBg.cancelDownload).toHaveBeenCalledWith('dl-img');
+  it('retries a failed image download through the native transfer port', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    const outcome = await fixture!.application.models.retryDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true}));
+    expect(boundary.download!.module.startDownload).toHaveBeenCalled();
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, modelType: 'image', status: 'downloading'})]);
   });
 
-  it('iOS retry delegates to the service-level recovery flow', async () => {
-    setPlatform('ios');
-    await imageProvider.retry('image:sdxl');
-    expect(mockRetryImageDownload).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'dl-img' }), expect.any(Function));
-    expect(mockBg.retryDownload).not.toHaveBeenCalled();
+  it('restores a retriable failure when a retry transfer errors', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    await fixture!.application.models.retryDownload({downloadId: DOWNLOAD_ID});
+    const transferId = boundary.download!.active()[0].downloadId;
+    boundary.download!.events.emit('DownloadError', {downloadId: transferId, reason: 'network down'});
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(projected()).toEqual([expect.objectContaining({
+      modelId: MODEL_ID,
+      status: 'failed',
+      errorMessage: 'network down',
+    })]);
   });
 
-  it('Android retry: resumes the native row directly, no UI op needed', async () => {
-    setPlatform('android');
-    await imageProvider.retry('image:sdxl');
-    expect(mockRetryImageDownload).not.toHaveBeenCalled();
-    expect(mockBg.retryDownload).toHaveBeenCalledWith('dl-img');
-    expect(useDownloadStore.getState().downloads['image:sdxl/m'].status).toBe('queued');
+  it('removes a failed image download from durable and reactive state', async () => {
+    installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    const outcome = await fixture!.application.models.removeDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true, value: true}));
+    expect(projected()).toEqual([]);
   });
 
-  // B6: bytes finished then EXTRACTION failed (missing model files) → the native row is gone, so
-  // retryDownload throws "Download not found". Retry must FALL BACK to the full re-download op, not
-  // die every tap.
-  it('Android retry: falls back to the full re-download op when the native row is gone', async () => {
-    setPlatform('android');
-    mockBg.retryDownload.mockRejectedValueOnce(new Error('Download not found'));
-    await imageProvider.retry('image:sdxl');
-    expect(mockBg.retryDownload).toHaveBeenCalledWith('dl-img'); // tried native resume first
-    expect(mockRetryImageDownload).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'dl-img' }), expect.any(Function));
-  });
-
-  // A multi-file (synthetic `image-multi:` row) download has no resumable native row — go straight
-  // to the full re-download op instead of a doomed retryDownload.
-  it('Android retry: a multi-file download skips native resume and re-downloads', async () => {
-    setPlatform('android');
-    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
-    useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl' }));
-    await imageProvider.retry('image:sdxl');
-    expect(mockBg.retryDownload).not.toHaveBeenCalled();
-    expect(mockRetryImageDownload).toHaveBeenCalled();
-  });
-
-  it('capability.retry is a STABLE constant (does not depend on injected ops)', async () => {
-    // No ops injected at all — capability must still advertise retry: true on both
-    // platforms (the flag must not flap when the UI injects ops in a later effect).
-    const d1 = (await imageProvider.list()).find(x => x.id === 'image:sdxl');
-    expect(d1?.capabilities.retry).toBe(true);
-    setImageDownloadAlertSink(jest.fn());
-    const d2 = (await imageProvider.list()).find(x => x.id === 'image:sdxl');
-    expect(d2?.capabilities.retry).toBe(true);
-  });
-
-  it('reconcile strands an interrupted multi-file download (no native row) as failed', async () => {
-    useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
-    useDownloadStore.getState().add(entry({ downloadId: 'image-multi:sdxl', status: 'processing' }));
-    await imageProvider.reconcile!();
-    expect(useDownloadStore.getState().downloads['image:sdxl/m'].status).toBe('failed');
+  it('retains an image download whose native transfers vanished as interrupted and retriable', async () => {
+    installNativeBoundary({download: true, fs: true, ram: {platform: 'ios', totalBytes: 8 * 1024 ** 3, availBytes: 4 * 1024 ** 3}});
+    await start([record('downloading', {primary: {transferId: PRIMARY_TRANSFER}, aux: {transferId: AUX_TRANSFER}})]);
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, modelType: 'image', status: 'interrupted'})]);
   });
 });

@@ -1,6 +1,6 @@
 const mockNative = {
   startDownload: jest.fn(),
-  cancelDownload: jest.fn(),
+  stopDownload: jest.fn(),
   getActiveDownloads: jest.fn(),
   moveCompletedDownload: jest.fn(),
   startProgressPolling: jest.fn(),
@@ -46,7 +46,7 @@ describe('nativeDownloadTransferAdapter', () => {
     mockNative.startDownload.mockResolvedValue({ downloadId: 42 });
     mockNative.getActiveDownloads.mockResolvedValue([]);
     mockNative.moveCompletedDownload.mockResolvedValue(undefined);
-    mockNative.cancelDownload.mockResolvedValue(undefined);
+    mockNative.stopDownload.mockResolvedValue('stopped');
     mockMkdir.mockResolvedValue(undefined);
   });
 
@@ -115,8 +115,90 @@ describe('nativeDownloadTransferAdapter', () => {
     await Promise.resolve();
     await Promise.resolve();
     controller.abort();
+    const stop = adapter.stop({ transferId: '42', disposition: 'retain-partial' });
     await expect(completion).rejects.toThrow('Download cancelled');
-    expect(mockNative.cancelDownload).toHaveBeenCalledWith('42');
+    await expect(stop).resolves.toEqual({ outcome: 'stopped' });
+    expect(mockNative.stopDownload).toHaveBeenCalledWith('42', true);
+  });
+
+  it('refuses a native stop response without a terminal verdict', async () => {
+    mockNative.stopDownload.mockResolvedValueOnce(undefined);
+    const adapter = freshAdapter();
+
+    await expect(adapter.stop({
+      transferId: '42',
+      disposition: 'delete-partial',
+    })).rejects.toThrow('Native download stop did not return a terminal verdict');
+    expect(mockNative.stopDownload).toHaveBeenCalledWith('42', false);
+  });
+
+  it('settles the transfer as a failure when native reports not-found', async () => {
+    mockNative.stopDownload.mockResolvedValueOnce('not-found');
+    const adapter = freshAdapter();
+    const completion = adapter.start({
+      id: 'artifact-missing',
+      url: 'https://models.test/model.gguf',
+      destination: '/models/model.gguf',
+      signal: new AbortController().signal,
+      onProgress: jest.fn(),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(adapter.stop({
+      transferId: '42',
+      disposition: 'delete-partial',
+    })).resolves.toEqual({ outcome: 'not-found' });
+    await expect(completion).rejects.toThrow('Native transfer was not found');
+  });
+
+  it('settles a retained recovered transfer as a typed abort when native already lost it', async () => {
+    mockNative.stopDownload.mockResolvedValueOnce('not-found');
+    const adapter = freshAdapter();
+    const completion = adapter.start({
+      id: 'artifact-recovered',
+      url: 'https://models.test/model.gguf',
+      destination: '/models/model.gguf',
+      signal: new AbortController().signal,
+      onProgress: jest.fn(),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(adapter.stop({
+      transferId: '42',
+      disposition: 'retain-partial',
+    })).resolves.toEqual({ outcome: 'stopped' });
+    await expect(completion).rejects.toMatchObject({name: 'DownloadAbortedError'});
+  });
+
+  it('does not start native work for an already-aborted request', async () => {
+    const adapter = freshAdapter();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(adapter.start({
+      id: 'artifact-aborted',
+      url: 'https://models.test/model.gguf',
+      destination: '/models/model.gguf',
+      signal: controller.signal,
+      onProgress: jest.fn(),
+    })).rejects.toMatchObject({ name: 'DownloadAbortedError' });
+    expect(mockNative.startDownload).not.toHaveBeenCalled();
+  });
+
+  it('settles an already-aborted attach with the typed abort', async () => {
+    const adapter = freshAdapter();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(adapter.attach({
+      transferId: '42',
+      destination: '/models/model.gguf',
+      signal: controller.signal,
+      onProgress: jest.fn(),
+    })).rejects.toMatchObject({ name: 'DownloadAbortedError' });
+    expect(mockNative.startProgressPolling).not.toHaveBeenCalled();
   });
 
   it('attaches to a transfer that completed while JavaScript was stopped', async () => {
@@ -135,11 +217,17 @@ describe('nativeDownloadTransferAdapter', () => {
     mockNative.getActiveDownloads.mockResolvedValue([
       { downloadId: 'live', status: 'running' },
       { downloadId: 'dead', status: 'failed' },
+      { downloadId: 'paused', status: 'paused' },
+      { downloadId: 'cancelled', status: 'cancelled' },
+      { downloadId: 'ready-to-move', status: 'completed' },
     ]);
     mockNative.excludePathFromBackup.mockResolvedValue(true);
     const adapter = freshAdapter();
     await expect(adapter.isActive('live')).resolves.toBe(true);
     await expect(adapter.isActive('dead')).resolves.toBe(false);
+    await expect(adapter.isActive('paused')).resolves.toBe(false);
+    await expect(adapter.isActive('cancelled')).resolves.toBe(false);
+    await expect(adapter.isActive('ready-to-move')).resolves.toBe(true);
     await expect(adapter.excludeFromBackup('/models')).resolves.toBe(true);
     adapter.dispose();
     expect(mockRemove).toHaveBeenCalledTimes(3);

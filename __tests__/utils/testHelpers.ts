@@ -139,10 +139,7 @@ export const resetStores = (): void => {
   // Reset whisper store
   useWhisperStore.setState({
     downloadedModelId: null,
-    downloadProgressById: {},
-    isModelLoading: false,
-    isModelLoaded: false,
-    error: null,
+    transcriptionLanguage: 'en',
   });
 
   // Reset remote server store
@@ -598,11 +595,7 @@ export const resetRemoteServerStore = (): void => {
 export const resetWhisperStore = (): void => {
   useWhisperStore.setState({
     downloadedModelId: null,
-    presentModelIds: [],
-    downloadProgressById: {},
-    isModelLoading: false,
-    isModelLoaded: false,
-    error: null,
+    transcriptionLanguage: 'en',
   });
 };
 

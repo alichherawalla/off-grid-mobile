@@ -60,6 +60,8 @@ import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetStores } from '../../utils/testHelpers';
 import { createDeviceInfo } from '../../utils/factories';
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+
 /** Fake the LAN/network boundary. `reachable=false` models "no server on the network". */
 function installFetch(reachable: boolean) {
   (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
@@ -100,7 +102,7 @@ async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
 }
 
 describe('T095 — server + model configured → tap Continue → routes into the app, skips remaining onboarding', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetStores();
     // Fresh remote-server slate so the added server is the only row.
     useRemoteServerStore.setState({ servers: [], serverHealth: {} });
@@ -108,6 +110,13 @@ describe('T095 — server + model configured → tap Continue → routes into th
     // onboarding step, Auto Setup (per AppNavigator's initial-route logic). This is BOOT state, not a
     // fabrication of the tested outcome — the outcome (skipping to Main) is produced by the gestures below.
     useAppStore.setState({ hasCompletedOnboarding: true, downloadedModels: [], deviceInfo: createDeviceInfo() });
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterEach(async () => {
+    await applicationFixture?.dispose();
+    applicationFixture = undefined;
   });
 
   it('moves from Auto Setup through Advanced Setup and lands on Home after a server connects', async () => {

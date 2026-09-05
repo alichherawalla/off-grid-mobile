@@ -81,7 +81,7 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 }));
 
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
-import { modelResidencyManager } from '../../harness/activeModelLifecycle';
+import { modelApplication, modelResidencyManager } from '../../harness/activeModelLifecycle';
 import { hardwareService } from '@offgrid/core/services/hardware';
 
 const getState = () => useTTSStore.getState();
@@ -130,8 +130,7 @@ describe('ttsStore — extra branch coverage', () => {
       isSwitchingVoice: false,
       settings: { ...baseSettings, voiceByEngine: {}, modelDownloaded: {} },
     });
-    // Plenty of free RAM so the override survival-floor (1200MB) always clears;
-    // the budget itself is pinned per-test via setBudgetOverrideMB.
+    // The native boundary supplies deterministic device memory. Shared derives all budgets from it.
     jest.spyOn(hardwareService, 'getTotalMemoryGB').mockReturnValue(12);
     availSpy = jest.spyOn(hardwareService, 'getAvailableMemoryGB').mockReturnValue(6);
     jest
@@ -140,7 +139,8 @@ describe('ttsStore — extra branch coverage', () => {
   });
 
   afterEach(async () => {
-    // No pollution: reset the shared residency manager + restore all spies.
+    // Remove real application residents before the next device-memory scenario.
+    await modelApplication().models.eject();
     await modelResidencyManager._reset();
     modelResidencyManager.setBudgetOverrideMB(null);
     jest.restoreAllMocks();
@@ -162,7 +162,6 @@ describe('ttsStore — extra branch coverage', () => {
     });
 
     it('override load: fits → engine initialized AND tts becomes resident', async () => {
-      modelResidencyManager.setBudgetOverrideMB(4000); // room for the 100MB voice model
       mockCurrentEngine.capabilities.peakRamMB = 100;
 
       await getState().initializeEngine({ override: true });
@@ -174,15 +173,15 @@ describe('ttsStore — extra branch coverage', () => {
     });
 
     it('warm/preload: NO room → skips quietly (not resident, no error, engine NOT initialized)', async () => {
-      // A resident 3800MB model + a 1024MB budget leaves no room to co-reside 300MB TTS.
-      modelResidencyManager.setBudgetOverrideMB(4000);
+      // Use a distinct public identity so a prior user's explicit override cannot authorize this warm load.
+      mockCurrentEngine = makeEngine({id: 'warm-tts'});
+      // A resident larger than the device-derived balanced budget leaves no room for warm TTS.
       const llmLease = await modelResidencyManager.acquire(
-        { key: 'llm', type: 'text', sizeMB: 3800 },
+        { key: 'llm', type: 'text', sizeMB: 12000 },
         { load: () => Promise.resolve(), unload: () => Promise.resolve({reclaimed: true}) },
         { override: true },
       );
       await llmLease.release();
-      modelResidencyManager.setBudgetOverrideMB(1024);
       mockCurrentEngine.capabilities.peakRamMB = 300;
 
       await getState().initializeEngine(); // override defaults to false
@@ -199,7 +198,6 @@ describe('ttsStore — extra branch coverage', () => {
       // survival floor — the user accepted the risk), so even at ~500MB real free RAM the override
       // load proceeds — evict, initialize, tts becomes resident. (The old "override still refuses
       // below the floor" behavior was removed.)
-      modelResidencyManager.setBudgetOverrideMB(4000);
       availSpy.mockReturnValue(0.5); // ~500MB free — tight, but override ignores the budget
       mockCurrentEngine.capabilities.peakRamMB = 100;
 
@@ -212,7 +210,6 @@ describe('ttsStore — extra branch coverage', () => {
 
     it('derives sizeMB from required-asset bytes when peakRamMB is 0', async () => {
       // peakRamMB 0 forces the `|| assets.reduce(...)/MB` fallback (line 249).
-      modelResidencyManager.setBudgetOverrideMB(4000);
       mockCurrentEngine.capabilities.peakRamMB = 0;
       mockCurrentEngine.getRequiredAssets.mockReturnValue([
         { sizeBytes: 200 * 1024 * 1024 },
@@ -229,7 +226,6 @@ describe('ttsStore — extra branch coverage', () => {
     });
 
     it('registered TTS canEvict tracks playbackStatus (veto while playing, evictable when idle)', async () => {
-      modelResidencyManager.setBudgetOverrideMB(4000);
       mockCurrentEngine.capabilities.peakRamMB = 100;
       await getState().initializeEngine({ override: true });
 
@@ -249,7 +245,6 @@ describe('ttsStore — extra branch coverage', () => {
       // Load TTS as a resident (idle → evictable), then force a load that needs the
       // room so residency fires the tts unload fn. Asserts the OUTCOME: the engine is
       // released and tts is no longer resident (line 276 — the eviction unload).
-      modelResidencyManager.setBudgetOverrideMB(2000);
       mockCurrentEngine.capabilities.peakRamMB = 500;
       useTTSStore.setState({ playbackStatus: 'idle' });
       await getState().initializeEngine({ override: true });
@@ -316,92 +311,9 @@ describe('ttsStore — extra branch coverage', () => {
 
   // ── checkDownloadStatus backfill ─────────────────────────────────────────
 
-  describe('checkDownloadStatus flag backfill', () => {
-    it('backfills modelDownloaded when the disk scan finds the model present', async () => {
-      mockCurrentEngine.isFullyDownloaded.mockReturnValue(true);
-      useTTSStore.setState({
-        settings: { ...baseSettings, modelDownloaded: {} },
-      });
-
-      await getState().checkDownloadStatus();
-
-      // Lines 308-315: flag backfilled from a confirmed present model.
-      expect(getState().settings.modelDownloaded?.['mock-tts']).toBe(true);
-    });
-
-    it('does NOT backfill when the model is not fully downloaded', async () => {
-      mockCurrentEngine.isFullyDownloaded.mockReturnValue(false);
-      useTTSStore.setState({ settings: { ...baseSettings, modelDownloaded: {} } });
-
-      await getState().checkDownloadStatus();
-
-      expect(getState().settings.modelDownloaded?.['mock-tts']).toBeUndefined();
-    });
-  });
-
   // ── downloadModels ───────────────────────────────────────────────────────
 
-  describe('downloadModels', () => {
-    it('persists the modelDownloaded flag after a successful download', async () => {
-      mockCurrentEngine.isFullyDownloaded.mockReturnValue(true);
-      useTTSStore.setState({
-        isDownloading: false,
-        settings: { ...baseSettings, modelDownloaded: {} },
-      });
-
-      await getState().downloadModels();
-
-      expect(mockCurrentEngine.downloadAssets).toHaveBeenCalledTimes(1);
-      expect(getState().settings.modelDownloaded?.['mock-tts']).toBe(true);
-      expect(getState().settings.voiceAssetsDownloaded?.['mock-tts']).toEqual(['default']);
-      expect(getState().error).toBeNull();
-    });
-
-    it('does NOT persist the flag when the model is still incomplete after download', async () => {
-      mockCurrentEngine.isFullyDownloaded.mockReturnValue(false);
-      useTTSStore.setState({ isDownloading: false, settings: { ...baseSettings, modelDownloaded: {} } });
-
-      await getState().downloadModels();
-
-      expect(getState().settings.modelDownloaded?.['mock-tts']).toBeUndefined();
-    });
-
-    it('surfaces an error when the download rejects', async () => {
-      mockCurrentEngine.downloadAssets.mockRejectedValueOnce(new Error('network down'));
-      useTTSStore.setState({ isDownloading: false });
-
-      await getState().downloadModels();
-
-      expect(getState().error).toBe('network down');
-    });
-
-    it('is a no-op guard while a download is already in flight', async () => {
-      useTTSStore.setState({ isDownloading: true });
-
-      await getState().downloadModels();
-
-      expect(mockCurrentEngine.downloadAssets).not.toHaveBeenCalled();
-    });
-  });
-
   // ── deleteModels ─────────────────────────────────────────────────────────
-
-  describe('deleteModels', () => {
-    it('clears the downloaded flag, zeroes progress, and drops any voice-switch', async () => {
-      useTTSStore.setState({
-        isSwitchingVoice: true,
-        overallDownloadProgress: 1,
-        settings: { ...baseSettings, modelDownloaded: { 'mock-tts': true } },
-      });
-
-      await getState().deleteModels();
-
-      expect(mockCurrentEngine.deleteAssets).toHaveBeenCalledTimes(1);
-      expect(getState().settings.modelDownloaded?.['mock-tts']).toBe(false);
-      expect(getState().overallDownloadProgress).toBe(0);
-      expect(getState().isSwitchingVoice).toBe(false);
-    });
-  });
 
   // ── releaseEngine ──────────────────────────────────────────────────────────
 

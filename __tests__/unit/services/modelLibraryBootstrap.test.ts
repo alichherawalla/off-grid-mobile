@@ -10,12 +10,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   modelLibrary,
 } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
-import { coordinatedDownloads as backgroundDownloadService } from '../../../src/services/modelServices/coordinatedDownloadBridge';
 import { huggingFaceService } from '../../../src/services/huggingface';
 import { buildDownloadedModel } from '../../../src/services/adapters/models/library/modelRegistryStorageAdapter';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
-import { textProvider } from '../../../src/services/adapters/downloads/textDownloadAdapter';
-import { useAppStore } from '../../../src/stores';
+import { nativeDownloadTransferAdapter } from '../../../src/services/adapters/downloads/nativeDownloadTransferAdapter';
 import {
   describeModelCredibility,
   isModelProjectorFile,
@@ -24,6 +22,7 @@ import {
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
+const excludeFromBackupSpy = jest.spyOn(nativeDownloadTransferAdapter, 'excludeFromBackup');
 
 // Mock huggingFaceService
 jest.mock('../../../src/services/huggingface', () => ({
@@ -33,30 +32,6 @@ jest.mock('../../../src/services/huggingface', () => ({
     ),
   },
 }));
-
-// Mock backgroundDownloadService
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
-  coordinatedDownloads: {
-    isAvailable: jest.fn(() => false),
-    startManifest: jest.fn(),
-    startDownload: jest.fn(),
-    cancelDownload: jest.fn(),
-    downloadFileTo: jest.fn(() => ({ downloadId: 999, downloadIdPromise: Promise.resolve(999), promise: Promise.resolve() })),
-    getActiveDownloads: jest.fn(() => Promise.resolve([])),
-    moveCompletedDownload: jest.fn(),
-    startProgressPolling: jest.fn(),
-    stopProgressPolling: jest.fn(),
-    onProgress: jest.fn(() => jest.fn()),
-    onComplete: jest.fn(() => jest.fn()),
-    onError: jest.fn(() => jest.fn()),
-    markSilent: jest.fn(),
-    unmarkSilent: jest.fn(),
-    excludeFromBackup: jest.fn(() => Promise.resolve(true)),
-  },
-}));
-
-const mockedBackgroundDownloadService = backgroundDownloadService as jest.Mocked<typeof backgroundDownloadService>;
-let mockManifestCompletion: Promise<any>;
 
 jest.mock('react-native-zip-archive', () => ({ unzip: jest.fn(() => Promise.resolve()) }));
 jest.mock('../../../src/utils/coreMLModelUtils', () => ({
@@ -83,8 +58,6 @@ describe('ModelManager', () => {
     jest.resetAllMocks();
 
     // Reset private state
-    (modelLibrary as any).downloadJobs = new Map();
-    (modelLibrary as any).backgroundDownloadMetadataCallback = null;
 
     // Re-establish huggingFaceService mock (resetAllMocks clears jest.mock implementations)
     (huggingFaceService.getDownloadUrl as jest.Mock).mockImplementation(
@@ -105,38 +78,6 @@ describe('ModelManager', () => {
     (mockedRNFS as any).stopDownload = jest.fn();
     (mockedRNFS as any).copyFile = jest.fn(() => Promise.resolve());
     (mockedRNFS as any).moveFile = jest.fn(() => Promise.resolve());
-
-    // Reset backgroundDownloadService mock implementations
-    mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-    mockedBackgroundDownloadService.startDownload.mockResolvedValue({} as any);
-    mockManifestCompletion = Promise.resolve({ success: true });
-    mockedBackgroundDownloadService.startManifest.mockImplementation((manifest: any) => {
-      for (const artifact of manifest.artifacts) {
-        mockedBackgroundDownloadService.startDownload({
-          url: artifact.url, fileName: artifact.localName.split('/').pop(),
-          modelId: manifest.modelId, totalBytes: artifact.sizeBytes,
-        } as any);
-      }
-      return {
-        downloadId: manifest.id,
-        handle: {
-          id: manifest.id,
-          admitted: Promise.resolve(null),
-          completion: mockManifestCompletion,
-          subscribe: (_listener: any) => jest.fn(),
-          cancel: jest.fn(async () => true),
-        },
-      } as any;
-    });
-    mockedBackgroundDownloadService.cancelDownload.mockResolvedValue(undefined as any);
-    mockedBackgroundDownloadService.downloadFileTo.mockReturnValue({ downloadId: 999, downloadIdPromise: Promise.resolve(999), promise: Promise.resolve() } as any);
-    mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
-    mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('' as any);
-    mockedBackgroundDownloadService.startProgressPolling.mockImplementation(() => {});
-    mockedBackgroundDownloadService.stopProgressPolling.mockImplementation(() => {});
-    mockedBackgroundDownloadService.onProgress.mockReturnValue(jest.fn());
-    mockedBackgroundDownloadService.onComplete.mockReturnValue(jest.fn());
-    mockedBackgroundDownloadService.onError.mockReturnValue(jest.fn());
 
     // Reset AsyncStorage defaults
     mockedAsyncStorage.getItem.mockResolvedValue(null);
@@ -168,14 +109,14 @@ describe('ModelManager', () => {
 
       await modelLibrary.initialize();
 
-      expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledTimes(3);
-      expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledWith(
+      expect(excludeFromBackupSpy).toHaveBeenCalledTimes(3);
+      expect(excludeFromBackupSpy).toHaveBeenCalledWith(
         expect.stringContaining('/models'),
       );
-      expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledWith(
+      expect(excludeFromBackupSpy).toHaveBeenCalledWith(
         expect.stringContaining('/image_models'),
       );
-      expect(mockedBackgroundDownloadService.excludeFromBackup).toHaveBeenCalledWith(
+      expect(excludeFromBackupSpy).toHaveBeenCalledWith(
         expect.stringContaining('/whisper-models'),
       );
     });
@@ -341,35 +282,6 @@ describe('ModelManager', () => {
       expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
     });
 
-    it('keeps the visible model when provider deletion fails', async () => {
-      const storedModel = {
-        id: 'model-provider-delete-fails',
-        name: 'Visible Model',
-        filePath: '/mock/documents/models/visible.gguf',
-        fileName: 'visible.gguf',
-        fileSize: 100,
-        author: 'test',
-        quantization: 'Q4_K_M',
-        downloadedAt: '2026-08-21T00:00:00.000Z',
-        credibility: {
-          source: 'community' as const,
-          isOfficial: false,
-          isVerifiedQuantizer: false,
-        },
-        engine: 'llama' as const,
-      };
-      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify([storedModel]));
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
-      useAppStore.setState({ downloadedModels: [storedModel] });
-
-      await expect(
-        textProvider.remove('text:model-provider-delete-fails'),
-      ).rejects.toThrow('disk refused deletion');
-
-      expect(useAppStore.getState().downloadedModels).toEqual([storedModel]);
-    });
-
     it('throws when model not found', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 
@@ -532,392 +444,6 @@ describe('ModelManager', () => {
       expect(result.source).toBe('community');
       expect(result.isOfficial).toBe(false);
       expect(result.isVerifiedQuantizer).toBe(false);
-    });
-  });
-
-  // ========================================================================
-  // downloadModelBackground
-  // ========================================================================
-  describe('downloadModelBackground', () => {
-    const file = createModelFile({
-      name: 'bg-model.gguf',
-      size: 8000000000,
-      quantization: 'Q4_K_M',
-    });
-
-    it('throws when not supported', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      await expect(
-        modelLibrary.downloadModelBackground('test/model', file)
-      ).rejects.toThrow('Background downloads not supported');
-    });
-
-    it('skips download when files already exist', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-      mockedAsyncStorage.setItem.mockResolvedValue(undefined as any);
-
-      const onComplete = jest.fn();
-      const result = await modelLibrary.downloadModelBackground('test/model', file);
-      modelLibrary.watchDownload(result.downloadId, onComplete);
-
-      // onComplete is now called after persistDownloadedModel resolves — flush microtasks
-      await new Promise(resolve => setImmediate(resolve));
-
-      expect(result.status).toBe('completed');
-      expect(onComplete).toHaveBeenCalled();
-      expect(mockedBackgroundDownloadService.startDownload).not.toHaveBeenCalled();
-    });
-
-    it('starts background download for main model', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
-
-      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
-        fileName: 'bg-model.gguf',
-        modelId: 'test/model',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes: 8000000000,
-        startedAt: Date.now(),
-      } as any);
-
-      const result = await modelLibrary.downloadModelBackground('test/model', file);
-
-      expect(mockedBackgroundDownloadService.startDownload).toHaveBeenCalled();
-      expect(result.downloadId).toBe('mobile:text:test/model/bg-model.gguf');
-    });
-
-    it('uses one replayable Shared handle for progress and completion', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(true);
-
-      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
-        fileName: 'bg-model.gguf',
-        modelId: 'test/model',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes: 8000000000,
-        startedAt: Date.now(),
-      } as any);
-
-      const info = await modelLibrary.downloadModelBackground('test/model', file);
-      modelLibrary.watchDownload(info.downloadId, jest.fn(), jest.fn());
-
-      expect(mockedBackgroundDownloadService.startManifest).toHaveBeenCalledTimes(1);
-      expect((modelLibrary as any).backgroundDownloadContext.get(info.downloadId).operation).toBeDefined();
-    });
-
-    it('calls metadata callback with download info', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(true);
-
-      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 42,
-        fileName: 'bg-model.gguf',
-        modelId: 'test/model',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes: 8000000000,
-        startedAt: Date.now(),
-      } as any);
-
-      const metadataCallback = jest.fn();
-      modelLibrary.setBackgroundDownloadMetadataCallback(metadataCallback);
-
-      await modelLibrary.downloadModelBackground('test/model', file);
-
-      expect(metadataCallback).not.toHaveBeenCalled();
-    });
-
-    it('places the main model and projector in one Shared manifest', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-
-      const visionFile = createModelFileWithMmProj({
-        name: 'vision.gguf',
-        size: 4000000000,
-        mmProjName: 'mmproj.gguf',
-        mmProjSize: 500000000,
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(false); // mmproj doesn't exist
-
-      mockedBackgroundDownloadService.startDownload
-        .mockResolvedValueOnce({
-          downloadId: 42,
-          fileName: 'vision.gguf',
-          modelId: 'test/model',
-          status: 'pending',
-          bytesDownloaded: 0,
-          totalBytes: 4000000000,
-          startedAt: Date.now(),
-        } as any)
-        .mockResolvedValueOnce({
-          downloadId: 43,
-          fileName: 'mmproj.gguf',
-          modelId: 'test/model',
-          status: 'pending',
-          bytesDownloaded: 0,
-          totalBytes: 500000000,
-          startedAt: Date.now(),
-        } as any);
-
-      await modelLibrary.downloadModelBackground('test/model', visionFile);
-
-      expect(RNFS.downloadFile).not.toHaveBeenCalled();
-      expect(mockedBackgroundDownloadService.startManifest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          artifacts: expect.arrayContaining([
-            expect.objectContaining({ name: 'vision.gguf', role: 'primary' }),
-            expect.objectContaining({ name: 'mmproj.gguf', role: 'mmproj' }),
-          ]),
-        }),
-      );
-    });
-
-    it('uses file.downloadUrl when set (cross-repo curated entries)', async () => {
-      // Curated entries (e.g. LiteRT recommended) carry an explicit downloadUrl that
-      // points at a different repo than the parent modelId. The download path must
-      // honor it instead of constructing one from modelId + file.name.
-      const customUrl = 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm';
-      const curated = createModelFile({
-        name: 'gemma-4-E2B-it.litertlm',
-        size: 2_590_000_000,
-        quantization: 'mixed',
-        downloadUrl: customUrl,
-      });
-
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(true);  // mmProjExists (no mmproj)
-
-      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: 99,
-        fileName: 'gemma-4-E2B-it.litertlm',
-        modelId: 'offgrid/litert-recommended',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes: curated.size,
-        startedAt: Date.now(),
-      } as any);
-
-      await modelLibrary.downloadModelBackground('offgrid/litert-recommended', curated);
-
-      expect(mockedBackgroundDownloadService.startManifest).toHaveBeenCalledWith(
-        expect.objectContaining({ artifacts: expect.arrayContaining([
-          expect.objectContaining({ url: customUrl, role: 'primary' }),
-        ]) }),
-      );
-    });
-  });
-
-  describe('resetMmProjForRetry', () => {
-    it('restores mmproj completion flags and local path for retried sidecars', () => {
-      const file = createModelFileWithMmProj({
-        name: 'vision.gguf',
-        size: 4_000_000_000,
-        quantization: 'Q4_K_M',
-        mmProjName: 'mmproj.gguf',
-        mmProjSize: 500_000_000,
-        mmProjDownloadUrl: 'https://huggingface.co/test/model/resolve/main/mmproj.gguf',
-      });
-      const ctx = {
-        modelId: 'test/model',
-        file,
-        localPath: '/mock/documents/models/vision.gguf',
-        mmProjLocalPath: null,
-        mmProjDownloadId: '43',
-        mmProjCompleted: true,
-        mmProjCompleteHandled: true,
-        mainCompleted: false,
-        mainCompleteHandled: false,
-        isFinalizing: false,
-      };
-      (modelLibrary as any).backgroundDownloadContext.set('42', ctx);
-
-      modelLibrary.resetMmProjForRetry('42');
-
-      expect(ctx.mmProjCompleted).toBe(false);
-      expect(ctx.mmProjCompleteHandled).toBe(false);
-      expect(ctx.mmProjLocalPath).toBe('/mock/documents/models/vision-mmproj.gguf');
-    });
-
-    it('leaves entries without mmproj download untouched', () => {
-      const file = createModelFile({ name: 'model.gguf', size: 4_000_000_000 });
-      const ctx = {
-        modelId: 'test/model',
-        file,
-        localPath: '/mock/documents/models/model.gguf',
-        mmProjLocalPath: null,
-        mmProjCompleted: true,
-        mmProjCompleteHandled: true,
-      };
-      (modelLibrary as any).backgroundDownloadContext.set('99', ctx);
-
-      modelLibrary.resetMmProjForRetry('99');
-
-      expect(ctx.mmProjCompleted).toBe(true);
-      expect(ctx.mmProjCompleteHandled).toBe(true);
-      expect(ctx.mmProjLocalPath).toBeNull();
-    });
-  });
-
-  // ========================================================================
-  // syncBackgroundDownloads
-  // ========================================================================
-  describe('syncBackgroundDownloads', () => {
-    it('returns empty when not supported', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      const result = await modelLibrary.syncBackgroundDownloads({}, jest.fn());
-
-      expect(result).toEqual([]);
-    });
-
-    it('processes completed downloads', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists.mockResolvedValue(true); // dirs exist
-      mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([
-        {
-          downloadId: 1,
-          fileName: 'model.gguf',
-          modelId: 'test/model',
-          status: 'completed',
-          bytesDownloaded: 4000,
-          totalBytes: 4000,
-          startedAt: 12345,
-        } as any,
-      ]);
-      mockedBackgroundDownloadService.moveCompletedDownload.mockResolvedValue('/models/model.gguf');
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-
-      const clearCb = jest.fn();
-      const result = await modelLibrary.syncBackgroundDownloads(
-        {
-          1: {
-            modelId: 'test/model',
-            fileName: 'model.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4000,
-          },
-        },
-        clearCb
-      );
-
-      expect(result).toHaveLength(1);
-      expect(clearCb).toHaveBeenCalledWith(1);
-    });
-
-    it('clears failed downloads', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([
-        {
-          downloadId: 2,
-          fileName: 'failed.gguf',
-          modelId: 'test/failed',
-          status: 'failed',
-          bytesDownloaded: 100,
-          totalBytes: 4000,
-          startedAt: 12345,
-        } as any,
-      ]);
-
-      const clearCb = jest.fn();
-      await modelLibrary.syncBackgroundDownloads(
-        {
-          2: {
-            modelId: 'test/failed',
-            fileName: 'failed.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4000,
-          },
-        },
-        clearCb
-      );
-
-      expect(clearCb).toHaveBeenCalledWith(2);
-    });
-
-    it('skips downloads with no metadata', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([
-        {
-          downloadId: 99,
-          fileName: 'unknown.gguf',
-          modelId: 'unknown',
-          status: 'completed',
-          bytesDownloaded: 4000,
-          totalBytes: 4000,
-          startedAt: 12345,
-        } as any,
-      ]);
-
-      const clearCb = jest.fn();
-      const result = await modelLibrary.syncBackgroundDownloads({}, clearCb);
-
-      // No metadata for downloadId 99, so it's skipped
-      expect(result).toHaveLength(0);
-      expect(clearCb).not.toHaveBeenCalled();
-    });
-
-    it('leaves running downloads as-is', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue([
-        {
-          downloadId: 3,
-          fileName: 'running.gguf',
-          modelId: 'test/running',
-          status: 'running',
-          bytesDownloaded: 2000,
-          totalBytes: 4000,
-          startedAt: 12345,
-        } as any,
-      ]);
-
-      const clearCb = jest.fn();
-      const result = await modelLibrary.syncBackgroundDownloads(
-        {
-          3: {
-            modelId: 'test/running',
-            fileName: 'running.gguf',
-            quantization: 'Q4_K_M',
-            author: 'test',
-            totalBytes: 4000,
-          },
-        },
-        clearCb
-      );
-
-      expect(result).toHaveLength(0);
-      expect(clearCb).not.toHaveBeenCalled();
     });
   });
 
@@ -1492,18 +1018,6 @@ describe('ModelManager', () => {
     });
   });
 
-  describe('cancelBackgroundDownload when not supported', () => {
-    it('throws when background service is unavailable', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      await expect(modelLibrary.cancelBackgroundDownload('42')).rejects.toThrow(
-        'Background downloads not supported'
-      );
-
-      expect(mockedBackgroundDownloadService.cancelDownload).not.toHaveBeenCalled();
-    });
-  });
-
   describe('scanForUntrackedTextModels tiny files', () => {
     it('skips files smaller than 1MB', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
@@ -1759,168 +1273,13 @@ describe('ModelManager', () => {
     });
   });
 
-  describe('downloadModelBackground complete handler', () => {
-    it('processes completed background download with mmproj', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-
-      const visionFile = createModelFileWithMmProj({
-        name: 'bg-vision.gguf',
-        size: 4000000000,
-        mmProjName: 'bg-mmproj.gguf',
-        mmProjSize: 500000000,
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)   // modelsDir
-        .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(false)  // main doesn't exist
-        .mockResolvedValueOnce(false); // mmproj doesn't exist
-
-      const onComplete = jest.fn();
-      const info = await modelLibrary.downloadModelBackground('test/model', visionFile);
-      mockedRNFS.exists.mockResolvedValue(true);
-      mockedAsyncStorage.getItem.mockResolvedValue('[]');
-      modelLibrary.watchDownload(info.downloadId, onComplete);
-      await new Promise(resolve => setImmediate(resolve));
-
-      expect(mockedBackgroundDownloadService.startManifest).toHaveBeenCalledTimes(1);
-      expect(onComplete).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('downloadModelBackground error handler', () => {
-    it('calls onError when background download fails', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-
-      const file = createModelFile({
-        name: 'bg-fail.gguf',
-        size: 4000000000,
-        quantization: 'Q4_K_M',
-      });
-
-      mockedRNFS.exists
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(true);
-
-      mockedBackgroundDownloadService.startDownload.mockResolvedValue({
-        downloadId: '99',
-        fileName: 'bg-fail.gguf',
-        modelId: 'test/model',
-        status: 'pending',
-        bytesDownloaded: 0,
-        totalBytes: 4000000000,
-        startedAt: Date.now(),
-      } as any);
-
-      mockManifestCompletion = Promise.resolve({ success: false, error: 'Network error' });
-
-      const onError = jest.fn();
-      const info = await modelLibrary.downloadModelBackground('test/model', file);
-      modelLibrary.watchDownload(info.downloadId, undefined, onError);
-
-      await new Promise(resolve => setImmediate(resolve));
-      expect(onError).toHaveBeenCalledWith(expect.any(Error));
-    });
-  });
-
   describe('repairMmProj', () => {
-    it('emits the one Shared operation id', async () => {
-      const saveSpy = jest.spyOn(modelLibrary, 'saveModelWithMmproj').mockResolvedValue(undefined);
-      const initSpy = jest.spyOn(modelLibrary, 'initialize').mockResolvedValue(undefined);
-      try {
-        const onDownloadIdReady = jest.fn();
-        const file = createModelFileWithMmProj({ name: 'vision-model.gguf', mmProjName: 'vision-model-mmproj.gguf' });
-        const present = new Set([`${RNFS.DocumentDirectoryPath}/models/vision-model.gguf`]);
-        mockedRNFS.exists.mockImplementation(async (path: string) => present.has(path));
-        mockedRNFS.unlink.mockImplementation(async (path: string) => { present.delete(path); });
-        mockedBackgroundDownloadService.startManifest.mockImplementation((manifest: any) => {
-          present.add(`${RNFS.DocumentDirectoryPath}/models/vision-model-mmproj.gguf`);
-          return {
-            downloadId: manifest.id,
-            handle: {
-              id: manifest.id,
-              admitted: Promise.resolve(null),
-              completion: Promise.resolve({ success: true }),
-              subscribe: () => jest.fn(),
-              cancel: jest.fn(async () => true),
-            },
-          } as any;
-        });
-        const repairPromise = modelLibrary.repairMmProj('test/model', file, { onDownloadIdReady });
+    it('rejects a repair target without a projector artifact', async () => {
+      const file = createModelFile({ name: 'text-model.gguf' });
 
-        // Flush all microtasks (initialize → RNFS.exists → startDownload)
-        await new Promise(resolve => setImmediate(resolve));
-
-        expect(mockedBackgroundDownloadService.startManifest).toHaveBeenCalled();
-        expect(onDownloadIdReady).toHaveBeenCalledWith(
-          'mobile:text:test/model/vision-model.gguf',
-        );
-        await repairPromise;
-      } finally {
-        initSpy.mockRestore();
-        saveSpy.mockRestore();
-      }
-    });
-  });
-
-  // ========================================================================
-  // getActiveBackgroundDownloads
-  // ========================================================================
-  describe('getActiveBackgroundDownloads', () => {
-    it('returns empty array when background downloads not supported', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      const result = await modelLibrary.getActiveBackgroundDownloads();
-      expect(result).toEqual([]);
-    });
-
-    it('delegates to backgroundDownloadService when supported', async () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-      const mockDownloads = [
-        { downloadId: 1, fileName: 'model.gguf', modelId: 'test', status: 'running', bytesDownloaded: 100, totalBytes: 1000, startedAt: Date.now() },
-      ];
-      mockedBackgroundDownloadService.getActiveDownloads.mockResolvedValue(mockDownloads as any);
-
-      const result = await modelLibrary.getActiveBackgroundDownloads();
-      expect(result).toEqual(mockDownloads);
-      expect(mockedBackgroundDownloadService.getActiveDownloads).toHaveBeenCalled();
-    });
-  });
-
-  // ========================================================================
-  // startBackgroundDownloadPolling / stopBackgroundDownloadPolling
-  // ========================================================================
-  describe('startBackgroundDownloadPolling', () => {
-    it('does nothing when background downloads not supported', () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      modelLibrary.startBackgroundDownloadPolling();
-      expect(mockedBackgroundDownloadService.startProgressPolling).not.toHaveBeenCalled();
-    });
-
-    it('delegates when supported', () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-
-      modelLibrary.startBackgroundDownloadPolling();
-      expect(mockedBackgroundDownloadService.startProgressPolling).toHaveBeenCalled();
-    });
-  });
-
-  describe('stopBackgroundDownloadPolling', () => {
-    it('does nothing when background downloads not supported', () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(false);
-
-      modelLibrary.stopBackgroundDownloadPolling();
-      expect(mockedBackgroundDownloadService.stopProgressPolling).not.toHaveBeenCalled();
-    });
-
-    it('delegates when supported', () => {
-      mockedBackgroundDownloadService.isAvailable.mockReturnValue(true);
-
-      modelLibrary.stopBackgroundDownloadPolling();
-      expect(mockedBackgroundDownloadService.stopProgressPolling).toHaveBeenCalled();
+      await expect(modelLibrary.repairMmProj('test/model', file)).rejects.toThrow(
+        'Model file has no associated mmproj',
+      );
     });
   });
 
@@ -2500,18 +1859,6 @@ describe('ModelManager', () => {
       const result = await modelLibrary.getDownloadedImageModels();
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe('exists');
-    });
-  });
-
-  // ========================================================================
-  // setBackgroundDownloadMetadataCallback
-  // ========================================================================
-  describe('setBackgroundDownloadMetadataCallback', () => {
-    it('stores the callback', () => {
-      const callback = jest.fn();
-      modelLibrary.setBackgroundDownloadMetadataCallback(callback);
-
-      expect((modelLibrary as any).backgroundDownloadMetadataCallback).toBe(callback);
     });
   });
 

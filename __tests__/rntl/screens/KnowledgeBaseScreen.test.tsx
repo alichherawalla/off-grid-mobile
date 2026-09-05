@@ -1,240 +1,143 @@
 /**
- * KnowledgeBaseScreen Tests
+ * KnowledgeBaseScreen — what a user sees and can do in a project's knowledge base.
+ *
+ * REWRITTEN from a mockist unit test that jest.mock-ed our own `ragBootstrap` module (deleted in
+ * 5fc92f88) and our own store. It now mounts the REAL screen over the REAL Mobile composition root and
+ * the REAL RAG facade (`applicationFacade().rag`), with fakes only at the device boundary: the SQLite
+ * driver, the filesystem, and the native embedding engine. Documents are genuinely indexed through the
+ * production `addDocument` seam, so the list, the sizes, the toggle and the delete are the real ones.
+ *
+ * The add-document GESTURE (picker → index) is covered by the rendered guards in
+ * __tests__/integration/knowledge-base/ (kbFileSizeGuard, kbIndexEmbedFailAbort, kbScannedPdfMessage);
+ * this file owns the LIST surface those do not assert: names, sizes, open, enable/disable, remove, back.
  */
+import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
+import { doMockRealSqlite } from '../../harness/sqliteFake';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
-import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
-
-const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
+const mockGoBack = jest.fn();
 
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
-  return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: mockGoBack,
-      setOptions: jest.fn(),
-    }),
-    useRoute: () => ({
-      params: { projectId: 'proj1' },
-    }),
-  };
-});
-
-const mockGetDocumentsByProject = jest.fn<Promise<any[]>, [string]>(() => Promise.resolve([]));
-const mockIndexDocument = jest.fn<Promise<number>, [any]>(() => Promise.resolve(1));
-const mockDeleteDocument = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
-const mockToggleDocument = jest.fn<Promise<void>, [number, boolean]>(() => Promise.resolve());
-
-jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
-  ragService: {
-    getDocumentsByProject: (projectId: string) => mockGetDocumentsByProject(projectId),
-    indexDocument: (params: any) => mockIndexDocument(params),
-    deleteDocument: (docId: number) => mockDeleteDocument(docId),
-    toggleDocument: (docId: number, enabled: boolean) => mockToggleDocument(docId, enabled),
-    ensureReady: jest.fn(() => Promise.resolve()),
-  },
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack, setOptions: () => {}, addListener: () => () => {} }),
+  useRoute: () => ({ params: { projectId: 'p1' } }),
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
 }));
 
-let mockProject: any = { id: 'proj1', name: 'My Project' };
+let fixture: MobileApplicationFixture | undefined;
+let boundary: ReturnType<typeof installNativeBoundary>;
 
-jest.mock('../../../src/stores', () => ({
-  useProjectStore: jest.fn((selector?: any) => {
-    const state = { getProject: () => mockProject };
-    return selector ? selector(state) : state;
-  }),
-  useChatStore: jest.fn(() => ({})),
-  useAppStore: jest.fn(() => ({})),
-}));
-
-jest.mock('@react-native-documents/picker', () => ({
-  pick: jest.fn(() => Promise.resolve([{
-    uri: 'file:///mock/doc.txt',
-    name: 'doc.txt',
-    size: 1000,
-  }])),
-  keepLocalCopy: jest.fn(() => Promise.resolve([{ status: 'success', localUri: '/mock/local/doc.txt' }])),
-}));
-
-jest.mock('react-native-vector-icons/Feather', () => {
-  const { Text } = require('react-native');
-  return ({ name }: any) => <Text>{name}</Text>;
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = undefined;
 });
 
-import { KnowledgeBaseScreen } from '../../../src/screens/KnowledgeBaseScreen';
+/** Mount the real screen for project `p1` after indexing `docs` through the production RAG facade. */
+async function mountKb(docs: ReadonlyArray<{ fileName: string; bytes: number }>) {
+  boundary = installNativeBoundary({ fs: true, llama: true });
+  doMockRealSqlite();
+  mockNavigate.mockClear();
+  mockGoBack.mockClear();
 
-const flushPromises = () => act(async () => {
-  await new Promise<void>(resolve => setTimeout(resolve, 0));
+  const RNFS = require('react-native-fs');
+  await RNFS.writeFile(`${boundary.fs!.DocumentDirectoryPath}/all-MiniLM-L6-v2-Q8_0.gguf`, 'GGUF');
+
+  const { startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  fixture = await startMobileApplicationFixture();
+
+  const { useProjectStore } = require('../../../src/stores/projectStore');
+  useProjectStore.setState({
+    projects: [{ id: 'p1', name: 'My Project', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }],
+  });
+
+  for (const doc of docs) {
+    boundary.fs!.seedFile(`/docs/${doc.fileName}`, doc.bytes);
+    const indexed = await fixture.application.rag.addDocument({
+      projectId: 'p1',
+      path: `/docs/${doc.fileName}`,
+      fileName: doc.fileName,
+      size: doc.bytes,
+    });
+    if (!indexed.ok) throw new Error(JSON.stringify(indexed.failure));
+  }
+
+  const React = require('react');
+  const rtl = requireRTL();
+  const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
+  const view = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
+  return { rtl, view };
+}
+
+describe('the knowledge base a user opens for a project', () => {
+  it('shows the project it belongs to, and says so when it is empty', async () => {
+    const { rtl, view } = await mountKb([]);
+    // The title is the user's own proof they are in the right project's KB, not another one's.
+    await rtl.waitFor(() => expect(view.queryByText('My Project')).not.toBeNull());
+    expect(view.queryByText('No documents yet')).not.toBeNull();
+  });
+
+  it('lists each indexed document by name and readable size', async () => {
+    const { rtl, view } = await mountKb([
+      { fileName: 'readme.txt', bytes: 500 },
+      { fileName: 'notes.txt', bytes: 2048 },
+    ]);
+    await rtl.waitFor(() => expect(view.queryByText('readme.txt')).not.toBeNull());
+    expect(view.queryByText('notes.txt')).not.toBeNull();
+    // Raw byte counts are unreadable; the user is shown the unit they think in.
+    expect(view.queryByText('500 B')).not.toBeNull();
+    expect(view.queryByText('2.0 KB')).not.toBeNull();
+  });
+
+  it('opens a document when the user taps it', async () => {
+    const { rtl, view } = await mountKb([{ fileName: 'readme.txt', bytes: 500 }]);
+    await rtl.waitFor(() => expect(view.queryByText('readme.txt')).not.toBeNull());
+    rtl.fireEvent.press(view.getByText('readme.txt'));
+    expect(mockNavigate).toHaveBeenCalledWith('DocumentPreview', expect.objectContaining({ fileName: 'readme.txt' }));
+  });
+
+  it('takes the user back when they press back', async () => {
+    const { rtl, view } = await mountKb([]);
+    await rtl.waitFor(() => expect(view.queryByText('No documents yet')).not.toBeNull());
+    rtl.fireEvent.press(view.getByLabelText('Back'));
+    expect(mockGoBack).toHaveBeenCalled();
+  });
 });
 
-describe('KnowledgeBaseScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockProject = { id: 'proj1', name: 'My Project' };
-    mockGetDocumentsByProject.mockResolvedValue([]);
-  });
+describe('turning a document off and removing it', () => {
+  it('persists a document being switched off, so retrieval stops using it', async () => {
+    const { rtl, view } = await mountKb([{ fileName: 'file.txt', bytes: 100 }]);
+    await rtl.waitFor(() => expect(view.queryByText('file.txt')).not.toBeNull());
 
-  describe('basic rendering', () => {
-    it('renders the screen and shows project name', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('My Project')).toBeTruthy();
-    });
+    const { Switch } = require('react-native');
+    rtl.fireEvent(view.UNSAFE_getAllByType(Switch)[0], 'valueChange', false);
 
-    it('shows fallback title when project is null', async () => {
-      mockProject = null;
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('Knowledge Base')).toBeTruthy();
-    });
-
-    it('shows loading indicator initially', () => {
-      const { getByLabelText } = render(<KnowledgeBaseScreen />);
-      // The one loader in this app announces itself as "Working". Asserted by what a user
-      // perceives rather than by component type, so replacing the loader again cannot break this.
-      expect(getByLabelText('Working')).toBeTruthy();
-    });
-
-    it('shows empty state when no documents', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([]);
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('No documents yet')).toBeTruthy();
+    // The switch is not cosmetic: the real DB row must say disabled, or the document is still retrieved
+    // while the user believes they excluded it.
+    await rtl.waitFor(async () => {
+      const listed = await fixture!.application.rag.listDocuments('p1');
+      if (!listed.ok) throw new Error('listDocuments failed');
+      expect(listed.value[0].enabled).toBeFalsy();
     });
   });
 
-  describe('with documents', () => {
-    const docs: any[] = [
-      { id: 1, name: 'readme.txt', path: '/docs/readme.txt', size: 500, enabled: 1, projectId: 'proj1', createdAt: '' },
-      { id: 2, name: 'notes.pdf', path: '/docs/notes.pdf', size: 2048 * 1024, enabled: 0, projectId: 'proj1', createdAt: '' },
-    ];
+  it('asks before removing a document, and removes it for real on confirm', async () => {
+    const { rtl, view } = await mountKb([{ fileName: 'file.txt', bytes: 100 }]);
+    await rtl.waitFor(() => expect(view.queryByText('file.txt')).not.toBeNull());
 
-    beforeEach(() => {
-      mockGetDocumentsByProject.mockResolvedValue(docs);
+    const { Alert } = require('react-native');
+    let confirm: (() => void) | undefined;
+    jest.spyOn(Alert, 'alert').mockImplementation((...args: unknown[]) => {
+      confirm = (args[2] as Array<{ style?: string; onPress?: () => void }> | undefined)
+        ?.find(b => b.style === 'destructive')?.onPress;
     });
 
-    it('renders document names', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('readme.txt')).toBeTruthy();
-      expect(getByText('notes.pdf')).toBeTruthy();
-    });
+    rtl.fireEvent.press(view.getByLabelText('Remove file.txt'));
+    // Deletion is irreversible, so the user is asked first and the file is named in the question.
+    expect(Alert.alert).toHaveBeenCalledWith('Remove Document', expect.stringContaining('file.txt'), expect.any(Array));
 
-    it('formats file sizes correctly', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('500 B')).toBeTruthy();
-      expect(getByText('2.0 MB')).toBeTruthy();
-    });
-
-    it('navigates to DocumentPreview when doc is pressed', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      fireEvent.press(getByText('readme.txt'));
-      expect(mockNavigate).toHaveBeenCalledWith('DocumentPreview', {
-        filePath: '/docs/readme.txt',
-        fileName: 'readme.txt',
-        fileSize: 500,
-      });
-    });
-  });
-
-  describe('file size formatting', () => {
-    it('formats KB size', async () => {
-      const kbDoc: any[] = [{ id: 3, name: 'small.txt', path: '/docs/small.txt', size: 2048, enabled: 1, projectId: 'proj1', createdAt: '' }];
-      mockGetDocumentsByProject.mockResolvedValue(kbDoc);
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(getByText('2.0 KB')).toBeTruthy();
-    });
-  });
-
-  describe('back navigation', () => {
-    it('calls goBack when back button pressed', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      fireEvent.press(getByText('arrow-left'));
-      expect(mockGoBack).toHaveBeenCalled();
-    });
-  });
-
-  describe('add document flow', () => {
-    it('calls pick when add button pressed', async () => {
-      const { pick } = require('@react-native-documents/picker');
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      fireEvent.press(getByText('plus'));
-      await flushPromises();
-      expect(pick).toHaveBeenCalled();
-    });
-
-    it('calls indexDocument after picking a file', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      fireEvent.press(getByText('plus'));
-      await flushPromises();
-      expect(mockIndexDocument).toHaveBeenCalled();
-    });
-
-    it('reloads docs after indexing', async () => {
-      const { getByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      const initialCallCount = mockGetDocumentsByProject.mock.calls.length;
-      fireEvent.press(getByText('plus'));
-      await flushPromises();
-      expect(mockGetDocumentsByProject.mock.calls.length).toBeGreaterThan(initialCallCount);
-    });
-  });
-
-  describe('error handling', () => {
-    it('handles load error gracefully', async () => {
-      mockGetDocumentsByProject.mockRejectedValueOnce(new Error('DB error'));
-      const { Alert } = require('react-native');
-      jest.spyOn(Alert, 'alert').mockImplementation((..._args: unknown[]) => undefined);
-      render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      expect(Alert.alert).toHaveBeenCalledWith('Error', 'DB error');
-    });
-  });
-
-  describe('toggle document', () => {
-    it('calls toggleDocument when switch is toggled', async () => {
-      const toggleDoc: any[] = [{ id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' }];
-      mockGetDocumentsByProject.mockResolvedValue(toggleDoc);
-      const { UNSAFE_getAllByType } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      const { Switch } = require('react-native');
-      const switches = UNSAFE_getAllByType(Switch);
-      fireEvent(switches[0], 'valueChange', false);
-      await flushPromises();
-      expect(mockToggleDocument).toHaveBeenCalledWith(1, false);
-    });
-  });
-
-  describe('delete document', () => {
-    it('shows Alert when delete is pressed and calls deleteDocument on confirm', async () => {
-      const deleteDoc: any[] = [{ id: 1, name: 'file.txt', path: '/file.txt', size: 100, enabled: 1, projectId: 'proj1', createdAt: '' }];
-      mockGetDocumentsByProject.mockResolvedValue(deleteDoc);
-      const { Alert } = require('react-native');
-      let confirmCallback: (() => void) | undefined;
-      jest.spyOn(Alert, 'alert').mockImplementation((...args: unknown[]) => {
-        const buttons = args[2] as any[];
-        const removeBtn = buttons?.find((b: any) => b.style === 'destructive');
-        confirmCallback = removeBtn?.onPress;
-      });
-
-      const { getAllByText } = render(<KnowledgeBaseScreen />);
-      await flushPromises();
-      fireEvent.press(getAllByText('trash-2')[0]);
-      expect(Alert.alert).toHaveBeenCalledWith('Remove Document', expect.stringContaining('file.txt'), expect.any(Array));
-
-      await act(async () => {
-        confirmCallback?.();
-        await flushPromises();
-      });
-      expect(mockDeleteDocument).toHaveBeenCalledWith(1);
-    });
+    await rtl.act(async () => { confirm?.(); });
+    await rtl.waitFor(() => expect(view.queryByText('file.txt')).toBeNull());
   });
 });

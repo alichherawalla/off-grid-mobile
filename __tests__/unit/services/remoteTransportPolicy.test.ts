@@ -5,10 +5,8 @@ import {
   remoteAuthorizationHeaders,
   validateRemoteEndpoint,
 } from '@offgrid/models';
-import {
-  fetchModelsFromServer,
-  RemoteModelDiscoveryError,
-} from '../../../src/services/adapters/remote/serverDiscovery';
+import { RemoteModelDiscoveryError } from '../../../src/services/adapters/remote/serverDiscovery';
+import { fetchModelsFromServer } from '../../../src/services/composition/remote';
 
 describe('remote transport policy', () => {
   const originalFetch = global.fetch;

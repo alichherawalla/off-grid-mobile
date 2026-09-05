@@ -1,6 +1,6 @@
 import {
   CHAT_GENERATION_RECLAIM_POLICY,
-  modelsFailureMessage,
+  ModelsFailureError,
   type ChatQueueProjection,
   type ChatTurn,
   type GenerationOperation,
@@ -35,7 +35,7 @@ export async function prepareMobileChatGeneration(): Promise<void> {
 }
 
 function requireChatTurn(outcome: Outcome<ChatTurn, ModelsFailure>): ChatTurn {
-  if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  if (!outcome.ok) throw new ModelsFailureError(outcome.failure);
   return outcome.value;
 }
 

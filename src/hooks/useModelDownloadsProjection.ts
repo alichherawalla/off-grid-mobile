@@ -2,10 +2,10 @@ import { useCallback, useSyncExternalStore } from 'react';
 import type { ModelsSnapshot } from '@offgrid/application';
 import { applicationFacade } from '../services/applicationFacade';
 
-const selectDownloads = (snapshot: ModelsSnapshot) => snapshot.downloads;
+const selectDownloads = (snapshot: ModelsSnapshot) => snapshot.control.downloads;
 
 /** The one Mobile React projection of facade-owned model downloads. */
-export function useModelDownloadsProjection(): ModelsSnapshot['downloads'] {
+export function useModelDownloadsProjection(): ModelsSnapshot['control']['downloads'] {
   const models = applicationFacade().models;
   const getSnapshot = useCallback(
     () => selectDownloads(models.snapshot()),
@@ -22,7 +22,7 @@ export function useModelDownloadsProjection(): ModelsSnapshot['downloads'] {
 export function useModelDownloadEntry(modelType: string, modelId: string) {
   const models = applicationFacade().models;
   const select = useCallback(
-    (snapshot: ModelsSnapshot) => snapshot.downloads.find(
+    (snapshot: ModelsSnapshot) => snapshot.control.downloads.find(
       row => row.modelType === modelType && row.modelId === modelId,
     ),
     [modelId, modelType],

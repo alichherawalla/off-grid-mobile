@@ -10,7 +10,10 @@ import {
   modelLibrary,
   hardwareService,
 } from '../../services';
-import { modelsFailureMessage, visionRepairMessage } from '@offgrid/application';
+import {
+  modelsFailureMessage,
+  visionRepairMessage,
+} from '@offgrid/application';
 import { useVoiceDownloadItems } from './useVoiceDownloadItems';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem, formatBytes } from './items';
@@ -29,9 +32,12 @@ export interface UseDownloadManagerResult {
   setAlertState: (state: AlertState) => void;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleRetryDownload: (item: DownloadItem) => void;
+  handlePauseDownload: (item: DownloadItem) => void;
+  handleResumeDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   isRepairingVision: (modelId: string) => boolean;
+  repairDownloadFor: (modelId: string) => DownloadItem | undefined;
   totalStorageUsed: number;
 }
 
@@ -60,18 +66,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
 
   const idOf = (item: DownloadItem): string => `${item.modelType}:${item.modelId}`;
 
-  // voiceItems (TTS/STT) carries BOTH finished and in-flight rows: a completed model
-  // is type:'completed', while a downloading or failed one is type:'active'. Route by
-  // that type — a downloading Kokoro must land in Active Downloads, NOT Downloaded
-  // Models. (Dumping all of voiceItems into completedItems made an in-progress voice
-  // download render as a finished 82MB model via CompletedDownloadCard, regardless of
-  // its real progress — the "shows downloaded while downloading/queued" bug.)
-  const voiceCompleted = voiceItems.filter(i => i.type === 'completed');
-  const voiceActive = voiceItems.filter(i => i.type === 'active');
-
   const completedItems: DownloadItem[] = [
     ...modelStoreCompletedItems(downloadedModels, downloadedImageModels),
-    ...voiceCompleted,
+    ...voiceItems,
   ];
 
   // One entry per model. A downloaded (registered, on-disk) model is authoritative, so
@@ -85,16 +82,13 @@ export function useDownloadManager(): UseDownloadManagerResult {
     .filter(e => e.status !== 'completed' && e.status !== 'cancelled')
     .map(facadeDownloadToActiveItem)
     .filter(item => !completedIds.has(idOf(item)));
-  // Include the in-flight/failed voice rows here so they render in Active Downloads
-  // (ActiveDownloadCard shows their live progress bar / Retry). Dedup against
-  // completedIds so a voice model that also has a completed row can't double-list.
-  const voiceActiveDeduped = voiceActive.filter(
-    item => !completedIds.has(idOf(item)),
-  );
-  const activeItems: DownloadItem[] = [
-    ...startedItems,
-    ...voiceActiveDeduped,
-  ];
+  const activeItems: DownloadItem[] = startedItems;
+  const repairDownloadFor = (modelId: string): DownloadItem | undefined => {
+    const row = downloads.find(
+      download => download.modelKey === modelId || download.modelId === modelId,
+    );
+    return row ? facadeDownloadToActiveItem(row) : undefined;
+  };
 
   const totalStorageUsed = completedItems.reduce(
     (sum, item) => sum + item.fileSize,
@@ -104,10 +98,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
-      if (!item.downloadId) throw new Error('The download has no operation id.');
-      const outcome = await applicationFacade().models.cancelDownload({
-        downloadId: item.downloadId,
-        removePartial: true,
+      const outcome = await applicationFacade().models.control({
+        type: 'cancel-download',
+        modelId: item.downloadId ?? item.modelId,
       });
       if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
     } catch (error) {
@@ -117,17 +110,44 @@ export function useDownloadManager(): UseDownloadManagerResult {
   };
 
   const handleRetryDownload = async (item: DownloadItem) => {
-    // Route purely by id — the service looks up the download and refuses a not-found
-    // id uniformly, so the UI does not gate on downloadId (which leaked the per-type
-    // id scheme: stt re-downloads via whisperService and never has a downloadId).
     try {
-      if (!item.downloadId) throw new Error('The download has no operation id.');
-      const outcome = await applicationFacade().models.retryDownload({
-        downloadId: item.downloadId,
+      const outcome = await applicationFacade().models.control({
+        type: 'retry-download',
+        modelId: item.downloadId ?? item.modelId,
       });
       if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
     } catch (error: any) {
       logger.error('[DownloadManager] Failed to retry download:', error);
+      setAlertState(showAlert(
+        'Retry Failed',
+        error instanceof Error ? error.message : String(error),
+      ));
+    }
+  };
+
+  const handlePauseDownload = async (item: DownloadItem) => {
+    try {
+      const outcome = await applicationFacade().models.control({
+        type: 'pause-download',
+        modelId: item.downloadId ?? item.modelId,
+      });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to pause download:', error);
+      setAlertState(showAlert('Error', 'Failed to pause download'));
+    }
+  };
+
+  const handleResumeDownload = async (item: DownloadItem) => {
+    try {
+      const outcome = await applicationFacade().models.control({
+        type: 'resume-download',
+        modelId: item.downloadId ?? item.modelId,
+      });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to resume download:', error);
+      setAlertState(showAlert('Error', 'Failed to resume download'));
     }
   };
 
@@ -282,9 +302,12 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setAlertState,
     handleRemoveDownload,
     handleRetryDownload,
+    handlePauseDownload,
+    handleResumeDownload,
     handleDeleteItem,
     handleRepairVision,
     isRepairingVision,
+    repairDownloadFor,
     totalStorageUsed,
   };
 }

@@ -3,12 +3,16 @@ import { modelsFailureMessage } from '@offgrid/application';
 import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
 import { getMobileApplication } from '../../../src/services/composition/application';
 import { mobileTextEngineControl } from '../../../src/services/modelServices/textEngineControl';
-import { useAppStore, useRemoteServerStore } from '../../../src/stores';
+import { useAppStore } from '../../../src/stores';
 import { createDownloadedModel } from '../../utils/factories';
 import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { setupWithConversation } from '../../utils/testHelpers';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import {
+  startMobileApplicationFixture,
+  type MobileApplicationFixture,
+} from '../../harness/mobileApplicationFixture';
 
 function remoteTransport(id: string): TextStreamTransport {
   return {
@@ -25,6 +29,15 @@ function remoteTransport(id: string): TextStreamTransport {
 
 describe('canonical Mobile text route authority', () => {
   const local = createDownloadedModel({ id: 'local-model', name: 'Local model', engine: 'llama' });
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(async () => {
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(async () => {
     remoteTextTransportRegistry.clear();
@@ -53,16 +66,15 @@ describe('canonical Mobile text route authority', () => {
   });
 
   it('keeps remote UI capability and execution identity on the same canonical route', async () => {
-    const remote = useRemoteServerStore.getState();
-    const serverId = (await remoteServerManager.addServer({ name: 'Remote server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'remote-model';
-    remote.setDiscoveredModels(serverId, [{
-      id: modelId,
-      name: 'Remote model',
-      serverId,
-      capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: true },
-      lastUpdated: new Date().toISOString(),
-    }]);
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Remote server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Remote model',
+        capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: true },
+      }] },
+    })).id;
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
     expect(activeMobileModel('text').model).toMatchObject({ id: modelId, source: 'remote', serverId });
@@ -79,16 +91,15 @@ describe('canonical Mobile text route authority', () => {
   });
 
   it('fails closed when the selected remote provider becomes unavailable', async () => {
-    const remote = useRemoteServerStore.getState();
-    const serverId = (await remoteServerManager.addServer({ name: 'Unavailable server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'unavailable-model';
-    remote.setDiscoveredModels(serverId, [{
-      id: modelId,
-      name: 'Unavailable model',
-      serverId,
-      capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
-      lastUpdated: new Date().toISOString(),
-    }]);
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Unavailable server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Unavailable model',
+        capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      }] },
+    })).id;
     remoteTextTransportRegistry.register(serverId, remoteTransport(serverId));
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
@@ -111,16 +122,15 @@ describe('canonical Mobile text route authority', () => {
   });
 
   it('returns to the persisted local route only after the remote server is removed', async () => {
-    const remote = useRemoteServerStore.getState();
-    const serverId = (await remoteServerManager.addServer({ name: 'Removed server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible' })).id;
     const modelId = 'removed-model';
-    remote.setDiscoveredModels(serverId, [{
-      id: modelId,
-      name: 'Removed model',
-      serverId,
-      capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
-      lastUpdated: new Date().toISOString(),
-    }]);
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Removed server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Removed model',
+        capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      }] },
+    })).id;
     remoteTextTransportRegistry.register(serverId, remoteTransport(serverId));
     await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 

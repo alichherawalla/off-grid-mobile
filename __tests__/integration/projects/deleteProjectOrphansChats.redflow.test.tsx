@@ -2,9 +2,11 @@
  * RED-FLOW (integration, UI-driven delete) — Q9: deleting a project orphans its chats with a dangling
  * projectId.
  *
- * projectStore.deleteProject only filters the projects array — it never cascades to the conversations that
- * referenced it. So a chat keeps a projectId pointing at a project that no longer exists: it stops appearing
- * under any project view and isn't re-filable. The DELETE is driven the way a user does it — mount the REAL
+ * A chat must never keep a projectId pointing at a project that no longer exists: it would stop appearing
+ * under any project view and would not be re-filable. The cascade is owned by the shared delete-project
+ * workflow; the store unfiles the conversations and drops the project once that workflow reports ok.
+ *
+ * The DELETE is driven the way a user does it — mount the REAL
  * ProjectDetailScreen, tap "Delete Project", confirm in the alert — over the REAL chatStore/projectStore (no
  * native leaf). The assertion is the store INVARIANT where the bug lives (a dangling project reference), which
  * is what a re-file/project-view flow later trips over. Pure stores + real screen; no deleteProject() shortcut.
@@ -43,7 +45,7 @@ describe('Q9 — deleting a project orphans its chats (red-flow, real delete ges
     await waitFor(() => { expect(useProjectStore.getState().getProject('proj-1')).toBeUndefined(); });
 
     // Correct: the chat is no longer bound to a project that doesn't exist (re-filable / unfiled).
-    // Today deleteProject doesn't cascade, so its projectId still points at the deleted project → RED.
+    // The cascade lives in the shared delete-project workflow; the store unfiles once it reports ok.
     const conv = useChatStore.getState().conversations.find(c => c.id === convId)!;
     const danglingRef = conv.projectId != null && useProjectStore.getState().getProject(conv.projectId) == null;
     expect(danglingRef).toBe(false);

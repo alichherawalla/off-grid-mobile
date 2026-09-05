@@ -71,6 +71,8 @@ export type ModelOrigin = ModelArtifactOrigin;
 
 interface DownloadedModelBase {
   id: string;
+  /** Shared installation identity for a downloaded external model family. */
+  registryFamilyId?: string;
   name: string;
   author: string;
   filePath: string;
@@ -483,5 +485,13 @@ export interface DebugInfo {
   contextUsagePercent: number;
 }
 // Remote server types
-export type { RemoteServer, RemoteModel, ServerTestResult, RemoteMediaModelIds, RemoteModelCategory, RemoteModelOption, RemoteModelCatalog } from './remoteServer';
+export type {
+  RemoteServer,
+  RemoteModel,
+  ServerTestResult,
+  RemoteMediaModelIds,
+  RemoteModelCategory,
+  RemoteModelOption,
+  RemoteModelCatalog,
+} from './remoteServer';
 export { remoteServerCapabilities } from './remoteServer';

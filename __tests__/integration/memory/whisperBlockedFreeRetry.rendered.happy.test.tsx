@@ -26,29 +26,37 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('T119 (rendered) — voice note transcribes when whisper load is blocked (free→retry) (DEV-B1)', () => {
   it('frees the generation model, loads whisper, and the reply renders on a tight device', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android', pro: true, whisper: true });
+    // TIGHT DEVICE, seeded at the RAM sensor (the only native leaf) — NOT by overriding domain policy.
+    // 4100 MB total on android => the REAL balanced policy derives a 2460 MB model budget (0.60 x total),
+    // which admits the 2458 MB text model alone and leaves 2 MB — far less than the 75 MB whisper sidecar.
+    // So the first whisper load really is refused by the single-model/budget rule ('blocked').
+    const MB = 1024 * 1024;
+    const h = await setupChatScreen({
+      engine: 'llama', platform: 'android', pro: true, whisper: true,
+      ram: { platform: 'android', totalBytes: 4100 * MB, availBytes: 2600 * MB },
+    });
      
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
-    const { transcriptionModelIntents } = require('../../../src/services/modelServices/transcriptionRuntimePort');
-    const { resolveTextResidentSpec } = require('../../../src/services/modelServices/modelLifecycleBootstrap');
-    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
+    const { refreshTranscriptionModels } = require('../../../src/services/transcriptionModelApplication');
+    const { resolveTextResidentSpec, resolveTranscriptionResidentSpec } = require('../../../src/services/modelServices/modelLifecycleBootstrap');
+    const { modelApplication } = require('../../harness/activeModelLifecycle');
      
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with
     // NO resident load — so the voice turn's first load attempt runs for real (and blocks on the tight budget).
     const docs = h.boundary.fs!.DocumentDirectoryPath;
     h.boundary.fs!.seedFile(`${docs}/whisper-models/ggml-tiny.en.bin`, 75 * 1024 * 1024);
-    await transcriptionModelIntents.reconcileDisk();
+    await refreshTranscriptionModels();
     useWhisperStore.setState({ downloadedModelId: 'tiny.en', isModelLoaded: false });
 
-    // Pin the budget tight: the resident text model fills it, so the whisper sidecar cannot co-reside →
-    // makeRoomFor returns fits=false → whisperStore.loadModel returns 'blocked'.
-    // Keep the text model admissible by itself while leaving no room for Whisper.
-    // A fixed 700 MB budget became invalid when the canonical estimator started
-    // accounting for the model's full working set: it made the post-transcription
-    // text reload impossible and no longer represented this journey.
+    // The tight device is real, so assert the precondition instead of forcing it: the derived budget must
+    // hold the text model and NOT the whisper sidecar on top of it. If either stops being true the journey
+    // under test no longer exists, and this fails loudly rather than passing for the wrong reason.
     const textResident = await resolveTextResidentSpec('m');
-    modelResidencyManager.setBudgetOverrideMB(textResident.sizeMB);
+    const whisperResident = resolveTranscriptionResidentSpec('tiny.en');
+    const budgetMB = modelApplication().models.residency.getBudgetMB();
+    expect(budgetMB).toBeGreaterThanOrEqual(textResident.sizeMB);
+    expect(budgetMB).toBeLessThan(textResident.sizeMB + whisperResident.sizeMB);
 
     h.render();
     await h.enterVoiceMode();

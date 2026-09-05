@@ -77,6 +77,9 @@ class DownloadManagerModule: RCTEventEmitter {
     /// rather than read off the task because a task built from resume data may not carry the
     /// original request.
     var sourceURL: String?
+    /// Adapter fact supplied by Shared before URLSession cancellation starts.
+    /// Nil means there is no owned stop policy; cancellation then discards partial bytes.
+    var retainPartialOnStop: Bool? = nil
   }
 
   struct PersistedFileTask: Codable {
@@ -107,11 +110,13 @@ class DownloadManagerModule: RCTEventEmitter {
     let isMultiFile: Bool
     let fileTasks: [PersistedFileTask]
     let sourceURL: String?
+    let retainPartialOnStop: Bool?
 
     enum CodingKeys: String, CodingKey {
       case downloadId, fileName, modelId, totalBytes, bytesDownloaded, status,
            startedAt, modelKey, modelType, combinedTotalBytes, metadataJson,
-           taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks, sourceURL
+           taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks, sourceURL,
+           retainPartialOnStop
     }
 
     init(
@@ -131,7 +136,8 @@ class DownloadManagerModule: RCTEventEmitter {
       multiFileDestDir: String?,
       isMultiFile: Bool,
       fileTasks: [PersistedFileTask],
-      sourceURL: String?
+      sourceURL: String?,
+      retainPartialOnStop: Bool?
     ) {
       self.downloadId = downloadId
       self.fileName = fileName
@@ -150,6 +156,7 @@ class DownloadManagerModule: RCTEventEmitter {
       self.isMultiFile = isMultiFile
       self.fileTasks = fileTasks
       self.sourceURL = sourceURL
+      self.retainPartialOnStop = retainPartialOnStop
     }
 
     init(from decoder: Decoder) throws {
@@ -172,6 +179,7 @@ class DownloadManagerModule: RCTEventEmitter {
       isMultiFile = try container.decode(Bool.self, forKey: .isMultiFile)
       fileTasks = try container.decode([PersistedFileTask].self, forKey: .fileTasks)
       sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL)
+      retainPartialOnStop = try container.decodeIfPresent(Bool.self, forKey: .retainPartialOnStop)
     }
   }
 
@@ -282,10 +290,8 @@ class DownloadManagerModule: RCTEventEmitter {
   // MARK: - Durable resume data
 
   /// Where the resume data URLSession hands back from `cancel(byProducingResumeData:)` waits for a
-  /// later `startDownload(resume: true)`. The transfer port has no pause verb: Shared pauses by
-  /// cancelling the native transfer, so a cancel here must leave the fetched bytes recoverable -
-  /// deleting partials is the file port's decision, not this module's. Documents, not
-  /// NSTemporaryDirectory, for the same reason as the staging dir: a pause routinely spans a
+  /// later `startDownload(resume: true)`. Shared selects this retention policy through its transfer
+  /// port. This data uses Documents, not NSTemporaryDirectory, because a pause routinely spans a
   /// relaunch. Excluded from backup like every other download artifact.
   static func resumeDataDirectory() -> String {
     let documentsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
@@ -472,7 +478,8 @@ class DownloadManagerModule: RCTEventEmitter {
       multiFileDestDir: info.multiFileDestDir,
       isMultiFile: info.isMultiFile,
       fileTasks: persistedFileTasks,
-      sourceURL: info.sourceURL
+      sourceURL: info.sourceURL,
+      retainPartialOnStop: info.retainPartialOnStop
     )
   }
 
@@ -509,7 +516,8 @@ class DownloadManagerModule: RCTEventEmitter {
       fileTasks: fileTasks,
       multiFileDestDir: persisted.multiFileDestDir,
       isMultiFile: persisted.isMultiFile,
-      sourceURL: persisted.sourceURL
+      sourceURL: persisted.sourceURL,
+      retainPartialOnStop: persisted.retainPartialOnStop
     )
   }
 
@@ -524,12 +532,12 @@ class DownloadManagerModule: RCTEventEmitter {
     )
   }
 
-  /// A cancelled task is how Shared pauses, so its bytes stay; any other terminal error spends them.
+  /// A cancelled task keeps bytes only when Shared selected a resumable stop.
   /// The cancel path also stores from `cancel(byProducingResumeData:)`'s handler - the two callbacks
   /// are unordered and write the same key, so whichever lands first is enough.
-  private func retainOrDiscardResumeData(forKey key: String, error: Error?) {
+  private func retainOrDiscardResumeData(forKey key: String, error: Error?, retainCancellation: Bool = false) {
     let nsError = error as NSError?
-    if nsError?.domain == NSURLErrorDomain && nsError?.code == NSURLErrorCancelled {
+    if retainCancellation && nsError?.domain == NSURLErrorDomain && nsError?.code == NSURLErrorCancelled {
       DownloadManagerModule.storeResumeData(nsError?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data, forKey: key)
     } else {
       DownloadManagerModule.discardResumeData(forKey: key)
@@ -904,21 +912,31 @@ extension DownloadManagerModule {
     ] as [String: Any])
   }
 
-  @objc func cancelDownload(_ downloadId: String,
-                            resolver resolve: @escaping RCTPromiseResolveBlock,
-                            rejecter reject: @escaping RCTPromiseRejectBlock) {
+  /// Stop one URLSession transfer and apply the partial-byte policy selected by Shared.
+  /// Return one explicit terminal fact: stopped, completed, or not-found.
+  @objc func stopDownload(_ downloadId: String,
+                          retainPartial: Bool,
+                          resolver resolve: @escaping RCTPromiseResolveBlock,
+                          rejecter reject: @escaping RCTPromiseRejectBlock) {
     let id = downloadId
-    NSLog("[DownloadManager] cancelDownload called for #%@", id)
+    NSLog("[DownloadManager] stopDownload called for #%@ retainPartial=%@", id, retainPartial ? "true" : "false")
     queue.async(flags: .barrier) {
       guard let info = self.downloads[id] else {
-        NSLog("[DownloadManager] cancelDownload: download #%@ NOT FOUND", id)
-        reject("NOT_FOUND", "Download \(id) not found", nil)
+        NSLog("[DownloadManager] stopDownload: download #%@ NOT FOUND", id)
+        resolve("not-found")
         return
       }
-      // Shared has no pause verb on the transfer port: a pause arrives here as this cancel. So the
-      // bytes fetched so far are NOT destroyed - the resume data URLSession produces is retained per
-      // artifact (per part for a multi-file download) for a later startDownload(resume: true).
-      // Whether a partial is ever deleted is the file port's call, not this module's.
+      // A completed verdict owns the file. A late stop cannot turn it into a cancellation.
+      if info.status == "completed" {
+        resolve("completed")
+        return
+      }
+      var stopping = info
+      stopping.retainPartialOnStop = retainPartial
+      self.downloads[id] = stopping
+      // Persist the adapter fact before native cancellation. A process death must not change a
+      // delete-partial stop into a retained resume file, or lose a pause's resumable bytes.
+      self.persistStateLocked()
       let cancelled = DispatchGroup()
       if info.isMultiFile {
         for (_, fileTask) in info.fileTasks {
@@ -926,18 +944,26 @@ extension DownloadManagerModule {
             let key = self.resumeKey(for: fileTask, in: info)
             cancelled.enter()
             task.cancel(byProducingResumeData: { data in
-              DownloadManagerModule.storeResumeData(data, forKey: key)
+              if retainPartial { DownloadManagerModule.storeResumeData(data, forKey: key) }
+              else { DownloadManagerModule.discardResumeData(forKey: key) }
               cancelled.leave()
             })
+          } else if !retainPartial {
+            DownloadManagerModule.discardResumeData(forKey: self.resumeKey(for: fileTask, in: info))
           }
         }
       } else if let task = info.task {
         let key = self.resumeKey(for: info)
         cancelled.enter()
         task.cancel(byProducingResumeData: { data in
-          if let key { DownloadManagerModule.storeResumeData(data, forKey: key) }
+          if let key {
+            if retainPartial { DownloadManagerModule.storeResumeData(data, forKey: key) }
+            else { DownloadManagerModule.discardResumeData(forKey: key) }
+          }
           cancelled.leave()
         })
+      } else if !retainPartial, let key = self.resumeKey(for: info) {
+        DownloadManagerModule.discardResumeData(forKey: key)
       }
       cancelled.notify(queue: self.queue) {
         self.queue.async(flags: .barrier) {
@@ -945,18 +971,28 @@ extension DownloadManagerModule {
             reject("CANCEL_RACE", "Download \(id) changed while cancellation was settling", nil)
             return
           }
+          if current.status == "completed" {
+            resolve("completed")
+            return
+          }
           if current.isMultiFile {
             for (_, fileTask) in current.fileTasks {
               self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
+              if !retainPartial {
+                DownloadManagerModule.discardResumeData(forKey: self.resumeKey(for: fileTask, in: current))
+              }
             }
           } else if let taskId = current.taskIdentifier ?? current.task?.taskIdentifier {
             self.taskToDownloadId.removeValue(forKey: taskId)
+          }
+          if !retainPartial, let key = self.resumeKey(for: current) {
+            DownloadManagerModule.discardResumeData(forKey: key)
           }
           self.downloads[id]?.status = "failed"
           self.downloads.removeValue(forKey: id)
           self.persistStateLocked()
           NSLog("[DownloadManager] Download #%@ cancelled and removed", id)
-          resolve(nil)
+          resolve("stopped")
         }
       }
     }
@@ -1406,23 +1442,46 @@ extension DownloadManagerModule {
         return
       }
 
+      let nativeError = error as NSError?
+      let requestedStop = info.retainPartialOnStop != nil
+        && nativeError?.domain == NSURLErrorDomain
+        && nativeError?.code == NSURLErrorCancelled
       NSLog("[DownloadManager] Download#%@ (%@) FAILED: %@",
             downloadId, info.fileName, error?.localizedDescription ?? "Unknown")
 
       if info.isMultiFile {
+        let retainCancellation = info.retainPartialOnStop ?? false
         if let failed = info.fileTasks[taskId] {
-          self.retainOrDiscardResumeData(forKey: self.resumeKey(for: failed, in: info), error: error)
+          self.retainOrDiscardResumeData(
+            forKey: self.resumeKey(for: failed, in: info), error: error, retainCancellation: retainCancellation
+          )
         }
         NSLog("[DownloadManager] Cancelling all remaining tasks for multi-file download#%@", downloadId)
         for (_, fileTask) in info.fileTasks where !fileTask.completed && fileTask.taskIdentifier != taskId {
           let key = self.resumeKey(for: fileTask, in: info)
-          // Siblings stop because of this part, not on request: keep what they fetched for a resume.
-          fileTask.task?.cancel(byProducingResumeData: { data in DownloadManagerModule.storeResumeData(data, forKey: key) })
+          // Sibling tasks use the same captured Shared stop policy as the failed task.
+          fileTask.task?.cancel(byProducingResumeData: { data in
+            if retainCancellation { DownloadManagerModule.storeResumeData(data, forKey: key) }
+            else { DownloadManagerModule.discardResumeData(forKey: key) }
+          })
           self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
         }
       } else {
-        if let key = self.resumeKey(for: info) { self.retainOrDiscardResumeData(forKey: key, error: error) }
+        if let key = self.resumeKey(for: info) {
+          self.retainOrDiscardResumeData(
+            forKey: key, error: error, retainCancellation: info.retainPartialOnStop ?? false
+          )
+        }
         self.taskToDownloadId.removeValue(forKey: taskId)
+      }
+
+      // `stopDownload` owns the terminal verdict for an explicit Shared stop. URLSession reports
+      // cancellation through this delegate before or after its resume-data callback. Keep the row
+      // until `stopDownload` confirms native settlement, and do not publish a false transfer error.
+      if requestedStop {
+        self.downloads[downloadId] = info
+        self.persistStateLocked()
+        return
       }
 
       info.status = "failed"

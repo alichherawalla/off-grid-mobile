@@ -10,7 +10,7 @@
 import type { ModelsSnapshot } from '@offgrid/application';
 import { facadeDownloadToActiveItem } from '../../../src/screens/DownloadManagerScreen/downloadItemMapping';
 
-type FacadeRow = ModelsSnapshot['downloads'][number];
+type FacadeRow = ModelsSnapshot['control']['downloads'][number];
 
 const row = (overrides: Partial<FacadeRow>): FacadeRow => ({
   downloadId: 'dl-1',

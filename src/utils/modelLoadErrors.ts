@@ -10,33 +10,6 @@
 export {
   OverridableModelMemoryError as OverridableMemoryError,
   isOverridableModelMemoryError as isOverridableMemoryError,
+  ImageModelIncompleteError,
+  isImageModelIncompleteError,
 } from '@offgrid/models';
-
-/**
- * The downloaded image model is missing required files (a partial/corrupt extraction),
- * so it can't load. This is a DATA-completeness problem, not a hardware/backend one —
- * a typed signal so the failure surface can say "re-download" instead of the misleading
- * "your device may not support this backend" (which the raw native crash produced).
- */
-export class ImageModelIncompleteError extends Error {
-  readonly incompleteModel = true as const;
-  /** The missing/zero-byte files, for logging + the user message. */
-  readonly missing: string[];
-
-  constructor(missing: string[]) {
-    super(
-      `Image model files are incomplete (missing: ${missing.join(', ')}). ` +
-        'The download was corrupted or interrupted. Delete and re-download this model.',
-    );
-    this.name = 'ImageModelIncompleteError';
-    this.missing = missing;
-    Object.setPrototypeOf(this, ImageModelIncompleteError.prototype);
-  }
-}
-
-export function isImageModelIncompleteError(err: unknown): err is ImageModelIncompleteError {
-  return (
-    err instanceof ImageModelIncompleteError ||
-    (typeof err === 'object' && err !== null && (err as { incompleteModel?: unknown }).incompleteModel === true)
-  );
-}

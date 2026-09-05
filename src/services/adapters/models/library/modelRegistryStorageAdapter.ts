@@ -51,6 +51,12 @@ export async function saveImageModelsList(models: ONNXImageModel[]): Promise<voi
   await AsyncStorage.setItem(IMAGE_MODELS_STORAGE_KEY, JSON.stringify(models));
 }
 
+/** Persist and publish one committed image-library projection. */
+export async function commitImageModelsList(models: ONNXImageModel[]): Promise<void> {
+  await saveImageModelsList(models);
+  useAppStore.getState().setDownloadedImageModels(models);
+}
+
 async function tryResolveMmProjPath(
   model: DownloadedModel,
   modelsDir: string,

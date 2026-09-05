@@ -31,6 +31,10 @@ export function mobileImageArchiveImportPorts(): ConstructorParameters<typeof Im
     const mobile = model as ONNXImageModel;
     await modelLibrary.addDownloadedImageModel(mobile);
     useAppStore.getState().addDownloadedImageModel(mobile);
+    // The Shared import transaction activates the newly registered model next. Publish the
+    // platform registry into Shared's inventory before that selection command runs, so selection
+    // resolves against the authoritative application snapshot instead of stale inventory.
+    await refreshMobileLLMServiceInventory();
   },
   currentSelection: async () => readMobileModelSelection('image'),
   async activate(model) {

@@ -1,65 +1,64 @@
-import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
- * Native-boundary integration for the transcript-only voice-note rule. The shared
- * GenerationService and the real Mobile LiteRT adapter run above the native fake.
+ * A recorded voice note is transcribed before Shared chat generation. The LiteRT
+ * native boundary receives the transcript as text and never receives the stale
+ * recording path as model audio.
  */
-import { installNativeBoundary } from '../../harness/nativeBoundary';
-import { createDownloadedModel } from '../../utils/factories';
+import { setupChatScreen } from '../../harness/chatHarness';
+
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
+  useRoute: () => require('../../harness/chatHarness').routeHolder,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
+}));
 
 describe('voice note on LiteRT', () => {
   it('sends transcript text and no audio file to the native model', async () => {
-    const boundary = installNativeBoundary({
-      ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 },
+    const h = await setupChatScreen({
+      engine: 'litert',
+      platform: 'android',
+      whisper: true,
+      pro: true,
     });
-    const { useAppStore } = require('../../../src/stores/appStore');
-    const {
-      refreshMobileModelServices,
-      selectMobileModel,
-    } = require('../../../src/services/modelServices');
-    const { mobileChatGenerationProjection } = require('../../../src/services/chatGenerationProjection');
-    const { mobileChatSession } = require('../../../src/screens/ChatScreen/mobileChatSession');
-    const { useChatStore } = require('../../../src/stores/chatStore');
+    await h.setupWhisperModel();
+    h.render();
+    await h.enterVoiceMode();
 
-    useAppStore.setState({
-      downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })]
-      
-    });
-    arrangeLocalSelection('text', 'lrt');
-    await refreshMobileModelServices();
-    await selectMobileModel({
-      source: 'local',
-      hostId: 'litert',
-      modelId: 'lrt',
-      modality: 'text',
-    });
-    boundary.litert!.scriptTurn({ content: 'The result is 4.' });
+    try {
+      const transcript = 'use the calculator for two plus two';
+      const textCallCount = h.boundary.litert.calls.sendMessage.length;
+      const audioCallCount =
+        h.boundary.litert.module.sendMessageWithAudio.mock.calls.length +
+        h.boundary.litert.calls.sendMessageWithMedia.length;
 
-    const conversationId = useChatStore
-      .getState()
-      .createConversation('lrt');
-    const user = useChatStore.getState().addMessage(conversationId, {
-      role: 'user',
-      content: 'use the calculator for two plus two',
-      turnKind: 'text',
-      attachments: [{
-        id: 'voice-note',
-        type: 'audio',
-        uri: '/stale/container/voice-note.wav',
-        mimeType: 'audio/wav',
-        audioFormat: 'wav',
-      }],
-    });
-    await mobileChatSession.sendPersisted(conversationId, user.id);
+      await h.voiceSend(transcript, { content: 'The result is 4.' });
 
-    expect(mobileChatGenerationProjection.getState().isGenerating).toBe(false);
-    const audioCalls = [
-      ...boundary.litert!.module.sendMessageWithAudio.mock.calls,
-      ...boundary.litert!.calls.sendMessageWithMedia,
-    ];
-    const audioSentToNative = audioCalls.flatMap(call => {
-      const candidate = call[call.length - 1];
-      return Array.isArray(candidate) ? candidate : [];
-    });
-    expect(audioSentToNative).toEqual([]);
+      await h.rtl.waitFor(() => {
+        expect(h.boundary.litert.calls.sendMessage).toHaveLength(
+          textCallCount + 1,
+        );
+        expect(
+          h.useChatStore.getState().getActiveConversation?.()?.messages.at(-1)
+            ?.content,
+        ).toBe('The result is 4.');
+      });
+
+      expect(String(h.boundary.litert.calls.sendMessage.at(-1)?.[0])).toContain(
+        transcript,
+      );
+      expect(
+        h.boundary.litert.module.sendMessageWithAudio.mock.calls.length +
+          h.boundary.litert.calls.sendMessageWithMedia.length,
+      ).toBe(audioCallCount);
+    } finally {
+      h.view?.unmount();
+      const pro = require('@offgrid/pro') as typeof import('../../../pro');
+      await pro.deactivate();
+    }
   });
 });

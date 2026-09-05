@@ -9,6 +9,7 @@ import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBr
 import { ImageModelRecommendation } from '../../types';
 import { isModelDownloadInProgress } from '@offgrid/application';
 import { useModelDownloadEntry } from '../../hooks/useModelDownloadsProjection';
+import { isDownloadingStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
 import { imageBackendLabel } from '../../utils/imageBackend';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
@@ -52,8 +53,9 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
   const entry = useModelDownloadEntry('image', model.id);
   const isActive = !!entry && isModelDownloadInProgress(entry.status);
-  const isQueued = entry?.status === 'queued';
-  const isDownloading = entry?.status === 'downloading';
+  const isQueued = isQueuedStatus(entry?.status);
+  const isDownloading = isDownloadingStatus(entry?.status);
+  const isPaused = isPausedStatus(entry?.status);
   const progressValue = entry && entry.totalBytes > 0
     ? entry.bytesDownloaded / entry.totalBytes
     : 0;
@@ -76,6 +78,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
         }}
         isDownloading={isDownloading}
         isQueued={isQueued}
+        isPaused={isPaused}
         downloadProgress={progressValue}
         downloadBytes={entry ? {
           downloaded: entry.bytesDownloaded,

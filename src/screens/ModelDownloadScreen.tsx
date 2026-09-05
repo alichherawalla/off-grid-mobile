@@ -15,7 +15,6 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING, OFF_GRID_DESKTOP_URL } from '../constants';
 import { withUtm } from '../utils/utm';
 import { useAppStore } from '../stores';
-import { isActiveStatus } from '../stores/downloadStore';
 import { useDiscoveredRemoteModels } from '../hooks/useDiscoveredRemoteModels';
 import { serverDiscoveredModels } from '../stores/remoteServerProjection';
 import { hardwareService } from '../services';
@@ -29,23 +28,6 @@ import logger from '../utils/logger';
 import { ModelsScreen } from './ModelsScreen';
 
 type Props = { navigation: NativeStackNavigationProp<RootStackParamList, 'AdvancedSetup'> };
-
-/** Active-download progress for a card, or null when the model isn't downloading.
- *  `queued` (store status 'pending') drives the "Queued" label vs a live progress bar.
- *  `bytes` feeds the shared card's "X MB / Y MB" line so onboarding matches the
- *  Text/Image/STT tabs (same ModelCard, same props) instead of showing % only. */
-export function downloadProgressFor(
-  entry: { status: string; progress: number; bytesDownloaded?: number; totalBytes?: number; combinedTotalBytes?: number; mmProjBytesDownloaded?: number; bytesPerSecond?: number } | undefined,
-): { progress: number; queued: boolean; bytes?: { downloaded: number; total: number; bytesPerSecond?: number } } | null {
-  if (!entry || !isActiveStatus(entry.status as any)) return null;
-  const total = entry.combinedTotalBytes ?? entry.totalBytes ?? 0;
-  const downloaded = (entry.bytesDownloaded ?? 0) + (entry.mmProjBytesDownloaded ?? 0);
-  return {
-    progress: entry.progress,
-    queued: entry.status === 'pending',
-    bytes: total > 0 ? { downloaded, total, bytesPerSecond: entry.bytesPerSecond } : undefined,
-  };
-}
 
 export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
@@ -181,18 +163,11 @@ export const AdvancedSetupScreen: React.FC<Props> = ({ navigation }) => {
       }
       const textModel = models.find(m => !m.capabilities.supportsVision) || models[0];
       if (textModel) {
-        const routeId = applicationFacade().models.remoteModelRoute(
+        const selected = await applicationFacade().models.activateOnServer(
           server.id,
-          textModel.id,
           'text',
+          textModel.id,
         );
-        if (!routeId) {
-          throw new Error(`Could not resolve ${textModel.name} on ${server.name}.`);
-        }
-        const selected = await applicationFacade().models.select({
-          modality: 'text',
-          modelId: routeId,
-        });
         if (!selected.ok) throw new Error(modelsFailureMessage(selected.failure));
       }
       setAlertState(showAlert('Connected!', `${server.name} is ready with ${models.length} model${models.length === 1 ? '' : 's'}. You can start chatting now.`,

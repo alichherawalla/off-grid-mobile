@@ -17,7 +17,6 @@ import { NativeEventBus } from '../../utils/nativeEventBus';
 /** The mock factory is hoisted above the fake's construction, so it reads the module through
  *  this declared slot rather than a closure the factory cannot see. */
 declare global {
-  // eslint-disable-next-line no-var
   var __downloadNativeFake: NativeEventBus | undefined;
 }
 
@@ -49,7 +48,7 @@ interface ActiveRow {
 /** The native module: also the event source, exactly as both platforms' modules are. */
 class DownloadNativeFake extends NativeEventBus {
   activeRows: ActiveRow[] = [];
-  readonly cancelled: string[] = [];
+  readonly stops: Array<{ transferId: string; retainPartial: boolean }> = [];
   readonly moved: Array<{ transferId: string; destination: string }> = [];
   pollingStarted = 0;
   /** Held open so a test can observe the window while the move is in flight. */
@@ -63,8 +62,9 @@ class DownloadNativeFake extends NativeEventBus {
     this.pollingStarted += 1;
   });
 
-  cancelDownload = jest.fn(async (transferId: string) => {
-    this.cancelled.push(transferId);
+  stopDownload = jest.fn(async (transferId: string, retainPartial: boolean) => {
+    this.stops.push({ transferId, retainPartial });
+    return 'stopped';
   });
 
   moveCompletedDownload = jest.fn(async (transferId: string, destination: string) => {
@@ -95,7 +95,6 @@ async function makeAdapter(): Promise<{
 }> {
   jest.resetModules();
   globalThis.__downloadNativeFake = native;
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const module: AdapterModule = require('../../../src/services/adapters/downloads/nativeDownloadTransferAdapter');
   return { adapter: new module.NativeDownloadTransferAdapter() };
 }
@@ -128,21 +127,22 @@ describe('the Mobile download host adapter', () => {
 
       // The user aborts WHILE the move is in flight.
       controller.abort();
-      await flush();
+      const stop = adapter.stop({ transferId: 'transfer-1', disposition: 'delete-partial' });
 
       // A second native cancel cannot make the move safer, so none is issued.
-      expect(native.cancelled).toEqual([]);
-      expect(native.cancelDownload).not.toHaveBeenCalled();
+      expect(native.stops).toEqual([]);
+      expect(native.stopDownload).not.toHaveBeenCalled();
 
       native.releaseMove?.();
-      await expect(started).rejects.toThrow('Download cancelled');
+      await expect(stop).resolves.toEqual({ outcome: 'completed' });
+      await expect(started).resolves.toEqual({ transferId: 'transfer-1' });
       // The move still completed: bytes are not abandoned half-placed.
       expect(native.moved).toEqual([
         { transferId: 'transfer-1', destination: '/models/model.gguf' },
       ]);
     });
 
-    it('reports cancellation, not success, when the abort arrived before the move finished', async () => {
+    it('keeps completion when the move owned the file before the stop request', async () => {
       native.releaseMove = () => undefined;
       const { adapter } = await makeAdapter();
       const controller = new AbortController();
@@ -159,10 +159,14 @@ describe('the Mobile download host adapter', () => {
       await flush();
       controller.abort();
       await flush();
+      const stop = adapter.stop({
+        transferId: 'transfer-1',
+        disposition: 'delete-partial',
+      });
       native.releaseMove?.();
 
-      // The move succeeding does NOT convert an aborted transfer into a completed one.
-      await expect(started).rejects.toThrow('Download cancelled');
+      await expect(stop).resolves.toEqual({ outcome: 'completed' });
+      await expect(started).resolves.toEqual({ transferId: 'transfer-1' });
     });
   });
 
@@ -180,10 +184,23 @@ describe('the Mobile download host adapter', () => {
 
       await flush();
       controller.abort();
+      const stop = adapter.stop({ transferId: 'transfer-1', disposition: 'retain-partial' });
 
-      await expect(started).rejects.toThrow('Download cancelled');
-      expect(native.cancelled).toEqual(['transfer-1']);
+      await expect(started).rejects.toMatchObject({ name: 'DownloadAbortedError' });
+      await expect(stop).resolves.toEqual({ outcome: 'stopped' });
+      expect(native.stops).toEqual([{ transferId: 'transfer-1', retainPartial: true }]);
       expect(native.moveCompletedDownload).not.toHaveBeenCalled();
+    });
+
+    it('deletes partial bytes only when Shared selects delete-partial', async () => {
+      const { adapter } = await makeAdapter();
+
+      await expect(adapter.stop({
+        transferId: 'transfer-9',
+        disposition: 'delete-partial',
+      })).resolves.toEqual({ outcome: 'stopped' });
+
+      expect(native.stops).toEqual([{ transferId: 'transfer-9', retainPartial: false }]);
     });
   });
 

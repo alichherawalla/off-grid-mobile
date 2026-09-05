@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { TASK_RUN_ENTITY, type SyncedTaskRun } from '@offgrid/sync';
+import { OpLog, TASK_RUN_ENTITY, type SyncedTaskRun } from '@offgrid/sync';
 import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
 import {
@@ -9,6 +9,7 @@ import {
 } from '../../../pro/tasks/taskRunStore';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { useChatStore } from '../../../src/stores/chatStore';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -24,11 +25,13 @@ jest.mock('react-native-zeroconf', () => {
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
 });
 
-const materializer = new MobileStateMaterializer();
 const origin = {
   originDeviceId: 'desktop-release-107',
   originDeviceName: 'Office Mac',
 };
+let materializer: MobileStateMaterializer;
+let stateLog: OpLog;
+let applicationFixture: MobileApplicationFixture;
 
 function runningTask(kind: SyncedTaskRun['kind']): SyncedTaskRun {
   return {
@@ -56,23 +59,18 @@ function runningTask(kind: SyncedTaskRun['kind']): SyncedTaskRun {
 }
 
 function renderTask(run: SyncedTaskRun): ReturnType<typeof render> {
-  materializer.put(
-    'conversation',
-    run.conversationId,
-    {
-      title: run.title,
-      created_at: new Date(run.startedAt).toISOString(),
-      updated_at: new Date(run.updatedAt).toISOString(),
-      project_id: null,
-    },
-    origin,
-  );
+  stateLog.record('conversation', run.conversationId, 'put', {
+    title: run.title,
+    created_at: new Date(run.startedAt).toISOString(),
+    updated_at: new Date(run.updatedAt).toISOString(),
+    project_id: null,
+  });
   useChatStore.getState().setActiveConversation(run.conversationId);
-  materializer.put(
+  stateLog.record(
     TASK_RUN_ENTITY,
     run.taskId,
+    'put',
     run as unknown as Record<string, unknown>,
-    origin,
   );
   return render(
     <TaskChatCard
@@ -86,8 +84,27 @@ function renderTask(run: SyncedTaskRun): ReturnType<typeof render> {
 }
 
 describe('Release 107 rendered task-control acknowledgement', () => {
+  beforeAll(async () => {
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
+    materializer = new MobileStateMaterializer();
+    let operationSequence = 0;
+    stateLog = new OpLog({
+      deviceId: origin.originDeviceId,
+      deviceName: origin.originDeviceName,
+      materializer,
+      uuid: () => `release-107-op-${++operationSequence}`,
+      now: () => Date.now(),
+    });
     useChatStore.getState().clearAllConversations();
     useSyncStore.getState().setThisDevice({
       id: 'mobile-release-107',
@@ -102,7 +119,7 @@ describe('Release 107 rendered task-control acknowledgement', () => {
 
   afterEach(() => {
     for (const kind of ['web_use', 'computer_use'] as const) {
-      materializer.remove(TASK_RUN_ENTITY, runningTask(kind).taskId);
+      stateLog.record(TASK_RUN_ENTITY, runningTask(kind).taskId, 'delete');
     }
     jest.useRealTimers();
   });
@@ -127,43 +144,33 @@ describe('Release 107 rendered task-control acknowledgement', () => {
       });
 
       act(() => {
-        materializer.put(
-          TASK_RUN_ENTITY,
-          run.taskId,
-          {
-            ...run,
-            currentAction: 'Opened another page',
-            updatedAt: 30,
-            latestControlResult: {
-              controlId: 'another-control',
-              kind: 'pause',
-              outcome: 'applied',
-              respondedAt: 30,
-            },
+        stateLog.record(TASK_RUN_ENTITY, run.taskId, 'put', {
+          ...run,
+          currentAction: 'Opened another page',
+          updatedAt: 30,
+          latestControlResult: {
+            controlId: 'another-control',
+            kind: 'pause',
+            outcome: 'applied',
+            respondedAt: 30,
           },
-          origin,
-        );
+        });
       });
       expect(screen.getByText('Pause requested')).toBeTruthy();
 
       act(() => {
-        materializer.put(
-          TASK_RUN_ENTITY,
-          run.taskId,
-          {
-            ...run,
-            status: 'paused',
-            phase: 'paused',
-            updatedAt: 40,
-            latestControlResult: {
-              controlId: pauseRequest!.controlId,
-              kind: 'pause',
-              outcome: 'applied',
-              respondedAt: 40,
-            },
+        stateLog.record(TASK_RUN_ENTITY, run.taskId, 'put', {
+          ...run,
+          status: 'paused',
+          phase: 'paused',
+          updatedAt: 40,
+          latestControlResult: {
+            controlId: pauseRequest!.controlId,
+            kind: 'pause',
+            outcome: 'applied',
+            respondedAt: 40,
           },
-          origin,
-        );
+        });
       });
       expect(screen.queryByText('Pause requested')).toBeNull();
       expect(screen.getByText('Resume')).toBeTruthy();
@@ -176,25 +183,20 @@ describe('Release 107 rendered task-control acknowledgement', () => {
       expect(screen.getByText('Stop requested')).toBeTruthy();
 
       act(() => {
-        materializer.put(
-          TASK_RUN_ENTITY,
-          run.taskId,
-          {
-            ...run,
-            status: 'paused',
-            phase: 'paused',
-            updatedAt: 50,
-            latestControlResult: {
-              controlId: rejectedRequest!.controlId,
-              kind: 'stop',
-              outcome: 'rejected',
-              message:
-                'The task owner rejected Stop because the run already changed.',
-              respondedAt: 50,
-            },
+        stateLog.record(TASK_RUN_ENTITY, run.taskId, 'put', {
+          ...run,
+          status: 'paused',
+          phase: 'paused',
+          updatedAt: 50,
+          latestControlResult: {
+            controlId: rejectedRequest!.controlId,
+            kind: 'stop',
+            outcome: 'rejected',
+            message:
+              'The task owner rejected Stop because the run already changed.',
+            respondedAt: 50,
           },
-          origin,
-        );
+        });
       });
       expect(
         screen.getByText(
@@ -235,36 +237,40 @@ describe('Release 107 rendered task-control acknowledgement', () => {
       const screen = renderTask(waiting);
 
       expect(screen.getByText('Continue')).toBeTruthy();
-      expect(screen.getByText(/Complete the requested step on Office Mac/)).toBeTruthy();
-      expect(screen.getByText(/Your phone does not take control of the Mac/)).toBeTruthy();
+      expect(
+        screen.getByText(/Complete the requested step on Office Mac/),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Your phone does not take control of the Mac/),
+      ).toBeTruthy();
       expect(screen.queryByText('Take Over')).toBeNull();
 
       await act(async () => {
         fireEvent.press(screen.getByTestId('task-control-continue'));
       });
-      const request = useTaskRunStore.getState().requestedControlByTaskId[waiting.taskId];
-      expect(request).toMatchObject({ kind: 'resume', label: 'Continue', state: 'pending' });
+      const request =
+        useTaskRunStore.getState().requestedControlByTaskId[waiting.taskId];
+      expect(request).toMatchObject({
+        kind: 'resume',
+        label: 'Continue',
+        state: 'pending',
+      });
       expect(screen.getByText('Continue requested')).toBeTruthy();
 
       act(() => {
-        materializer.put(
-          TASK_RUN_ENTITY,
-          waiting.taskId,
-          {
-            ...waiting,
-            status: 'running',
-            phase: 'acting',
-            currentAction: 'Continuing after sign-in',
-            updatedAt: 30,
-            latestControlResult: {
-              controlId: request!.controlId,
-              kind: 'resume',
-              outcome: 'applied',
-              respondedAt: 30,
-            },
+        stateLog.record(TASK_RUN_ENTITY, waiting.taskId, 'put', {
+          ...waiting,
+          status: 'running',
+          phase: 'acting',
+          currentAction: 'Continuing after sign-in',
+          updatedAt: 30,
+          latestControlResult: {
+            controlId: request!.controlId,
+            kind: 'resume',
+            outcome: 'applied',
+            respondedAt: 30,
           },
-          origin,
-        );
+        });
       });
 
       expect(screen.queryByText('Continue requested')).toBeNull();

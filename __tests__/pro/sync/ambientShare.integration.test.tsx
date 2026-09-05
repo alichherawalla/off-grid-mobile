@@ -48,8 +48,6 @@ import { useChatStore } from '../../../src/stores/chatStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
 import { sharedFileSyncService } from '../../../pro/sync/sharedFileSyncService';
-import { syncService } from '../../../pro/sync/syncService';
-import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ambientShareService } from '../../../pro/sync/ambientShareService';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
@@ -67,6 +65,7 @@ import {
   createLicensedMesh,
   installLicensedPhone,
 } from '../../harness/licensedMesh';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 
 /**
  * The approval row asking a given question, found by walking up from the question itself.
@@ -152,6 +151,7 @@ describe('mobile ambient sharing journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
   let screenshotListener: ((event: ScreenshotEvent) => void) | undefined;
+  let applicationFixture: MobileApplicationFixture;
 
   beforeEach(async () => {
     mesh.reset();
@@ -184,7 +184,6 @@ describe('mobile ambient sharing journey', () => {
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     useAppStore.getState().clearGeneratedImages();
     useChatStore.getState().clearAllConversations();
-    useSyncStore.getState().reset();
     // A licensed phone with its own machine activated: the saved-device list is built from the licence
     // roster, so without both the desktop pairs and appears nowhere.
     installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
@@ -193,7 +192,19 @@ describe('mobile ambient sharing journey', () => {
       name: 'This phone',
       platform: 'ios',
     });
+    const {ProximityAir} = require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+    if (!applicationFixture) {
+      const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+      applicationFixture = await startMobileApplicationFixture({pro: true});
+    } else {
+      await applicationFixture.application.sync.start();
+    }
 
     NativeModules.SyncScreenshotModule = {
       setEnabled: jest.fn(),
@@ -220,10 +231,15 @@ describe('mobile ambient sharing journey', () => {
     ui?.unmount();
     await remote?.engine.stop();
     await stateSyncService.stop();
-    await syncService.stop();
+    await applicationFixture?.application.sync.stop();
+    delete NativeModules.SyncProximityModule;
     _clearScreensForTesting();
     _clearSectionsForTesting();
     jest.restoreAllMocks();
+  });
+
+  afterAll(async () => {
+    await applicationFixture?.dispose();
   });
 
   it('asks before sending, survives a refusal, and lets the user retry successfully', async () => {
@@ -372,7 +388,7 @@ describe('mobile ambient sharing journey', () => {
         stateSyncService.sendSharedFileRecord(deviceId, syncId),
     });
     await stateSyncService.start();
-    await syncService.start();
+    await applicationFixture.application.sync.start();
 
     ui = render(
       <>
@@ -385,7 +401,7 @@ describe('mobile ambient sharing journey', () => {
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
 
-    const mobile = useSyncStore.getState().thisDevice;
+    const mobile = applicationFixture.application.sync.snapshot().self;
     const discovery = getDiscoveryBoundaries().at(-1);
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');

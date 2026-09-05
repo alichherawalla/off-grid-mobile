@@ -42,20 +42,24 @@ const voiceDownload = (phase: 'queued' | 'paused'): PersistedModelDownload => ({
   attempt: 1,
 });
 
-async function renderPersistedVoiceDownload(phase: 'queued' | 'paused') {
+async function renderVoicePanel(downloads: PersistedModelDownload[] = []) {
   const { installNativeBoundary, requireRTL } =
     require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
-  installNativeBoundary({ fs: true, download: true });
+  const boundary = installNativeBoundary({ fs: true, download: true });
   const { seedMobileDownloadJournal, startMobileApplicationFixture } =
     require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
-  await seedMobileDownloadJournal([voiceDownload(phase)]);
+  if (downloads.length) await seedMobileDownloadJournal(downloads);
   const fixture = await startMobileApplicationFixture({ pro: true });
   const rtl = requireRTL();
   const RuntimeReact = require('react') as typeof import('react');
   const Panel = require('../../../pro/audio/ui/VoiceModelsPanel')
     .VoiceModelsPanel as typeof VoiceModelsPanel;
   const view = rtl.render(RuntimeReact.createElement(Panel));
-  return { fixture, rtl, view };
+  return { boundary, fixture, rtl, view };
+}
+
+async function renderPersistedVoiceDownload(phase: 'queued' | 'paused') {
+  return renderVoicePanel([voiceDownload(phase)]);
 }
 
 describe('VoiceModelsPanel', () => {
@@ -64,132 +68,74 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows the RAM privacy banner', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-    });
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
+    const { fixture, view } = await renderVoicePanel();
 
     try {
       expect(view.getByText(/nothing is sent anywhere/)).toBeTruthy();
     } finally {
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
   it('filters voices by language and selects the first voice when language changes', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
+    const { fixture, rtl, view } = await renderVoicePanel();
 
     try {
-      harness.rtl.fireEvent.press(view.getByText('Download voice'));
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(view.getByText('Download voice'));
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-af_heart')).toBeTruthy();
       });
       expect(view.queryByTestId('voice-bf_emma')).toBeNull();
 
-      harness.rtl.fireEvent.press(view.getByTestId('models-tts-language'));
-      harness.rtl.fireEvent.press(
+      rtl.fireEvent.press(view.getByTestId('models-tts-language'));
+      rtl.fireEvent.press(
         view.getByTestId('models-tts-language-en-GB'),
       );
-      await harness.rtl.waitFor(() => {
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-bf_emma')).toBeTruthy();
         expect(view.queryByTestId('voice-af_heart')).toBeNull();
       });
     } finally {
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
   it('shows an opt-in download when the model is not downloaded', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
+    const { fixture, rtl, view } = await renderVoicePanel();
 
     try {
       const cta = view.getByText('Download voice');
-      harness.rtl.fireEvent.press(cta);
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(cta);
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-af_heart')).toBeTruthy();
       });
       expect(view.queryByText('Download voice')).toBeNull();
     } finally {
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
   it('shows the model as DOWNLOADED (voices) when the service reports completed, even if the engine is not loaded — the mismatch fix', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
+    const { fixture, rtl, view } = await renderVoicePanel();
 
     try {
-      harness.rtl.fireEvent.press(view.getByText('Download voice'));
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(view.getByText('Download voice'));
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-af_heart')).toBeTruthy();
       });
       expect(view.queryByText('Download voice')).toBeNull();
       expect(view.queryByText('0%')).toBeNull();
     } finally {
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
   it('shows live progress while the service reports downloading', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
+    const { fixture, rtl, view } = await renderVoicePanel();
     const { BareResourceFetcher } =
       require('react-native-executorch-bare-resource-fetcher') as typeof import('react-native-executorch-bare-resource-fetcher');
     let finishDownload!: () => void;
@@ -202,16 +148,9 @@ describe('VoiceModelsPanel', () => {
         await heldDownload;
       },
     );
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
-
     try {
-      harness.rtl.fireEvent.press(view.getByText('Download voice'));
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(view.getByText('Download voice'));
+      await rtl.waitFor(() => {
         expect(view.getByText('40%')).toBeTruthy();
       });
       expect(view.queryByText('Download voice')).toBeNull();
@@ -219,23 +158,16 @@ describe('VoiceModelsPanel', () => {
       expect(view.queryByText(/NaN/)).toBeNull();
     } finally {
       finishDownload();
-      await harness.rtl.waitFor(() => {
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-af_heart')).toBeTruthy();
       });
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
   it('shows transferred bytes and rate from the shared download projection', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
+    const { fixture, rtl, view } = await renderVoicePanel();
     const { BareResourceFetcher } =
       require('react-native-executorch-bare-resource-fetcher') as typeof import('react-native-executorch-bare-resource-fetcher');
     let finishDownload!: () => void;
@@ -250,26 +182,19 @@ describe('VoiceModelsPanel', () => {
         await heldDownload;
       },
     );
-    const RealVoiceModelsPanel =
-      require('../../../pro/audio/ui/VoiceModelsPanel')
-        .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const view = harness.rtl.render(
-      harness.React.createElement(RealVoiceModelsPanel),
-    );
-
     try {
-      harness.rtl.fireEvent.press(view.getByText('Download voice'));
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(view.getByText('Download voice'));
+      await rtl.waitFor(() => {
         expect(view.getByText('50%')).toBeTruthy();
         expect(view.getByText(/41 MB \/ 82 MB · .* MB\/s/)).toBeTruthy();
       });
     } finally {
       finishDownload();
-      await harness.rtl.waitFor(() => {
+      await rtl.waitFor(() => {
         expect(view.getByTestId('voice-af_heart')).toBeTruthy();
       });
       view.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 
@@ -291,30 +216,23 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('backfills the persisted-downloaded flag from disk when the panel opens', async () => {
-    const { setupChatScreen } =
-      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-    const harness = await setupChatScreen({
-      engine: 'llama',
-      platform: 'android',
-      pro: true,
-      download: true,
-    });
+    const { fixture, rtl, view: first } = await renderVoicePanel();
     const Panel = require('../../../pro/audio/ui/VoiceModelsPanel')
       .VoiceModelsPanel as typeof VoiceModelsPanel;
-    const first = harness.rtl.render(harness.React.createElement(Panel));
     let firstUnmounted = false;
 
     try {
-      harness.rtl.fireEvent.press(first.getByText('Download voice'));
-      await harness.rtl.waitFor(() => {
+      rtl.fireEvent.press(first.getByText('Download voice'));
+      await rtl.waitFor(() => {
         expect(first.getByTestId('voice-af_heart')).toBeTruthy();
       });
       first.unmount();
       firstUnmounted = true;
 
-      const reopened = harness.rtl.render(harness.React.createElement(Panel));
+      const RuntimeReact = require('react') as typeof import('react');
+      const reopened = rtl.render(RuntimeReact.createElement(Panel));
       try {
-        await harness.rtl.waitFor(() => {
+        await rtl.waitFor(() => {
           expect(reopened.getByTestId('voice-af_heart')).toBeTruthy();
           expect(reopened.queryByText('Download voice')).toBeNull();
         });
@@ -323,7 +241,7 @@ describe('VoiceModelsPanel', () => {
       }
     } finally {
       if (!firstUnmounted) first.unmount();
-      await harness.settle(300);
+      await fixture.dispose();
     }
   });
 });

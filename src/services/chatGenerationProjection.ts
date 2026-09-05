@@ -161,7 +161,6 @@ class MobileGenerationProjection {
     if (partial && !store.streamingMessage) store.appendToStreamingMessage(partial);
     if (store.streamingForConversationId) {
       store.finalizeStreamingMessage(turn.conversationId, this.elapsed(), this.meta());
-      if (partial.trim()) this.checkSharePrompt();
     } else store.clearStreamingMessage();
     this.reset();
   }

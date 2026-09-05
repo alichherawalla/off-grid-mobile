@@ -53,9 +53,10 @@ function reportTranscriptionReconcileFailure(error: unknown): void {
   reportModelFailure('stt', error, {
     id: 'transcription-models-reconcile',
     title: 'Transcription models are unavailable',
-    message: error instanceof Error
-      ? error.message
-      : 'Off Grid AI could not update your transcription models.',
+    message:
+      error instanceof Error
+        ? error.message
+        : 'Off Grid AI could not update your transcription models.',
   });
 }
 
@@ -101,7 +102,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
           downloaded: Math.round(downloadProgress * totalBytes),
           total: totalBytes,
         }
-    : undefined;
+      : undefined;
   return (
     <ModelCard
       compact
@@ -120,7 +121,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
       onPress={
-        downloading
+        downloading || queued
           ? undefined
           : present
           ? active
@@ -129,7 +130,9 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
           : () => onDownload(model.id)
       }
       onDownload={
-        !present && !downloading ? () => onDownload(model.id) : undefined
+        !present && !downloading && !queued
+          ? () => onDownload(model.id)
+          : undefined
       }
       onDelete={present ? () => onDelete(model.id) : undefined}
     />
@@ -151,16 +154,17 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   const shared = useThemedStyles(createModelsScreenStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const activeRoute = useActiveMobileModel('transcription').model;
-  const activeRemoteModelName = activeRoute?.source === 'remote'
-    ? activeRoute.name
-    : null;
-  const downloadedModelId = activeRoute?.source === 'local'
-    ? activeRoute.id
-    : null;
+  const activeRemoteModelName =
+    activeRoute?.source === 'remote' ? activeRoute.name : null;
+  const downloadedModelId =
+    activeRoute?.source === 'local' ? activeRoute.id : null;
 
   const transcription = useTranscriptionModelsProjection();
   const presentModelIds = React.useMemo(
-    () => transcription.models.filter(row => row.installed).map(row => row.catalog.id),
+    () =>
+      transcription.models
+        .filter(row => row.installed)
+        .map(row => row.catalog.id),
     [transcription.models],
   );
   const whisperError = transcription.operation?.failure
@@ -172,16 +176,18 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   // A failed entry reports active=false, so a stuck "downloading" bar can't linger while the
   // Download Manager shows "failed" — the model just becomes downloadable again. Disk probes
   // are deferred until nothing is downloading so an in-flight file isn't mistaken for absent.
-  const { stateFor: downloadStateFor, anyDownloading } = useSttDownloadState(transcription);
+  const { stateFor: downloadStateFor, anyDownloading } =
+    useSttDownloadState(transcription);
 
   // Probe disk on mount and whenever downloads finish, so every on-disk model
   // (not just the active one) shows as downloaded.
   useEffect(() => {
     if (!anyDownloading) {
       refreshTranscriptionModels().then(outcome => {
-        if (!outcome.ok) reportTranscriptionReconcileFailure(
-          modelsFailureMessage(outcome.failure),
-        );
+        if (!outcome.ok)
+          reportTranscriptionReconcileFailure(
+            modelsFailureMessage(outcome.failure),
+          );
       }, reportTranscriptionReconcileFailure);
     }
   }, [anyDownloading]);
@@ -193,9 +199,10 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     useCallback(() => {
       if (!anyDownloading) {
         refreshTranscriptionModels().then(outcome => {
-          if (!outcome.ok) reportTranscriptionReconcileFailure(
-            modelsFailureMessage(outcome.failure),
-          );
+          if (!outcome.ok)
+            reportTranscriptionReconcileFailure(
+              modelsFailureMessage(outcome.failure),
+            );
         }, reportTranscriptionReconcileFailure);
       }
     }, [anyDownloading]),
@@ -210,58 +217,50 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
     });
   }, [whisperError]);
 
-  const handleDownload = useCallback(
-    async (id: string) => {
+  const handleDownload = useCallback(async (id: string) => {
     // The store owns downloadingId (set/cleared in downloadModel), so a download
     // started here — or from the chat voice button — shows progress on this tab.
-      try {
-        const outcome = await downloadTranscriptionModel(id);
-        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
-      } catch (error) {
-        reportTranscriptionReconcileFailure(error);
-      }
-    },
-    [],
-  );
+    try {
+      const outcome = await downloadTranscriptionModel(id);
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    } catch (error) {
+      reportTranscriptionReconcileFailure(error);
+    }
+  }, []);
 
-  const handleSelect = useCallback(
-    async (id: string) => {
-      try {
-        const outcome = await selectTranscriptionModel(id);
-        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
-      } catch (error) {
-        reportTranscriptionReconcileFailure(error);
-      }
-    },
-    [],
-  );
+  const handleSelect = useCallback(async (id: string) => {
+    try {
+      const outcome = await selectTranscriptionModel(id);
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    } catch (error) {
+      reportTranscriptionReconcileFailure(error);
+    }
+  }, []);
 
-  const handleDelete = useCallback(
-    (id: string) => {
-      setAlertState(
-        showAlert(
-          'Remove Transcription Model',
-          'This deletes the model files for this language/size.',
-          [
-      { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Remove',
-              style: 'destructive',
-              onPress: () => {
-                setAlertState(hideAlert());
-                removeTranscriptionModel(id).then(outcome => {
-                  if (!outcome.ok) reportTranscriptionReconcileFailure(
+  const handleDelete = useCallback((id: string) => {
+    setAlertState(
+      showAlert(
+        'Remove Transcription Model',
+        'This deletes the model files for this language/size.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => {
+              setAlertState(hideAlert());
+              removeTranscriptionModel(id).then(outcome => {
+                if (!outcome.ok)
+                  reportTranscriptionReconcileFailure(
                     modelsFailureMessage(outcome.failure),
                   );
-                }, reportTranscriptionReconcileFailure);
-              },
+              }, reportTranscriptionReconcileFailure);
             },
-          ],
-        ),
-      );
-    },
-    [],
-  );
+          },
+        ],
+      ),
+    );
+  }, []);
 
   const renderWhisperCard = (
     model: (typeof WHISPER_MODELS)[number],
@@ -281,9 +280,9 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         downloadBytes={
           state?.totalBytes
             ? {
-          downloaded: state.currentBytes ?? 0,
-          total: state.totalBytes,
-          bytesPerSecond: state.bytesPerSecond,
+                downloaded: state.currentBytes ?? 0,
+                total: state.totalBytes,
+                bytesPerSecond: state.bytesPerSecond,
               }
             : undefined
         }
@@ -326,21 +325,34 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
       {ENGLISH_MODELS.map((m, i) => renderWhisperCard(m, i))}
 
       <Text style={styles.sectionLabel}>Multilingual - 99 languages</Text>
-      {MULTI_MODELS.map((m, i) => renderWhisperCard(m, ENGLISH_MODELS.length + i))}
+      {MULTI_MODELS.map((m, i) =>
+        renderWhisperCard(m, ENGLISH_MODELS.length + i),
+      )}
 
-      <CustomAlert visible={alertState.visible} title={alertState.title}
-        message={alertState.message} buttons={alertState.buttons}
-        onClose={() => setAlertState(hideAlert())} />
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        buttons={alertState.buttons}
+        onClose={() => setAlertState(hideAlert())}
+      />
     </ScrollView>
   );
 };
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) =>
-  ({
-    flex: { flex: 1 },
-    content: { paddingHorizontal: SPACING.md, paddingTop: SPACING.xs, paddingBottom: SPACING.xxl },
-    sectionLabel: {
-      ...TYPOGRAPHY.label, textTransform: 'uppercase' as const, color: colors.textMuted,
-      letterSpacing: 0.3, marginBottom: SPACING.sm, marginTop: SPACING.xs,
-    },
-  });
+const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+  flex: { flex: 1 },
+  content: {
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.xxl,
+  },
+  sectionLabel: {
+    ...TYPOGRAPHY.label,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+    letterSpacing: 0.3,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+});

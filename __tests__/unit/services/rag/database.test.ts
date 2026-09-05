@@ -197,6 +197,7 @@ describe('RagDatabase', () => {
       const mockDocs = [
         {
           id: 1,
+          sync_id: 'doc-sync-1',
           project_id: 'proj1',
           name: 'doc1.txt',
           path: '/p',

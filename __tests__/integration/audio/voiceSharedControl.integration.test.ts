@@ -3,19 +3,19 @@
  * Only the native TTS runtime is fake; the registry, store, Shared services,
  * generation routing, residency manager, and projection subscriptions are real.
  */
-import { OnDeviceEngineEmitter, ttsRegistry } from '../../../pro/audio/engine';
 import type {
   ModelAssetState,
   TTSEngine,
   TTSEngineEvents,
   TTSSpeakOptions,
   TTSVoice,
-} from '../../../pro/audio/engine';
-import { useTTSStore } from '../../../pro/audio/ttsStore';
+} from '../../../pro/audio/engine/types';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 const ENGINE_ID = 'integration-voice';
 
-class NativeVoiceBoundaryFake extends OnDeviceEngineEmitter<TTSEngineEvents> implements TTSEngine {
+class NativeVoiceBoundaryFake implements TTSEngine {
   readonly id = ENGINE_ID;
   readonly displayName = 'Integration Voice';
   readonly capabilities = {
@@ -27,8 +27,30 @@ class NativeVoiceBoundaryFake extends OnDeviceEngineEmitter<TTSEngineEvents> imp
   private downloaded = true;
   rejectNextVoice = false;
   spoken: Array<{ text: string; options?: TTSSpeakOptions }> = [];
+  private listeners = new Map<keyof TTSEngineEvents, Set<(...args: any[]) => void>>();
+
+  on<K extends keyof TTSEngineEvents>(event: K, listener: TTSEngineEvents[K]) {
+    const listeners = this.listeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(event, listeners);
+    return () => this.off(event, listener);
+  }
+  off<K extends keyof TTSEngineEvents>(event: K, listener: TTSEngineEvents[K]) {
+    this.listeners.get(event)?.delete(listener);
+  }
+  once<K extends keyof TTSEngineEvents>(event: K, listener: TTSEngineEvents[K]) {
+    const stop = this.on(event, ((...args: any[]) => {
+      stop();
+      listener(...args);
+    }) as TTSEngineEvents[K]);
+    return stop;
+  }
+  private emit<K extends keyof TTSEngineEvents>(event: K, ...args: Parameters<TTSEngineEvents[K]>) {
+    this.listeners.get(event)?.forEach(listener => listener(...args));
+  }
 
   getPhase() { return this.phase; }
+  getLastDownloadError() { return null; }
   isSupported() { return true; }
   async initialize() { this.phase = 'ready'; }
   async release() { this.phase = 'idle'; }
@@ -71,35 +93,39 @@ class NativeVoiceBoundaryFake extends OnDeviceEngineEmitter<TTSEngineEvents> imp
 
 describe('Mobile Pro uses the Shared voice control plane', () => {
   const native = new NativeVoiceBoundaryFake();
+  let fixture: MobileApplicationFixture;
+  let ttsRegistry: typeof import('../../../pro/audio/engine')['ttsRegistry'];
+  let useTTSStore: typeof import('../../../pro/audio/ttsStore')['useTTSStore'];
+  let voiceControlService: typeof import('../../../pro/audio/ttsControlService')['voiceControlService'];
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    installNativeBoundary();
+    ({ ttsRegistry } = require('../../../pro/audio/engine') as typeof import('../../../pro/audio/engine'));
     ttsRegistry.register(ENGINE_ID, () => native);
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    fixture = await startMobileApplicationFixture({ pro: true });
+    ({ useTTSStore } = require('../../../pro/audio/ttsStore') as typeof import('../../../pro/audio/ttsStore'));
+    ({ voiceControlService } = require('../../../pro/audio/ttsControlService') as typeof import('../../../pro/audio/ttsControlService'));
   });
 
   afterAll(async () => {
     await useTTSStore.getState().releaseEngine();
     await ttsRegistry.unregister(ENGINE_ID);
+    await fixture.dispose();
   });
 
   beforeEach(async () => {
-    useTTSStore.setState({
-      playbackStatus: 'idle', playSessionId: 0, currentMessageId: null,
-      currentAudioPath: null, currentAmplitude: 0, playbackElapsed: 0,
-      playbackDuration: 0, activeVoiceId: 'af_heart', error: null,
-      isSwitchingVoice: false, pendingVoiceId: null, failedVoiceId: null,
-      voiceSwitchProgress: 0, voiceSwitchNeedsDownload: false,
-      settings: {
-        interfaceMode: 'chat', enabled: true, speed: 1.25, engineId: ENGINE_ID,
-        voiceByEngine: { [ENGINE_ID]: 'af_heart' },
-        modelDownloaded: { [ENGINE_ID]: true },
-        voiceAssetsDownloaded: { [ENGINE_ID]: ['af_heart'] },
-      },
-    });
     await useTTSStore.getState().setEngine(ENGINE_ID);
+    useTTSStore.getState().updateSettings({ enabled: true, speed: 1.25 });
+    await voiceControlService.download({
+      set: useTTSStore.setState,
+      get: useTTSStore.getState,
+    });
     native.spoken.length = 0;
+    fixture.application.speech.session.dispatch('reset');
   });
 
-  it('applies a voice, rolls back a failed switch, and synthesizes through Shared generation', async () => {
+  it('applies a voice, rolls back a failed switch, and speaks under the Shared session owner', async () => {
     await useTTSStore.getState().setVoice('bf_emma');
     expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma');
     expect(useTTSStore.getState().settings.voiceAssetsDownloaded?.[ENGINE_ID]).toContain('bf_emma');
@@ -109,10 +135,41 @@ describe('Mobile Pro uses the Shared voice control plane', () => {
     expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma');
     expect(useTTSStore.getState().failedVoiceId).toBe('af_heart');
 
-    await useTTSStore.getState().speak('Private speech', 'voice-turn-1');
+    fixture.application.speech.session.dispatch('userStart');
+    expect(fixture.application.speech.session.micShouldBeOpen()).toBe(true);
+    fixture.application.speech.session.dispatch('turnCaptured');
+    expect(fixture.application.speech.session.speechMayPlay()).toBe(true);
+
+    const models = await fixture.refreshModels();
+    const voiceRoute = models.inventory.find(
+      model => model.modality === 'voice' && model.providerId === ENGINE_ID,
+    )?.routeId;
+    expect(voiceRoute).toBeDefined();
+    expect(await fixture.application.speech.selectModel('tts', voiceRoute!)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    expect(await fixture.application.speech.selectVoice('bf_emma')).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const finished = new Promise<void>(resolve => {
+      const stop = fixture.application.speech.events(event => {
+        if (event.type === 'speech_finished' && event.operationId === 'voice-turn-1') {
+          stop();
+          resolve();
+        }
+      });
+    });
+    expect(await fixture.application.speech.speak({
+      text: 'Private speech',
+      operationId: 'voice-turn-1',
+      speed: 1.25,
+    })).toEqual({ ok: true, value: { operationId: 'voice-turn-1' } });
+    await finished;
     expect(native.spoken).toEqual([
-      { text: 'Private speech', options: expect.objectContaining({ speed: 1.25, voiceId: 'bf_emma', messageId: 'voice-turn-1' }) },
+      { text: 'Private speech', options: expect.objectContaining({ speed: 1.25, voiceId: 'bf_emma' }) },
     ]);
-    expect(useTTSStore.getState().playbackStatus).toBe('idle');
+    expect(fixture.application.speech.snapshot().voice.state).toBe('stopped');
   });
 });

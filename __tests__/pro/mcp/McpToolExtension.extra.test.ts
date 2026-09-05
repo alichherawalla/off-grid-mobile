@@ -1,4 +1,5 @@
 import { arrangeRemoteSelection, resetStores as resetStoresForSelection } from '../../utils/testHelpers';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 /**
  * Extra coverage for McpToolExtension — drives the REAL extension against the REAL
  * mcpStore + remoteServerStore + schemaTrim + mcpService parse/prompt logic. The only
@@ -27,9 +28,13 @@ jest.mock('@offgrid/pro/mcp/mcpService', () => {
     executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
   };
 });
-jest.mock('@offgrid/pro/mcp/companionTaskMesh', () => ({
-  executeCompanionTask: (input: unknown) => mockExecuteCompanionTask(input),
-}));
+jest.mock('@offgrid/pro/mcp/companionTaskMesh', () => {
+  const actual = jest.requireActual('@offgrid/pro/mcp/companionTaskMesh');
+  return {
+    ...actual,
+    executeCompanionTask: (input: unknown) => mockExecuteCompanionTask(input),
+  };
+});
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -50,6 +55,8 @@ import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
 import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/models';
 import type { McpTool } from '@offgrid/pro/mcp/types';
 import { useSyncStore } from '@offgrid/pro/sync/syncStore';
+
+let applicationFixture: MobileApplicationFixture;
 
 // A compact tool (under the small-model budget) — passes through trimming untouched.
 const compactTool: McpTool = {
@@ -107,6 +114,15 @@ function resetStores() {
   });
   resetStoresForSelection();
 }
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture?.dispose();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();

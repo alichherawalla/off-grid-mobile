@@ -22,7 +22,8 @@ import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 jest.mock('react-native-vector-icons/Feather', () => {
   const RC = require('react');
   const { Text } = require('react-native');
-  return (props: { name: string }) => RC.createElement(Text, { testID: `icon-${props.name}` }, props.name);
+  return (props: { name: string }) =>
+    RC.createElement(Text, { testID: `icon-${props.name}` }, props.name);
 });
 
 // Native boundaries the store's real side-effects reach into (updateSettings →
@@ -49,19 +50,12 @@ const mockTTSEngine = {
   release: jest.fn(async () => {}),
 };
 jest.mock('../../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: () => mockTTSEngine, getRegisteredIds: () => ['kokoro'] },
-}));
-
-// The residency lock/hardware are native boundaries; the mode switch's
-// initializeEngine side-effect routes through them. Grant room so it proceeds
-// without touching real device memory.
-jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
-  modelResidencyManager: {
-    runExclusive: async (_label: string, fn: () => Promise<void>) => fn(),
-    makeRoomFor: async () => ({ fits: true, evicted: [] as string[] }),
-    register: jest.fn(),
+  ttsRegistry: {
+    getActiveEngine: () => mockTTSEngine,
+    getRegisteredIds: () => ['kokoro'],
   },
 }));
+
 jest.mock('../../../../pro/audio/ttsPlayback', () => ({
   playMessage: jest.fn(),
   seekMessage: jest.fn(),
@@ -75,22 +69,56 @@ jest.mock('../../../../pro/audio/ttsPlayback', () => ({
 
 import { TTSSection } from '@offgrid/pro/audio/ui/TTSSection';
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
+import type { MobileApplicationFixture } from '../../../harness/mobileApplicationFixture';
 
 const VOICES = [
-  { id: 'af_heart', label: 'Warm', metadata: { accent: 'English (US)', languageCode: 'en-US', gender: 'Female', persona: 'Friendly' } },
-  { id: 'bf_emma', label: 'Gentle', metadata: { accent: 'English (UK)', languageCode: 'en-GB', gender: '', persona: '' } },
+  {
+    id: 'af_heart',
+    label: 'Warm',
+    metadata: {
+      accent: 'English (US)',
+      languageCode: 'en-US',
+      gender: 'Female',
+      persona: 'Friendly',
+    },
+  },
+  {
+    id: 'bf_emma',
+    label: 'Gentle',
+    metadata: {
+      accent: 'English (UK)',
+      languageCode: 'en-GB',
+      gender: '',
+      persona: '',
+    },
+  },
 ] as any;
 
 // Snapshot the pristine store so every test starts from the real defaults and
 // leaves nothing mutated for other suites.
 const INITIAL = useTTSStore.getState();
+let applicationFixture: MobileApplicationFixture;
 
 const setStore = (patch: Partial<ReturnType<typeof useTTSStore.getState>>) =>
-  act(() => { useTTSStore.setState(patch); });
+  act(() => {
+    useTTSStore.setState(patch);
+  });
 
 describe('TTSSection', () => {
+  beforeAll(async () => {
+    const { startMobileApplicationFixture } =
+      require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   afterEach(() => {
-    act(() => { useTTSStore.setState(INITIAL, true); });
+    act(() => {
+      useTTSStore.setState(INITIAL, true);
+    });
     jest.clearAllMocks();
   });
 
@@ -108,7 +136,9 @@ describe('TTSSection', () => {
 
     it('renders the TTS Settings link only when the navigate callback is provided, and pressing it calls back', () => {
       const onNavigate = jest.fn();
-      const { getByText, getByTestId } = render(<TTSSection onNavigateToTTSSettings={onNavigate} />);
+      const { getByText, getByTestId } = render(
+        <TTSSection onNavigateToTTSSettings={onNavigate} />,
+      );
       // The link row shows the external-link icon + label.
       expect(getByTestId('icon-external-link')).toBeTruthy();
       fireEvent.press(getByText('TTS Settings'));
@@ -132,7 +162,10 @@ describe('TTSSection', () => {
         settings: {
           ...INITIAL.settings,
           interfaceMode: 'chat',
-          modelDownloaded: { ...INITIAL.settings.modelDownloaded, kokoro: true },
+          modelDownloaded: {
+            ...INITIAL.settings.modelDownloaded,
+            kokoro: true,
+          },
         },
       });
 
@@ -152,7 +185,12 @@ describe('TTSSection', () => {
         isReady: true,
         voices: VOICES,
         activeVoiceId: 'af_heart',
-        settings: { ...INITIAL.settings, interfaceMode: 'chat', enabled: true, speed: 1.0 },
+        settings: {
+          ...INITIAL.settings,
+          interfaceMode: 'chat',
+          enabled: true,
+          speed: 1.0,
+        },
       }),
     );
 
@@ -176,7 +214,12 @@ describe('TTSSection', () => {
 
     it('hides the Enable-TTS toggle and shows the Audio-mode description while in audio mode', () => {
       act(() => {
-        useTTSStore.setState({ settings: { ...useTTSStore.getState().settings, interfaceMode: 'audio' } });
+        useTTSStore.setState({
+          settings: {
+            ...useTTSStore.getState().settings,
+            interfaceMode: 'audio',
+          },
+        });
       });
       const { getByText, queryByText } = render(<TTSSection />);
       expect(getByText(/Audio Mode/)).toBeTruthy();
@@ -193,7 +236,9 @@ describe('TTSSection', () => {
 
     it('shows the language download until the requested voice is ready', async () => {
       let finishSwitch!: () => void;
-      const pendingSwitch = new Promise<void>((resolve) => { finishSwitch = resolve; });
+      const pendingSwitch = new Promise<void>(resolve => {
+        finishSwitch = resolve;
+      });
       mockSetVoice.mockReturnValueOnce(pendingSwitch);
       const realSetVoice = useTTSStore.getState().setVoice;
       const setVoiceFromUI = jest.fn(realSetVoice);
@@ -201,13 +246,17 @@ describe('TTSSection', () => {
       const { getByText, getByTestId, queryByTestId } = render(<TTSSection />);
       expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
       fireEvent.press(getByTestId('chat-tts-language'));
-      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
+      await act(async () => {
+        fireEvent.press(getByTestId('chat-tts-language-en-GB'));
+      });
 
       expect(setVoiceFromUI).toHaveBeenCalledWith('bf_emma');
       expect(mockSetVoice).toHaveBeenCalledWith('bf_emma');
       expect(mockSetVoice.mock.results[0]?.value).toBe(pendingSwitch);
       expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
-      await waitFor(() => expect(useTTSStore.getState().pendingVoiceId).toBe('bf_emma'));
+      await waitFor(() =>
+        expect(useTTSStore.getState().pendingVoiceId).toBe('bf_emma'),
+      );
       expect(getByTestId('chat-tts-language-download-status')).toBeTruthy();
       expect(getByText(/Downloading English \(UK\) voice/)).toBeTruthy();
       expect(queryByTestId('icon-check-circle')).toBeNull();
@@ -216,7 +265,9 @@ describe('TTSSection', () => {
       fireEvent.press(getByTestId('chat-tts-language'));
       expect(queryByTestId('chat-tts-language-en-US')).toBeNull();
 
-      act(() => { useTTSStore.setState({ voiceSwitchProgress: 0.42 }); });
+      act(() => {
+        useTTSStore.setState({ voiceSwitchProgress: 0.42 });
+      });
       expect(getByText('Downloading English (UK) voice - 42%')).toBeTruthy();
 
       act(() => {
@@ -226,18 +277,35 @@ describe('TTSSection', () => {
           downloadBytesPerSecond: 2 * 1024 * 1024,
         });
       });
-      expect(getByText('Downloading English (UK) voice - 42% · 21 MB / 50 MB · 2.0 MB/s')).toBeTruthy();
+      expect(
+        getByText(
+          'Downloading English (UK) voice - 42% · 21 MB / 50 MB · 2.0 MB/s',
+        ),
+      ).toBeTruthy();
 
-      await act(async () => { finishSwitch(); await Promise.resolve(); });
-      await waitFor(() => expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy());
+      await act(async () => {
+        finishSwitch();
+        await Promise.resolve();
+      });
+      await waitFor(() =>
+        expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy(),
+      );
       expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma');
-      expect(useTTSStore.getState().settings.voiceByEngine[useTTSStore.getState().settings.engineId]).toBe('bf_emma');
+      expect(
+        useTTSStore.getState().settings.voiceByEngine[
+          useTTSStore.getState().settings.engineId
+        ],
+      ).toBe('bf_emma');
       expect(getByText('Gentle')).toBeTruthy();
     });
 
     it('prepares a voice from cache when that voice completed before', async () => {
       let finishSwitch!: () => void;
-      mockSetVoice.mockReturnValueOnce(new Promise<void>((resolve) => { finishSwitch = resolve; }));
+      mockSetVoice.mockReturnValueOnce(
+        new Promise<void>(resolve => {
+          finishSwitch = resolve;
+        }),
+      );
       setStore({
         settings: {
           ...useTTSStore.getState().settings,
@@ -247,13 +315,20 @@ describe('TTSSection', () => {
       const { getByText, getByTestId, queryByText } = render(<TTSSection />);
 
       fireEvent.press(getByTestId('chat-tts-language'));
-      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
+      await act(async () => {
+        fireEvent.press(getByTestId('chat-tts-language-en-GB'));
+      });
 
       expect(getByText('Preparing English (UK) voice')).toBeTruthy();
       expect(queryByText(/Downloading English \(UK\) voice/)).toBeNull();
 
-      await act(async () => { finishSwitch(); await Promise.resolve(); });
-      await waitFor(() => expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy());
+      await act(async () => {
+        finishSwitch();
+        await Promise.resolve();
+      });
+      await waitFor(() =>
+        expect(getByTestId('chat-tts-language-ready-status')).toBeTruthy(),
+      );
     });
 
     it('shows a failed language download and retries it', async () => {
@@ -263,13 +338,25 @@ describe('TTSSection', () => {
       const { getByText, getByTestId } = render(<TTSSection />);
 
       fireEvent.press(getByTestId('chat-tts-language'));
-      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-en-GB')); });
-      await waitFor(() => expect(getByTestId('chat-tts-language-download-error')).toBeTruthy());
-      expect(getByText('Could not download the English (UK) voice. Check your connection and retry.')).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(getByTestId('chat-tts-language-en-GB'));
+      });
+      await waitFor(() =>
+        expect(getByTestId('chat-tts-language-download-error')).toBeTruthy(),
+      );
+      expect(
+        getByText(
+          'Could not download the English (UK) voice. Check your connection and retry.',
+        ),
+      ).toBeTruthy();
       expect(useTTSStore.getState().activeVoiceId).toBe('af_heart');
 
-      await act(async () => { fireEvent.press(getByTestId('chat-tts-language-download-retry')); });
-      await waitFor(() => expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma'));
+      await act(async () => {
+        fireEvent.press(getByTestId('chat-tts-language-download-retry'));
+      });
+      await waitFor(() =>
+        expect(useTTSStore.getState().activeVoiceId).toBe('bf_emma'),
+      );
       expect(mockSetVoice).toHaveBeenCalledTimes(2);
     });
 
@@ -277,14 +364,25 @@ describe('TTSSection', () => {
     it('tapping the Audio chip flips interfaceMode to "audio" in the REAL store', async () => {
       const { getByText } = render(<TTSSection />);
       expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
-      await act(async () => { fireEvent.press(getByText('Audio')); });
+      await act(async () => {
+        fireEvent.press(getByText('Audio'));
+      });
       expect(useTTSStore.getState().settings.interfaceMode).toBe('audio');
     });
 
     it('tapping the Chat chip from audio mode flips interfaceMode back to "chat"', async () => {
-      act(() => { useTTSStore.setState({ settings: { ...useTTSStore.getState().settings, interfaceMode: 'audio' } }); });
+      act(() => {
+        useTTSStore.setState({
+          settings: {
+            ...useTTSStore.getState().settings,
+            interfaceMode: 'audio',
+          },
+        });
+      });
       const { getByText } = render(<TTSSection />);
-      await act(async () => { fireEvent.press(getByText('Chat')); });
+      await act(async () => {
+        fireEvent.press(getByText('Chat'));
+      });
       expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
     });
 
@@ -293,14 +391,18 @@ describe('TTSSection', () => {
       const { UNSAFE_getByType } = render(<TTSSection />);
       const { Switch } = require('react-native');
       expect(useTTSStore.getState().settings.enabled).toBe(true);
-      await act(async () => { fireEvent(UNSAFE_getByType(Switch), 'valueChange', false); });
+      await act(async () => {
+        fireEvent(UNSAFE_getByType(Switch), 'valueChange', false);
+      });
       expect(useTTSStore.getState().settings.enabled).toBe(false);
     });
 
     // ── Speed slider interaction (real store action) ───────────────────────
     it('committing the speed slider updates settings.speed in the REAL store', async () => {
       const { getByTestId } = render(<TTSSection />);
-      await act(async () => { fireEvent(getByTestId('tts-speed-slider'), 'slidingComplete', 1.5); });
+      await act(async () => {
+        fireEvent(getByTestId('tts-speed-slider'), 'slidingComplete', 1.5);
+      });
       expect(useTTSStore.getState().settings.speed).toBe(1.5);
     });
   });

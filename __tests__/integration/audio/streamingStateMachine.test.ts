@@ -10,6 +10,10 @@
  * the drain lock; a new stream supersedes the old.
  */
 import logger from '@offgrid/core/utils/logger';
+import { createOffGridApplication, type OffGridApplication } from '@offgrid/application';
+import { EXECUTORCH_KOKORO_IDENTITY, type ModelSelectionStore } from '@offgrid/models';
+import { mobileLocalVoiceInventoryAdapter } from '../../../src/services/modelServices/voiceGenerationAdapter';
+import { mobileRouteId } from '../../../src/services/modelServices/mobileRoute';
 
 jest.mock('@offgrid/core/utils/logger', () => ({
   __esModule: true,
@@ -40,11 +44,6 @@ const mockEngine = {
 jest.mock('../../../pro/audio/engine', () => ({
   ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine), getEngine: jest.fn(() => mockEngine), getRegisteredIds: jest.fn(() => ['kokoro']), has: jest.fn(() => true) },
 }));
-const mockCanLoad = jest.fn((..._a: unknown[]) => false);
-jest.mock('@offgrid/core/services/modelServices/residencyBootstrap', () => ({
-  modelResidencyManager: { canLoadWithoutEviction: (...a: unknown[]) => mockCanLoad(...a) },
-}));
-
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
   feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive, _setSpeakTimeoutForTest,
@@ -52,6 +51,37 @@ import {
 } from '../../../pro/audio/streamingSpeech';
 import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
 import { bindVoiceProjection } from '../../../pro/audio/ttsControlService';
+import { registerApplicationFacade } from '../../../src/services/applicationFacade';
+
+let availableMemoryMB = 0;
+let totalMemoryMB = 8_192;
+const voiceRouteId = mobileRouteId({
+  source: 'local', hostId: 'kokoro', modality: 'voice', modelId: EXECUTORCH_KOKORO_IDENTITY.modelId,
+});
+const selections: ModelSelectionStore = {
+  read: modality => modality === 'voice' ? voiceRouteId : null,
+  write: async () => undefined,
+};
+const application: OffGridApplication = createOffGridApplication({
+  models: {
+    selection: selections,
+    memory: {
+      current: () => ({ totalMB: totalMemoryMB, availableMB: availableMemoryMB, platform: 'mobile' }),
+    },
+    inventoryAdapters: [mobileLocalVoiceInventoryAdapter],
+    remote: {
+      configuration: {
+        read: () => ({version: 1, activeServerId: null, servers: []}),
+        write: async () => undefined,
+      },
+      credentials: {
+        read: async () => null, write: async () => undefined, remove: async () => undefined,
+      },
+      providers: { register: async () => undefined, unregister: async () => undefined },
+    },
+  },
+});
+registerApplicationFacade(() => application);
 
 const flush = () => new Promise<void>((r) => setImmediate(r));
 async function waitForSpeakCount(count: number): Promise<void> {
@@ -72,7 +102,8 @@ beforeEach(async () => {
   jest.clearAllMocks();
   speakMode = 'resolve';
   enginePhase = 'ready';
-  mockCanLoad.mockReturnValue(false);
+  availableMemoryMB = 0;
+  totalMemoryMB = 8_192;
   // clearAllMocks resets call history but NOT implementations — restore the
   // speakMode-driven impl so a prior test's mockImplementation can't leak in.
   mockEngine.speak.mockImplementation(() => {
@@ -99,7 +130,6 @@ beforeEach(async () => {
   disposeSink = _setSmSink((e) => events.push(e));
   (logger as any);
 });
-
 afterEach(() => { disposeSink?.(); });
 
 describe('streaming state machine — happy path', () => {
@@ -178,10 +208,9 @@ describe('streaming state machine — budget-aware warm-up (the intelligent path
   it('warms TTS to stream alongside the LLM when residency reports budget', async () => {
     useTTSStore.setState({ isReady: false } as never); // engine cold at stream start
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(true); // headroom to coexist with the LLM
+    availableMemoryMB = 6_000; // headroom to coexist with the LLM
     feedStreamingText('Streaming this. ');
     await flush();
-    expect(mockCanLoad).toHaveBeenCalledWith(expect.objectContaining({ key: expect.stringMatching(/^voice:/), type: 'voice' }));
     expect(state.initializeEngine).toHaveBeenCalled(); // warmed → will stream
     expect(names()).toContain('stream warm: budget OK → warming TTS to stream alongside the LLM');
   });
@@ -189,17 +218,22 @@ describe('streaming state machine — budget-aware warm-up (the intelligent path
   it('does NOT warm (stays speak-after) when there is no budget', async () => {
     useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(false); // memory-tight
+    totalMemoryMB = 2_048;
+    const resident = await application.models.residency.acquire(
+      {key: 'text:active', modelId: 'active.gguf', type: 'text', sizeMB: 800},
+      {load: async () => undefined, unload: async () => ({reclaimed: true})},
+    );
     feedStreamingText('No budget here. ');
     await flush();
     expect(state.initializeEngine).not.toHaveBeenCalled();
     expect(names()).toContain('stream warm SKIP: no budget to run TTS alongside the LLM → speak-after');
+    await resident.release();
   });
 
   it('only attempts the warm once per turn', async () => {
     useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(true);
+    availableMemoryMB = 6_000;
     feedStreamingText('One. ');
     feedStreamingText('One. Two. ');
     feedStreamingText('One. Two. Three. ');

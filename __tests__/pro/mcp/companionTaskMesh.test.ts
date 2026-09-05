@@ -1,15 +1,9 @@
-jest.mock('../../../pro/sync/syncService', () => ({
-  syncService: {
-    onAppMessage: jest.fn(() => jest.fn()),
-    sendApp: jest.fn(() => false),
-  },
-}));
-
 import {
   CompanionTaskMesh,
   type CompanionTaskTransport,
 } from '../../../pro/mcp/companionTaskMesh';
 import { parseTaskCapability } from '../../../pro/mcp/companionTaskMeshLogic';
+import type {SendCommand, SyncEvent} from '@offgrid/sync';
 
 const webUse = {
   name: 'web_use',
@@ -22,24 +16,19 @@ const webUse = {
 };
 
 class MeshBoundary implements CompanionTaskTransport {
-  handler:
-    | ((deviceId: string, channel: string, data: unknown) => void)
-    | undefined;
-  sent: { deviceId: string; channel: string; data: unknown }[] = [];
-  connected = true;
+  handler: ((event: SyncEvent) => void) | undefined;
+  sent: SendCommand[] = [];
 
-  onAppMessage(
-    handler: (deviceId: string, channel: string, data: unknown) => void,
-  ): () => void {
+  events(handler: (event: SyncEvent) => void): () => void {
     this.handler = handler;
     return () => {
       this.handler = undefined;
     };
   }
 
-  sendApp(deviceId: string, channel: string, data: unknown): boolean {
-    this.sent.push({ deviceId, channel, data });
-    return this.connected;
+  async send(command: SendCommand) {
+    this.sent.push(command);
+    return {ok: true as const, value: undefined};
   }
 }
 

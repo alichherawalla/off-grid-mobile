@@ -38,6 +38,12 @@ import { selectedRemoteRoute } from '../../utils/testHelpers';
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 describe('T097 (rendered) — Home Text count with a remote model active is not a misleading desync', () => {
   const setup = (opts: { selectRemoteModel: boolean }) => {
     installNativeBoundary();
@@ -84,6 +90,8 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
   it('shows Text count = 0 (literal local count) while the Text type reads ACTIVE (remote model represented)', async () => {
     const env = setup({ selectRemoteModel: true });
     const { React, rtl, HomeScreen, nav } = env;
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
 
     await connectServerViaUI(env);
 

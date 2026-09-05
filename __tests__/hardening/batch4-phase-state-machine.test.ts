@@ -27,7 +27,8 @@ import {
 import { flushPromises } from '../utils/testHelpers';
 import type { ImageGenPhase } from '../../src/services/imageGenerationService';
 
-type Fixture = import('../harness/mobileApplicationFixture').MobileApplicationFixture;
+type Fixture =
+  import('../harness/mobileApplicationFixture').MobileApplicationFixture;
 
 let applicationFixture: Fixture | undefined;
 
@@ -47,10 +48,12 @@ interface Arranged {
  * bytes on the (in-memory) disk, boot the real application, refresh its inventory, then
  * select through the application's own route resolution. No store poking.
  */
-async function arrangeImageModel(opts: {
-  enhance?: boolean;
-  withTextEngine?: boolean;
-} = {}): Promise<Arranged> {
+async function arrangeImageModel(
+  opts: {
+    enhance?: boolean;
+    withTextEngine?: boolean;
+  } = {},
+): Promise<Arranged> {
   const boundary = installNativeBoundary({
     fs: true,
     llama: opts.withTextEngine === true,
@@ -183,7 +186,9 @@ describe('image-gen phase state machine — ordered transitions (cases 17, 18, 2
     expect(phases).toContain('generating');
     expect(phases[phases.length - 1]).toBe('done');
     // loading must precede generating (case 18 direction, without enhancement).
-    expect(phases.indexOf('loading')).toBeLessThan(phases.indexOf('generating'));
+    expect(phases.indexOf('loading')).toBeLessThan(
+      phases.indexOf('generating'),
+    );
   });
 
   it('enhancement ON: passes through enhancing BEFORE loading/generating (cases 17, 18)', async () => {

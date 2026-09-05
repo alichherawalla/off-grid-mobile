@@ -1,4 +1,5 @@
 import { useDownloadStore, isActiveStatus, isQueuedStatus, isDownloadingStatus, DownloadEntry, DownloadStatus } from '../../../src/stores/downloadStore';
+import {isPausedStatus} from '../../../src/utils/downloadStatus';
 
 const makeEntry = (overrides: Partial<DownloadEntry> = {}): DownloadEntry => ({
   modelKey: 'author/model/model.gguf',
@@ -59,9 +60,9 @@ describe('isQueuedStatus / isDownloadingStatus', () => {
     for (const s of ALL.filter(x => x !== 'queued')) expect(isQueuedStatus(s)).toBe(false);
   });
 
-  it('downloading is active-but-not-queued', () => {
+  it('downloading means bytes or processing are active', () => {
     expect(isDownloadingStatus('downloading')).toBe(true);
-    expect(isDownloadingStatus('paused')).toBe(true);
+    expect(isDownloadingStatus('paused')).toBe(false);
     expect(isDownloadingStatus('processing')).toBe(true);
     // pending is queued, not downloading — this is the whole point of the split
     expect(isDownloadingStatus('queued')).toBe(false);
@@ -71,11 +72,15 @@ describe('isQueuedStatus / isDownloadingStatus', () => {
     expect(isDownloadingStatus('cancelled')).toBe(false);
   });
 
-  it('partitions active exactly into queued + downloading (no overlap, no gap)', () => {
+  it('partitions active exactly into queued, downloading, or paused', () => {
     for (const s of ALL) {
-      // active === queued OR downloading, and queued/downloading never both true
-      expect(isActiveStatus(s)).toBe(isQueuedStatus(s) || isDownloadingStatus(s));
-      expect(isQueuedStatus(s) && isDownloadingStatus(s)).toBe(false);
+      const partitions = [
+        isQueuedStatus(s),
+        isDownloadingStatus(s),
+        isPausedStatus(s),
+      ].filter(Boolean).length;
+      expect(isActiveStatus(s)).toBe(partitions === 1);
+      expect(partitions).toBeLessThanOrEqual(1);
     }
   });
 

@@ -1,4 +1,3 @@
-import { remoteServerManager } from '../../remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../../../types';
 import {
   DEFAULT_REMOTE_SPEECH_MIME,
@@ -13,6 +12,7 @@ import {
   resolveRemoteRoute,
 } from '@offgrid/models';
 import type { RemoteMediaModality } from '@offgrid/models';
+import { getApiKeyImpl } from './serverRuntime';
 
 
 export interface RemoteImageResult {
@@ -45,7 +45,7 @@ async function request<T>(
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   try {
-    const apiKey = await remoteServerManager.getApiKey(server.id);
+    const apiKey = await getApiKeyImpl(server.id);
     if (controller.signal.aborted) throw new Error('Remote request cancelled');
     const response = await fetch(input.url ?? remoteMediaEndpoint(server.endpoint, modality), {
       ...init,

@@ -8,6 +8,10 @@ import { RemoteServerEditorScreen } from '../../../src/screens/RemoteServerEdito
 import { RemoteServersScreen } from '../../../src/screens/RemoteServersScreen';
 import { useRemoteServerStore } from '../../../src/stores';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
+// Registers the real model-selection command port (module scope of modelServices/index.ts).
+// Removing a server clears its canonical selections through that port, so the production wiring
+// must be present exactly as the app composes it.
+import '../../../src/services/modelServices';
 import {
   gatewayModelList,
   installLanProbe,

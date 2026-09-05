@@ -18,26 +18,6 @@ jest.mock('react-native-vector-icons/Feather', () => {
   return ({ name, ...props }: any) => <Text {...props}>{name}</Text>;
 });
 
-// The sheet is a modal wrapper; render its children inline (respecting `visible`, as
-// the real one does) so the test can drive the content and observe it hiding while
-// the scanner is open.
-jest.mock('@offgrid/core/components/AppSheet', () => ({
-  AppSheet: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
-    visible ? children : null,
-}));
-
-jest.mock('../../../src/theme', () => {
-  const colors = {
-    text: '#000', textMuted: '#999', primary: '#1DB954', error: '#F00',
-    background: '#FFF', surface: '#F5F5F5', border: '#E0E0E0',
-  };
-  const shadows = { small: {}, medium: {}, large: {} };
-  return {
-    useTheme: () => ({ colors, shadows, isDark: false }),
-    useThemedStyles: (fn: any) => fn(colors, shadows),
-  };
-});
-
 // vision-camera is globally stubbed in jest.setup; capture the scan config here so
 // the test can simulate a decoded QR frame.
 const visionCamera = require('react-native-vision-camera');
@@ -64,11 +44,11 @@ maybe('PairingCodeSheet scan-to-pair', () => {
 
   const baseProps = () => ({
     visible: true,
+    deviceId: 'device-studio-mac',
     deviceName: 'Studio Mac',
     confirmLabel: 'Pair',
     testIDPrefix: 'sync-test',
     onClose: jest.fn(),
-    onPair: jest.fn().mockResolvedValue(undefined),
   });
 
   beforeEach(() => {
@@ -98,14 +78,14 @@ maybe('PairingCodeSheet scan-to-pair', () => {
     expect(queryByTestId('sync-test-input')).toBeNull();
   });
 
-  it('pairs from a scanned QR via the same onPair as typing', async () => {
+  it('routes a scanned pairing code through the same normalized input as typing', async () => {
     const props = baseProps();
     const { getByTestId } = render(<PairingCodeSheet {...props} />);
     fireEvent.press(getByTestId('sync-test-scan'));
     await act(async () => {
       scanConfig!.onCodeScanned([{ value: VALID_QR }]);
     });
-    expect(props.onPair).toHaveBeenCalledWith(VALID_QR);
+    expect(getByTestId('sync-test-input').props.value).toBe('ABCD-2345');
   });
 
   it('ignores a QR that is not a pairing code', async () => {
@@ -115,6 +95,6 @@ maybe('PairingCodeSheet scan-to-pair', () => {
     await act(async () => {
       scanConfig!.onCodeScanned([{ value: 'https://example.com/not-a-code' }]);
     });
-    expect(props.onPair).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 });

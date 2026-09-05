@@ -28,7 +28,7 @@ import { applicationFacade } from '../../services/applicationFacade';
 import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 import { huggingFaceService } from '../../services/huggingface';
-import { aggregateTextModelDownloads, buildFileDownloadHandler } from './modelDownloadProjection';
+import { aggregateTextModelDownloads, buildFileDownloadHandler, modelDownloadMatchesFile } from './modelDownloadProjection';
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
 }
@@ -86,7 +86,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
   const getFileCardState = (item: ModelFile) => {
     const modelKey = makeModelKey(selectedModel.id, item.name);
-    const entry = downloads.find(row => row.modelType === 'text' && row.modelId === modelKey);
+    const entry = downloads.find(row => modelDownloadMatchesFile(row, selectedModel.id, item.name));
     const downloaded = isModelDownloaded(selectedModel.id, item.name);
     const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
     const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
@@ -126,7 +126,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? stripModelFileExtension(item.name);
     const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
-    const download = downloads.find(row => row.modelType === 'text' && row.modelId === s.downloadKey);
+    const download = downloads.find(row => modelDownloadMatchesFile(row, selectedModel.id, item.name));
     const retry = async () => {
       if (!download) return;
       const outcome = await applicationFacade().models.retryDownload({ downloadId: download.downloadId });

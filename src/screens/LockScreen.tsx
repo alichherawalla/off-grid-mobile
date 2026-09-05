@@ -20,7 +20,6 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
-import logger from '../utils/logger';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -71,6 +70,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
     setIsVerifying(true);
 
+    // authService is the port to the keystore: an unreadable keystore comes back as `false`
+    // (a failed attempt), never as a throw. There is no separate error path to render.
     try {
       const isValid = await authService.verifyPassphrase(passphrase);
 
@@ -97,9 +98,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           setAlertState(showAlert('Incorrect Passphrase', alertMessage));
         }
       }
-    } catch (error) {
-      logger.warn('[LockScreen] Passphrase verification failed:', error);
-      setAlertState(showAlert('Error', 'Failed to verify passphrase'));
     } finally {
       setIsVerifying(false);
     }

@@ -36,7 +36,7 @@ import {
 } from './constants';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
-import { downloadedModelMatchesFile } from './modelDownloadProjection';
+import { downloadedModelMatchesFile, modelDownloadMatchesFile } from './modelDownloadProjection';
 import {
   catalogModelFiles,
   resolveModelFiles,
@@ -381,23 +381,9 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   );
 
   const handleDownload = useCallback(async (model: ModelInfo, file: ModelFile) => {
-    // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
-    // mechanism + one duplicate guard. This screen owns only its completion/error UI.
+    // Shared publishes preparation, transfer, and completion reactively. This action only queues
+    // the selected source and reports an admission failure.
     await startModelDownload(model.id, file, {
-      onRegistered: dm => {
-        if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
-          setAlertState(
-            showAlert(
-              'Model Downloaded',
-              `${model.name} downloaded but the vision projection file could not be saved. Go to Download Manager and use "Repair Vision" to fix it.`,
-            ),
-          );
-        } else {
-          setAlertState(
-            showAlert('Success', `${model.name} downloaded successfully!`),
-          );
-        }
-      },
       onError: err =>
         setAlertState(
           showAlert(
@@ -409,12 +395,17 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   }, [setAlertState]);
 
   const handleCancelDownload = useCallback(async (modelKey: string) => {
-    const download = modelDownloads.find(
-      row => row.modelType === 'text' && row.modelId === modelKey,
+    const download = modelDownloads.find(row =>
+      modelDownloadMatchesFile(
+        row,
+        modelKey.slice(0, modelKey.lastIndexOf('/')),
+        modelKey.slice(modelKey.lastIndexOf('/') + 1),
+      ),
     );
     if (!download) return;
-    const outcome = await applicationFacade().models.cancelDownload({
-      downloadId: download.downloadId,
+    const outcome = await applicationFacade().models.control({
+      type: 'cancel-download',
+      modelId: download.downloadId,
     });
     if (!outcome.ok) {
       setAlertState(showAlert('Cancel Failed', modelsFailureMessage(outcome.failure)));

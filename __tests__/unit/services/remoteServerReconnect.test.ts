@@ -3,6 +3,10 @@ import * as Keychain from 'react-native-keychain';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import {
+  startMobileApplicationFixture,
+  type MobileApplicationFixture,
+} from '../../harness/mobileApplicationFixture';
 import '../../../src/services/modelServices';
 
 jest.mock('react-native-device-info', () => ({
@@ -18,6 +22,15 @@ const modelList = () =>
 
 describe('remote server reconnect', () => {
   const originalFetch = global.fetch;
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(async () => {
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();

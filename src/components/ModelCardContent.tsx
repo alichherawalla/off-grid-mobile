@@ -317,6 +317,8 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
 interface ModelCardActionsProps {
   isDownloaded: boolean | undefined;
   isDownloading: boolean | undefined;
+  isQueued: boolean | undefined;
+  isPaused: boolean | undefined;
   isActive: boolean | undefined;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
@@ -331,9 +333,9 @@ interface ModelCardActionsProps {
 
 const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
-function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, accessibilityLabel, styles }: {
   icon: string; color: string; haptic: string; onPress: () => void;
-  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+  disabled?: boolean; testID?: string; accessibilityLabel?: string; styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <TouchableOpacity
@@ -342,6 +344,7 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
       disabled={disabled}
       hitSlop={HIT_SLOP}
       testID={testID}
+      accessibilityLabel={accessibilityLabel}
     >
       <Icon name={icon} size={16} color={color} />
     </TouchableOpacity>
@@ -363,21 +366,21 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
       ) : (
         onRepairVision && <ActionButton icon="tool" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
-      {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
-      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
+      {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} testID={tid('select')} accessibilityLabel="Use this model" styles={styles} />}
+      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} testID={tid('delete')} accessibilityLabel="Delete this model" styles={styles} />}
     </>
   );
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isActive, isCompatible,
+  isDownloaded, isDownloading, isQueued, isPaused, isActive, isCompatible,
   testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
-  if (isDownloading && onCancel) {
+  if ((isDownloading || isQueued || isPaused) && onCancel) {
     return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
   }
   if (!isDownloaded && onDownload) {

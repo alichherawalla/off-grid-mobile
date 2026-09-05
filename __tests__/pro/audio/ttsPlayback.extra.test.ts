@@ -96,6 +96,7 @@ import {
   stopStreamingPlayback,
   setPlaybackSpeed,
 } from '@offgrid/pro/audio/ttsPlayback';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 
 // Retrieve the mocked boundaries (built inside the factories) via the mock registry.
 const mockAudioFilePlayer = jest.requireMock('@offgrid/pro/audio/audioFilePlayer').audioFilePlayer as {
@@ -114,6 +115,7 @@ const mockResetStreamingSpeech = mockStreaming.resetStreamingSpeech;
 const mockStopStreamingSpeechForTurn = mockStreaming.stopStreamingSpeechForTurn;
 
 const getState = () => useTTSStore.getState();
+let applicationFixture: MobileApplicationFixture;
 
 function resetState() {
   useTTSStore.setState({
@@ -126,6 +128,15 @@ function resetState() {
     settings: { interfaceMode: 'chat', enabled: true, speed: 1.5, engineId: 'mock-tts', voiceByEngine: {} },
   });
 }
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 beforeEach(() => {
   resetState();

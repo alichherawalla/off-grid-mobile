@@ -16,25 +16,34 @@ jest.mock('../../../src/utils/logger', () => ({
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { discoveredRemoteModels } from '../../../src/stores/remoteServerProjection';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
-import { mobileRemoteServerApplication } from '../../../src/services/modelServices/workspace';
+import {applicationFacade} from '../../../src/services/applicationFacade';
+import '../../../src/services/composition/application';
+import {
+  startMobileModelServices,
+  stopMobileModelServices,
+} from '../../../src/services/modelServices';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Add a server directly into the store and return its id. */
+/** Add a server through the public application transaction. */
+const addedServerIds = new Set<string>();
+
 async function addServer(opts: {
   id: string;
   endpoint: string;
   name?: string;
 }): Promise<void> {
-  await mobileRemoteServerApplication.save({
+  const outcome = await applicationFacade().models.saveRemoteServer({
     id: opts.id,
     name: opts.name ?? opts.id,
     endpoint: opts.endpoint,
     provider: 'openai-compatible',
     createdAt: new Date().toISOString(),
   });
+  if (!outcome.ok) throw new Error(`Could not add test server: ${outcome.failure.kind}`);
+  addedServerIds.add(outcome.value.id);
 }
 
 /** Resolve a fetch call with a JSON body and a given ok/status. */
@@ -59,12 +68,17 @@ function rejectWith(msg: string): Promise<never> {
 describe('remoteServerDiscovery integration', () => {
   let mockFetch: jest.Mock;
 
-  beforeEach(() => {
+  beforeAll(() => startMobileModelServices());
+  afterAll(() => stopMobileModelServices());
+
+  beforeEach(async () => {
+    for (const serverId of addedServerIds) {
+      await applicationFacade().models.removeRemoteServer(serverId);
+    }
+    addedServerIds.clear();
     jest.clearAllMocks();
     mockFetch = jest.fn();
     (globalThis as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
-    // Reset servers and discovered models between tests
-    useRemoteServerStore.setState({ servers: [] });
   });
 
   // =========================================================================

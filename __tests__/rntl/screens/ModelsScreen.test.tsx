@@ -1060,7 +1060,10 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     const view = await openFilter(/^Quant [▴▾]$/);
     await realRTL.waitFor(() => expect(view.getByText('Q4_K_M')).toBeTruthy());
     realRTL.fireEvent.press(view.getByText('Q4_K_M'));
-    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'quant');
+    const searchInput = view.getByTestId('search-input');
+    realRTL.fireEvent.changeText(searchInput, 'quant');
+    await realRTL.waitFor(() => expect(searchInput.props.value).toBe('quant'));
+    realRTL.fireEvent(searchInput, 'submitEditing');
     await realRTL.waitFor(() => expect(view.getByText('Quant Model')).toBeTruthy());
     realRTL.fireEvent.press(view.getByTestId('model-card-0'));
     await realRTL.waitFor(() => expect(view.getByText('model-Q4_K_M')).toBeTruthy());

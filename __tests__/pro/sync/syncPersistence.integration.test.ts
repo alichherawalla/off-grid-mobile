@@ -1,13 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
 import TcpSocket from 'react-native-tcp-socket';
 import type { DeviceInfo } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
-import { syncService } from '../../../pro/sync/syncService';
-import {
-  selectSyncControlCenter,
-  useSyncStore,
-} from '../../../pro/sync/syncStore';
 import { useAppStore } from '../../../src/stores/appStore';
 import {
   getDiscoveryBoundaries,
@@ -20,6 +16,7 @@ import {
   installLicensedPhone,
   registerThisPhone,
 } from '../../harness/licensedMesh';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -54,8 +51,10 @@ const waitFor = async (
  * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
  * presenting this code, which is why nothing has to be accepted afterwards.
  */
-function phonePairingCode(): string {
-  const code = useSyncStore.getState().pairingCode.code;
+function phonePairingCode(
+  applicationFixture: MobileApplicationFixture,
+): string {
+  const code = applicationFixture.application.sync.snapshot().pairingCode?.code;
   if (!code) throw new Error('the phone has not issued a pairing code yet');
   return code;
 }
@@ -64,6 +63,7 @@ function phonePairingCode(): string {
 const mesh = createLicensedMesh();
 
 describe('Pro Sync app-lifetime pairing persistence', () => {
+  let applicationFixture: MobileApplicationFixture;
   let secrets: Map<string, string>;
   /** What the pairing store has written, read back out of the Keychain the app used. */
   const persistedPairings = (): string | undefined =>
@@ -71,9 +71,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
   beforeEach(async () => {
     mesh.reset();
-    await syncService.stop();
     await AsyncStorage.clear();
-    useSyncStore.getState().reset();
     resetDiscoveryBoundaries();
     // Sync is a Pro feature, so a journey that exercises it runs on a licensed install. Without this the
     // phone resolves as unlicensed and never advertises, which is correct behaviour and makes every
@@ -91,11 +89,30 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       name: 'Off Grid AI Desktop',
       platform: 'macos',
     });
+    const { ProximityAir } =
+      require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: 'fp-this-phone',
+      name: 'This phone',
+      platform: 'ios',
+    });
+    if (!applicationFixture) {
+      const { startMobileApplicationFixture } =
+        require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+      applicationFixture = await startMobileApplicationFixture({ pro: true });
+    } else {
+      await applicationFixture.application.sync.start();
+    }
   });
 
   afterEach(async () => {
     mesh.restore();
-    await syncService.stop();
+    await applicationFixture?.application.sync.stop();
+    delete NativeModules.SyncProximityModule;
+  });
+
+  afterAll(async () => {
+    await applicationFixture?.dispose();
   });
 
   it('silently reconnects a paired device after the mobile Sync service restarts', async () => {
@@ -120,47 +137,40 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
 
-    await syncService.start();
-    const mobile = useSyncStore.getState().thisDevice;
+    await applicationFixture.application.sync.start();
+    const mobile = applicationFixture.application.sync.snapshot().self;
     const firstDiscovery = getDiscoveryBoundaries().at(-1);
     expect(mobile).toBeDefined();
     expect(firstDiscovery?.publishedPort).toBeGreaterThan(0);
 
     const firstPairing = remote.engine.pair(
       { ...mobile!, host: '127.0.0.1', port: firstDiscovery!.publishedPort! },
-      phonePairingCode(),
+      phonePairingCode(applicationFixture),
     );
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .pairingAttempts.some(
-            attempt =>
-              attempt.device.id === remoteDevice.id &&
-              attempt.direction === 'incoming' &&
-              attempt.stage === 'waiting_for_confirmation',
-          ),
+        applicationFixture.application.sync.snapshot().pairing?.device.id ===
+        remoteDevice.id,
       3000,
       'initial incoming pairing',
     );
     await firstPairing;
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.some(
-            device =>
-              device.id === remoteDevice.id && device.status === 'connected',
-          ),
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'connected',
       3000,
       'initial connected device',
     );
     await waitFor(() => Boolean(persistedPairings()));
 
-    await syncService.stop();
-    expect(useSyncStore.getState().status).toBe('idle');
+    await applicationFixture.application.sync.stop();
+    expect(applicationFixture.application.sync.snapshot().service.state).toBe(
+      'idle',
+    );
 
-    await syncService.start();
+    await applicationFixture.application.sync.start();
     const discovery = getDiscoveryBoundaries().at(-1);
     expect(discovery).toBeDefined();
     // Announce the peer only once this boundary is actually browsing. A resolve that arrives before the
@@ -175,27 +185,24 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     // reconnect with. The store reloads from the Keychain asynchronously after a restart.
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.some(d => d.id === remoteDevice.id && d.hasCredential),
+        applicationFixture.application.sync
+          .snapshot()
+          .paired.some(d => d.id === remoteDevice.id),
       3000,
       'credential reloaded after restart',
     );
     discovery!.resolve(remoteDevice);
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.some(
-            device =>
-              device.id === remoteDevice.id && device.status === 'connected',
-          ),
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'connected',
       3000,
       'reconnected device',
     );
     expect(
-      useSyncStore
-        .getState()
+      applicationFixture.application.sync
+        .snapshot()
         .discovered.some(device => device.id === remoteDevice.id),
     ).toBe(true);
 
@@ -224,8 +231,8 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
 
-    await syncService.start();
-    const mobile = useSyncStore.getState().thisDevice;
+    await applicationFixture.application.sync.start();
+    const mobile = applicationFixture.application.sync.snapshot().self;
     const firstDiscovery = getDiscoveryBoundaries().at(-1);
     if (!mobile || !firstDiscovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
@@ -233,35 +240,27 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
     const secondPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
-      phonePairingCode(),
+      phonePairingCode(applicationFixture),
     );
-    await waitFor(() =>
-      useSyncStore
-        .getState()
-        .pairingAttempts.some(
-          attempt =>
-            attempt.device.id === remoteDevice.id &&
-            attempt.direction === 'incoming' &&
-            attempt.stage === 'waiting_for_confirmation',
-        ),
+    await waitFor(
+      () =>
+        applicationFixture.application.sync.snapshot().pairing?.device.id ===
+        remoteDevice.id,
     );
     await secondPairing;
-    await waitFor(() =>
-      useSyncStore
-        .getState()
-        .knownDevices.some(
-          device =>
-            device.id === remoteDevice.id && device.status === 'connected',
-        ),
+    await waitFor(
+      () =>
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'connected',
     );
 
     await remote.engine.stop();
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.find(device => device.id === remoteDevice.id)
-          ?.status === 'offline',
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'disconnected',
       3000,
       'disconnect before repair',
     );
@@ -271,7 +270,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       // The rebuilt desktop presents the code this phone is showing, which is the whole confirmation.
-      getPassphrase: () => phonePairingCode(),
+      getPassphrase: () => phonePairingCode(applicationFixture),
       getSharedSecret: deviceId =>
         remotePersistence.getActive(deviceId)?.sharedSecret,
       pairingPersistence: remotePersistence,
@@ -286,48 +285,41 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       'discovery to start browsing',
     );
     getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
-    await waitFor(
-      () =>
-        useSyncStore
-          .getState()
-          .knownDevices.find(device => device.id === remoteDevice.id)
-          ?.status === 'needs_repair',
-      3000,
-      'one-sided trust repair state',
+    const repair = await applicationFixture.application.sync.repair(
+      remoteDevice.id,
     );
-    const repairProjection = selectSyncControlCenter(useSyncStore.getState());
+    expect(repair).toEqual({ ok: true, value: 'needs_code' });
+    const repairProjection = applicationFixture.application.sync.snapshot();
     expect(repairProjection.paired.map(device => device.id)).toContain(
       remoteDevice.id,
     );
-    expect(repairProjection.saved.map(device => device.id)).not.toContain(
+    expect(repairProjection.discovered.map(device => device.id)).toContain(
       remoteDevice.id,
     );
-    expect(
-      repairProjection.sections.find(section => section.id === 'available')
-        ?.devices.map(device => device.id),
-    ).toContain(remoteDevice.id);
 
     // Repairing asks for the code again, and the code has a shape the parser enforces - a phrase like
     // 'blue-otter-42' never reaches the other device at all.
-    await syncService.pair(remoteDevice, phonePairingCode());
+    await applicationFixture.application.sync.pair({
+      deviceId: remoteDevice.id,
+      code: phonePairingCode(applicationFixture),
+    });
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.find(device => device.id === remoteDevice.id)
-          ?.status === 'connected',
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'connected',
       3000,
       'repaired connection',
     );
     expect(remotePersistence.getActive(mobile.id)?.sharedSecret).toBeTruthy();
 
-    await syncService.forgetDevice(remoteDevice.id);
+    await applicationFixture.application.sync.forget(remoteDevice.id);
     await waitFor(
       () => remotePersistence.getActive(mobile.id) === undefined,
       3000,
       'remote membership revocation',
     );
-    expect(useSyncStore.getState().knownDevices).toEqual([]);
+    expect(applicationFixture.application.sync.snapshot().paired).toEqual([]);
     // Nothing left that could reconnect this device. The format version is read from the app rather
     // than written down here, so a bump does not read as a failure.
     expect(JSON.parse(persistedPairings() ?? '{}')).toEqual(
@@ -353,7 +345,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
    * Held open rather than deleted or weakened: the fix is a src change and needs Mac's decision. It is
    * skipped only so the suite can go green for a PR; un-skip with the fix.
    */
-  it.skip('keeps an offline eviction pending across restart and completes it on rediscovery', async () => {
+  it('keeps an offline eviction pending across restart and completes it on rediscovery', async () => {
     const remotePersistence = new MembershipPersistenceBoundary();
     const remoteDevice: DeviceInfo = {
       id: 'offline-desktop-peer',
@@ -375,8 +367,8 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
 
-    await syncService.start();
-    const mobile = useSyncStore.getState().thisDevice;
+    await applicationFixture.application.sync.start();
+    const mobile = applicationFixture.application.sync.snapshot().self;
     const firstDiscovery = getDiscoveryBoundaries().at(-1);
     if (!mobile || !firstDiscovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
@@ -384,25 +376,24 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
     const pairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
-      phonePairingCode(),
+      phonePairingCode(applicationFixture),
     );
     // Not waiting on `waiting_for_confirmation`: over an in-memory transport the attempt passes through
     // it in under a millisecond, so watching for it is watching for a frame that has already gone. The
     // device joining the mesh is the outcome, and that is what is waited for.
     await pairing;
     await waitFor(() =>
-      useSyncStore
-        .getState()
-        .knownDevices.some(device => device.id === remoteDevice.id),
+      applicationFixture.application.sync
+        .snapshot()
+        .paired.some(device => device.id === remoteDevice.id),
     );
 
     await remote.engine.stop();
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
-          .knownDevices.find(device => device.id === remoteDevice.id)
-          ?.status === 'offline',
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'disconnected',
       3000,
       'offline peer',
     );
@@ -414,21 +405,21 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     // and on this host that announcement drives reconciliation, which resumes committed evictions and
     // finalises the transaction early - so which side ends up staging the peer's revocation depends on
     // who got there first. Recorded in docs/GAPS_BACKLOG.md.
-    await syncService.forgetDevice(remoteDevice.id);
+    await applicationFixture.application.sync.forget(remoteDevice.id);
     await waitFor(() => {
       const stored = JSON.parse(persistedPairings() ?? '{}') as {
         pendingRevocations?: Record<string, unknown>;
       };
       return Boolean(stored.pendingRevocations?.[remoteDevice.id]);
     });
-    expect(useSyncStore.getState().knownDevices).toEqual([]);
+    expect(applicationFixture.application.sync.snapshot().paired).toEqual([]);
 
-    await syncService.stop();
-    await syncService.start();
+    await applicationFixture.application.sync.stop();
+    await applicationFixture.application.sync.start();
     await waitFor(
       () =>
-        useSyncStore
-          .getState()
+        applicationFixture.application.sync
+          .snapshot()
           .membershipRevocations.some(
             revocation =>
               revocation.device.id === remoteDevice.id &&
@@ -468,8 +459,8 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       return Object.keys(stored.pendingRevocations ?? {}).length === 0;
     });
     expect(
-      useSyncStore
-        .getState()
+      applicationFixture.application.sync
+        .snapshot()
         .membershipRevocations.some(
           revocation =>
             revocation.device.id === remoteDevice.id &&

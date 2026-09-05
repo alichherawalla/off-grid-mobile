@@ -364,6 +364,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           <ModelCardActions
             isDownloaded={isDownloaded}
             isDownloading={isDownloading}
+            isQueued={isQueued}
+            isPaused={isPaused}
             isActive={isActive}
             isCompatible={isCompatible}
             incompatibleReason={incompatibleReason}

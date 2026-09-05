@@ -9,6 +9,7 @@ import {
   installLicensedPhone,
   registerThisPhone,
 } from '../../harness/licensedMesh';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.unmock('@react-navigation/native');
 
@@ -52,18 +53,6 @@ async function waitForCondition(
 /** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
 const mesh = createLicensedMesh();
 
-/**
- * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
- * presenting this code, which is why nothing has to be accepted afterwards.
- */
-function phonePairingCode(): string {
-  const { useSyncStore } =
-    require('../../../pro/sync/syncStore') as typeof import('../../../pro/sync/syncStore');
-  const code = useSyncStore.getState().pairingCode.code;
-  if (!code) throw new Error('the phone has not issued a pairing code yet');
-  return code;
-}
-
 describe('Pro mobile knowledge document sync journey', () => {
   it('stages file-first input, indexes it visibly, sends a picked file back, and applies a tombstone', async () => {
     const globals = globalThis as unknown as {
@@ -73,12 +62,20 @@ describe('Pro mobile knowledge document sync journey', () => {
     globals.Buffer = undefined;
     installNativeBoundary({ llama: true });
     installRealSqlite();
+    const ReactNative = require('react-native');
+    const { ProximityAir } = require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    ReactNative.NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: 'fp-this-phone',
+      name: 'This phone',
+      platform: 'ios',
+    });
+    const { installPro } = require('../../harness/proHarness') as typeof import('../../harness/proHarness');
+    await installPro();
     const React = require('react');
     const rtl = requireRTL();
     const { NavigationContainer } = require('@react-navigation/native');
     const asyncStorageModule = require('@react-native-async-storage/async-storage');
     const AsyncStorage = asyncStorageModule.default ?? asyncStorageModule;
-    const Keychain = require('react-native-keychain');
     const TcpSocket = require('react-native-tcp-socket').default;
     const RNFS = require('react-native-fs').default;
     const picker = require('@react-native-documents/picker');
@@ -100,16 +97,13 @@ describe('Pro mobile knowledge document sync journey', () => {
     } = require('../../../src/bootstrap/hookRegistry');
     const { useAppStore } = require('../../../src/stores/appStore');
     const { useChatStore } = require('../../../src/stores/chatStore');
-    const { ragService } = require('../../../src/services/modelServices/bootstrap/ragBootstrap');
     const { buildSyncEngine } = require('../../../src/services/sync/engine');
     const {
       knowledgeDocumentSyncService,
     } = require('../../../pro/sync/knowledgeDocumentSyncService');
     const { stateSyncService } = require('../../../pro/sync/stateSyncService');
-    const { syncService } = require('../../../pro/sync/syncService');
     const { useSyncStore } = require('../../../pro/sync/syncStore');
     const {
-      getDiscoveryBoundaries,
       resetDiscoveryBoundaries,
     } = require('../../utils/nativeSyncBoundaries');
     const {
@@ -180,7 +174,17 @@ describe('Pro mobile knowledge document sync journey', () => {
       name: 'Off Grid AI Desktop',
       platform: 'macos',
     });
-    Keychain.setGenericPassword.mockResolvedValue(true);
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    const applicationFixture: MobileApplicationFixture =
+      await startMobileApplicationFixture({ pro: true });
+    const rag = applicationFixture.application.rag;
+    const allKnowledgeDocuments = async () => {
+      const documents = [];
+      for await (const document of rag.sync.allDocuments()) {
+        documents.push(document);
+      }
+      return documents;
+    };
 
     const remoteDevice = {
       id: 'desktop-knowledge-peer',
@@ -267,45 +271,49 @@ describe('Pro mobile knowledge document sync journey', () => {
       remoteDevice.port = remote.transport.boundPort ?? 0;
       await stateSyncService.start();
       expect(stateSyncService.preferences().projects).toBe(true);
-      await syncService.start();
 
       const prePairPath = '/docs/phone-before-pair.txt';
       const prePairText =
         'This knowledge document existed on the phone before the desktop paired.';
       await RNFS.writeFile(prePairPath, prePairText, 'utf8');
-      await ragService.indexDocument({
+      const prePairIndex = await rag.addDocument({
         projectId: prePairProjectId,
-        filePath: prePairPath,
+        path: prePairPath,
         fileName: 'phone-before-pair.txt',
-        fileSize: Buffer.byteLength(prePairText),
+        size: Buffer.byteLength(prePairText),
       });
+      expect(prePairIndex.ok).toBe(true);
 
-      const mobile = useSyncStore.getState().thisDevice;
-      const discovery = getDiscoveryBoundaries().at(-1);
-      if (!mobile || !discovery?.publishedPort) {
+      const mobile = applicationFixture.application.sync.snapshot().self;
+      if (!mobile || !mobile.port) {
         throw new Error('Sync did not publish the mobile device');
       }
       // There is no accept step and no separate passphrase: the peer presents the code THIS phone is
       // showing, and a code that matches is the whole confirmation. Waiting for the intermediate
       // `waiting_for_confirmation` stage is also gone - over an in-memory transport the attempt passes
       // through it in under a millisecond, so it is a frame that has already been and gone.
+      const pairingCode =
+        await applicationFixture.application.sync.rotatePairingCode();
+      if (!pairingCode.ok) {
+        throw new Error('The phone did not issue a pairing code');
+      }
       await remote.engine.pair(
         {
           ...mobile,
           host: '127.0.0.1',
-          port: discovery.publishedPort,
+          port: mobile.port,
         },
-        phonePairingCode(),
+        pairingCode.value.code,
       );
       await waitForCondition(
         () =>
           remote.engine.isPaired(mobile.id) &&
-          useSyncStore
-            .getState()
-            .knownDevices.some(
-              (device: { id: string; status: string }) =>
-                device.id === remoteDevice.id && device.status === 'connected',
-            ),
+          applicationFixture.application.sync.snapshot().paired.some(
+            device => device.id === remoteDevice.id,
+          ) &&
+          applicationFixture.application.sync.snapshot().connections[
+            remoteDevice.id
+          ] === 'connected',
         'Mobile and Desktop did not reach connected state',
       );
       await waitForCondition(
@@ -342,7 +350,7 @@ describe('Pro mobile knowledge document sync journey', () => {
           new Uint8Array(remoteBytes.subarray(offset, offset + length)),
       });
       expect(
-        (await ragService.getAllDocumentsForSync()).some(
+        (await allKnowledgeDocuments()).some(
           (document: { syncId: string }) =>
             document.syncId === remoteDocumentId,
         ),
@@ -370,17 +378,19 @@ describe('Pro mobile knowledge document sync journey', () => {
 
       await waitForCondition(
         async () =>
-          (await ragService.getAllDocumentsForSync()).some(
+          (await allKnowledgeDocuments()).some(
             (document: { syncId: string }) =>
               document.syncId === remoteDocumentId,
           ),
         'Mobile did not index the streamed Desktop document',
       );
-      expect(await ragService.getDocumentsByProject(remoteProjectId)).toEqual([
+      const remoteProjectDocuments = await rag.listDocuments(remoteProjectId);
+      expect(remoteProjectDocuments.ok).toBe(true);
+      expect(remoteProjectDocuments.ok && remoteProjectDocuments.value).toEqual([
         expect.objectContaining({
           name: 'launch-brief.txt',
-          project_id: remoteProjectId,
-          sync_id: remoteDocumentId,
+          projectId: remoteProjectId,
+          syncId: remoteDocumentId,
         }),
       ]);
 
@@ -402,7 +412,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       // checksum and resumes at the end, so no payload crosses the mesh and no document is re-indexed.
       expect(repeatedReads).toBe(0);
       expect(
-        (await ragService.getAllDocumentsForSync()).filter(
+        (await allKnowledgeDocuments()).filter(
           (document: { syncId: string }) =>
             document.syncId === remoteDocumentId,
         ),
@@ -479,7 +489,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       await waitForCondition(
         async () =>
           !(
-            await ragService.getAllDocumentsForSync()
+            await allKnowledgeDocuments()
           ).some(
             (document: { syncId: string }) =>
               document.syncId === remoteDocumentId,
@@ -503,7 +513,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       await knowledgeDocumentSyncService.stop();
       await stateSyncService.stop();
       await remote.engine.stop();
-      await syncService.stop();
+      await applicationFixture.dispose();
     }
   });
 });

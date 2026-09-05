@@ -1,35 +1,44 @@
 /**
- * AppNavigator Tests
+ * AppNavigator — real composition.
  *
- * Tests for the main navigation setup including:
- * - Tab bar safe area inset handling
- * - Tab bar renders all tabs
- * - Dynamic height based on device navigation mode
+ * Mounts the REAL root navigator (real RootStack + real bottom tabs + the real
+ * screen registry) over the REAL app store, the REAL screens, the REAL
+ * components barrel and the REAL model services, running against the in-memory
+ * device boundary (installNativeBoundary({ fs: true })).
+ *
+ * No Off Grid module is mocked. The only fakes are outside our system:
+ * safe-area-context (so the test can drive a device inset), vector-icons and
+ * the native filesystem. Every assertion reads the UI the user sees.
+ *
+ * Behaviours covered:
+ *  - bootstrap gating: onboarding-not-done -> Onboarding route; done -> Main tabs
+ *  - route registration: all five tab labels + tab testIDs exist
+ *  - tab bar safe-area height/padding for gesture, iPhone and 3-button navigation
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { useAppStore } from '../../../src/stores/appStore';
-import { resetStores, setupWithActiveModel } from '../../utils/testHelpers';
-import { createDeviceInfo } from '../../utils/factories';
+import {
+  installNativeBoundary,
+  requireRTL,
+} from '../../harness/nativeBoundary';
 
-// Mock requestAnimationFrame
-(globalThis as any).requestAnimationFrame = (cb: () => void) => {
-  return setTimeout(cb, 0);
-};
-
-// Track useSafeAreaInsets mock so we can change it per test
+// Outside our system: the device's safe-area insets. Mutable so a test can
+// stand in for gesture nav (0), iPhone home indicator (34) and Android
+// 3-button nav (48) without touching production code.
 const mockInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
 jest.mock('react-native-safe-area-context', () => {
   const mockReact = require('react');
-  const mockSafeAreaInsetsContext = mockReact.createContext(mockInsets);
-  const mockSafeAreaFrameContext = mockReact.createContext({ x: 0, y: 0, width: 390, height: 844 });
   return {
-    SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
-    SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
-    SafeAreaInsetsContext: mockSafeAreaInsetsContext,
-    SafeAreaFrameContext: mockSafeAreaFrameContext,
+    SafeAreaProvider: ({ children }: any) => children,
+    SafeAreaView: ({ children }: any) => children,
+    SafeAreaInsetsContext: mockReact.createContext(mockInsets),
+    SafeAreaFrameContext: mockReact.createContext({
+      x: 0,
+      y: 0,
+      width: 390,
+      height: 844,
+    }),
     useSafeAreaInsets: () => mockInsets,
     initialWindowMetrics: {
       frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -38,151 +47,151 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-// Mock navigation
-const mockNavigate = jest.fn();
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native');
-  return {
-    ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: jest.fn(),
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
-    }),
-  };
+jest.mock('react-native-vector-icons/Feather', () => {
+  const { Text } = require('react-native');
+  return ({ name }: any) => <Text>{name}</Text>;
 });
 
-// Mock services
-jest.mock('../../harness/activeModelLifecycle', () => ({
-  activeModelService: {
-    // The model-selection seam, from the one place it is defined.
-    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    loadTextModel: jest.fn(() => Promise.resolve()),
-    loadImageModel: jest.fn(() => Promise.resolve()),
-    unloadTextModel: jest.fn(() => Promise.resolve()),
-    unloadImageModel: jest.fn(() => Promise.resolve()),
-    unloadAllModels: jest.fn(() => Promise.resolve({ textUnloaded: true, imageUnloaded: true })),
-    getActiveModels: jest.fn(() => ({ text: null, image: null })),
-    checkMemoryForModel: jest.fn(() => Promise.resolve({ canLoad: true, severity: 'safe', message: '' })),
-    subscribe: jest.fn(() => jest.fn()),
-    getResourceUsage: jest.fn(() => Promise.resolve({
-      textModelMemory: 0,
-      imageModelMemory: 0,
-      totalMemory: 0,
-      memoryAvailable: 4 * 1024 * 1024 * 1024,
-    })),
-    syncWithNativeState: jest.fn(),
-  },
-}));
+(globalThis as any).requestAnimationFrame = (cb: () => void) =>
+  setTimeout(cb, 0);
 
-jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
-  modelLibrary: {
-    getDownloadedModels: jest.fn(() => Promise.resolve([])),
-      linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
-    getDownloadedImageModels: jest.fn(() => Promise.resolve([])),
-  },
-}));
+describe('AppNavigator (real composition)', () => {
+  let RTL: ReturnType<typeof requireRTL>;
+  let AppNavigator: React.FC;
+  let NavigationContainer: any;
+  let useAppStore: any;
 
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: {
-    getDeviceInfo: jest.fn(() => Promise.resolve({
-      totalMemory: 8 * 1024 * 1024 * 1024,
-      availableMemory: 4 * 1024 * 1024 * 1024,
-    })),
-    formatBytes: jest.fn((bytes: number) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`),
-    formatModelSize: jest.fn(() => '4.0 GB'),
-  },
-}));
+  const setInsetBottom = (bottom: number) => {
+    mockInsets.bottom = bottom;
+  };
 
-jest.mock('../../../src/utils/haptics', () => ({
-  triggerHaptic: jest.fn(),
-}));
-
-// Mock AnimatedEntry / AnimatedListItem / AnimatedPressable
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
-jest.mock('../../../src/components/AnimatedListItem', () => ({
-  AnimatedListItem: ({ children, onPress, testID, style }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity testID={testID} style={style} onPress={onPress}>
-        {children}
-      </TouchableOpacity>
+  const mount = () =>
+    RTL.render(
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>,
     );
-  },
-}));
-jest.mock('../../../src/components/AnimatedPressable', () => ({
-  AnimatedPressable: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return <TouchableOpacity style={style} onPress={onPress} testID={testID}>{children}</TouchableOpacity>;
-  },
-}));
 
-// Mock AppSheet
-jest.mock('../../../src/components/AppSheet', () => ({
-  AppSheet: ({ visible, children }: any) => {
-    if (!visible) return null;
-    return children;
-  },
-}));
-
-// Mock components module
-jest.mock('../../../src/components', () => {
-  const actual = jest.requireActual('../../../src/components');
-  return {
-    ...actual,
-    CustomAlert: () => null,
+  const settle = async () => {
+    await RTL.act(async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
   };
-});
 
-// Mock useFocusTrigger
-jest.mock('../../../src/hooks/useFocusTrigger', () => ({
-  useFocusTrigger: () => 0,
-}));
+  const mountAndSettle = async () => {
+    const r = mount();
+    await settle();
+    return r;
+  };
 
-// Mock Swipeable
-jest.mock('react-native-gesture-handler/Swipeable', () => {
-  const RN = require('react');
-  const { View } = require('react-native');
-  return RN.forwardRef(({ children, containerStyle }: any, _ref: any) => (
-    <View style={containerStyle}>{children}</View>
-  ));
-});
+  /**
+   * The onboarding flag is durable state: the real app recovers it from
+   * AsyncStorage through the app store's own persist middleware on every launch.
+   * Seeding that boundary and letting the store rehydrate reaches the
+   * precondition the way a returning user does, instead of manufacturing it.
+   */
+  const seedPersistedOnboarding = async (complete: boolean) => {
+    const storage = require('@react-native-async-storage/async-storage');
+    await storage.setItem(
+      'local-llm-app-storage',
+      JSON.stringify({
+        state: { hasCompletedOnboarding: complete },
+        version: 0,
+      }),
+    );
+    await useAppStore.persist.rehydrate();
+  };
 
-// Import after mocks
-import { AppNavigator } from '../../../src/navigation/AppNavigator';
+  /**
+   * `downloadedModels` is NOT part of the app store's persisted slice - the real
+   * recovery path is the model-library bootstrap, which only runs when the whole
+   * Mobile application composition root is started. A root-route navigator test
+   * mounts the navigator alone, so there is no persisted boundary and no gesture
+   * that precedes mount for this one field; it is set directly and deliberately.
+   */
+  const setInstalledModels = (
+    models: ReturnType<typeof installedTextModel>[],
+  ) => {
+    useAppStore.setState({ downloadedModels: models });
+  };
 
-const renderAppNavigator = () => {
-  return render(
-    <NavigationContainer>
-      <AppNavigator />
-    </NavigationContainer>
-  );
-};
+  beforeEach(async () => {
+    installNativeBoundary({ fs: true });
+    jest.spyOn(global, 'fetch').mockImplementation(async input => {
+      const url = String(input);
+      return {
+        ok: url.startsWith('https://huggingface.co/'),
+        status: url.startsWith('https://huggingface.co/') ? 200 : 404,
+        json: async () => [],
+      } as Response;
+    });
 
-describe('AppNavigator', () => {
-  beforeEach(() => {
-    resetStores();
-    jest.clearAllMocks();
-    // Reset insets to default
+    RTL = requireRTL();
+    NavigationContainer =
+      require('@react-navigation/native').NavigationContainer;
+    AppNavigator = require('../../../src/navigation/AppNavigator').AppNavigator;
+    useAppStore = require('../../../src/stores').useAppStore;
+
     mockInsets.top = 0;
     mockInsets.right = 0;
     mockInsets.bottom = 0;
     mockInsets.left = 0;
 
-    // Setup store so we land on Main tabs
-    setupWithActiveModel();
-    useAppStore.setState({
-      hasCompletedOnboarding: true,
-      deviceInfo: createDeviceInfo(),
+    await seedPersistedOnboarding(true);
+    setInstalledModels([installedTextModel()]);
+  });
+
+  afterEach(async () => {
+    // installNativeBoundary() calls jest.resetModules() on every beforeEach. Without
+    // tearing the previous graph down here each test orphans a mounted tree and an
+    // un-stopped application on a module graph nobody can reach any more.
+    RTL?.cleanup?.();
+    const fixtures =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    await fixtures.currentMobileApplicationFixture()?.dispose();
+    jest.restoreAllMocks();
+  });
+
+  /** A model the user has already downloaded — the real Main-tabs precondition. */
+  const installedTextModel = () => ({
+    id: 'm1',
+    name: 'Model 1',
+    author: 'a',
+    fileName: 'm1.gguf',
+    filePath: '/docs/models/m1.gguf',
+    fileSize: 1024,
+    quantization: 'Q4_K_M',
+    downloadedAt: '',
+  });
+
+  // ---- Bootstrap gating (the root route the user lands on) ----
+
+  describe('bootstrap gating', () => {
+    it('lands on the Main tabs once onboarding is complete', async () => {
+      const { getByTestId } = await mountAndSettle();
+      expect(getByTestId('home-tab')).toBeTruthy();
+    });
+
+    it('does not show the Main tab bar before onboarding is complete', async () => {
+      await seedPersistedOnboarding(false);
+      const { queryByTestId } = await mountAndSettle();
+      expect(queryByTestId('home-tab')).toBeNull();
+    });
+
+    it('routes a user with no downloaded model to auto setup, not the tabs', async () => {
+      await seedPersistedOnboarding(true);
+      setInstalledModels([]);
+      const rendered = await mountAndSettle();
+      expect(rendered.queryByTestId('home-tab')).toBeNull();
+      await rendered.findByTestId('auto-setup-screen');
     });
   });
 
-  describe('Tab bar rendering', () => {
-    it('renders all five tab labels', () => {
-      const { getAllByText } = renderAppNavigator();
+  // ---- Route registration ----
+
+  describe('tab bar rendering', () => {
+    it('renders all five tab labels', async () => {
+      const { getAllByText } = await mountAndSettle();
 
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
@@ -191,8 +200,8 @@ describe('AppNavigator', () => {
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders all tab buttons with testIDs', () => {
-      const { getByTestId } = renderAppNavigator();
+    it('renders all tab buttons with testIDs', async () => {
+      const { getByTestId } = await mountAndSettle();
 
       expect(getByTestId('home-tab')).toBeTruthy();
       expect(getByTestId('chats-tab')).toBeTruthy();
@@ -202,88 +211,72 @@ describe('AppNavigator', () => {
     });
   });
 
-  describe('Tab bar safe area insets', () => {
-    it('uses minimum paddingBottom of 20 when bottom inset is 0 (gesture navigation)', () => {
-      mockInsets.bottom = 0;
-      const { getByTestId } = renderAppNavigator();
+  // ---- Tab bar safe area insets ----
 
-      // Tab bar should render — verify via a tab button
-      const homeTab = getByTestId('home-tab');
-      expect(homeTab).toBeTruthy();
+  describe('tab bar safe area insets', () => {
+    const flatten = (style: any): any =>
+      Array.isArray(style)
+        ? Object.assign({}, ...style.filter(Boolean).map(flatten))
+        : style ?? {};
 
-      // Find the tab bar container (parent of tab buttons)
-      // The tab bar style should have height: 60 + 20 = 80 and paddingBottom: 20
-      const tabBar = getByTestId('home-tab').parent?.parent;
-      if (tabBar && tabBar.props?.style) {
-        const flatStyle = Array.isArray(tabBar.props.style)
-          ? Object.assign({}, ...tabBar.props.style.filter(Boolean))
-          : tabBar.props.style;
-        if (flatStyle.paddingBottom !== undefined) {
-          expect(flatStyle.paddingBottom).toBe(20);
+    /**
+     * Walk up from a tab button to the first ancestor that carries the tab-bar
+     * container style (the node that owns paddingBottom/height). The direct
+     * `.parent.parent` node does not, so an assertion pinned to it silently
+     * asserts nothing.
+     */
+    const tabBarStyle = (rendered: any) => {
+      let node: any = rendered.getByTestId('home-tab');
+      while (node) {
+        const flat = flatten(node.props?.style);
+        if (flat.paddingBottom !== undefined && flat.height !== undefined) {
+          return flat;
         }
-        if (flatStyle.height !== undefined) {
-          expect(flatStyle.height).toBe(80);
-        }
+        node = node.parent;
       }
+      throw new Error('tab bar container style not found above home-tab');
+    };
+
+    it('uses a minimum paddingBottom of 20 when the bottom inset is 0 (gesture navigation)', async () => {
+      setInsetBottom(0);
+      const rendered = await mountAndSettle();
+
+      expect(rendered.getByTestId('home-tab')).toBeTruthy();
+      const flat = tabBarStyle(rendered);
+      expect(flat.paddingBottom).toBe(20);
+      expect(flat.height).toBe(80);
     });
 
-    it('uses device bottom inset when larger than minimum (3-button navigation)', () => {
-      mockInsets.bottom = 48;
-      const { getByTestId } = renderAppNavigator();
+    it('uses the device bottom inset when larger than the minimum (3-button navigation)', async () => {
+      setInsetBottom(48);
+      const rendered = await mountAndSettle();
 
-      const homeTab = getByTestId('home-tab');
-      expect(homeTab).toBeTruthy();
-
-      // The tab bar style should have height: 60 + 48 = 108 and paddingBottom: 48
-      const tabBar = getByTestId('home-tab').parent?.parent;
-      if (tabBar && tabBar.props?.style) {
-        const flatStyle = Array.isArray(tabBar.props.style)
-          ? Object.assign({}, ...tabBar.props.style.filter(Boolean))
-          : tabBar.props.style;
-        if (flatStyle.paddingBottom !== undefined) {
-          expect(flatStyle.paddingBottom).toBe(48);
-        }
-        if (flatStyle.height !== undefined) {
-          expect(flatStyle.height).toBe(108);
-        }
-      }
+      expect(rendered.getByTestId('home-tab')).toBeTruthy();
+      const flat = tabBarStyle(rendered);
+      expect(flat.paddingBottom).toBe(48);
+      expect(flat.height).toBe(108);
     });
 
-    it('uses device bottom inset of 34 for iPhone-style safe area', () => {
-      mockInsets.bottom = 34;
-      const { getByTestId } = renderAppNavigator();
+    it('uses a device bottom inset of 34 for the iPhone home indicator', async () => {
+      setInsetBottom(34);
+      const rendered = await mountAndSettle();
 
-      const homeTab = getByTestId('home-tab');
-      expect(homeTab).toBeTruthy();
-
-      const tabBar = getByTestId('home-tab').parent?.parent;
-      if (tabBar && tabBar.props?.style) {
-        const flatStyle = Array.isArray(tabBar.props.style)
-          ? Object.assign({}, ...tabBar.props.style.filter(Boolean))
-          : tabBar.props.style;
-        if (flatStyle.paddingBottom !== undefined) {
-          expect(flatStyle.paddingBottom).toBe(34);
-        }
-        if (flatStyle.height !== undefined) {
-          expect(flatStyle.height).toBe(94);
-        }
-      }
+      expect(rendered.getByTestId('home-tab')).toBeTruthy();
+      const flat = tabBarStyle(rendered);
+      expect(flat.paddingBottom).toBe(34);
+      expect(flat.height).toBe(94);
     });
 
-    it('renders all tabs with large bottom inset (regression test for nav bar overlap)', () => {
-      // This is the key regression test: with a 48dp bottom inset (3-button Android nav),
-      // all tabs should still be visible and not clipped by the system navigation bar
-      mockInsets.bottom = 48;
-      const { getAllByText, getByTestId } = renderAppNavigator();
+    it('keeps every tab visible with a large bottom inset (regression: nav bar overlap)', async () => {
+      setInsetBottom(48);
+      const { getAllByText, getByTestId } = await mountAndSettle();
 
-      // All tab labels should be visible
       expect(getAllByText('Home').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Chats').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Projects').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Models').length).toBeGreaterThanOrEqual(1);
       expect(getAllByText('Settings').length).toBeGreaterThanOrEqual(1);
 
-      // All tab buttons should be pressable
       expect(getByTestId('home-tab')).toBeTruthy();
       expect(getByTestId('chats-tab')).toBeTruthy();
       expect(getByTestId('projects-tab')).toBeTruthy();

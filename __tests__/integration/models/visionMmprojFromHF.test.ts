@@ -18,10 +18,10 @@ import fs from 'fs';
 import path from 'path';
 import {
   isModelProjectorFile as isMMProjFile,
+  modelProjectorLocalName,
   pickProjectorForDownload as pickMmProjForDownload,
   projectorBelongsToModel as mmProjBelongsToModel,
 } from '@offgrid/models';
-import { mmProjLocalName } from '../../../src/services/adapters/models/library/downloadArtifactAdapter';
 import { RECOMMENDED_MODELS } from '@offgrid/models';
 
 const CURATED_VISION_REPOS = RECOMMENDED_MODELS.filter(m => m.type === 'vision').map(m => m.id);
@@ -115,7 +115,7 @@ function repoPairsAndBelongs(fx: RepoFixture): { pairs: boolean; belongs: boolea
   if (pairedModels.length === 0) return { pairs: false, belongs: false };
   const belongs = pairedModels.every(m => {
     const chosen = pickMmProjForDownload(m, projectors)!;
-    return mmProjBelongsToModel(m, mmProjLocalName(m, chosen));
+    return mmProjBelongsToModel(m, modelProjectorLocalName(m, chosen));
   });
   return { pairs: true, belongs };
 }

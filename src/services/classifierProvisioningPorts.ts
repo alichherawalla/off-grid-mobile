@@ -7,8 +7,9 @@ import type { DownloadedModel, ModelFile } from '../types';
 import { useAppStore } from '../stores';
 import { nativeDownloadTransferAdapter } from './adapters/downloads/nativeDownloadTransferAdapter';
 import { huggingFaceService } from './huggingface';
-import { startModelDownload } from './startModelDownload';
 import { selectMobileModel } from './modelServices/selectionCommands';
+import { applicationFacade } from './applicationFacade';
+import { makeModelKey } from '../utils/modelKey';
 
 export type ClassifierModel = DownloadedModel & { hostId: string };
 
@@ -34,13 +35,24 @@ export function mobileClassifierProvisioningPorts(): ConstructorParameters<typeo
     modality: 'classifier',
     modelId: model.id,
   }),
-  download: (repository, artifact, callbacks) =>
-    startModelDownload(repository, artifact, {
-      onRegistered: model => callbacks.onRegistered({
-        ...model,
-        hostId: model.engine,
-      }),
-      onError: callbacks.onError,
-    }),
+  download: async (repository, artifact, callbacks) => {
+    const outcome = await applicationFacade().models.control({
+      type: 'download',
+      modelId: makeModelKey(repository, artifact.name),
+      selection: { repositoryId: repository, fileName: artifact.name },
+    });
+    if (!outcome.ok || outcome.value.status !== 'completed') {
+      callbacks.onError();
+      return;
+    }
+    const installed = useAppStore.getState().downloadedModels.find(
+      model => model.id === makeModelKey(repository, artifact.name),
+    );
+    if (!installed) {
+      callbacks.onError();
+      return;
+    }
+    callbacks.onRegistered({ ...installed, hostId: installed.engine });
+  },
 };
 }

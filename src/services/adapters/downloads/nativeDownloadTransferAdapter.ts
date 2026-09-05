@@ -1,6 +1,11 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
-import type { DownloadTransferPort } from '@offgrid/models';
+import {
+  DownloadAbortedError,
+  type DownloadTransferStopOutcome,
+  type DownloadTransferPort,
+  type DownloadTransferStopDisposition,
+} from '@offgrid/models';
 
 const native = NativeModules.DownloadManagerModule;
 
@@ -10,7 +15,9 @@ type Failure = { downloadId: string; reason?: string; reasonCode?: string };
 
 interface ListenerSet {
   progress: (event: Progress) => void;
-  complete: (event: Complete) => void;
+  complete: (event: Complete, completionWon?: boolean) => void;
+  completionWon: () => void;
+  aborted: () => void;
   error: (event: Failure) => void;
 }
 
@@ -21,10 +28,13 @@ interface WaitForTransferInput {
   onProgress: (progress: { bytesDownloaded: number; totalBytes: number }) => void;
 }
 
-interface TerminalOperation {
-  kind: 'cancel' | 'move';
-  promise: Promise<void>;
-}
+type TerminalOperation =
+  | {
+    kind: 'stop';
+    disposition: DownloadTransferStopDisposition;
+    promise: Promise<{ outcome: DownloadTransferStopOutcome }>;
+  }
+  | { kind: 'move'; promise: Promise<void> };
 
 export class NativeDownloadTransferAdapter implements DownloadTransferPort {
   private readonly listeners = new Map<string, ListenerSet>();
@@ -47,6 +57,7 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
 
   async start(input: Parameters<DownloadTransferPort['start']>[0]): Promise<{ transferId?: string }> {
     this.assertAvailable();
+    if (input.signal.aborted) throw new DownloadAbortedError();
     if (Platform.OS === 'android' && typeof native.requestNotificationPermission === 'function') {
       try { native.requestNotificationPermission(); } catch { /* permission is optional */ }
     }
@@ -86,7 +97,16 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
     const rows = await native.getActiveDownloads();
     return (rows ?? []).some((row: { downloadId?: string; id?: string; status?: string }) => {
       const id = String(row.downloadId ?? row.id);
-      return id === transferId && row.status !== 'failed';
+      const status = row.status?.toLowerCase();
+      return id === transferId && status !== undefined && [
+        'pending',
+        'queued',
+        'running',
+        'retrying',
+        'waiting_for_network',
+        // Native completion still owns a staged file until Shared attaches and promotes it.
+        'completed',
+      ].includes(status);
     });
   }
 
@@ -104,20 +124,67 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
     return (await native.getActiveDownloads()) ?? [];
   }
 
-  async cancel(transferId: string): Promise<void> {
+  async stop(input: {
+    transferId: string;
+    disposition: DownloadTransferStopDisposition;
+  }): Promise<{ outcome: DownloadTransferStopOutcome }> {
     this.assertAvailable();
-    const existing = this.terminalOperations.get(transferId);
-    if (existing) return existing.promise;
-    const cancellation = Promise.resolve()
-      .then(() => native.cancelDownload(transferId))
-      .then(() => undefined);
-    const terminal: TerminalOperation = { kind: 'cancel', promise: cancellation };
-    this.terminalOperations.set(transferId, terminal);
+    const existing = this.terminalOperations.get(input.transferId);
+    if (existing?.kind === 'move') {
+      this.listeners.get(input.transferId)?.completionWon();
+      await existing.promise;
+      return { outcome: 'completed' };
+    }
+    if (existing?.kind === 'stop') {
+      if (existing.disposition !== input.disposition) {
+        throw new Error('Transfer already has a different stop disposition');
+      }
+      return existing.promise;
+    }
+    if (typeof native.stopDownload !== 'function') {
+      throw new Error('Native download stop policy is unavailable');
+    }
+    const stop = Promise.resolve()
+      .then(() => native.stopDownload(input.transferId, input.disposition === 'retain-partial'))
+      .then((outcome: unknown): { outcome: DownloadTransferStopOutcome } => {
+        if (outcome !== 'stopped' && outcome !== 'completed' && outcome !== 'not-found') {
+          throw new Error('Native download stop did not return a terminal verdict');
+        }
+        // Retain-partial is used for pause and shutdown. If native has already lost the row,
+        // the requested terminal state is nevertheless true: no transfer remains and no bytes
+        // may be deleted. Report `stopped` to the Shared owner and settle the waiter through the
+        // typed abort below. Delete-partial keeps `not-found` so an interactive cancel is refused.
+        return {
+          outcome: outcome === 'not-found' && input.disposition === 'retain-partial'
+            ? 'stopped'
+            : outcome,
+        };
+      });
+    const terminal: TerminalOperation = {
+      kind: 'stop',
+      disposition: input.disposition,
+      promise: stop,
+    };
+    this.terminalOperations.set(input.transferId, terminal);
     try {
-      await cancellation;
+      const result = await stop;
+      if (this.terminalOperations.get(input.transferId) === terminal) {
+        this.terminalOperations.delete(input.transferId);
+      }
+      if (result.outcome === 'stopped') {
+        this.listeners.get(input.transferId)?.aborted();
+      } else if (result.outcome === 'completed') {
+        this.listeners.get(input.transferId)?.complete({ downloadId: input.transferId }, true);
+      } else {
+        this.listeners.get(input.transferId)?.error({
+          downloadId: input.transferId,
+          reason: 'Native transfer was not found',
+        });
+      }
+      return result;
     } finally {
-      if (this.terminalOperations.get(transferId) === terminal) {
-        this.terminalOperations.delete(transferId);
+      if (this.terminalOperations.get(input.transferId) === terminal) {
+        this.terminalOperations.delete(input.transferId);
       }
     }
   }
@@ -150,6 +217,10 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
     onProgress,
   }: WaitForTransferInput): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DownloadAbortedError());
+        return;
+      }
       let settled = false;
       let abortRequested = false;
       const cleanup = () => {
@@ -159,28 +230,23 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
       const abort = () => {
         if (settled) return;
         abortRequested = true;
-        // A completion event transfers ownership to the move. Await that same
-        // terminal operation; a second native cancel cannot make the move safer.
-        if (this.terminalOperations.get(transferId)?.kind === 'move') return;
-        this.cancel(transferId).then(() => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          reject(new Error('Download cancelled'));
-        }, cause => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          reject(cause);
-        });
+        // Shared owns the stop disposition and calls `stop`. An AbortSignal alone cannot say
+        // whether bytes must be retained or deleted, so this listener only records the request.
+      };
+      const aborted = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new DownloadAbortedError());
       };
       this.listeners.set(transferId, {
         progress: event => onProgress({
           bytesDownloaded: event.bytesDownloaded,
           totalBytes: event.totalBytes,
         }),
-        complete: () => {
+        complete: (_event, completionWon = false) => {
           if (settled || this.terminalOperations.has(transferId)) return;
+          if (completionWon) abortRequested = false;
           // Register the terminal operation before invoking the native move so
           // abort and explicit cancellation always observe the same promise.
           const terminalMove = Promise.resolve()
@@ -195,7 +261,7 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
             if (settled) return;
             settled = true;
             cleanup();
-            if (abortRequested) reject(new Error('Download cancelled'));
+            if (abortRequested) reject(new DownloadAbortedError());
             else resolve();
           }, cause => {
             if (this.terminalOperations.get(transferId) === terminal) {
@@ -207,6 +273,8 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
             reject(cause);
           });
         },
+        completionWon: () => { abortRequested = false; },
+        aborted,
         error: event => {
           if (settled || this.terminalOperations.has(transferId)) return;
           settled = true;
@@ -215,10 +283,6 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
         },
       });
       signal.addEventListener('abort', abort, { once: true });
-      if (signal.aborted) {
-        abort();
-        return;
-      }
       try {
         native.startProgressPolling();
       } catch (cause) {

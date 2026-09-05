@@ -11,6 +11,7 @@ import {
 import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { whisperService } from '../../../src/services/whisperService';
 import '../../../src/stores/whisperStore';
+import '../../../src/services/composition/application';
 import { MobileModelPackageSink } from '../../../pro/sync/modelPackageSink';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 

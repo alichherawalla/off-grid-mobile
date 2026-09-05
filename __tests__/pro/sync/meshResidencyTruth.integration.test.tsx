@@ -5,6 +5,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import { meshResidencyPolicy } from '../../../pro/sync/meshResidency';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 
 jest.unmock('@react-navigation/native');
 
@@ -39,20 +40,22 @@ const nativeResidency = {
   })),
 };
 
+let applicationFixture: MobileApplicationFixture;
+
 describe('Android mesh residency truth in the rendered Sync journey', () => {
+  beforeAll(async () => {
+    const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({pro: true});
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   beforeEach(async () => {
     await meshResidencyPolicy.release();
     useSyncStore.getState().reset();
-    useSyncStore.getState().setThisDevice({
-      id: 'this-phone',
-      name: 'This phone',
-      platform: 'android',
-      version: '107',
-      host: '127.0.0.1',
-      port: 42069,
-    });
-    useSyncStore.getState().setStatus('running');
-    useSyncStore.getState().setDiscoverable(true);
+    await applicationFixture.application.sync.setDiscoverable(true);
     (NativeModules as unknown as Record<string, unknown>).MeshResidencyModule =
       nativeResidency;
   });

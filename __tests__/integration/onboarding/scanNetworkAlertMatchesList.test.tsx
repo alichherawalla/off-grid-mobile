@@ -47,21 +47,34 @@ jest.mock('react-native-safe-area-context', () => {
     SafeAreaProvider: ({ children }: { children: React.ReactNode }) => children,
     SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
     SafeAreaInsetsContext: mockReact.createContext(insets),
-    SafeAreaFrameContext: mockReact.createContext({ x: 0, y: 0, width: 390, height: 844 }),
+    SafeAreaFrameContext: mockReact.createContext({
+      x: 0,
+      y: 0,
+      width: 390,
+      height: 844,
+    }),
     useSafeAreaInsets: () => insets,
-    initialWindowMetrics: { frame: { x: 0, y: 0, width: 390, height: 844 }, insets },
+    initialWindowMetrics: {
+      frame: { x: 0, y: 0, width: 390, height: 844 },
+      insets,
+    },
   };
 });
 
 import { AdvancedSetupScreen } from '../../../src/screens/ModelDownloadScreen';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { resetStores } from '../../utils/testHelpers';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 const GATEWAY_ENDPOINT = 'http://192.168.1.50:7878';
 
 /** A minimal navigation stub — the screen only calls navigation.replace on Connect/Skip, neither of
  *  which this test exercises. It is NOT our code under test; the tested behaviour is the alert vs the row. */
-const navigation = { replace: jest.fn(), navigate: jest.fn(), goBack: jest.fn() } as any;
+const navigation = {
+  replace: jest.fn(),
+  navigate: jest.fn(),
+  goBack: jest.fn(),
+} as any;
 
 /**
  * Fake the LAN/HTTP boundary — the gateway's /v1/models transport.
@@ -75,30 +88,51 @@ const navigation = { replace: jest.fn(), navigate: jest.fn(), goBack: jest.fn() 
  *   the user saw: "it said no servers found, but added ogad to the list" — the alert (from the failed 2nd
  *   check) and the row (from the later successful check) both, at once.
  */
-function installFetch(opts: { serverReachable: boolean; flakyWarmup?: boolean }): void {
+function installFetch(opts: {
+  serverReachable: boolean;
+  flakyWarmup?: boolean;
+}): void {
   const { serverReachable, flakyWarmup } = opts;
-  const modelsBody = { object: 'list', data: [{ id: 'gateway-llama-3-8b', object: 'model', owned_by: 'local' }] };
+  const modelsBody = {
+    object: 'list',
+    data: [{ id: 'gateway-llama-3-8b', object: 'model', owned_by: 'local' }],
+  };
   let gatewayModelHits = 0;
 
-  (global as unknown as { fetch: unknown }).fetch = jest.fn(async (input: string) => {
-    const url = String(input);
-    const isGatewayModels = url.startsWith(GATEWAY_ENDPOINT) && url.includes('/v1/models');
-    if (serverReachable && isGatewayModels) {
-      gatewayModelHits += 1;
-      // 2nd hit rejects during warm-up so the manual scan's health check finds nothing reachable — the
-      // exact device transient. Every other hit answers, so discovery finds it and the later auto-check
-      // marks it reachable.
-      if (flakyWarmup && gatewayModelHits === 2) throw new Error('warming up');
-      return { ok: true, status: 200, json: async () => modelsBody };
-    }
-    // Everything else — the rest of the discovery subnet sweep, capability probes, unreachable hosts —
-    // is a graceful reject/!ok, exactly as an empty LAN behaves.
-    return { ok: false, status: 404, json: async () => ({}) };
-  });
+  (global as unknown as { fetch: unknown }).fetch = jest.fn(
+    async (input: string) => {
+      const url = String(input);
+      const isGatewayModels =
+        url.startsWith(GATEWAY_ENDPOINT) && url.includes('/v1/models');
+      if (serverReachable && isGatewayModels) {
+        gatewayModelHits += 1;
+        // 2nd hit rejects during warm-up so the manual scan's health check finds nothing reachable — the
+        // exact device transient. Every other hit answers, so discovery finds it and the later auto-check
+        // marks it reachable.
+        if (flakyWarmup && gatewayModelHits === 2)
+          throw new Error('warming up');
+        return { ok: true, status: 200, json: async () => modelsBody };
+      }
+      // Everything else — the rest of the discovery subnet sweep, capability probes, unreachable hosts —
+      // is a graceful reject/!ok, exactly as an empty LAN behaves.
+      return { ok: false, status: 404, json: async () => ({}) };
+    },
+  );
 }
 
 describe('Scan Network — alert matches the rendered list (device state-mismatch)', () => {
   const realFetch = global.fetch;
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(async () => {
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(() => {
     resetStores();
@@ -123,20 +157,28 @@ describe('Scan Network — alert matches the rendered list (device state-mismatc
 
     // Wait for the "Analyzing your device..." init to finish and the network section to render. With an
     // empty store the mount auto-check settles immediately, so "Scan Network" is pressable.
-    await waitFor(() => { expect(ui.queryByText('Scan Network')).not.toBeNull(); }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(ui.queryByText('Scan Network')).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
 
     // Real gesture: tap "Scan Network". The real discoverLANServers finds the gateway and adds it; the
     // scan's own health check flaps (finds nothing reachable this instant); the servers-changed auto-check
     // then marks the gateway reachable so its row renders.
     await act(async () => {
       fireEvent.press(ui.getByText('Scan Network'));
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise(r => setTimeout(r, 0));
     });
 
     // Terminal artifact: the discovered gateway row is present (its name renders)...
-    await waitFor(() => {
-      expect(ui.queryByText(/Off Grid AI Gateway/)).not.toBeNull();
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(ui.queryByText(/Off Grid AI Gateway/)).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
     // ...and the "not found" alert is NOT shown. The alert and the list AGREE.
     expect(ui.queryByText('No Servers Found')).toBeNull();
   });
@@ -146,14 +188,22 @@ describe('Scan Network — alert matches the rendered list (device state-mismatc
     installFetch({ serverReachable: false });
 
     const ui = render(<AdvancedSetupScreen navigation={navigation} />);
-    await waitFor(() => { expect(ui.queryByText('Network Models')).not.toBeNull(); }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(ui.queryByText('Network Models')).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
 
     fireEvent.press(ui.getByText('Scan Network'));
 
     // The helpful "No Servers Found" alert appears — and no server row exists.
-    await waitFor(() => {
-      expect(ui.queryByText('No Servers Found')).not.toBeNull();
-    }, { timeout: 5000 });
+    await waitFor(
+      () => {
+        expect(ui.queryByText('No Servers Found')).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
     expect(ui.queryByTestId(/^discovered-server-/)).toBeNull();
   });
 });

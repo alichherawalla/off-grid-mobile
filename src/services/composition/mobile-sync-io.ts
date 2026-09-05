@@ -8,6 +8,7 @@ import {
   MultiTransportBridge,
   supportsAppleProximity,
   type DeviceInfo,
+  type DiscoveredDevice,
   type DiscoveryService,
   type SyncConnection,
   type SyncDiscoveryHealthSnapshot,
@@ -22,6 +23,56 @@ import { nativeSyncLanAddress } from '../sync/nativeBlobChannel';
 import { IosProximityAdapter } from '../sync/nativeProximity';
 
 const LOCAL_ADDRESS_POLL_MS = 15_000;
+
+function createRestartableLanDiscovery(): DiscoveryService {
+  let current: RnDiscovery | null = null;
+  let found: ((device: DiscoveredDevice) => void) | undefined;
+  let lost: ((deviceId: string) => void) | undefined;
+
+  const adapter = (): RnDiscovery => {
+    if (current) return current;
+    current = new RnDiscovery(new Zeroconf() as unknown as RnZeroconf, {
+      allowHostname: Platform.OS !== 'android',
+      log: message => logger.log(message),
+    });
+    if (found) current.onDeviceFound(found);
+    if (lost) current.onDeviceLost(lost);
+    return current;
+  };
+
+  return {
+    start: () => adapter().start(),
+    startBrowsing: () => adapter().startBrowsing(),
+    stopBrowsing: async () => current?.stopBrowsing(),
+    rescan: () => adapter().rescan(),
+    advertise: device => adapter().advertise(device),
+    stopAdvertising: async () => current?.stopAdvertising(),
+    onDeviceFound(callback) {
+      found = callback;
+      current?.onDeviceFound(callback);
+    },
+    onDeviceLost(callback) {
+      lost = callback;
+      current?.onDeviceLost(callback);
+    },
+    async stop() {
+      const stopped = current;
+      current = null;
+      await stopped?.stop();
+    },
+    getDiscoveryHealthSnapshot: () =>
+      current?.getDiscoveryHealthSnapshot() ?? {
+        routes: [
+          {
+            id: 'lan',
+            browse: { state: 'idle' },
+            advertise: { state: 'idle' },
+            peerCount: 0,
+          },
+        ],
+      },
+  };
+}
 
 export type MobileSyncIo = Pick<
   SyncPlatformPorts,
@@ -116,13 +167,7 @@ export function createMobileSyncIo(localDevice: DeviceInfo): MobileSyncIo {
       logger.warn(`[SYNC] ${routeId} transport: ${error.message}`);
     },
   });
-  const lanDiscovery = new RnDiscovery(
-    new Zeroconf() as unknown as RnZeroconf,
-    {
-      allowHostname: Platform.OS !== 'android',
-      log: message => logger.log(message),
-    },
-  );
+  const lanDiscovery = createRestartableLanDiscovery();
   const discoveryService = new CompositeDiscoveryService({
     sources: [
       {

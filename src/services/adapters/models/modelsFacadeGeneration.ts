@@ -1,5 +1,6 @@
 import {
   GenerationAbortedError,
+  ModelsFailureError,
   modelsFailureMessage,
   PartialGenerationError,
   type GenerationEvents,
@@ -44,8 +45,9 @@ function failureError(failure: ModelsFailure): Error {
     case 'unknown_model':
     case 'remote_http':
     case 'runtime':
-    default:
       return new Error(modelsFailureMessage(failure));
+    default:
+      return new ModelsFailureError(failure);
   }
 }
 

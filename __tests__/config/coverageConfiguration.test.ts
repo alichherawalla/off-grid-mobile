@@ -40,7 +40,9 @@ describe('workspace coverage configuration', () => {
 
   it('runs Mobile without force-exit and limits Shared coverage to Mobile consumers', () => {
     expect(packageManifest.scripts['test:js']).not.toContain('--forceExit');
-    expect(packageManifest.scripts['test:js:shard']).toBe('npm run test:js --');
+    expect(packageManifest.scripts['test:js']).toContain('scripts/run-jest-shards.mjs');
+    expect(packageManifest.scripts['test:js:shard']).toContain('jest --coverage --maxWorkers=1');
+    expect(packageManifest.scripts['test:js:shard']).not.toContain('--forceExit');
     const command = packageManifest.scripts['test:coverage:workspace'];
     expect(command).not.toContain('--forceExit');
     expect(command).toMatch(/^npm run test:js &&/);

@@ -46,10 +46,9 @@ export function useVoiceControllerEffects(input: VoiceControllerEffectInput): vo
       recordingConversationIdRef.current &&
       recordingConversationIdRef.current !== conversationId
     ) {
-      clearResult();
-      recordingConversationIdRef.current = null;
+      cancelRef.current();
     }
-  }, [conversationId, clearResult, recordingConversationIdRef]);
+  }, [conversationId, cancelRef, recordingConversationIdRef]);
 
   useEffect(() => {
     if (!finalResult) return;

@@ -25,7 +25,7 @@ describe('knowledge document Sync identity', () => {
       require('../../../src/services/adapters/rag/ragDatabaseAdapter') as typeof import('../../../src/services/adapters/rag/ragDatabaseAdapter');
     await ragDatabase.ensureReady();
 
-    const firstRead = ragDatabase.getAllDocuments();
+    const firstRead = ragDatabase.getDocumentsByProject('project-1');
     expect(firstRead).toHaveLength(1);
     expect(firstRead[0].sync_id).toMatch(UUID_V4);
 

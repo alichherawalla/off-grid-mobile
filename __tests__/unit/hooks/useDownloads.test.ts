@@ -1,170 +1,176 @@
-import { act, renderHook } from '@testing-library/react-native';
-import type {
-  DownloadCompleteEvent,
-  DownloadErrorEvent,
-  DownloadProgressEvent,
-} from '../../../src/services/backgroundDownloadTypes';
+import type {PersistedModelDownload} from '@offgrid/models';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+import {installNativeBoundary} from '../../harness/nativeBoundary';
 
-let mockProgressListener: ((event: DownloadProgressEvent) => void) | undefined;
-let mockCompleteListener: ((event: DownloadCompleteEvent) => void) | undefined;
-let mockErrorListener: ((event: DownloadErrorEvent) => void) | undefined;
-const mockUnsubscribeProgress = jest.fn();
-const mockUnsubscribeComplete = jest.fn();
-const mockUnsubscribeError = jest.fn();
+const MODEL_ID = 'owner/model';
+const DOWNLOAD_ID = `${MODEL_ID}/model.gguf`;
+const TRANSFER_ID = 'native-model-transfer';
 
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
-  coordinatedDownloads: {
-    isAvailable: jest.fn(() => true),
-    onAnyProgress: jest.fn((listener: (event: DownloadProgressEvent) => void) => {
-      mockProgressListener = listener;
-      return mockUnsubscribeProgress;
-    }),
-    onAnyComplete: jest.fn((listener: (event: DownloadCompleteEvent) => void) => {
-      mockCompleteListener = listener;
-      return mockUnsubscribeComplete;
-    }),
-    onAnyError: jest.fn((listener: (event: DownloadErrorEvent) => void) => {
-      mockErrorListener = listener;
-      return mockUnsubscribeError;
-    }),
-    cancelDownload: jest.fn(async () => undefined),
-  },
-}));
+let fixture: MobileApplicationFixture | null = null;
+const mounted: Array<{unmount(): void}> = [];
 
-import { useDownloads, useDownloadListeners } from '../../../src/hooks/useDownloads';
-import { useDownloadStore, type DownloadEntry } from '../../../src/stores/downloadStore';
+afterEach(async () => {
+  for (const root of mounted.splice(0)) root.unmount();
+  await fixture?.dispose();
+  fixture = null;
+});
 
-function entry(overrides: Partial<DownloadEntry> = {}): DownloadEntry {
+function record(
+  modelId = MODEL_ID,
+  fileName = 'model.gguf',
+  transferId = TRANSFER_ID,
+): PersistedModelDownload {
+  const id = `${modelId}/${fileName}`;
   return {
-    modelKey: 'llm:model/model.gguf',
-    downloadId: 'main',
-    modelId: 'llm:model',
-    fileName: 'model.gguf',
-    quantization: 'Q4',
-    modelType: 'text',
-    status: 'queued',
-    bytesDownloaded: 0,
-    totalBytes: 100,
-    combinedTotalBytes: 120,
-    progress: 0,
+    manifest: {
+      id,
+      modelId,
+      kind: 'text',
+      revision: 'main',
+      artifacts: [{
+        id: 'primary',
+        name: fileName,
+        role: 'primary',
+        required: true,
+        localName: fileName,
+        url: `https://example.test/${encodeURIComponent(fileName)}`,
+        sizeBytes: 100,
+      }],
+    },
+    phase: 'downloading',
+    artifacts: [{
+      artifactId: 'primary',
+      phase: 'downloading',
+      transferId,
+      bytesDownloaded: 20,
+      totalBytes: 100,
+    }],
     createdAt: 1,
-    ...overrides,
+    updatedAt: 1,
+    attempt: 1,
   };
 }
 
-describe('useDownloads Shared projection integration', () => {
-  const cancelDownload = () => (
-    jest.requireMock('../../../src/services/modelServices/coordinatedDownloadBridge')
-      .coordinatedDownloads.cancelDownload as jest.Mock
-  );
+function renderCurrent<T>(hook: () => T): {readonly current: T; act: (work: () => void | Promise<void>) => Promise<void>} {
+  const React = require('react') as typeof import('react');
+  const renderer = require('react-test-renderer') as typeof import('react-test-renderer');
+  let value: T;
+  function Probe() {
+    value = hook();
+    return null;
+  }
+  let root: ReturnType<typeof renderer.create>;
+  renderer.act(() => {
+    root = renderer.create(React.createElement(Probe));
+  });
+  mounted.push(root!);
+  return {
+    get current() { return value!; },
+    async act(work) {
+      await renderer.act(async () => {
+        await work();
+      });
+    },
+  };
+}
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockProgressListener = undefined;
-    mockCompleteListener = undefined;
-    mockErrorListener = undefined;
-    useDownloadStore.getState().setAll([]);
+function seedTransfer(
+  boundary: ReturnType<typeof installNativeBoundary>,
+  modelId = MODEL_ID,
+  fileName = 'model.gguf',
+  transferId = TRANSFER_ID,
+): void {
+  boundary.download!.seedActive({
+    downloadId: transferId,
+    modelId,
+    fileName,
+    modelType: 'text',
+    status: 'running',
+    bytesDownloaded: 20,
+    totalBytes: 100,
+  });
+}
+
+async function start(records: readonly PersistedModelDownload[]): Promise<void> {
+  const {seedMobileDownloadJournal, startMobileApplicationFixture} =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal(records);
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
+}
+
+describe('useModelDownloadsProjection', () => {
+  it('reads the current Shared download projection', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedTransfer(boundary);
+    await start([record()]);
+
+    const {useModelDownloadsProjection} = require('../../../src/hooks/useModelDownloadsProjection') as typeof import('../../../src/hooks/useModelDownloadsProjection');
+    const result = renderCurrent(() => useModelDownloadsProjection());
+
+    expect(result.current).toEqual([expect.objectContaining({
+      downloadId: DOWNLOAD_ID,
+      modelId: MODEL_ID,
+      status: 'downloading',
+      bytesDownloaded: 20,
+      totalBytes: 100,
+    })]);
   });
 
-  it('subscribes and removes all native event listeners', () => {
-    const { unmount } = renderHook(() => useDownloadListeners());
-    expect(mockProgressListener).toBeDefined();
-    expect(mockCompleteListener).toBeDefined();
-    expect(mockErrorListener).toBeDefined();
-    unmount();
-    expect(mockUnsubscribeProgress).toHaveBeenCalledTimes(1);
-    expect(mockUnsubscribeComplete).toHaveBeenCalledTimes(1);
-    expect(mockUnsubscribeError).toHaveBeenCalledTimes(1);
-  });
+  it('reactively renders native progress published by the Shared owner', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedTransfer(boundary);
+    await start([record()]);
+    const {useModelDownloadsProjection} = require('../../../src/hooks/useModelDownloadsProjection') as typeof import('../../../src/hooks/useModelDownloadsProjection');
+    const result = renderCurrent(() => useModelDownloadsProjection());
 
-  it('projects progress, retry wait, and failure through the real Shared controller', () => {
-    useDownloadStore.getState().add(entry());
-    renderHook(() => useDownloadListeners());
-
-    act(() => mockProgressListener?.({
-      downloadId: 'main', fileName: 'model.gguf', modelId: 'llm:model',
-      status: 'running', bytesDownloaded: 40, totalBytes: 100,
-    }));
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      status: 'downloading', bytesDownloaded: 40,
+    await result.act(async () => {
+      boundary.download!.events.emit('DownloadProgress', {
+        downloadId: TRANSFER_ID,
+        bytesDownloaded: 75,
+        totalBytes: 100,
+      });
+      await new Promise<void>(resolve => setImmediate(resolve));
     });
 
-    act(() => mockProgressListener?.({
-      downloadId: 'main', fileName: 'model.gguf', modelId: 'llm:model',
-      status: 'waiting_for_network', bytesDownloaded: 40, totalBytes: 100,
-    }));
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf'].status)
-      .toBe('paused');
+    expect(result.current).toEqual([expect.objectContaining({
+      downloadId: DOWNLOAD_ID,
+      bytesDownloaded: 75,
+      totalBytes: 100,
+    })]);
+  });
 
-    act(() => mockErrorListener?.({
-      downloadId: 'main', fileName: 'model.gguf', modelId: 'llm:model',
-      status: 'failed', reason: 'network timeout', reasonCode: 'network_timeout',
+  it('selects only the requested model entry', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedTransfer(boundary);
+    seedTransfer(boundary, 'owner/other', 'other.gguf', 'native-other');
+    await start([
+      record(),
+      record('owner/other', 'other.gguf', 'native-other'),
+    ]);
+
+    const {useModelDownloadEntry} = require('../../../src/hooks/useModelDownloadsProjection') as typeof import('../../../src/hooks/useModelDownloadsProjection');
+    const result = renderCurrent(() => useModelDownloadEntry('text', MODEL_ID));
+
+    expect(result.current).toEqual(expect.objectContaining({
+      downloadId: DOWNLOAD_ID,
+      modelId: MODEL_ID,
     }));
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      status: 'failed', errorMessage: expect.any(String), errorCode: 'network_timeout',
+  });
+
+  it('reactively renders cancellation requested through the public application command', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    seedTransfer(boundary);
+    await start([record()]);
+    const {useModelDownloadsProjection} = require('../../../src/hooks/useModelDownloadsProjection') as typeof import('../../../src/hooks/useModelDownloadsProjection');
+    const result = renderCurrent(() => useModelDownloadsProjection());
+
+    await result.act(async () => {
+      const outcome = await fixture!.application.models.cancelDownload({downloadId: DOWNLOAD_ID});
+      expect(outcome).toEqual(expect.objectContaining({ok: true, value: true}));
     });
-  });
 
-  it('keeps main and projector completion ordered by Shared policy', () => {
-    useDownloadStore.getState().add(entry({
-      status: 'completed',
-      mmProjDownloadId: 'projector',
-      mmProjStatus: 'downloading',
-    }));
-    renderHook(() => useDownloadListeners());
-
-    act(() => mockCompleteListener?.({
-      downloadId: 'projector', fileName: 'mmproj.gguf', modelId: 'llm:model',
-      status: 'completed', bytesDownloaded: 20, totalBytes: 20, localUri: '/mmproj.gguf',
-    }));
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      status: 'completed', mmProjStatus: 'completed', mmProjBytesDownloaded: 20,
-    });
-  });
-
-  it('moves image completion to processing and completes transcription', () => {
-    useDownloadStore.getState().add(entry({ modelType: 'image' }));
-    useDownloadStore.getState().add(entry({
-      modelKey: 'whisper-tiny.en/ggml-tiny.en.bin',
-      downloadId: 'speech',
-      modelId: 'whisper-tiny.en',
-      fileName: 'ggml-tiny.en.bin',
-      modelType: 'stt',
-    }));
-    renderHook(() => useDownloadListeners());
-
-    act(() => mockCompleteListener?.({
-      downloadId: 'main', fileName: 'model.gguf', modelId: 'llm:model',
-      status: 'completed', bytesDownloaded: 100, totalBytes: 100, localUri: '/model.gguf',
-    }));
-    act(() => mockCompleteListener?.({
-      downloadId: 'speech', fileName: 'ggml-tiny.en.bin', modelId: 'whisper-tiny.en',
-      status: 'completed', bytesDownloaded: 100, totalBytes: 100, localUri: '/tiny.bin',
-    }));
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf'].status).toBe('processing');
-    expect(useDownloadStore.getState().downloads['whisper-tiny.en/ggml-tiny.en.bin'].status)
-      .toBe('completed');
-  });
-
-  it('cancels both artifacts and removes the projection', async () => {
-    useDownloadStore.getState().add(entry({ mmProjDownloadId: 'projector' }));
-    const { result } = renderHook(() => useDownloads());
-    await act(() => result.current.cancel('llm:model/model.gguf'));
-    expect(cancelDownload()).toHaveBeenCalledWith('main');
-    expect(cancelDownload()).toHaveBeenCalledWith('projector');
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toBeUndefined();
-  });
-
-  it('retries through the native boundary and updates the canonical identity', async () => {
-    useDownloadStore.getState().add(entry({ status: 'failed' }));
-    const { result } = renderHook(() => useDownloads());
-    await act(() => result.current.retry(
-      'llm:model/model.gguf',
-      async () => 'replacement',
-    ));
-    expect(cancelDownload()).toHaveBeenCalledWith('main');
-    expect(useDownloadStore.getState().downloads['llm:model/model.gguf']).toMatchObject({
-      downloadId: 'replacement', status: 'queued',
-    });
+    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(TRANSFER_ID, false);
+    expect(result.current).toEqual([expect.objectContaining({status: 'cancelled'})]);
   });
 });

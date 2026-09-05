@@ -6,6 +6,7 @@
  */
 import { recordingController } from '../../../src/services/recordingController';
 import { voiceSession } from '../../../src/services/voiceSession';
+import '../../../src/services/composition/application';
 
 const handlers = () => ({ start: jest.fn(), stop: jest.fn(), cancel: jest.fn() });
 

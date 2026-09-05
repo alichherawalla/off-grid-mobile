@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import {
+  OpLog,
   TASK_RUN_ENTITY,
   TASK_VISUAL_STEP_ENTITY,
   taskVisualStepId,
@@ -19,6 +20,7 @@ import {
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import { useAccordionStore } from '../../../src/stores/accordionStore';
 import { useChatStore } from '../../../src/stores/chatStore';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -40,11 +42,12 @@ jest.mock('@react-native-community/slider', () => ({
     require('react').createElement(require('react-native').View, props),
 }));
 
-const materializer = new MobileStateMaterializer();
 const origin = {
   originDeviceId: 'desktop-session-owner',
   originDeviceName: 'Studio Mac',
 };
+let stateLog: OpLog;
+let applicationFixture: MobileApplicationFixture;
 const FRAME_PAYLOAD = '/9j/2Q==';
 
 const taskToolName = (kind: SyncedTaskRun['kind']): string =>
@@ -69,10 +72,10 @@ function taskRun(
       status === 'running'
         ? 'acting'
         : status === 'done'
-          ? 'complete'
-          : status === 'reconnecting'
-            ? 'waiting'
-          : status,
+        ? 'complete'
+        : status === 'reconnecting'
+        ? 'waiting'
+        : status,
     progress: [],
     startedAt: 1_000,
     updatedAt: 4_000,
@@ -119,32 +122,27 @@ function visualStep(
 }
 
 function renderSyncedTask(run: SyncedTaskRun): ReturnType<typeof render> {
-  materializer.put(
-    'conversation',
-    run.conversationId,
-    {
-      title: run.title,
-      created_at: new Date(run.startedAt).toISOString(),
-      updated_at: new Date(run.updatedAt).toISOString(),
-      project_id: null,
-    },
-    origin,
-  );
+  stateLog.record('conversation', run.conversationId, 'put', {
+    title: run.title,
+    created_at: new Date(run.startedAt).toISOString(),
+    updated_at: new Date(run.updatedAt).toISOString(),
+    project_id: null,
+  });
   useChatStore.getState().setActiveConversation(run.conversationId);
-  materializer.put(
+  stateLog.record(
     TASK_RUN_ENTITY,
     run.taskId,
+    'put',
     run as unknown as Record<string, unknown>,
-    origin,
   );
   // Admitted sync puts the authenticated run owner before its evidence.
   for (const sequence of [2, 1]) {
     const step = visualStep(run, sequence);
-    materializer.put(
+    stateLog.record(
       TASK_VISUAL_STEP_ENTITY,
       step.visualStepId,
+      'put',
       step as unknown as Record<string, unknown>,
-      origin,
     );
   }
   return render(
@@ -163,11 +161,12 @@ function renderSyncedTask(run: SyncedTaskRun): ReturnType<typeof render> {
 }
 
 function removeSyncedTask(run: SyncedTaskRun): void {
-  materializer.remove(TASK_RUN_ENTITY, run.taskId);
+  stateLog.record(TASK_RUN_ENTITY, run.taskId, 'delete');
   for (const sequence of [1, 2]) {
-    materializer.remove(
+    stateLog.record(
       TASK_VISUAL_STEP_ENTITY,
       taskVisualStepId(run.taskId, sequence),
+      'delete',
     );
   }
 }
@@ -179,8 +178,26 @@ function measureTaskSessionFrame(screen: ReturnType<typeof render>): void {
 }
 
 describe('Release 107 task session playback', () => {
+  beforeAll(async () => {
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   beforeEach(() => {
     jest.useFakeTimers();
+    let operationSequence = 0;
+    stateLog = new OpLog({
+      deviceId: origin.originDeviceId,
+      deviceName: origin.originDeviceName,
+      materializer: new MobileStateMaterializer(),
+      uuid: () => `release-107-playback-op-${++operationSequence}`,
+      now: () => Date.now(),
+    });
     registerSlot(SLOTS.taskToolDetail, TaskChatCard);
     useAccordionStore.setState({ expanded: {} });
     useChatStore.getState().clearAllConversations();
@@ -220,19 +237,13 @@ describe('Release 107 task session playback', () => {
       expect(screen.queryByTestId('task-control-stop')).toBeNull();
       expect(screen.queryByText('The task screen is syncing.')).toBeNull();
 
-      fireEvent(
-        screen.getByTestId('task-session-frame'),
-        'layout',
-        { nativeEvent: { layout: { width: 300 } } },
-      );
+      fireEvent(screen.getByTestId('task-session-frame'), 'layout', {
+        nativeEvent: { layout: { width: 300 } },
+      });
       expect(screen.getByLabelText('Saved task screen 1 of 2')).toBeTruthy();
       expect(screen.queryByTestId('task-live-frame')).toBeNull();
 
-      fireEvent(
-        screen.getByTestId('task-session-scrubber'),
-        'valueChange',
-        1,
-      );
+      fireEvent(screen.getByTestId('task-session-scrubber'), 'valueChange', 1);
       expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
       expect(screen.getByText('Selected Continue')).toBeTruthy();
       expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
@@ -290,23 +301,18 @@ describe('Release 107 task session playback', () => {
 
   it('replaces the sync placeholder as soon as saved evidence materializes', () => {
     const { frame: _liveFrame, ...run } = taskRun('web_use', 'running');
-    materializer.put(
-      'conversation',
-      run.conversationId,
-      {
-        title: run.title,
-        created_at: new Date(run.startedAt).toISOString(),
-        updated_at: new Date(run.updatedAt).toISOString(),
-        project_id: null,
-      },
-      origin,
-    );
+    stateLog.record('conversation', run.conversationId, 'put', {
+      title: run.title,
+      created_at: new Date(run.startedAt).toISOString(),
+      updated_at: new Date(run.updatedAt).toISOString(),
+      project_id: null,
+    });
     useChatStore.getState().setActiveConversation(run.conversationId);
-    materializer.put(
+    stateLog.record(
       TASK_RUN_ENTITY,
       run.taskId,
+      'put',
       run as unknown as Record<string, unknown>,
-      origin,
     );
     const screen = render(
       <ChatMessage
@@ -328,11 +334,11 @@ describe('Release 107 task session playback', () => {
 
     const step = visualStep(run, 1);
     act(() => {
-      materializer.put(
+      stateLog.record(
         TASK_VISUAL_STEP_ENTITY,
         step.visualStepId,
+        'put',
         step as unknown as Record<string, unknown>,
-        origin,
       );
     });
     expect(screen.queryByText('The task screen is syncing.')).toBeNull();

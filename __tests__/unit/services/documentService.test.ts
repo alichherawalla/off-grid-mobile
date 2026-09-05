@@ -726,12 +726,13 @@ describe('DocumentService', () => {
   // savePersistentCopy fallback
   // ========================================================================
   describe('persistent copy fallback', () => {
-    it('returns resolvedPath when persistent copy fails', async () => {
+    it('returns the readable source when persistent copy fails', async () => {
       Object.defineProperty(Platform, 'OS', { value: 'android' });
 
       mockedRNFS.exists
         .mockResolvedValueOnce(true)  // attachments dir check
-        .mockResolvedValueOnce(false); // persistent file check after failed copy
+        .mockResolvedValueOnce(false) // persistent file check after failed copy
+        .mockResolvedValueOnce(true); // readable source remains available
       mockedRNFS.stat.mockResolvedValue({ size: 100, isFile: () => true } as any);
       mockedRNFS.readFile.mockResolvedValue('content');
       // First copyFile for content:// → temp, second for temp → persistent (fails)
@@ -755,15 +756,13 @@ describe('DocumentService', () => {
   // createFromText error handling
   // ========================================================================
   describe('createFromText writeFile failure', () => {
-    it('returns empty uri when writeFile fails', async () => {
+    it('reports the storage failure when the attachment cannot be written', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.writeFile.mockRejectedValue(new Error('no space'));
 
-      const result = await documentService.createFromText('some text', 'note.txt');
-
-      expect(result.uri).toBe('');
-      expect(result.textContent).toBe('some text');
-      expect(result.fileName).toBe('note.txt');
+      await expect(
+        documentService.createFromText('some text', 'note.txt'),
+      ).rejects.toThrow('no space');
     });
   });
 });

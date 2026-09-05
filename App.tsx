@@ -33,8 +33,6 @@ import {
 } from './src/services/composition/application';
 import {
   refreshMobileModelServices,
-  startMobileModelServices,
-  stopMobileModelServices,
 } from './src/services/modelServices';
 import {
   startNetworkReconnectWatcher,
@@ -121,7 +119,6 @@ const ensureModelSelectionStoreHydrated = async () => {
 
 function stopMobileRuntime(loadPolicySync: ReturnType<typeof createLoadPolicySync>): void {
   stopNetworkReconnectWatcher();
-  stopMobileModelServices();
   stopMobileApplication();
   loadPolicySync.dispose();
 }
@@ -240,9 +237,6 @@ function App() {
             proError,
           );
         }
-
-        startMobileModelServices();
-        await refreshMobileModelServices();
 
         // Initialize remote server providers in the background — don't block
         // the home screen while fetching models from potentially unreachable servers.

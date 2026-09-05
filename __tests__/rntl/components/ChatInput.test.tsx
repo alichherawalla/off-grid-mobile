@@ -14,7 +14,7 @@ import React from 'react';
 import { voiceSession } from '../../../src/services/voiceSession';
 import { recordingController } from '../../../src/services/recordingController';
 import { Keyboard, Platform } from 'react-native';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ChatInput } from '../../../src/components/ChatInput';
 
 const mockSelectMobileModel = jest.fn((_facts: unknown) => Promise.resolve());
@@ -180,6 +180,28 @@ describe('ChatInput', () => {
   const pressImageModeToggle = (fns: { getByTestId: any }) => {
     openQuickSettings(fns);
     fireEvent.press(fns.getByTestId('quick-image-mode'));
+  };
+  const renderRealAttachmentInput = async (
+    props: Partial<React.ComponentProps<typeof ChatInput>> = {},
+  ) => {
+    jest.unmock('../../../src/services/modelServices');
+    jest.unmock('../../../src/services/documentService');
+    jest.unmock('../../../src/stores');
+    jest.unmock('../../../src/hooks/useWhisperTranscription');
+    jest.unmock('../../../src/components/VoiceRecordButton');
+    const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+    });
+    const RealChatInput = require('../../../src/components/ChatInput')
+      .ChatInput as typeof ChatInput;
+    const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+      supportsVision: true,
+      onSend: jest.fn(),
+      ...props,
+    }));
+    return { harness, view };
   };
 
   // ============================================================================
@@ -1336,87 +1358,20 @@ describe('ChatInput', () => {
   // ============================================================================
   // Voice recording integration (covers lines 87-88, 95-96, 104-111, 442-443)
   // ============================================================================
-  describe('voice recording integration', () => {
-    it('starts one real native microphone session from the voice button', async () => {
-      jest.unmock('../../../src/services/modelServices');
-      jest.unmock('../../../src/services/documentService');
-      jest.unmock('../../../src/stores');
-      jest.unmock('../../../src/hooks/useWhisperTranscription');
-      jest.unmock('../../../src/components/VoiceRecordButton');
-      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
-      const harness = await setupChatScreen({
-        engine: 'llama',
-        platform: 'android',
-        whisper: true,
-      });
-      await harness.setupWhisperModel();
-      harness.render();
-
-      try {
-        await harness.tapMic();
-        await harness.rtl.waitFor(() => {
-          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
-        });
-        const context = await (harness.boundary.whisper!.module.initWhisper as jest.Mock)
-          .mock.results[0].value;
-        expect(context.transcribeRealtime).toHaveBeenCalledTimes(1);
-        expect(harness.view!.getByTestId('voice-record-button')).toBeTruthy();
-      } finally {
-        harness.view?.unmount();
-        await harness.settle(300);
-      }
-      expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
-    });
-
-    it('inserts a standalone chat-mode dictation into the composer (does NOT auto-send)', () => {
-      const mockClearResult = jest.fn();
-      const onSend = jest.fn();
-      // First render: no finalResult, empty composer (standalone).
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: false,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: null,
-        error: null,
-        startRecording: jest.fn().mockResolvedValue(undefined),
-        stopRecording: jest.fn(),
-        clearResult: mockClearResult,
-      });
-      mockUseWhisperStore.mockReturnValue({
-        downloadedModelId: 'whisper-model-1',
-      });
-
-      const { getByTestId, rerender } = render(
-        <ChatInput {...defaultProps} onSend={onSend} conversationId="conv-123" />
-      );
-
-      // Simulate finalResult arriving for a standalone recording.
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: false,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: 'Hello from voice',
-        error: null,
-        startRecording: jest.fn().mockResolvedValue(undefined),
-        stopRecording: jest.fn(),
-        clearResult: mockClearResult,
-      });
-
-      rerender(<ChatInput {...defaultProps} onSend={onSend} conversationId="conv-123" />);
-
-      // B26: chat-mode hold-to-talk dictation places the transcript INTO the composer for the
-      // user to review and send (the user spoke and expects the words in the input box) — it
-      // does NOT auto-send. The transcript is consumed (clearResult) into the input value.
-      expect(onSend).not.toHaveBeenCalled();
-      const input = getByTestId('chat-input');
-      expect(input.props.value).toBe('Hello from voice');
-      expect(mockClearResult).toHaveBeenCalled();
-    });
-
+  // ============================================================================
+  // RESTORED COVERAGE (previously deleted). These run on the file's pre-existing
+  // module mocks, so they MUST stay above the first real-composition test - once a
+  // test calls jest.unmock()/resetModules the mocked graph is gone for the rest of
+  // the file.
+  // ============================================================================
+  describe('restored coverage', () => {
+    // RESTORED (was silently dropped): dictation must APPEND into a composer that
+    // already has text, never overwrite it. Kept on the file's pre-existing mocked
+    // path because the real-composition path cannot reach this state - the mic
+    // button is hidden as soon as the composer has text (see 'hides mic button when
+    // input has text'), and the composer is unmounted while recording runs, so no
+    // real gesture sequence produces a non-empty composer plus an arriving
+    // transcript. See report: appendTranscript (src/components/ChatInput/index.tsx:205).
     it('appends transcribed text to existing message', () => {
       const mockClearResult = jest.fn();
       mockUseWhisperTranscription.mockReturnValue({
@@ -1462,417 +1417,15 @@ describe('ChatInput', () => {
       expect(input.props.value).toBe('Existing text appended words');
     });
 
-    it('clears pending transcription when conversation changes', () => {
-      const mockClearResult = jest.fn();
-      const mockStartRecording = jest.fn().mockResolvedValue(undefined);
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: false,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: null,
-        error: null,
-        startRecording: mockStartRecording,
-        stopRecording: jest.fn(),
-        clearResult: mockClearResult,
-      });
-      mockUseWhisperStore.mockReturnValue({
-        downloadedModelId: 'whisper-model-1',
-      });
-
-      const { getByTestId, rerender } = render(
-        <ChatInput {...defaultProps} conversationId="conv-1" />
-      );
-
-      // Start recording in conv-1
-      fireEvent.press(getByTestId('voice-record-button'));
-
-      // Change conversation (covers lines 95-96)
-      rerender(<ChatInput {...defaultProps} conversationId="conv-2" />);
-
-      expect(mockClearResult).toHaveBeenCalled();
-    });
-
-    it('calls stopRecording and clearResult on cancel recording', () => {
-      const mockStopRecording = jest.fn();
-      const mockClearResult = jest.fn();
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: true,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: null,
-        error: null,
-        startRecording: jest.fn().mockResolvedValue(undefined),
-        stopRecording: mockStopRecording,
-        clearResult: mockClearResult,
-      });
-      mockUseWhisperStore.mockReturnValue({
-        downloadedModelId: 'whisper-model-1',
-      });
-
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      // Press cancel recording button (covers lines 442-443)
-      fireEvent.press(getByTestId('voice-cancel-button'));
-
-      expect(mockStopRecording).toHaveBeenCalled();
-      expect(mockClearResult).toHaveBeenCalled();
-    });
-  });
-
-  // ============================================================================
-  // Image mode toggle without loaded model (covers lines 136-141)
-  // ============================================================================
-  describe('image mode toggle alert when no model loaded', () => {
-    it('shows alert when toggling image mode without loaded model', () => {
-      // imageModelLoaded is false, but we need the toggle to be visible to press it
-      // The toggle is only visible when imageModelLoaded is true AND manual mode
-      // But handleImageModeToggle checks imageModelLoaded internally too
-      // Actually, looking at the code: the toggle button only renders when
-      // settings.imageGenerationMode === 'manual' && imageModelLoaded
-      // So we can't press it when imageModelLoaded is false.
-      // Lines 136-141 are inside handleImageModeToggle which checks !imageModelLoaded
-      // This means the toggle is visible (imageModelLoaded=true), but we somehow
-      // need to test the !imageModelLoaded branch.
-      // Wait - actually the toggle shows when imageModelLoaded is true.
-      // The !imageModelLoaded check on line 135 is a safety check inside the handler.
-      // To reach it, we'd need the prop to change after render.
-      // Let me use rerender to change the prop after the toggle is visible.
-
-      const onImageModeChange = jest.fn();
-      const result = render(
-        <ChatInput
-          {...defaultProps}
-          imageModelLoaded={true}
-          onImageModeChange={onImageModeChange}
-        />
-      );
-
-      pressImageModeToggle(result);
-      expect(onImageModeChange).toHaveBeenCalledWith('force');
-    });
-  });
-
-  // ============================================================================
-  // Camera flow - pick from camera (covers lines 165-167, 204-216)
-  // ============================================================================
-  describe('camera capture flow', () => {
-    it('picks image from camera when Camera option is pressed', async () => {
-      jest.useFakeTimers();
-      const { launchCamera } = require('react-native-image-picker');
-      launchCamera.mockResolvedValue({
-        assets: [{
-          uri: 'file:///camera-photo.jpg',
-          type: 'image/jpeg',
-          width: 1024,
-          height: 768,
-          fileName: 'camera-photo.jpg',
-        }],
-      });
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      // Open attach picker, press photo
-      pressAttachPhoto(result);
-
-      // Wait for alert
-      await waitFor(() => {
-        expect(result.getByText('Camera')).toBeTruthy();
-      });
-
-      // Press Camera option
-      fireEvent.press(result.getByText('Camera'));
-
-      // Advance timer for the 300ms delay before pickFromCamera
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchCamera).toHaveBeenCalled();
-        expect(result.queryByTestId('attachments-container')).toBeTruthy();
-      });
-
-      jest.useRealTimers();
-    });
-
-    it('handles camera error gracefully', async () => {
-      jest.useFakeTimers();
-      const { launchCamera } = require('react-native-image-picker');
-      launchCamera.mockRejectedValue(new Error('Camera permission denied'));
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      pressAttachPhoto(result);
-
-      await waitFor(() => {
-        expect(result.getByText('Camera')).toBeTruthy();
-      });
-
-      fireEvent.press(result.getByText('Camera'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchCamera).toHaveBeenCalled();
-      });
-
-      jest.useRealTimers();
-    });
-
-    it('handles camera returning no assets', async () => {
-      jest.useFakeTimers();
-      const { launchCamera } = require('react-native-image-picker');
-      launchCamera.mockResolvedValue({ assets: [] });
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      pressAttachPhoto(result);
-
-      await waitFor(() => {
-        expect(result.getByText('Camera')).toBeTruthy();
-      });
-
-      fireEvent.press(result.getByText('Camera'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchCamera).toHaveBeenCalled();
-      });
-
-      expect(result.queryByTestId('attachments-container')).toBeNull();
-
-      jest.useRealTimers();
-    });
-  });
-
-  // ============================================================================
-  // Photo library error (covers line 199)
-  // ============================================================================
-  describe('photo library error', () => {
-    it('handles photo library error gracefully', async () => {
-      jest.useFakeTimers();
-      const { launchImageLibrary } = require('react-native-image-picker');
-      launchImageLibrary.mockRejectedValue(new Error('Library access denied'));
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      pressAttachPhoto(result);
-
-      await waitFor(() => {
-        expect(result.getByText('Photo Library')).toBeTruthy();
-      });
-
-      fireEvent.press(result.getByText('Photo Library'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchImageLibrary).toHaveBeenCalled();
-      });
-
-      jest.useRealTimers();
-    });
-  });
-
-  // ============================================================================
-  // Document picker error with message fallback (covers line 270)
-  // ============================================================================
-  describe('document picker error without message', () => {
-    it('shows fallback error message when error has no message', async () => {
-      const errorObj: any = {};
-      mockPick.mockRejectedValue(errorObj);
-      mockIsErrorWithCode.mockReturnValue(false);
-
-      const { getByTestId, getByText } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      pressAttachDocument({ getByTestId });
-
-      await waitFor(() => {
-        expect(getByText('Error')).toBeTruthy();
-        expect(getByText('Failed to read document')).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Voice recording with no conversationId (covers branch 5[1]: null fallback)
-  // ============================================================================
-  describe('voice recording without conversationId', () => {
-    it('starts recording with null conversationId when prop is undefined', () => {
-      const mockStartRecording = jest.fn().mockResolvedValue(undefined);
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: false,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: null,
-        error: null,
-        startRecording: mockStartRecording,
-        stopRecording: jest.fn(),
-        clearResult: jest.fn(),
-      });
-      mockUseWhisperStore.mockReturnValue({
-        downloadedModelId: 'whisper-model-1',
-      });
-
-      // conversationId is not provided (undefined)
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      fireEvent.press(getByTestId('voice-record-button'));
-
-      expect(mockStartRecording).toHaveBeenCalled();
-    });
-  });
-
-  // ============================================================================
-  // Document picker returns empty result (covers branch 24[0]: !file return)
-  // ============================================================================
-  describe('document picker returns empty array', () => {
-    it('does nothing when picker returns no files', async () => {
-      mockPick.mockResolvedValue([]);
-
-      const { getByTestId, queryByTestId } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      pressAttachDocument({ getByTestId });
-
-      await waitFor(() => {
-        expect(mockPick).toHaveBeenCalled();
-      });
-
-      // No attachments should be added
-      expect(queryByTestId('attachments-container')).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // Attachment preview with document without fileName (covers branch 34[1])
-  // ============================================================================
-  describe('document preview without fileName', () => {
-    it('shows Document fallback text when fileName is missing', async () => {
-      mockPick.mockResolvedValue([{
-        uri: 'file:///mock/unnamed-doc',
-        name: 'somefile.txt',
-        type: 'text/plain',
-        size: 100,
-      }]);
-      mockProcessDocument.mockResolvedValue({
-        id: 'doc-no-name',
-        type: 'document' as const,
-        uri: 'file:///mock/unnamed-doc',
-        fileName: '',
-        textContent: 'content',
-        fileSize: 100,
-      });
-
-      const { getByTestId, getByText } = render(
-        <ChatInput {...defaultProps} />
-      );
-
-      pressAttachDocument({ getByTestId });
-
-      await waitFor(() => {
-        expect(getByText('Document')).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Photo library returning empty assets (covers branch 18[1])
-  // ============================================================================
-  describe('photo library returning no assets', () => {
-    it('does not add attachments when library returns empty assets', async () => {
-      jest.useFakeTimers();
-      const { launchImageLibrary } = require('react-native-image-picker');
-      launchImageLibrary.mockResolvedValue({ assets: [] });
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      pressAttachPhoto(result);
-
-      await waitFor(() => {
-        expect(result.getByText('Photo Library')).toBeTruthy();
-      });
-
-      fireEvent.press(result.getByText('Photo Library'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchImageLibrary).toHaveBeenCalled();
-      });
-
-      expect(result.queryByTestId('attachments-container')).toBeNull();
-
-      jest.useRealTimers();
-    });
-
-    it('does not add attachments when library returns null assets', async () => {
-      jest.useFakeTimers();
-      const { launchImageLibrary } = require('react-native-image-picker');
-      launchImageLibrary.mockResolvedValue({ assets: null });
-
-      const result = render(
-        <ChatInput {...defaultProps} supportsVision={true} />
-      );
-
-      pressAttachPhoto(result);
-
-      await waitFor(() => {
-        expect(result.getByText('Photo Library')).toBeTruthy();
-      });
-
-      fireEvent.press(result.getByText('Photo Library'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(350);
-      });
-
-      await waitFor(() => {
-        expect(launchImageLibrary).toHaveBeenCalled();
-      });
-
-      expect(result.queryByTestId('attachments-container')).toBeNull();
-
-      jest.useRealTimers();
-    });
-  });
-
-  // ============================================================================
-  // Icon collapse animation (triggered by text content)
-  // ============================================================================
-  describe('icon collapse animation', () => {
+    // RULING on the two dropped Animated.timing tests: the surviving pointer-events
+    // tests below ('disables pointer events on pill icons when text is present' /
+    // 're-enables pointer events on pill icons when text is cleared') do NOT subsume
+    // them. Those assert ComposerIconsRow.tsx:35, `pointerEvents={hasText ? 'none' :
+    // 'auto'}`, which is derived straight from `hasText` and never touches iconsAnim.
+    // The width/opacity collapse itself is driven by the Animated.timing in
+    // ChatInput/index.tsx:180; delete that effect and the pointer-events tests stay
+    // green while the icons never collapse. So both are restored here, spying only on
+    // React Native's Animated (an external leaf), not on any Off Grid module.
     it('starts Animated.timing to collapse when text is entered', () => {
       const timingSpy = jest.spyOn(require('react-native').Animated, 'timing');
       const { getByTestId } = render(<ChatInput {...defaultProps} />);
@@ -1901,60 +1454,636 @@ describe('ChatInput', () => {
       timingSpy.mockRestore();
     });
 
-    it('disables pointer events on pill icons when text is present', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
+  });
+
+  // ============================================================================
+  // Attachment preview with document without fileName (covers branch 34[1])
+  // ============================================================================
+  describe('document preview without fileName', () => {
+    // RESTORED (was silently dropped): the attachment chip must still name the
+    // file ("Document") when the processed attachment carries no fileName
+    // (src/components/ChatInput/Attachments.tsx:287). Kept on the file's
+    // pre-existing mocked documentService because the real service always names
+    // the file (documentService.ts:232 falls back to 'document'), so the empty
+    // fileName state is not reachable through the real composition path.
+    it('shows Document fallback text when fileName is missing', async () => {
+      mockPick.mockResolvedValue([{
+        uri: 'file:///mock/unnamed-doc',
+        name: 'somefile.txt',
+        type: 'text/plain',
+        size: 100,
+      }]);
+      mockProcessDocument.mockResolvedValue({
+        id: 'doc-no-name',
+        type: 'document' as const,
+        uri: 'file:///mock/unnamed-doc',
+        fileName: '',
+        textContent: 'content',
+        fileSize: 100,
+      });
+
+      const { getByTestId, getByText } = render(
         <ChatInput {...defaultProps} />
       );
 
-      // Before typing, icons should be interactive
-      expect(getByTestId('attach-button')).toBeTruthy();
+      pressAttachDocument({ getByTestId });
 
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
+      await waitFor(() => {
+        expect(getByText('Document')).toBeTruthy();
+      });
+    });
+  });
 
-      // After typing, the Animated.View wrapping icons should have pointerEvents='none'
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBeGreaterThan(0);
+  describe('voice recording integration', () => {
+    it('starts one real native microphone session from the voice button', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
+      });
+      await harness.setupWhisperModel();
+      harness.render();
+
+      try {
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+        });
+        const context = await (harness.boundary.whisper!.module.initWhisper as jest.Mock)
+          .mock.results[0].value;
+        expect(context.transcribeRealtime).toHaveBeenCalledTimes(1);
+        expect(harness.view!.getByTestId('voice-record-button')).toBeTruthy();
+      } finally {
+        harness.view?.unmount();
+        await harness.settle(300);
+      }
+      expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
     });
 
-    it('re-enables pointer events on pill icons when text is cleared', () => {
-      const { getByTestId, UNSAFE_queryAllByProps } = render(
-        <ChatInput {...defaultProps} />
-      );
+    it('inserts a standalone chat-mode dictation into the composer (does NOT auto-send)', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
+      });
+      await harness.setupWhisperModel();
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const onSend = jest.fn();
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        onSend,
+        conversationId: 'conv-123',
+      }));
+      harness.view = view;
 
-      fireEvent.changeText(getByTestId('chat-input'), 'hello');
-      fireEvent.changeText(getByTestId('chat-input'), '');
+      try {
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+        });
+        await harness.releaseMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
+        });
+        harness.boundary.whisper?.emitRealtime({
+          text: 'Hello from voice',
+          isCapturing: false,
+        });
 
-      const pointerNoneViews = UNSAFE_queryAllByProps({ pointerEvents: 'none' });
-      expect(pointerNoneViews.length).toBe(0);
+        await harness.rtl.waitFor(() => {
+          expect(view.getByTestId('chat-input').props.value).toBe('Hello from voice');
+        });
+        expect(onSend).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
     });
 
-    it('icons remain accessible when input is empty', () => {
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} supportsVision={true} imageModelLoaded={true} />
-      );
+    it('clears pending transcription when conversation changes', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
+      });
+      await harness.setupWhisperModel();
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const onSend = jest.fn();
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        onSend,
+        conversationId: 'conv-1',
+      }));
+      harness.view = view;
 
-      // Both icons should be pressable when no text
-      expect(getByTestId('attach-button')).toBeTruthy();
-      expect(getByTestId('quick-settings-button')).toBeTruthy();
+      try {
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+        });
+
+        view.rerender(harness.React.createElement(RealChatInput, {
+          onSend,
+          conversationId: 'conv-2',
+        }));
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
+          expect(view.getByTestId('chat-input')).toBeTruthy();
+          expect(
+            view.getByTestId('voice-record-button').props.accessibilityLabel,
+          ).toBe('Start voice recording');
+        });
+        harness.boundary.whisper?.emitRealtime({
+          text: 'words from the previous chat',
+          isCapturing: false,
+        });
+        await harness.settle(50);
+
+        expect(view.queryByText('words from the previous chat')).toBeNull();
+        expect(onSend).not.toHaveBeenCalled();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
     });
 
-    it('send button remains visible when text is entered', () => {
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} />
-      );
+    it('cancels recording when the microphone gesture is interrupted', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
+      });
+      await harness.setupWhisperModel();
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        conversationId: 'conv-123',
+      }));
+      harness.view = view;
 
-      fireEvent.changeText(getByTestId('chat-input'), 'Hello');
+      try {
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+        });
+        const button = view.getByTestId('voice-record-button');
+        harness.rtl.fireEvent(button, 'responderTerminate', {
+          nativeEvent: { timestamp: 500 },
+          touchHistory: {
+            touchBank: [],
+            numberActiveTouches: 0,
+            indexOfSingleActiveTouch: -1,
+            mostRecentTimeStamp: 500,
+          },
+        });
 
-      // Send button should be accessible while typing
-      expect(getByTestId('send-button')).toBeTruthy();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
+          expect(view.getByTestId('chat-input')).toBeTruthy();
+          expect(
+            view.getByTestId('voice-record-button').props.accessibilityLabel,
+          ).toBe('Start voice recording');
+        });
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Image mode toggle without loaded model (covers lines 136-141)
+  // ============================================================================
+  describe('image mode toggle alert when no model loaded', () => {
+    it('shows alert when toggling image mode without a downloaded model', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+      });
+      harness.render();
+
+      try {
+        await harness.cycleImageMode();
+        await harness.rtl.waitFor(() => {
+          expect(harness.view!.getByText('No Image Model')).toBeTruthy();
+          expect(
+            harness.view!.getByText(
+              'Download an image generation model from the Models screen to enable this feature.',
+            ),
+          ).toBeTruthy();
+        });
+        expect(harness.view!.queryByTestId('image-mode-force-badge')).toBeNull();
+      } finally {
+        harness.view?.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Camera flow - pick from camera (covers lines 165-167, 204-216)
+  // ============================================================================
+  describe('camera capture flow', () => {
+    it('picks image from camera when Camera option is pressed', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+      });
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const { launchCamera } = require('react-native-image-picker') as {
+        launchCamera: jest.Mock;
+      };
+      launchCamera.mockResolvedValue({
+        assets: [{
+          uri: 'file:///camera-photo.jpg',
+          type: 'image/jpeg',
+          width: 1024,
+          height: 768,
+          fileName: 'camera-photo.jpg',
+        }],
+      });
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        supportsVision: true,
+        onSend: jest.fn(),
+      }));
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Camera')),
+        );
+
+        await harness.rtl.waitFor(() => {
+          expect(view.getByTestId('attachments-container')).toBeTruthy();
+          expect(view.getAllByTestId(/^attachment-image-/)).toHaveLength(1);
+        });
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
     });
 
-    it('stop button remains visible when generating with no text', () => {
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} isGenerating={true} onStop={jest.fn()} />
-      );
+    it('handles camera error gracefully', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+      });
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const { launchCamera } = require('react-native-image-picker') as {
+        launchCamera: jest.Mock;
+      };
+      launchCamera.mockRejectedValue(new Error('Camera permission denied'));
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        supportsVision: true,
+        onSend: jest.fn(),
+      }));
 
-      expect(getByTestId('stop-button')).toBeTruthy();
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Camera')),
+        );
+
+        await harness.rtl.waitFor(() => {
+          expect(launchCamera).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('handles camera returning no assets', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+      });
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const { launchCamera } = require('react-native-image-picker') as {
+        launchCamera: jest.Mock;
+      };
+      launchCamera.mockResolvedValue({ assets: [] });
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        supportsVision: true,
+        onSend: jest.fn(),
+      }));
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Camera')),
+        );
+
+        await harness.rtl.waitFor(() => {
+          expect(launchCamera).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Photo library error (covers line 199)
+  // ============================================================================
+  describe('photo library error', () => {
+    it('handles photo library error gracefully', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      const { launchImageLibrary } = require('react-native-image-picker') as {
+        launchImageLibrary: jest.Mock;
+      };
+      launchImageLibrary.mockRejectedValue(new Error('Library access denied'));
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Photo Library')),
+        );
+        await harness.rtl.waitFor(() => {
+          expect(launchImageLibrary).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Document picker error with message fallback (covers line 270)
+  // ============================================================================
+  describe('document picker error without message', () => {
+    it('shows fallback error message when error has no message', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      const errorObj: any = {};
+      mockPick.mockRejectedValue(errorObj);
+      mockIsErrorWithCode.mockReturnValue(false);
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-document'));
+
+        await harness.rtl.waitFor(() => {
+          expect(view.getByText('Error')).toBeTruthy();
+          expect(view.getByText('Failed to read document')).toBeTruthy();
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Voice recording with no conversationId (covers branch 5[1]: null fallback)
+  // ============================================================================
+  describe('voice recording without conversationId', () => {
+    it('starts recording in a new chat before a conversation exists', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
+      });
+      await harness.setupWhisperModel();
+      const RealChatInput = require('../../../src/components/ChatInput')
+        .ChatInput as typeof ChatInput;
+      const view = harness.rtl.render(harness.React.createElement(RealChatInput, {
+        onSend: jest.fn(),
+      }));
+      harness.view = view;
+
+      try {
+        expect(harness.conversationId).toBeNull();
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+          expect(
+            view.getByTestId('voice-record-button').props.accessibilityLabel,
+          ).toBe('Stop voice recording');
+        });
+        const context = await (harness.boundary.whisper!.module.initWhisper as jest.Mock)
+          .mock.results[0].value;
+        expect(context.transcribeRealtime).toHaveBeenCalledTimes(1);
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+
+      expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
+    });
+  });
+
+  // ============================================================================
+  // Document picker returns empty result (covers branch 24[0]: !file return)
+  // ============================================================================
+  describe('document picker returns empty array', () => {
+    it('does nothing when picker returns no files', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      mockPick.mockResolvedValue([]);
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-document'));
+
+        await harness.rtl.waitFor(() => {
+          expect(mockPick).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Photo library returning empty assets (covers branch 18[1])
+  // ============================================================================
+  describe('photo library returning no assets', () => {
+    it('does not add attachments when library returns empty assets', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      const { launchImageLibrary } = require('react-native-image-picker') as {
+        launchImageLibrary: jest.Mock;
+      };
+      launchImageLibrary.mockResolvedValue({ assets: [] });
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Photo Library')),
+        );
+        await harness.rtl.waitFor(() => {
+          expect(launchImageLibrary).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('does not add attachments when library returns null assets', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      const { launchImageLibrary } = require('react-native-image-picker') as {
+        launchImageLibrary: jest.Mock;
+      };
+      launchImageLibrary.mockResolvedValue({ assets: null });
+
+      try {
+        harness.rtl.fireEvent.press(view.getByTestId('attach-button'));
+        harness.rtl.fireEvent.press(view.getByTestId('attach-photo'));
+        harness.rtl.fireEvent.press(
+          await harness.rtl.waitFor(() => view.getByText('Photo Library')),
+        );
+        await harness.rtl.waitFor(() => {
+          expect(launchImageLibrary).toHaveBeenCalledTimes(1);
+        });
+        expect(view.queryByTestId('attachments-container')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+  });
+
+  // ============================================================================
+  // Icon collapse animation (triggered by text content)
+  // ============================================================================
+  describe('icon collapse animation', () => {
+    it('disables pointer events on pill icons when text is present', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      try {
+        expect(view.getByTestId('attach-button')).toBeTruthy();
+        harness.rtl.fireEvent.changeText(view.getByTestId('chat-input'), 'hello');
+        expect(
+          view.UNSAFE_queryAllByProps({ pointerEvents: 'none' }).length,
+        ).toBeGreaterThan(0);
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('re-enables pointer events on pill icons when text is cleared', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      try {
+        harness.rtl.fireEvent.changeText(view.getByTestId('chat-input'), 'hello');
+        harness.rtl.fireEvent.changeText(view.getByTestId('chat-input'), '');
+        expect(
+          view.UNSAFE_queryAllByProps({ pointerEvents: 'none' }),
+        ).toHaveLength(0);
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('icons remain accessible when input is empty', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      try {
+        expect(view.getByTestId('attach-button')).toBeTruthy();
+        expect(view.getByTestId('quick-settings-button')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('send button remains visible when text is entered', async () => {
+      const { harness, view } = await renderRealAttachmentInput();
+      try {
+        harness.rtl.fireEvent.changeText(view.getByTestId('chat-input'), 'Hello');
+        expect(view.getByTestId('send-button')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
+    });
+
+    it('stop button remains visible when generating with no text', async () => {
+      const { harness, view } = await renderRealAttachmentInput({
+        isGenerating: true,
+        onStop: jest.fn(),
+      });
+      try {
+        expect(view.getByTestId('stop-button')).toBeTruthy();
+      } finally {
+        view.unmount();
+        await harness.settle(300);
+      }
     });
   });
 });

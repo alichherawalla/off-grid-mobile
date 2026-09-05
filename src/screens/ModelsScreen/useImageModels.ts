@@ -28,7 +28,7 @@ import {
   modelsFailureMessage,
 } from '@offgrid/application';
 import { applicationFacade } from '../../services/applicationFacade';
-import { publicImageDownloadRequest } from '../../services/adapters/models/downloads/publicImageDownloadRequest';
+import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import {
   filterImageCatalog,
@@ -187,9 +187,16 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleDownloadImageModel = useCallback(
     async (modelInfo: ImageModelDescriptor) => {
       const start = async () => {
-        const outcome = await applicationFacade().models.download(
-          publicImageDownloadRequest(modelInfo),
-        );
+        const selection = mobileImageDownloadSelection(modelInfo);
+        if (!selection) {
+          setAlertState(showAlert('Download Failed', 'The model source is incomplete.'));
+          return;
+        }
+        const outcome = await applicationFacade().models.control({
+          type: 'queue-download',
+          modelId: `image:${modelInfo.id}`,
+          selection,
+        });
         if (!outcome.ok) {
           setAlertState(showAlert(
             'Download Failed',
@@ -228,13 +235,13 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   const handleCancelImageDownload = useCallback(
     async (modelId: string) => {
       try {
-        const row = applicationFacade().models.snapshot().downloads.find(
+        const row = applicationFacade().models.snapshot().control.downloads.find(
           download => download.modelType === 'image' && download.modelId === modelId,
         );
         if (!row) return;
-        const outcome = await applicationFacade().models.cancelDownload({
-          downloadId: row.downloadId,
-          removePartial: true,
+        const outcome = await applicationFacade().models.control({
+          type: 'cancel-download',
+          modelId: row.downloadId,
         });
         if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
       } catch (error) {

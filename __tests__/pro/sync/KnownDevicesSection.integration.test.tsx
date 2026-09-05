@@ -57,7 +57,7 @@ describe('<KnownDevicesSection/> action ownership', () => {
         pairingDeviceId={null}
         onPair={jest.fn()}
         onRepair={jest.fn(async () => 'reconnected')}
-        onDisconnect={jest.fn(() => true)}
+        onDisconnect={jest.fn(async () => undefined)}
         onReconnect={onReconnect}
         onSetManualEndpoint={jest.fn()}
         manualEndpointDeviceIds={[]}
@@ -89,7 +89,7 @@ describe('<KnownDevicesSection/> action ownership', () => {
         pairingDeviceId={null}
         onPair={jest.fn()}
         onRepair={jest.fn(async () => 'reconnected')}
-        onDisconnect={jest.fn(() => true)}
+        onDisconnect={jest.fn(async () => undefined)}
         onReconnect={jest.fn(async () => {
           throw new Error('Host unreachable');
         })}

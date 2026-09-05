@@ -34,22 +34,25 @@ describe('native download transfer terminal ownership', () => {
     expect(nativeDownload.module.moveCompletedDownload).toHaveBeenCalledTimes(1);
 
     abort.abort();
-    const cancelled = adapter.cancel('transfer-1');
-    expect(nativeDownload.module.cancelDownload).not.toHaveBeenCalled();
+    const stopped = adapter.stop({
+      transferId: 'transfer-1',
+      disposition: 'delete-partial',
+    });
+    expect(nativeDownload.module.stopDownload).not.toHaveBeenCalled();
 
     move.resolve('/staging/model.bin');
-    await expect(cancelled).resolves.toBeUndefined();
-    await expect(attached).rejects.toThrow('Download cancelled');
+    await expect(stopped).resolves.toEqual({ outcome: 'completed' });
+    await expect(attached).resolves.toBeUndefined();
     expect(nativeDownload.module.moveCompletedDownload).toHaveBeenCalledTimes(1);
-    expect(nativeDownload.module.cancelDownload).not.toHaveBeenCalled();
+    expect(nativeDownload.module.stopDownload).not.toHaveBeenCalled();
     adapter.dispose();
   });
 
   it('does not start a move after native cancellation owns terminal settlement', async () => {
     const boundary = installNativeBoundary({ download: true });
     const nativeDownload = boundary.download!;
-    const cancellation = deferred<void>();
-    nativeDownload.module.cancelDownload.mockReturnValueOnce(cancellation.promise);
+    const stopAcknowledgement = deferred<string>();
+    nativeDownload.module.stopDownload.mockReturnValueOnce(stopAcknowledgement.promise);
     const { NativeDownloadTransferAdapter } = require(
       '../../../src/services/adapters/downloads/nativeDownloadTransferAdapter'
     );
@@ -62,19 +65,25 @@ describe('native download transfer terminal ownership', () => {
       onProgress: jest.fn(),
     });
 
-    const cancelled = adapter.cancel('transfer-cancel-first');
+    const stopped = adapter.stop({
+      transferId: 'transfer-cancel-first',
+      disposition: 'delete-partial',
+    });
     nativeDownload.events.emit('DownloadComplete', {
       downloadId: 'transfer-cancel-first',
     });
     abort.abort();
     await Promise.resolve();
-    expect(nativeDownload.module.cancelDownload).toHaveBeenCalledTimes(1);
+    expect(nativeDownload.module.stopDownload).toHaveBeenCalledWith(
+      'transfer-cancel-first',
+      false,
+    );
     expect(nativeDownload.module.moveCompletedDownload).not.toHaveBeenCalled();
 
-    cancellation.resolve();
-    await expect(cancelled).resolves.toBeUndefined();
-    await expect(attached).rejects.toThrow('Download cancelled');
-    expect(nativeDownload.module.cancelDownload).toHaveBeenCalledTimes(1);
+    stopAcknowledgement.resolve('stopped');
+    await expect(stopped).resolves.toEqual({ outcome: 'stopped' });
+    await expect(attached).rejects.toMatchObject({ name: 'DownloadAbortedError' });
+    expect(nativeDownload.module.stopDownload).toHaveBeenCalledTimes(1);
     expect(nativeDownload.module.moveCompletedDownload).not.toHaveBeenCalled();
     adapter.dispose();
   });

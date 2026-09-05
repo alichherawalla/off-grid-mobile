@@ -12,7 +12,8 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
+import * as Keychain from 'react-native-keychain';
 
 // Navigation is globally mocked in jest.setup.ts
 const mockGoBack = jest.fn();
@@ -34,127 +35,13 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-const mockSetEnabled = jest.fn();
-const mockRemovePassphrase = jest.fn(() => Promise.resolve());
-
-let mockAuthEnabled = false;
-
-jest.mock('../../../src/stores', () => ({
-  useAppStore: jest.fn((selector?: any) => {
-    const state = {
-      themeMode: 'system',
-    };
-    return selector ? selector(state) : state;
-  }),
-  useAuthStore: jest.fn(() => ({
-    isEnabled: mockAuthEnabled,
-    setEnabled: mockSetEnabled,
-  })),
-}));
-
-jest.mock('../../../src/services', () => ({
-  authService: {
-    removePassphrase: mockRemovePassphrase,
-  },
-}));
-
-jest.mock('../../../src/components', () => ({
-  Card: ({ children, style }: any) => {
-    const { View } = require('react-native');
-    return <View style={style}>{children}</View>;
-  },
-}));
-
-jest.mock('../../../src/components/Button', () => ({
-  Button: ({ title, onPress }: any) => {
-    const { TouchableOpacity, Text } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress}>
-        <Text>{title}</Text>
-      </TouchableOpacity>
-    );
-  },
-}));
-
-jest.mock('../../../src/components/CustomAlert', () => {
-  const { View, Text, TouchableOpacity } = require('react-native');
-  return {
-    CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
-      if (!visible) return null;
-      return (
-        <View testID="custom-alert">
-          <Text testID="alert-title">{title}</Text>
-          <Text testID="alert-message">{message}</Text>
-          {buttons && buttons.map((btn: any, i: number) => (
-            <TouchableOpacity
-              key={i}
-              testID={`alert-button-${btn.text}`}
-              onPress={() => {
-                if (btn.onPress) btn.onPress();
-                onClose();
-              }}
-            >
-              <Text>{btn.text}</Text>
-            </TouchableOpacity>
-          ))}
-          {!buttons && (
-            <TouchableOpacity testID="alert-ok" onPress={onClose}>
-              <Text>OK</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-    },
-    showAlert: (title: string, message: string, buttons?: any[]) => ({
-      visible: true,
-      title,
-      message,
-      buttons: buttons || [{ text: 'OK', style: 'default' }],
-    }),
-    hideAlert: () => ({ visible: false, title: '', message: '', buttons: [] }),
-    initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-  };
-});
-
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
-
-jest.mock('../../../src/components/AnimatedListItem', () => ({
-  AnimatedListItem: ({ children, onPress, style }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity style={style} onPress={onPress}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
-
-// Mock PassphraseSetupScreen
-jest.mock('../../../src/screens/PassphraseSetupScreen', () => ({
-  PassphraseSetupScreen: ({ onComplete, onCancel, isChanging }: any) => {
-    const { View, Text, TouchableOpacity } = require('react-native');
-    return (
-      <View testID="passphrase-setup">
-        <Text>{isChanging ? 'Change Passphrase' : 'Set Passphrase'}</Text>
-        <TouchableOpacity testID="passphrase-complete" onPress={onComplete}>
-          <Text>Complete</Text>
-        </TouchableOpacity>
-        <TouchableOpacity testID="passphrase-cancel" onPress={onCancel}>
-          <Text>Cancel Setup</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  },
-}));
-
 import { SecuritySettingsScreen } from '../../../src/screens/SecuritySettingsScreen';
+import { useAuthStore } from '../../../src/stores/authStore';
 
 describe('SecuritySettingsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthEnabled = false;
+    act(() => useAuthStore.getState().setEnabled(false));
   });
 
   // ============================================================================
@@ -205,31 +92,31 @@ describe('SecuritySettingsScreen', () => {
       const { getAllByRole } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
       expect(switches.length).toBeGreaterThan(0);
-      // The switch value should reflect mockAuthEnabled = false
+      // The switch renders the real store state.
       expect(switches[0].props.value).toBe(false);
     });
 
     it('opens passphrase setup when toggling on', () => {
-      const { getAllByRole, queryByTestId } = render(<SecuritySettingsScreen />);
+      const { getAllByRole, getByText, queryByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       // Initially no passphrase setup shown
-      expect(queryByTestId('passphrase-setup')).toBeNull();
+      expect(queryByText('Set Up Passphrase')).toBeNull();
 
       // Toggle switch on
       fireEvent(switches[0], 'valueChange', true);
 
       // Passphrase setup modal should appear
-      expect(queryByTestId('passphrase-setup')).toBeTruthy();
+      expect(getByText('Set Up Passphrase')).toBeTruthy();
     });
 
-    it('shows "Set Passphrase" text when enabling (not changing)', () => {
+    it('shows "Set Up Passphrase" when enabling rather than the change flow', () => {
       const { getAllByRole, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       fireEvent(switches[0], 'valueChange', true);
 
-      expect(getByText('Set Passphrase')).toBeTruthy();
+      expect(getByText('Set Up Passphrase')).toBeTruthy();
     });
   });
 
@@ -238,7 +125,7 @@ describe('SecuritySettingsScreen', () => {
   // ============================================================================
   describe('passphrase toggle - disable', () => {
     beforeEach(() => {
-      mockAuthEnabled = true;
+      act(() => useAuthStore.getState().setEnabled(true));
     });
 
     it('switch shows on when auth is enabled', () => {
@@ -248,42 +135,40 @@ describe('SecuritySettingsScreen', () => {
     });
 
     it('shows confirmation alert when toggling off', () => {
-      const { getAllByRole, queryByTestId } = render(<SecuritySettingsScreen />);
+      const { getAllByRole, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       fireEvent(switches[0], 'valueChange', false);
 
       // Should show the alert asking to confirm disabling
-      expect(queryByTestId('custom-alert')).toBeTruthy();
-      expect(queryByTestId('alert-title')?.props.children).toBe('Disable Passphrase Lock');
+      expect(getByText('Disable Passphrase Lock')).toBeTruthy();
     });
 
     it('shows confirmation alert with Disable and Cancel buttons', () => {
-      const { getAllByRole, queryByTestId, getByText } = render(<SecuritySettingsScreen />);
+      const { getAllByRole, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       // Toggle off to trigger the confirmation alert
       fireEvent(switches[0], 'valueChange', false);
 
       // Alert should be visible with correct title and buttons
-      expect(queryByTestId('custom-alert')).toBeTruthy();
-      expect(queryByTestId('alert-title')?.props.children).toBe('Disable Passphrase Lock');
+      expect(getByText('Disable Passphrase Lock')).toBeTruthy();
       expect(getByText('Disable')).toBeTruthy();
       expect(getByText('Cancel')).toBeTruthy();
     });
 
     it('does not disable auth when cancelled', () => {
-      const { getAllByRole, getByTestId } = render(<SecuritySettingsScreen />);
+      const { getAllByRole, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       fireEvent(switches[0], 'valueChange', false);
 
       // Press "Cancel" button in alert
-      fireEvent.press(getByTestId('alert-button-Cancel'));
+      fireEvent.press(getByText('Cancel'));
 
       // Should NOT call removePassphrase
-      expect(mockRemovePassphrase).not.toHaveBeenCalled();
-      expect(mockSetEnabled).not.toHaveBeenCalled();
+      expect(useAuthStore.getState().isEnabled).toBe(true);
+      expect(Keychain.resetGenericPassword).not.toHaveBeenCalled();
     });
   });
 
@@ -292,7 +177,7 @@ describe('SecuritySettingsScreen', () => {
   // ============================================================================
   describe('change passphrase', () => {
     beforeEach(() => {
-      mockAuthEnabled = true;
+      act(() => useAuthStore.getState().setEnabled(true));
     });
 
     it('shows "Change Passphrase" button when auth is enabled', () => {
@@ -301,19 +186,17 @@ describe('SecuritySettingsScreen', () => {
     });
 
     it('does not show "Change Passphrase" button when auth is disabled', () => {
-      mockAuthEnabled = false;
+      act(() => useAuthStore.getState().setEnabled(false));
       const { queryByText } = render(<SecuritySettingsScreen />);
       expect(queryByText('Change Passphrase')).toBeNull();
     });
 
     it('opens passphrase setup in change mode when button is pressed', () => {
-      const { getByText, queryByTestId } = render(<SecuritySettingsScreen />);
+      const { getByText } = render(<SecuritySettingsScreen />);
 
       fireEvent.press(getByText('Change Passphrase'));
 
-      expect(queryByTestId('passphrase-setup')).toBeTruthy();
-      // The PassphraseSetupScreen mock shows 'Change Passphrase' text when isChanging=true
-      // and the button text also says 'Change Passphrase', so we verify modal is open
+      expect(getByText('Enter your current passphrase and then set a new one.')).toBeTruthy();
     });
   });
 
@@ -321,32 +204,32 @@ describe('SecuritySettingsScreen', () => {
   // Passphrase Setup Modal Interactions
   // ============================================================================
   describe('passphrase setup modal', () => {
-    it('closes passphrase setup on complete', () => {
-      const { getAllByRole, queryByTestId, getByTestId } = render(<SecuritySettingsScreen />);
+    it('closes passphrase setup on complete', async () => {
+      const { getAllByRole, queryByText, getByPlaceholderText, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       // Open setup
       fireEvent(switches[0], 'valueChange', true);
-      expect(queryByTestId('passphrase-setup')).toBeTruthy();
+      expect(getByText('Set Up Passphrase')).toBeTruthy();
 
-      // Complete setup
-      fireEvent.press(getByTestId('passphrase-complete'));
+      fireEvent.changeText(getByPlaceholderText('Enter passphrase (min 6 characters)'), 'secret1');
+      fireEvent.changeText(getByPlaceholderText('Re-enter passphrase'), 'secret1');
+      fireEvent.press(getByText('Enable Lock'));
 
-      // Modal should close (passphrase-setup no longer visible)
-      // Note: In real RN, Modal visibility is controlled by state,
-      // but our mock renders conditionally
+      await waitFor(() => expect(queryByText('Set Up Passphrase')).toBeNull());
+      expect(useAuthStore.getState().isEnabled).toBe(true);
     });
 
     it('closes passphrase setup on cancel', () => {
-      const { getAllByRole, queryByTestId, getByTestId } = render(<SecuritySettingsScreen />);
+      const { getAllByRole, queryByText, getByText } = render(<SecuritySettingsScreen />);
       const switches = getAllByRole('switch');
 
       // Open setup
       fireEvent(switches[0], 'valueChange', true);
-      expect(queryByTestId('passphrase-setup')).toBeTruthy();
+      expect(getByText('Set Up Passphrase')).toBeTruthy();
 
-      // Cancel setup
-      fireEvent.press(getByTestId('passphrase-cancel'));
+      fireEvent.press(getByText('Cancel'));
+      expect(queryByText('Set Up Passphrase')).toBeNull();
     });
   });
 });

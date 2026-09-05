@@ -1,4 +1,5 @@
 import type {
+  AsyncDownloadedModelRegistryPort,
   DownloadFilePort,
   DownloadFinalizationTransaction,
   DownloadTransferPort,
@@ -7,6 +8,9 @@ import type {
 
 type TransferStart = Parameters<DownloadTransferPort['start']>[0];
 type TransferAttach = Parameters<NonNullable<DownloadTransferPort['attach']>>[0];
+type TransferStopFunction = NonNullable<DownloadTransferPort['stop']>;
+type TransferStop = Parameters<TransferStopFunction>[0];
+type TransferStopResult = Awaited<ReturnType<TransferStopFunction>>;
 
 /**
  * One optional platform-managed artifact strategy, supplied before application composition.
@@ -20,7 +24,7 @@ export interface MobileManagedArtifactIO {
   start(input: TransferStart): Promise<{ transferId?: string }>;
   attach?(input: TransferAttach): Promise<void>;
   isActive?(transferId: string): Promise<boolean>;
-  cancel?(transferId: string): Promise<void>;
+  stop?(input: TransferStop): Promise<TransferStopResult>;
   exists(path: string): Promise<boolean>;
   size(path: string): Promise<number>;
   remove(path: string): Promise<void>;
@@ -31,17 +35,19 @@ export interface MobileManagedArtifactIO {
     state: string;
     disposition: 'rollback' | 'commit';
   }): Promise<void>;
+  /** Canonical durable registration for managed artifacts that do not use Mobile's text/image rows. */
+  downloadedRegistry?: Pick<
+    Extract<AsyncDownloadedModelRegistryPort, { capture: unknown }>,
+    'capture' | 'apply' | 'restore' | 'contains'
+  >;
 }
 
 export function compositeDownloadTransferPort(
   native: DownloadTransferPort,
   managed?: MobileManagedArtifactIO,
 ): DownloadTransferPort {
-  return {
-    start: input => managed?.ownsArtifact(input.id)
-      ? managed.start(input)
-      : native.start(input),
-    attach: async input => {
+  const attach = native.attach || managed?.attach
+    ? async (input: TransferAttach): Promise<void> => {
       if (managed?.ownsTransfer(input.transferId)) {
         if (!managed.attach) throw new Error('This managed download cannot attach after restart.');
         await managed.attach(input);
@@ -49,18 +55,30 @@ export function compositeDownloadTransferPort(
       }
       if (!native.attach) throw new Error('This native download cannot attach after restart.');
       await native.attach(input);
-    },
-    isActive: transferId => managed?.ownsTransfer(transferId)
+    }
+    : undefined;
+  const isActive = native.isActive || managed?.isActive
+    ? (transferId: string): Promise<boolean> => managed?.ownsTransfer(transferId)
       ? managed.isActive?.(transferId) ?? Promise.resolve(false)
-      : native.isActive?.(transferId) ?? Promise.resolve(false),
-    cancel: async transferId => {
-      if (managed?.ownsTransfer(transferId)) {
-        if (!managed.cancel) throw new Error('This managed download cannot be cancelled.');
-        await managed.cancel(transferId);
-        return;
+      : native.isActive?.(transferId) ?? Promise.resolve(false)
+    : undefined;
+  const stop = native.stop || managed?.stop
+    ? async (input: TransferStop): Promise<TransferStopResult> => {
+      if (managed?.ownsTransfer(input.transferId)) {
+        if (!managed.stop) throw new Error('This managed download cannot apply the requested stop policy.');
+        return managed.stop(input);
       }
-      if (native.cancel) await native.cancel(transferId);
-    },
+      if (!native.stop) throw new Error('This native download cannot apply the requested stop policy.');
+      return native.stop(input);
+    }
+    : undefined;
+  return {
+    start: input => managed?.ownsArtifact(input.id)
+      ? managed.start(input)
+      : native.start(input),
+    attach,
+    isActive,
+    stop,
   };
 }
 
@@ -68,6 +86,8 @@ export function compositeDownloadFilePort(
   native: DownloadFilePort,
   managed?: MobileManagedArtifactIO,
 ): DownloadFilePort {
+  const remove = (path: string): Promise<void> =>
+    managed?.ownsPath(path) ? managed.remove(path) : native.remove(path);
   return {
     pathFor: localName => native.pathFor(localName),
     exists: path => managed?.ownsPath(path) ? managed.exists(path) : native.exists(path),
@@ -78,6 +98,7 @@ export function compositeDownloadFilePort(
     sha256: native.sha256
       ? path => native.sha256!(path)
       : undefined,
-    remove: path => managed?.ownsPath(path) ? managed.remove(path) : native.remove(path),
+    remove,
+    removePartial: remove,
   };
 }

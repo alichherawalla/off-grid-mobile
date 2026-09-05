@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NativeModules } from 'react-native';
 import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
 import { NO_COMPRESSION, unzip, zip } from 'react-native-zip-archive';
+import { createTranscriptionModelsSelector } from '@offgrid/application';
 import {
   FileTransferManager,
   IncrementalChecksum,
@@ -16,20 +18,13 @@ import { modelLibrary } from '../../../src/services/modelServices/bootstrap/mode
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
-import { useWhisperStore } from '../../../src/stores/whisperStore';
-import { transcriptionModelIntents } from '../../../src/services/modelServices/transcriptionRuntimePort';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
 import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
-import { syncService } from '../../../pro/sync/syncService';
-import { useSyncStore } from '../../../pro/sync/syncStore';
-import {
-  getDiscoveryBoundaries,
-  resetDiscoveryBoundaries,
-} from '../../utils/nativeSyncBoundaries';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { createPeerEntitlement } from '../../harness/peerEntitlement';
 import { createKeygenFake } from '../../harness/keygenFake';
 import { transferredImageManifest } from '@offgrid/models';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -67,6 +62,7 @@ const LICENCE_KEY = 'OFFGRID-TEST-LICENCE';
 const keygen = createKeygenFake();
 /** The provider's id for that licence, which is what a credential carries as its entitlement. */
 let licenceId = '';
+let applicationFixture: MobileApplicationFixture;
 
 async function waitForState(
   condition: () => boolean,
@@ -124,15 +120,27 @@ function packageMetadata(
  * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
  * presenting this code, which is why nothing has to be accepted afterwards.
  */
-function phonePairingCode(): string {
-  const code = useSyncStore.getState().pairingCode.code;
-  if (!code) throw new Error('the phone has not issued a pairing code yet');
-  return code;
-}
-
 describe('Pro mobile model package receiver', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let remoteTransfers: FileTransferManager | undefined;
+
+  beforeAll(async () => {
+    const { ProximityAir } =
+      require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: 'mobile-package-receiver',
+      name: 'Model receiver',
+      platform: 'ios',
+      version: '1',
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(async () => {
     modelTransferFsBoundary.reset();
@@ -140,8 +148,6 @@ describe('Pro mobile model package receiver', () => {
     keygen.install();
     licenceId = keygen.addLicence({ key: LICENCE_KEY, seats: 3 });
     await AsyncStorage.clear();
-    resetDiscoveryBoundaries();
-    useSyncStore.getState().reset();
     // Pairing is a Pro capability, so a receiver that is not Pro refuses the Mac before any model is
     // offered. The rest of this suite is about what happens AFTER two devices are paired.
     useAppStore.getState().setProActive(true);
@@ -163,7 +169,7 @@ describe('Pro mobile model package receiver', () => {
         return target;
       },
     );
-    await transcriptionModelIntents.reconcileDisk();
+    await applicationFixture.refreshModels();
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });
@@ -172,7 +178,6 @@ describe('Pro mobile model package receiver', () => {
     keygen.restore();
     await remoteTransfers?.dispose();
     await remote?.engine.stop();
-    await syncService.stop();
     await modelTransferService.stop();
   });
 
@@ -215,39 +220,39 @@ describe('Pro mobile model package receiver', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
     modelTransferService.start();
-    await syncService.start();
+    await applicationFixture.application.sync.start();
+    const listening =
+      await applicationFixture.application.sync.setListeningPort(43_117);
+    if (!listening.ok) {
+      throw new Error('Sync did not start the mobile listener');
+    }
 
-    const mobile = useSyncStore.getState().thisDevice;
-    const discovery = getDiscoveryBoundaries().at(-1);
-    if (!mobile || !discovery?.publishedPort) {
+    const mobile = applicationFixture.application.sync.snapshot().self;
+    if (!mobile) {
       throw new Error('Sync did not publish the mobile device');
     }
-    const pairing = remote.engine.pair(
+    const pairingCode =
+      await applicationFixture.application.sync.rotatePairingCode();
+    const pairingCodeValue = pairingCode.ok ? pairingCode.value.code : null;
+    if (!pairingCodeValue) {
+      throw new Error('the phone has not issued a pairing code yet');
+    }
+    await remote.engine.pair(
       {
         ...mobile,
         host: '127.0.0.1',
-        port: discovery.publishedPort,
+        port: listening.value,
       },
-      phonePairingCode(),
+      pairingCodeValue,
     );
-    await waitForState(() =>
-      useSyncStore
-        .getState()
-        .pairingAttempts.some(
-          attempt =>
-            attempt.device.id === remoteDevice.id &&
-            attempt.direction === 'incoming' &&
-            attempt.stage === 'waiting_for_confirmation',
-        ),
-    );
-    await pairing;
-    await waitForState(() =>
-      useSyncStore
-        .getState()
-        .knownDevices.some(
-          device =>
-            device.id === remoteDevice.id && device.status === 'connected',
-        ),
+    await waitForState(
+      () =>
+        applicationFixture.application.sync
+          .snapshot()
+          .paired.some(device => device.id === remoteDevice.id) &&
+        applicationFixture.application.sync.snapshot().connections[
+          remoteDevice.id
+        ] === 'connected',
     );
     return { mobile, transfers };
   }
@@ -361,7 +366,19 @@ describe('Pro mobile model package receiver', () => {
         sizeBytes: whisper.length,
       }),
     ]);
-    expect(useWhisperStore.getState().presentModelIds).toContain('base.en');
+    const transcriptionModels = createTranscriptionModelsSelector();
+    await applicationFixture.refreshModels();
+    expect(
+      transcriptionModels(applicationFixture.application.models.snapshot())
+        .models,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          catalog: expect.objectContaining({ id: 'base.en' }),
+          installed: true,
+        }),
+      ]),
+    );
 
     const imageArchive = Buffer.alloc(48 * 1024, 0x49);
     imageArchive.write('PK\u0003\u0004', 0, 'binary');

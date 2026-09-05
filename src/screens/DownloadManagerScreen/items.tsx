@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
-import { Card } from '../../components';
+import { Card } from '../../components/Card';
 import { useTheme, useThemedStyles } from '../../theme';
 import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
@@ -12,6 +12,7 @@ import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
+import { isDownloadingStatus, isPausedStatus } from '../../utils/downloadStatus';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export type DownloadItem = {
 export { formatBytes } from '../../utils/formatBytes';
 
 export function getStatusText(status: string): string {
+  if (status === 'preparing') return 'Preparing...';
   if (status === 'running' || status === 'downloading') return 'Downloading...';
   if (status === 'pending' || status === 'queued') return 'Queued';
   if (status === 'paused') return 'Paused';
@@ -74,9 +76,47 @@ interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
   onRetry: (item: DownloadItem) => void;
+  onPause: (item: DownloadItem) => void;
+  onResume: (item: DownloadItem) => void;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
+const DownloadControlActions: React.FC<ActiveDownloadCardProps> = ({
+  item,
+  onRemove,
+  onPause,
+  onResume,
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const paused = isPausedStatus(item.status);
+  const canPauseOrResume = isDownloadingStatus(item.status) || paused;
+  return (
+    <View style={styles.downloadActionsRow}>
+      {canPauseOrResume && (
+        <TouchableOpacity
+          style={styles.downloadActionButton}
+          hitSlop={SPACING.md}
+          accessibilityLabel={paused ? 'Resume download' : 'Pause download'}
+          testID={paused ? 'resume-download-button' : 'pause-download-button'}
+          onPress={() => paused ? onResume(item) : onPause(item)}
+        >
+          <Icon name={paused ? 'play' : 'pause'} size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+      <TouchableOpacity
+        style={styles.downloadActionButton}
+        hitSlop={SPACING.md}
+        accessibilityLabel="Cancel download"
+        testID="remove-download-button"
+        onPress={() => onRemove(item)}
+      >
+        <Icon name="x" size={20} color={colors.error} />
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry, onPause, onResume }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const needsAttention = item.status === 'failed' || item.status === 'interrupted';
@@ -136,15 +176,15 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
               <Text style={styles.removeButtonText}>Remove</Text>
             </TouchableOpacity>
           </View>
-        ) : item.modelType !== 'tts' ? (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            testID="remove-download-button"
-            onPress={() => onRemove(item)}
-          >
-            <Icon name="x" size={20} color={colors.error} />
-          </TouchableOpacity>
-        ) : null}
+        ) : (
+          <DownloadControlActions
+            item={item}
+            onRemove={onRemove}
+            onRetry={onRetry}
+            onPause={onPause}
+            onResume={onResume}
+          />
+        )}
       </View>
       <View style={styles.progressContainer}>
         <View style={styles.progressBarBackground}>
@@ -184,6 +224,7 @@ interface CompletedDownloadCardProps {
   onDelete: (item: DownloadItem) => void;
   onRepairVision?: (item: DownloadItem) => void;
   isRepairingVision?: boolean;
+  repairDownload?: DownloadItem;
 }
 
 /** Feather icon for a completed model row. A vision model missing its projector reads as
@@ -204,7 +245,7 @@ function modelTypeIconColor(item: DownloadItem, needsVisionRepair: boolean, colo
   return colors.primary;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false, repairDownload }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const needsVisionRepair = checkNeedsVisionRepair(item);
@@ -216,6 +257,15 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
       ? new Date(item.downloadedAt).toLocaleDateString()
       : undefined,
   ].filter(Boolean).join(' · ');
+  const repairProgress = isRepairingVision && repairDownload
+    ? presentProgress({
+        progress: repairDownload.progress,
+        bytesDownloaded: repairDownload.bytesDownloaded,
+        totalBytes: repairDownload.fileSize,
+        bytesPerSecond: repairDownload.bytesPerSecond,
+        status: repairDownload.status,
+      })
+    : undefined;
 
   return (
     <Card style={styles.downloadCard}>
@@ -252,6 +302,24 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         <View style={styles.repairingBadge} testID="repairing-vision-badge">
           <LoadingDots color={colors.primary} />
           <Text style={styles.repairingBadgeText}>Repairing</Text>
+        </View>
+      )}
+      {repairProgress && (
+        <View style={styles.progressContainer} testID="repair-vision-progress">
+          <View style={styles.progressBarBackground}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${repairProgress.progress.percentage ?? 0}%` as const,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {[repairProgress.percentageText, repairProgress.detailText].filter(Boolean).join(' · ')}
+          </Text>
         </View>
       )}
     </Card>

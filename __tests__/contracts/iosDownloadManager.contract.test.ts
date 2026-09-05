@@ -18,26 +18,22 @@ interface DownloadManagerModuleInterface {
     title?: string;
     description?: string;
     totalBytes?: number;
-    /**
-     * Contract change (pause/resume): Shared's transfer port has no pause verb. A pause reaches the
-     * native module as `cancelDownload`, and a resume as a fresh `startDownload` with `resume: true`.
-     * So `cancelDownload` MUST retain the bytes it already fetched (iOS: URLSession resume data,
-     * persisted durably; Android: the partial file), and `startDownload({ resume: true })` continues
-     * from them when any exist. Absent or false means a fresh request, which also discards any
-     * retained bytes for that artifact. Deleting partials otherwise is the file port's job.
-     */
+    /** Continue from native partial bytes retained by a prior stop. */
     resume?: boolean;
   }): Promise<{
-    downloadId: number;
+    downloadId: string;
     fileName: string;
     modelId: string;
   }>;
 
-  /** Retains resumable bytes - see `startDownload.resume`. Not a delete. */
-  cancelDownload(downloadId: number): Promise<void>;
+  /** Shared selects whether a terminal stop retains or deletes partial bytes. */
+  stopDownload(
+    downloadId: string,
+    retainPartial: boolean,
+  ): Promise<'stopped' | 'completed' | 'not-found'>;
 
   getActiveDownloads(): Promise<Array<{
-    downloadId: number;
+    downloadId: string;
     fileName: string;
     modelId: string;
     status: string;
@@ -48,13 +44,13 @@ interface DownloadManagerModuleInterface {
     failureReason?: string;
   }>>;
 
-  getDownloadProgress(downloadId: number): Promise<{
+  getDownloadProgress(downloadId: string): Promise<{
     bytesDownloaded: number;
     totalBytes: number;
     status: string;
   }>;
 
-  moveCompletedDownload(downloadId: number, targetPath: string): Promise<string>;
+  moveCompletedDownload(downloadId: string, targetPath: string): Promise<string>;
 
   // iOS no-ops for API compatibility with Android's polling model
   startProgressPolling(): void;
@@ -64,7 +60,7 @@ interface DownloadManagerModuleInterface {
 // Mock the iOS native module
 const mockDownloadModule: DownloadManagerModuleInterface = {
   startDownload: jest.fn(),
-  cancelDownload: jest.fn(),
+  stopDownload: jest.fn(),
   getActiveDownloads: jest.fn(),
   getDownloadProgress: jest.fn(),
   moveCompletedDownload: jest.fn(),
@@ -95,7 +91,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
     it('exposes all required methods', () => {
       const requiredMethods = [
         'startDownload',
-        'cancelDownload',
+        'stopDownload',
         'getActiveDownloads',
         'getDownloadProgress',
         'moveCompletedDownload',
@@ -116,7 +112,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
   describe('startDownload', () => {
     it('accepts download params and returns downloadId + metadata', async () => {
       (mockDownloadModule.startDownload as jest.Mock).mockResolvedValue({
-        downloadId: 1,
+        downloadId: '1',
         fileName: 'sd21-coreml.zip',
         modelId: 'coreml_sd21',
       });
@@ -133,16 +129,16 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
       expect(result).toHaveProperty('downloadId');
       expect(result).toHaveProperty('fileName');
       expect(result).toHaveProperty('modelId');
-      expect(typeof result.downloadId).toBe('number');
+      expect(typeof result.downloadId).toBe('string');
       expect(typeof result.fileName).toBe('string');
     });
 
     it('accepts resume: true so a paused download continues from retained bytes', async () => {
       // This is the ONE widening in this contract for pause/resume. It is named here so it is
       // read as a deliberate surface change: both native modules must read `resume` and, when
-      // true, continue from what the earlier cancelDownload retained rather than start over.
+      // true, continue from what the earlier retain-partial stop kept rather than start over.
       (mockDownloadModule.startDownload as jest.Mock).mockResolvedValue({
-        downloadId: 3,
+        downloadId: '3',
         fileName: 'model.gguf',
         modelId: 'test-model',
       });
@@ -161,7 +157,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
 
     it('works with minimal params (no title/description/totalBytes)', async () => {
       (mockDownloadModule.startDownload as jest.Mock).mockResolvedValue({
-        downloadId: 2,
+        downloadId: '2',
         fileName: 'model.gguf',
         modelId: 'test-model',
       });
@@ -183,15 +179,14 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
   });
 
   // ========================================================================
-  // cancelDownload
+  // stopDownload
   // ========================================================================
-  describe('cancelDownload', () => {
-    it('accepts downloadId and returns void', async () => {
-      (mockDownloadModule.cancelDownload as jest.Mock).mockResolvedValue(undefined);
+  describe('stopDownload', () => {
+    it('accepts the Shared partial policy and reports whether stop won', async () => {
+      (mockDownloadModule.stopDownload as jest.Mock).mockResolvedValue('stopped');
 
-      await mockDownloadModule.cancelDownload(42);
-
-      expect(mockDownloadModule.cancelDownload).toHaveBeenCalledWith(42);
+      await expect(mockDownloadModule.stopDownload('42', false)).resolves.toBe('stopped');
+      expect(mockDownloadModule.stopDownload).toHaveBeenCalledWith('42', false);
     });
   });
 
@@ -202,7 +197,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
     it('returns array of download info objects', async () => {
       const mockDownloads = [
         {
-          downloadId: 1,
+          downloadId: '1',
           fileName: 'model.zip',
           modelId: 'coreml_sd21',
           status: 'running',
@@ -236,7 +231,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
     it('includes completed downloads with localUri', async () => {
       const mockDownloads = [
         {
-          downloadId: 1,
+          downloadId: '1',
           fileName: 'model.zip',
           modelId: 'coreml_sd21',
           status: 'completed',
@@ -257,7 +252,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
     it('includes failed downloads with failureReason', async () => {
       const mockDownloads = [
         {
-          downloadId: 2,
+          downloadId: '2',
           fileName: 'model.zip',
           modelId: 'coreml_sd21',
           status: 'failed',
@@ -287,7 +282,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
         status: 'running',
       });
 
-      const result = await mockDownloadModule.getDownloadProgress(1);
+      const result = await mockDownloadModule.getDownloadProgress('1');
 
       expect(result).toHaveProperty('bytesDownloaded');
       expect(result).toHaveProperty('totalBytes');
@@ -305,9 +300,9 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
       const targetPath = '/var/mobile/.../Documents/image_models/sd21/model.zip';
       (mockDownloadModule.moveCompletedDownload as jest.Mock).mockResolvedValue(targetPath);
 
-      const result = await mockDownloadModule.moveCompletedDownload(1, targetPath);
+      const result = await mockDownloadModule.moveCompletedDownload('1', targetPath);
 
-      expect(mockDownloadModule.moveCompletedDownload).toHaveBeenCalledWith(1, targetPath);
+      expect(mockDownloadModule.moveCompletedDownload).toHaveBeenCalledWith('1', targetPath);
       expect(typeof result).toBe('string');
       expect(result).toBe(targetPath);
     });
@@ -338,7 +333,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
   describe('Events (same names and shapes as Android)', () => {
     it('emits DownloadProgress with expected shape', () => {
       const progressEvent = {
-        downloadId: 1,
+        downloadId: '1',
         fileName: 'model.zip',
         modelId: 'coreml_sd21',
         bytesDownloaded: 500_000_000,
@@ -352,13 +347,13 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
       expect(progressEvent).toHaveProperty('bytesDownloaded');
       expect(progressEvent).toHaveProperty('totalBytes');
       expect(progressEvent).toHaveProperty('status');
-      expect(typeof progressEvent.downloadId).toBe('number');
+      expect(typeof progressEvent.downloadId).toBe('string');
       expect(typeof progressEvent.bytesDownloaded).toBe('number');
     });
 
     it('emits DownloadComplete with expected shape', () => {
       const completeEvent = {
-        downloadId: 1,
+        downloadId: '1',
         fileName: 'model.zip',
         modelId: 'coreml_sd21',
         bytesDownloaded: 2_500_000_000,
@@ -377,7 +372,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
 
     it('emits DownloadError with expected shape', () => {
       const errorEvent = {
-        downloadId: 1,
+        downloadId: '1',
         fileName: 'model.zip',
         modelId: 'coreml_sd21',
         status: 'failed',
@@ -428,7 +423,7 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
       // The native module must move it to Documents/ synchronously
       // and include the final path as localUri.
       const completedDownload = {
-        downloadId: 1,
+        downloadId: '1',
         fileName: 'model.zip',
         modelId: 'coreml_sd21',
         status: 'completed',

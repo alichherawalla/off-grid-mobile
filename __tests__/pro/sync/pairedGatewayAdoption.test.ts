@@ -6,22 +6,25 @@ import { useRemoteServerStore } from '@offgrid/core/stores/remoteServerStore';
 import { resetStores, waitFor } from '../../utils/testHelpers';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { manualMeshEndpointStore } from '../../../pro/sync/manualMeshEndpoint';
-import { createKnownSyncDevice } from '../../../pro/sync/knownSyncDevice';
 import { initPairedGatewayAdoption } from '../../../pro/sync/pairedGatewayAdoption';
+import { getMobileApplication } from '../../../src/services/composition/application';
+import {pairingSecretStore} from '../../../pro/sync/pairingSecretStore';
+import {publishSavedRoster} from '../../../pro/sync/savedRoster';
+import type {DeviceInfo, PairedDevice} from '@offgrid/sync';
 
 /**
  * A device you paired is a remote server you can use. You paired the Mac once; you should not also
  * type its address into Remote Servers.
  *
- * Drives the REAL paired-gateway adoption over the REAL sync store, the REAL mobile workspace and the
- * REAL remote server store. The only fake is the network: `fetch` answers as an Off Grid Desktop
+ * Drives the real paired-gateway adoption from the durable pairing adapter, through its production
+ * roster publication, the registered Shared application, and the real Mobile remote-server ports.
+ * The only fake is the network: `fetch` answers as an Off Grid Desktop
  * gateway would at the address the Mac is reachable on, and refuses every other address. Nothing of
  * ours is mocked; the outcome is read where the app reads it - the saved servers, their health and
  * the models discovered on them.
  *
- * The roster arrives through the store's own action, which is what the sync runtime calls when it
- * has read the pairings. That is the honest ceiling here: the gesture that produces a roster is
- * pairing over a live transport, which no jest boundary can stand in for.
+ * Pairing is committed through the same persistence port that Shared Sync owns. The test does not
+ * arrange consumer state; the production roster publisher projects that durable fact.
  */
 describe('a paired Mac is adopted as a remote server', () => {
   const GATEWAY_PORT = 7878;
@@ -62,9 +65,7 @@ describe('a paired Mac is adopted as a remote server', () => {
       return notFound();
     });
 
-  const mac = (overrides: Partial<{ host: string; privateHost: string }> = {}) =>
-    createKnownSyncDevice(
-      {
+  const mac = (overrides: Partial<{ host: string; privateHost: string }> = {}): DeviceInfo => ({
         id: 'mac',
         name: 'Mac',
         platform: 'macos',
@@ -73,20 +74,53 @@ describe('a paired Mac is adopted as a remote server', () => {
         port: 4040,
         gatewayPort: GATEWAY_PORT,
         ...(overrides.privateHost ? { privateHost: overrides.privateHost } : {}),
-      },
-      'connected',
-    );
+      });
+
+  const paired = (device: DeviceInfo): PairedDevice => ({
+    ...device,
+    membershipId: `membership-${device.id}`,
+    sharedSecret: `secret-${device.id}`,
+    pairedAt: 1,
+    lastConnected: 1,
+  });
+
+  const publishRoster = async (devices: readonly DeviceInfo[]): Promise<void> => {
+    const requested = new Set(devices.map(device => device.id));
+    for (const existing of pairingSecretStore.list()) {
+      if (!requested.has(existing.device.id)) {
+        await pairingSecretStore.removePaired(existing.device.id);
+      }
+    }
+    for (const device of devices) {
+      if (pairingSecretStore.getActive(device.id)) {
+        await pairingSecretStore.observe(device);
+        continue;
+      }
+      const value = paired(device);
+      await pairingSecretStore.beginPairing(value);
+      await pairingSecretStore.commitPairing(value);
+    }
+    publishSavedRoster();
+  };
 
   const servers = () => useRemoteServerStore.getState().servers;
   const pairedServer = () => servers().find(server => server.id === 'paired:mac');
 
   let stop: (() => void) | null = null;
 
-  beforeEach(() => {
+  beforeAll(() => {
+    // Construct the registered Shared application that owns paired-server adoption.
+    getMobileApplication();
+  });
+
+  beforeEach(async () => {
     resetStores();
     useRemoteServerStore.setState({ servers: [], serverHealth: {} });
     useSyncStore.getState().reset();
     manualMeshEndpointStore.resetCache();
+    pairingSecretStore.resetCache();
+    await pairingSecretStore.load();
+    await publishRoster([]);
   });
 
   afterEach(() => {
@@ -101,7 +135,7 @@ describe('a paired Mac is adopted as a remote server', () => {
     // Before the roster has been read, an empty list means "not looked yet", not "no devices".
     expect(servers()).toEqual([]);
 
-    useSyncStore.getState().setKnownDevices([mac()]);
+    await publishRoster([mac()]);
     await waitFor(() => useRemoteServerStore.getState().serverHealth['paired:mac'] !== undefined, {
       timeout: 5000,
     });
@@ -118,12 +152,12 @@ describe('a paired Mac is adopted as a remote server', () => {
     ).toEqual(['qwen3-8b']);
   });
 
-  it('dials the private address you saved for the Mac when sync is on the private route', async () => {
+  it('dials the private address you saved for the Mac when no LAN address is available', async () => {
     (global as unknown as { fetch: unknown }).fetch = desktopGatewayAt(PRIVATE_HOST);
     await manualMeshEndpointStore.save({ deviceId: 'mac', host: PRIVATE_HOST });
     stop = initPairedGatewayAdoption();
 
-    useSyncStore.getState().setKnownDevices([{ ...mac(), routeId: 'private' }]);
+    await publishRoster([mac({host: '', privateHost: PRIVATE_HOST})]);
     await waitFor(() => useRemoteServerStore.getState().serverHealth['paired:mac']?.status === 'healthy', {
       timeout: 5000,
     });
@@ -136,7 +170,7 @@ describe('a paired Mac is adopted as a remote server', () => {
     (global as unknown as { fetch: unknown }).fetch = desktopGatewayAt(PRIVATE_HOST);
     stop = initPairedGatewayAdoption();
 
-    useSyncStore.getState().setKnownDevices([mac({ privateHost: PRIVATE_HOST })]);
+    await publishRoster([mac({ privateHost: PRIVATE_HOST })]);
     await waitFor(() => useRemoteServerStore.getState().serverHealth['paired:mac']?.status === 'healthy', {
       timeout: 5000,
     });
@@ -148,11 +182,8 @@ describe('a paired Mac is adopted as a remote server', () => {
     (global as unknown as { fetch: unknown }).fetch = desktopGatewayAt(LAN_HOST);
     stop = initPairedGatewayAdoption();
 
-    useSyncStore.getState().setKnownDevices([
-      createKnownSyncDevice(
-        { id: 'phone', name: 'Pixel', platform: 'android', version: '1.0.0', host: LAN_HOST, port: 4040 },
-        'connected',
-      ),
+    await publishRoster([
+      {id: 'phone', name: 'Pixel', platform: 'android', version: '1.0.0', host: LAN_HOST, port: 4040},
     ]);
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -162,10 +193,10 @@ describe('a paired Mac is adopted as a remote server', () => {
   it('forgets the server when the Mac is unpaired', async () => {
     (global as unknown as { fetch: unknown }).fetch = desktopGatewayAt(LAN_HOST);
     stop = initPairedGatewayAdoption();
-    useSyncStore.getState().setKnownDevices([mac()]);
+    await publishRoster([mac()]);
     await waitFor(() => pairedServer() !== undefined, { timeout: 5000 });
 
-    useSyncStore.getState().setKnownDevices([]);
+    await publishRoster([]);
     await waitFor(() => pairedServer() === undefined, { timeout: 5000 });
 
     expect(servers()).toEqual([]);

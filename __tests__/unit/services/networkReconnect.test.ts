@@ -1,5 +1,6 @@
 import { AppState } from 'react-native';
 import { getIpAddress } from 'react-native-device-info';
+import '../../../src/services/composition/application';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { remoteServerManager } from '../../../src/services/remoteServerManager';
 import '../../../src/services/modelServices';

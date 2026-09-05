@@ -151,7 +151,12 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     const A = createDownloadedModel({ id: 'A', engine: 'llama' });
     useAppStore.setState({ downloadedModels: [A] });
 
-    mockLlm.isModelLoaded.mockReturnValue(true);
+    let nativeLoaded = true;
+    mockLlm.isModelLoaded.mockImplementation(() => nativeLoaded);
+    mockLlm.unloadModel.mockImplementation(async () => {
+      nativeLoaded = false;
+      return {released: true};
+    });
     await activeModelService.loadTextModel('A');
     expect(selectedLocalModelId('text')).toBe('A');
 

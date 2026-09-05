@@ -1,8 +1,8 @@
 import {
-  CORE_SYNC_ENTITIES,
   mobileModelSettingPatch,
   modelSettingMutations,
 } from '../../../src/services/sync/mutation';
+import { CORE_SYNC_ENTITIES } from '@offgrid/application';
 
 describe('model settings sync contract', () => {
   it('round-trips every setting shared by desktop and mobile through canonical wire keys', () => {

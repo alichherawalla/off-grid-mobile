@@ -4,6 +4,8 @@ import type { SpeechPlatformPorts } from '@offgrid/application';
 import { cleanTranscription } from '@offgrid/models';
 import { audioRecorderService } from '../../audioRecorderService';
 import { whisperService } from '../../whisperService';
+import { prepareMessageForSpeech } from '../../../utils/messageContent';
+import { mobileModelSelectionStore } from '../../modelServices/selectionStore';
 
 export type MobileSpeechInputPorts = Pick<
   SpeechPlatformPorts,
@@ -57,4 +59,38 @@ export const mobileSpeechInputPorts: MobileSpeechInputPorts = {
     },
   },
   cleanTranscript: cleanTranscription,
+};
+
+/**
+ * Core has native speech input but no speech-output engine. Supplying the complete port keeps the
+ * Shared speech application as the session and transcription owner in both core and Pro builds;
+ * Pro replaces these unavailable output adapters with its native TTS implementation.
+ */
+export const mobileCoreSpeechPorts: SpeechPlatformPorts = {
+  ...mobileSpeechInputPorts,
+  synthesizer: {
+    ready: () => false,
+    async synthesize() {
+      throw new Error('Speech output is not available.');
+    },
+  },
+  playback: {
+    async play() {
+      throw new Error('Speech output is not available.');
+    },
+    stop: () => undefined,
+  },
+  cleanForSpeech: prepareMessageForSpeech,
+  selection: {
+    async read() {
+      return {
+        stt: mobileModelSelectionStore.read('transcription'),
+        tts: null,
+        voice: null,
+      };
+    },
+    async write(selection) {
+      await mobileModelSelectionStore.write('transcription', selection.stt);
+    },
+  },
 };
