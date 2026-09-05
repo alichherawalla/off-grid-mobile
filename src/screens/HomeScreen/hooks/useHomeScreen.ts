@@ -267,16 +267,23 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       try {
         // Single owning side-effect — same cancellation + unload path as Chat.
         const outcome = await applicationFacade().workflows.ejectModels();
-        if (!outcome.ok)
-          throw new Error(modelsFailureMessage(outcome.failure));
+        if (!outcome.ok) {
+          setAlertState(
+            showAlert('Error', modelsFailureMessage(outcome.failure)),
+          );
+          return;
+        }
         const { count } = outcome.value;
         if (count > 0) {
           setAlertState(
             showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`),
           );
         }
-      } catch (_error) {
-        setAlertState(showAlert('Error', 'Failed to unload models'));
+      } catch (error) {
+        setAlertState(showAlert(
+          'Error',
+          error instanceof Error ? error.message : 'Failed to unload models',
+        ));
       } finally {
         setIsEjecting(false);
         setLoadingState({ isLoading: false, type: null, modelName: null });

@@ -2,7 +2,7 @@ import type { ModelEjectionService, ModelModality } from '@offgrid/models';
 import { stopActiveMobileChatSession } from './chatSessionControl';
 import { activeRouteIsRemote } from './activeRoute';
 import { lifecycleProjectionPort } from './lifecycleProjectionPort';
-import { unloadImageModel, unloadTextModel } from './modelLifecycleBootstrap';
+import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 
 const EJECTABLE_MODALITIES = ['text', 'image', 'transcription', 'voice'] as const;
 
@@ -24,8 +24,24 @@ export function mobileModelEjectionPorts(): ConstructorParameters<typeof ModelEj
     // The two local runtimes this device can unload. Shared counts the answers; it does not need to
     // know the names.
     localUnloads: {
-      textUnloaded: () => unloadTextModel(true),
-      imageUnloaded: () => unloadImageModel(true),
+      'text runtime': async () => {
+        const native = nativeModelLifecycle.getState();
+        const hadRuntime = native.loadedTextModelId !== null || native.textIsLoaded;
+        if (!hadRuntime) return { status: 'absent' } as const;
+        const release = await nativeModelLifecycle.unloadTextModel(true);
+        return release.released
+          ? { status: 'released' } as const
+          : { status: 'retained', reason: release.reason } as const;
+      },
+      'image runtime': async () => {
+        const native = nativeModelLifecycle.getState();
+        const hadRuntime = native.loadedImageModelId !== null || native.imageIsLoaded;
+        if (!hadRuntime) return { status: 'absent' } as const;
+        const release = await nativeModelLifecycle.unloadImageModel(true);
+        return release.released
+          ? { status: 'released' } as const
+          : { status: 'retained', reason: release.reason } as const;
+      },
     },
     // Which modalities a remote server answers is the active route's fact, per modality.
     remoteModalities: (): readonly ModelModality[] =>

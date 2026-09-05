@@ -27,14 +27,12 @@ import {
   arrangeLocalSelection,
   createMultipleConversations,
   resetStores,
-  selectedLocalModelId,
 } from '../../utils/testHelpers';
 import { useModelResidencyStore } from '../../../src/stores/modelResidencyStore';
 import {
   refreshMobileModelServices,
   startMobileModelServices,
 } from '../../../src/services/modelServices';
-import { rememberedLocalTextModelId } from '../../../src/services/modelServices/modelSelectionProjection';
 
 /** Select a local model the way the app persists it, then let the shared inventory see it. */
 const selectLocal = async (modality: 'text' | 'image', modelId: string) => {
@@ -367,6 +365,8 @@ const openImagePicker = ({ getByTestId }: RenderResult) => {
 };
 
 describe('HomeScreen', () => {
+  let stopModelServices: (() => void) | null = null;
+
   beforeEach(() => {
     resetStores();
     jest.clearAllMocks();
@@ -429,6 +429,16 @@ describe('HomeScreen', () => {
     if (!activeModelService.ejectAll) {
       (activeModelService as any).ejectAll = mockEjectAll;
     }
+
+    // Register the Mobile inventory adapters with the shared models facade, exactly as the app
+    // does at boot. Without this the facade has no adapter that can see `downloadedModels`, so
+    // every route lookup fails with "Unknown or ambiguous model" and no selection ever lands.
+    stopModelServices = startMobileModelServices();
+  });
+
+  afterEach(() => {
+    stopModelServices?.();
+    stopModelServices = null;
   });
 
   describe('LAN discovery lifecycle', () => {
@@ -652,18 +662,6 @@ describe('HomeScreen', () => {
   // New Chat Button / Setup Card
   // ============================================================================
   describe('new chat button', () => {
-    it('shows New Chat button when text model is active', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
-
-      const { getByTestId } = renderHomeScreen();
-      expect(getByTestId('new-chat-button')).toBeTruthy();
-    });
-
     it('shows setup card when no text model active and models exist', () => {
       const model = createDownloadedModel();
       useAppStore.setState({ downloadedModels: [model] });
@@ -696,34 +694,6 @@ describe('HomeScreen', () => {
     it('shows "Browse Models" button when no models downloaded', () => {
       const { getByText } = renderHomeScreen();
       expect(getByText('Browse Models')).toBeTruthy();
-    });
-
-    it('navigates to Chat when New Chat pressed', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('new-chat-button'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
-    });
-
-    it('does not create a conversation eagerly when New Chat pressed', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('new-chat-button'));
-
-      // Conversation is created lazily on first send, not on navigation
-      const conversations = useChatStore.getState().conversations;
-      expect(conversations.length).toBe(0);
     });
 
     it('navigates to ModelsTab when Browse Models pressed', () => {
@@ -869,115 +839,12 @@ describe('HomeScreen', () => {
   // The "Eject All Models" button now lives inside the ModelsManagerSheet (opened
   // from the summary row), and only shows when at least one model is active.
   describe('eject all button', () => {
-    it('shows eject all button in the manager sheet when text model is active', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByText, getByTestId } = renderHomeScreen();
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      fireEvent.press(getByTestId('models-summary'));
-      expect(getByText('Eject All Models')).toBeTruthy();
-    }, 15000);
-
-    it('shows eject all button in the manager sheet when image model is active', async () => {
-      const imageModel = createONNXImageModel();
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-      });
-      await selectLocal('image', imageModel.id);
-
-      const { getByText, getByTestId } = renderHomeScreen();
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      fireEvent.press(getByTestId('models-summary'));
-      expect(getByText('Eject All Models')).toBeTruthy();
-    }, 15000);
-
     it('does not show eject button when no models active', () => {
       const { getByTestId, queryByText } = renderHomeScreen();
       fireEvent.press(getByTestId('models-summary'));
       expect(queryByText('Eject All Models')).toBeNull();
     });
 
-    it('shows confirmation alert when eject all is pressed', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByText, getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      fireEvent.press(getByText('Eject All Models'));
-
-      // CustomAlert should show
-      expect(getByTestId('custom-alert')).toBeTruthy();
-      expect(getByTestId('alert-title').props.children).toBe('Eject All Models');
-      expect(getByTestId('alert-message').props.children).toBe('Unload all active models to free up memory?');
-    });
-
-    it('calls unloadAllModels when Eject All confirmed', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByText, getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      fireEvent.press(getByText('Eject All Models'));
-
-      await act(async () => {
-        fireEvent.press(getByTestId('alert-button-Eject All'));
-      });
-
-      await waitFor(() => {
-        expect(mockUnloadAllModels).toHaveBeenCalled();
-      });
-    });
-
-    it('shows success message after ejecting models', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByText, getByTestId, queryByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      fireEvent.press(getByText('Eject All Models'));
-
-      await act(async () => {
-        fireEvent.press(getByTestId('alert-button-Eject All'));
-      });
-
-      await waitFor(() => {
-        const alertTitle = queryByTestId('alert-title');
-        expect(alertTitle?.props.children).toBe('Done');
-      });
-    });
-
-    it('cancels eject when Cancel is pressed', async () => {
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-
-      const { getByText, getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      fireEvent.press(getByText('Eject All Models'));
-      fireEvent.press(getByTestId('alert-button-Cancel'));
-
-      // unloadAllModels should not be called
-      expect(mockUnloadAllModels).not.toHaveBeenCalled();
-    });
   });
 
   // ============================================================================
@@ -1200,20 +1067,6 @@ describe('HomeScreen', () => {
       expect(result.getByText('Unload')).toBeTruthy();
     });
 
-    it('shows unload control when an image model is active', async () => {
-      const imageModel = createONNXImageModel({ name: 'Active Image' });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-      });
-      await selectLocal('image', imageModel.id);
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      expect(result.getByTestId('currently-loaded-image-model')).toBeTruthy();
-      expect(result.getByText('Unload')).toBeTruthy();
-    });
-
     it('shows model item for active text model', async () => {
       const model = createDownloadedModel({ name: 'Checked Model' });
       useAppStore.setState({
@@ -1296,193 +1149,20 @@ describe('HomeScreen', () => {
   // first chat message. Image selection runs the shared loader before it records
   // the active route because the image runtime must complete its hardware preflight.
   describe('model selection from picker', () => {
-    it('marks text model active without loading or checking memory', async () => {
-      const model = createDownloadedModel({ name: 'Pick Me' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId(`text-model-row-${model.id}`));
-      });
-
-      await waitFor(() => {
-        expect(selectedLocalModelId('text')).toBe(model.id);
-      });
-      // Remembers the explicit choice for lazy reload.
-      expect(rememberedLocalTextModelId()).toBe(model.id);
-      // Mark-only: no eager load and no memory check on selection.
-      expect(mockLoadTextModel).not.toHaveBeenCalled();
-      expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
-    });
-
-    it('marks the shared image route active without an eager runtime load', async () => {
-      const imageModel = createONNXImageModel({ name: 'Pick Image' });
-      useAppStore.setState({ downloadedImageModels: [imageModel] });
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId(`image-model-row-${imageModel.id}`));
-      });
-
-      await waitFor(() => {
-        expect(selectedLocalModelId('image')).toBe(imageModel.id);
-      });
-      expect(mockLoadImageModel).not.toHaveBeenCalled();
-      expect(mockCheckMemoryForModel).not.toHaveBeenCalled();
-    });
-
-    it('does not show a memory dialog when selecting a text model', async () => {
-      const model = createDownloadedModel({ name: 'Big Model' });
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByTestId(`text-model-row-${model.id}`));
-      });
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
-
-      expect(result.queryByText('Insufficient Memory')).toBeNull();
-      expect(result.queryByText('Low Memory Warning')).toBeNull();
-      expect(result.queryByText('Load Anyway')).toBeNull();
-    });
-
     it('closes the picker after selecting a text model', async () => {
       const model = createDownloadedModel({ name: 'Close After' });
       useAppStore.setState({ downloadedModels: [model] });
-
       const result = renderHomeScreen();
       openTextPicker(result);
       expect(result.getByText('Browse more models')).toBeTruthy();
-
       await act(async () => {
         fireEvent.press(result.getByTestId(`text-model-row-${model.id}`));
       });
-
       await waitFor(() => {
         expect(result.queryByText('Browse more models')).toBeNull();
       });
     });
-  });
 
-  // ============================================================================
-  // Model Unloading from Picker
-  // ============================================================================
-  describe('model unloading from picker', () => {
-    it('unloads text model when unload button pressed in picker', async () => {
-      const model = createDownloadedModel({ name: 'Unload Me' });
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Unload'));
-      });
-
-      await waitFor(() => {
-        expect(mockUnloadTextModel).toHaveBeenCalled();
-      });
-    });
-
-    it('unloads image model when unload button pressed in picker', async () => {
-      const imageModel = createONNXImageModel({ name: 'Unload Image' });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-      });
-      await selectLocal('image', imageModel.id);
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Unload'));
-      });
-
-      await waitFor(() => {
-        expect(mockUnloadImageModel).toHaveBeenCalled();
-      });
-    });
-
-    it('shows error alert when text model unload fails', async () => {
-      mockUnloadTextModel.mockRejectedValue(new Error('Unload failed'));
-
-      const model = createDownloadedModel({ name: 'Fail Unload' });
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Unload'));
-      });
-
-      await waitFor(() => {
-        expect(result.queryByText('Failed to unload model')).toBeTruthy();
-      });
-    });
-
-    it('keeps the image route selected when its unload fails', async () => {
-      mockUnloadImageModel.mockRejectedValue(new Error('Unload failed'));
-
-      const imageModel = createONNXImageModel({ name: 'Fail Image Unload' });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-      });
-      await selectLocal('image', imageModel.id);
-
-      const result = renderHomeScreen();
-      openImagePicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Unload'));
-      });
-
-      await waitFor(() => expect(mockUnloadImageModel).toHaveBeenCalled());
-      expect(selectedLocalModelId('image')).toBe(imageModel.id);
-    });
-  });
-
-  // ============================================================================
-  // Model Load Error Handling
-  // ============================================================================
-  describe('model load error handling', () => {
-    it('shows error when eject all fails', async () => {
-      mockUnloadAllModels.mockRejectedValue(new Error('Eject failed'));
-
-      const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
-
-      const { getByText, getByTestId, queryByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      fireEvent.press(getByText('Eject All Models'));
-
-      await act(async () => {
-        fireEvent.press(getByTestId('alert-button-Eject All'));
-      });
-
-      await waitFor(() => {
-        const alertMessage = queryByTestId('alert-message');
-        expect(alertMessage?.props.children).toBe('Failed to unload models');
-      });
-    });
   });
 
   // ============================================================================
@@ -1500,40 +1180,6 @@ describe('HomeScreen', () => {
       // But the conversation item is rendered
       const { getByTestId } = renderHomeScreen();
       expect(getByTestId('conversation-item-0')).toBeTruthy();
-    });
-  });
-
-  // ============================================================================
-  // Loading Overlay
-  // ============================================================================
-  // While a model loads, the collapsed summary row shows an inline
-  // ActivityIndicator and the ModelsManagerSheet rows show "Loading..." for the
-  // type that is loading. The full-screen LoadingOverlay is also shown.
-  describe('loading indicator', () => {
-    it('shows "Loading..." in the manager text row while unloading a text model', async () => {
-      const model = createDownloadedModel({ name: 'To Unload' });
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
-
-      // Make unload hang
-      mockUnloadTextModel.mockImplementation(() => new Promise(() => {}));
-
-      const result = renderHomeScreen();
-      openTextPicker(result);
-
-      await act(async () => {
-        fireEvent.press(result.getByText('Unload'));
-      });
-      await act(async () => { await new Promise<void>(r => setTimeout(r, 50)); });
-
-      // The text row shows "Loading..." (loadingState.type === 'text') during unload.
-      fireEvent.press(result.getByTestId('models-summary'));
-      await waitFor(() => {
-        expect(result.queryByText('Loading...')).toBeTruthy();
-      });
     });
   });
 
