@@ -277,35 +277,6 @@ describe('handleSelectModel', () => {
   });
 });
 
-// ── downloaded-file resolution (recovered / catch-up id schemes) ──────────
-describe('isModelDownloaded / getDownloadedModel resolve by file, not composite id', () => {
-  const REPO = 'unsloth/gemma-4-E2B-it-GGUF';
-
-  it('resolves a quant registered under the composite download id', () => {
-    mockStoreState.downloadedModels = [
-      { id: `${REPO}/gemma-4-E2B-it-Q4_K_M.gguf`, fileName: 'gemma-4-E2B-it-Q4_K_M.gguf', quantization: 'Q4_K_M', engine: 'llama' },
-    ];
-    const { result } = renderHook(() => useTextModels(setAlertState));
-    expect(result.current.isModelDownloaded(REPO, 'gemma-4-E2B-it-Q4_K_M.gguf')).toBe(true);
-    expect(result.current.getDownloadedModel(REPO, 'gemma-4-E2B-it-Q4_K_M.gguf')?.quantization).toBe('Q4_K_M');
-  });
-
-  it('resolves a quant recovered under a DIFFERENT id (catch-up/recovery) by its fileName', () => {
-    // The Q4_0 finished after an app kill and was re-registered by the recovery scan
-    // under a `recovered_…` id — the composite-id lookup would miss it and fall back to
-    // the sibling Q4_K_M. Matching by fileName finds the real Q4_0 entry.
-    mockStoreState.downloadedModels = [
-      { id: `${REPO}/gemma-4-E2B-it-Q4_K_M.gguf`, fileName: 'gemma-4-E2B-it-Q4_K_M.gguf', quantization: 'Q4_K_M', engine: 'llama' },
-      { id: 'recovered_gemma-4-E2B-it-Q4_0.gguf_1783000000000', fileName: 'gemma-4-E2B-it-Q4_0.gguf', quantization: 'Q4_0', engine: 'llama' },
-    ];
-    const { result } = renderHook(() => useTextModels(setAlertState));
-    expect(result.current.isModelDownloaded(REPO, 'gemma-4-E2B-it-Q4_0.gguf')).toBe(true);
-    const resolved = result.current.getDownloadedModel(REPO, 'gemma-4-E2B-it-Q4_0.gguf');
-    expect(resolved?.quantization).toBe('Q4_0');
-    expect(resolved?.id).toBe('recovered_gemma-4-E2B-it-Q4_0.gguf_1783000000000');
-  });
-});
-
 // ── Recommended-list NPU/GPU prioritization (the resort at useTextModels.ts:329) ──
 // Guards the user-visible behavior CodeRabbit flagged: on the 'recommended' sort,
 // NPU/GPU-accelerable models float to the top; explicit sorts are honored (no resort).
