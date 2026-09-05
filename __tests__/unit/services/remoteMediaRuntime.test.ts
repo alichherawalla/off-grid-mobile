@@ -1,17 +1,9 @@
-import { remoteMediaRuntime } from '../../../src/services/adapters/remote/mediaRuntime';
-import * as Keychain from 'react-native-keychain';
-import { remoteServerManager } from '../../../src/services/remoteServerManager';
-import '../../../src/services/modelServices';
-import { executeMobileTranscription } from '../../../src/services/mobileTranscription';
-import RNFS from 'react-native-fs';
-import {
-  activeRemoteVoiceServer,
-  synthesizeRemoteVoiceFile,
-} from '../../../src/services/adapters/remote/voicePlayback';
 import {
   remoteServerCapabilities,
   type RemoteServer,
 } from '../../../src/types';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 const server: RemoteServer = {
   id: 'desktop-study',
@@ -39,6 +31,33 @@ function jsonResponse(payload: unknown, status = 200): Response {
 
 describe('remoteMediaRuntime', () => {
   const originalFetch = global.fetch;
+  let applicationFixture: MobileApplicationFixture;
+  let remoteMediaRuntime: typeof import('../../../src/services/adapters/remote/mediaRuntime')['remoteMediaRuntime'];
+  let remoteServerManager: typeof import('../../../src/services/remoteServerManager')['remoteServerManager'];
+  let executeMobileTranscription: typeof import('../../../src/services/mobileTranscription')['executeMobileTranscription'];
+  let activeRemoteVoiceServer: typeof import('../../../src/services/adapters/remote/voicePlayback')['activeRemoteVoiceServer'];
+  let synthesizeRemoteVoiceFile: typeof import('../../../src/services/adapters/remote/voicePlayback')['synthesizeRemoteVoiceFile'];
+  let Keychain: typeof import('react-native-keychain');
+  let RNFS: typeof import('react-native-fs');
+
+  beforeAll(async () => {
+    installNativeBoundary();
+    ({ remoteMediaRuntime } = require('../../../src/services/adapters/remote/mediaRuntime') as typeof import('../../../src/services/adapters/remote/mediaRuntime'));
+    ({ remoteServerManager } = require('../../../src/services/remoteServerManager') as typeof import('../../../src/services/remoteServerManager'));
+    ({ executeMobileTranscription } = require('../../../src/services/mobileTranscription') as typeof import('../../../src/services/mobileTranscription'));
+    ({ activeRemoteVoiceServer, synthesizeRemoteVoiceFile } = require('../../../src/services/adapters/remote/voicePlayback') as typeof import('../../../src/services/adapters/remote/voicePlayback'));
+    Keychain = require('react-native-keychain') as typeof import('react-native-keychain');
+    const fileSystemModule = require('react-native-fs') as {
+      default?: typeof import('react-native-fs');
+    } & typeof import('react-native-fs');
+    RNFS = fileSystemModule.default ?? fileSystemModule;
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
   beforeEach(async () => {
     await remoteServerManager.clearAllServers();
@@ -153,6 +172,7 @@ describe('remoteMediaRuntime', () => {
     await remoteServerManager.setActiveRemoteMediaModel(
       serverId, 'transcription', 'whisper-large-v3',
     );
+    await applicationFixture.refreshModels();
 
     await expect(
       executeMobileTranscription('file:///recording.wav'),
@@ -189,6 +209,7 @@ describe('remoteMediaRuntime', () => {
       selections: { voice: 'kokoro' },
     })).id;
     await remoteServerManager.setActiveRemoteMediaModel(id, 'voice', 'kokoro');
+    await applicationFixture.refreshModels();
 
     const active = activeRemoteVoiceServer();
     expect(active?.name).toBe('Studio Mac');
