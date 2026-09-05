@@ -29,15 +29,7 @@ import {
 } from '../../../pro/sync/clipboardSyncService';
 import { ClipboardPreferences } from '../../../pro/sync/clipboardPreferences';
 import { ClipboardHistoryStore } from '../../../pro/sync/clipboardHistoryStore';
-import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
-import { ClipboardScreen } from '../../../pro/ui/ClipboardScreen';
-import { SyncScreen } from '../../../pro/ui/SyncScreen';
-import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
-import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
-import { SyncFilesScreen } from '../../../pro/ui/SyncScreen/SyncFilesScreen';
-import { ProRoot } from '../../../pro/ui/ProRoot';
-import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
   registerScreen,
   _clearScreensForTesting,
@@ -46,7 +38,6 @@ import { _clearSectionsForTesting } from '../../../src/components/settings/secti
 import { useAppStore } from '../../../src/stores/appStore';
 import {
   createNativeTcpBoundary,
-  getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { sheetAction } from '../../utils/sheets';
@@ -60,6 +51,7 @@ import {
   installLicensedPhone,
   registerThisPhone,
 } from '../../harness/licensedMesh';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 
 /** This phone's fingerprint, which is also the sync device id its installation registers under. */
 const PHONE_FINGERPRINT = 'fp-this-phone';
@@ -148,9 +140,40 @@ const CLIPBOARD_HISTORY_STORAGE_KEY = 'offgrid-sync-clipboard-history-v1';
 /** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
 const mesh = createLicensedMesh();
 
+let ClipboardScreen: typeof import('../../../pro/ui/ClipboardScreen').ClipboardScreen;
+let SyncScreen: typeof import('../../../pro/ui/SyncScreen').SyncScreen;
+let SyncSharingSettingsScreen: typeof import('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen').SyncSharingSettingsScreen;
+let SyncActivityScreen: typeof import('../../../pro/ui/SyncScreen/SyncActivityScreen').SyncActivityScreen;
+let SyncFilesScreen: typeof import('../../../pro/ui/SyncScreen/SyncFilesScreen').SyncFilesScreen;
+let ProRoot: typeof import('../../../pro/ui/ProRoot').ProRoot;
+let AppNavigator: typeof import('../../../src/navigation/AppNavigator').AppNavigator;
+
 describe('mobile clipboard Sync journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
+  let applicationFixture: MobileApplicationFixture | undefined;
+
+  beforeAll(() => {
+    const { registerMobileApplicationPorts } =
+      require('../../../src/services/composition/application') as typeof import('../../../src/services/composition/application');
+    const { createMobileApplicationPorts } =
+      require('../../../pro/composition/application') as typeof import('../../../pro/composition/application');
+    registerMobileApplicationPorts(createMobileApplicationPorts);
+    ({ ClipboardScreen } =
+      require('../../../pro/ui/ClipboardScreen') as typeof import('../../../pro/ui/ClipboardScreen'));
+    ({ SyncScreen } =
+      require('../../../pro/ui/SyncScreen') as typeof import('../../../pro/ui/SyncScreen'));
+    ({ SyncSharingSettingsScreen } =
+      require('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen') as typeof import('../../../pro/ui/SyncScreen/SyncSharingSettingsScreen'));
+    ({ SyncActivityScreen } =
+      require('../../../pro/ui/SyncScreen/SyncActivityScreen') as typeof import('../../../pro/ui/SyncScreen/SyncActivityScreen'));
+    ({ SyncFilesScreen } =
+      require('../../../pro/ui/SyncScreen/SyncFilesScreen') as typeof import('../../../pro/ui/SyncScreen/SyncFilesScreen'));
+    ({ ProRoot } =
+      require('../../../pro/ui/ProRoot') as typeof import('../../../pro/ui/ProRoot'));
+    ({ AppNavigator } =
+      require('../../../src/navigation/AppNavigator') as typeof import('../../../src/navigation/AppNavigator'));
+  });
 
   beforeEach(async () => {
     mesh.reset();
@@ -196,7 +219,8 @@ describe('mobile clipboard Sync journey', () => {
     mesh.restore();
     ui?.unmount();
     await remote?.engine.stop();
-    await syncService.stop();
+    await applicationFixture?.dispose();
+    applicationFixture = undefined;
     await clipboardSyncService.stop();
     _clearScreensForTesting();
     _clearSectionsForTesting();
@@ -540,7 +564,16 @@ describe('mobile clipboard Sync journey', () => {
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
-    await syncService.start();
+    const { ProximityAir } =
+      require('../../utils/proximityNativeBoundary') as typeof import('../../utils/proximityNativeBoundary');
+    NativeModules.SyncProximityModule = new ProximityAir().device({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({ pro: true });
     // Pro is an entitlement the clipboard service is TOLD about, as pro/index.ts tells it on activation.
     // Without it the toggle flips, the preference is saved, and native observation never starts.
     clipboardSyncService.setEntitlementActive(true);
@@ -568,16 +601,17 @@ describe('mobile clipboard Sync journey', () => {
       expect(ui!.getByTestId('sync-pairing-code-value')).toBeTruthy(),
     );
 
-    const mobile = useSyncStore.getState().thisDevice;
-    const discovery = getDiscoveryBoundaries().at(-1);
-    if (!mobile || !discovery?.publishedPort) {
+    const sync = applicationFixture.application.sync.snapshot();
+    const mobile = sync.self;
+    const listeningPort = sync.listeningPort?.value ?? mobile?.port;
+    if (!mobile || !listeningPort) {
       throw new Error('Sync did not publish the mobile device');
     }
     const pairing = remote.engine.pair(
       {
         ...mobile,
         host: '127.0.0.1',
-        port: discovery.publishedPort,
+        port: listeningPort,
       },
       await pairingCodeOnScreen(ui),
     );
@@ -651,6 +685,11 @@ describe('mobile clipboard Sync journey', () => {
     expect(ui.getAllByText('This phone')).toHaveLength(1);
     expect(ui.getByText('copied on Mac')).toBeTruthy();
     expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();
+    expect(
+      clipboardSyncService
+        .historySnapshot()
+        .filter(entry => entry.text === 'copied on Mac'),
+    ).toHaveLength(1);
 
     nativeClipboardText = '';
     fireEvent.press(
@@ -659,6 +698,13 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() => expect(nativeClipboardText).toBe('copied on Mac'));
 
     fireEvent.press(ui.getByLabelText('Delete text from Off Grid AI Desktop'));
+    await waitFor(() =>
+      expect(
+        clipboardSyncService
+          .historySnapshot()
+          .some(entry => entry.text === 'copied on Mac'),
+      ).toBe(false),
+    );
     await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull());
 
     // Confirmed in an in-app sheet, like every other confirmation here - never a system modal. The
