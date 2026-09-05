@@ -14,6 +14,7 @@ let fixture: MobileApplicationFixture | null = null;
 afterEach(async () => {
   await fixture?.dispose();
   fixture = null;
+  jest.restoreAllMocks();
 });
 
 const persistedDownload: PersistedModelDownload = {
@@ -97,5 +98,80 @@ describe('Download Manager cancellation through the real application', () => {
     expect(fixture.application.models.snapshot().control.downloads).toEqual([
       expect.objectContaining({ downloadId: DOWNLOAD_ID, status: 'cancelled' }),
     ]);
+  });
+
+  it('deletes a downloaded text model from public inventory and native storage after confirmation', async () => {
+    const boundary = installNativeBoundary({
+      download: true,
+      fs: true,
+      llama: true,
+    });
+    const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    await seedMobileDownloadJournal([]);
+    fixture = await startMobileApplicationFixture();
+
+    const file = {
+      name: 'manager-delete.Q4_K_M.gguf',
+      size: 1_024,
+      quantization: 'Q4_K_M',
+      downloadUrl:
+        'https://huggingface.co/author/manager-delete/resolve/main/manager-delete.Q4_K_M.gguf',
+    };
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        siblings: [{ rfilename: file.name, lfs: { size: file.size } }],
+      }),
+    } as Response);
+    const { startModelDownload } =
+      require('../../../src/services/startModelDownload') as typeof import('../../../src/services/startModelDownload');
+    await startModelDownload('author/manager-delete', file);
+    const transfer = boundary.download!.active()[0];
+    expect(transfer).toBeDefined();
+    boundary.download!.complete(transfer!.downloadId);
+
+    const { renderHook, act, waitFor } = requireRTL();
+    await waitFor(() =>
+      expect(
+        fixture!.application.models.snapshot().inventory.some(model =>
+          model.id.includes('author/manager-delete'),
+        ),
+      ).toBe(true),
+    );
+    const { useDownloadManager } =
+      require('../../../src/screens/DownloadManagerScreen/useDownloadManager') as typeof import('../../../src/screens/DownloadManagerScreen/useDownloadManager');
+    const view = renderHook(() => useDownloadManager());
+    const item = await waitFor(() => {
+      const match = view.result.current.completedItems.find(
+        candidate => candidate.modelType === 'text' &&
+          candidate.fileName === file.name,
+      );
+      expect(match).toBeDefined();
+      return match!;
+    });
+    const path = `${boundary.fs!.DocumentDirectoryPath}/models/${file.name}`;
+    expect(await boundary.fs!.exists(path)).toBe(true);
+
+    act(() => view.result.current.handleDeleteItem(item));
+    const confirm = (view.result.current.alertState.buttons ?? []).find(
+      button => button.text === 'Delete',
+    );
+    expect(confirm).toBeDefined();
+    await act(async () => confirm!.onPress?.());
+
+    await waitFor(() =>
+      expect(
+        fixture!.application.models.snapshot().inventory.some(
+          model => model.id === item.modelId,
+        ),
+      ).toBe(false),
+    );
+    expect(await boundary.fs!.exists(path)).toBe(false);
+    expect(
+      view.result.current.completedItems.some(
+        candidate => candidate.modelId === item.modelId,
+      ),
+    ).toBe(false);
   });
 });
