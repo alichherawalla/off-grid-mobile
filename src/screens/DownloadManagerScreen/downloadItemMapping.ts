@@ -2,6 +2,7 @@ import { hardwareService } from '../../services';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem } from './items';
 import { imageBackendLabel } from '../../utils/imageBackend';
+import { downloadFileRoleLabel } from '../../utils/downloadStatus';
 import type { ModelsSnapshot } from '@offgrid/application';
 import { mobileImageDownloadMetadata } from '../../services/modelServices/modelDownloadRequests';
 
@@ -35,7 +36,9 @@ export function facadeDownloadToActiveItem(
     downloadId: entry.downloadId,
     modelKey: entry.modelKey,
     modelId: entry.modelId,
-    fileName: image?.imageModelName ?? entry.fileName,
+    // A multi-file model names the part it is fetching by its published ROLE, so a projector
+    // reads as "Vision support" rather than an opaque filename. Image models keep their own name.
+    fileName: image?.imageModelName ?? downloadFileRoleLabel(entry.currentFileRole, entry.fileName),
     author: image
       ? getImageAuthor(image.imageModelBackend)
       : entry.modelId.split('/')[0] ?? 'Unknown',

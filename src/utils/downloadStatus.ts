@@ -8,11 +8,13 @@
 import { ModelKey } from './modelKey';
 import type { ProgressRateSample } from '@offgrid/ui';
 import {
+  decodeDownloadLifecyclePhase,
   isActiveDownloadStatus,
   isFailedDownloadStatus,
   isQueuedDownloadStatus,
   isTransferringDownloadStatus,
   type DownloadLifecyclePhase,
+  type PublicDownloadInfo,
 } from '@offgrid/models';
 
 /** Shared owns the one lifecycle vocabulary used by every download projection. */
@@ -39,6 +41,8 @@ export interface DownloadEntry {
   mmProjDownloadId?: string
   mmProjBytesDownloaded?: number
   mmProjStatus?: DownloadStatus
+  /** The role of the file currently transferring, as Shared publishes it. Never name-inferred. */
+  currentFileRole?: PublicDownloadInfo['currentFileRole']
   mmProjFileName?: string
   mmProjFileSize?: number
   errorMessage?: string
@@ -80,4 +84,32 @@ export function isQueuedStatus(status: DownloadStatus): boolean {
 
 export function isDownloadingStatus(status: DownloadStatus): boolean {
   return isTransferringDownloadStatus(status);
+}
+
+/**
+ * A download a PERSON paused. Distinct from queued and from failed, and it must render as its
+ * own thing: Shared classifies `paused` as active (so a paused row still blocks a duplicate
+ * start) but neither queued nor transferring nor failed, so without this a paused row falls
+ * through every branch and reads as a stalled download the user cannot explain.
+ *
+ * Decoded through Shared rather than compared to a literal here, so the vocabulary stays in one
+ * place and legacy spellings (`waiting_for_network` -> `paused`) map the same way everywhere.
+ */
+export function isPausedStatus(status?: string | null): boolean {
+  return decodeDownloadLifecyclePhase(status) === 'paused';
+}
+
+/** The role Shared publishes for the file currently transferring. Shared's type, not a copy. */
+export type DownloadFileRole = PublicDownloadInfo['currentFileRole'];
+
+/**
+ * What to call the file a multi-file model is currently fetching.
+ *
+ * The ROLE is data Shared publishes; this never inspects the file NAME. A filename regex is
+ * exactly the guessing this replaced - it broke on every renamed or unconventional projector,
+ * and it silently mislabelled files it half-matched. An unknown or absent role falls back to
+ * the real file name rather than inventing a description of it.
+ */
+export function downloadFileRoleLabel(role: DownloadFileRole, fileName: string): string {
+  return role === 'mmproj' ? 'Vision support' : fileName;
 }
