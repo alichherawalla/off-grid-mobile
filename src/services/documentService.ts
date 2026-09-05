@@ -15,6 +15,7 @@ import logger from '../utils/logger';
 import {
   admitDocument,
   documentAttachmentCharBudget,
+  documentDisplayName,
   documentPreview,
   formatDocumentForContext,
   isPdfDocument,
@@ -229,7 +230,7 @@ class DocumentService {
     console.log(
       `[DocumentService] Processing document - filePath: ${filePath}, fileName: ${fileName}`,
     );
-    const name = fileName || filePath.split('/').pop() || 'document';
+    const name = documentDisplayName(fileName || filePath);
     const isPdf = isPdfDocument(name);
     console.log(`[DocumentService] isPdf: ${isPdf}`);
     const typeAdmission = admitDocument(name, undefined, this.capabilities());
