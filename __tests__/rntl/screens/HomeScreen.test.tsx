@@ -50,7 +50,8 @@ import { Linking, Clipboard } from 'react-native';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
 import { SUPPORT_EMAIL } from '../../../src/utils/supportEmail';
-import { remoteServerManager } from '../../../src/services/modelServices/remoteServerController';
+import { applicationFacade } from '../../../src/services/applicationFacade';
+import { installLanProbe } from '../../harness/lanProbe';
 import logger from '../../../src/utils/logger';
 
 // Mock requestAnimationFrame
@@ -357,62 +358,49 @@ describe('HomeScreen', () => {
   });
 
   describe('LAN discovery lifecycle', () => {
-    it('waits for saved remote settings and recovers from a pre-scan remount', async () => {
+    it('uses saved remote settings and recovers from a pre-scan remount', async () => {
       jest.useFakeTimers();
-      const discoverySpy = jest
-        .spyOn(remoteServerManager, 'scanAndReconcile')
-        .mockResolvedValue({ moved: [], found: [] });
-      let finishHydration: ((state: ReturnType<typeof useRemoteServerStore.getState>) => void) | undefined;
-      const unsubscribe = jest.fn();
-      const persistApi = useRemoteServerStore.persist;
-      const hydratedSpy = jest.spyOn(persistApi, 'hasHydrated').mockReturnValue(false);
-      const hydrationSpy = jest.spyOn(persistApi, 'onFinishHydration').mockImplementation(callback => {
-        finishHydration = callback;
-        return unsubscribe;
-      });
+      const lan = installLanProbe({});
       useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: undefined });
       let firstMount: ReturnType<typeof renderHomeScreen> | undefined;
       let secondMount: ReturnType<typeof renderHomeScreen> | undefined;
 
       try {
+        await useRemoteServerStore.persist.rehydrate();
+        const saved = await applicationFacade().models.saveRemoteServer({
+          name: 'Saved gateway',
+          endpoint: 'http://192.168.1.2:11434',
+          provider: 'ollama',
+        });
+        expect(saved.ok).toBe(true);
+
         firstMount = renderHomeScreen();
-        await act(async () => undefined);
         await act(async () => {
-          jest.advanceTimersByTime(3000);
+          jest.advanceTimersByTime(0);
           await Promise.resolve();
         });
-        expect(discoverySpy).not.toHaveBeenCalled();
-
-        useRemoteServerStore.setState({
-          servers: [{ id: 'saved', name: 'Saved gateway', endpoint: 'http://saved.test', provider: 'ollama' }],
-        } as any);
-        await act(async () => { finishHydration?.(useRemoteServerStore.getState()); });
         expect(useAppStore.getState().settings.autoDiscoverRemoteModels).toBe(true);
 
-        // Unmount after hydration but before the deferred scan. A later mount
-        // must be able to schedule the scan again from the hydrated store.
+        // Unmount before the deferred scan. A later mount must be able to schedule
+        // the scan again from the saved gateway supplied through the application.
         await act(async () => {
           jest.advanceTimersByTime(1000);
           await Promise.resolve();
         });
         firstMount.unmount();
         firstMount = undefined;
-        expect(discoverySpy).not.toHaveBeenCalled();
-        expect(unsubscribe).toHaveBeenCalledTimes(1);
+        expect(lan.requested).toHaveLength(0);
 
-        hydratedSpy.mockReturnValue(true);
         secondMount = renderHomeScreen();
         await act(async () => {
           jest.advanceTimersByTime(3000);
           await Promise.resolve();
         });
-        expect(discoverySpy).toHaveBeenCalledTimes(1);
+        expect(lan.requested).toHaveLength(762);
       } finally {
         firstMount?.unmount();
         secondMount?.unmount();
-        hydrationSpy.mockRestore();
-        hydratedSpy.mockRestore();
-        discoverySpy.mockRestore();
+        lan.uninstall();
         jest.useRealTimers();
       }
     });
