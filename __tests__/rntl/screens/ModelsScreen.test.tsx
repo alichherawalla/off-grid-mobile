@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
@@ -20,7 +20,6 @@ const CODE_FALLBACK_QUERY = 'coder';
 import {
   createDownloadedModel,
   createModelInfo,
-  createModelFile,
   createModelFileWithMmProj,
   createDeviceInfo,
 } from '../../utils/factories';
@@ -236,6 +235,17 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     if (url.includes('/api/models?')) {
       return new Response(JSON.stringify(searchResponse), {
         status: searchFails ? 503 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/api/models/') && url.includes('blobs=true')) {
+      return new Response(JSON.stringify({
+        siblings: treeResponse.map(file => ({
+          rfilename: file.path,
+          lfs: { size: file.size },
+        })),
+      }), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -1145,6 +1155,69 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     finishCopy();
     await realRTL.waitFor(() => expect(view.queryByText('Importing model.gguf')).toBeNull());
   });
+
+  const proveRealTextDownloadStarts = async (repositoryId: string) => {
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 1_024)];
+    realNativeBoundary.download!.module.startDownload.mockClear();
+    networkFetch.mockClear();
+    const view = await openModelDetail(repositoryId);
+    realRTL.fireEvent.press(await view.findByTestId('file-card-0-download'));
+    await realRTL.waitFor(() =>
+      expect(realNativeBoundary.download!.module.startDownload).toHaveBeenCalledTimes(1),
+    );
+    expect(networkFetch).toHaveBeenCalledWith(
+      expect.stringContaining(`/api/models/${repositoryId}?blobs=true`),
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    );
+    const transferId = realNativeBoundary.download!.active().at(-1)!.downloadId;
+    realNativeBoundary.download!.fail(transferId, 'test cleanup');
+    await realFixture.application.models.clearInactiveDownloads();
+  };
+
+  it('triggers download when download button pressed on file card', async () => {
+    await proveRealTextDownloadStarts('test-org/test-model-3B');
+  });
+
+  it('calls downloadModelBackground when download button is pressed', async () => {
+    await proveRealTextDownloadStarts('test-org/second-model-3B');
+  });
+
+  it('shows downloaded indicator on already-downloaded file', async () => {
+    const repositoryId = 'test-org/completed-model-3B';
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 1_024)];
+    realNativeBoundary.download!.module.startDownload.mockClear();
+    const view = await openModelDetail(repositoryId);
+    realRTL.fireEvent.press(await view.findByTestId('file-card-0-download'));
+    await realRTL.waitFor(() =>
+      expect(realNativeBoundary.download!.module.startDownload).toHaveBeenCalledTimes(1),
+    );
+    const transferId = realNativeBoundary.download!.active().at(-1)!.downloadId;
+    realNativeBoundary.download!.complete(transferId);
+    await realRTL.waitFor(() => expect(view.getByLabelText('Delete this model')).toBeTruthy());
+    expect(view.queryByTestId('file-card-0-download')).toBeNull();
+    await realFixture.application.models.remove(`${repositoryId}/model-Q4_K_M.gguf`);
+    await realFixture.application.models.clearInactiveDownloads();
+  });
+
+  it('marks recommended model as downloaded when matching model exists', async () => {
+    const repositoryId = 'ggml-org/SmolLM3-3B-GGUF';
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 1_024)];
+    realNativeBoundary.download!.module.startDownload.mockClear();
+    const view = await openModelDetail(repositoryId);
+    realRTL.fireEvent.press(await view.findByTestId('file-card-0-download'));
+    await realRTL.waitFor(() =>
+      expect(realNativeBoundary.download!.module.startDownload).toHaveBeenCalledTimes(1),
+    );
+    const transferId = realNativeBoundary.download!.active().at(-1)!.downloadId;
+    realNativeBoundary.download!.complete(transferId);
+    await realRTL.waitFor(() => expect(view.getByLabelText('Delete this model')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByLabelText('Back'));
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), '');
+    await realRTL.waitFor(() => expect(view.getByText('SmolLM3 3B')).toBeTruthy());
+    expect(view.getAllByTestId(/model-card-\d+-downloaded/)).toHaveLength(1);
+    await realFixture.application.models.remove(`${repositoryId}/model-Q4_K_M.gguf`);
+    await realFixture.application.models.clearInactiveDownloads();
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -1264,81 +1337,11 @@ describe('ModelsScreen', () => {
   // Downloaded model indicators
   // ============================================================================
   describe('downloaded model indicators', () => {
-    it('marks recommended model as downloaded when matching model exists', async () => {
-      // Download a model that matches a recommended model
-      const downloadedModel = createDownloadedModel({
-        id: 'Qwen/Qwen3-0.6B-GGUF/qwen3-0.6b-q4_k_m.gguf',
-      });
-      mockGetDownloadedModels.mockResolvedValue([downloadedModel]);
-      useAppStore.setState({ downloadedModels: [downloadedModel] });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-    });
   // ============================================================================
   // Bring Your Own Model (constants/logic)
   // Model detail view - download and file filtering
   // ============================================================================
   describe('model detail view interactions', () => {
-    it('triggers download when download button pressed on file card', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({ id: 'test-org/test-model-3B', name: 'Test Model', author: 'test-org' }),
-      ]);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ]);
-      const { getByTestId, getByText } = renderModelsScreen();
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-      fireEvent.changeText(getByTestId('search-input'), 'test');
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-      fireEvent.press(getByText('Test Model'));
-      await waitFor(() => expect(getByTestId('file-card-0-download-btn')).toBeTruthy());
-      fireEvent.press(getByTestId('file-card-0-download-btn'));
-    });
-
-    it('shows downloaded indicator on already-downloaded file', async () => {
-      const downloadedModel = createDownloadedModel({
-        id: 'test-org/test-model-3B/model-Q4_K_M.gguf',
-        name: 'Test Model Q4_K_M',
-      });
-      const files = [
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ];
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-          files: [],
-        }),
-      ]);
-      mockGetModelFiles.mockResolvedValue(files);
-
-      // Mark model as downloaded via the mock that loadDownloadedModels calls
-      mockGetDownloadedModels.mockResolvedValue([downloadedModel]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      // File should show downloaded indicator
-      await waitFor(() => {
-        expect(getByTestId('file-card-0-downloaded')).toBeTruthy();
-      });
-    });
   });
   // ============================================================================
   // Import progress rendering
@@ -1374,45 +1377,6 @@ describe('ModelsScreen', () => {
   // handleDownload - covers the download handler branches
   // ============================================================================
   describe('text model download flow', () => {
-    it('calls downloadModelBackground when download button is pressed', async () => {
-      const { modelLibrary } = require('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap');
-      modelLibrary.downloadModelBackground = jest.fn(() => Promise.resolve({ downloadId: 1 }));
-
-      const files = [
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ];
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test-org/test-model-3B',
-          name: 'Test Model',
-          author: 'test-org',
-        }),
-      ]);
-      mockGetModelFiles.mockResolvedValue(files);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Test Model')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Test Model'));
-      });
-      await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy());
-
-      await waitFor(() => {
-        expect(getByTestId('file-card-0-download-btn')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByTestId('file-card-0-download-btn'));
-      });
-
-      expect(modelLibrary.downloadModelBackground).toHaveBeenCalled();
-    });
   });
   // ============================================================================
   // handleSearch with filters
