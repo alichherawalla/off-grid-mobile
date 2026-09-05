@@ -15,7 +15,7 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
@@ -158,15 +158,18 @@ describe('ModelSettingsScreen', () => {
       expect(getByDisplayValue(/helpful AI assistant/)).toBeTruthy();
     });
 
-    it('updates system prompt when text changes', () => {
-      const { getByDisplayValue } = renderWithSections('prompt');
+    it('saves the edited system prompt through the settings command', async () => {
+      const { getByDisplayValue, getByLabelText } = renderWithSections('prompt');
       const input = getByDisplayValue(/helpful AI assistant/);
 
       fireEvent.changeText(input, 'You are a coding assistant.');
+      fireEvent.press(getByLabelText('Save system prompt'));
 
-      expect(useAppStore.getState().settings.systemPrompt).toBe(
-        'You are a coding assistant.',
-      );
+      await waitFor(() => {
+        expect(useAppStore.getState().settings.systemPrompt).toBe(
+          'You are a coding assistant.',
+        );
+      });
     });
   });
 
