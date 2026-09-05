@@ -224,63 +224,6 @@ jest.mock('../../../src/services/hardware', () => ({
   },
 }));
 
-// Mock AppSheet to render children directly when visible. The real AppSheet
-// fires onClosed after its slide-out animation completes; mirror that here (via
-// an effect when it goes invisible) so deferred actions wired through onClosed
-// — closeManagerThen -> runPendingAfterClose, which opens the pickers and the
-// eject alert — actually run in tests.
-jest.mock('../../../src/components/AppSheet', () => ({
-  AppSheet: ({ visible, onClose, onClosed, title, children }: any) => {
-    const { useEffect } = require('react');
-    const { View, Text, TouchableOpacity } = require('react-native');
-    useEffect(() => {
-      if (!visible) { onClosed?.(); }
-    }, [visible, onClosed]);
-    if (!visible) return null;
-    return (
-      <View testID="app-sheet">
-        <Text testID="app-sheet-title">{title}</Text>
-        {children}
-        <TouchableOpacity testID="close-sheet" onPress={onClose}>
-          <Text>Close</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  },
-}));
-
-// Mock CustomAlert and related from components
-jest.mock('../../../src/components', () => {
-  const actual = jest.requireActual('../../../src/components');
-  return {
-    ...actual,
-    CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
-      const { View, Text, TouchableOpacity } = require('react-native');
-      if (!visible) return null;
-      return (
-        <View testID="custom-alert">
-          <Text testID="alert-title">{title}</Text>
-          <Text testID="alert-message">{message}</Text>
-          {buttons && buttons.map((btn: any, i: number) => (
-            <TouchableOpacity
-              key={i}
-              testID={`alert-button-${btn.text}`}
-              onPress={() => { if (btn.onPress) { btn.onPress(); } onClose(); }}
-            >
-              <Text>{btn.text}</Text>
-            </TouchableOpacity>
-          ))}
-          {!buttons && (
-            <TouchableOpacity testID="alert-ok" onPress={onClose}>
-              <Text>OK</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-    },
-  };
-});
-
 // Mock useFocusTrigger
 jest.mock('../../../src/hooks/useFocusTrigger', () => ({
   useFocusTrigger: () => 0,
@@ -969,14 +912,14 @@ describe('HomeScreen', () => {
       useAppStore.setState({ downloadedModels: [model] });
 
       const result = renderHomeScreen();
-      const { queryByText, queryAllByTestId } = result;
+      const { queryByText } = result;
       // No picker open yet (manager sheet is not open either).
       expect(queryByText('Browse more models')).toBeNull();
 
       openTextPicker(result);
 
       // Picker sheet shows its title (manager sheet has closed).
-      expect(queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('TEXT MODEL');
+      expect(result.getByText('TEXT MODEL')).toBeTruthy();
     });
 
     it('opens image model picker when the image manager row is pressed', () => {
@@ -986,7 +929,7 @@ describe('HomeScreen', () => {
       const result = renderHomeScreen();
       openImagePicker(result);
 
-      expect(result.queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('IMAGE MODEL');
+      expect(result.getByText('IMAGE MODEL')).toBeTruthy();
     });
 
     it('shows the current empty text-model state', () => {
@@ -1065,7 +1008,7 @@ describe('HomeScreen', () => {
 
       expect(result.getByText('Browse more models')).toBeTruthy();
 
-      fireEvent.press(result.getByTestId('close-sheet'));
+      fireEvent.press(result.getByTestId('app-sheet-close'));
 
       expect(result.queryByText('Browse more models')).toBeNull();
     });
@@ -1197,7 +1140,7 @@ describe('HomeScreen', () => {
       openTextPicker(result);
       expect(result.getAllByText(/GB/).length).toBeGreaterThanOrEqual(1);
       // Close the text picker, then open the image picker.
-      fireEvent.press(result.getByTestId('close-sheet'));
+      fireEvent.press(result.getByTestId('app-sheet-close'));
       openImagePicker(result);
       expect(result.getAllByText(/GB/).length).toBeGreaterThanOrEqual(1);
     });
@@ -1236,7 +1179,7 @@ describe('HomeScreen', () => {
       const conv = createConversation({ title: 'Delete This Chat' });
       useChatStore.setState({ conversations: [conv] });
 
-      const { getByTestId, queryByText } = renderHomeScreen();
+      const { getByTestId, getByText, queryByText } = renderHomeScreen();
 
       // Press the trash button (has testID="delete-conversation-button")
       fireEvent.press(getByTestId('delete-conversation-button'));
@@ -1248,7 +1191,7 @@ describe('HomeScreen', () => {
 
       // Press Delete button in the alert
       await act(async () => {
-        fireEvent.press(getByTestId('alert-button-Delete'));
+        fireEvent.press(getByText('Delete'));
       });
 
       // Conversation should be deleted
@@ -1259,7 +1202,7 @@ describe('HomeScreen', () => {
       const conv = createConversation({ title: 'Keep This Chat' });
       useChatStore.setState({ conversations: [conv] });
 
-      const { getByTestId, queryByText } = renderHomeScreen();
+      const { getByTestId, getByText, queryByText } = renderHomeScreen();
 
       fireEvent.press(getByTestId('delete-conversation-button'));
 
@@ -1268,7 +1211,7 @@ describe('HomeScreen', () => {
       });
 
       // Press Cancel
-      fireEvent.press(getByTestId('alert-button-Cancel'));
+      fireEvent.press(getByText('Cancel'));
 
       // Conversation should still exist
       expect(useChatStore.getState().conversations.length).toBe(1);
@@ -1436,7 +1379,7 @@ describe('HomeScreen', () => {
       fireEvent.press(getByText('Select Model'));
 
       // Should open the text model picker
-      expect(queryByTestId('app-sheet')).toBeTruthy();
+      expect(queryByTestId('app-sheet-surface')).toBeTruthy();
     });
   });
 });
