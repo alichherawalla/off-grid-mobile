@@ -19,7 +19,6 @@ import { resetStores } from '../../utils/testHelpers';
 const CODE_FALLBACK_QUERY = 'coder';
 import {
   createDownloadedModel,
-  createONNXImageModel,
   createModelInfo,
   createModelFile,
   createModelFileWithMmProj,
@@ -1105,6 +1104,47 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
       expect(view.getByText('2.5K likes')).toBeTruthy();
     });
   });
+
+  it('does not show badge when no active downloads', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('downloads-icon')).toBeTruthy());
+    expect(view.queryByTestId('downloads-badge-count')).toBeNull();
+  });
+
+  it('does not show badge for downloaded image models with no active downloads', async () => {
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByText('Image Models'));
+    await realRTL.waitFor(() => expect(view.getByTestId('image-model-card-0')).toBeTruthy());
+    expect(view.queryByTestId('downloads-badge-count')).toBeNull();
+  });
+
+  it('filters recommended models by type filter', async () => {
+    searchResponse = [
+      rawModel('ggml-org/SmolVLM 2B', 'ggml-org', { tags: ['gguf', 'vision', 'multimodal'] }),
+      rawModel('ggml-org/SmolLM3 3B', 'ggml-org', { tags: ['gguf', 'text-generation'] }),
+    ];
+    const view = await openFilter(/Type/);
+    await realRTL.waitFor(() => expect(view.getAllByText('Vision').length).toBeGreaterThan(0));
+    realRTL.fireEvent.press(view.getAllByText('Vision')[0]);
+    await realRTL.waitFor(() => expect(view.getByText('SmolVLM 2B')).toBeTruthy());
+    expect(view.queryByText('SmolLM3 3B')).toBeNull();
+  });
+
+  it('shows import progress card when importing', async () => {
+    const picker = require('@react-native-documents/picker');
+    const fs = require('react-native-fs');
+    let finishCopy!: () => void;
+    picker.pick.mockResolvedValueOnce([
+      { uri: 'file:///external/model.gguf', name: 'model.gguf', size: 1_024 },
+    ]);
+    fs.copyFile.mockImplementationOnce(() => new Promise<void>(resolve => { finishCopy = resolve; }));
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByTestId('import-local-model'));
+    await realRTL.waitFor(() => expect(view.getByText('Importing model.gguf')).toBeTruthy());
+    expect(view.getByText('0%')).toBeTruthy();
+    finishCopy();
+    await realRTL.waitFor(() => expect(view.queryByText('Importing model.gguf')).toBeNull());
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -1130,36 +1170,6 @@ describe('ModelsScreen', () => {
   // Download badge
   // ============================================================================
   describe('download badge', () => {
-    it('does not show badge when no active downloads', async () => {
-      const model = createDownloadedModel({ id: 'dl-model' });
-      mockGetDownloadedModels.mockResolvedValue([model]);
-      useAppStore.setState({ downloadedModels: [model] });
-
-      const { queryByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        // Badge should not show because there are no active downloads
-        expect(queryByText('1')).toBeFalsy();
-      });
-    });
-
-    it('does not show badge for downloaded image models with no active downloads', async () => {
-      const textModel = createDownloadedModel({ id: 'text-1' });
-      const imageModel = createONNXImageModel({ id: 'image-1' });
-      mockGetDownloadedModels.mockResolvedValue([textModel]);
-      mockGetDownloadedImageModels.mockResolvedValue([imageModel]);
-      useAppStore.setState({
-        downloadedModels: [textModel],
-        downloadedImageModels: [imageModel],
-      });
-
-      const { queryByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        // Badge should not show because there are no active downloads
-        expect(queryByText('2')).toBeFalsy();
-      });
-    });
   });
   // ============================================================================
   // Recommended Models & Constants
@@ -1334,42 +1344,11 @@ describe('ModelsScreen', () => {
   // Import progress rendering
   // ============================================================================
   describe('import progress', () => {
-    it('shows import progress card when importing', async () => {
-      // We can test this by setting isImporting state
-      // Since isImporting is internal state, we trigger it via the import flow
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('import-local-model')).toBeTruthy());
-    });
   });
 
   // Recommended models filtering with active filters
   // ============================================================================
   describe('recommended models with filters', () => {
-    it('filters recommended models by type filter', async () => {
-      const { getByTestId, getByText, getAllByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Set type filter to "vision"
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Type/));
-      });
-      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
-      await act(async () => {
-        fireEvent.press(getAllByText('Vision')[0]);
-      });
-
-      // The recommended models list should now be filtered by vision type
-      // We can verify the filter is active by checking the pill shows "Vision"
-      await waitFor(() => {
-        expect(getByText(/Vision/)).toBeTruthy();
-      });
-    });
-
     it('hides recommended models that are already downloaded', async () => {
       // Set a downloaded model that matches a recommended model ID
       useAppStore.setState({
