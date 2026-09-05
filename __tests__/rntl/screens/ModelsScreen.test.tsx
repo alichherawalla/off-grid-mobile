@@ -645,6 +645,121 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     const view = await openModelDetail('org/Vision Model');
     await realRTL.waitFor(() => expect(view.getByText(/mmproj/)).toBeTruthy());
   });
+
+  const openFilter = async (label: RegExp) => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(label));
+    return view;
+  };
+
+  it('clears search results when query is emptied', async () => {
+    searchResponse = [rawModel('test/Search Result')];
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText('Search Result')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), '');
+    await realRTL.waitFor(() => expect(view.getByText('Recommended for your device')).toBeTruthy());
+  });
+
+  it('handles submit editing (enter key) to trigger search', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    networkFetch.mockClear();
+    realRTL.fireEvent(view.getByTestId('search-input'), 'submitEditing');
+    await realRTL.waitFor(() =>
+      expect(networkFetch).toHaveBeenCalledWith(
+        expect.stringContaining('search=test'),
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('selects a source filter chip', async () => {
+    const view = await openFilter(/Source/);
+    await realRTL.waitFor(() => expect(view.getByText('LM Studio')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('LM Studio'));
+    await realRTL.waitFor(() => expect(view.getByText(/LM Studio/)).toBeTruthy());
+  });
+
+  it('selects a size filter chip', async () => {
+    const view = await openFilter(/Size/);
+    await realRTL.waitFor(() => expect(view.getByText('3-8B')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('3-8B'));
+    await realRTL.waitFor(() => expect(view.getByText(/3-8B/)).toBeTruthy());
+  });
+
+  it('selects a quant filter chip', async () => {
+    const view = await openFilter(/^Quant [▴▾]$/);
+    await realRTL.waitFor(() => expect(view.getByText('Q5_K_M')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Q5_K_M'));
+    await realRTL.waitFor(() => expect(view.getByText(/Q5_K_M/)).toBeTruthy());
+  });
+
+  it('clears all text filters via Clear button', async () => {
+    const view = await openFilter(/Org/);
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+    await realRTL.waitFor(() => expect(view.getByText('Clear')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Clear'));
+    await realRTL.waitFor(() => expect(view.getByText(/Org/)).toBeTruthy());
+  });
+
+  it('filters search results by source credibility', async () => {
+    searchResponse = [
+      rawModel('official/Official 3B', 'meta-llama'),
+      rawModel('community/Community 3B', 'random'),
+    ];
+    const view = await openFilter(/Source/);
+    await realRTL.waitFor(() => expect(view.getByText('Official')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Official'));
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'model');
+    await realRTL.waitFor(() => expect(view.getByText('Official 3B')).toBeTruthy());
+    expect(view.queryByText('Community 3B')).toBeNull();
+  });
+
+  it('filters search results by model type (vision)', async () => {
+    searchResponse = [
+      rawModel('test/LLaVA Vision 7B', 'test', { tags: ['gguf', 'vision', 'multimodal'] }),
+      rawModel('test/Text Only 3B', 'test', { tags: ['gguf', 'text-generation'] }),
+    ];
+    const view = await openFilter(/Type/);
+    await realRTL.waitFor(() => expect(view.getAllByText('Vision').length).toBeGreaterThan(0));
+    realRTL.fireEvent.press(view.getAllByText('Vision')[0]);
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText('LLaVA Vision 7B')).toBeTruthy());
+    expect(view.queryByText('Text Only 3B')).toBeNull();
+  });
+
+  it('filters search results by size', async () => {
+    searchResponse = [
+      rawModel('test/Small 1B', 'test', { siblings: [{ rfilename: 'small-Q4_K_M.gguf', size: 1_000_000_000 }] }),
+      rawModel('test/Large 70B', 'test', { siblings: [{ rfilename: 'large-Q4_K_M.gguf', size: 4_000_000_000 }] }),
+    ];
+    const view = await openFilter(/Size/);
+    await realRTL.waitFor(() => expect(view.getByText('1-3B')).toBeTruthy());
+    networkFetch.mockClear();
+    realRTL.fireEvent.press(view.getByText('1-3B'));
+    await realRTL.waitFor(() => expect(view.getByText('Small 1B')).toBeTruthy());
+    expect(networkFetch).toHaveBeenCalled();
+    expect(view.queryByText('Large 70B')).toBeNull();
+  });
+
+  it('shows empty state with filter message when filters active but no results', async () => {
+    const view = await openFilter(/Type/);
+    await realRTL.waitFor(() => expect(view.getAllByText('Vision').length).toBeGreaterThan(0));
+    realRTL.fireEvent.press(view.getAllByText('Vision')[0]);
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'nonexistent');
+    await realRTL.waitFor(() => expect(view.getByText(/No models match your filters/)).toBeTruthy());
+  });
+
+  it('shows generic empty state when no filters but no results', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'nonexistent');
+    await realRTL.waitFor(() => expect(view.getByText(/No models found/)).toBeTruthy());
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -976,58 +1091,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Search edge cases
-  // ============================================================================
-  describe('search edge cases', () => {
-    it('clears search results when query is emptied', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({ name: 'Search Result' }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      // Perform search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Search Result')).toBeTruthy());
-
-      // Clear search and search again
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), '');
-      });
-
-      // Should show recommended models again
-      await waitFor(() => {
-        expect(getByText('Recommended for your device')).toBeTruthy();
-      });
-    });
-
-    it('handles submit editing (enter key) to trigger search', async () => {
-      mockSearchModels.mockResolvedValue([]);
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await act(async () => {
-        fireEvent(getByTestId('search-input'), 'submitEditing');
-      });
-
-      await waitFor(() => {
-        expect(mockSearchModels).toHaveBeenCalled();
-      });
-    });
-  });
-
   // ============================================================================
   // Refresh
   // ============================================================================
@@ -1051,314 +1114,6 @@ describe('ModelsScreen', () => {
 
   // ============================================================================
   // Bring Your Own Model (constants/logic)
-  // ============================================================================
-  // ============================================================================
-  // Filter interactions - selecting filter chips (covers setTypeFilter,
-  // setSourceFilter, setSizeFilter, setQuantFilter callbacks + expanded content)
-  // ============================================================================
-  describe('filter chip selection', () => {
-    it('selects a source filter chip', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      // Expand source filter
-      await act(async () => {
-        fireEvent.press(getByText(/Source/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('LM Studio')).toBeTruthy();
-      });
-
-      // Select a source
-      await act(async () => {
-        fireEvent.press(getByText('LM Studio'));
-      });
-
-      // After selecting, expanded dimension collapses
-      // And the pill now shows the label instead of "Source"
-      await waitFor(() => {
-        expect(getByText(/LM Studio/)).toBeTruthy();
-      });
-    });
-
-    it('selects a size filter chip', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Size/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('3-8B')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('3-8B'));
-      });
-
-      // Size pill now shows "3-8B" instead of "Size"
-      await waitFor(() => {
-        expect(getByText(/3-8B/)).toBeTruthy();
-      });
-    });
-
-    it('selects a quant filter chip', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Quant/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Q5_K_M')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('Q5_K_M'));
-      });
-
-      // Quant pill now shows "Q5_K_M"
-      await waitFor(() => {
-        expect(getByText(/Q5_K_M/)).toBeTruthy();
-      });
-    });
-
-    it('clears all text filters via Clear button', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Open filters and select an org
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Qwen')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-
-      // Clear should appear
-      await waitFor(() => {
-        expect(getByText('Clear')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('Clear'));
-      });
-
-      // After clearing, no badge count on Org pill
-      await waitFor(() => {
-        const orgText = getByText(/Org/);
-        expect(orgText).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Search result filtering with active filters
-  // ============================================================================
-  describe('search with active filters', () => {
-    it('filters search results by source credibility', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'official/model-3B',
-          name: 'Official 3B',
-          author: 'meta-llama',
-          credibility: { source: 'official', isOfficial: true, isVerifiedQuantizer: false },
-          files: [createModelFile({ size: 2000000000 })],
-        }),
-        createModelInfo({
-          id: 'community/model-3B',
-          name: 'Community 3B',
-          author: 'random',
-          credibility: { source: 'community', isOfficial: false, isVerifiedQuantizer: false },
-          files: [createModelFile({ size: 2000000000 })],
-        }),
-      ]);
-
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // First open filters and set source to "official"
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Source/));
-      });
-      await waitFor(() => expect(getByText('Official')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Official'));
-      });
-
-      // Now search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'model');
-      });
-
-      // Only official model should show
-      await waitFor(() => {
-        expect(getByText('Official 3B')).toBeTruthy();
-      });
-      expect(queryByText('Community 3B')).toBeNull();
-    });
-
-    it('filters search results by model type (vision)', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/llava-7B',
-          name: 'LLaVA Vision 7B',
-          tags: ['vision', 'multimodal'],
-          files: [createModelFile({ size: 4000000000 })],
-        }),
-        createModelInfo({
-          id: 'test/text-3B',
-          name: 'Text Only 3B',
-          tags: ['text-generation'],
-          files: [createModelFile({ size: 2000000000 })],
-        }),
-      ]);
-
-      const { getByTestId, getByText, getAllByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Set type to "vision"
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Type/));
-      });
-      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
-      await act(async () => {
-        fireEvent.press(getAllByText('Vision')[0]);
-      });
-
-      // Search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => {
-        expect(getByText('LLaVA Vision 7B')).toBeTruthy();
-      });
-      expect(queryByText('Text Only 3B')).toBeNull();
-    });
-
-    it('filters search results by size', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/model-1B',
-          name: 'Small 1B',
-          files: [createModelFile({ size: 1000000000 })],
-        }),
-        createModelInfo({
-          id: 'test/model-70B',
-          name: 'Large 70B',
-          files: [createModelFile({ size: 4000000000 })],
-        }),
-      ]);
-
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Set size filter to "small" (1-3B)
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Size/));
-      });
-      await waitFor(() => expect(getByText('1-3B')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('1-3B'));
-      });
-
-      // Size filters auto-trigger search even with an empty query.
-      await waitFor(() => {
-        expect(getByText('Small 1B')).toBeTruthy();
-      });
-      expect(mockSearchModels).toHaveBeenCalled();
-      // Large 70B doesn't match 1-3B size filter
-      expect(queryByText('Large 70B')).toBeNull();
-    });
-
-    it('shows empty state with filter message when filters active but no results', async () => {
-      mockSearchModels.mockResolvedValue([]);
-
-      const { getByTestId, getByText, getAllByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Set a type filter
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Type/));
-      });
-      await waitFor(() => expect(getAllByText('Vision').length).toBeGreaterThan(0));
-      await act(async () => {
-        fireEvent.press(getAllByText('Vision')[0]);
-      });
-
-      // Search with no results
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'nonexistent');
-      });
-
-      await waitFor(() => {
-        expect(getByText(/No models match your filters/)).toBeTruthy();
-      });
-    });
-
-    it('shows generic empty state when no filters but no results', async () => {
-      mockSearchModels.mockResolvedValue([]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'nonexistent');
-      });
-
-      await waitFor(() => {
-        expect(getByText(/No models found/)).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
   // Model detail view - download and file filtering
   // ============================================================================
   describe('model detail view interactions', () => {
