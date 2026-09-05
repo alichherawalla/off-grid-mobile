@@ -11,6 +11,16 @@ export function downloadedModelMatchesFile(
   return model.fileName === fileName || model.id === `${repositoryId}/${fileName}`;
 }
 
+/** Match one Shared download projection to the exact repository artifact selected in the UI. */
+export function modelDownloadMatchesFile(
+  download: ModelsSnapshot['control']['downloads'][number],
+  repositoryId: string,
+  fileName: string,
+): boolean {
+  return (download.repositoryId ?? download.modelId) === repositoryId
+    && download.fileName === fileName;
+}
+
 export function buildFileDownloadHandler(input: {
   state: { downloaded: boolean; progress: unknown; hasFailed: boolean };
   fileName: string;
@@ -34,7 +44,7 @@ export function buildFileDownloadHandler(input: {
   };
 }
 
-export function aggregateTextModelDownloads(downloads: ModelsSnapshot['downloads'], repositoryId: string) {
+export function aggregateTextModelDownloads(downloads: ModelsSnapshot['control']['downloads'], repositoryId: string) {
   const active = downloads.filter(row =>
     row.modelType === 'text'
     && row.modelId.startsWith(`${repositoryId}/`)

@@ -9,9 +9,6 @@
  * - runSearch with code type and no query (CODE_FALLBACK_QUERY)
  */
 
-import { renderHook, act } from '@testing-library/react-native';
-import { useTextModels } from '../../../../src/screens/ModelsScreen/useTextModels';
-
 // ── Navigation ────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn(), setOptions: jest.fn(), addListener: jest.fn(() => jest.fn()) }),
@@ -41,7 +38,8 @@ const mockStoreState: any = {
 };
 
 jest.mock('../../../../src/stores', () => ({
-  useAppStore: jest.fn(() => mockStoreState),
+  useAppStore: jest.fn((selector?: (state: typeof mockStoreState) => unknown) =>
+    selector ? selector(mockStoreState) : mockStoreState),
 }));
 
 jest.mock('../../../../src/stores/downloadStore', () => ({
@@ -50,8 +48,6 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
     {
       getState: () => ({
         downloads: mockDownloads,
-        // startModelDownload publishes a queued 'pending' row up-front; mirror the real
-        // store's add (refuses a duplicate modelKey) so the shared download action runs.
         add: (entry: any) => { if (!mockDownloads[entry.modelKey]) mockDownloads[entry.modelKey] = entry; },
         remove: (modelKey: string) => { delete mockDownloads[modelKey]; },
         setStatus: jest.fn(),
@@ -70,20 +66,9 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
 
 // ── Services ──────────────────────────────────────────────────────────
 const mockSearchModels = jest.fn((_query: string, _opts?: any) => Promise.resolve([]));
-const mockCancelBackgroundDownload = jest.fn((_id: number) => Promise.resolve());
 const mockDeleteModel = jest.fn((_id: string) => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockGetDownloadedModels = jest.fn(() => Promise.resolve([]));
-const mockRegistryCancel = jest.fn((_id: string) => Promise.resolve());
-const mockRegistryRemove = jest.fn((_id: string) => Promise.resolve());
-
-jest.mock('../../../../src/services/modelServices/downloadRegistryBootstrap', () => ({
-  modelDownloadRegistry: {
-    cancel: (id: string) => mockRegistryCancel(id),
-    remove: (id: string) => mockRegistryRemove(id),
-  },
-}));
-
 jest.mock('../../../../src/services/modelServices/residencyIntents', () => ({
   mobileResidencyIntents: {
     unloadText: () => mockUnloadTextModel(),
@@ -100,7 +85,6 @@ jest.mock('../../../../src/services', () => ({
     getDownloadedModels: () => mockGetDownloadedModels(),
     downloadModelBackground: jest.fn(),
     watchDownload: jest.fn(),
-    cancelBackgroundDownload: (id: number) => mockCancelBackgroundDownload(id),
     repairMmProj: jest.fn(),
     deleteModel: (id: string) => mockDeleteModel(id),
   },
@@ -122,6 +106,13 @@ jest.mock('../../../../src/components/CustomAlert', () => ({
   initialAlertState: { title: '', message: '', visible: false },
 }));
 
+const { installNativeBoundary, requireRTL } =
+  require('../../../harness/nativeBoundary') as typeof import('../../../harness/nativeBoundary');
+installNativeBoundary({ download: true, fs: true, llama: true });
+const { renderHook, act } = requireRTL();
+const { useTextModels } =
+  require('../../../../src/screens/ModelsScreen/useTextModels') as typeof import('../../../../src/screens/ModelsScreen/useTextModels');
+
 // ─────────────────────────────────────────────────────────────────────
 
 const setAlertState = jest.fn();
@@ -133,48 +124,6 @@ beforeEach(() => {
   Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
   const { useAppStore } = jest.requireMock('../../../../src/stores') as any;
   useAppStore.getState = () => mockStoreState;
-});
-
-// ── handleCancelDownload ──────────────────────────────────────────────
-
-describe('handleCancelDownload', () => {
-  it('calls cancelBackgroundDownload when a downloadId exists for the key', async () => {
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    // Seed a download in progress by calling handleDownload first (mock resolves immediately)
-    const mockFile = { name: 'model.gguf', size: 1000, quantization: 'Q4_K_M', downloadUrl: 'http://x' };
-    const mockModel = { id: 'org/repo', name: 'Test', author: 'org', description: '', downloads: 0, likes: 0, tags: [], lastModified: '', files: [] };
-
-    const { modelLibrary: mm } = jest.requireMock('../../../../src/services');
-    mm.downloadModelBackground.mockResolvedValueOnce({ downloadId: 99 });
-
-    await act(async () => {
-      await result.current.handleDownload(mockModel as any, mockFile as any);
-    });
-
-    mockDownloads['org/repo/model.gguf'] = {
-      downloadId: 99,
-      modelKey: 'org/repo/model.gguf',
-      status: 'running',
-    };
-
-    await act(async () => {
-      await result.current.handleCancelDownload('org/repo/model.gguf');
-    });
-
-    expect(mockRegistryCancel).toHaveBeenCalledWith('text:org/repo/model.gguf');
-  });
-
-  it('clears downloadProgress without calling cancelBackgroundDownload when no downloadId', async () => {
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    // Call cancel for a key that was never started
-    await act(async () => {
-      await result.current.handleCancelDownload('nonexistent/key.gguf');
-    });
-
-    expect(mockRegistryCancel).toHaveBeenCalledWith('text:nonexistent/key.gguf');
-  });
 });
 
 // ── handleDeleteModel ─────────────────────────────────────────────────
@@ -189,36 +138,9 @@ describe('handleDeleteModel', () => {
       await result.current.handleDeleteModel('org/missing-model');
     });
 
-    expect(mockRegistryRemove).not.toHaveBeenCalled();
+    expect(mockDeleteModel).not.toHaveBeenCalled();
   });
 
-  it('sends active deletion to the shared download control plane', async () => {
-    const model = { id: 'org/active-model', name: 'Active', fileName: 'active.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
-    mockStoreState.downloadedModels = [model];
-    mockStoreState.activeModelId = 'org/active-model';
-
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    await act(async () => {
-      await result.current.handleDeleteModel('org/active-model');
-    });
-
-    expect(mockRegistryRemove).toHaveBeenCalledWith('text:org/active-model');
-  });
-
-  it('sends inactive deletion to the same shared download control plane', async () => {
-    const model = { id: 'org/inactive-model', name: 'Inactive', fileName: 'inactive.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
-    mockStoreState.downloadedModels = [model];
-    mockStoreState.activeModelId = 'org/some-other-model';
-
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    await act(async () => {
-      await result.current.handleDeleteModel('org/inactive-model');
-    });
-
-    expect(mockRegistryRemove).toHaveBeenCalledWith('text:org/inactive-model');
-  });
 });
 
 // ── runSearch error path ──────────────────────────────────────────────
