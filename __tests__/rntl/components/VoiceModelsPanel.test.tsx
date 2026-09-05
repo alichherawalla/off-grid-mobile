@@ -7,165 +7,359 @@
  *  - not-downloaded → a single "Download voice" action (opt-in)
  *  - downloaded → a selectable list of voices; tapping one selects it
  */
-import React from 'react';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import type { PersistedModelDownload } from '@offgrid/models';
+import type { VoiceModelsPanel } from '../../../pro/audio/ui/VoiceModelsPanel';
 
-jest.mock('@offgrid/core/services/hardware', () => ({
-  hardwareService: { getTotalMemoryGB: jest.fn(() => 8) },
-}));
-
-jest.mock('@offgrid/core/components/CustomAlert', () => {
-  const { View } = require('react-native');
-  return {
-    CustomAlert: () => <View testID="custom-alert" />,
-    showAlert: (title: string, message: string, buttons: any[]) => ({ visible: true, title, message, buttons }),
-    hideAlert: () => ({ visible: false }),
-    initialAlertState: { visible: false },
-  };
+const voiceDownload = (phase: 'queued' | 'paused'): PersistedModelDownload => ({
+  manifest: {
+    id: 'tts:software-mansion/executorch-kokoro',
+    modelId: 'software-mansion/executorch-kokoro',
+    kind: 'voice',
+    revision: 'runtime',
+    artifacts: [
+      {
+        id: 'kokoro-medium',
+        name: 'kokoro-medium',
+        role: 'primary',
+        required: true,
+        localName: 'kokoro-medium',
+        url: '',
+        sizeBytes: 82 * 1024 * 1024,
+      },
+    ],
+  },
+  phase,
+  artifacts: [
+    {
+      artifactId: 'kokoro-medium',
+      phase,
+      bytesDownloaded: Math.round(82 * 1024 * 1024 * 0.4),
+      totalBytes: 82 * 1024 * 1024,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 1,
+  attempt: 1,
 });
 
-jest.mock('@offgrid/core/components/AnimatedPressable', () => {
-  const { TouchableOpacity } = require('react-native');
-  return {
-    AnimatedPressable: ({ children, onPress, disabled, testID }: any) => (
-      <TouchableOpacity testID={testID} onPress={onPress} disabled={disabled}>{children}</TouchableOpacity>
-    ),
-  };
-});
-
-const mockEngine = {
-  id: 'kokoro',
-  displayName: 'Kokoro TTS',
-  capabilities: { peakRamMB: 82 },
-  getRequiredAssets: () => [{ id: 'a', sizeBytes: 82 * 1024 * 1024 }],
-  getActiveVoice: () => null,
-};
-jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: () => mockEngine },
-}));
-
-// The panel reads download state from the SAME service the Download Manager does.
-let mockDownloads: any[] = [];
-jest.mock('@offgrid/core/hooks/useModelDownloads', () => ({
-  useModelDownloads: () => mockDownloads,
-}));
-const ttsDl = (status: string, progress = status === 'completed' ? 1 : 0) =>
-  ({ id: 'tts:software-mansion/executorch-kokoro', modelType: 'tts', name: 'Kokoro TTS', status, progress });
-
-const actions = {
-  setVoice: jest.fn(async () => {}),
-  downloadModels: jest.fn(async () => {}),
-  deleteModels: jest.fn(async () => {}),
-  checkDownloadStatus: jest.fn(async () => {}),
-  clearError: jest.fn(),
-};
-let mockStoreState: any;
-jest.mock('../../../pro/audio/ttsStore', () => ({
-  useTTSStore: (selector?: (state: any) => unknown) =>
-    selector ? selector(mockStoreState) : mockStoreState,
-}));
-
-import { VoiceModelsPanel } from '../../../pro/audio/ui/VoiceModelsPanel';
-
-const VOICES = [
-  { id: 'af_heart', label: 'Warm', metadata: { accent: 'US', gender: 'Female', persona: 'Friendly' } },
-  { id: 'bf_emma', label: 'Gentle', metadata: { accent: 'British', gender: 'Female', persona: 'Soft' } },
-];
-
-const renderPanel = async () => {
-  const utils = render(<VoiceModelsPanel />);
-  await act(async () => { await Promise.resolve(); });
-  return utils;
-};
+async function renderPersistedVoiceDownload(phase: 'queued' | 'paused') {
+  const { installNativeBoundary, requireRTL } =
+    require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
+  installNativeBoundary({ fs: true, download: true });
+  const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal([voiceDownload(phase)]);
+  const fixture = await startMobileApplicationFixture({ pro: true });
+  const rtl = requireRTL();
+  const RuntimeReact = require('react') as typeof import('react');
+  const Panel = require('../../../pro/audio/ui/VoiceModelsPanel')
+    .VoiceModelsPanel as typeof VoiceModelsPanel;
+  const view = rtl.render(RuntimeReact.createElement(Panel));
+  return { fixture, rtl, view };
+}
 
 describe('VoiceModelsPanel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDownloads = [ttsDl('completed')];
-    mockStoreState = {
-      isReady: true,
-      error: null,
-      voices: VOICES,
-      activeVoiceId: 'af_heart',
-      settings: { modelDownloaded: {} },
-      ...actions,
-    };
   });
 
   it('shows the RAM privacy banner', async () => {
-    const { getByText } = await renderPanel();
-    expect(getByText(/nothing is sent anywhere/)).toBeTruthy();
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+    });
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
+
+    try {
+      expect(view.getByText(/nothing is sent anywhere/)).toBeTruthy();
+    } finally {
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
   it('filters voices by language and selects the first voice when language changes', async () => {
-    const { getByTestId } = await renderPanel();
-    expect(getByTestId('voice-af_heart')).toBeTruthy();
-    expect(() => getByTestId('voice-bf_emma')).toThrow();
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
 
-    fireEvent.press(getByTestId('models-tts-language'));
-    await act(async () => { fireEvent.press(getByTestId('models-tts-language-en-GB')); });
-    expect(actions.setVoice).toHaveBeenCalledWith('bf_emma');
+    try {
+      harness.rtl.fireEvent.press(view.getByText('Download voice'));
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      expect(view.queryByTestId('voice-bf_emma')).toBeNull();
+
+      harness.rtl.fireEvent.press(view.getByTestId('models-tts-language'));
+      harness.rtl.fireEvent.press(
+        view.getByTestId('models-tts-language-en-GB'),
+      );
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-bf_emma')).toBeTruthy();
+        expect(view.queryByTestId('voice-af_heart')).toBeNull();
+      });
+    } finally {
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
   it('shows an opt-in download when the model is not downloaded', async () => {
-    mockDownloads = []; // service has no tts entry → not downloaded / not downloading
-    mockStoreState.isReady = false;
-    const { getByText } = await renderPanel();
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
 
-    const cta = getByText('Download voice');
-    expect(cta).toBeTruthy();
-    await act(async () => { fireEvent.press(cta); });
-    await waitFor(() => expect(actions.downloadModels).toHaveBeenCalled());
+    try {
+      const cta = view.getByText('Download voice');
+      harness.rtl.fireEvent.press(cta);
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      expect(view.queryByText('Download voice')).toBeNull();
+    } finally {
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
   it('shows the model as DOWNLOADED (voices) when the service reports completed, even if the engine is not loaded — the mismatch fix', async () => {
-    // Regression for the Download-Manager-vs-Voice-panel mismatch: the service is
-    // the single source. When it says 'completed', the panel shows voices — never a
-    // stale 0% progress bar — regardless of the engine being loaded or any store flag.
-    mockDownloads = [ttsDl('completed')];
-    mockStoreState.isReady = false;
-    mockStoreState.settings = { modelDownloaded: {} };
-    const { getByTestId, queryByText } = await renderPanel();
-    expect(getByTestId('voice-af_heart')).toBeTruthy();
-    expect(queryByText('Download voice')).toBeNull();
-    expect(queryByText('0%')).toBeNull();
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
+
+    try {
+      harness.rtl.fireEvent.press(view.getByText('Download voice'));
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      expect(view.queryByText('Download voice')).toBeNull();
+      expect(view.queryByText('0%')).toBeNull();
+    } finally {
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
   it('shows live progress while the service reports downloading', async () => {
-    mockDownloads = [ttsDl('downloading', 0.4)];
-    mockStoreState.isReady = false;
-    const { getByText, queryByText } = await renderPanel();
-    expect(getByText('40%')).toBeTruthy();
-    expect(queryByText(/Rate unavailable/)).toBeNull();
-    expect(queryByText(/NaN/)).toBeNull();
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const { BareResourceFetcher } =
+      require('react-native-executorch-bare-resource-fetcher') as typeof import('react-native-executorch-bare-resource-fetcher');
+    let finishDownload!: () => void;
+    const heldDownload = new Promise<void>(resolve => {
+      finishDownload = resolve;
+    });
+    (BareResourceFetcher.fetch as jest.Mock).mockImplementationOnce(
+      async (onProgress: (progress: number) => void) => {
+        onProgress(0.4);
+        await heldDownload;
+      },
+    );
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
+
+    try {
+      harness.rtl.fireEvent.press(view.getByText('Download voice'));
+      await harness.rtl.waitFor(() => {
+        expect(view.getByText('40%')).toBeTruthy();
+      });
+      expect(view.queryByText('Download voice')).toBeNull();
+      expect(view.queryByText(/Rate unavailable/)).toBeNull();
+      expect(view.queryByText(/NaN/)).toBeNull();
+    } finally {
+      finishDownload();
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
-  it('shows bytes and rate when the engine reports them', async () => {
-    mockDownloads = [ttsDl('downloading', 0.5)];
-    mockStoreState.isReady = false;
-    mockStoreState.downloadCurrentBytes = 25 * 1024 * 1024;
-    mockStoreState.downloadTotalBytes = 50 * 1024 * 1024;
-    mockStoreState.downloadBytesPerSecond = 2 * 1024 * 1024;
-    const { getByText } = await renderPanel();
-    expect(getByText('50%')).toBeTruthy();
-    expect(getByText('25 MB / 50 MB · 2.0 MB/s')).toBeTruthy();
+  it('shows transferred bytes and rate from the shared download projection', async () => {
+    jest.unmock('@offgrid/core/services/hardware');
+    jest.unmock('@offgrid/core/components/CustomAlert');
+    jest.unmock('@offgrid/core/components/AnimatedPressable');
+    jest.unmock('../../../pro/audio/engine');
+    jest.unmock('@offgrid/core/hooks/useModelDownloads');
+    jest.unmock('../../../pro/audio/ttsStore');
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const { BareResourceFetcher } =
+      require('react-native-executorch-bare-resource-fetcher') as typeof import('react-native-executorch-bare-resource-fetcher');
+    let finishDownload!: () => void;
+    const heldDownload = new Promise<void>(resolve => {
+      finishDownload = resolve;
+    });
+    (BareResourceFetcher.fetch as jest.Mock).mockImplementationOnce(
+      async (onProgress: (progress: number) => void) => {
+        onProgress(0.25);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        onProgress(0.5);
+        await heldDownload;
+      },
+    );
+    const RealVoiceModelsPanel =
+      require('../../../pro/audio/ui/VoiceModelsPanel')
+        .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const view = harness.rtl.render(
+      harness.React.createElement(RealVoiceModelsPanel),
+    );
+
+    try {
+      harness.rtl.fireEvent.press(view.getByText('Download voice'));
+      await harness.rtl.waitFor(() => {
+        expect(view.getByText('50%')).toBeTruthy();
+        expect(view.getByText(/41 MB \/ 82 MB · .* MB\/s/)).toBeTruthy();
+      });
+    } finally {
+      finishDownload();
+      await harness.rtl.waitFor(() => {
+        expect(view.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      view.unmount();
+      await harness.settle(300);
+    }
   });
 
   it('shows progress (not the idle CTA) for queued and paused too — the shared in-progress predicate', async () => {
     // Regression: the panel used a bare `=== 'downloading'`, so a queued or a
     // kill-interrupted (paused) TTS download flashed the "Download voice" CTA.
     for (const status of ['queued', 'paused'] as const) {
-      mockDownloads = [ttsDl(status, 0.4)];
-      mockStoreState.isReady = false;
-      const { getByText, queryByText } = await renderPanel();
-      expect(getByText('40%')).toBeTruthy();
-      expect(queryByText('Download voice')).toBeNull();
+      const { fixture, rtl, view } = await renderPersistedVoiceDownload(status);
+      try {
+        await rtl.waitFor(() => {
+          expect(view.getByText('40%')).toBeTruthy();
+          expect(view.queryByText('Download voice')).toBeNull();
+        });
+      } finally {
+        view.unmount();
+        await fixture.dispose();
+      }
     }
   });
 
   it('backfills the persisted-downloaded flag from disk when the panel opens', async () => {
-    actions.checkDownloadStatus.mockClear();
-    await renderPanel();
-    expect(actions.checkDownloadStatus).toHaveBeenCalled();
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      pro: true,
+      download: true,
+    });
+    const Panel = require('../../../pro/audio/ui/VoiceModelsPanel')
+      .VoiceModelsPanel as typeof VoiceModelsPanel;
+    const first = harness.rtl.render(harness.React.createElement(Panel));
+    let firstUnmounted = false;
+
+    try {
+      harness.rtl.fireEvent.press(first.getByText('Download voice'));
+      await harness.rtl.waitFor(() => {
+        expect(first.getByTestId('voice-af_heart')).toBeTruthy();
+      });
+      first.unmount();
+      firstUnmounted = true;
+
+      const reopened = harness.rtl.render(harness.React.createElement(Panel));
+      try {
+        await harness.rtl.waitFor(() => {
+          expect(reopened.getByTestId('voice-af_heart')).toBeTruthy();
+          expect(reopened.queryByText('Download voice')).toBeNull();
+        });
+      } finally {
+        reopened.unmount();
+      }
+    } finally {
+      if (!firstUnmounted) first.unmount();
+      await harness.settle(300);
+    }
   });
 });
