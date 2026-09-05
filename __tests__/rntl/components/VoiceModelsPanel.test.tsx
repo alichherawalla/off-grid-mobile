@@ -64,12 +64,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows the RAM privacy banner', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
@@ -93,12 +87,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('filters voices by language and selects the first voice when language changes', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
@@ -136,12 +124,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows an opt-in download when the model is not downloaded', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
@@ -171,12 +153,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows the model as DOWNLOADED (voices) when the service reports completed, even if the engine is not loaded — the mismatch fix', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
@@ -206,12 +182,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows live progress while the service reports downloading', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
@@ -258,12 +228,6 @@ describe('VoiceModelsPanel', () => {
   });
 
   it('shows transferred bytes and rate from the shared download projection', async () => {
-    jest.unmock('@offgrid/core/services/hardware');
-    jest.unmock('@offgrid/core/components/CustomAlert');
-    jest.unmock('@offgrid/core/components/AnimatedPressable');
-    jest.unmock('../../../pro/audio/engine');
-    jest.unmock('@offgrid/core/hooks/useModelDownloads');
-    jest.unmock('../../../pro/audio/ttsStore');
     const { setupChatScreen } =
       require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
     const harness = await setupChatScreen({
