@@ -222,6 +222,13 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
   let RealReact: typeof React;
   let originalFetch: typeof global.fetch;
   let searchResponse: Array<Record<string, unknown>> = [];
+  const imageMnnBoundaryFiles: Array<Record<string, unknown>> = [
+    { type: 'file', path: 'StableDiffusionV1.zip', size: 500_000_000 },
+    { type: 'file', path: 'AnimeGenerator.zip', size: 500_000_000 },
+  ];
+  const imageQnnBoundaryFiles: Array<Record<string, unknown>> = [
+    { type: 'file', path: 'FastModel_qnn2.28_8gen2.zip', size: 500_000_000 },
+  ];
   let treeResponse: Array<Record<string, unknown>> = [];
   const networkFetch = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -232,7 +239,12 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
       });
     }
     if (url.includes('/tree/')) {
-      return new Response(JSON.stringify(treeResponse), {
+      const response = url.includes('xororz/sd-mnn')
+        ? imageMnnBoundaryFiles
+        : url.includes('xororz/sd-qnn')
+          ? imageQnnBoundaryFiles
+          : treeResponse;
+      return new Response(JSON.stringify(response), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -260,7 +272,7 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     }
     const { installNativeBoundary, requireRTL, GB } =
       require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
-    installNativeBoundary({
+    const nativeBoundary = installNativeBoundary({
       download: true,
       fs: true,
       whisper: true,
@@ -270,6 +282,10 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
         availBytes: 4 * GB,
       },
     });
+    const DeviceInfo = require('react-native-device-info');
+    DeviceInfo.getHardware.mockResolvedValue('qcom');
+    DeviceInfo.getModel.mockReturnValue('Snapdragon test device');
+    nativeBoundary.diffusion.module.getSoCModel = jest.fn().mockResolvedValue('SM8550');
     originalFetch = global.fetch;
     global.fetch = networkFetch as typeof global.fetch;
     realRTL = requireRTL();
@@ -760,6 +776,132 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'nonexistent');
     await realRTL.waitFor(() => expect(view.getByText(/No models found/)).toBeTruthy());
   });
+
+  const openImageTab = async () => {
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByText('Image Models'));
+    return view;
+  };
+  const openImageFilters = async (view: ReturnType<typeof renderRealScreen>) => {
+    const filterToggle = await view.findByRole('button', {
+      name: 'Filter image models',
+    });
+    realRTL.fireEvent.press(filterToggle);
+  };
+
+  it('shows image search input on image tab', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByPlaceholderText('Search models...')).toBeTruthy());
+  });
+
+  it('shows RAM info on image tab', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText(/8GB RAM/)).toBeTruthy());
+  });
+
+  it('renders image tab content area', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => {
+      expect(view.getByPlaceholderText('Search models...')).toBeTruthy();
+      expect(view.getByTestId('rec-toggle')).toBeTruthy();
+    });
+  });
+
+  it('renders image models after recommendation loads', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => {
+      expect(view.getByTestId('image-model-card-0')).toBeTruthy();
+      expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy();
+    });
+  });
+
+  it('toggles recommended-only star button', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+    expect(view.queryByText('Stable Diffusion V1 (GPU)')).toBeNull();
+    realRTL.fireEvent.press(view.getByTestId('rec-toggle'));
+    await realRTL.waitFor(() => expect(view.getByText('Stable Diffusion V1 (GPU)')).toBeTruthy());
+  });
+
+  it('shows image filter toggle on image tab', async () => {
+    const view = await openImageTab();
+    await openImageFilters(view);
+    expect(view.getByText(/^NPU [▴▾]$/)).toBeTruthy();
+    expect(view.getByText(/^Style [▴▾]$/)).toBeTruthy();
+  });
+
+  it('renders device recommendation banner on image tab', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText(/Snapdragon flagship/)).toBeTruthy());
+  });
+
+  it('loads and shows image models on image tab', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+  });
+
+  it('shows image filter bar when filter toggle pressed on image tab', async () => {
+    const view = await openImageTab();
+    await openImageFilters(view);
+    expect(view.getByText(/^NPU [▴▾]$/)).toBeTruthy();
+    expect(view.getByText(/^Style [▴▾]$/)).toBeTruthy();
+  });
+
+  it('renders image tab with models available', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => {
+      expect(view.getByTestId('image-model-card-0')).toBeTruthy();
+      expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy();
+    });
+  });
+
+  it('filters image models by search query text', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('rec-toggle'));
+    await realRTL.waitFor(() => expect(view.getByText('Anime Generator (GPU)')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByPlaceholderText('Search models...'), 'anime');
+    await realRTL.waitFor(() => expect(view.getByText('Anime Generator (GPU)')).toBeTruthy());
+    expect(view.queryByText('Stable Diffusion V1 (GPU)')).toBeNull();
+    expect(view.queryByText('Fast Model (NPU 8gen2)')).toBeNull();
+  });
+
+  it('image tab shows recommendation text', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText(/Snapdragon flagship/)).toBeTruthy());
+  });
+
+  it('clears image filters via clearImageFilters', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('rec-toggle'));
+    await openImageFilters(view);
+    realRTL.fireEvent.press(view.getByText(/^Backend [▴▾]$/));
+    await realRTL.waitFor(() => expect(view.getAllByText('GPU').length).toBeGreaterThan(0));
+    realRTL.fireEvent.press(view.getAllByText('GPU')[0]);
+    await realRTL.waitFor(() => expect(view.getByText('Stable Diffusion V1 (GPU)')).toBeTruthy());
+    expect(view.queryByText('Fast Model (NPU 8gen2)')).toBeNull();
+    realRTL.fireEvent.press(view.getByText('Clear'));
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+  });
+
+  it('hides non-recommended models while recommended-only is on', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText('Fast Model (NPU 8gen2)')).toBeTruthy());
+    expect(view.queryByText('Stable Diffusion V1 (GPU)')).toBeNull();
+    expect(view.queryByText('Anime Generator (GPU)')).toBeNull();
+  });
+
+  it('dismisses first-time hint when rec-toggle is pressed', async () => {
+    const view = await openImageTab();
+    await realRTL.waitFor(() => expect(view.getByText(/Showing recommended models only/)).toBeTruthy());
+    expect(view.queryByText('Stable Diffusion V1 (GPU)')).toBeNull();
+    realRTL.fireEvent.press(view.getByTestId('rec-toggle'));
+    await realRTL.waitFor(() => {
+      expect(view.queryByText(/Showing recommended models only/)).toBeNull();
+      expect(view.getByText('Stable Diffusion V1 (GPU)')).toBeTruthy();
+    });
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -950,96 +1092,6 @@ describe('ModelsScreen', () => {
       await waitFor(() => {
         expect(getByTestId('models-screen')).toBeTruthy();
       });
-    });
-  });
-  // Image Models Tab
-  // ============================================================================
-  describe('image models tab', () => {
-    it('shows image search input on image tab', async () => {
-      mockFetchAvailableModels.mockResolvedValue([]);
-
-      const { getByText, getByPlaceholderText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        // Image tab has its own search input
-        expect(getByPlaceholderText('Search models...')).toBeTruthy();
-      });
-    });
-
-    it('shows RAM info on image tab', async () => {
-      mockFetchAvailableModels.mockResolvedValue([]);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/GB RAM/)).toBeTruthy();
-      });
-    });
-
-    it('renders image tab content area', async () => {
-      mockFetchAvailableModels.mockResolvedValue([]);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Image tab renders the device recommendation area
-      await waitFor(() => {
-        expect(getByText(/GB RAM/)).toBeTruthy();
-      });
-    });
-
-    it('renders image models after recommendation loads', async () => {
-      const imageModels = [
-        {
-          id: 'test/sd-model',
-          name: 'sd-model',
-          displayName: 'Test SD Model',
-          size: 500000000,
-          backend: 'mnn' as const,
-          variant: 'standard',
-          downloadUrl: 'https://example.com/model.zip',
-          fileName: 'model.mnn',
-          repo: 'test/sd-model',
-        },
-      ];
-      mockFetchAvailableModels.mockResolvedValue(imageModels);
-
-      const { getByText, queryByTestId } = renderModelsScreen();
-
-      // Wait for initial mount effects to complete (imageRec loading)
-      await act(async () => {
-        await new Promise<void>(resolve => setTimeout(resolve, 50));
-      });
-
-      // Switch to image tab
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Wait for models to load
-      await act(async () => {
-        await new Promise<void>(resolve => setTimeout(resolve, 50));
-      });
-
-      // Check if image model card rendered
-      const card = queryByTestId('image-model-card-0');
-      if (card) {
-        expect(card).toBeTruthy();
-      } else {
-        // If model cards didn't render (due to filtering), at least the section rendered
-        expect(getByText(/GB RAM/)).toBeTruthy();
-      }
     });
   });
 
@@ -1283,49 +1335,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Image tab - filter interactions
-  // ============================================================================
-  describe('image tab filters', () => {
-    it('toggles recommended-only star button', async () => {
-      const { getByText } = renderModelsScreen();
-
-      // Switch to image tab
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('shows image filter toggle on image tab', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('renders device recommendation banner on image tab', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/8GB RAM/)).toBeTruthy();
-      });
-    });
-  });
-
   // ============================================================================
   // Import progress rendering
   // ============================================================================
@@ -1673,116 +1682,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Image search query
-  // ============================================================================
-  describe('image search', () => {
-    const mockImageModels = [
-      {
-        id: 'sd-model-1',
-        name: 'sd-model-1',
-        displayName: 'Stable Diffusion V1',
-        backend: 'mnn',
-        fileName: 'sd1.zip',
-        downloadUrl: 'https://example.com/sd1.zip',
-        size: 1000000000,
-        repo: 'test/sd1',
-      },
-      {
-        id: 'anime-model',
-        name: 'anime-model',
-        displayName: 'Anime Generator',
-        backend: 'mnn',
-        fileName: 'anime.zip',
-        downloadUrl: 'https://example.com/anime.zip',
-        size: 1000000000,
-        repo: 'test/anime',
-      },
-      {
-        id: 'qnn-model',
-        name: 'qnn-model',
-        displayName: 'QNN Fast Model',
-        backend: 'qnn',
-        fileName: 'qnn.zip',
-        downloadUrl: 'https://example.com/qnn.zip',
-        size: 500000000,
-        repo: 'test/qnn',
-      },
-    ];
-
-    it('loads and shows image models on image tab', async () => {
-      mockFetchAvailableModels.mockResolvedValue(mockImageModels);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('shows image filter bar when filter toggle pressed on image tab', async () => {
-      mockFetchAvailableModels.mockResolvedValue(mockImageModels);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('renders image tab with models available', async () => {
-      mockFetchAvailableModels.mockResolvedValue(mockImageModels);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Image tab content renders
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('filters image models by search query text', async () => {
-      mockFetchAvailableModels.mockResolvedValue(mockImageModels);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-
-    it('image tab shows recommendation text', async () => {
-      mockFetchAvailableModels.mockResolvedValue(mockImageModels);
-
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/8GB RAM/)).toBeTruthy();
-      });
-    });
-  });
-
   // ============================================================================
   // handleDownload - covers the download handler branches
   // ============================================================================
@@ -1827,95 +1726,6 @@ describe('ModelsScreen', () => {
       expect(modelLibrary.downloadModelBackground).toHaveBeenCalled();
     });
   });
-
-  // ============================================================================
-  // clearImageFilters
-  // ============================================================================
-  describe('image filter clear', () => {
-    it('clears image filters via clearImageFilters', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // recommended toggle and backend filter behaviour
-  // ============================================================================
-  describe('image model recommended toggle and backend filter', () => {
-    const mnnModel = {
-      id: 'cpu-model',
-      name: 'cpu-model',
-      displayName: 'GPU Model',
-      backend: 'mnn' as const,
-      fileName: 'cpu.zip',
-      downloadUrl: 'https://example.com/cpu.zip',
-      size: 500000000,
-      repo: 'test/cpu-model',
-    };
-    const qnnModel = {
-      id: 'npu-model',
-      name: 'npu-model',
-      displayName: 'NPU Model',
-      backend: 'qnn' as const,
-      fileName: 'npu.zip',
-      downloadUrl: 'https://example.com/npu.zip',
-      size: 500000000,
-      repo: 'test/npu-model',
-    };
-
-    it('hides qnn model when showRecommendedOnly is on and recommendedBackend is mnn', async () => {
-      mockFetchAvailableModels.mockResolvedValue([mnnModel, qnnModel]);
-
-      const { queryByText, getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Allow async state (imageRec + models) to fully settle
-      await act(async () => {
-        await new Promise<void>(resolve => setTimeout(resolve, 100));
-      });
-
-      // GPU Model (mnn) matches recommendedBackend='mnn' → visible
-      // NPU Model (qnn) does not match → filtered out by showRecommendedOnly
-      expect(queryByText('NPU Model')).toBeNull();
-    });
-
-    it('dismisses first-time hint when rec-toggle is pressed', async () => {
-      mockFetchAvailableModels.mockResolvedValue([mnnModel]);
-
-      const { getByText, getByTestId, queryByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/RAM/)).toBeTruthy();
-      });
-
-      // Hint should be visible on first open (showRecHint=true, showRecommendedOnly=true)
-      expect(queryByText(/Showing recommended models only/)).toBeTruthy();
-
-      // Pressing the toggle dismisses the hint and turns off recommended mode
-      await act(async () => {
-        fireEvent.press(getByTestId('rec-toggle'));
-      });
-
-      await waitFor(() => {
-        expect(queryByText(/Showing recommended models only/)).toBeNull();
-      });
-    });
-  });
-
   // ============================================================================
   // handleSearch with filters
   // ============================================================================

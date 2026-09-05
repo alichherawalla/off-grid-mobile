@@ -311,6 +311,8 @@ export const ImageModelsTab: React.FC<Props> = ({
             style={[styles.filterToggle, (imageFiltersVisible || hasActiveImageFilters) && styles.filterToggleActive]}
             onPress={() => setImageFiltersVisible(v => !v)}
             hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel="Filter image models"
           >
             <Icon name="sliders" size={14} color={(imageFiltersVisible || hasActiveImageFilters) ? colors.primary : colors.textMuted} />
             {hasActiveImageFilters && <View style={styles.filterDot} />}
