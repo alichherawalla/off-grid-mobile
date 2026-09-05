@@ -38,6 +38,32 @@ const selectLocal = async (modality: 'text' | 'image', modelId: string) => {
   arrangeLocalSelection(modality, modelId);
   await refreshMobileModelServices();
 };
+
+const saveAndSelectRemoteTextModel = async (name: string) => {
+  const originalFetch = global.fetch;
+  global.fetch = jest.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => ({ object: 'list', data: [{ id: name }] }),
+  } as unknown as Response));
+  try {
+    const saved = await applicationFacade().models.saveRemoteServer({
+      id: 'summary-server',
+      name: 'Summary server',
+      endpoint: 'http://192.168.1.2:8000/v1',
+      provider: 'openai-compatible',
+    });
+    expect(saved.ok).toBe(true);
+    const discovered = await applicationFacade().models.discoverRemoteServers('summary-server');
+    expect(discovered.ok).toBe(true);
+    const selected = await applicationFacade().models.activateOnServer('summary-server', 'text', name);
+    expect(selected.ok).toBe(true);
+    return 'summary-server';
+  } finally {
+    global.fetch = originalFetch;
+  }
+};
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -533,19 +559,19 @@ describe('HomeScreen', () => {
     });
 
     it('shows the active text model name inside the manager sheet (not on the home screen)', async () => {
-      const model = createDownloadedModel({ name: 'Llama-3.2-3B' });
-      useAppStore.setState({
-        downloadedModels: [model],
-      });
-      await selectLocal('text', model.id);
+      const serverId = await saveAndSelectRemoteTextModel('Llama-3.2-3B');
 
-      const { getAllByText, getByTestId, queryByText } = renderHomeScreen();
-      // The name is not rendered directly on the home screen.
-      expect(queryByText('Llama-3.2-3B')).toBeNull();
+      try {
+        const { getAllByText, getByTestId, queryByText } = renderHomeScreen();
+        // The name is not rendered directly on the home screen.
+        expect(queryByText('Llama-3.2-3B')).toBeNull();
 
-      // Open the manager sheet — the text row shows the active model name.
-      fireEvent.press(getByTestId('models-summary'));
-      expect(getAllByText('Llama-3.2-3B').length).toBeGreaterThanOrEqual(1);
+        // Open the manager sheet — the text row shows the active model name.
+        fireEvent.press(getByTestId('models-summary'));
+        expect(getAllByText('Llama-3.2-3B').length).toBeGreaterThanOrEqual(1);
+      } finally {
+        await applicationFacade().models.removeRemoteServer(serverId);
+      }
     });
 
     it('shows the active image model name inside the manager sheet', async () => {
