@@ -16,7 +16,6 @@ import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
 
 // Mirror constants from ModelsScreen so test assertions stay in sync with the source
-const VISION_PIPELINE_TAG = 'image-text-to-text';
 const CODE_FALLBACK_QUERY = 'coder';
 import {
   createDownloadedModel,
@@ -967,6 +966,81 @@ describe('ModelsScreen basic rendering and tabs (real composition)', () => {
     realRTL.fireEvent.press(view.getByText('Text Models'));
     await realRTL.waitFor(() => expect(view.queryByText('Qwen')).toBeNull());
   });
+
+  it('detects code models from tags', async () => {
+    searchResponse = [rawModel('test/DeepSeek Coder 7B', 'test', { tags: ['gguf', 'code'] })];
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'coder');
+    await realRTL.waitFor(() => expect(view.getByText('DeepSeek Coder 7B')).toBeTruthy());
+  });
+
+  it('detects image-gen models from diffusion tags', async () => {
+    searchResponse = [rawModel('test/Stable Diffusion XL', 'test', { tags: ['gguf', 'diffusion', 'text-to-image'] })];
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'stable');
+    await realRTL.waitFor(() => expect(view.getByText('Stable Diffusion XL')).toBeTruthy());
+  });
+
+  it('hides models with files too large for device RAM', async () => {
+    searchResponse = [
+      rawModel('test/Fits in RAM 3B', 'test', { siblings: [{ rfilename: 'fits-Q4_K_M.gguf', size: 2_000_000_000 }] }),
+      rawModel('test/Too Big 70B', 'test', { siblings: [{ rfilename: 'large-Q4_K_M.gguf', size: 40_000_000_000 }] }),
+    ];
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText('Fits in RAM 3B')).toBeTruthy());
+    expect(view.queryByText('Too Big 70B')).toBeNull();
+  });
+
+  it('shows models with no file info (files not yet fetched)', async () => {
+    searchResponse = [rawModel('test/No File Info')];
+    const view = renderRealScreen();
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'no-files');
+    await realRTL.waitFor(() => expect(view.getByText('No File Info')).toBeTruthy());
+  });
+
+  it('matches models by org in ID (quantizer repos)', async () => {
+    searchResponse = [
+      rawModel('bartowski/Qwen 2.5 7B', 'bartowski'),
+      rawModel('test/Unrelated Model 3B', 'test'),
+    ];
+    const view = await openFilter(/Org/);
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText('Qwen 2.5 7B')).toBeTruthy());
+    expect(view.queryByText('Unrelated Model 3B')).toBeNull();
+  });
+
+  it('toggles org on then off', async () => {
+    const view = await openFilter(/Org/);
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+    await realRTL.waitFor(() => expect(view.getByText('1')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+    await realRTL.waitFor(() => expect(view.queryByText('1')).toBeNull());
+  });
+
+  it('triggers HuggingFace search when vision type filter is set and query is empty', async () => {
+    const view = await openFilter(/Type/);
+    await realRTL.waitFor(() => expect(view.getAllByText('Vision').length).toBeGreaterThan(0));
+    networkFetch.mockClear();
+    realRTL.fireEvent.press(view.getAllByText('Vision')[0]);
+    await realRTL.waitFor(() =>
+      expect(networkFetch).toHaveBeenCalledWith(
+        expect.stringContaining('pipeline_tag=image-text-to-text'),
+        expect.any(Object),
+      ),
+    );
+  });
+
+  it('does not trigger HuggingFace search when query is empty and no filters are active', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByText(/Recommended for your device/)).toBeTruthy());
+    networkFetch.mockClear();
+    expect(networkFetch).not.toHaveBeenCalled();
+    expect(view.getByText(/Recommended for your device/)).toBeTruthy();
+  });
 });
 
 describe('ModelsScreen', () => {
@@ -1313,114 +1387,7 @@ describe('ModelsScreen', () => {
       await waitFor(() => expect(getByTestId('import-local-model')).toBeTruthy());
     });
   });
-  // ============================================================================
-  // Search results with code models
-  // ============================================================================
-  describe('model type detection', () => {
-    it('detects code models from tags', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/coder-7B',
-          name: 'DeepSeek Coder 7B',
-          tags: ['code'],
-          files: [createModelFile({ size: 4000000000 })],
-        }),
-      ]);
 
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'coder');
-      });
-
-      await waitFor(() => {
-        expect(getByText('DeepSeek Coder 7B')).toBeTruthy();
-      });
-    });
-
-    it('detects image-gen models from diffusion tags', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/sd-model',
-          name: 'Stable Diffusion XL',
-          tags: ['diffusion', 'text-to-image'],
-          files: [createModelFile({ size: 4000000000 })],
-        }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'stable');
-      });
-
-      await waitFor(() => {
-        expect(getByText('Stable Diffusion XL')).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Compatible files filter
-  // ============================================================================
-  describe('file compatibility', () => {
-    it('hides models with files too large for device RAM', async () => {
-      // Device has 8GB RAM, so max file size is 8 * 0.6 = 4.8GB
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/fits-3B',
-          name: 'Fits in RAM 3B',
-          files: [createModelFile({ size: 2000000000 })], // 2GB - fits
-        }),
-        createModelInfo({
-          id: 'test/too-big-70B',
-          name: 'Too Big 70B',
-          files: [createModelFile({ size: 40000000000 })], // 40GB - doesn't fit
-        }),
-      ]);
-
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => {
-        expect(getByText('Fits in RAM 3B')).toBeTruthy();
-      });
-      expect(queryByText('Too Big 70B')).toBeNull();
-    });
-
-    it('shows models with no file info (files not yet fetched)', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'test/no-files',
-          name: 'No File Info',
-          files: [],
-        }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'no-files');
-      });
-
-      await waitFor(() => {
-        expect(getByText('No File Info')).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
   // Recommended models filtering with active filters
   // ============================================================================
   describe('recommended models with filters', () => {
@@ -1504,96 +1471,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Org filter with quantizer repo matching
-  // ============================================================================
-  describe('org filter matching', () => {
-    it('matches models by org in ID (quantizer repos)', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'bartowski/Qwen-2.5-7B-GGUF',
-          name: 'Qwen 2.5 7B',
-          author: 'bartowski',
-          files: [createModelFile({ size: 4000000000 })],
-        }),
-        createModelInfo({
-          id: 'test/unrelated-3B',
-          name: 'Unrelated Model 3B',
-          author: 'test',
-          files: [createModelFile({ size: 2000000000 })],
-        }),
-      ]);
-
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      // Select Qwen org filter
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-      await waitFor(() => expect(getByText('Qwen')).toBeTruthy());
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-
-      // Search
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      // Qwen model matches via name containing "Qwen"
-      await waitFor(() => {
-        expect(getByText('Qwen 2.5 7B')).toBeTruthy();
-      });
-      // Unrelated model shouldn't match Qwen filter
-      expect(queryByText('Unrelated Model 3B')).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // Multiple org selection (toggle on/off)
-  // ============================================================================
-  describe('multiple org toggles', () => {
-    it('toggles org on then off', async () => {
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-      await waitFor(() => expect(getByText('Qwen')).toBeTruthy());
-
-      // Select Qwen - org chips stay expanded (toggleOrg doesn't collapse)
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-
-      // Badge count should be 1
-      await waitFor(() => {
-        expect(getByText('1')).toBeTruthy();
-      });
-
-      // Qwen chip should still be visible (org dimension stays expanded)
-      // Deselect Qwen
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-
-      // Badge count should be gone (no orgs selected)
-      await waitFor(() => {
-        expect(queryByText('1')).toBeNull();
-      });
-    });
-  });
   // ============================================================================
   // handleDownload - covers the download handler branches
   // ============================================================================
@@ -1642,55 +1519,6 @@ describe('ModelsScreen', () => {
   // handleSearch with filters
   // ============================================================================
   describe('handleSearch with active filters', () => {
-    it('triggers HuggingFace search when vision type filter is set and query is empty', async () => {
-      const { getByText, getByTestId, getAllByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText(/Recommended for your device/)).toBeTruthy();
-      });
-
-      // Open filter bar
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      // Select Vision type filter
-      await act(async () => {
-        fireEvent.press(getByText(/^Type/));
-      });
-
-      await act(async () => {
-        fireEvent.press(getAllByText('Vision')[0]);
-      });
-
-      // Hit search with empty query but vision filter active
-
-      await waitFor(() => {
-        expect(mockSearchModels).toHaveBeenCalledWith(
-          '', // empty query
-          expect.objectContaining({ pipelineTag: VISION_PIPELINE_TAG }),
-        );
-      });
-    });
-
-    it('does not trigger HuggingFace search when query is empty and no filters are active', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText(/Recommended for your device/)).toBeTruthy();
-      });
-
-      mockSearchModels.mockClear();
-
-      // Hit search with empty query and no filters
-
-      expect(mockSearchModels).not.toHaveBeenCalled();
-      // Should still show recommended section
-      await waitFor(() => {
-        expect(getByText(/Recommended for your device/)).toBeTruthy();
-      });
-    });
-
     it('triggers HuggingFace search with "coder" keyword when code filter is set and query is empty', async () => {
       const { getByText, getByTestId } = renderModelsScreen();
 
