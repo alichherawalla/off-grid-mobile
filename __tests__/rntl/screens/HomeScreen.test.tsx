@@ -249,31 +249,6 @@ jest.mock('../../../src/components/AppSheet', () => ({
   },
 }));
 
-// Mock AnimatedEntry to just render children
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
-
-// Mock AnimatedListItem to render as a simple touchable
-jest.mock('../../../src/components/AnimatedListItem', () => ({
-  AnimatedListItem: ({ children, onPress, testID, style }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return (
-      <TouchableOpacity testID={testID} style={style} onPress={onPress}>
-        {children}
-      </TouchableOpacity>
-    );
-  },
-}));
-
-// Mock AnimatedPressable
-jest.mock('../../../src/components/AnimatedPressable', () => ({
-  AnimatedPressable: ({ children, onPress, style, testID }: any) => {
-    const { TouchableOpacity } = require('react-native');
-    return <TouchableOpacity style={style} onPress={onPress} testID={testID}>{children}</TouchableOpacity>;
-  },
-}));
-
 // Mock CustomAlert and related from components
 jest.mock('../../../src/components', () => {
   const actual = jest.requireActual('../../../src/components');
