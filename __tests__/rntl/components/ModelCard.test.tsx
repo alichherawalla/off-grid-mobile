@@ -114,6 +114,51 @@ describe('ModelCard', () => {
   // ============================================================================
   // Basic Rendering
   // ============================================================================
+  // ============================================================================
+  // Paused — its own state. The Text tab now feeds isPaused from the same aggregate
+  // as isDownloading/isQueued; without it a paused card read as idle (no section)
+  // while bytes sat on disk.
+  // ============================================================================
+  describe('paused state', () => {
+    const bytes = { downloaded: 1024 * 1024 * 1024, total: 4 * 1024 * 1024 * 1024 };
+
+    it('renders the Paused label (and glyph) when isPaused, with neither downloading nor queued set', () => {
+      const { getByText, getByLabelText, queryByLabelText } = render(
+        <ModelCard model={baseModel} isPaused downloadProgress={0.25} downloadBytes={bytes} />
+      );
+      expect(getByText('Paused')).toBeTruthy();
+      expect(getByLabelText('Paused')).toBeTruthy();
+      expect(queryByLabelText('Queued')).toBeNull();
+    });
+
+    it('keeps showing the bytes already on disk while paused, without a transfer rate', () => {
+      const { getByText, queryByText } = render(
+        <ModelCard
+          model={baseModel}
+          isPaused
+          downloadProgress={0.25}
+          downloadBytes={{ ...bytes, bytesPerSecond: 5 * 1024 * 1024 }}
+        />
+      );
+      expect(getByText('1.0 GB / 4.0 GB')).toBeTruthy();
+      // Nothing is moving, so no "/s" rate may be claimed.
+      expect(queryByText(/\/s/)).toBeNull();
+    });
+
+    it('does not show Paused for a running or a queued download', () => {
+      const running = render(<ModelCard model={baseModel} isDownloading downloadProgress={0.25} />);
+      expect(running.queryByText('Paused')).toBeNull();
+      const queued = render(<ModelCard model={baseModel} isQueued downloadProgress={0} />);
+      expect(queued.queryByText('Paused')).toBeNull();
+    });
+
+    it('shows nothing download-related when idle (no flags)', () => {
+      const { queryByText, queryByLabelText } = render(<ModelCard model={baseModel} />);
+      expect(queryByText('Paused')).toBeNull();
+      expect(queryByLabelText('Queued')).toBeNull();
+    });
+  });
+
   describe('basic rendering', () => {
     it('renders model name', () => {
       const { getByText } = render(

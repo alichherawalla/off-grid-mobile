@@ -1,4 +1,5 @@
 // swiftlint:disable file_length
+import CryptoKit
 import Foundation
 import React
 
@@ -72,6 +73,10 @@ class DownloadManagerModule: RCTEventEmitter {
     var fileTasks: [Int: FileTask] // taskIdentifier -> FileTask
     var multiFileDestDir: String?
     var isMultiFile: Bool
+    /// The URL a single-file download was started from. Part of the resume-data key, kept here
+    /// rather than read off the task because a task built from resume data may not carry the
+    /// original request.
+    var sourceURL: String?
   }
 
   struct PersistedFileTask: Codable {
@@ -101,11 +106,12 @@ class DownloadManagerModule: RCTEventEmitter {
     let multiFileDestDir: String?
     let isMultiFile: Bool
     let fileTasks: [PersistedFileTask]
+    let sourceURL: String?
 
     enum CodingKeys: String, CodingKey {
       case downloadId, fileName, modelId, totalBytes, bytesDownloaded, status,
            startedAt, modelKey, modelType, combinedTotalBytes, metadataJson,
-           taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks
+           taskIdentifier, localUri, multiFileDestDir, isMultiFile, fileTasks, sourceURL
     }
 
     init(
@@ -124,7 +130,8 @@ class DownloadManagerModule: RCTEventEmitter {
       localUri: String?,
       multiFileDestDir: String?,
       isMultiFile: Bool,
-      fileTasks: [PersistedFileTask]
+      fileTasks: [PersistedFileTask],
+      sourceURL: String?
     ) {
       self.downloadId = downloadId
       self.fileName = fileName
@@ -142,6 +149,7 @@ class DownloadManagerModule: RCTEventEmitter {
       self.multiFileDestDir = multiFileDestDir
       self.isMultiFile = isMultiFile
       self.fileTasks = fileTasks
+      self.sourceURL = sourceURL
     }
 
     init(from decoder: Decoder) throws {
@@ -163,6 +171,7 @@ class DownloadManagerModule: RCTEventEmitter {
       multiFileDestDir = try container.decodeIfPresent(String.self, forKey: .multiFileDestDir)
       isMultiFile = try container.decode(Bool.self, forKey: .isMultiFile)
       fileTasks = try container.decode([PersistedFileTask].self, forKey: .fileTasks)
+      sourceURL = try container.decodeIfPresent(String.self, forKey: .sourceURL)
     }
   }
 
@@ -268,6 +277,58 @@ class DownloadManagerModule: RCTEventEmitter {
     try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     excludeFromBackup(at: URL(fileURLWithPath: dir))
     return dir
+  }
+
+  // MARK: - Durable resume data
+
+  /// Where the resume data URLSession hands back from `cancel(byProducingResumeData:)` waits for a
+  /// later `startDownload(resume: true)`. The transfer port has no pause verb: Shared pauses by
+  /// cancelling the native transfer, so a cancel here must leave the fetched bytes recoverable -
+  /// deleting partials is the file port's decision, not this module's. Documents, not
+  /// NSTemporaryDirectory, for the same reason as the staging dir: a pause routinely spans a
+  /// relaunch. Excluded from backup like every other download artifact.
+  static func resumeDataDirectory() -> String {
+    let documentsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
+      ?? NSTemporaryDirectory()
+    let dir = (documentsDir as NSString).appendingPathComponent(".download-resume")
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    excludeFromBackup(at: URL(fileURLWithPath: dir))
+    return dir
+  }
+
+  /// One key per artifact that is stable across the two starts a pause/resume produces. This module
+  /// allocates a fresh downloadId on every start, so the id that saved the data is unknown to the
+  /// start that needs it; (modelId, fileName, url) is what both starts share. `relativePath` keeps
+  /// the parts of a multi-file download apart. The url is in the key because resume data can only
+  /// continue the request it was produced from.
+  static func resumeDataKey(modelId: String, fileName: String, relativePath: String?, url: String) -> String {
+    let material = [modelId, fileName, relativePath ?? "", url].joined(separator: "\n")
+    return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func resumeDataURL(forKey key: String) -> URL {
+    URL(fileURLWithPath: (resumeDataDirectory() as NSString).appendingPathComponent("\(key).resume"))
+  }
+
+  static func storeResumeData(_ data: Data?, forKey key: String) {
+    guard let data, !data.isEmpty else { return }
+    let url = resumeDataURL(forKey: key)
+    do {
+      try data.write(to: url, options: .atomic)
+      excludeFromBackup(at: url)
+      NSLog("[DownloadManager] Retained %d bytes of resume data for key %@", data.count, key)
+    } catch {
+      NSLog("[DownloadManager] Failed to retain resume data for key %@: %@", key, error.localizedDescription)
+    }
+  }
+
+  static func loadResumeData(forKey key: String) -> Data? {
+    guard let data = try? Data(contentsOf: resumeDataURL(forKey: key)), !data.isEmpty else { return nil }
+    return data
+  }
+
+  static func discardResumeData(forKey key: String) {
+    try? FileManager.default.removeItem(at: resumeDataURL(forKey: key))
   }
 
   // MARK: - RCTEventEmitter
@@ -410,7 +471,8 @@ class DownloadManagerModule: RCTEventEmitter {
       localUri: info.localUri,
       multiFileDestDir: info.multiFileDestDir,
       isMultiFile: info.isMultiFile,
-      fileTasks: persistedFileTasks
+      fileTasks: persistedFileTasks,
+      sourceURL: info.sourceURL
     )
   }
 
@@ -446,8 +508,32 @@ class DownloadManagerModule: RCTEventEmitter {
       localUri: persisted.localUri,
       fileTasks: fileTasks,
       multiFileDestDir: persisted.multiFileDestDir,
-      isMultiFile: persisted.isMultiFile
+      isMultiFile: persisted.isMultiFile,
+      sourceURL: persisted.sourceURL
     )
+  }
+
+  private func resumeKey(for info: DownloadInfo) -> String? {
+    guard let url = info.sourceURL ?? info.task?.originalRequest?.url?.absoluteString else { return nil }
+    return DownloadManagerModule.resumeDataKey(modelId: info.modelId, fileName: info.fileName, relativePath: nil, url: url)
+  }
+
+  private func resumeKey(for fileTask: FileTask, in info: DownloadInfo) -> String {
+    DownloadManagerModule.resumeDataKey(
+      modelId: info.modelId, fileName: info.fileName, relativePath: fileTask.relativePath, url: fileTask.url.absoluteString
+    )
+  }
+
+  /// A cancelled task is how Shared pauses, so its bytes stay; any other terminal error spends them.
+  /// The cancel path also stores from `cancel(byProducingResumeData:)`'s handler - the two callbacks
+  /// are unordered and write the same key, so whichever lands first is enough.
+  private func retainOrDiscardResumeData(forKey key: String, error: Error?) {
+    let nsError = error as NSError?
+    if nsError?.domain == NSURLErrorDomain && nsError?.code == NSURLErrorCancelled {
+      DownloadManagerModule.storeResumeData(nsError?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data, forKey: key)
+    } else {
+      DownloadManagerModule.discardResumeData(forKey: key)
+    }
   }
 
   private func persistStateLocked() {
@@ -546,7 +632,8 @@ class DownloadManagerModule: RCTEventEmitter {
             localUri: nil,
             fileTasks: [:],
             multiFileDestDir: desc.destinationDir,
-            isMultiFile: desc.isMultiFile
+            isMultiFile: desc.isMultiFile,
+            sourceURL: downloadTask.originalRequest?.url?.absoluteString
           )
 
           if desc.isMultiFile {
@@ -628,7 +715,19 @@ extension DownloadManagerModule {
     NSLog("[DownloadManager] Starting download #%@: url=%@, fileName=%@, modelId=%@, totalBytes=%lld, modelType=%@",
           downloadId, urlString, fileName, modelId, totalBytes, modelType)
 
-    let task = session.downloadTask(with: makeDownloadRequest(url))
+    // `resume: true` is Shared's `transfers.start` after a pause. Continue from the resume data the
+    // pause retained when there is any; otherwise (or without the flag) this is a fresh request.
+    // Either way the stored data is spent: consumed by the task, or superseded by a fresh start.
+    let resumeRequested = (params["resume"] as? NSNumber)?.boolValue ?? false
+    let resumeKey = DownloadManagerModule.resumeDataKey(modelId: modelId, fileName: fileName, relativePath: nil, url: urlString)
+    let task: URLSessionDownloadTask
+    if resumeRequested, let resumeData = DownloadManagerModule.loadResumeData(forKey: resumeKey) {
+      task = session.downloadTask(withResumeData: resumeData)
+      NSLog("[DownloadManager] Download #%@ resumes from retained bytes (%d bytes of resume data)", downloadId, resumeData.count)
+    } else {
+      task = session.downloadTask(with: makeDownloadRequest(url))
+    }
+    DownloadManagerModule.discardResumeData(forKey: resumeKey)
     task.taskDescription = encodeTaskDescription(TaskDescription(
       downloadId: downloadId,
       fileName: fileName,
@@ -658,7 +757,8 @@ extension DownloadManagerModule {
       localUri: nil,
       fileTasks: [:],
       multiFileDestDir: nil,
-      isMultiFile: false
+      isMultiFile: false,
+      sourceURL: urlString
     )
 
     queue.sync(flags: .barrier) {
@@ -695,6 +795,7 @@ extension DownloadManagerModule {
     }
 
     let totalBytes = (params["totalBytes"] as? NSNumber)?.int64Value ?? 0
+    let resumeRequested = (params["resume"] as? NSNumber)?.boolValue ?? false
     let downloadId = queue.sync(flags: .barrier) { () -> String in
       let id = String(nextDownloadId)
       nextDownloadId += 1
@@ -719,7 +820,18 @@ extension DownloadManagerModule {
       }
 
       let fileSize = (fileInfo["size"] as? NSNumber)?.int64Value ?? 0
-      let task = session.downloadTask(with: makeDownloadRequest(url))
+      // Same rule as startDownload, per part: a pause retained each part's resume data separately.
+      let resumeKey = DownloadManagerModule.resumeDataKey(
+        modelId: modelId, fileName: fileName, relativePath: relativePath, url: urlString
+      )
+      let task: URLSessionDownloadTask
+      if resumeRequested, let resumeData = DownloadManagerModule.loadResumeData(forKey: resumeKey) {
+        task = session.downloadTask(withResumeData: resumeData)
+        NSLog("[DownloadManager] File %@ of download #%@ resumes from retained bytes", relativePath, downloadId)
+      } else {
+        task = session.downloadTask(with: makeDownloadRequest(url))
+      }
+      DownloadManagerModule.discardResumeData(forKey: resumeKey)
       task.taskDescription = encodeTaskDescription(TaskDescription(
         downloadId: downloadId,
         fileName: fileName,
@@ -766,7 +878,8 @@ extension DownloadManagerModule {
       localUri: nil,
       fileTasks: fileTasks,
       multiFileDestDir: destinationDir,
-      isMultiFile: true
+      isMultiFile: true,
+      sourceURL: nil
     )
 
     queue.sync(flags: .barrier) {
@@ -802,17 +915,29 @@ extension DownloadManagerModule {
         reject("NOT_FOUND", "Download \(id) not found", nil)
         return
       }
+      // Shared has no pause verb on the transfer port: a pause arrives here as this cancel. So the
+      // bytes fetched so far are NOT destroyed - the resume data URLSession produces is retained per
+      // artifact (per part for a multi-file download) for a later startDownload(resume: true).
+      // Whether a partial is ever deleted is the file port's call, not this module's.
       let cancelled = DispatchGroup()
       if info.isMultiFile {
         for (_, fileTask) in info.fileTasks {
           if let task = fileTask.task {
+            let key = self.resumeKey(for: fileTask, in: info)
             cancelled.enter()
-            task.cancel(byProducingResumeData: { _ in cancelled.leave() })
+            task.cancel(byProducingResumeData: { data in
+              DownloadManagerModule.storeResumeData(data, forKey: key)
+              cancelled.leave()
+            })
           }
         }
       } else if let task = info.task {
+        let key = self.resumeKey(for: info)
         cancelled.enter()
-        task.cancel(byProducingResumeData: { _ in cancelled.leave() })
+        task.cancel(byProducingResumeData: { data in
+          if let key { DownloadManagerModule.storeResumeData(data, forKey: key) }
+          cancelled.leave()
+        })
       }
       cancelled.notify(queue: self.queue) {
         self.queue.async(flags: .barrier) {
@@ -1171,6 +1296,7 @@ extension DownloadManagerModule {
     fileTask.completed = true
     info.fileTasks[taskId] = fileTask
     taskToDownloadId.removeValue(forKey: taskId)
+    DownloadManagerModule.discardResumeData(forKey: resumeKey(for: fileTask, in: info))
 
     let completedCount = info.fileTasks.values.filter { $0.completed }.count
     NSLog("[DownloadManager] Multi-file progress: %d/%d files completed for download#%@",
@@ -1228,6 +1354,7 @@ extension DownloadManagerModule {
       // Exclude the staged file itself from backup (per-file flag; the dir flag is not inherited by
       // files created later). These are large model artifacts we never want in an iCloud backup.
       DownloadManagerModule.excludeFromBackup(at: destURL)
+      if let key = resumeKey(for: info) { DownloadManagerModule.discardResumeData(forKey: key) }
       info.localUri = destPath
       info.status = "completed"
       info.bytesDownloaded = info.totalBytes
@@ -1283,12 +1410,18 @@ extension DownloadManagerModule {
             downloadId, info.fileName, error?.localizedDescription ?? "Unknown")
 
       if info.isMultiFile {
+        if let failed = info.fileTasks[taskId] {
+          self.retainOrDiscardResumeData(forKey: self.resumeKey(for: failed, in: info), error: error)
+        }
         NSLog("[DownloadManager] Cancelling all remaining tasks for multi-file download#%@", downloadId)
-        for (_, fileTask) in info.fileTasks where !fileTask.completed {
-          fileTask.task?.cancel()
+        for (_, fileTask) in info.fileTasks where !fileTask.completed && fileTask.taskIdentifier != taskId {
+          let key = self.resumeKey(for: fileTask, in: info)
+          // Siblings stop because of this part, not on request: keep what they fetched for a resume.
+          fileTask.task?.cancel(byProducingResumeData: { data in DownloadManagerModule.storeResumeData(data, forKey: key) })
           self.taskToDownloadId.removeValue(forKey: fileTask.taskIdentifier)
         }
       } else {
+        if let key = self.resumeKey(for: info) { self.retainOrDiscardResumeData(forKey: key, error: error) }
         self.taskToDownloadId.removeValue(forKey: taskId)
       }
 
@@ -1335,6 +1468,20 @@ class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
       bytesWritten: bytesWritten,
       totalBytesWritten: totalBytesWritten,
       totalBytesExpected: totalBytesExpectedToWrite
+    )
+  }
+
+  func urlSession(_: URLSession,
+                  downloadTask: URLSessionDownloadTask,
+                  didResumeAtOffset fileOffset: Int64,
+                  expectedTotalBytes: Int64) {
+    NSLog("[DownloadManager] Delegate: task#%d resumed at offset %lld of %lld",
+          downloadTask.taskIdentifier, fileOffset, expectedTotalBytes)
+    module?.handleProgress(
+      taskId: downloadTask.taskIdentifier,
+      bytesWritten: 0,
+      totalBytesWritten: fileOffset,
+      totalBytesExpected: expectedTotalBytes
     )
   }
 

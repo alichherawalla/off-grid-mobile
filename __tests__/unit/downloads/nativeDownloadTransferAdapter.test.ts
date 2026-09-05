@@ -301,6 +301,49 @@ describe('the Mobile download host adapter', () => {
     });
   });
 
+  describe('resuming a paused download', () => {
+    // Shared's transfer port has no pause verb: a pause is `cancel`, a resume is `start` again with
+    // `resume: true`. Native retained the bytes on cancel; this flag is the ONLY thing that tells it
+    // to continue from them, so dropping it here would silently restart every resume from zero.
+    it('passes resume: true through to the native start', async () => {
+      const { adapter } = await makeAdapter();
+      const controller = new AbortController();
+      const started = adapter.start({
+        id: 'model-a',
+        url: 'https://example.test/model.gguf',
+        destination: '/models/model.gguf',
+        resume: true,
+        signal: controller.signal,
+        onProgress: () => undefined,
+      } as unknown as Parameters<typeof adapter.start>[0]);
+
+      await flush();
+      expect(native.startDownload).toHaveBeenCalledWith(expect.objectContaining({ resume: true }));
+
+      native.emit(COMPLETE, { downloadId: 'transfer-1' });
+      await started;
+    });
+
+    it('asks for a fresh transfer (resume: false) when Shared did not ask to resume', async () => {
+      const { adapter } = await makeAdapter();
+      const controller = new AbortController();
+      const started = adapter.start({
+        id: 'model-a',
+        url: 'https://example.test/model.gguf',
+        destination: '/models/model.gguf',
+        resume: false,
+        signal: controller.signal,
+        onProgress: () => undefined,
+      } as unknown as Parameters<typeof adapter.start>[0]);
+
+      await flush();
+      expect(native.startDownload).toHaveBeenCalledWith(expect.objectContaining({ resume: false }));
+
+      native.emit(COMPLETE, { downloadId: 'transfer-1' });
+      await started;
+    });
+  });
+
   describe('attaching to a transfer already running on the device', () => {
     it('settles from a terminal row the device already holds, with no second start', async () => {
       native.activeRows = [{ downloadId: 'transfer-1', status: 'completed' }];

@@ -18,12 +18,22 @@ interface DownloadManagerModuleInterface {
     title?: string;
     description?: string;
     totalBytes?: number;
+    /**
+     * Contract change (pause/resume): Shared's transfer port has no pause verb. A pause reaches the
+     * native module as `cancelDownload`, and a resume as a fresh `startDownload` with `resume: true`.
+     * So `cancelDownload` MUST retain the bytes it already fetched (iOS: URLSession resume data,
+     * persisted durably; Android: the partial file), and `startDownload({ resume: true })` continues
+     * from them when any exist. Absent or false means a fresh request, which also discards any
+     * retained bytes for that artifact. Deleting partials otherwise is the file port's job.
+     */
+    resume?: boolean;
   }): Promise<{
     downloadId: number;
     fileName: string;
     modelId: string;
   }>;
 
+  /** Retains resumable bytes - see `startDownload.resume`. Not a delete. */
   cancelDownload(downloadId: number): Promise<void>;
 
   getActiveDownloads(): Promise<Array<{
@@ -125,6 +135,28 @@ describe('iOS DownloadManagerModule Contract (parity with Android)', () => {
       expect(result).toHaveProperty('modelId');
       expect(typeof result.downloadId).toBe('number');
       expect(typeof result.fileName).toBe('string');
+    });
+
+    it('accepts resume: true so a paused download continues from retained bytes', async () => {
+      // This is the ONE widening in this contract for pause/resume. It is named here so it is
+      // read as a deliberate surface change: both native modules must read `resume` and, when
+      // true, continue from what the earlier cancelDownload retained rather than start over.
+      (mockDownloadModule.startDownload as jest.Mock).mockResolvedValue({
+        downloadId: 3,
+        fileName: 'model.gguf',
+        modelId: 'test-model',
+      });
+
+      await mockDownloadModule.startDownload({
+        url: 'https://example.com/model.gguf',
+        fileName: 'model.gguf',
+        modelId: 'test-model',
+        resume: true,
+      });
+
+      expect(mockDownloadModule.startDownload).toHaveBeenCalledWith(
+        expect.objectContaining({ resume: true }),
+      );
     });
 
     it('works with minimal params (no title/description/totalBytes)', async () => {

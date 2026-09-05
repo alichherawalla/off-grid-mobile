@@ -274,8 +274,10 @@ class WorkerDownload(
     private suspend fun handleStoppedState(downloadId: String, download: DownloadEntity, bytesWritten: Long): Result {
         val current = downloadDao.getDownload(downloadId) ?: download
         return if (current.status == DownloadStatus.CANCELLED) {
-            val partialFile = File(current.destination)
-            if (partialFile.exists()) partialFile.delete()
+            // A cancel is also how Shared pauses (the transfer port has no pause verb), so the
+            // partial at `destination` stays: a later start with resume=true continues it by
+            // Range (see buildRequest). Deleting a partial is the file port's decision. Terminal
+            // failures (416, size mismatch, bad SHA) still delete theirs in streamToFile.
             Result.failure()
         } else {
             // System stopped the worker — retry silently, no JS state change.

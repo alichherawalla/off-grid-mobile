@@ -15,7 +15,7 @@ import {
   ModelCardActions,
   RecommendedConfig,
 } from './ModelCardContent';
-import { QUEUED_ICON } from '../utils/downloadStatusIcon';
+import { PAUSED_ICON, QUEUED_ICON } from '../utils/downloadStatusIcon';
 import { formatBytes } from '../utils/formatBytes';
 import { presentProgress } from '../utils/progressPresentation';
 
@@ -40,6 +40,9 @@ interface ModelCardProps {
   /** Accepted but waiting for a concurrency slot — shows a "Queued" label instead of a
    *  0% progress bar, so the user gets clear feedback the tap registered. */
   isQueued?: boolean;
+  /** A person paused this download. The bytes on disk still show; the label says "Paused" so the
+   *  card reads as neither idle nor downloading. */
+  isPaused?: boolean;
   downloadProgress?: number;
   downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
@@ -148,9 +151,10 @@ const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   queued?: boolean;
+  paused?: boolean;
   /** Number of concurrent downloads behind this card (>1 → show "N downloads"). */
   count?: number;
-}> = ({ progress, bytes, queued, count }) => {
+}> = ({ progress, bytes, queued, paused, count }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const presented = presentProgress({
@@ -158,16 +162,32 @@ const DownloadProgressSection: React.FC<{
     bytesDownloaded: bytes?.downloaded,
     totalBytes: bytes?.total,
     bytesPerSecond: bytes?.bytesPerSecond,
-    status: queued ? 'pending' : 'running',
+    status: queued ? 'pending' : paused ? 'paused' : 'running',
   });
   const percentage = presented.progress.percentage ?? 0;
   // Cumulative download → note how many files are running so the total reads clearly.
   const countLabel = count && count > 1 ? `${count} downloads` : '';
+  // No rate while queued or paused: nothing is moving, so a stale rate would be a lie.
   const caption = [
     presented.bytesText,
-    queued ? undefined : presented.rateText,
+    queued || paused ? undefined : presented.rateText,
     countLabel,
   ].filter(Boolean).join(' · ');
+  const statusLabel = queued ? (
+    <View style={styles.progressLabelRow}>
+      <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+      <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+    </View>
+  ) : paused ? (
+    // Paused keeps the FILLED bar (the bytes are on disk) and says so, where queued shows an
+    // empty one: the person stopped this, they did not just ask for it.
+    <View style={styles.progressLabelRow}>
+      <Icon name={PAUSED_ICON} size={12} color={colors.textSecondary} accessibilityLabel="Paused" />
+      <Text style={[styles.progressText, styles.pausedText]}>Paused</Text>
+    </View>
+  ) : (
+    <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
+  );
   return (
   <View style={styles.progressSection}>
     {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
@@ -179,14 +199,7 @@ const DownloadProgressSection: React.FC<{
         RIGHT. "Queued" while waiting for a slot, otherwise the percent. */}
     <View style={styles.progressCaptionRow}>
       <Text style={styles.progressBytesText}>{caption}</Text>
-      {queued ? (
-        <View style={styles.progressLabelRow}>
-          <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
-          <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
-        </View>
-      ) : (
-        <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
-      )}
+      {statusLabel}
     </View>
   </View>
   );
@@ -243,6 +256,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isDownloaded,
   isDownloading,
   isQueued,
+  isPaused,
   downloadProgress = 0,
   downloadBytes,
   downloadCount,
@@ -332,8 +346,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
 
           <ModelDownloadStats compact={compact} downloads={model.downloads} likes={model.likes} styles={styles} />
 
-          {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} count={downloadCount} />
+          {(isDownloading || isQueued || isPaused) && (
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} paused={isPaused} count={downloadCount} />
           )}
           {failedState && (
             <FailedSection

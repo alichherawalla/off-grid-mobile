@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.lifecycle.Observer
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -86,6 +87,8 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                     reactApplicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
                     "${downloadId}_${fileName}",
                 ).absolutePath
+                val resume = params.hasKey("resume") && params.getBoolean("resume")
+                withContext(Dispatchers.IO) { adoptOrDiscardCancelledPartial(url, fileName, destination, resume) }
 
                 val entity = DownloadEntity(
                     id = downloadId,
@@ -121,6 +124,35 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
             } catch (e: Exception) {
                 SafePromise(promise, NAME).reject("DOWNLOAD_ERROR", "Failed to start download: ${e.message}", e)
             }
+        }
+    }
+
+    /**
+     * Every start gets a fresh id and therefore a fresh `destination`, so the partial a cancel
+     * (= Shared's pause) left behind is unreachable by name. Move it under the new destination
+     * when the caller asked to resume - the worker then continues it by Range - and delete it
+     * when the caller asked for a fresh download of the same artifact, so a true cancel does
+     * not leak the file. Either way the cancelled row has served its purpose and goes.
+     */
+    private suspend fun adoptOrDiscardCancelledPartial(url: String, fileName: String, destination: String, resume: Boolean) {
+        val cancelled = downloadDao.getAllDownloads().first()
+            .filter { it.status == DownloadStatus.CANCELLED && it.url == url && it.fileName == fileName }
+            .sortedByDescending { it.createdAt }
+        cancelled.forEachIndexed { index, row ->
+            val partial = File(row.destination)
+            if (partial.exists()) {
+                val adopt = resume && index == 0
+                if (adopt) {
+                    File(destination).parentFile?.mkdirs()
+                    if (!partial.renameTo(File(destination))) {
+                        Log.w(NAME, "Could not adopt partial ${partial.path}; resuming from zero")
+                        if (!partial.delete()) Log.w(NAME, "Could not delete unadoptable partial ${partial.path}")
+                    }
+                } else if (!partial.delete()) {
+                    Log.w(NAME, "Could not delete superseded partial ${partial.path}")
+                }
+            }
+            downloadDao.deleteDownload(row)
         }
     }
 
@@ -179,11 +211,10 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
                         null -> Unit
                     }
                     if (download != null) {
+                        // The partial at `destination` is kept: Shared pauses through this same
+                        // cancel, and a later startDownload(resume=true) adopts the bytes. A fresh
+                        // start (resume=false) for the same artifact discards them instead.
                         downloadDao.updateStatus(downloadId, DownloadStatus.CANCELLED, DownloadReason.USER_CANCELLED)
-                        val file = File(download.destination)
-                        check(!file.exists() || file.delete()) {
-                            "Cancelled download file could not be removed"
-                        }
                     }
                 }
                 workManager.pruneWork()

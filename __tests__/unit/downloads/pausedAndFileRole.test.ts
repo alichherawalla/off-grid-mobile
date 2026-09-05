@@ -15,13 +15,9 @@
  * The classification is Shared's; these assert that Mobile's surfaces consume it rather than
  * re-deriving it.
  *
- * NOT covered here: `downloadItemMapping.activeDownloadItem`, which now applies
- * `downloadFileRoleLabel` to the row's name. That module cannot be loaded in isolation -
- * `downloadItemMapping.ts:1` imports the `../../services` BARREL for `hardwareService`, which
- * constructs `ImageGenerationService` at module load and throws "The mobile application facade is
- * not configured." Faking the facade would be faking our own composition, and narrowing the
- * import is a production change outside this slice, so the gap is reported rather than papered
- * over. The label logic it calls is covered directly below.
+ * The row-level projection (`downloadItemMapping.facadeDownloadToActiveItem`) is covered in
+ * `downloadItemMapping.test.ts`, now that the module imports `hardwareService` from its own file
+ * instead of the `../../services` barrel that constructed ImageGenerationService at import.
  */
 import {
   downloadFileRoleLabel,

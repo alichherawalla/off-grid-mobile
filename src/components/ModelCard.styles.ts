@@ -262,6 +262,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   queuedText: {
     color: colors.textMuted,
   },
+  pausedText: {
+    color: colors.textSecondary,
+  },
   progressBytesText: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,

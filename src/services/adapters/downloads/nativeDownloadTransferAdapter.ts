@@ -61,6 +61,9 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
       modelType: 'artifact',
       totalBytes: input.expectedBytes ?? 0,
       hideNotification: false,
+      // Shared resumes a paused download with a fresh start(resume: true). Native retained the
+      // bytes when the pause cancelled it; this flag is what tells it to continue from them.
+      resume: input.resume === true,
     });
     const transferId = String(result.downloadId);
     input.onStarted?.(transferId);

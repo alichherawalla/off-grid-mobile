@@ -1,4 +1,6 @@
-import { hardwareService } from '../../services';
+// From its own module, not the `../../services` barrel: the barrel constructs ImageGenerationService
+// at import and throws without the facade, which made this pure projection unloadable in isolation.
+import { hardwareService } from '../../services/hardware';
 import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem } from './items';
 import { imageBackendLabel } from '../../utils/imageBackend';
