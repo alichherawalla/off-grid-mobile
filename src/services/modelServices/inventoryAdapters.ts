@@ -193,8 +193,8 @@ const localWhisperInventoryAdapter: ModelInventoryAdapter = {
         loaded:
           selected &&
           whisperService.isModelLoaded() &&
-          whisperService.getLoadedModelPath() === whisperService.getModelPath(modelId),
-        loading: false,
+          whisperService.getLoadedModelPath() ===
+            whisperService.getModelPath(modelId),
       });
     });
   },

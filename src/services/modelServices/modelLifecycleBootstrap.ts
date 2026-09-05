@@ -1,6 +1,5 @@
 import { useModelResidencyStore } from '../../stores/modelResidencyStore';
 import {
-  ensurePersistentResident,
   modelLoadRefusal,
   runIndependentUnloads,
   unloadPersistentResident,
@@ -127,30 +126,21 @@ export async function loadTranscriptionModel(
   modelId: string,
   observer: TranscriptionLifecycleObserver = {},
 ): Promise<TranscriptionLoadResult> {
-  try {
-    const spec = resolveTranscriptionResidentSpec(modelId);
-    const modelPath = whisperService.getModelPath(modelId);
-    const acquired = await ensurePersistentResident({
-      manager: applicationFacade().models.residency,
-      spec,
-      handlers: {
-        load: async () => {
-          await whisperService.loadModel(modelPath);
-          observer.onLoaded?.();
-        },
-        unload: () => reclaimFrom(whisperService.unloadModel(), observer),
-      },
-    });
-    if (!acquired) return 'blocked';
-    const loaded = whisperService.getLoadedModelPath() === modelPath;
-    if (loaded) observer.onLoaded?.();
-    return loaded ? 'loaded' : 'error';
-  } catch (error) {
-    logger.error('[TranscriptionLifecycle] Failed to load model', error);
-    throw error;
-  } finally {
-    await lifecycleProjectionPort.refreshInventory();
+  const outcome = await models().load({
+    modality: 'transcription',
+    modelId,
+  });
+  if (!outcome.ok) {
+    if (
+      outcome.failure.kind === 'not_ready' ||
+      outcome.failure.kind === 'memory_refused'
+    ) return 'blocked';
+    throw loadRejection(outcome.failure, false);
   }
+  observer.onLoaded?.();
+  return whisperService.getLoadedModelPath() === whisperService.getModelPath(modelId)
+    ? 'loaded'
+    : 'error';
 }
 
 /**
