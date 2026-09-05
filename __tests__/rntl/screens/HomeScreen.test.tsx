@@ -106,11 +106,6 @@ jest.mock('../../../src/services', () => ({
   unloadImageModel: () => mockUnloadImageModel(),
 }));
 
-jest.mock('../../../src/services/modelServices/ejectModelsForUser', () => ({
-  ejectAllModelsForUser: () => mockEjectAll(),
-}));
-
-
 jest.mock('../../harness/activeModelLifecycle', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
@@ -138,18 +133,6 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
     })),
     syncWithNativeState: jest.fn(),
     getLoadedModelIds: jest.fn(() => ({ textModelId: null, imageModelId: null })),
-  },
-}));
-
-// The disk is the library's source of truth and the store mirrors it. This boundary answers
-// with what a test placed in the store, so the screen's own library refresh keeps it.
-jest.mock('../../../src/services/modelServices/bootstrap/modelLibraryBootstrap', () => ({
-  modelLibrary: {
-    getDownloadedModels: jest.fn(() =>
-      Promise.resolve(require('../../../src/stores/appStore').useAppStore.getState().downloadedModels)),
-    linkOrphanMmProj: jest.fn().mockResolvedValue(undefined),
-    getDownloadedImageModels: jest.fn(() =>
-      Promise.resolve(require('../../../src/stores/appStore').useAppStore.getState().downloadedImageModels)),
   },
 }));
 
