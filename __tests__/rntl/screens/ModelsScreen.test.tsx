@@ -10,7 +10,6 @@
  */
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { useAppStore } from '../../../src/stores/appStore';
 import { resetStores } from '../../utils/testHelpers';
@@ -18,7 +17,6 @@ import { resetStores } from '../../utils/testHelpers';
 // Mirror constants from ModelsScreen so test assertions stay in sync with the source
 const CODE_FALLBACK_QUERY = 'coder';
 import {
-  createDownloadedModel,
   createModelInfo,
   createModelFileWithMmProj,
   createDeviceInfo,
@@ -202,14 +200,6 @@ jest.mock('@react-native-documents/picker', () => ({
 
 // Import AFTER all mocks are set up
 import { ModelsScreen } from '../../../src/screens/ModelsScreen';
-
-const renderModelsScreen = () => {
-  return render(
-    <NavigationContainer>
-      <ModelsScreen />
-    </NavigationContainer>
-  );
-};
 
 describe('ModelsScreen basic rendering and tabs (real composition)', () => {
   let realFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture;
@@ -1349,25 +1339,6 @@ describe('ModelsScreen', () => {
   describe('import progress', () => {
   });
 
-  // Recommended models filtering with active filters
-  // ============================================================================
-  describe('recommended models with filters', () => {
-    it('hides recommended models that are already downloaded', async () => {
-      // Set a downloaded model that matches a recommended model ID
-      useAppStore.setState({
-        downloadedModels: [
-          createDownloadedModel({
-            id: 'bartowski/Llama-3.2-1B-Instruct-GGUF/some-file.gguf',
-          }),
-        ],
-      });
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('models-screen')).toBeTruthy());
-      // Recommended models that match downloaded IDs should be filtered out
-    });
-  });
   // ============================================================================
   // Detail view - back button returns to list
   // ============================================================================
