@@ -1337,32 +1337,35 @@ describe('ChatInput', () => {
   // Voice recording integration (covers lines 87-88, 95-96, 104-111, 442-443)
   // ============================================================================
   describe('voice recording integration', () => {
-    it('starts recording and tracks conversationId', () => {
-      const mockStartRecording = jest.fn().mockResolvedValue(undefined);
-      mockUseWhisperTranscription.mockReturnValue({
-        isRecording: false,
-        isModelLoaded: true,
-        isModelLoading: false,
-        isTranscribing: false,
-        partialResult: '',
-        finalResult: null,
-        error: null,
-        startRecording: mockStartRecording,
-        stopRecording: jest.fn(),
-        clearResult: jest.fn(),
+    it('starts one real native microphone session from the voice button', async () => {
+      jest.unmock('../../../src/services/modelServices');
+      jest.unmock('../../../src/services/documentService');
+      jest.unmock('../../../src/stores');
+      jest.unmock('../../../src/hooks/useWhisperTranscription');
+      jest.unmock('../../../src/components/VoiceRecordButton');
+      const { setupChatScreen } = require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({
+        engine: 'llama',
+        platform: 'android',
+        whisper: true,
       });
-      mockUseWhisperStore.mockReturnValue({
-        downloadedModelId: 'whisper-model-1',
-      });
+      await harness.setupWhisperModel();
+      harness.render();
 
-      const { getByTestId } = render(
-        <ChatInput {...defaultProps} conversationId="conv-123" />
-      );
-
-      // Press mic button to start recording (covers lines 87-88)
-      fireEvent.press(getByTestId('voice-record-button'));
-
-      expect(mockStartRecording).toHaveBeenCalled();
+      try {
+        await harness.tapMic();
+        await harness.rtl.waitFor(() => {
+          expect(harness.boundary.whisper?.realtimeActive()).toBe(true);
+        });
+        const context = await (harness.boundary.whisper!.module.initWhisper as jest.Mock)
+          .mock.results[0].value;
+        expect(context.transcribeRealtime).toHaveBeenCalledTimes(1);
+        expect(harness.view!.getByTestId('voice-record-button')).toBeTruthy();
+      } finally {
+        harness.view?.unmount();
+        await harness.settle(300);
+      }
+      expect(harness.boundary.whisper?.realtimeActive()).toBe(false);
     });
 
     it('inserts a standalone chat-mode dictation into the composer (does NOT auto-send)', () => {
