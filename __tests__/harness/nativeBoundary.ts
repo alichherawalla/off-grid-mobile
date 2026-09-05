@@ -1035,6 +1035,49 @@ export interface RamProfile {
 export const GB = 1024 * 1024 * 1024;
 export const MB = 1024 * 1024;
 
+/** Seed only the native RAM leaf without replacing the current React module graph. */
+export function seedNativeRamBoundary(profile: RamProfile): void {
+  const RN = require('react-native');
+  const DeviceInfo = require('react-native-device-info');
+  RN.NativeModules.DeviceMemoryModule = {
+    getMemoryInfo: jest.fn(async () => ({
+      processAvailableBytes: profile.availBytes,
+      footprintBytes: profile.totalBytes - profile.availBytes,
+    })),
+  };
+  (DeviceInfo.getTotalMemory as jest.Mock).mockResolvedValue(profile.totalBytes);
+  (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(
+    profile.totalBytes - profile.availBytes,
+  );
+  Object.defineProperty(RN.Platform, 'OS', {
+    value: profile.platform,
+    configurable: true,
+  });
+  Object.defineProperty(RN.Platform, 'Version', {
+    value: profile.platform === 'android' ? 34 : '17.0',
+    configurable: true,
+  });
+}
+
+/** Seed one file on the Jest-native RNFS leaf without replacing the React module graph. */
+export function seedNativeFileBoundary(path: string, sizeBytes: number): () => void {
+  const RNFS = require('react-native-fs');
+  const previousExists = RNFS.exists.getMockImplementation();
+  const previousStat = RNFS.stat.getMockImplementation();
+  RNFS.exists.mockImplementation(async (candidate: string) =>
+    candidate === path ? true : ((await previousExists?.(candidate)) ?? false),
+  );
+  RNFS.stat.mockImplementation(async (candidate: string) =>
+    candidate === path
+      ? { size: sizeBytes, isFile: () => true, isDirectory: () => false }
+      : previousStat(candidate),
+  );
+  return () => {
+    if (previousExists) RNFS.exists.mockImplementation(previousExists);
+    if (previousStat) RNFS.stat.mockImplementation(previousStat);
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Fake: react-native-fs — a stateful in-memory filesystem (the REAL device leaf we can't run in node).
 // Replaces the dumb global jest.setup stub (exists→false / readDir→[]) so the real listing/scan/

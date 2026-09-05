@@ -28,7 +28,6 @@ import {
   createMultipleConversations,
   resetStores,
 } from '../../utils/testHelpers';
-import { useModelResidencyStore } from '../../../src/stores/modelResidencyStore';
 import {
   refreshMobileModelServices,
   startMobileModelServices,
@@ -125,6 +124,17 @@ import { applicationFacade } from '../../../src/services/applicationFacade';
 import { importMobileImageArchive } from '../../../src/services/adapters/models/library/imageArchiveImportAdapter';
 import { installLanProbe } from '../../harness/lanProbe';
 import logger from '../../../src/utils/logger';
+import {
+  GB,
+  seedNativeFileBoundary,
+  seedNativeRamBoundary,
+} from '../../harness/nativeBoundary';
+
+seedNativeRamBoundary({
+  platform: 'ios',
+  totalBytes: 8 * GB,
+  availBytes: 8 * GB,
+});
 
 // Mock requestAnimationFrame
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
@@ -209,21 +219,6 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
   },
 }));
 
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: {
-    getDeviceInfo: jest.fn(() => Promise.resolve({
-      totalMemory: 8 * 1024 * 1024 * 1024,
-      availableMemory: 4 * 1024 * 1024 * 1024,
-    })),
-    getTotalMemoryGB: jest.fn(() => 8),
-    formatBytes: jest.fn((bytes: number) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`),
-    formatModelSize: jest.fn(() => '4.0 GB'),
-    getModelTotalSize: jest.fn((model: any) => model.fileSize ?? model.size ?? 0),
-    estimateImageModelRam: jest.fn((model: any) => model.size ?? 0),
-    formatModelRam: jest.fn((bytes: number) => `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB RAM`),
-  },
-}));
-
 // Mock useFocusTrigger
 jest.mock('../../../src/hooks/useFocusTrigger', () => ({
   useFocusTrigger: () => 0,
@@ -244,6 +239,12 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 // Import after mocks
 import { HomeScreen } from '../../../src/screens/HomeScreen';
 import { activeModelService } from '../../harness/activeModelLifecycle';
+const realActiveModelService = (
+  jest.requireActual('../../harness/activeModelLifecycle') as typeof import('../../harness/activeModelLifecycle')
+).activeModelService;
+const realHardwareService = (
+  jest.requireActual('../../../src/services/hardware') as typeof import('../../../src/services/hardware')
+).hardwareService;
 
 const mockNavigation = {
   navigate: mockNavigate,
@@ -971,12 +972,21 @@ describe('HomeScreen', () => {
     });
 
     it('shows unload button when a text model is resident', async () => {
-      const model = createDownloadedModel({ name: 'Active Model' });
+      const model = createDownloadedModel({
+        name: 'Active Model',
+        fileSize: 1024 * 1024 * 1024,
+      });
       useAppStore.setState({
         downloadedModels: [model],
       });
       await selectLocal('text', model.id);
-      useModelResidencyStore.setState({ loadedTextModelId: model.id });
+      await realHardwareService.refreshMemoryInfo();
+      const restoreFile = seedNativeFileBoundary(model.filePath, model.fileSize);
+      try {
+        await realActiveModelService.loadTextModel(model.id);
+      } finally {
+        restoreFile();
+      }
 
       const result = renderHomeScreen();
       openTextPicker(result);
