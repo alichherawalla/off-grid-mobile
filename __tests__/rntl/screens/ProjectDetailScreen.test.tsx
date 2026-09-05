@@ -13,138 +13,32 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
+import { modelsFailureMessage } from '@offgrid/application';
 
 const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
+let mockRouteProjectId = 'proj1';
+let mockUseRealNavigation = false;
 
 jest.mock('@react-navigation/native', () => {
   const actual = jest.requireActual('@react-navigation/native');
   return {
     ...actual,
-    useNavigation: () => ({
-      navigate: mockNavigate,
-      goBack: mockGoBack,
-      setOptions: jest.fn(),
-      addListener: jest.fn(() => jest.fn()),
-    }),
-    useRoute: () => ({
-      params: { projectId: 'proj1' },
-    }),
+    useNavigation: () => mockUseRealNavigation
+      ? actual.useNavigation()
+      : {
+          navigate: mockNavigate,
+          goBack: mockGoBack,
+          setOptions: jest.fn(),
+          addListener: jest.fn(() => jest.fn()),
+        },
+    useRoute: () => mockUseRealNavigation
+      ? actual.useRoute()
+      : { params: { projectId: mockRouteProjectId } },
     useFocusEffect: jest.fn(),
     useIsFocused: () => true,
   };
 });
-
-const mockDeleteProject = jest.fn();
-const mockDeleteConversation = jest.fn();
-const mockSetActiveConversation = jest.fn();
-const mockCreateConversation = jest.fn(() => 'new-conv-1');
-
-let mockProject: any = {
-  id: 'proj1',
-  name: 'Test Project',
-  description: 'A test project description',
-  systemPrompt: 'Be helpful',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
-
-let mockConversations: any[] = [];
-let mockTextModels: any[] = [{ id: 'model1', name: 'Test Model' }];
-let mockActiveTextModel: any = { id: 'model1', name: 'Test Model' };
-
-jest.mock('../../../src/hooks/useActiveMobileModel', () => ({
-  useActiveMobileModel: () => ({ model: mockActiveTextModel }),
-}));
-
-jest.mock('../../../src/hooks/useMobileModelInventory', () => ({
-  useMobileModelInventory: () => mockTextModels,
-}));
-
-jest.mock('../../../src/stores', () => ({
-  useProjectStore: jest.fn(() => ({
-    getProject: jest.fn(() => mockProject),
-    deleteProject: mockDeleteProject,
-  })),
-  useChatStore: jest.fn(() => ({
-    conversations: mockConversations,
-    deleteConversation: mockDeleteConversation,
-    setActiveConversation: mockSetActiveConversation,
-    createConversation: mockCreateConversation,
-  })),
-  useAppStore: jest.fn((selector?: any) => {
-    const state = {
-      themeMode: 'system',
-    };
-    return selector ? selector(state) : state;
-  }),
-}));
-
-jest.mock('../../../src/components', () => ({
-  Card: ({ children, style }: any) => {
-    const { View } = require('react-native');
-    return <View style={style}>{children}</View>;
-  },
-  Button: ({ title, onPress, disabled }: any) => {
-    const { TouchableOpacity, Text } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} disabled={disabled} testID={`button-${title}`}>
-        <Text>{title}</Text>
-      </TouchableOpacity>
-    );
-  },
-}));
-
-jest.mock('../../../src/components/Button', () => ({
-  Button: ({ title, onPress, disabled }: any) => {
-    const { TouchableOpacity, Text } = require('react-native');
-    return (
-      <TouchableOpacity onPress={onPress} disabled={disabled} testID={`button-${title}`}>
-        <Text>{title}</Text>
-      </TouchableOpacity>
-    );
-  },
-}));
-
-jest.mock('../../../src/components/CustomAlert', () => {
-  const { View, Text, TouchableOpacity } = require('react-native');
-  return {
-    CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
-      if (!visible) return null;
-      return (
-        <View testID="custom-alert">
-          <Text testID="alert-title">{title}</Text>
-          <Text testID="alert-message">{message}</Text>
-          {buttons && buttons.map((btn: any, i: number) => (
-            <TouchableOpacity
-              key={i}
-              testID={`alert-button-${btn.text}`}
-              onPress={() => {
-                if (btn.onPress) btn.onPress();
-                onClose();
-              }}
-            >
-              <Text>{btn.text}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      );
-    },
-    showAlert: (title: string, message: string, buttons?: any[]) => ({
-      visible: true,
-      title,
-      message,
-      buttons: buttons || [{ text: 'OK', style: 'default' }],
-    }),
-    hideAlert: () => ({ visible: false, title: '', message: '', buttons: [] }),
-    initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-  };
-});
-
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
 
 // The library's SHIPPED jest mock, not a hand-rolled SafeAreaView. This file's own stub exported only
 // that one component, so anything in the tree reaching for useSafeAreaInsets (a bottom sheet, for
@@ -158,22 +52,6 @@ jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
   return ({ name }: any) => <Text>{name}</Text>;
 });
-
-const mockGetDocumentsByProject = jest.fn<Promise<any[]>, [string]>(() => Promise.resolve([]));
-const mockIndexDocument = jest.fn<Promise<number>, [any]>(() => Promise.resolve(1));
-const mockDeleteDocumentRag = jest.fn<Promise<void>, [number]>(() => Promise.resolve());
-const mockToggleDocument = jest.fn<Promise<void>, [number, boolean]>(() => Promise.resolve());
-
-jest.mock('../../../src/services/modelServices/bootstrap/ragBootstrap', () => ({
-  ragService: {
-    getDocumentsByProject: (projectId: string) => mockGetDocumentsByProject(projectId),
-    indexDocument: (params: any) => mockIndexDocument(params),
-    deleteDocument: (docId: number) => mockDeleteDocumentRag(docId),
-    toggleDocument: (docId: number, enabled: boolean) => mockToggleDocument(docId, enabled),
-    deleteProjectDocuments: jest.fn(() => Promise.resolve()),
-    ensureReady: jest.fn(() => Promise.resolve()),
-  },
-}));
 
 jest.mock('@react-native-documents/picker', () => ({
   pick: jest.fn(() => Promise.resolve([{
@@ -194,558 +72,594 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
   );
 });
 
-import { ProjectDetailScreen } from '../../../src/screens/ProjectDetailScreen';
+describe('ProjectDetailScreen basic rendering (real composition)', () => {
+  let fixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture;
+  let rtl: typeof import('@testing-library/react-native');
+  let RealReact: typeof React;
+  let RealProjectDetailScreen: typeof import('../../../src/screens/ProjectDetailScreen').ProjectDetailScreen;
+  let RealProjectsScreen: typeof import('../../../src/screens/ProjectsScreen').ProjectsScreen;
+  let RealProjectEditScreen: typeof import('../../../src/screens/ProjectEditScreen').ProjectEditScreen;
+  let RealChatScreen: typeof import('../../../src/screens/ChatScreen').ChatScreen;
+  let originalFetch: typeof global.fetch;
+  const serverIds: string[] = [];
+  let nativeBoundary: import('../../harness/nativeBoundary').NativeBoundary;
 
-describe('ProjectDetailScreen', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockProject = {
-      id: 'proj1',
+  beforeAll(async () => {
+    for (const path of [
+      '../../../src/stores',
+      '../../../src/hooks/useActiveMobileModel',
+      '../../../src/hooks/useMobileModelInventory',
+      '../../../src/components',
+      '../../../src/components/Button',
+      '../../../src/components/CustomAlert',
+      '../../../src/components/AnimatedEntry',
+    ]) jest.unmock(path);
+    const { installNativeBoundary, requireRTL } =
+      require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
+    nativeBoundary = installNativeBoundary({ download: true, fs: true, llama: true });
+    nativeBoundary.fs!.seedFile(
+      `${nativeBoundary.fs!.DocumentDirectoryPath}/all-MiniLM-L6-v2-Q8_0.gguf`,
+      4,
+    );
+    const { doMockRealSqlite } =
+      require('../../harness/sqliteFake') as typeof import('../../harness/sqliteFake');
+    doMockRealSqlite();
+    originalFetch = global.fetch;
+    rtl = requireRTL();
+    RealReact = require('react');
+    ({ ProjectDetailScreen: RealProjectDetailScreen } = require('../../../src/screens/ProjectDetailScreen'));
+    ({ ProjectsScreen: RealProjectsScreen } = require('../../../src/screens/ProjectsScreen'));
+    ({ ProjectEditScreen: RealProjectEditScreen } = require('../../../src/screens/ProjectEditScreen'));
+    ({ ChatScreen: RealChatScreen } = require('../../../src/screens/ChatScreen'));
+    fixture = await (require('../../harness/mobileApplicationFixture') as
+      typeof import('../../harness/mobileApplicationFixture')).startMobileApplicationFixture();
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    rtl.cleanup();
+    for (const serverId of serverIds.splice(0)) {
+      await fixture.application.models.removeRemoteServer(serverId);
+    }
+    global.fetch = originalFetch;
+    mockUseRealNavigation = false;
+    mockGoBack.mockClear();
+    mockNavigate.mockClear();
+  });
+  afterAll(async () => fixture.dispose());
+
+  const createProject = (
+    description: string | null = 'A test project description',
+  ) => {
+    const { useProjectStore } =
+      require('../../../src/stores/projectStore') as typeof import('../../../src/stores/projectStore');
+    const project = useProjectStore.getState().createProject({
       name: 'Test Project',
-      description: 'A test project description',
+      description: description as string,
       systemPrompt: 'Be helpful',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockConversations = [];
-    mockTextModels = [{ id: 'model1', name: 'Test Model' }];
-    mockActiveTextModel = { id: 'model1', name: 'Test Model' };
-  });
-
-  // ============================================================================
-  // Basic Rendering
-  // ============================================================================
-  describe('basic rendering', () => {
-    it('renders project name', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Test Project')).toBeTruthy();
+      icon: '#10B981',
     });
+    mockRouteProjectId = project.id;
+    return project;
+  };
 
-    it('does not show project description in header', () => {
-      const { queryByText } = render(<ProjectDetailScreen />);
-      // Project description is not displayed in the detail screen header
-      expect(queryByText('A test project description')).toBeNull();
-    });
+  const renderProject = (
+    description: string | null = 'A test project description',
+  ) => {
+    createProject(description);
+    return rtl.render(RealReact.createElement(RealProjectDetailScreen));
+  };
 
-    it('shows project initial in icon', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('T')).toBeTruthy();
-    });
+  const renderMissingProject = () => {
+    mockRouteProjectId = 'project-that-does-not-exist';
+    return rtl.render(RealReact.createElement(RealProjectDetailScreen));
+  };
 
-    it('shows chat count stat', () => {
-      const { queryByText } = render(<ProjectDetailScreen />);
-      // When there are 0 chats, no count is shown (only shows when > 0)
-      expect(queryByText('0 chats')).toBeNull();
-    });
-
-    it('shows Chats section title', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Chats')).toBeTruthy();
-    });
-
-    it('shows Delete Project button', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Delete Project')).toBeTruthy();
-    });
-  });
-
-  // ============================================================================
-  // Navigation
-  // ============================================================================
-  describe('navigation', () => {
-    it('back button navigates back', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('arrow-left'));
-      expect(mockGoBack).toHaveBeenCalledTimes(1);
-    });
-
-    it('edit button navigates to ProjectEdit', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('edit-2'));
-      expect(mockNavigate).toHaveBeenCalledWith('ProjectEdit', { projectId: 'proj1' });
-    });
-  });
-
-  // ============================================================================
-  // Empty Chats State
-  // ============================================================================
-  describe('empty chats state', () => {
-    it('shows empty chats message', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('No chats yet')).toBeTruthy();
-    });
-
-    it('shows "Start a Chat" button when models available', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Start a Chat')).toBeTruthy();
-    });
-
-    it('hides "Start a Chat" button when no models downloaded', () => {
-      mockTextModels = [];
-      const { queryByText } = render(<ProjectDetailScreen />);
-      expect(queryByText('Start a Chat')).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // Conversation List
-  // ============================================================================
-  describe('conversation list', () => {
-    it('shows conversations for this project', () => {
-      mockConversations = [
-        {
-          id: 'conv1',
-          title: 'Project Chat 1',
-          projectId: 'proj1',
-          modelId: 'model1',
-          messages: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Project Chat 1')).toBeTruthy();
-    });
-
-    it('does not show conversations from other projects', () => {
-      mockConversations = [
-        {
-          id: 'conv1',
-          title: 'Other Project Chat',
-          projectId: 'other-project',
-          modelId: 'model1',
-          messages: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { queryByText, getByText } = render(<ProjectDetailScreen />);
-      expect(queryByText('Other Project Chat')).toBeNull();
-      // Still shows empty state
-      expect(getByText('No chats yet')).toBeTruthy();
-    });
-
-    it('shows last message preview in conversation item', () => {
-      mockConversations = [
-        {
-          id: 'conv1',
-          title: 'Chat With Preview',
-          projectId: 'proj1',
-          modelId: 'model1',
-          messages: [
-            { id: 'm1', role: 'user', content: 'Hello there', timestamp: Date.now() },
-            { id: 'm2', role: 'assistant', content: 'Hi! How can I help?', timestamp: Date.now() },
+  const renderProjectHistory = (projectId: string) => {
+    mockUseRealNavigation = true;
+    const { NavigationContainer } = require('@react-navigation/native') as
+      typeof import('@react-navigation/native');
+    const { createNativeStackNavigator } =
+      require('@react-navigation/native-stack') as typeof import('@react-navigation/native-stack');
+    const Stack = createNativeStackNavigator();
+    return rtl.render(
+      <NavigationContainer
+        initialState={{
+          index: 1,
+          routes: [
+            { name: 'Projects' },
+            { name: 'ProjectDetail', params: { projectId } },
           ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
+        }}
+      >
+        <Stack.Navigator>
+          <Stack.Screen name="Projects" component={RealProjectsScreen} />
+          <Stack.Screen name="ProjectDetail" component={RealProjectDetailScreen} />
+          <Stack.Screen name="ProjectEdit" component={RealProjectEditScreen} />
+          <Stack.Screen name="Chat" component={RealChatScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>,
+    );
+  };
 
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Hi! How can I help?')).toBeTruthy();
+  const renderProjectWithConversation = (title: string) => {
+    const view = renderProject();
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    let conversationId = '';
+    rtl.act(() => {
+      conversationId = useChatStore.getState().createConversation(
+        'external-model',
+        title,
+        mockRouteProjectId,
+      );
     });
+    return { view, conversationId, useChatStore };
+  };
 
-    it('shows "You: " prefix for user messages in preview', () => {
-      mockConversations = [
-        {
-          id: 'conv1',
-          title: 'Chat With User Preview',
-          projectId: 'proj1',
-          modelId: 'model1',
-          messages: [
-            { id: 'm1', role: 'user', content: 'Last user message', timestamp: Date.now() },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText(/You: Last user message/)).toBeTruthy();
+  const renderProjectWithActiveRemoteText = async (realNavigation = false) => {
+    global.fetch = jest.fn(async () => new Response(JSON.stringify({
+      object: 'list', data: [{ id: 'Llama-3.2-3B' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const saved = await fixture.application.models.saveRemoteServer({
+      name: 'Project chat server',
+      endpoint: 'http://192.168.1.3:8000/v1',
+      provider: 'openai-compatible',
     });
+    if (!saved.ok) throw new Error(modelsFailureMessage(saved.failure));
+    serverIds.push(saved.value.id);
+    const discovered = await fixture.application.models.discoverRemoteServers(saved.value.id);
+    if (!discovered.ok) throw new Error(modelsFailureMessage(discovered.failure));
+    const activated = await fixture.application.models.activateOnServer(
+      saved.value.id, 'text', 'Llama-3.2-3B',
+    );
+    if (!activated.ok) throw new Error(modelsFailureMessage(activated.failure));
+    const project = createProject();
+    return realNavigation
+      ? renderProjectHistory(project.id)
+      : rtl.render(RealReact.createElement(RealProjectDetailScreen));
+  };
 
-    it('shows correct chat count in stats', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Chat 1', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-        {
-          id: 'conv2', title: 'Chat 2', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText } = render(<ProjectDetailScreen />);
-      // Component shows just the count number, not "2 chats"
-      expect(getByText('2')).toBeTruthy();
+  const renderProjectWithRemoteInventory = async (realNavigation = false) => {
+    global.fetch = jest.fn(async () => new Response(JSON.stringify({
+      siblings: [{
+        rfilename: 'inventory.Q4_K_M.gguf',
+        lfs: { size: 1024 },
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const { startModelDownload } =
+      require('../../../src/services/startModelDownload') as typeof import('../../../src/services/startModelDownload');
+    await startModelDownload('author/inventory', {
+      name: 'inventory.Q4_K_M.gguf',
+      size: 1024,
+      quantization: 'Q4_K_M',
+      downloadUrl: 'https://huggingface.co/author/inventory/resolve/main/inventory.Q4_K_M.gguf',
     });
-
-    it('navigates to chat when conversation is tapped', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Tappable Chat', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Tappable Chat'));
-
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('conv1');
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'conv1' });
+    const transfer = nativeBoundary.download!.active()[0];
+    nativeBoundary.download!.complete(transfer.downloadId);
+    await rtl.waitFor(async () => {
+      const snapshot = await fixture.refreshModels();
+      expect(snapshot.inventory.some(model => model.id.includes('author/inventory'))).toBe(true);
     });
-  });
+    const project = createProject();
+    return realNavigation
+      ? renderProjectHistory(project.id)
+      : rtl.render(RealReact.createElement(RealProjectDetailScreen));
+  };
 
-  // ============================================================================
-  // New Chat
-  // ============================================================================
-  describe('new chat', () => {
-    it('navigates to the project chat when "New" is pressed', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', { conversationId: 'new-conv-1', projectId: 'proj1' });
+  const renderProjectWithDocument = async (fileName: string, size: number) => {
+    const view = renderProject();
+    const path = `${nativeBoundary.fs!.DocumentDirectoryPath}/${fileName}`;
+    nativeBoundary.fs!.seedFile(path, size);
+    const added = await fixture.application.rag.addDocument({
+      projectId: mockRouteProjectId,
+      path,
+      fileName,
+      size,
     });
+    if (!added.ok) throw new Error(JSON.stringify(added.failure));
+    return view;
+  };
 
-    it('disables New button when no models available', () => {
-      mockTextModels = [];
-      const { getByTestId } = render(<ProjectDetailScreen />);
-      const newButton = getByTestId('button-New');
-      expect(newButton.props.accessibilityState?.disabled || newButton.props.disabled).toBeTruthy();
-    });
-
-    it('starts a chat when the selected text route is available', () => {
-      mockActiveTextModel = { id: 'model1', name: 'Test Model' };
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {
-        conversationId: 'new-conv-1',
-        projectId: 'proj1',
-      });
-    });
-
-    it('starts a chat when only an inventory model is available', () => {
-      mockActiveTextModel = null;
-      mockTextModels = [{ id: 'fallback-model', name: 'Fallback' }];
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('New'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Chat', {
-        conversationId: 'new-conv-1',
-        projectId: 'proj1',
-      });
-    });
-  });
-
-  // ============================================================================
-  // Delete Project
-  // ============================================================================
-  describe('delete project', () => {
-    it('shows confirmation alert when Delete Project is pressed', () => {
-      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Delete Project'));
-
-      expect(queryByTestId('custom-alert')).toBeTruthy();
-      expect(queryByTestId('alert-title')?.props.children).toBe('Delete Project');
-    });
-
-    it('includes project name in confirmation message', () => {
-      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Delete Project'));
-
-      const message = queryByTestId('alert-message')?.props.children;
-      expect(message).toContain('Test Project');
-    });
-
-    it('deletes project and navigates back when confirmed', () => {
-      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Delete Project'));
-
-      // Press "Delete" in the confirmation alert
-      fireEvent.press(getByTestId('alert-button-Delete'));
-
-      expect(mockDeleteProject).toHaveBeenCalledWith('proj1');
-      expect(mockGoBack).toHaveBeenCalled();
-    });
-
-    it('does not delete project when cancelled', () => {
-      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Delete Project'));
-
-      // Press "Cancel" in the confirmation alert
-      fireEvent.press(getByTestId('alert-button-Cancel'));
-
-      expect(mockDeleteProject).not.toHaveBeenCalled();
-      expect(mockGoBack).not.toHaveBeenCalled();
-    });
-  });
-
-  // ============================================================================
-  // Delete Chat
-  // ============================================================================
-  describe('delete chat', () => {
-    it('shows confirmation alert when delete swipe action is pressed', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Delete Me Chat', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText, queryByTestId } = render(<ProjectDetailScreen />);
-      // The trash icon renders as "trash-2" text from our Icon mock
-      fireEvent.press(getByText('trash-2'));
-
-      expect(queryByTestId('custom-alert')).toBeTruthy();
-      expect(queryByTestId('alert-title')?.props.children).toBe('Delete Chat');
-    });
-
-    it('deletes conversation when confirmed', () => {
-      mockConversations = [
-        {
-          id: 'conv1', title: 'Delete Me', projectId: 'proj1', modelId: 'model1',
-          messages: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        },
-      ];
-
-      const { getByText, getByTestId } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('trash-2'));
-      fireEvent.press(getByTestId('alert-button-Delete'));
-
-      expect(mockDeleteConversation).toHaveBeenCalledWith('conv1');
-    });
-  });
-
-  // ============================================================================
-  // Project Not Found
-  // ============================================================================
-  describe('project not found', () => {
-    it('shows error when project is null', () => {
-      mockProject = null;
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Project not found')).toBeTruthy();
-    });
-
-    it('shows "Go back" link when project not found', () => {
-      mockProject = null;
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Go back')).toBeTruthy();
-    });
-
-    it('navigates back when "Go back" link is pressed', () => {
-      mockProject = null;
-      const { getByText } = render(<ProjectDetailScreen />);
-      fireEvent.press(getByText('Go back'));
-      expect(mockGoBack).toHaveBeenCalled();
-    });
-  });
-
-  // ============================================================================
-  // Knowledge Base
-  // ============================================================================
-  describe('knowledge base', () => {
-    it('shows Knowledge Base section title', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Knowledge Base')).toBeTruthy();
-    });
-
-    it('shows empty state when no documents', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('No documents added')).toBeTruthy();
-    });
-
-    it('shows Add button', () => {
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Add')).toBeTruthy();
-    });
-
-    it('shows documents when loaded', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([
-        { id: 1, project_id: 'proj1', name: 'readme.pdf', path: '/p', size: 2048, created_at: '2024-01-01', enabled: 1 },
-      ]);
-
-      const { findByText } = render(<ProjectDetailScreen />);
-      expect(await findByText('readme.pdf')).toBeTruthy();
-    });
-
-    it('shows formatted file size', async () => {
-      mockGetDocumentsByProject.mockResolvedValue([
-        { id: 1, project_id: 'proj1', name: 'big.pdf', path: '/p', size: 1048576, created_at: '2024-01-01', enabled: 1 },
-      ]);
-
-      const { findByText } = render(<ProjectDetailScreen />);
-      expect(await findByText('1.0 MB')).toBeTruthy();
-    });
-  });
-
-  // ============================================================================
-  // Project Without Description
-  // ============================================================================
-  describe('project without description', () => {
-    it('does not render description when empty', () => {
-      mockProject = { ...mockProject, description: '' };
-      const { queryByText } = render(<ProjectDetailScreen />);
-      expect(queryByText('A test project description')).toBeNull();
-    });
-
-    it('does not render description when null', () => {
-      mockProject = { ...mockProject, description: null };
-      const { queryByText } = render(<ProjectDetailScreen />);
-      expect(queryByText('A test project description')).toBeNull();
-    });
-  });
-
-  // ============================================================================
-  // formatDate branches (lines 115-120)
-  // ============================================================================
-  describe('formatDate', () => {
-    const makeConv = (daysAgo: number) => {
-      const date = new Date();
-      date.setDate(date.getDate() - daysAgo);
-      return {
-        id: `conv-${daysAgo}`,
-        title: `Chat ${daysAgo}d ago`,
-        projectId: 'proj1',
-        modelId: 'model1',
-        messages: [],
-        createdAt: date.toISOString(),
-        updatedAt: date.toISOString(),
-      };
+  const renderDatedConversation = (daysAgo: number) => {
+    createProject();
+    const past = new Date();
+    past.setDate(past.getDate() - daysAgo);
+    jest.useFakeTimers({ now: past });
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    useChatStore.getState().createConversation(
+      'external-model', `Chat ${daysAgo}d ago`, mockRouteProjectId,
+    );
+    jest.useRealTimers();
+    return {
+      past,
+      view: rtl.render(RealReact.createElement(RealProjectDetailScreen)),
     };
+  };
 
-    it('shows "Yesterday" for conversations updated 1 day ago (line 116)', () => {
-      mockConversations = [makeConv(1)];
-      const { getByText } = render(<ProjectDetailScreen />);
-      expect(getByText('Yesterday')).toBeTruthy();
-    });
-
-    it('shows weekday name for conversations updated 3 days ago (line 118)', () => {
-      mockConversations = [makeConv(3)];
-      const { toJSON } = render(<ProjectDetailScreen />);
-      // toLocaleDateString with { weekday: 'short' } returns e.g. "Mon", "Tue"
-      // The exact value depends on locale; just verify the component renders
-      expect(toJSON()).toBeTruthy();
-    });
-
-    it('shows month/day for conversations updated 8 days ago (line 120)', () => {
-      mockConversations = [makeConv(8)];
-      const { toJSON } = render(<ProjectDetailScreen />);
-      // toLocaleDateString with { month: 'short', day: 'numeric' }
-      expect(toJSON()).toBeTruthy();
-    });
+  it('renders project name', () => {
+    expect(renderProject().getByText('Test Project')).toBeTruthy();
   });
 
-  // ============================================================================
-  // Knowledge Base file indexing fixes
-  // ============================================================================
-  describe('Knowledge Base file indexing fixes', () => {
-    // Grab the mocked pick function so we can reconfigure it per test
-    const DocumentPicker = require('@react-native-documents/picker');
+  it('does not show project description in header', () => {
+    expect(renderProject().queryByText('A test project description')).toBeNull();
+  });
 
-    beforeEach(() => {
-      // Reset pick to a single-file result by default
-      DocumentPicker.pick.mockResolvedValue([{
-        uri: 'file:///mock/doc.pdf',
-        name: 'doc.pdf',
-        size: 5000,
-      }]);
-      DocumentPicker.keepLocalCopy.mockResolvedValue([{ status: 'success', localUri: 'file:///mock/doc.pdf' }]);
+  it('shows project initial in icon', () => {
+    expect(renderProject().getByText('T')).toBeTruthy();
+  });
+
+  it('hides the chat count when the project has no chats', () => {
+    expect(renderProject().queryByText('0 chats')).toBeNull();
+  });
+
+  it('shows Chats section title', () => {
+    expect(renderProject().getByText('Chats')).toBeTruthy();
+  });
+
+  it('shows Delete Project button', () => {
+    expect(renderProject().getByText('Delete Project')).toBeTruthy();
+  });
+
+  it('back button returns to the real Projects screen', async () => {
+    const project = createProject();
+    const view = renderProjectHistory(project.id);
+    expect(await view.findByTestId('project-detail-screen')).toBeTruthy();
+
+    rtl.fireEvent.press(view.getByLabelText('Back'));
+
+    expect(await view.findByTestId('projects-screen')).toBeTruthy();
+    expect(view.queryByTestId('project-detail-screen')).toBeNull();
+  });
+
+  it('edit button opens the real project editor', async () => {
+    const project = createProject();
+    const view = renderProjectHistory(project.id);
+    rtl.fireEvent.press(view.getByText('edit-2'));
+    expect(await view.findByTestId('project-edit-screen')).toBeTruthy();
+    expect(view.queryByTestId('project-detail-screen')).toBeNull();
+  });
+
+  it('opens the selected project in the real editor', async () => {
+    const project = createProject();
+    const view = renderProjectHistory(project.id);
+
+    rtl.fireEvent.press(await view.findByText('edit-2'));
+
+    const name = await view.findByTestId('project-edit-name');
+    expect(name.props.value).toBe('Test Project');
+    expect(view.getByTestId('project-edit-system-prompt').props.value).toBe('Be helpful');
+  });
+
+  it('shows error when project is null', () => {
+    expect(renderMissingProject().getByText('Project not found')).toBeTruthy();
+  });
+
+  it('shows "Go back" link when project not found', () => {
+    expect(renderMissingProject().getByText('Go back')).toBeTruthy();
+  });
+
+  it('returns to the real Projects screen from a missing project', async () => {
+    const view = renderProjectHistory('project-that-does-not-exist');
+    expect(await view.findByText('Project not found')).toBeTruthy();
+
+    rtl.fireEvent.press(view.getByText('Go back'));
+
+    expect(await view.findByTestId('projects-screen')).toBeTruthy();
+    expect(view.queryByText('Project not found')).toBeNull();
+  });
+
+  it('shows confirmation alert when Delete Project is pressed', () => {
+    const view = renderProject();
+    rtl.fireEvent.press(view.getByText('Delete Project'));
+    expect(view.getAllByText('Delete Project')).toHaveLength(2);
+  });
+
+  it('includes project name in confirmation message', () => {
+    const view = renderProject();
+    rtl.fireEvent.press(view.getByText('Delete Project'));
+    expect(view.getByText(/Delete "Test Project"\?/)).toBeTruthy();
+  });
+
+  it('deletes project and returns to the real Projects screen when confirmed', async () => {
+    const project = createProject();
+    const view = renderProjectHistory(project.id);
+    expect(await view.findByTestId('project-detail-screen')).toBeTruthy();
+    rtl.fireEvent.press(view.getByText('Delete Project'));
+    rtl.fireEvent.press(view.getByText('Delete', { exact: true }));
+    const { useProjectStore } =
+      require('../../../src/stores/projectStore') as typeof import('../../../src/stores/projectStore');
+    await rtl.waitFor(() => expect(useProjectStore.getState().getProject(project.id)).toBeUndefined());
+    expect(await view.findByTestId('projects-screen')).toBeTruthy();
+    expect(view.queryByTestId(`project-row-${project.id}`)).toBeNull();
+  });
+
+  it('does not delete project when cancelled', () => {
+    const view = renderProject();
+    const projectId = mockRouteProjectId;
+    rtl.fireEvent.press(view.getByText('Delete Project'));
+    rtl.fireEvent.press(view.getByText('Cancel'));
+    const { useProjectStore } =
+      require('../../../src/stores/projectStore') as typeof import('../../../src/stores/projectStore');
+    expect(useProjectStore.getState().getProject(projectId)).toBeTruthy();
+    expect(view.queryByText(/Delete "Test Project"\?/)).toBeNull();
+    expect(view.getByTestId('project-detail-screen')).toBeTruthy();
+  });
+
+  it('shows confirmation alert when delete swipe action is pressed', () => {
+    const { view } = renderProjectWithConversation('Delete Me Chat');
+    expect(view.getByText('Delete Me Chat')).toBeTruthy();
+    rtl.fireEvent.press(view.getAllByText('trash-2')[0]);
+    expect(view.getByText('Delete Chat')).toBeTruthy();
+  });
+
+  it('deletes conversation when confirmed', async () => {
+    const { view, conversationId, useChatStore } =
+      renderProjectWithConversation('Delete Me');
+    rtl.fireEvent.press(view.getAllByText('trash-2')[0]);
+    rtl.fireEvent.press(view.getByText('Delete', { exact: true }));
+    await rtl.waitFor(() => expect(
+      useChatStore.getState().conversations.some(item => item.id === conversationId),
+    ).toBe(false));
+    expect(view.queryByText('Delete Me')).toBeNull();
+  });
+
+  it('shows Knowledge Base section title', () => {
+    expect(renderProject().getByText('Knowledge Base')).toBeTruthy();
+  });
+
+  it('shows empty state when no documents', async () => {
+    const view = renderProject();
+    expect(await view.findByText('No documents added')).toBeTruthy();
+  });
+
+  it('shows Add button', () => {
+    expect(renderProject().getByText('Add')).toBeTruthy();
+  });
+
+  it('shows conversations for this project', () => {
+    const { view } = renderProjectWithConversation('Project Chat 1');
+    expect(view.getByText('Project Chat 1')).toBeTruthy();
+  });
+
+  it('does not show conversations from other projects', () => {
+    const view = renderProject();
+    const currentProjectId = mockRouteProjectId;
+    const { useProjectStore } =
+      require('../../../src/stores/projectStore') as typeof import('../../../src/stores/projectStore');
+    const other = useProjectStore.getState().createProject({
+      name: 'Other Project', description: '', systemPrompt: '', icon: '#000000',
     });
-
-    it('Add button is enabled before any indexing', () => {
-      const { getByTestId } = render(<ProjectDetailScreen />);
-      const addButton = getByTestId('button-Add');
-      // disabled should be falsy — the button is not disabled at rest
-      expect(addButton.props.disabled).toBeFalsy();
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    rtl.act(() => {
+      useChatStore.getState().createConversation('external-model', 'Other Project Chat', other.id);
     });
+    mockRouteProjectId = currentProjectId;
+    expect(view.queryByText('Other Project Chat')).toBeNull();
+    expect(view.getByText('No chats yet')).toBeTruthy();
+  });
 
-    it('Add button is enabled while indexing is in progress', async () => {
-      // Make indexDocument hang indefinitely so we can inspect state mid-flight
-      let resolveIndex!: () => void;
-      mockIndexDocument.mockReturnValue(new Promise<number>((resolve) => {
-        resolveIndex = () => resolve(1);
-      }));
+  it('shows correct chat count in stats', () => {
+    const { view, useChatStore } = renderProjectWithConversation('Chat 1');
+    rtl.act(() => {
+      useChatStore.getState().createConversation(
+        'external-model', 'Chat 2', mockRouteProjectId,
+      );
+    });
+    expect(view.getByText('2')).toBeTruthy();
+  });
 
-      const { getByTestId } = render(<ProjectDetailScreen />);
-      const addButton = getByTestId('button-Add');
+  it('opens the real Chat screen when a conversation is tapped', async () => {
+    const project = createProject();
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    const conversationId = useChatStore.getState().createConversation(
+      'external-model', 'Tappable Chat', project.id,
+    );
+    const view = renderProjectHistory(project.id);
+    rtl.fireEvent.press(view.getByText('Tappable Chat'));
+    expect(useChatStore.getState().getActiveConversation()?.id).toBe(conversationId);
+    expect(await view.findByText('New Chat')).toBeTruthy();
+    expect(view.getByText('No Model Selected')).toBeTruthy();
+  });
 
-      // Button starts enabled
-      expect(addButton.props.disabled).toBeFalsy();
-
-      // Trigger the add flow (starts indexing but doesn't finish yet)
-      act(() => {
-        fireEvent.press(addButton);
+  it('shows last message preview in conversation item', () => {
+    const { view, conversationId, useChatStore } =
+      renderProjectWithConversation('Chat With Preview');
+    rtl.act(() => {
+      useChatStore.getState().addMessage(conversationId, {
+        role: 'user', content: 'Hello there',
       });
-
-      // Even while indexing is in progress the button must remain enabled
-      expect(addButton.props.disabled).toBeFalsy();
-
-      // Resolve the pending index so React can flush and we avoid act() warnings
-      await act(async () => {
-        resolveIndex();
+      useChatStore.getState().addMessage(conversationId, {
+        role: 'assistant', content: 'Hi! How can I help?',
       });
     });
+    expect(view.getByText('Hi! How can I help?')).toBeTruthy();
+  });
 
-    it('File count updates after each file is indexed', async () => {
-      // First call (mount): no documents; second call (after indexing): one document
-      mockGetDocumentsByProject
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: 1, name: 'doc1.pdf', path: '/p', size: 1000, enabled: 1, project_id: 'proj1', created_at: '2024-01-01' }]);
-
-      DocumentPicker.pick.mockResolvedValue([{
-        uri: 'file:///mock/doc1.pdf',
-        name: 'doc1.pdf',
-        size: 1000,
-      }]);
-
-      mockIndexDocument.mockResolvedValue(1);
-
-      const { getByTestId } = render(<ProjectDetailScreen />);
-
-      // Wait for the initial load to complete
-      await waitFor(() => expect(mockGetDocumentsByProject).toHaveBeenCalledTimes(1));
-
-      // Press Add and wait for the full indexing cycle to complete
-      await act(async () => {
-        fireEvent.press(getByTestId('button-Add'));
+  it('shows "You: " prefix for user messages in preview', () => {
+    const { view, conversationId, useChatStore } =
+      renderProjectWithConversation('Chat With User Preview');
+    rtl.act(() => {
+      useChatStore.getState().addMessage(conversationId, {
+        role: 'user', content: 'Last user message',
       });
-
-      // loadKbDocs must have been called at least twice:
-      // once on mount + at least once inside the loop after indexing the file
-      await waitFor(() => expect(mockGetDocumentsByProject.mock.calls.length).toBeGreaterThanOrEqual(2));
     });
+    expect(view.getByText(/You: Last user message/)).toBeTruthy();
+  });
 
-    it('loadKbDocs is called per file during multi-file indexing', async () => {
-      // First call: mount; subsequent calls: after each file indexed
-      mockGetDocumentsByProject.mockResolvedValue([]);
-      mockIndexDocument.mockResolvedValue(1);
+  it('shows empty chats message', () => {
+    expect(renderProject().getByText('No chats yet')).toBeTruthy();
+  });
 
-      // Return two files from the picker
-      DocumentPicker.pick.mockResolvedValue([
-        { uri: 'file:///mock/file1.pdf', name: 'file1.pdf', size: 1000 },
-        { uri: 'file:///mock/file2.pdf', name: 'file2.pdf', size: 2000 },
-      ]);
-      DocumentPicker.keepLocalCopy
-        .mockResolvedValueOnce([{ status: 'success', localUri: 'file:///mock/file1.pdf' }])
-        .mockResolvedValueOnce([{ status: 'success', localUri: 'file:///mock/file2.pdf' }]);
+  it('hides "Start a Chat" button when no models downloaded', () => {
+    expect(renderProject().queryByText('Start a Chat')).toBeNull();
+  });
 
-      const { getByTestId } = render(<ProjectDetailScreen />);
+  it('disables New button when no models available', () => {
+    expect(renderProject().getByRole('button', {
+      name: 'New',
+      disabled: true,
+    })).toBeTruthy();
+  });
 
-      // Wait for initial mount load
-      await waitFor(() => expect(mockGetDocumentsByProject).toHaveBeenCalledTimes(1));
+  it('shows "Start a Chat" button when models available', async () => {
+    const view = await renderProjectWithActiveRemoteText();
+    expect(view.getByText('Start a Chat')).toBeTruthy();
+  });
 
-      // Press Add and wait for both files to be indexed
-      await act(async () => {
-        fireEvent.press(getByTestId('button-Add'));
-      });
+  it('opens the real project chat when "New" is pressed', async () => {
+    const view = await renderProjectWithActiveRemoteText(true);
+    const selectedModelId = fixture.application.models.snapshot().active.text
+      ?.model?.id;
+    expect(selectedModelId).toBeTruthy();
+    rtl.fireEvent.press(view.getByRole('button', { name: 'New' }));
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    const conversation = useChatStore.getState().conversations.find(
+      item => item.projectId === mockRouteProjectId,
+    );
+    expect(conversation).toBeTruthy();
+    expect(conversation!.modelId).toBe(selectedModelId);
+    expect(await view.findByTestId('chat-screen')).toBeTruthy();
+    expect(view.queryByTestId('project-detail-screen')).toBeNull();
+  });
 
-      // Expect: 1 (mount) + 1 (after file1) + 1 (after file2) + 1 (final after loop) = 4
-      // At minimum: 1 (mount) + 2 (one per file inside loop) = 3
-      await waitFor(() => expect(mockGetDocumentsByProject.mock.calls.length).toBeGreaterThanOrEqual(3));
-    });
+  it('starts a real Chat screen when the selected text route is available', async () => {
+    const view = await renderProjectWithActiveRemoteText(true);
+    rtl.fireEvent.press(await view.findByText('Start a Chat'));
+    expect(await view.findByTestId('chat-screen')).toBeTruthy();
+    expect(view.queryByTestId('project-detail-screen')).toBeNull();
+  });
+
+  it('shows documents when loaded', async () => {
+    const view = await renderProjectWithDocument('readme.txt', 2048);
+    expect(await view.findByText('readme.txt')).toBeTruthy();
+  });
+
+  it('shows formatted file size', async () => {
+    const view = await renderProjectWithDocument('big.txt', 1048576);
+    expect(await view.findByText('1.0 MB')).toBeTruthy();
+  });
+
+  it('shows "Yesterday" for conversations updated 1 day ago (line 116)', () => {
+    expect(renderDatedConversation(1).view.getByText('Yesterday')).toBeTruthy();
+  });
+
+  it('shows weekday name for conversations updated 3 days ago (line 118)', () => {
+    const { view, past } = renderDatedConversation(3);
+    expect(view.getByText(past.toLocaleDateString(undefined, {
+      weekday: 'short',
+    }))).toBeTruthy();
+  });
+
+  it('shows month/day for conversations updated 8 days ago (line 120)', () => {
+    const { view, past } = renderDatedConversation(8);
+    expect(view.getByText(past.toLocaleDateString(undefined, {
+      month: 'short', day: 'numeric',
+    }))).toBeTruthy();
+  });
+
+  it('does not render description when empty', () => {
+    expect(renderProject('').queryByText('A test project description')).toBeNull();
+  });
+
+  it('does not render description when null', () => {
+    expect(renderProject(null).queryByText('A test project description')).toBeNull();
+  });
+
+  it('Add button is enabled before any indexing', () => {
+    expect(renderProject().getByRole('button', {
+      name: 'Add', disabled: false,
+    })).toBeTruthy();
+  });
+
+  it('File count updates after each file is indexed', async () => {
+    const view = renderProject();
+    const path = `${nativeBoundary.fs!.DocumentDirectoryPath}/doc1.txt`;
+    nativeBoundary.fs!.seedFile(path, 1000);
+    const DocumentPicker = require('@react-native-documents/picker') as {
+      pick: jest.Mock; keepLocalCopy: jest.Mock;
+    };
+    DocumentPicker.pick.mockResolvedValue([{
+      uri: 'content://external/doc1.txt', name: 'doc1.txt', size: 1000,
+    }]);
+    DocumentPicker.keepLocalCopy.mockResolvedValue([{
+      status: 'success', localUri: `file://${path}`,
+    }]);
+    rtl.fireEvent.press(view.getByTestId('kb-add-document'));
+    expect(await view.findByText('doc1.txt')).toBeTruthy();
+    expect(view.getByLabelText('Knowledge Base has 1 documents')).toBeTruthy();
+  });
+
+  it('starts a chat when only an inventory model is available', async () => {
+    const view = await renderProjectWithRemoteInventory(true);
+    const inventoryModelId = fixture.application.models.snapshot().inventory
+      .find(model => model.modality === 'text')?.id;
+    expect(inventoryModelId).toBeTruthy();
+    rtl.fireEvent.press(view.getByText('Start a Chat'));
+    const { useChatStore } =
+      require('../../../src/stores/chatStore') as typeof import('../../../src/stores/chatStore');
+    const conversation = useChatStore.getState().conversations.find(
+      item => item.projectId === mockRouteProjectId,
+    );
+    expect(conversation).toBeTruthy();
+    expect(conversation!.modelId).toBe(inventoryModelId);
+    expect(await view.findByText('New Chat')).toBeTruthy();
+    expect(view.getByText('No Model Selected')).toBeTruthy();
+  });
+
+  it('disables Add while indexing and re-enables it after completion', async () => {
+    const view = renderProject();
+    const path = `${nativeBoundary.fs!.DocumentDirectoryPath}/held.txt`;
+    nativeBoundary.fs!.seedFile(path, 12);
+    const DocumentPicker = require('@react-native-documents/picker') as {
+      pick: jest.Mock; keepLocalCopy: jest.Mock;
+    };
+    DocumentPicker.pick.mockResolvedValue([{
+      uri: 'content://external/held.txt', name: 'held.txt', size: 12,
+    }]);
+    DocumentPicker.keepLocalCopy.mockResolvedValue([{
+      status: 'success', localUri: `file://${path}`,
+    }]);
+    const RNFS = require('react-native-fs') as { readFile: jest.Mock };
+    const previousReadFile = RNFS.readFile.getMockImplementation()!;
+    let releaseRead!: (value: string) => void;
+    const heldRead = new Promise<string>(resolve => { releaseRead = resolve; });
+    RNFS.readFile.mockImplementation((readPath: string, ...args: unknown[]) =>
+      readPath === path ? heldRead : previousReadFile(readPath, ...args));
+    try {
+      rtl.fireEvent.press(view.getByTestId('kb-add-document'));
+      expect(await view.findByText('Indexing held.txt...')).toBeTruthy();
+      expect(view.getByRole('button', { name: 'Add', disabled: true })).toBeTruthy();
+      releaseRead('held content');
+      expect(await view.findByText('held.txt')).toBeTruthy();
+      expect(view.getByRole('button', { name: 'Add', disabled: false })).toBeTruthy();
+    } finally {
+      RNFS.readFile.mockImplementation(previousReadFile);
+    }
+  });
+
+  it('indexes every selected file in a multi-file import', async () => {
+    const view = renderProject();
+    const base = nativeBoundary.fs!.DocumentDirectoryPath;
+    nativeBoundary.fs!.seedFile(`${base}/file1.txt`, 1000);
+    nativeBoundary.fs!.seedFile(`${base}/file2.txt`, 2000);
+    const DocumentPicker = require('@react-native-documents/picker') as {
+      pick: jest.Mock; keepLocalCopy: jest.Mock;
+    };
+    DocumentPicker.pick.mockResolvedValue([
+      { uri: 'content://external/file1.txt', name: 'file1.txt', size: 1000 },
+      { uri: 'content://external/file2.txt', name: 'file2.txt', size: 2000 },
+    ]);
+    DocumentPicker.keepLocalCopy
+      .mockResolvedValueOnce([{ status: 'success', localUri: `file://${base}/file1.txt` }])
+      .mockResolvedValueOnce([{ status: 'success', localUri: `file://${base}/file2.txt` }]);
+    rtl.fireEvent.press(view.getByTestId('kb-add-document'));
+    expect(await view.findByText('file1.txt')).toBeTruthy();
+    expect(await view.findByText('file2.txt')).toBeTruthy();
+    expect(view.getByLabelText('Knowledge Base has 2 documents')).toBeTruthy();
   });
 });

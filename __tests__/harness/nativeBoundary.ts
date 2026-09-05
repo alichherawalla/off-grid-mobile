@@ -355,6 +355,8 @@ export interface LlamaFake {
   scriptGpuInitFailure(fail?: boolean): void;
   /** Make EVERY init attempt fail (a model that can't load on any backend) — the real load path throws. */
   scriptInitFailure(fail?: boolean): void;
+  /** Set the GGUF header facts returned by llama.rn's metadata-only file probe. */
+  scriptModelInfo(metadata: Record<string, unknown>): void;
   /** HOLD the next post-init multimodal-support check (context.getMultimodalSupport) open until
    *  releaseMultimodalHold() — the device-shaped load window between context init and capability
    *  detection (the 2026-07-13 18:50 device log shows ~3.4s there for gemma-4-E2B: init succeeded
@@ -374,6 +376,7 @@ function makeLlamaFake(
   chatTemplate?: string,
 ): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [], clearCache: [] };
+  let modelInfo: Record<string, unknown> = {};
   type PreparedCompletion = Omit<LlamaCompletionScript, 'text'> & {
     text: string;
   };
@@ -594,7 +597,8 @@ function makeLlamaFake(
     // no markers) to assert the Thinking toggle stays hidden.
     metadata: {
       'tokenizer.chat_template':
-        chatTemplate ?? '{% if enable_thinking %}<think>\n{{reasoning}}\n</think>{% endif %}{{content}}',
+        chatTemplate ??
+        '{% if enable_thinking %}<think>\n{{reasoning}}\n</think>{% endif %}{{content}}',
     },
   };
 
@@ -621,6 +625,7 @@ function makeLlamaFake(
         n > 0 ? '' : 'gpu layers not requested';
       return context;
     }),
+    loadLlamaModelInfo: jest.fn(async () => modelInfo),
     releaseContext: jest.fn().mockResolvedValue(undefined),
     completion: jest.fn().mockResolvedValue({ text: '' }),
     stopCompletion: jest.fn().mockResolvedValue(undefined),
@@ -650,6 +655,9 @@ function makeLlamaFake(
     },
     scriptInitFailure: (fail = true) => {
       initFails = fail;
+    },
+    scriptModelInfo: metadata => {
+      modelInfo = metadata;
     },
     scriptMultimodalHold: () => {
       mmHoldPending = true;
@@ -774,6 +782,7 @@ export interface DownloadRow {
   status?: string;
   bytesDownloaded?: number;
   totalBytes?: number;
+  sha256?: string;
 }
 
 export interface DownloadFake {
@@ -781,13 +790,30 @@ export interface DownloadFake {
   events: FakeEmitterHandle;
   /** Put a row into the native active set (as if a download were in flight). */
   seedActive(row: DownloadRow): void;
+  /** Emit measured native progress for one active transfer. */
+  progress(
+    downloadId: string,
+    bytesDownloaded: number,
+    totalBytes: number,
+  ): void;
+  /** Complete one active transfer through the native event channel. */
+  complete(downloadId: string, facts?: { sha256?: string }): void;
+  /** Fail one active transfer through the native event channel. */
+  fail(downloadId: string, reason: string): void;
   /** Currently-active native rows. */
   active(): DownloadRow[];
   /** Model an app-kill: iOS URLSession loses its rows; pass {survive} for Android WorkManager rows. */
   simulateRelaunch(opts?: { survive?: string[] }): void;
 }
 
-function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
+function makeDownloadFake(
+  handle: FakeEmitterHandle,
+  seedCompletedFile?: (
+    path: string,
+    sizeBytes: number,
+    sha256?: string,
+  ) => void,
+): DownloadFake {
   const rows = new Map<string, DownloadRow>();
   const module: Record<string, jest.Mock> = {
     startDownload: jest.fn(async (params: DownloadRow) => {
@@ -801,14 +827,23 @@ function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
       rows.set(row.downloadId, row);
       return row;
     }),
-    cancelDownload: jest.fn(async (id: string) => {
+    stopDownload: jest.fn(async (id: string, _retainPartial: boolean) => {
+      if (!rows.has(id)) return 'not-found';
+      if (rows.get(id)?.status === 'completed') return 'completed';
       rows.delete(id);
+      return 'stopped';
     }),
     retryDownload: jest.fn(async () => {}),
     getActiveDownloads: jest.fn(async () => [...rows.values()]),
-    moveCompletedDownload: jest.fn(
-      async (_id: string, target: string) => target,
-    ),
+    moveCompletedDownload: jest.fn(async (id: string, target: string) => {
+      const row = rows.get(id);
+      seedCompletedFile?.(
+        target,
+        row?.totalBytes ?? row?.bytesDownloaded ?? 0,
+        row?.sha256,
+      );
+      return target;
+    }),
     startProgressPolling: jest.fn(),
     stopProgressPolling: jest.fn(),
     requestNotificationPermission: jest.fn(),
@@ -822,6 +857,38 @@ function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
     module,
     events: handle,
     seedActive: row => rows.set(row.downloadId, { status: 'running', ...row }),
+    progress: (downloadId, bytesDownloaded, totalBytes) => {
+      const row = rows.get(downloadId);
+      if (!row) throw new Error(`Native download is not active: ${downloadId}`);
+      rows.set(downloadId, {
+        ...row,
+        status: 'running',
+        bytesDownloaded,
+        totalBytes,
+      });
+      handle.emit('DownloadProgress', {
+        downloadId,
+        bytesDownloaded,
+        totalBytes,
+      });
+    },
+    complete: (downloadId, facts) => {
+      const row = rows.get(downloadId);
+      if (!row) throw new Error(`Native download is not active: ${downloadId}`);
+      rows.set(downloadId, {
+        ...row,
+        status: 'completed',
+        bytesDownloaded: row.totalBytes ?? row.bytesDownloaded ?? 0,
+        ...facts,
+      });
+      handle.emit('DownloadComplete', { downloadId });
+    },
+    fail: (downloadId, reason) => {
+      const row = rows.get(downloadId);
+      if (!row) throw new Error(`Native download is not active: ${downloadId}`);
+      rows.set(downloadId, { ...row, status: 'failed' });
+      handle.emit('DownloadError', { downloadId, reason });
+    },
     active: () => [...rows.values()],
     simulateRelaunch: opts => {
       const survive = new Set(opts?.survive ?? []);
@@ -1049,11 +1116,15 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     memState.availBytes += freed;
   };
 
-  const litert = makeLiteRTFake(handle);
-  const downloadFake = opts.download ? makeDownloadFake(handle) : undefined;
-
   // Stateful FS: override the dumb global react-native-fs stub BEFORE any service requires it.
   const fsFake = opts.fs ? createNativeFileSystemBoundary() : undefined;
+  const litert = makeLiteRTFake(handle);
+  const downloadFake = opts.download
+    ? makeDownloadFake(handle, (path, sizeBytes, sha256) => {
+        fsFake?.seedFile(path, sizeBytes);
+        if (sha256) fsFake?.setReportedHash(path, 'sha256', sha256);
+      })
+    : undefined;
   if (fsFake) jest.doMock('react-native-fs', () => fsFake.module);
 
   // Diffusion writes its rendered PNG to the (memfs) disk when fs is present, like the native module.
@@ -1070,6 +1141,12 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
 
   const RN = require('react-native');
+  // resetModules() creates a fresh React Native View class after jest.setup installed the
+  // host-measurement boundary. Restore the native layout callback on this module graph so anchored
+  // controls open through their real measureInWindow path.
+  RN.View.prototype.measureInWindow = (
+    callback: (...values: number[]) => void,
+  ): void => callback(0, 0, 100, 40);
   RN.NativeModules.LiteRTModule = litert.module;
   // Both platform names point at the same fake; localDreamGenerator's Platform.select picks one.
   RN.NativeModules.LocalDreamModule = diffusion.module;
