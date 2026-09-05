@@ -304,10 +304,9 @@ describe('TranscriptionModelsTab — listing & presence (real composition)', () 
       applicationFixture!.application.models.snapshot().active.transcription
         ?.model?.id,
     ).toBe(selectedBefore);
-    const published =
-      applicationFixture!.application.models.snapshot().control.downloads.find(
-        row => row.modelId === 'tiny.en',
-      );
+    const published = applicationFixture!.application.models
+      .snapshot()
+      .control.downloads.find(row => row.modelId === 'tiny.en');
     expect(published).toBeDefined();
 
     await act(async () => {
@@ -455,14 +454,15 @@ describe('TranscriptionModelsTab — model intents (real composition)', () => {
     fireEvent.press(view.getByTestId(largeCard));
 
     await RTL.waitFor(() => {
-      expect(view.queryByTestId(`${largeCard}-download`)).toBeNull();
       expect(boundary.download!.module.startDownload).toHaveBeenCalledTimes(1);
     });
+    await RTL.waitFor(() => {
+      expect(view.queryByTestId(`${largeCard}-download`)).toBeNull();
+    });
 
-    const published =
-      applicationFixture!.application.models.snapshot().control.downloads.find(
-        row => row.modelId === 'large-v3',
-      );
+    const published = applicationFixture!.application.models
+      .snapshot()
+      .control.downloads.find(row => row.modelId === 'large-v3');
     expect(published).toBeDefined();
     fireEvent.press(view.getByTestId(largeCard));
     expect(boundary.download!.module.startDownload).toHaveBeenCalledTimes(1);
