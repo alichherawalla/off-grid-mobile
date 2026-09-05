@@ -1,7 +1,8 @@
 import packageManifest from '../../package.json';
 
-const { proCoverageThreshold } = require('../../scripts/jestCoverageThresholds') as {
-  proCoverageThreshold(exists: boolean): Record<string, unknown>;
+const jestConfig = require('../../jest.config') as {
+  collectCoverageFrom: string[];
+  coverageThreshold: Record<string, unknown>;
 };
 
 describe('workspace coverage configuration', () => {
@@ -12,15 +13,16 @@ describe('workspace coverage configuration', () => {
     expect(command).toContain('--consumers=mobile,mobile-pro');
   });
 
-  it('adds the Pro threshold only when Pro source exists', () => {
-    expect(proCoverageThreshold(false)).toEqual({});
-    expect(proCoverageThreshold(true)).toEqual({
-      './pro': {
+  it('measures core and Pro under one combined 80 percent threshold', () => {
+    expect(jestConfig.collectCoverageFrom).toContain('pro/**/*.{ts,tsx}');
+    expect(jestConfig.coverageThreshold).toMatchObject({
+      global: {
         statements: 80,
         branches: 80,
         functions: 80,
         lines: 80,
       },
     });
+    expect(jestConfig.coverageThreshold).not.toHaveProperty('./pro');
   });
 });
