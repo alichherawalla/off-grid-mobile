@@ -30,7 +30,10 @@ import {
   selectedLocalModelId,
 } from '../../utils/testHelpers';
 import { useModelResidencyStore } from '../../../src/stores/modelResidencyStore';
-import { refreshMobileModelServices } from '../../../src/services/modelServices';
+import {
+  refreshMobileModelServices,
+  startMobileModelServices,
+} from '../../../src/services/modelServices';
 import { rememberedLocalTextModelId } from '../../../src/services/modelServices/modelSelectionProjection';
 
 /** Select a local model the way the app persists it, then let the shared inventory see it. */
@@ -64,6 +67,50 @@ const saveAndSelectRemoteTextModel = async (name: string) => {
     global.fetch = originalFetch;
   }
 };
+
+const importAndSelectImageArchive = async () => {
+  const stopModelServices = startMobileModelServices();
+  const RNFS = require('react-native-fs') as { exists: jest.Mock; readDir: jest.Mock };
+  const zip = require('react-native-zip-archive') as { unzip: jest.Mock };
+  const previousExists = RNFS.exists.getMockImplementation();
+  const previousReadDir = RNFS.readDir.getMockImplementation();
+  const previousUnzip = zip.unzip.getMockImplementation();
+  let modelRoot = '';
+  const files = ['unet.mnn', 'unet.mnn.weight', 'vae_decoder.mnn'];
+  RNFS.exists.mockImplementation(async path =>
+    Boolean(modelRoot) && (path === modelRoot || path.startsWith(`${modelRoot}/`)),
+  );
+  RNFS.readDir.mockImplementation(async path => path === modelRoot
+    ? files.map(name => ({
+        name,
+        path: `${modelRoot}/${name}`,
+        size: 100,
+        isFile: () => true,
+        isDirectory: () => false,
+      }))
+    : ((await previousReadDir?.(path)) ?? []));
+  zip.unzip.mockImplementation(async (_archive: string, destination: string) => {
+    modelRoot = destination;
+    return destination;
+  });
+  const restore = () => {
+    stopModelServices();
+    if (previousExists) RNFS.exists.mockImplementation(previousExists);
+    if (previousReadDir) RNFS.readDir.mockImplementation(previousReadDir);
+    if (previousUnzip) zip.unzip.mockImplementation(previousUnzip);
+  };
+  const imported = await importMobileImageArchive({
+    sourceUri: 'file:///external/SDXL-Turbo.zip',
+    fileName: 'SDXL-Turbo.zip',
+  });
+  expect(imported.status).toBe('imported');
+  if (imported.status !== 'imported') {
+    restore();
+    throw new Error(imported.error);
+  }
+  expect(imported.activated).toBe(true);
+  return { modelId: imported.model.id, restore };
+};
 import {
   createDownloadedModel,
   createONNXImageModel,
@@ -77,6 +124,7 @@ import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
 import { SUPPORT_EMAIL } from '../../../src/utils/supportEmail';
 import { applicationFacade } from '../../../src/services/applicationFacade';
+import { importMobileImageArchive } from '../../../src/services/adapters/models/library/imageArchiveImportAdapter';
 import { installLanProbe } from '../../harness/lanProbe';
 import logger from '../../../src/utils/logger';
 
@@ -575,15 +623,16 @@ describe('HomeScreen', () => {
     });
 
     it('shows the active image model name inside the manager sheet', async () => {
-      const imageModel = createONNXImageModel({ name: 'SDXL Turbo' });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-      });
-      await selectLocal('image', imageModel.id);
+      const imported = await importAndSelectImageArchive();
 
-      const { getByText, getByTestId } = renderHomeScreen();
-      fireEvent.press(getByTestId('models-summary'));
-      expect(getByText('SDXL Turbo')).toBeTruthy();
+      try {
+        const { getByText, getByTestId } = renderHomeScreen();
+        fireEvent.press(getByTestId('models-summary'));
+        expect(getByText('SDXL Turbo')).toBeTruthy();
+      } finally {
+        await applicationFacade().models.remove(imported.modelId);
+        imported.restore();
+      }
     });
 
     it('opens the manager sheet when the summary row is pressed', () => {
