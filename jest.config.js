@@ -9,6 +9,7 @@ const fs = require('node:fs');
 // genuinely absent (open-core CI without the PAT) do we ignore those suites and map
 // @offgrid/pro to the null stub, so the open-core suite still runs and stays green.
 const proExists = fs.existsSync(path.resolve(__dirname, 'pro/package.json'));
+const { proCoverageThreshold } = require('./scripts/jestCoverageThresholds');
 
 // Suites under THIS repo's __tests__ that import @offgrid/pro. Ignored ONLY when pro is
 // absent. (pro/'s OWN suite is always ignored here — it runs in the pro repo's CI.)
@@ -121,7 +122,7 @@ module.exports = {
     // glob) so jest aggregates all pro files into ONE group — a glob (`pro/**`) would apply
     // per-file and fail on the many pro files no core suite imports.
     // Pro is measured separately because this directory key removes it from the global group.
-    './pro': { statements: 75, branches: 75, functions: 75, lines: 75 },
+    ...proCoverageThreshold(proExists),
     // New standalone modules in this change set are held to 100% on every axis. Changed
     // legacy files have their NEW branches covered by the suites but aren't whole-file-100%.
     './src/utils/imageModelIntegrity.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
