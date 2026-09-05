@@ -17,7 +17,7 @@ import {
   type PublicDownloadInfo,
 } from '@offgrid/models';
 
-/** Shared owns the one lifecycle vocabulary used by every download projection. */
+/** Shared owns the durable lifecycle vocabulary stored by Mobile. */
 export type DownloadStatus = DownloadLifecyclePhase
 
 type ModelType = 'text' | 'image' | 'stt' | 'tts'
@@ -29,7 +29,7 @@ export interface DownloadEntry {
   fileName: string
   quantization: string
   modelType: ModelType
-  status: DownloadStatus
+  status: PublicDownloadInfo['status']
   bytesDownloaded: number
   totalBytes: number
   combinedTotalBytes: number
@@ -56,7 +56,7 @@ export interface DownloadEntry {
  * Use this to guard against duplicate starts (rapid double-tap) so we never
  * have two parallel native downloads racing on the same logical file.
  */
-export function isActiveStatus(status: DownloadStatus): boolean {
+export function isActiveStatus(status?: string | null): boolean {
   return isActiveDownloadStatus(status);
 }
 
@@ -66,7 +66,7 @@ export function isActiveStatus(status: DownloadStatus): boolean {
  * Manager badge + count) must include it. Device 2026-07-15: failed downloads never showed
  * on the icon badge, so a stuck download had no signal to open the manager.
  */
-export function isFailedStatus(status: DownloadStatus): boolean {
+export function isFailedStatus(status?: string | null): boolean {
   return isFailedDownloadStatus(status);
 }
 
@@ -78,11 +78,11 @@ export function isFailedStatus(status: DownloadStatus): boolean {
  * Download Manager count, and the badge. Never re-derive `status === 'pending'`
  * inline in a view; call these so the classification can't drift per-surface.
  */
-export function isQueuedStatus(status: DownloadStatus): boolean {
+export function isQueuedStatus(status?: string | null): boolean {
   return isQueuedDownloadStatus(status);
 }
 
-export function isDownloadingStatus(status: DownloadStatus): boolean {
+export function isDownloadingStatus(status?: string | null): boolean {
   return isTransferringDownloadStatus(status);
 }
 

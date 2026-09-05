@@ -29,6 +29,7 @@ import { registerModelSelectionCommandPort } from './modelSelectionCommandPort';
 import { removeMobileServerSelection } from './modelSelectionProjection';
 import { reportModelFailure } from '../modelFailureHandler';
 import logger from '../../utils/logger';
+import { registerSharedDownloadProjection } from './downloadProjectionAdapter';
 
 registerLifecycleProjectionPort({
   // The full refresh: an inventory rebuild is only complete once the generation,
@@ -175,6 +176,7 @@ export function startMobileModelServices(): () => void {
     for (const adapter of mobileInventoryAdapters) {
       cleanups.push(adapters.registerInventory(adapter));
     }
+    cleanups.push(registerSharedDownloadProjection());
     const refresh = () => {
       refreshMobileModelServices().catch(consumeAlreadyProjectedFailure);
     };
