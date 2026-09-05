@@ -747,6 +747,7 @@ afterEach(async () => {
   const g = globalThis as unknown as {
     __RTL_CLEANUP__?: () => void;
     __GEN_CLEANUP__?: () => Promise<void>;
+    __PRO_CLEANUP__?: () => Promise<void>;
   };
   if (g.__RTL_CLEANUP__) { try { g.__RTL_CLEANUP__(); } catch { /* already torn down */ } g.__RTL_CLEANUP__ = undefined; }
   // A generation left IN FLIGHT outlives its test. generationServiceHelpers schedules a 50ms token-buffer
@@ -756,6 +757,11 @@ afterEach(async () => {
   // running. That is why exactly one rendered suite failed per run, with a different name each time, and why
   // it always passed in isolation. Whoever started a generation registers the stop here.
   if (g.__GEN_CLEANUP__) { try { await g.__GEN_CLEANUP__(); } catch { /* already torn down */ } g.__GEN_CLEANUP__ = undefined; }
+  // Whoever activates the real Pro runtime owns its teardown. Clear the
+  // registration first, then expose any cleanup failure to the test runner.
+  const cleanupPro = g.__PRO_CLEANUP__;
+  g.__PRO_CLEANUP__ = undefined;
+  if (cleanupPro) await cleanupPro();
 });
 
 // Global timeout for async operations
