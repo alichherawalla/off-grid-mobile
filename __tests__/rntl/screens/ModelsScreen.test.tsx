@@ -140,15 +140,6 @@ jest.mock('../../harness/activeModelLifecycle', () => ({
   },
 }));
 
-jest.mock('../../../src/services/modelServices/coordinatedDownloadBridge', () => ({
-  coordinatedDownloads: {
-    queryDownload: jest.fn(() => Promise.resolve(null)),
-    cancelDownload: jest.fn(() => Promise.resolve()),
-    startDownload: jest.fn(() => Promise.resolve(1)),
-    isAvailable: jest.fn(() => Promise.resolve(true)),
-  },
-}));
-
 // Mock child components to simplify — ModelCard renders model name
 jest.mock('../../../src/components', () => {
   const { View, Text, TouchableOpacity } = require('react-native');
@@ -197,12 +188,10 @@ jest.mock('../../../src/components/CustomAlert', () => {
   };
 });
 
-jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children, ...props }: any) => {
-    const { View } = require('react-native');
-    return <View {...props}>{children}</View>;
-  },
-}));
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
+);
 
 jest.mock('@react-native-documents/picker', () => ({
   pick: jest.fn(),
@@ -225,6 +214,439 @@ const renderModelsScreen = () => {
   );
 };
 
+describe('ModelsScreen basic rendering and tabs (real composition)', () => {
+  let realFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture;
+  let realRTL: typeof import('@testing-library/react-native');
+  let RealModelsScreen: typeof ModelsScreen;
+  let RealNavigationContainer: typeof NavigationContainer;
+  let RealReact: typeof React;
+  let originalFetch: typeof global.fetch;
+  let searchResponse: Array<Record<string, unknown>> = [];
+  let treeResponse: Array<Record<string, unknown>> = [];
+  const networkFetch = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/api/models?')) {
+      return new Response(JSON.stringify(searchResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('/tree/')) {
+      return new Response(JSON.stringify(treeResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response('{}', {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+
+  beforeAll(async () => {
+    for (const path of [
+      '../../../src/services/huggingface',
+      '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap',
+      '../../../src/services/hardware',
+      '../../../src/services/huggingFaceModelBrowser',
+      '../../../src/services/coreMLModelBrowser',
+      '../../../src/utils/coreMLModelUtils',
+      '../../harness/activeModelLifecycle',
+      '../../../src/components',
+      '../../../src/components/AnimatedEntry',
+      '../../../src/components/CustomAlert',
+    ]) {
+      jest.unmock(path);
+    }
+    const { installNativeBoundary, requireRTL, GB } =
+      require('../../harness/nativeBoundary') as typeof import('../../harness/nativeBoundary');
+    installNativeBoundary({
+      download: true,
+      fs: true,
+      whisper: true,
+      ram: {
+        platform: 'android',
+        totalBytes: 8 * GB,
+        availBytes: 4 * GB,
+      },
+    });
+    originalFetch = global.fetch;
+    global.fetch = networkFetch as typeof global.fetch;
+    realRTL = requireRTL();
+    RealReact = require('react');
+    ({ NavigationContainer: RealNavigationContainer } = require('@react-navigation/native'));
+    ({ ModelsScreen: RealModelsScreen } = require('../../../src/screens/ModelsScreen'));
+    const { hardwareService } =
+      require('../../../src/services/hardware') as typeof import('../../../src/services/hardware');
+    await hardwareService.getDeviceInfo();
+    const mobileFixture =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    await mobileFixture.seedMobileDownloadJournal([]);
+    realFixture = await mobileFixture.startMobileApplicationFixture();
+  });
+
+  afterEach(() => {
+    searchResponse = [];
+    treeResponse = [];
+    networkFetch.mockClear();
+    realRTL.cleanup();
+  });
+  afterAll(async () => {
+    await realFixture.dispose();
+    global.fetch = originalFetch;
+  });
+
+  const renderRealScreen = () =>
+    realRTL.render(
+      RealReact.createElement(
+        RealNavigationContainer,
+        null,
+        RealReact.createElement(RealModelsScreen),
+      ),
+    );
+
+  it('renders the models screen container', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('models-screen')).toBeTruthy());
+  });
+
+  it('shows the Models title', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByText('Models')).toBeTruthy());
+  });
+
+  it('shows text and image tab buttons', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => {
+      expect(view.getByText('Text Models')).toBeTruthy();
+      expect(view.getByText('Image Models')).toBeTruthy();
+    });
+  });
+
+  it('shows the downloads icon', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('downloads-icon')).toBeTruthy());
+  });
+
+  it('shows Import Local File button', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByText('Import Local File')).toBeTruthy());
+  });
+
+  it('navigates to DownloadManager when downloads icon pressed', async () => {
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByTestId('downloads-icon'));
+    expect(mockNavigate).toHaveBeenCalledWith('DownloadManager');
+  });
+
+  it('switches to image models tab', async () => {
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByText('Image Models'));
+    await realRTL.waitFor(() => expect(view.getByText('Image Models')).toBeTruthy());
+  });
+
+  it('switches back to text models tab', async () => {
+    const view = renderRealScreen();
+    realRTL.fireEvent.press(view.getByText('Image Models'));
+    realRTL.fireEvent.press(view.getByText('Text Models'));
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+  });
+
+  it('shows search input on text tab', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+  });
+
+  it('triggers search when typing', async () => {
+    searchResponse = [
+      {
+        id: 'meta-llama/Llama-3',
+        author: 'meta-llama',
+        lastModified: '2026-01-01T00:00:00Z',
+        downloads: 1,
+        likes: 1,
+        tags: ['gguf'],
+      },
+    ];
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'llama');
+    await realRTL.waitFor(() => {
+      expect(networkFetch).toHaveBeenCalledWith(
+        expect.stringContaining('search=llama'),
+        expect.objectContaining({ headers: { Accept: 'application/json' } }),
+      );
+    });
+  });
+
+  it('shows recommended models header', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() =>
+      expect(view.getByText('Recommended for your device')).toBeTruthy(),
+    );
+  });
+
+  it('shows RAM info banner', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByText(/\d+GB RAM/)).toBeTruthy());
+  });
+
+  it('shows search results after searching', async () => {
+    searchResponse = [
+      {
+        id: 'test-org/Test Model Alpha',
+        author: 'test-org',
+        lastModified: '2026-01-01T00:00:00Z',
+        downloads: 1,
+        likes: 1,
+        tags: ['gguf'],
+      },
+      {
+        id: 'test-org/Test Model Beta',
+        author: 'test-org',
+        lastModified: '2026-01-01T00:00:00Z',
+        downloads: 1,
+        likes: 1,
+        tags: ['gguf'],
+      },
+    ];
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => {
+      expect(view.getByText('Test Model Alpha')).toBeTruthy();
+      expect(view.getByText('Test Model Beta')).toBeTruthy();
+    });
+  });
+
+  it('shows empty state when no search results', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'nonexistent-model');
+    await realRTL.waitFor(() => expect(view.getByText(/No models found/)).toBeTruthy());
+  });
+
+  it('always shows the Voice Models tab button', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('voice-models-tab')).toBeTruthy());
+  });
+
+  it('shows the upsell when no voice engine is registered', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('voice-models-tab')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('voice-models-tab'));
+    await realRTL.waitFor(() => expect(view.getByTestId('voice-models-upsell')).toBeTruthy());
+  });
+
+  it('navigates to ProDetail when Get Pro is pressed', async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('voice-models-tab')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('voice-models-tab'));
+    await realRTL.waitFor(() => expect(view.getByText('Get Pro')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Get Pro'));
+    expect(mockNavigate).toHaveBeenCalledWith('ProDetail');
+  });
+
+  const openTextFilters = async () => {
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('text-filter-toggle')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('text-filter-toggle'));
+    return view;
+  };
+
+  it('shows filter pills when filter toggle is pressed', async () => {
+    const view = await openTextFilters();
+    await realRTL.waitFor(() => {
+      expect(view.getByText(/Org/)).toBeTruthy();
+      expect(view.getByText(/Type/)).toBeTruthy();
+      expect(view.getByText(/Source/)).toBeTruthy();
+      expect(view.getByText(/Size/)).toBeTruthy();
+      expect(view.getAllByText(/Quant/).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('expands Org filter and shows org chips', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Org/));
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+  });
+
+  it('selects org filter chip and shows badge count', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Org/));
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+  });
+
+  it('expands Type filter and shows type options', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Type/));
+    await realRTL.waitFor(() => expect(view.getByText('Text')).toBeTruthy());
+  });
+
+  it('selects a type filter', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Type/));
+    await realRTL.waitFor(() => expect(view.getByText('Text')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Text'));
+  });
+
+  it('expands Source filter and shows credibility options', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Source/));
+    await realRTL.waitFor(() => expect(view.getByText('All')).toBeTruthy());
+  });
+
+  it('expands Size filter and shows size options', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Size/));
+    await realRTL.waitFor(() => expect(view.getByText('1-3B')).toBeTruthy());
+  });
+
+  it('expands Quant filter and shows quant options', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/^Quant [▴▾]$/));
+    await realRTL.waitFor(() => expect(view.getByText('Q4_K_M')).toBeTruthy());
+  });
+
+  it('shows Clear button when org filter is active', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Org/));
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Qwen'));
+    await realRTL.waitFor(() => expect(view.getByText('Clear')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText('Clear'));
+  });
+
+  it('hides filter bar when toggle pressed again', async () => {
+    const view = await openTextFilters();
+    await realRTL.waitFor(() => expect(view.getByText(/Org/)).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('text-filter-toggle'));
+  });
+
+  it('collapses expanded dimension when same pill pressed again', async () => {
+    const view = await openTextFilters();
+    realRTL.fireEvent.press(view.getByText(/Org/));
+    await realRTL.waitFor(() => expect(view.getByText('Qwen')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByText(/Org/));
+    await realRTL.waitFor(() => expect(view.queryByText('Qwen')).toBeNull());
+  });
+
+  const rawModel = (id: string, author = id.split('/')[0], extra: Record<string, unknown> = {}) => ({
+    id,
+    author,
+    lastModified: '2026-01-01T00:00:00Z',
+    downloads: 5000,
+    likes: 200,
+    tags: ['gguf'],
+    ...extra,
+  });
+  const rawFile = (path: string, size: number) => ({ type: 'file', path, size });
+  const openModelDetail = async (id: string, author?: string) => {
+    searchResponse = [rawModel(id, author)];
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'test');
+    await realRTL.waitFor(() => expect(view.getByText(id.split('/').pop()!)).toBeTruthy());
+    realRTL.fireEvent.press(view.getByTestId('model-card-0'));
+    return view;
+  };
+
+  it('navigates to model detail when search result is pressed', async () => {
+    treeResponse = [rawFile('model-Q4_K_M.gguf', 2_000_000_000)];
+    const view = await openModelDetail('test-org/Test Model');
+    await realRTL.waitFor(() => expect(view.getByTestId('model-detail-screen')).toBeTruthy());
+  });
+
+  it('does not navigate to detail for unsupported phi models', async () => {
+    searchResponse = [rawModel('microsoft/Phi-3 Mini')];
+    const view = renderRealScreen();
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+    realRTL.fireEvent.changeText(view.getByTestId('search-input'), 'phi');
+    await realRTL.waitFor(() => expect(view.getByText('Phi-3 Mini')).toBeTruthy());
+    networkFetch.mockClear();
+    realRTL.fireEvent.press(view.getByTestId('model-card-0'));
+    expect(view.queryByTestId('model-detail-screen')).toBeNull();
+    expect(networkFetch).not.toHaveBeenCalled();
+  });
+
+  it('shows back button on model detail view', async () => {
+    treeResponse = [rawFile('model.gguf', 1_000_000_000)];
+    const view = await openModelDetail('test-org/Back Test Model');
+    await realRTL.waitFor(() => expect(view.getByLabelText('Back')).toBeTruthy());
+    realRTL.fireEvent.press(view.getByLabelText('Back'));
+    await realRTL.waitFor(() => expect(view.getByTestId('search-input')).toBeTruthy());
+  });
+
+  it('shows model description and stats in detail view', async () => {
+    treeResponse = [rawFile('model.gguf', 1_000_000_000)];
+    const view = await openModelDetail('org/Stats Model');
+    await realRTL.waitFor(() => {
+      expect(view.getByText('Text generation · by org')).toBeTruthy();
+      expect(view.getByText(/downloads/)).toBeTruthy();
+      expect(view.getByText(/likes/)).toBeTruthy();
+    });
+  });
+
+  it('shows Available Files section in detail view', async () => {
+    treeResponse = [
+      rawFile('model-Q4_K_M.gguf', 2_000_000_000),
+      rawFile('model-Q8_0.gguf', 4_000_000_000),
+    ];
+    const view = await openModelDetail('org/Files Model');
+    await realRTL.waitFor(() => {
+      expect(view.getByText('Available Files')).toBeTruthy();
+      expect(view.getByText(/Choose a quantization/)).toBeTruthy();
+    });
+  });
+
+  it('renders Gemma 4 E2B files from the Shared catalog without network discovery', async () => {
+    const view = await openModelDetail('unsloth/gemma-4-E2B-it-GGUF', 'google');
+    await realRTL.waitFor(() => expect(view.getByText('gemma-4-E2B-it-Q4_K_M')).toBeTruthy());
+    expect(view.getByText(/Vision files include mmproj/)).toBeTruthy();
+    expect(view.queryByText('No compatible files found for this model.')).toBeNull();
+    expect(view.queryByText('Failed to load model files.')).toBeNull();
+    expect(networkFetch.mock.calls.some(([url]) => String(url).includes('/tree/'))).toBe(false);
+  });
+
+  it('shows credibility badge for official models', async () => {
+    treeResponse = [rawFile('model.gguf', 1_000_000_000)];
+    const view = await openModelDetail('meta-llama/Official Model');
+    await realRTL.waitFor(() => expect(view.getByText('✓')).toBeTruthy());
+  });
+
+  it('shows credibility badge for lmstudio curated models', async () => {
+    treeResponse = [rawFile('model.gguf', 1_000_000_000)];
+    const view = await openModelDetail('lmstudio-community/LMStudio Model');
+    await realRTL.waitFor(() => expect(view.getByText('★')).toBeTruthy());
+  });
+
+  it('shows credibility badge for verified quantizers', async () => {
+    treeResponse = [rawFile('model.gguf', 1_000_000_000)];
+    const view = await openModelDetail('bartowski/Verified Model');
+    await realRTL.waitFor(() => expect(view.getByText('◆')).toBeTruthy());
+  });
+
+  it('filters out files too large for device', async () => {
+    treeResponse = [
+      rawFile('model-small.gguf', 2 * 1024 * 1024 * 1024),
+      rawFile('model-large.gguf', 6 * 1024 * 1024 * 1024),
+    ];
+    const view = await openModelDetail('org/Large Model');
+    await realRTL.waitFor(() => expect(view.getByText('Available Files')).toBeTruthy());
+    await realRTL.waitFor(() => expect(view.getByTestId('file-card-0')).toBeTruthy());
+  });
+
+  it('shows vision mmproj note when files have mmProjFile', async () => {
+    treeResponse = [
+      rawFile('model-Q4_K_M.gguf', 2_000_000_000),
+      rawFile('mmproj-model-f16.gguf', 500_000_000),
+    ];
+    const view = await openModelDetail('org/Vision Model');
+    await realRTL.waitFor(() => expect(view.getByText(/mmproj/)).toBeTruthy());
+  });
+});
+
 describe('ModelsScreen', () => {
   beforeEach(() => {
     resetStores();
@@ -241,240 +663,6 @@ describe('ModelsScreen', () => {
     // Set up device info so recommended models render
     useAppStore.setState({
       deviceInfo: createDeviceInfo({ totalMemory: 8 * 1024 * 1024 * 1024 }),
-    });
-  });
-
-  // ============================================================================
-  // Basic Rendering
-  // ============================================================================
-  describe('basic rendering', () => {
-    it('renders the models screen container', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('models-screen')).toBeTruthy();
-      });
-    });
-
-    it('shows the Models title', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('Models')).toBeTruthy();
-      });
-    });
-
-    it('shows text and image tab buttons', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('Text Models')).toBeTruthy();
-        expect(getByText('Image Models')).toBeTruthy();
-      });
-    });
-
-    it('shows the downloads icon', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('downloads-icon')).toBeTruthy();
-      });
-    });
-
-    it('shows Import Local File button', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('Import Local File')).toBeTruthy();
-      });
-    });
-
-    it('navigates to DownloadManager when downloads icon pressed', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        fireEvent.press(getByTestId('downloads-icon'));
-      });
-
-      expect(mockNavigate).toHaveBeenCalledWith('DownloadManager');
-    });
-  });
-
-  // ============================================================================
-  // Text Models Tab (default)
-  // ============================================================================
-  describe('text models tab', () => {
-    it('shows search input on text tab', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-    });
-
-    it('triggers search when typing', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({ name: 'Llama-3', author: 'meta-llama' }),
-      ]);
-
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'llama');
-      });
-
-      await waitFor(() => {
-        expect(mockSearchModels).toHaveBeenCalled();
-      });
-    });
-
-    it('shows recommended models header', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByText('Recommended for your device')).toBeTruthy();
-      });
-    });
-
-    it('shows RAM info banner', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await waitFor(() => {
-        // The banner shows "XGB RAM — models up to YB recommended (Q4_K_M)"
-        expect(getByText(/\d+GB RAM/)).toBeTruthy(); // NOSONAR — regex matches short rendered UI strings, not user input; ReDoS not applicable
-      });
-    });
-
-    it('shows search results after searching', async () => {
-      const searchResults = [
-        createModelInfo({ id: 'result-1', name: 'Test Model Alpha', author: 'test-org' }),
-        createModelInfo({ id: 'result-2', name: 'Test Model Beta', author: 'test-org' }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      // Wait for initial render
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-
-      // Type search query
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      // Press search button and wait for async results
-
-      await waitFor(() => {
-        expect(getByText('Test Model Alpha')).toBeTruthy();
-        expect(getByText('Test Model Beta')).toBeTruthy();
-      });
-    });
-
-    it('shows empty state when no search results', async () => {
-      mockSearchModels.mockResolvedValue([]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      // Wait for initial render
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'nonexistent-model');
-      });
-
-      await waitFor(() => {
-        expect(getByText(/No models found/)).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Tab Switching
-  // ============================================================================
-  describe('tab switching', () => {
-    it('switches to image models tab', async () => {
-      const { getByText } = renderModelsScreen();
-
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Search input should not be visible on image tab (it has its own)
-      // The image tab content should render
-      await waitFor(() => {
-        // On image tab, the text tab search input testID should be gone
-        // and image content should appear
-        expect(getByText('Image Models')).toBeTruthy();
-      });
-    });
-
-    it('switches back to text models tab', async () => {
-      const { getByText, getByTestId } = renderModelsScreen();
-
-      // Switch to image tab
-      await act(async () => {
-        fireEvent.press(getByText('Image Models'));
-      });
-
-      // Switch back to text tab
-      await act(async () => {
-        fireEvent.press(getByText('Text Models'));
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Voice Models Tab (locked teaser when pro is absent)
-  // ============================================================================
-  describe('voice models tab', () => {
-    it('always shows the Voice Models tab button', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => {
-        expect(getByTestId('voice-models-tab')).toBeTruthy();
-      });
-    });
-
-    it('shows the upsell when no voice engine is registered', async () => {
-      const { getByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('voice-models-tab')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('voice-models-tab'));
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('voice-models-upsell')).toBeTruthy();
-      });
-    });
-
-    it('navigates to ProDetail when Get Pro is pressed', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('voice-models-tab')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('voice-models-tab'));
-      });
-
-      await waitFor(() => expect(getByText('Get Pro')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText('Get Pro'));
-      });
-
-      expect(mockNavigate).toHaveBeenCalledWith('ProDetail');
     });
   });
 
@@ -649,614 +837,6 @@ describe('ModelsScreen', () => {
       });
     });
   });
-
-  // ============================================================================
-  // Text Filter Bar
-  // ============================================================================
-  describe('text filter bar', () => {
-    it('shows filter pills when filter toggle is pressed', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/Org/)).toBeTruthy();
-        expect(getByText(/Type/)).toBeTruthy();
-        expect(getByText(/Source/)).toBeTruthy();
-        expect(getByText(/Size/)).toBeTruthy();
-        expect(getByText(/Quant/)).toBeTruthy();
-      });
-    });
-
-    it('expands Org filter and shows org chips', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Qwen')).toBeTruthy();
-      });
-    });
-
-    it('selects org filter chip and shows badge count', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      await waitFor(() => expect(getByText('Qwen')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-    });
-
-    it('expands Type filter and shows type options', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Type/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Text')).toBeTruthy();
-      });
-    });
-
-    it('selects a type filter', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Type/));
-      });
-
-      await waitFor(() => expect(getByText('Text')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText('Text'));
-      });
-    });
-
-    it('expands Source filter and shows credibility options', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Source/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('All')).toBeTruthy();
-      });
-    });
-
-    it('expands Size filter and shows size options', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Size/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('1-3B')).toBeTruthy();
-      });
-    });
-
-    it('expands Quant filter and shows quant options', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Quant/));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Q4_K_M')).toBeTruthy();
-      });
-    });
-
-    it('shows Clear button when org filter is active', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      await waitFor(() => expect(getByText('Qwen')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText('Qwen'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Clear')).toBeTruthy();
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText('Clear'));
-      });
-    });
-
-    it('hides filter bar when toggle pressed again', async () => {
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await waitFor(() => expect(getByText(/Org/)).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-    });
-
-    it('collapses expanded dimension when same pill pressed again', async () => {
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('text-filter-toggle')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('text-filter-toggle'));
-      });
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      await waitFor(() => expect(getByText('Qwen')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByText(/Org/));
-      });
-
-      // Expanded content should be gone
-      await waitFor(() => {
-        expect(queryByText('Qwen')).toBeNull();
-      });
-    });
-  });
-
-  // ============================================================================
-  // Model Selection & Detail View
-  // ============================================================================
-  describe('model selection', () => {
-    it('navigates to model detail when search result is pressed', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'test-org/test-model',
-          name: 'Test Model',
-          author: 'test-org',
-          files: [createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 })],
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => {
-        expect(getByText('Test Model')).toBeTruthy();
-      });
-
-      // Press on the model card to view details
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      // Should show the model detail view
-      await waitFor(() => {
-        expect(getByTestId('model-detail-screen')).toBeTruthy();
-      });
-    });
-
-    it('does not navigate to detail for unsupported phi models', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'microsoft/phi-3-mini',
-          name: 'Phi-3 Mini',
-          author: 'microsoft',
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-
-      const { getByTestId, getByText, queryByTestId } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'phi');
-      });
-
-      await waitFor(() => {
-        expect(getByText('Phi-3 Mini')).toBeTruthy();
-      });
-
-      fireEvent.press(getByTestId('model-card-0'));
-
-      expect(queryByTestId('model-detail-screen')).toBeNull();
-      expect(mockGetModelFiles).not.toHaveBeenCalled();
-    });
-
-    it('shows back button on model detail view', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'test-org/back-test',
-          name: 'Back Test Model',
-          author: 'test-org',
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model.gguf', size: 1000000000 }),
-      ]);
-
-      const { getByTestId, getByText, getByLabelText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => expect(getByText('Back Test Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByLabelText('Back')).toBeTruthy();
-      });
-
-      // Press back to return to models list
-      await act(async () => {
-        fireEvent.press(getByLabelText('Back'));
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('search-input')).toBeTruthy();
-      });
-    });
-
-    it('shows model description and stats in detail view', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/stats-model',
-          name: 'Stats Model',
-          author: 'org',
-          description: 'A model with stats',
-          downloads: 5000,
-          likes: 200,
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model.gguf', size: 1000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-
-      await waitFor(() => expect(getByText('Stats Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('A model with stats')).toBeTruthy();
-        expect(getByText(/downloads/)).toBeTruthy();
-        expect(getByText(/likes/)).toBeTruthy();
-      });
-    });
-
-    it('shows Available Files section in detail view', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/files-model',
-          name: 'Files Model',
-          author: 'org',
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-Q4_K_M.gguf', size: 2000000000 }),
-        createModelFile({ name: 'model-Q8_0.gguf', size: 4000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Files Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Available Files')).toBeTruthy();
-        expect(getByText(/Choose a quantization/)).toBeTruthy();
-      });
-    });
-
-    it('renders Gemma 4 E2B files from the Shared catalog without network discovery', async () => {
-      mockSearchModels.mockResolvedValue([
-        createModelInfo({
-          id: 'unsloth/gemma-4-E2B-it-GGUF',
-          name: 'Gemma 4 E2B',
-          author: 'google',
-          files: [],
-        }),
-      ]);
-      mockGetModelFiles.mockRejectedValue(new Error('Network discovery must not run'));
-
-      const { getByTestId, getByText, queryByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'Gemma 4 E2B');
-      });
-      await waitFor(() => expect(getByText('Gemma 4 E2B')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('gemma-4-E2B-it-Q4_K_M')).toBeTruthy();
-      });
-      expect(getByText(/Vision files include mmproj/)).toBeTruthy();
-      expect(queryByText('No compatible files found for this model.')).toBeNull();
-      expect(queryByText('Failed to load model files.')).toBeNull();
-      expect(mockGetModelFiles).not.toHaveBeenCalled();
-    });
-
-    it('shows credibility badge for official models', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/official-model',
-          name: 'Official Model',
-          author: 'org',
-          credibility: { source: 'official', isOfficial: true, isVerifiedQuantizer: false },
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model.gguf', size: 1000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Official Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('✓')).toBeTruthy();
-      });
-    });
-
-    it('shows credibility badge for lmstudio curated models', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/lmstudio-model',
-          name: 'LMStudio Model',
-          author: 'org',
-          credibility: { source: 'lmstudio', isOfficial: false, isVerifiedQuantizer: true },
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model.gguf', size: 1000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('LMStudio Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('★')).toBeTruthy();
-      });
-    });
-
-    it('shows credibility badge for verified quantizers', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/verified-model',
-          name: 'Verified Model',
-          author: 'org',
-          credibility: { source: 'verified-quantizer', isOfficial: false, isVerifiedQuantizer: true },
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model.gguf', size: 1000000000 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Verified Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('◆')).toBeTruthy();
-      });
-    });
-
-    it('filters out files too large for device', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/large-model',
-          name: 'Large Model',
-          author: 'org',
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      // One file fits (2GB < 8*0.6=4.8GB), one doesn't (6GB > 4.8GB)
-      mockGetModelFiles.mockResolvedValue([
-        createModelFile({ name: 'model-small.gguf', size: 2 * 1024 * 1024 * 1024 }),
-        createModelFile({ name: 'model-large.gguf', size: 6 * 1024 * 1024 * 1024 }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Large Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText('Available Files')).toBeTruthy();
-      });
-
-      // Small file should be shown, large one filtered
-      await waitFor(() => {
-        expect(getByTestId('file-card-0')).toBeTruthy();
-      });
-    });
-
-    it('shows vision mmproj note when files have mmProjFile', async () => {
-      const searchResults = [
-        createModelInfo({
-          id: 'org/vision-model',
-          name: 'Vision Model',
-          author: 'org',
-          files: [],
-        }),
-      ];
-      mockSearchModels.mockResolvedValue(searchResults);
-      mockGetModelFiles.mockResolvedValue([
-        createModelFileWithMmProj({
-          name: 'model.gguf',
-          size: 2000000000,
-          mmProjName: 'mmproj.gguf',
-          mmProjSize: 500000000,
-        }),
-      ]);
-
-      const { getByTestId, getByText } = renderModelsScreen();
-
-      await waitFor(() => expect(getByTestId('search-input')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.changeText(getByTestId('search-input'), 'test');
-      });
-      await waitFor(() => expect(getByText('Vision Model')).toBeTruthy());
-
-      await act(async () => {
-        fireEvent.press(getByTestId('model-card-0'));
-      });
-
-      await waitFor(() => {
-        expect(getByText(/mmproj/)).toBeTruthy();
-      });
-    });
-  });
-
-  // ============================================================================
   // Image Models Tab
   // ============================================================================
   describe('image models tab', () => {
