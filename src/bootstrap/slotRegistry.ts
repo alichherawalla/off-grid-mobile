@@ -26,10 +26,15 @@ function emitChange(): void {
 export function registerSlot(
   name: string,
   component: ComponentType<any>,
-): void {
-  if (slots[name] === component) return; // no-op re-register (dev Fast Refresh)
+): () => void {
+  if (slots[name] === component) return () => undefined; // no-op re-register (dev Fast Refresh)
   slots[name] = component;
   emitChange();
+  return () => {
+    if (slots[name] !== component) return;
+    delete slots[name];
+    emitChange();
+  };
 }
 
 export function getSlot(name: string): ComponentType<any> | undefined {
@@ -73,6 +78,9 @@ export const SLOTS = {
   messageAudioMode: 'message.audioMode',
   /** Per-message meta-row control (the TTS speak/play button) in chat mode. */
   messageSpeakButton: 'message.speakButton',
+  /** Expanded content for a Pro task tool-result row. Core keeps the compact row and Pro owns the
+   *  authoritative live, replay, and control detail. */
+  taskToolDetail: 'message.taskToolDetail',
   /** Extra row in the chat-input quick-settings popover (voice mode toggle). */
   quickSettingsAudioRow: 'quickSettings.audioRow',
   /** One-tap Chat↔Audio interface toggle in the chat-input pill icon row.
@@ -85,4 +93,6 @@ export const SLOTS = {
    *  download/management). The tab itself only appears when this is
    *  registered, so free builds show just Text/Image. */
   modelsScreenVoiceTab: 'modelsScreen.voiceTab',
+  /** Small Pro-owned Voice availability indicator on the core Auto Setup plan. */
+  autoSetupVoiceIndicator: 'autoSetup.voiceIndicator',
 } as const;

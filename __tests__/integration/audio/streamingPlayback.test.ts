@@ -23,9 +23,13 @@ jest.mock('@offgrid/core/utils/logger', () => ({
 // build a backlog mid-stream the way a real synthesizer does.
 const pending: Array<() => void> = [];
 const mockEngine = {
+  id: 'kokoro',
+  stop: jest.fn(),
   speak: jest.fn(() => new Promise<void>((resolve) => { pending.push(resolve); })),
   getActiveVoice: jest.fn(() => null),
   getPhase: jest.fn(() => 'processing' as const),
+  isFullyDownloaded: jest.fn(() => true),
+  capabilities: { streaming: true, peakRamMB: 320 },
   displayName: 'Mock',
 };
 /** Release the oldest in-flight speak() and let the microtask queue settle. */
@@ -37,11 +41,20 @@ async function releaseOneSpeak(): Promise<void> {
 }
 
 jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine), getEngine: jest.fn(() => mockEngine), getRegisteredIds: jest.fn(() => ['kokoro']), has: jest.fn(() => true) },
 }));
 
 jest.mock('../../../pro/audio/ttsStore', () => ({
   useTTSStore: { getState: jest.fn(), setState: jest.fn() },
+}));
+
+// Keep the real streaming coordinator and its slow native boundary while the
+// canonical shared voice route is represented by this boundary adapter.
+jest.mock('../../../pro/audio/voiceGeneration', () => ({
+  generateVoice: jest.fn(async (text: string, messageId: string) => {
+    await mockEngine.speak(text, { messageId });
+    return { output: { type: 'voice', text }, finishReason: 'stop' };
+  }),
 }));
 
 import { useTTSStore } from '../../../pro/audio/ttsStore';
@@ -51,6 +64,13 @@ import {
 
 const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
 const flush = () => new Promise<void>((r) => setImmediate(r));
+async function waitForSpeakCount(count: number): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (mockEngine.speak.mock.calls.length < count) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${count} spoken segments`);
+    await flush();
+  }
+}
 let state: Record<string, any>;
 
 const spokenSegments = () => (mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0]);
@@ -68,6 +88,7 @@ beforeEach(async () => {
   mockEngine.speak.mockImplementation(() => new Promise<void>((resolve) => { pending.push(resolve); }));
   state = {
     settings: { interfaceMode: 'audio', enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
+    voices: [],
     isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
   };
   store.getState.mockImplementation(() => state);
@@ -86,7 +107,7 @@ describe('streaming TTS — full answer is spoken to the end', () => {
     await flush();
     feedStreamingText('One. Two. ');
     feedStreamingText('One. Two. Three. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(isStreamingSpeechActive()).toBe(true);
     expect(spokenSegments()).toEqual(['One.']); // "One." in flight; Two./Three. queued
 
@@ -105,7 +126,7 @@ describe('streaming TTS — full answer is spoken to the end', () => {
 
   it('hands playback off to the real message id when the turn finalizes', async () => {
     feedStreamingText('Hello world. ');
-    await flush();
+    await waitForSpeakCount(1);
     finishStreamingText('Hello world. Second part', 'assistant-42');
     await releaseOneSpeak();
     expect(state.currentMessageId).toBe('assistant-42');
@@ -115,13 +136,13 @@ describe('streaming TTS — full answer is spoken to the end', () => {
 describe('streaming TTS — interruption semantics', () => {
   it('a NEW stream supersedes the old one cleanly (a new turn is allowed to interrupt)', async () => {
     feedStreamingText('Old one. ');
-    await flush();
+    await waitForSpeakCount(1);
     await releaseOneSpeak(); // "Old one."
 
     // New generation begins — reset (what core does on a genuine new turn) then feed.
     resetStreamingSpeech();
     feedStreamingText('New answer here.');
-    await flush();
+    await waitForSpeakCount(2);
     await releaseOneSpeak();
 
     expect(spokenSegments()).toEqual(['Old one.', 'New answer here.']);
@@ -133,7 +154,7 @@ describe('streaming TTS — interruption semantics', () => {
     // never settled, the drain's await hung, draining stayed true forever, and
     // every later stream hit "drain: already draining" (no autoplay, no end-play).
     feedStreamingText('Stuck sentence. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(spokenSegments()).toEqual(['Stuck sentence.']); // in flight, NEVER released (hangs)
 
     // The recovery path core triggers (stop / new turn / mode switch) must clear

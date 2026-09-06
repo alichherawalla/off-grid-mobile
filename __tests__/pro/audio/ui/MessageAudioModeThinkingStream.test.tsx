@@ -19,17 +19,13 @@
  * so the sequence is genuinely incremental and driven through the real store.
  */
 import React from 'react';
-import { render, within } from '@testing-library/react-native';
-import { MessageAudioMode } from '@offgrid/pro/audio/ui/MessageAudioMode';
 import type { MessageAudioModeProps } from '@offgrid/pro/audio/ui/MessageAudioMode';
-import { useChatStore } from '@offgrid/core/stores/chatStore';
-import { getDisplayMessages } from '../../../../src/screens/ChatScreen/types';
 import type { Message } from '@offgrid/core/types';
-
-// The file player decodes real audio off a native module — a genuine boundary.
-jest.mock('@offgrid/pro/audio/audioFilePlayer', () => ({
-  decodeFileWaveform: jest.fn(async () => [] as number[]),
-}));
+import type { MobileApplicationFixture } from '../../../harness/mobileApplicationFixture';
+import {
+  installNativeBoundary,
+  requireRTL,
+} from '../../../harness/nativeBoundary';
 
 const baseProps: Omit<MessageAudioModeProps, 'msg'> = {
   isStreamingThis: true,
@@ -42,11 +38,33 @@ const baseProps: Omit<MessageAudioModeProps, 'msg'> = {
   onImagePress: jest.fn(),
 };
 
-const initialChatState = useChatStore.getState();
+let applicationFixture: MobileApplicationFixture | undefined;
+let MessageAudioMode: typeof import('@offgrid/pro/audio/ui/MessageAudioMode').MessageAudioMode;
+let useChatStore: typeof import('@offgrid/core/stores/chatStore').useChatStore;
+let getDisplayMessages: typeof import('../../../../src/screens/ChatScreen/types').getDisplayMessages;
+let rtl: typeof import('@testing-library/react-native');
+
+beforeAll(async () => {
+  installNativeBoundary();
+  rtl = requireRTL();
+  ({ MessageAudioMode } =
+    require('@offgrid/pro/audio/ui/MessageAudioMode') as typeof import('@offgrid/pro/audio/ui/MessageAudioMode'));
+  ({ useChatStore } =
+    require('@offgrid/core/stores/chatStore') as typeof import('@offgrid/core/stores/chatStore'));
+  ({ getDisplayMessages } =
+    require('../../../../src/screens/ChatScreen/types') as typeof import('../../../../src/screens/ChatScreen/types'));
+  const { startMobileApplicationFixture } =
+    require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({ pro: true });
+});
+
+afterAll(async () => {
+  await applicationFixture?.dispose();
+});
 
 afterEach(() => {
+  rtl.cleanup();
   jest.clearAllMocks();
-  useChatStore.setState(initialChatState, true);
 });
 
 /** Build the in-progress `streaming` message the UI renders, from live store state. */
@@ -74,29 +92,31 @@ describe('MessageAudioMode — voice thinking streams per token (OD8)', () => {
     // inside the (expanded-while-streaming) thinking block.
     const renderThinking = () => {
       const msg = currentStreamingMessage(conversationId);
-      const utils = render(<MessageAudioMode {...baseProps} msg={msg} />);
+      const utils = rtl.render(<MessageAudioMode {...baseProps} msg={msg} />);
       const block = utils.getByTestId('thinking-block-content');
       return { utils, block };
     };
 
     // Step 1: partial reasoning is already visible while streaming.
     const step1 = renderThinking();
-    expect(within(step1.block).getByText(/Let me/)).toBeTruthy();
-    expect(within(step1.block).queryByText(/think about/)).toBeNull();
+    expect(rtl.within(step1.block).getByText(/Let me/)).toBeTruthy();
+    expect(rtl.within(step1.block).queryByText(/think about/)).toBeNull();
     step1.utils.unmount();
 
     // Step 2: another token arrives — the DISPLAY grows to include it.
     useChatStore.getState().appendToStreamingReasoningContent(' think about');
     const step2 = renderThinking();
-    expect(within(step2.block).getByText(/Let me think about/)).toBeTruthy();
-    expect(within(step2.block).queryByText(/the weather/)).toBeNull();
+    expect(
+      rtl.within(step2.block).getByText(/Let me think about/),
+    ).toBeTruthy();
+    expect(rtl.within(step2.block).queryByText(/the weather/)).toBeNull();
     step2.utils.unmount();
 
     // Step 3: more tokens — still growing, still mid-stream (not gated on completion).
     useChatStore.getState().appendToStreamingReasoningContent(' the weather');
     const step3 = renderThinking();
     expect(
-      within(step3.block).getByText(/Let me think about the weather/),
+      rtl.within(step3.block).getByText(/Let me think about the weather/),
     ).toBeTruthy();
     step3.utils.unmount();
   });

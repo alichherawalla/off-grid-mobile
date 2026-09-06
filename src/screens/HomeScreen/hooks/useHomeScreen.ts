@@ -1,36 +1,60 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
-import { AlertState, initialAlertState, showAlert, hideAlert } from '../../../components';
-import { useAppStore, useChatStore, useRemoteServerStore } from '../../../stores';
-import { modelManager, hardwareService, activeModelService, ResourceUsage, remoteServerManager } from '../../../services';
+import {
+  AlertState,
+  initialAlertState,
+  showAlert,
+  hideAlert,
+} from '../../../components';
+import {
+  useAppStore,
+  useChatStore,
+  useRemoteServerStore,
+} from '../../../stores';
+import { useDiscoveredRemoteModels } from '../../../hooks/useDiscoveredRemoteModels';
+import {
+  modelLibrary,
+  hardwareService,
+  getResourceUsage,
+  ResourceUsage,
+  subscribeToModelState,
+  syncWithNativeState,
+} from '../../../services';
 import { Conversation, RemoteModel } from '../../../types';
 import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
-import { resolveAutoDiscoverMigration } from '../../../utils/remoteAutoDiscovery';
+import { useActiveLocalModelId, useActiveMobileModel } from '../../../hooks/useActiveMobileModel';
+import {
+  modelsFailureMessage,
+  remoteServerModelOptions,
+  resolveAutoDiscoverMigration,
+} from '@offgrid/application';
 import logger from '../../../utils/logger';
 import { mostRecentConversations } from '../../../utils/conversationOrdering';
-import { ejectAllModelsForUser } from '../../../services/userModelEjection';
+import { applicationFacade } from '../../../services/applicationFacade';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
 // (which imports them back — a cycle). Re-exported here for existing external importers.
-import type { HomeScreenNavigationProp, ModelPickerType, LoadingState } from './types';
+import type {
+  HomeScreenNavigationProp,
+  ModelPickerType,
+  LoadingState,
+} from './types';
 
 export type { HomeScreenNavigationProp, ModelPickerType, LoadingState };
 
 // Track if we've synced native state to avoid repeated calls
-let hasInitializedNativeSync = false;
-let hasRunLANDiscovery = false;
+let hasInitializedNativeModelState = false;
+let lanDiscoveryState: 'idle' | 'scheduled' | 'complete' = 'idle';
 
 function deleteConversationWithAlert(
   conversation: Conversation,
   setAlertState: (s: AlertState) => void,
   deleteConversation: (id: string) => void,
 ) {
-  setAlertState(showAlert(
-    'Delete Conversation',
-    `Delete "${conversation.title}"?`,
-    [
+  setAlertState(
+    showAlert('Delete Conversation', `Delete "${conversation.title}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -40,8 +64,8 @@ function deleteConversationWithAlert(
           deleteConversation(conversation.id);
         },
       },
-    ]
-  ));
+    ]),
+  );
 }
 
 export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
@@ -56,35 +80,35 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const [memoryInfo, setMemoryInfo] = useState<ResourceUsage | null>(null);
   const isFirstMount = useRef(true);
 
-  const {
-    downloadedModels,
-    setDownloadedModels,
-    activeModelId,
-    setActiveModelId: _setActiveModelId,
-    downloadedImageModels,
-    setDownloadedImageModels,
-    activeImageModelId,
-    setActiveImageModelId: _setActiveImageModelId,
-    deviceInfo,
-    setDeviceInfo,
-    generatedImages,
-  } = useAppStore();
+  // The chat store was already narrowed here (see below) but the APP store was not, so Home still
+  // re-rendered on every settings keystroke, every download tick and every shared-file write.
+  // Four reads for the four facts it renders; the setters are actions and are read at call time.
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const downloadedImageModels = useAppStore(
+    state => state.downloadedImageModels,
+  );
+  const deviceInfo = useAppStore(state => state.deviceInfo);
+  const generatedImages = useAppStore(state => state.generatedImages);
+  const { setDownloadedModels, setDownloadedImageModels, setDeviceInfo } =
+    useAppStore.getState();
+  // Selection is read from the shared active route, never from a store mirror.
+  const activeModelId = useActiveLocalModelId('text');
+  const activeImageModelId = useActiveLocalModelId('image');
 
-  const { conversations, setActiveConversation, deleteConversation } = useChatStore();
+  // Select the three things Home reads, not the whole store. A streaming reply writes the chat store
+  // once per token; a whole-store subscription re-rendered Home and every sheet under it per token,
+  // while the chat screen sat on top of it, which is what made taps stop landing mid-reply.
+  const conversations = useChatStore(state => state.conversations);
+  const setActiveConversation = useChatStore(state => state.setActiveConversation);
+  const deleteConversation = useChatStore(state => state.deleteConversation);
 
   // Remote server store for remote models
-  const {
-    servers: remoteServers,
-    discoveredModels: remoteDiscoveredModels,
-    activeRemoteTextModelId,
-    activeRemoteImageModelId,
-    activeServerId,
-  } = useRemoteServerStore();
+  const remoteServers = useRemoteServerStore(state => state.servers);
+  const remoteDiscoveredModels = useDiscoveredRemoteModels();
 
   const {
     handleSelectTextModel: _handleSelectTextModel,
     handleUnloadTextModel: _handleUnloadTextModel,
-    handleSelectImageModel,
     handleUnloadImageModel,
   } = useModelLoading({
     setLoadingState,
@@ -92,24 +116,20 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setAlertState,
   });
 
-  // Wrap local model handlers to clear any active remote server first
-  const handleSelectTextModel = useCallback(
-    (model: Parameters<typeof _handleSelectTextModel>[0]) => {
-      remoteServerManager.clearActiveRemoteModel();
-      return _handleSelectTextModel(model);
-    },
-    [_handleSelectTextModel],
-  );
+  const handleSelectTextModel = _handleSelectTextModel;
+  const handleUnloadTextModel = _handleUnloadTextModel;
 
-  const handleUnloadTextModel = useCallback(
-    () => {
-      remoteServerManager.clearActiveRemoteModel();
-      return _handleUnloadTextModel();
-    },
-    [_handleUnloadTextModel],
-  );
-
-  const { model: activeTextModel, modelId: activeTextModelId } = useActiveTextModel();
+  const {
+    model: activeTextModel,
+    modelId: activeTextModelId,
+    isRemote: isRemoteTextModel,
+  } =
+    useActiveTextModel();
+  const activeImageRoute = useActiveMobileModel('image').model;
+  const activeRemoteTextModelId = isRemoteTextModel ? activeTextModelId : null;
+  const activeRemoteImageModelId = activeImageRoute?.source === 'remote'
+    ? activeImageRoute.id
+    : null;
 
   const { runLANDiscovery } = useLANDiscovery({ navigation, setAlertState });
 
@@ -118,45 +138,87 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     handleUnloadRemoteTextModel,
     handleSelectRemoteImageModel,
     handleUnloadRemoteImageModel,
-  } = useRemoteModelHandlers({ activeModelId, setPickerType, setLoadingState, setAlertState });
+  } = useRemoteModelHandlers({
+    setPickerType,
+    setLoadingState,
+    setAlertState,
+  });
 
   useEffect(() => {
+    let lanDiscoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelHydrationListener: (() => void) | null = null;
+    let cancelled = false;
     const task = InteractionManager.runAfterInteractions(() => {
       loadData();
-      if (!hasInitializedNativeSync) {
-        hasInitializedNativeSync = true;
-        activeModelService.syncWithNativeState();
+      if (!hasInitializedNativeModelState) {
+        hasInitializedNativeModelState = true;
+        syncWithNativeState();
       }
-      if (!hasRunLANDiscovery) {
-        hasRunLANDiscovery = true;
+      if (lanDiscoveryState === 'idle') {
+        lanDiscoveryState = 'scheduled';
         // One-time default for the auto-discover toggle: fresh installs → OFF; grandfather users who
         // already had a gateway → ON. Guard on the remote-server store being hydrated so we read the
         // real (persisted) server list, not the empty initial state. runLANDiscovery self-gates on
         // the resulting setting, so a slow hydration simply skips this launch (correct next launch).
-        const migrateAutoDiscover = (): void => {
+        const migrateAndScheduleDiscovery = (): void => {
+          if (cancelled) return;
           const next = resolveAutoDiscoverMigration(
             useAppStore.getState().settings.autoDiscoverRemoteModels,
             useRemoteServerStore.getState().servers.length > 0,
           );
-          if (next !== undefined) useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: next });
+          if (next !== undefined)
+            useAppStore
+              .getState()
+              .updateSettings({ autoDiscoverRemoteModels: next });
+          // Delay LAN scan so the home screen is fully rendered and interactive first.
+          // Start this delay only after persisted remote settings are available, or the
+          // scan can read the empty initial store and skip a valid saved gateway.
+          lanDiscoveryTimer = setTimeout(() => {
+            lanDiscoveryTimer = null;
+            if (cancelled) {
+              lanDiscoveryState = 'idle';
+              return;
+            }
+            runLANDiscovery();
+            lanDiscoveryState = 'complete';
+          }, 3000);
         };
         // `.persist` is a zustand-middleware addition; guard it so this is safe under test mocks
         // that don't include it (treat "no persist API" as already-hydrated).
-        const persistApi = (useRemoteServerStore as { persist?: { hasHydrated?: () => boolean; onFinishHydration?: (cb: () => void) => void } }).persist;
-        if (!persistApi?.hasHydrated || persistApi.hasHydrated()) migrateAutoDiscover();
-        else persistApi.onFinishHydration?.(migrateAutoDiscover);
-        // Delay LAN scan so the home screen is fully rendered and interactive first
-        setTimeout(runLANDiscovery, 3000);
+        const persistApi = (
+          useRemoteServerStore as {
+          persist?: {
+            hasHydrated?: () => boolean;
+            onFinishHydration?: (cb: () => void) => (() => void) | void;
+          };
+          }
+        ).persist;
+        if (!persistApi?.hasHydrated || persistApi.hasHydrated()) {
+          migrateAndScheduleDiscovery();
+        } else {
+          cancelHydrationListener =
+            persistApi.onFinishHydration?.(migrateAndScheduleDiscovery) ?? null;
+        }
       }
     });
     isFirstMount.current = false;
-    return () => task.cancel();
+    return () => {
+      cancelled = true;
+      task.cancel();
+      cancelHydrationListener?.();
+      if (lanDiscoveryTimer !== null) {
+        clearTimeout(lanDiscoveryTimer);
+      }
+      if (lanDiscoveryState === 'scheduled') lanDiscoveryState = 'idle';
+    };
 
+    // This is an intentional mount owner. The effect registers and cancels its own delayed work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshMemoryInfo = useCallback(async () => {
     try {
-      const info = await activeModelService.getResourceUsage();
+      const info = await getResourceUsage();
       setMemoryInfo(info);
     } catch (_error) {
       logger.warn('[HomeScreen] Failed to get memory info:', _error);
@@ -165,7 +227,9 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   useEffect(() => {
     refreshMemoryInfo();
-    const unsubscribe = activeModelService.subscribe(() => { refreshMemoryInfo(); });
+    const unsubscribe = subscribeToModelState(() => {
+      refreshMemoryInfo();
+    });
     return () => unsubscribe();
   }, [refreshMemoryInfo]);
 
@@ -174,40 +238,59 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
       const info = await hardwareService.getDeviceInfo();
       setDeviceInfo(info);
     }
-    await modelManager.linkOrphanMmProj();
-    const models = await modelManager.getDownloadedModels();
+    await modelLibrary.linkOrphanMmProj();
+    const models = await modelLibrary.getDownloadedModels();
     setDownloadedModels(models);
-    const imageModels = await modelManager.getDownloadedImageModels();
+    const imageModels = await modelLibrary.getDownloadedImageModels();
     setDownloadedImageModels(imageModels);
   };
 
   const handleEjectAll = () => {
     const hasLocalModels = activeModelId || activeImageModelId;
     const hasRemoteModel = activeRemoteTextModelId || activeRemoteImageModelId;
-    if (!hasLocalModels && !hasRemoteModel) { return; }
+    if (!hasLocalModels && !hasRemoteModel) {
+      return;
+    }
 
     const doEjectAll = async () => {
       setAlertState(hideAlert());
       setIsEjecting(true);
-      setLoadingState({ isLoading: true, type: 'text', modelName: 'Ejecting models...' });
+      setLoadingState({
+        isLoading: true,
+        type: 'text',
+        modelName: 'Ejecting models...',
+      });
       // Let the overlay render before blocking the bridge
       await new Promise<void>(resolve =>
-        InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350))
+        InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350)),
       );
       try {
         // Single owning side-effect — same cancellation + unload path as Chat.
-        const { count } = await ejectAllModelsForUser();
-        if (count > 0) {
-          setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
+        const outcome = await applicationFacade().workflows.ejectModels();
+        if (!outcome.ok) {
+          setAlertState(
+            showAlert('Error', modelsFailureMessage(outcome.failure)),
+          );
+          return;
         }
-      } catch (_error) {
-        setAlertState(showAlert('Error', 'Failed to unload models'));
+        const { count } = outcome.value;
+        if (count > 0) {
+          setAlertState(
+            showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`),
+          );
+        }
+      } catch (error) {
+        setAlertState(showAlert(
+          'Error',
+          error instanceof Error ? error.message : 'Failed to unload models',
+        ));
       } finally {
         setIsEjecting(false);
         setLoadingState({ isLoading: false, type: null, modelName: null });
       }
     };
-    setAlertState(showAlert(
+    setAlertState(
+      showAlert(
       'Eject All Models',
       'Unload all active models to free up memory?',
       [
@@ -215,15 +298,20 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         {
           text: 'Eject All',
           style: 'destructive',
-          onPress: () => { doEjectAll(); },
+            onPress: () => {
+              doEjectAll();
+            },
         },
-      ]
-    ));
+        ],
+      ),
+    );
   };
 
   const startNewChat = () => {
     // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
-    if (!activeTextModelId && !activeImageModelId) { return; }
+    if (!activeTextModelId && !activeImageModelId) {
+      return;
+    }
     navigation.navigate('Chat', {});
   };
 
@@ -233,25 +321,54 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const handleDeleteConversation = (conversation: Conversation) =>
-    deleteConversationWithAlert(conversation, setAlertState, deleteConversation);
+    deleteConversationWithAlert(
+      conversation,
+      setAlertState,
+      deleteConversation,
+    );
 
-  const activeRemoteImageModel = activeRemoteImageModelId && activeServerId
-    ? (remoteDiscoveredModels[activeServerId] || []).find((m) => m.id === activeRemoteImageModelId)
+  const remoteImageModels: RemoteModel[] = remoteServerModelOptions(
+    remoteServers,
+    'image',
+  ).map(option => ({
+    id: option.id,
+    name: option.name,
+    serverId: option.serverId,
+    capabilities: {
+      supportsVision: false,
+      supportsToolCalling: false,
+      supportsThinking: false,
+    },
+    details: { serverName: option.serverName },
+    lastUpdated: '',
+  }));
+  const activeRemoteImageServerId = activeImageRoute?.source === 'remote'
+    ? activeImageRoute.serverId
+    : null;
+  const activeRemoteImageModel =
+    activeRemoteImageModelId && activeRemoteImageServerId
+      ? remoteImageModels.find(
+          model =>
+            model.id === activeRemoteImageModelId &&
+            model.serverId === activeRemoteImageServerId,
+        )
     : null;
 
-  const activeImageModel = activeRemoteImageModel || downloadedImageModels.find((m) => m.id === activeImageModelId) || null;
+  const activeImageModel =
+    activeRemoteImageModel ||
+    downloadedImageModels.find(m => m.id === activeImageModelId) ||
+    null;
   // Ordered, not just the store's first four - otherwise "Recent" can list older chats than
   // the ones just used, and disagrees with the Chats list and desktop.
-  const recentConversations = mostRecentConversations(conversations, 4);
-
-  // Get all remote text models — includes vision-language models since they do text generation too
-  const remoteTextModels: RemoteModel[] = remoteServers.flatMap(server =>
-    remoteDiscoveredModels[server.id] || []
+  const recentConversations = useMemo(
+    () => mostRecentConversations(conversations, 4),
+    [conversations],
   );
 
-  // Remote image generation models — Ollama/LM Studio don't serve image gen models,
-  // so this is intentionally empty. Vision-language models belong in remoteTextModels.
-  const remoteImageModels: RemoteModel[] = [];
+  // Get all remote text models — includes vision-language models since they do text generation too
+  const remoteTextModels: RemoteModel[] = remoteServers.flatMap(
+    server => remoteDiscoveredModels[server.id] || [],
+  );
 
   return {
     pickerType,
@@ -277,7 +394,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     activeRemoteImageModelId,
     handleSelectTextModel,
     handleUnloadTextModel,
-    handleSelectImageModel,
     handleUnloadImageModel,
     // Remote model handlers
     handleSelectRemoteTextModel,

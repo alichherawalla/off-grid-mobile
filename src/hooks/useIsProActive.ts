@@ -19,9 +19,9 @@ export const PRO_TOOLS_SCREEN = 'McpServers';
 
 export function useIsProActive(): boolean {
   const registered = useHasRegisteredScreen(PRO_TOOLS_SCREEN);
-  // Registration says the bundle LOADED; access says this device is still entitled to it. Both, because
-  // registries cannot be unregistered: a device the roster deactivated while the app was running has the
-  // Pro screens registered for the rest of the session, and would keep every Pro entry point without this.
+  // Registration says the bundle loaded; access says this device is still
+  // entitled. The access check closes the short interval while async runtime
+  // cleanup removes every registered Pro surface.
   const hasAccess = useAppStore(selectHasProAccess);
   return registered && hasAccess;
 }

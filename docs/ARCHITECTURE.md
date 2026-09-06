@@ -2,6 +2,39 @@
 
 > This document contains the full technical documentation for Off Grid. For a quick overview, see the [README](../README.md).
 
+## Model-control boundary
+
+`@offgrid/models` is the shared business-logic owner for Desktop and Mobile model behavior. It owns
+catalog and inventory rules, active route selection, generation and tool-loop policy, reasoning and
+streaming policy, memory budgets, residency and eviction decisions, downloads, remote-server policy,
+and the modality contracts. See
+[`shared/packages/models/README.md`](../../shared/packages/models/README.md) for the authoritative
+boundary.
+
+Mobile services below this boundary are platform adapters and composition roots. They call
+React Native inference engines, native storage, keychain, network, and operating-system APIs. The
+screens and stores render shared projections and send intents. They must not choose providers,
+fallbacks, budgets, reasoning dialects, retry rules, or residency actions.
+
+The current Mobile composition uses the Shared `LLMService`, `GenerationService`,
+`ChatSessionService`, `ModelResidencyManager`, image application service, and download workflow.
+Files such as `src/services/llm.ts`, image runtime files, Whisper/Kokoro bridges, RNFS adapters, and
+background-download bridges are intended to be native transport adapters. `src/screens/ChatScreen`
+must render session events and send commands, and Zustand model/download fields must be projections
+of Shared state.
+
+This boundary is **not fully closed in the current working tree**. Mobile still contains model-load,
+lifecycle, chat-route, compaction, download, remote-server, tool, RAG-input, and sync-policy
+orchestration. Some UI and hook paths also compose more than one model command. The exact Code /
+Wired / Verified state and file evidence is in [`docs/GAPS_BACKLOG.md`](GAPS_BACKLOG.md), under
+"QA architecture closure sweep - 2026-09-01". Do not treat a passing architecture script as proof
+that this migration is complete.
+
+Some implementation paths later in this document predate this consolidation. Where they name
+`generationService`, `activeModelService`, `ProviderRegistry`, or another app-local service as the
+policy owner, that text is historical and must not be used to add a second control plane. The Shared
+package README and the architecture gates define the current boundary.
+
 ---
 
 ## Platform Support

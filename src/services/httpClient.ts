@@ -1,3 +1,4 @@
+import { remoteErrorBodyMessage } from '@offgrid/models';
 /**
  * HTTP Client for Remote LLM Servers
  *
@@ -7,9 +8,17 @@
 
 import logger from '../utils/logger';
 import { createSSELineProcessor } from './httpClientSSE';
+import { isCredentialTransportDowngrade } from '@offgrid/models';
 
-export { parseOpenAIMessage, parseAnthropicMessage, parseSSEStream } from './httpClientSSE';
-export { imageToBase64DataUrl, isPrivateNetworkEndpoint, testEndpoint, detectServerType } from './httpClientUtils';
+export {
+  parseOpenAIMessage,
+  parseAnthropicMessage,
+  parseSSEStream,
+} from './httpClientSSE';
+export {
+  imageToBase64DataUrl,
+  isPrivateNetworkEndpoint,
+} from './httpClientUtils';
 // The stream-message types live in httpClientTypes so httpClientSSE can import them without
 // importing this file (which imports SSE) — that would be a cycle. Imported for internal use here
 // and re-exported for back-compat.
@@ -38,6 +47,29 @@ export interface StreamRequestConfig extends StreamRequestOptions {
   body: unknown;
 }
 
+const INSECURE_CREDENTIAL_REDIRECT =
+  'Remote server redirected credentials to an insecure endpoint';
+
+function rejectCredentialDowngrade(input: {
+  xhr: XMLHttpRequest;
+  requestUrl: string;
+  hasAuthorization: boolean;
+  reject: (reason?: unknown) => void;
+}): boolean {
+  const { xhr, requestUrl, hasAuthorization, reject } = input;
+  if (
+    !isCredentialTransportDowngrade(
+      requestUrl,
+      xhr.responseURL,
+      hasAuthorization,
+    )
+  ) {
+    return false;
+  }
+  xhr.abort();
+  reject(new Error(INSECURE_CREDENTIAL_REDIRECT));
+  return true;
+}
 
 /** Default timeouts */
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
@@ -49,7 +81,7 @@ const DEFAULT_RETRY_DELAY = 1000; // 1 second
  */
 export async function fetchWithTimeout<T = unknown>(
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<T> {
   const {
     timeout = DEFAULT_TIMEOUT,
@@ -94,7 +126,11 @@ export async function fetchWithTimeout<T = unknown>(
 
       // Retry on network errors
       if (attempt < retries) {
-        logger.log(`[HTTP] Retry ${attempt + 1}/${retries} after error: ${lastError.message}`);
+        logger.log(
+          `[HTTP] Retry ${attempt + 1}/${retries} after error: ${
+            lastError.message
+          }`,
+        );
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
     }
@@ -110,9 +146,9 @@ export async function fetchWithTimeout<T = unknown>(
 export async function createStreamingRequest(
   url: string,
   req: StreamRequestConfig,
-  onEvent: (event: SSEEvent) => void
+  onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
-  const { body, headers = {}, timeout = 300000, signal } = req;
+  const { body, headers = {}, timeout = 0, signal } = req;
   logger.log('[HttpClient] Creating streaming request to:', url);
   return new Promise((resolve, reject) => {
     // XMLHttpRequest is required for SSE streaming in React Native as fetch
@@ -127,10 +163,10 @@ export async function createStreamingRequest(
       });
     }
 
-    const timeoutId = setTimeout(() => {
+    const timeoutId = timeout > 0 ? setTimeout(() => {
       xhr.abort();
       reject(new Error('Request timeout'));
-    }, timeout);
+    }, timeout) : undefined;
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
@@ -146,6 +182,19 @@ export async function createStreamingRequest(
     xhr.onreadystatechange = () => {
       if (xhr.readyState === 4) {
         clearTimeout(timeoutId);
+        // React Native strips Authorization on redirects in both native clients:
+        // iOS rebuilds redirect headers in RCTHTTPRequestHandler; Android OkHttp
+        // removes Authorization when the URL cannot reuse the connection. Reject
+        // the downgraded response as well, so no result can arrive over cleartext.
+        if (
+          rejectCredentialDowngrade({
+            xhr,
+            requestUrl: url,
+            hasAuthorization: 'Authorization' in headers,
+            reject,
+          })
+        )
+          return;
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             // Process any remaining data
@@ -163,14 +212,33 @@ export async function createStreamingRequest(
         } else {
           // Log the full server error body — a bare "HTTP 400" is undiagnosable; the body
           // (e.g. llama.cpp's "failed to parse grammar") is what tells you what to fix.
-          logger.error(`[HttpClient] HTTP ${xhr.status} error body: ${xhr.responseText || '(empty)'}`);
-          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
+          logger.error(
+            `[HttpClient] HTTP ${xhr.status} error body: ${
+              xhr.responseText || '(empty)'
+            }`,
+          );
+          reject(
+            new Error(
+              remoteErrorBodyMessage(xhr.responseText ?? '', xhr.status),
+            ),
+          );
         }
       }
     };
 
     // Handle progress events for real-time streaming
     xhr.onprogress = () => {
+      if (
+        rejectCredentialDowngrade({
+          xhr,
+          requestUrl: url,
+          hasAuthorization: 'Authorization' in headers,
+          reject,
+        })
+      ) {
+        clearTimeout(timeoutId);
+        return;
+      }
       const responseText = xhr.responseText;
       if (responseText.length > processedLength) {
         const newData = responseText.slice(processedLength);
@@ -208,80 +276,73 @@ export async function createStreamingRequest(
 export async function createNDJSONStreamingRequest(
   url: string,
   req: StreamRequestConfig,
-  onLine: (parsed: Record<string, unknown>) => void
+  onLine: (parsed: Record<string, unknown>) => void,
 ): Promise<void> {
-  const { body, headers = {}, timeout = 300000, signal } = req;
+  const { body, headers = {}, timeout = 0, signal } = req;
   logger.log('[HttpClient] Creating NDJSON streaming request to:', url);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest(); // NOSONAR
 
     if (signal) {
-      signal.addEventListener('abort', () => { xhr.abort(); resolve(); });
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        resolve();
+      });
     }
 
-    const timeoutId = setTimeout(() => { xhr.abort(); reject(new Error('Request timeout')); }, timeout);
+    const timeoutId = timeout > 0 ? setTimeout(() => {
+      xhr.abort();
+      reject(new Error('Request timeout'));
+    }, timeout) : undefined;
 
     xhr.open('POST', url, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+    Object.entries(headers).forEach(([key, value]) =>
+      xhr.setRequestHeader(key, value),
+    );
 
     let processedLength = 0;
-    let lineBuffer = '';
-
-    const processChunk = (text: string) => {
-      // Prepend any leftover partial line from the previous chunk
-      const combined = lineBuffer + text;
-      const lines = combined.split('\n');
-      // Last element may be an incomplete line — hold it for the next chunk
-      lineBuffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          onLine(JSON.parse(trimmed) as Record<string, unknown>);
-        } catch {
-          logger.warn('[HttpClient] Failed to parse NDJSON line:', trimmed.substring(0, 100));
-        }
-      }
-    };
+    const processor = createNDJSONProcessor(onLine);
 
     xhr.onprogress = () => {
+      if (
+        rejectCredentialDowngrade({
+          xhr,
+          requestUrl: url,
+          hasAuthorization: 'Authorization' in headers,
+          reject,
+        })
+      ) {
+        clearTimeout(timeoutId);
+        return;
+      }
       const text = xhr.responseText;
       if (text.length > processedLength) {
-        processChunk(text.slice(processedLength));
+        processor.process(text.slice(processedLength));
         processedLength = text.length;
       }
     };
 
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 4) {
-        clearTimeout(timeoutId);
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const text = xhr.responseText;
-          if (text.length > processedLength) {
-            processChunk(text.slice(processedLength));
-          }
-          // Flush any remaining buffered line
-          if (lineBuffer.trim()) {
-            try {
-              onLine(JSON.parse(lineBuffer.trim()) as Record<string, unknown>);
-            } catch {
-              logger.warn('[HttpClient] Failed to parse final NDJSON line:', lineBuffer.substring(0, 100));
-            }
-            lineBuffer = '';
-          }
-          resolve();
-        } else {
-          // Log the full server error body — a bare "HTTP 400" is undiagnosable; the body
-          // (e.g. llama.cpp's "failed to parse grammar") is what tells you what to fix.
-          logger.error(`[HttpClient] HTTP ${xhr.status} error body: ${xhr.responseText || '(empty)'}`);
-          reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`));
-        }
-      }
-    };
+    xhr.onreadystatechange = () =>
+      completeNDJSONRequest({
+        xhr,
+        url,
+        hasAuthorization: 'Authorization' in headers,
+        processedLength,
+        processor,
+        timeoutId,
+        resolve,
+        reject,
+      });
 
-    xhr.onerror = () => { clearTimeout(timeoutId); reject(new Error('Network error')); };
-    xhr.ontimeout = () => { clearTimeout(timeoutId); reject(new Error('Request timeout')); };
+    xhr.onerror = () => {
+      clearTimeout(timeoutId);
+      reject(new Error('Network error'));
+    };
+    xhr.ontimeout = () => {
+      clearTimeout(timeoutId);
+      reject(new Error('Request timeout'));
+    };
 
     try {
       const bodyStr = JSON.stringify(body);
@@ -292,4 +353,93 @@ export async function createNDJSONStreamingRequest(
       reject(err);
     }
   });
+}
+
+interface NDJSONProcessor {
+  process(text: string): void;
+  flush(): void;
+}
+
+function parseNDJSONLine(
+  line: string,
+  onLine: (parsed: Record<string, unknown>) => void,
+  final: boolean,
+): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  try {
+    onLine(JSON.parse(trimmed) as Record<string, unknown>);
+  } catch {
+    logger.warn(
+      final
+        ? '[HttpClient] Failed to parse final NDJSON line:'
+        : '[HttpClient] Failed to parse NDJSON line:',
+      (final ? line : trimmed).substring(0, 100),
+    );
+  }
+}
+
+function createNDJSONProcessor(
+  onLine: (parsed: Record<string, unknown>) => void,
+): NDJSONProcessor {
+  let lineBuffer = '';
+  return {
+    process(text) {
+      const lines = `${lineBuffer}${text}`.split('\n');
+      lineBuffer = lines.pop() || '';
+      lines.forEach(line => parseNDJSONLine(line, onLine, false));
+    },
+    flush() {
+      parseNDJSONLine(lineBuffer, onLine, true);
+      lineBuffer = '';
+    },
+  };
+}
+
+function completeNDJSONRequest({
+  xhr,
+  url,
+  hasAuthorization,
+  processedLength,
+  processor,
+  timeoutId,
+  resolve,
+  reject,
+}: {
+  xhr: XMLHttpRequest;
+  url: string;
+  hasAuthorization: boolean;
+  processedLength: number;
+  processor: NDJSONProcessor;
+  timeoutId: ReturnType<typeof setTimeout> | undefined;
+  resolve: () => void;
+  reject: (reason?: unknown) => void;
+}): void {
+  if (xhr.readyState !== 4) return;
+  clearTimeout(timeoutId);
+  if (
+    rejectCredentialDowngrade({
+      xhr,
+      requestUrl: url,
+      hasAuthorization,
+      reject,
+    })
+  )
+    return;
+  if (xhr.status >= 200 && xhr.status < 300) {
+    if (xhr.responseText.length > processedLength) {
+      processor.process(xhr.responseText.slice(processedLength));
+    }
+    processor.flush();
+    resolve();
+    return;
+  }
+  logger.error(
+    `[HttpClient] HTTP ${xhr.status} error body: ${
+      xhr.responseText || '(empty)'
+    }`,
+  );
+  reject(
+    new Error(remoteErrorBodyMessage(xhr.responseText ?? '', xhr.status)),
+  );
 }

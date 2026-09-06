@@ -32,19 +32,30 @@ jest.mock('react-native-calendar-events', () => ({
 // out in the open-core CI. Load it dynamically via a computed path (so tsc does
 // not try to resolve the absent module) and skip the suite when it is missing.
 // jest hoists the jest.mock calls above this, so the mocks are already registered.
-function loadProExtension(): ToolExtension | null {
+interface LoadedProExtension {
+  extension: ToolExtension;
+  setEntitlementActive(active: boolean): void;
+}
+
+function loadProExtension(): LoadedProExtension | null {
   const proPath = ['..', '..', '..', '..', 'pro', 'tools', 'EmailCalendarExtension'].join('/');
   try {
-     
-    return require(proPath).EmailCalendarExtension as ToolExtension;
+    const module = require(proPath) as {
+      EmailCalendarExtension: ToolExtension;
+      setEmailCalendarEntitlementActive(active: boolean): void;
+    };
+    return {
+      extension: module.EmailCalendarExtension,
+      setEntitlementActive: module.setEmailCalendarEntitlementActive,
+    };
   } catch {
     return null;
   }
 }
 
-const proExtension = loadProExtension();
-const EmailCalendarExtension = proExtension ?? ({} as ToolExtension);
-const describeIfPro = proExtension ? describe : describe.skip;
+const loadedProExtension = loadProExtension();
+const EmailCalendarExtension = loadedProExtension?.extension ?? ({} as ToolExtension);
+const describeIfPro = loadedProExtension ? describe : describe.skip;
 
 const mockOpenURL = jest.spyOn(Linking, 'openURL');
 
@@ -54,11 +65,16 @@ function call(name: string, args: Record<string, any> = {}): ToolCall {
 
 describeIfPro('EmailCalendarExtension', () => {
   beforeEach(() => {
+    loadedProExtension?.setEntitlementActive(true);
     mockEnabledTools = [];
     mockOpenURL.mockReset().mockResolvedValue(undefined as never);
     mockSaveEvent.mockReset().mockResolvedValue('evt-1');
     mockRequestPermissions.mockReset().mockResolvedValue('authorized');
     mockFetchAllEvents.mockReset().mockResolvedValue([]);
+  });
+
+  afterAll(() => {
+    loadedProExtension?.setEntitlementActive(false);
   });
 
   describe('definitions and gating', () => {

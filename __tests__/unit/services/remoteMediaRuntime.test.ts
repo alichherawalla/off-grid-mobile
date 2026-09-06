@@ -1,0 +1,242 @@
+import {
+  remoteServerCapabilities,
+  type RemoteServer,
+} from '../../../src/types';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+
+const server: RemoteServer = {
+  id: 'desktop-study',
+  name: 'Study Mac',
+  endpoint: 'http://192.168.1.30:7878/',
+  provider: 'openai-compatible',
+  createdAt: '2026-08-29T00:00:00.000Z',
+  selections: {
+    image: 'flux-schnell',
+    transcription: 'whisper-large-v3',
+    voice: 'kokoro',
+  },
+};
+
+function jsonResponse(payload: unknown, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => 'application/json' },
+    json: async () => payload,
+    text: async () => JSON.stringify(payload),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  } as unknown as Response;
+}
+
+describe('remoteMediaRuntime', () => {
+  const originalFetch = global.fetch;
+  let applicationFixture: MobileApplicationFixture;
+  let remoteMediaRuntime: typeof import('../../../src/services/adapters/remote/mediaRuntime')['remoteMediaRuntime'];
+  let remoteServerManager: typeof import('../../../src/services/remoteServerManager')['remoteServerManager'];
+  let executeMobileTranscription: typeof import('../../../src/services/mobileTranscription')['executeMobileTranscription'];
+  let activeRemoteVoiceServer: typeof import('../../../src/services/adapters/remote/voicePlayback')['activeRemoteVoiceServer'];
+  let synthesizeRemoteVoiceFile: typeof import('../../../src/services/adapters/remote/voicePlayback')['synthesizeRemoteVoiceFile'];
+  let Keychain: typeof import('react-native-keychain');
+  let RNFS: typeof import('react-native-fs');
+
+  beforeAll(async () => {
+    installNativeBoundary();
+    ({ remoteMediaRuntime } = require('../../../src/services/adapters/remote/mediaRuntime') as typeof import('../../../src/services/adapters/remote/mediaRuntime'));
+    ({ remoteServerManager } = require('../../../src/services/remoteServerManager') as typeof import('../../../src/services/remoteServerManager'));
+    ({ executeMobileTranscription } = require('../../../src/services/mobileTranscription') as typeof import('../../../src/services/mobileTranscription'));
+    ({ activeRemoteVoiceServer, synthesizeRemoteVoiceFile } = require('../../../src/services/adapters/remote/voicePlayback') as typeof import('../../../src/services/adapters/remote/voicePlayback'));
+    Keychain = require('react-native-keychain') as typeof import('react-native-keychain');
+    const fileSystemModule = require('react-native-fs') as {
+      default?: typeof import('react-native-fs');
+    } & typeof import('react-native-fs');
+    RNFS = fileSystemModule.default ?? fileSystemModule;
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
+  beforeEach(async () => {
+    await remoteServerManager.clearAllServers();
+    jest.spyOn(Keychain, 'getGenericPassword').mockResolvedValue({
+      service: `ai.offgridmobile.servers.${server.id}`,
+      storage: 'AES_GCM',
+      username: `server_${server.id}`,
+      password: 'device-secret',
+    } as never);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('derives media capabilities from the server model IDs', () => {
+    expect(remoteServerCapabilities(server)).toEqual({
+      imageGeneration: true,
+      transcription: true,
+      voice: true,
+      embeddings: false,
+    });
+    expect(remoteServerCapabilities({ selections: { image: '   ' } })).toEqual(
+      {
+        imageGeneration: false,
+        transcription: false,
+        voice: false,
+        embeddings: false,
+      },
+    );
+  });
+
+  it('keeps private-LAN HTTP unauthenticated and rejects redirects', async () => {
+    const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    global.fetch = jest.fn(async (url, init) => {
+      calls.push([url, init]);
+      return jsonResponse({ data: [{ b64_json: 'image-bytes' }] });
+    }) as typeof fetch;
+
+    await expect(
+      remoteMediaRuntime.generateImage(server, { prompt: 'A quiet desk' }),
+    ).resolves.toEqual({ base64: 'image-bytes', url: undefined });
+
+    expect(calls[0]?.[0]).toBe(
+      'http://192.168.1.30:7878/v1/images/generations',
+    );
+    expect(calls[0]?.[1]?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+    });
+    expect(calls[0]?.[1]?.headers).not.toHaveProperty('Authorization');
+    expect(calls[0]?.[1]?.redirect).toBe('error');
+    expect(JSON.parse(String(calls[0]?.[1]?.body))).toMatchObject({
+      model: 'flux-schnell',
+      prompt: 'A quiet desk',
+    });
+    expect(server).not.toHaveProperty('apiKey');
+  });
+
+  it('does not duplicate a persisted OpenAI v1 route', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ data: [{ b64_json: 'image-bytes' }] }),
+    ) as typeof fetch;
+
+    await remoteMediaRuntime.generateImage(
+      { ...server, endpoint: 'http://192.168.1.30:7878/v1' },
+      { prompt: 'A quiet desk' },
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://192.168.1.30:7878/v1/images/generations',
+      expect.any(Object),
+    );
+  });
+
+  it('sends a stored credential only to an HTTPS endpoint', async () => {
+    const calls: Array<[RequestInfo | URL, RequestInit | undefined]> = [];
+    global.fetch = jest.fn(async (url, init) => {
+      calls.push([url, init]);
+      return jsonResponse({ data: [{ b64_json: 'image-bytes' }] });
+    }) as typeof fetch;
+    await remoteMediaRuntime.generateImage(
+      { ...server, endpoint: 'https://desktop.example.test' },
+      { prompt: 'A quiet desk' },
+    );
+    expect(calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: 'Bearer device-secret',
+    });
+    expect(calls[0]?.[1]?.redirect).toBe('error');
+  });
+
+  it('uses the transcription endpoint and reports an empty server response', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({})) as typeof fetch;
+
+    await expect(
+      remoteMediaRuntime.transcribe(server, {
+        fileUri: 'file:///recording.wav',
+      }),
+    ).rejects.toThrow('Remote server returned no transcript');
+  });
+
+  it('routes file transcription through the active server without a local Whisper model', async () => {
+    global.fetch = jest.fn(async () =>
+      jsonResponse({ text: 'Private meeting notes' }),
+    ) as typeof fetch;
+    const serverId = (await remoteServerManager.addServer({
+      name: server.name,
+      endpoint: server.endpoint,
+      provider: server.provider,
+      selections: { transcription: 'whisper-large-v3' },
+    })).id;
+    await remoteServerManager.setActiveRemoteMediaModel(
+      serverId, 'transcription', 'whisper-large-v3',
+    );
+    await applicationFixture.refreshModels();
+
+    await expect(
+      executeMobileTranscription('file:///recording.wav'),
+    ).resolves.toBe('Private meeting notes');
+  });
+
+  it('cancels an in-flight voice request through AbortSignal', async () => {
+    global.fetch = jest.fn(() => new Promise(() => undefined)) as typeof fetch;
+    const controller = new AbortController();
+    const pending = remoteMediaRuntime.synthesizeVoice(
+      server,
+      { text: 'Your summary is ready.' },
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toThrow('Remote request cancelled');
+  });
+
+  it('writes remote speech into the file-backed playback seam for the active Desktop', async () => {
+    const audio = Uint8Array.from([1, 2, 3, 4]).buffer;
+    global.fetch = jest.fn(
+      async () =>
+        ({
+      ...jsonResponse({}, 200),
+      headers: { get: () => 'audio/mpeg' },
+      arrayBuffer: async () => audio,
+        } as unknown as Response),
+    ) as typeof fetch;
+    const id = (await remoteServerManager.addServer({
+      name: 'Studio Mac',
+      endpoint: server.endpoint,
+      provider: server.provider,
+      selections: { voice: 'kokoro' },
+    })).id;
+    await remoteServerManager.setActiveRemoteMediaModel(id, 'voice', 'kokoro');
+    await applicationFixture.refreshModels();
+
+    const active = activeRemoteVoiceServer();
+    expect(active?.name).toBe('Studio Mac');
+    await expect(
+      synthesizeRemoteVoiceFile({
+        server: active!,
+        text: 'Your summary is ready.',
+        messageId: 'message:1',
+        voice: 'hf_alpha',
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toBe('/mock/caches/remote_voice/message_1.mp3');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://192.168.1.30:7878/v1/audio/speech',
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'kokoro',
+          input: 'Your summary is ready.',
+          voice: 'hf_alpha',
+          response_format: 'mp3',
+        }),
+      }),
+    );
+    expect(RNFS.writeFile).toHaveBeenCalledWith(
+      '/mock/caches/remote_voice/message_1.mp3',
+      Buffer.from(audio).toString('base64'),
+      'base64',
+    );
+  });
+});

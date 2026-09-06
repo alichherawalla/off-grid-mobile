@@ -1,204 +1,228 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { hydrateDownloadStore, isMmProjFileName } from '../../../src/services/downloadHydration';
-import { saveActiveDownloads } from '../../../src/services/activeDownloadPersistence';
-import { useDownloadStore } from '../../../src/stores/downloadStore';
+import { isMMProjFile, type PersistedModelDownload } from '@offgrid/models';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+import { installNativeBoundary, MB } from '../../harness/nativeBoundary';
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
-    isAvailable: jest.fn(),
-    getActiveDownloads: jest.fn(),
+let fixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
+});
+
+const record = (
+  id: string,
+  fileName: string,
+  phase: PersistedModelDownload['phase'] = 'downloading',
+  bytesDownloaded = 500 * MB,
+  totalBytes = 1000 * MB,
+): PersistedModelDownload => ({
+  manifest: {
+    id,
+    modelId: id,
+    kind: 'text',
+    revision: 'main',
+    artifacts: [
+      {
+        id: 'primary',
+        name: fileName,
+        role: 'primary',
+        required: true,
+        localName: fileName,
+        url: `https://example.test/${fileName}`,
+      },
+    ],
   },
-}));
-
-const { backgroundDownloadService } = jest.requireMock('../../../src/services/backgroundDownloadService');
-
-beforeEach(async () => {
-  jest.clearAllMocks();
-  useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} });
-  await AsyncStorage.clear(); // reset the persisted in-flight snapshot between tests
+  phase,
+  artifacts: [
+    {
+      artifactId: 'primary',
+      phase,
+      ...(phase === 'downloading' ? { transferId: `transfer-${id}` } : {}),
+      bytesDownloaded,
+      totalBytes,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: 1,
+  attempt: 1,
 });
 
-describe('isMmProjFileName', () => {
-  it('returns true for mmproj filenames', () => {
-    expect(isMmProjFileName('llava-v1.5-mmproj.gguf')).toBe(true);
-    expect(isMmProjFileName('model-mmproj.gguf')).toBe(true);
+async function start(
+  records: readonly PersistedModelDownload[],
+): Promise<void> {
+  const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal(records);
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
+}
+
+function downloads() {
+  const { useDownloadStore } =
+    require('../../../src/stores/downloadStore') as typeof import('../../../src/stores/downloadStore');
+  return Object.values(useDownloadStore.getState().downloads);
+}
+
+describe('Shared projector policy', () => {
+  it('recognises projector filenames', () => {
+    expect(isMMProjFile('llava-v1.5-mmproj.gguf')).toBe(true);
+    expect(isMMProjFile('model-projector.gguf')).toBe(true);
   });
 
-  it('returns false for regular filenames', () => {
-    expect(isMmProjFileName('model-Q4_K_M.gguf')).toBe(false);
-    expect(isMmProjFileName('plain-model.gguf')).toBe(false);
+  it('does not classify model weights as projectors', () => {
+    expect(isMMProjFile('model-Q4_K_M.gguf')).toBe(false);
+    expect(isMMProjFile('plain-model.gguf')).toBe(false);
   });
 });
 
-describe('hydrateDownloadStore', () => {
-  it('does nothing when service is unavailable', async () => {
-    backgroundDownloadService.isAvailable.mockReturnValue(false);
-    await hydrateDownloadStore();
-    expect(backgroundDownloadService.getActiveDownloads).not.toHaveBeenCalled();
+describe('public Shared download recovery and Mobile projection', () => {
+  it('projects no downloads when the native service has no rows', async () => {
+    installNativeBoundary({ download: true, fs: true });
+    await start([]);
+    expect(downloads()).toEqual([]);
   });
 
-  it('hydrates store with active text downloads', async () => {
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      {
-        downloadId: 'dl-1',
-        modelId: 'author/model',
-        modelKey: 'author/model/model.gguf',
+  it('projects an active text download with progress', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-author/model',
+      modelId: 'author/model',
+      fileName: 'model.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 500 * MB,
+      totalBytes: 1000 * MB,
+    });
+    await start([record('author/model', 'model.gguf')]);
+    expect(downloads()).toEqual([
+      expect.objectContaining({
         fileName: 'model.gguf',
-        quantization: 'Q4_K_M',
-        modelType: 'text',
-        status: 'running',
-        bytesDownloaded: 500,
-        totalBytes: 1000,
-        combinedTotalBytes: 1000,
-        createdAt: 1000,
-      },
+        status: 'downloading',
+        progress: 0.5,
+      }),
     ]);
-
-    await hydrateDownloadStore();
-
-    const entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
-    expect(entry).toBeDefined();
-    expect(entry.status).toBe('running');
-    expect(entry.bytesDownloaded).toBe(500);
-    expect(entry.progress).toBe(0.5);
   });
 
-  it('skips mmproj rows (they appear as child of parent)', async () => {
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      {
-        downloadId: 'dl-parent',
-        modelId: 'author/model',
-        fileName: 'model.gguf',
-        status: 'running',
-        bytesDownloaded: 200,
-        totalBytes: 1000,
-        combinedTotalBytes: 1500,
-        mmProjDownloadId: 'dl-mm',
-        createdAt: 1000,
-      },
-      {
-        downloadId: 'dl-mm',
-        modelId: 'author/model',
-        fileName: 'model-mmproj.gguf',
-        status: 'running',
-        bytesDownloaded: 100,
-        totalBytes: 500,
-        createdAt: 900,
-      },
-    ]);
-
-    await hydrateDownloadStore();
-
-    const state = useDownloadStore.getState();
-    const keys = Object.keys(state.downloads);
-    expect(keys.length).toBe(1);
-    const entry = state.downloads[keys[0]];
-    expect(entry.mmProjDownloadId).toBe('dl-mm');
-    expect(entry.mmProjBytesDownloaded).toBe(100);
+  it('folds a projector artifact into one vision-model projection', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-author/vision',
+      modelId: 'author/vision',
+      fileName: 'vision.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 500 * MB,
+      totalBytes: 1000 * MB,
+    });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-projector',
+      modelId: 'author/vision',
+      fileName: 'vision-mmproj.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 100 * MB,
+      totalBytes: 200 * MB,
+    });
+    const vision = record('author/vision', 'vision.gguf');
+    vision.manifest.artifacts.push({
+      id: 'projector',
+      name: 'vision-mmproj.gguf',
+      role: 'mmproj',
+      required: true,
+      localName: 'vision-mmproj.gguf',
+      url: 'https://example.test/vision-mmproj.gguf',
+    });
+    vision.artifacts.push({
+      artifactId: 'projector',
+      phase: 'downloading',
+      transferId: 'transfer-projector',
+      bytesDownloaded: 100 * MB,
+      totalBytes: 200 * MB,
+    });
+    await start([vision]);
+    expect(downloads().map(item => item.fileName)).toEqual(['vision.gguf']);
   });
 
-  it('skips cancelled and completed downloads', async () => {
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      {
-        downloadId: 'dl-done',
-        modelId: 'a/b',
-        fileName: 'b.gguf',
-        status: 'completed',
-        bytesDownloaded: 1000,
-        totalBytes: 1000,
-        createdAt: 1000,
-      },
-      {
-        downloadId: 'dl-cancel',
-        modelId: 'a/c',
-        fileName: 'c.gguf',
+  it('preserves recoverable terminal records in the Shared projection', async () => {
+    installNativeBoundary({ download: true, fs: true });
+    await start([
+      record('done', 'done.gguf', 'completed', 1000 * MB),
+      record('cancelled', 'cancelled.gguf', 'cancelled', 0),
+    ]);
+    expect(downloads()).toEqual([
+      expect.objectContaining({ fileName: 'done.gguf', status: 'interrupted' }),
+      expect.objectContaining({
+        fileName: 'cancelled.gguf',
         status: 'cancelled',
-        bytesDownloaded: 0,
-        totalBytes: 500,
-        createdAt: 1000,
-      },
+      }),
     ]);
-
-    await hydrateDownloadStore();
-    expect(Object.keys(useDownloadStore.getState().downloads).length).toBe(0);
   });
 
-  it('keeps latest entry when duplicate keys exist', async () => {
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      {
-        downloadId: 'dl-old',
-        modelId: 'author/model',
-        modelKey: 'author/model/model.gguf',
-        fileName: 'model.gguf',
-        status: 'failed',
-        bytesDownloaded: 100,
-        totalBytes: 1000,
-        createdAt: 500,
-      },
-      {
-        downloadId: 'dl-new',
-        modelId: 'author/model',
-        modelKey: 'author/model/model.gguf',
-        fileName: 'model.gguf',
-        status: 'running',
-        bytesDownloaded: 300,
-        totalBytes: 1000,
-        createdAt: 1500,
-      },
+  it('keeps the newest durable attempt for one model', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-author/model',
+      modelId: 'author/model',
+      fileName: 'model.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 700 * MB,
+      totalBytes: 1000 * MB,
+    });
+    const old = record('author/model', 'model.gguf', 'failed', 100 * MB);
+    const latest = {
+      ...record('author/model', 'model.gguf', 'downloading', 700 * MB),
+      createdAt: 2,
+      updatedAt: 2,
+      attempt: 2,
+    };
+    await start([old, latest]);
+    expect(downloads()).toEqual([
+      expect.objectContaining({ bytesDownloaded: 700 * MB }),
     ]);
-
-    await hydrateDownloadStore();
-    const entry = useDownloadStore.getState().downloads['author/model/model.gguf'];
-    expect(entry.downloadId).toBe('dl-new');
   });
 
-  // Cold app-kill recovery: an in-flight download persisted to the durable snapshot must be carried
-  // forward as a failed/retriable card — NOT vanish — when its native row is gone on relaunch (iOS
-  // URLSession drops the task on force-quit). device 2026-07-15.
-  const inflight = {
-    downloadId: 'dl-inflight',
-    modelId: 'author/big-model',
-    modelKey: 'author/big-model/model.gguf',
-    fileName: 'model.gguf',
-    quantization: 'Q4_K_M',
-    modelType: 'text' as const,
-    status: 'running' as const,
-    bytesDownloaded: 1_100_000_000,
-    totalBytes: 5_500_000_000,
-    combinedTotalBytes: 5_500_000_000,
-    progress: 0.2,
-    createdAt: 1000,
-  };
-
-  it('strands a persisted in-flight download as failed when the native row is gone (cold app-kill)', async () => {
-    // Cold kill: in-memory store empty (beforeEach), native snapshot empty (task dropped), but the
-    // in-flight download survives in the durable snapshot loadActiveDownloads() reads.
-    await saveActiveDownloads([inflight]);
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([]);
-
-    await hydrateDownloadStore();
-
-    const entry = useDownloadStore.getState().downloads['author/big-model/model.gguf'];
-    expect(entry).toBeDefined();               // did NOT vanish
-    expect(entry.status).toBe('failed');       // stranded as retriable
-    expect(entry.errorMessage).toMatch(/Interrupted/);
+  it('retains an interrupted entry when an iOS native transfer disappears', async () => {
+    installNativeBoundary({
+      download: true,
+      fs: true,
+      ram: {
+        platform: 'ios',
+        totalBytes: 8 * 1024 ** 3,
+        availBytes: 4 * 1024 ** 3,
+      },
+    });
+    await start([record('author/model', 'model.gguf')]);
+    expect(downloads()).toEqual([
+      expect.objectContaining({
+        fileName: 'model.gguf',
+        status: 'interrupted',
+      }),
+    ]);
   });
 
-  it('does NOT strand when the native snapshot still reports the row (Android survives a kill)', async () => {
-    // Android WorkManager survives a kill → the row reappears in the native snapshot → the persisted
-    // snapshot must be ignored for that key, never flip a live download to a false "failed".
-    await saveActiveDownloads([inflight]);
-    backgroundDownloadService.isAvailable.mockReturnValue(true);
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([{ ...inflight, bytesDownloaded: 2_000_000_000 }]);
-
-    await hydrateDownloadStore();
-
-    const entry = useDownloadStore.getState().downloads['author/big-model/model.gguf'];
-    expect(entry.status).toBe('running');      // live native row wins — no false strand (no Android regression)
+  it('keeps a surviving Android native transfer active', async () => {
+    const boundary = installNativeBoundary({
+      download: true,
+      fs: true,
+      ram: {
+        platform: 'android',
+        totalBytes: 8 * 1024 ** 3,
+        availBytes: 4 * 1024 ** 3,
+      },
+    });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-author/model',
+      modelId: 'author/model',
+      fileName: 'model.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 700 * MB,
+      totalBytes: 1000 * MB,
+    });
+    await start([record('author/model', 'model.gguf')]);
+    expect(downloads()).toEqual([
+      expect.objectContaining({ status: 'downloading' }),
+    ]);
   });
 });

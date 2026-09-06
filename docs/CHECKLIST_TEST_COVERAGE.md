@@ -236,7 +236,7 @@ A row flagged HAS-UI-TEST may still carry a device caveat where the *trigger* is
 | 161 | 11 Polish | Orientation behavior | DEVICE-ONLY | — | Real rotation / Info.plist portrait-lock |
 | 162 | 11 Polish | About screen renders | HAS-UI-TEST | `__tests__/rntl/screens/AboutScreen.test.tsx` | Renders links; real open device |
 | 163 | 11 Polish | Storage usage screen | HAS-UI-TEST | `__tests__/rntl/screens/StorageSettingsScreen.test.tsx` | Renders storage/model sizes, orphaned files, clear-cache |
-| 164 | 11 Polish | App lock passphrase set + enforce | HAS-UI-TEST | `__tests__/rntl/screens/LockScreen.test.tsx`, `SecuritySettingsScreen.test.tsx`, `PassphraseSetupScreen.test.tsx` | Rendered lock/setup; verify/unlock/reject. Biometric device |
+| 164 | 11 Polish | App lock passphrase set + enforce | HAS-UI-TEST | `__tests__/integration/security/passphraseLock.rendered.test.tsx`, `__tests__/rntl/screens/SecuritySettingsScreen.test.tsx` | Rendered lock/setup; verify/unlock/reject. Biometric device |
 | 165 | 11 Polish | Share/promo sheet once per session | HAS-UI-TEST | `__tests__/integration/happy/supportShareDismiss.happy.test.tsx` (+ `home/sharePromptOncePerSession.rendered.test.tsx`) | T096/DEV. Rendered once-per-session guard |
 | 166 | 11 Polish | Settings persist across relaunch | HAS-UI-TEST | `__tests__/integration/happy/persistence.happy.test.tsx` (+ `settingsApplied.happy.test.tsx`) | Persistence gate. Real persist+relaunch; project round-trip, not every setting individually |
 | 167 | 11 Polish | Chat history survives relaunch | HAS-SERVICE-TEST-ONLY | `__tests__/integration/happy/persistence.happy.test.tsx` | Persistence renders project round-trip only; chat-history relaunch = store rehydration |

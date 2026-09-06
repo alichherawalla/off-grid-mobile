@@ -20,14 +20,19 @@ function subscribe(onStoreChange: () => void): () => void {
   return () => listeners.delete(onStoreChange);
 }
 
-export function registerScreen(screen: RegisteredScreen): void {
+export function registerScreen(screen: RegisteredScreen): () => void {
   // Dedupe by name. loadProFeatures can run more than once (dev Fast Refresh, or
   // a future re-activate-on-purchase without restart); duplicate route names
   // crash the navigator (the duplicate-screen render bug). First wins. Mirrors
   // the guard in sectionRegistry.
-  if (screens.some(s => s.name === screen.name)) return;
+  if (screens.some(s => s.name === screen.name)) return () => undefined;
   screens = [...screens, screen];
   emitChange();
+  return () => {
+    if (!screens.includes(screen)) return;
+    screens = screens.filter(item => item !== screen);
+    emitChange();
+  };
 }
 
 export function getRegisteredScreens(): RegisteredScreen[] {

@@ -9,33 +9,49 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
-import { CustomAlert, hideAlert, showAlert, SharePromptSheet, ProAhaSheet } from '../../components';
+import {
+  CustomAlert,
+  hideAlert,
+  showAlert,
+  SharePromptSheet,
+  ProAhaSheet,
+} from '../../components';
+import { WHISPER_MODELS } from '@offgrid/application';
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';
-import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
 import { createStyles } from './styles';
 import { useChatScreen } from './useChatScreen';
-import { MessageRenderer } from './MessageRenderer';
+import {
+  useChatRowRenderer,
+  useChatScrollTracker,
+} from './useChatListCallbacks';
 import { NoModelScreen, ChatHeader } from './ChatScreenComponents';
 import { ChatModalSection } from './ChatModalSection';
 import { ChatMessageArea } from './ChatMessageArea';
-import { ModelsManagerSheet, ModelRowType } from '../../components/models/ModelsManagerSheet';
+import {
+  ModelsManagerSheet,
+  ModelRowType,
+} from '../../components/models/ModelsManagerSheet';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
-import { useWhisperStore } from '../../stores/whisperStore';
-import { WHISPER_MODELS } from '../../services';
+import { useTranscriptionModelsProjection } from '../../hooks/useTranscriptionModelsProjection';
+import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 
 function countConversationImages(conv: Conversation | undefined): number {
-  return (conv?.messages || []).reduce((n: number, m: Message) =>
-    n + (m.attachments?.filter((a) => a.type === 'image').length || 0), 0);
+  return (conv?.messages || []).reduce(
+    (n: number, m: Message) =>
+      n + (m.attachments?.filter(a => a.type === 'image').length || 0),
+    0,
+  );
 }
 export const ChatScreen: React.FC = () => {
   const flatListRef = React.useRef<FlatList>(null);
   const isNearBottomRef = React.useRef(true);
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const rootNavigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
@@ -44,43 +60,70 @@ export const ChatScreen: React.FC = () => {
   const [modelsManagerOpen, setModelsManagerOpen] = useState(false);
   // Which tab the model selector opens on — set from the manager row the user tapped so
   // tapping "Image" focuses the Image tab (it defaulted to Text regardless of the row).
-  const [modelSelectorTab, setModelSelectorTab] = useState<'text' | 'image'>('text');
+  const [modelSelectorTab, setModelSelectorTab] = useState<'text' | 'image'>(
+    'text',
+  );
   const [whisperOpen, setWhisperOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const voiceSummary = useUiModeStore((s) => s.voiceSummary);
-  const whisperModelId = useWhisperStore((s) => s.downloadedModelId);
+  const voiceSummary = useUiModeStore(s => s.voiceSummary);
+  const whisperModelId = useTranscriptionModelsProjection().selectedModelId;
+  const remoteLabels = useActiveRemoteModelLabels();
   const modelLabels: Record<ModelRowType, string> = {
     text: chat.activeModelName ?? chat.activeModel?.name ?? '—',
-    image: chat.activeImageModel?.name ?? '—',
-    voice: voiceSummary ?? '—',
-    speech: WHISPER_MODELS.find((m) => m.id === whisperModelId)?.name ?? '—',
+    image: remoteLabels.image ?? chat.activeImageModel?.name ?? '—',
+    voice: remoteLabels.voice ?? voiceSummary ?? '—',
+    speech:
+      remoteLabels.transcription ??
+      WHISPER_MODELS.find(m => m.id === whisperModelId)?.name ??
+      '—',
   };
   const pendingModelRowRef = useRef<ModelRowType | null>(null);
   // Eject All — shared with Home via one hook (the unload side-effect lives in the
   // service, not duplicated per screen). Deferred until the sheet fully closes so
   // the confirm dialog isn't rendered under it (same pattern as the row pickers).
-  const { isEjecting, hasActiveModel: hasEjectableModel, ejectAll } = useEjectAllModels();
+  const {
+    isEjecting,
+    hasActiveModel: hasEjectableModel,
+    ejectAll,
+  } = useEjectAllModels();
   const pendingEjectRef = useRef(false);
   const confirmEjectAll = () => {
-    chat.setAlertState(showAlert('Eject All Models', 'Unload all active models to free up memory?', [
+    chat.setAlertState(
+      showAlert(
+        'Eject All Models',
+        'Unload all active models to free up memory?',
+        [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Eject', style: 'destructive',
+            text: 'Eject',
+            style: 'destructive',
         onPress: async () => {
           chat.setAlertState(hideAlert());
           try {
             const count = await ejectAll();
-            if (count > 0) chat.setAlertState(showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`));
+                if (count > 0)
+                  chat.setAlertState(
+                    showAlert(
+                      'Done',
+                      `Unloaded ${count} model${count > 1 ? 's' : ''}`,
+                    ),
+                  );
           } catch {
-            chat.setAlertState(showAlert('Error', 'Failed to unload models'));
+                chat.setAlertState(
+                  showAlert('Error', 'Failed to unload models'),
+                );
           }
         },
       },
-    ]));
+        ],
+      ),
+    );
   };
   const openModelRowNow = (type: ModelRowType) => {
-    if (type === 'text' || type === 'image') { setModelSelectorTab(type); chat.setShowModelSelector(true); }
-    else if (type === 'speech') setWhisperOpen(true);
+    if (type === 'text' || type === 'image') {
+      setModelSelectorTab(type);
+      chat.setShowModelSelector(true);
+    } else if (type === 'speech') setWhisperOpen(true);
     else setVoiceOpen(true);
   };
   const openModelRow = (type: ModelRowType) => {
@@ -100,26 +143,28 @@ export const ChatScreen: React.FC = () => {
 
   const [proAhaVisible, setProAhaVisible] = useState(false);
   const proAhaShownThisSession = useRef(false);
-  useEffect(() => {
-    // Reset cycle on each new chat session so PRO sheet can fire again
-    useAppStore.getState().setProAhaTriggeredBy(null);
-    proAhaShownThisSession.current = false;
-  }, []);
-  useEffect(() => subscribeProPrompt(() => {
+  useEffect(
+    () =>
+      subscribeProPrompt(() => {
     if (proAhaShownThisSession.current) return;
     proAhaShownThisSession.current = true;
     setProAhaVisible(true);
-  }), []);
+      }),
+    [],
+  );
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
 
   React.useEffect(() => {
     if (chat.activeConversation?.messages.length && isNearBottomRef.current) {
-      setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   }, [chat.activeConversation?.messages.length]);
 
   React.useEffect(() => {
-    const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const event =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const sub = Keyboard.addListener(event, () => {
       flatListRef.current?.scrollToEnd({ animated: true });
     });
@@ -127,7 +172,7 @@ export const ChatScreen: React.FC = () => {
   }, []);
 
   // Reset scroll when switching between chat/audio interface modes
-  const interfaceMode = useUiModeStore((s) => s.interfaceMode);
+  const interfaceMode = useUiModeStore(s => s.interfaceMode);
   const prevModeRef = React.useRef(interfaceMode);
   React.useEffect(() => {
     if (prevModeRef.current !== interfaceMode) {
@@ -136,10 +181,19 @@ export const ChatScreen: React.FC = () => {
       chat.setShowScrollToBottom(false);
       // FlatList re-renders via extraData; onContentSizeChange fires and scrolls.
       // Backup: scroll after items have had time to re-measure.
-      setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: false }); }, 300);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 300);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interfaceMode]);
+
+  // Both stable, and both declared BEFORE the no-model early return so the hook order never varies.
+  const handleScroll = useChatScrollTracker(
+    isNearBottomRef,
+    chat.setShowScrollToBottom,
+  );
+  const renderItem = useChatRowRenderer(chat);
 
   const alertEl = (
     <CustomAlert
@@ -155,7 +209,8 @@ export const ChatScreen: React.FC = () => {
     return (
       <>
         <NoModelScreen
-          styles={styles} colors={colors}
+          styles={styles}
+          colors={colors}
           navigation={chat.navigation}
           hasAvailableModels={chat.hasAvailableModels}
           showModelSelector={chat.showModelSelector}
@@ -173,30 +228,6 @@ export const ChatScreen: React.FC = () => {
   // ChatMessageArea), so the chat stays visible while a text/image model loads —
   // no full-screen takeover.
 
-  const handleScroll = (event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    isNearBottomRef.current = distFromBottom < 100;
-    chat.setShowScrollToBottom(!isNearBottomRef.current);
-  };
-
-  const renderItem = ({ item, index }: { item: any; index: number }) => (
-    <MessageRenderer
-      item={item} index={index}
-      displayMessagesLength={chat.displayMessages.length}
-      animateLastN={chat.animateLastN}
-      imageModelLoaded={chat.imageModelLoaded}
-      isStreaming={chat.isStreaming}
-      isGeneratingImage={chat.isGeneratingImage}
-      showGenerationDetails={chat.settings.showGenerationDetails}
-      onCopy={chat.handleCopyMessage}
-      onRetry={chat.handleRetryMessage}
-      onEdit={chat.handleEditMessage}
-      onGenerateImage={chat.handleGenerateImageFromMessage}
-      onImagePress={chat.handleImagePress}
-    />
-  );
-
   const imageCount = countConversationImages(chat.activeConversation);
 
   // Bottom safe-area is applied on the input footer (ChatMessageArea), not here
@@ -204,9 +235,15 @@ export const ChatScreen: React.FC = () => {
   // gap below the bar.
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView testID="chat-screen" style={styles.keyboardView} behavior="padding" keyboardVerticalOffset={0}>
+      <KeyboardAvoidingView
+        testID="chat-screen"
+        style={styles.keyboardView}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
         <ChatHeader
-          styles={styles} colors={colors}
+          styles={styles}
+          colors={colors}
           activeConversation={chat.activeConversation}
           activeProject={chat.activeProject}
           navigation={chat.navigation}
@@ -222,18 +259,35 @@ export const ChatScreen: React.FC = () => {
             const t = pendingModelRowRef.current;
             pendingModelRowRef.current = null;
             if (t) openModelRowNow(t);
-            if (pendingEjectRef.current) { pendingEjectRef.current = false; confirmEjectAll(); }
+            if (pendingEjectRef.current) {
+              pendingEjectRef.current = false;
+              confirmEjectAll();
+            }
           }}
           labels={modelLabels}
-          remote={{ text: !!chat.activeModelInfo?.isRemote }}
+          remote={{
+            text: !!chat.activeModelInfo?.isRemote,
+            image: !!remoteLabels.image,
+            voice: !!remoteLabels.voice,
+            speech: !!remoteLabels.transcription,
+          }}
           loadingState={{ isLoading: !!chat.isModelLoading, type: 'text' }}
           isEjecting={isEjecting}
           hasActiveModel={hasEjectableModel}
           onOpenRow={openModelRow}
-          onEject={() => { pendingEjectRef.current = true; setModelsManagerOpen(false); }}
+          onEject={() => {
+            pendingEjectRef.current = true;
+            setModelsManagerOpen(false);
+          }}
         />
-        <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
-        <VoiceModelsSheet visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+        <WhisperPickerSheet
+          visible={whisperOpen}
+          onClose={() => setWhisperOpen(false)}
+        />
+        <VoiceModelsSheet
+          visible={voiceOpen}
+          onClose={() => setVoiceOpen(false)}
+        />
         <ChatMessageArea
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}
@@ -244,7 +298,8 @@ export const ChatScreen: React.FC = () => {
           renderItem={renderItem}
         />
         <ChatModalSection
-          styles={styles} colors={colors}
+          styles={styles}
+          colors={colors}
           showProjectSelector={chat.showProjectSelector}
           setShowProjectSelector={chat.setShowProjectSelector}
           showDebugPanel={chat.showDebugPanel}
@@ -274,7 +329,10 @@ export const ChatScreen: React.FC = () => {
         />
       </KeyboardAvoidingView>
       {alertEl}
-      <SharePromptSheet visible={sharePromptVisible} onClose={() => setSharePromptVisible(false)} />
+      <SharePromptSheet
+        visible={sharePromptVisible}
+        onClose={() => setSharePromptVisible(false)}
+      />
       <ProAhaSheet
         visible={proAhaVisible}
         onClose={() => setProAhaVisible(false)}

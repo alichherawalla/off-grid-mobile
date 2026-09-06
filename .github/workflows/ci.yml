@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -20,19 +21,28 @@ on:
 # `if: ${{ !cancelled() && steps.install.outcome == 'success' }}`, so a red gate does NOT hide the
 # ones after it - the whole list still reports, which is the one thing the four separate checks were
 # genuinely good at. The trade-off is wall-clock: the gates no longer run in parallel.
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: macos-latest
-    env:
-      # Exposed at the job level so the step `if:` below can read it: the `secrets` context
-      # is NOT allowed inside an `if:` condition (GitHub rejects the whole workflow at
-      # startup — a 0-second failure), but the `env` context IS. This one line being an
-      # `if: ${{ secrets.* }}` is what took the entire CI pipeline down.
-      PRO_SUBMODULE_PAT: ${{ secrets.PRO_SUBMODULE_PAT }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Detect trusted private-source access
+        id: private_sources
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          PRO_SUBMODULE_PAT: ${{ secrets.PRO_SUBMODULE_PAT }}
+        run: |
+          if [ -n "$PRO_SUBMODULE_PAT" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Pull the private pro/ so the pro-dependent suites run against the REAL package — a green run
       # then actually exercises pro, not a stub. It also matters to the other gates: tsc sees
@@ -47,22 +57,22 @@ jobs:
       # change are never seen together. Matching branch first, main as the fallback, exactly as the
       # shared checkout below and as OGAD does it.
       - name: Check out the matching pro branch
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        if: ${{ steps.private_sources.outputs.available == 'true' }}
         id: pro_branch
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/mobile-pro
-          token: ${{ env.PRO_SUBMODULE_PAT }}
+          token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: pro
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
       - name: Fall back to pro main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.pro_branch.outcome != 'success' }}
+        if: ${{ steps.private_sources.outputs.available == 'true' && steps.pro_branch.outcome != 'success' }}
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/mobile-pro
-          token: ${{ env.PRO_SUBMODULE_PAT }}
+          token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: pro
           persist-credentials: false
 
@@ -72,9 +82,8 @@ jobs:
           # Node 26, pinned by the TEST gate and now shared by all of them. The RAG/knowledge-base
           # suites run a REAL in-memory database via node's built-in `node:sqlite`
           # (__tests__/harness/sqliteFake.ts). That module is absent on Node 20 and flag-gated on
-          # Node 22. On Node 24 it loads but its native teardown SEGFAULTs the process under jest's
-          # --forceExit (exit 139) — reproduced locally: the full suite exits 139 on Node 24 and
-          # exits 0 on Node 26. Node 26's node:sqlite fixes that teardown crash.
+          # Node 22. Node 26 provides the stable node:sqlite lifecycle used by the real database
+          # journeys, including normal Jest teardown without forced process termination.
           node-version: '26'
           cache: 'npm'
 
@@ -96,26 +105,26 @@ jobs:
       # Matching branch first, main as the fallback: a PR that changes the app and the shared package
       # together has to be tested against the package it expects, not against main's copy.
       - name: Check out the shared monorepo
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        if: ${{ steps.private_sources.outputs.available == 'true' }}
         id: shared_branch
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
+          token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: _shared
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
       - name: Fall back to shared main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        if: ${{ steps.private_sources.outputs.available == 'true' && steps.shared_branch.outcome != 'success' }}
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
+          token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: _shared
           persist-credentials: false
       - name: Put shared beside this checkout
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        if: ${{ steps.private_sources.outputs.available == 'true' }}
         run: |
           rm -rf ../shared
           mv _shared ../shared
@@ -130,14 +139,11 @@ jobs:
           # against dependencies nobody committed. The drift it papered over was real (five packages committed to
           # shared without regenerating its lock) and is fixed at the source; if it recurs, this should stop.
           npm --prefix ../shared ci
-          # Both packages this app consumes, because npm resolves each file: dep to its dist/ (jest
-          # reads src/, but tsc and metro read dist/). rag was never built at all before.
-          npm --prefix ../shared/packages/sync run build
-          npm --prefix ../shared/packages/rag run build
-          # speech too. It is a file: dep like the other two and six src files import it, but it was
-          # never built here - so every gate failed on "Cannot find module '@offgrid/speech'" (1966
-          # errors in one run) long before it reached anything real.
-          npm --prefix ../shared/packages/speech run build
+          # Use Shared's dependency-ordered root build. It builds application last, after every
+          # package that application re-exports. Individual package builds left a valid-looking but
+          # stale application/dist that failed only when Metro imported a new symbol.
+          npm --prefix ../shared run build
+          npm run verify:shared-contract
 
       - name: Install dependencies
         id: install
@@ -181,9 +187,14 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run knip
 
-      - name: Run Jest tests
+      - name: Run Mobile and Shared consumer coverage
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npx jest --coverage --forceExit --runInBand
+        env:
+          # The serial RN + jsdom suite retains more than Node's default 2 GB heap before
+          # coverage is written. The macOS runner has 14 GB; keep enough headroom for native
+          # tooling while allowing the complete suite to finish without weakening the gate.
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: npm run test:coverage:workspace
 
       - name: Install Android NDK
         # Configuring the native modules (op-sqlite etc.) needs the pinned NDK; the macOS

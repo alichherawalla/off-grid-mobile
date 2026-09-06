@@ -54,6 +54,7 @@ export interface TcpDialRecord {
 }
 
 let dials: TcpDialRecord[] = [];
+const routedPorts = new Map<number, number>();
 
 export function getTcpDials(): readonly TcpDialRecord[] {
   return dials;
@@ -61,6 +62,18 @@ export function getTcpDials(): readonly TcpDialRecord[] {
 
 export function resetTcpDials(): void {
   dials = [];
+}
+
+/** Route one advertised port to the listener that represents a different fake host. */
+export function routeTcpPort(
+  advertisedPort: number,
+  listenerPort: number,
+): void {
+  routedPorts.set(advertisedPort, listenerPort);
+}
+
+export function resetTcpPortRoutes(): void {
+  routedPorts.clear();
 }
 
 export function createNativeTcpBoundary(): RnTcpModule {
@@ -85,7 +98,8 @@ export function createNativeTcpBoundary(): RnTcpModule {
       return server;
     },
     createConnection(options, callback) {
-      const onConnection = servers.get(options.port);
+      const listenerPort = routedPorts.get(options.port) ?? options.port;
+      const onConnection = servers.get(listenerPort);
       if (!onConnection) {
         // Recorded before throwing: a dial to a port nothing is listening on is a real outcome, and a
         // test that only sees the throw cannot tell it apart from a dial that never happened.

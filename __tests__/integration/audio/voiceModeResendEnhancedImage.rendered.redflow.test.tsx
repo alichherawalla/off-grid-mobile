@@ -29,10 +29,11 @@ describe('T062 (voice + enhancement) — resend of an enhanced image request re-
     await h.setupWhisperModel();
     h.render();
 
-    await h.placeImageModel({ backend: 'mnn' });
+    // 57ee10c1: the harness composes the real application root and the import adapter owns the model id.
+    const imageModel = await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
-    await activeModelService.loadImageModel('sd');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
+    await activeModelService.loadImageModel(imageModel.id);
     // Enable prompt enhancement — the setting that ran on the device before the failing resend.
     h.useAppStore.getState().updateSettings({ enhanceImagePrompts: true });
 

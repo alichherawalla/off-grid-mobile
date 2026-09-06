@@ -38,6 +38,19 @@ final class BlobChannelModule: RCTEventEmitter {
     work.async { resolve(BlobChannelSupport.lanAddress()) }
   }
 
+  /// All current IPv4 interfaces; the shared QR projector decides which routes are safe.
+  @objc(interfaceCandidates:withRejecter:)
+  func interfaceCandidates(
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject _: @escaping RCTPromiseRejectBlock
+  ) {
+    work.async {
+      resolve(BlobChannelSupport.interfaceCandidates().map { candidate in
+        ["host": candidate.host, "interfaceName": candidate.interfaceName]
+      })
+    }
+  }
+
   /// Offer an endpoint for one transfer, and answer the url a peer should stream to.
   ///
   /// Resolves with nothing when this device has no address on a shared network: there is no endpoint

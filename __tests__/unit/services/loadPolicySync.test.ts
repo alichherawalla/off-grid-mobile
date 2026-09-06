@@ -12,26 +12,46 @@
  * sync diffs on the RESULTING LoadPolicy, so setLoadPolicy runs only when the
  * effective policy actually changes.
  */
-import { loadPolicyFromSettings, startLoadPolicySync } from '../../../src/services/loadPolicySync';
-import { modelResidencyManager } from '../../../src/services/modelResidency';
+import { loadPolicyFromSettings } from '@offgrid/models';
+import {
+  createLoadPolicySync,
+  startLoadPolicySync,
+} from '../../../src/services/loadPolicySync';
+import {
+  modelApplication,
+  modelResidencyManager,
+} from '../../harness/activeModelLifecycle';
 import { useAppStore } from '../../../src/stores';
 
 describe('loadPolicyFromSettings (the one setting→policy mapping)', () => {
   it('prefers the explicit 3-mode setting when present', () => {
-    expect(loadPolicyFromSettings({ modelLoadingMode: 'conservative' })).toBe('conservative');
-    expect(loadPolicyFromSettings({ modelLoadingMode: 'balanced' })).toBe('balanced');
-    expect(loadPolicyFromSettings({ modelLoadingMode: 'aggressive' })).toBe('aggressive');
+    expect(loadPolicyFromSettings({ modelLoadingMode: 'conservative' })).toBe(
+      'conservative',
+    );
+    expect(loadPolicyFromSettings({ modelLoadingMode: 'balanced' })).toBe(
+      'balanced',
+    );
+    expect(loadPolicyFromSettings({ modelLoadingMode: 'aggressive' })).toBe(
+      'aggressive',
+    );
   });
 
   it('falls back to the legacy boolean when no explicit mode is set', () => {
-    expect(loadPolicyFromSettings({ aggressiveModelLoading: true })).toBe('aggressive');
-    expect(loadPolicyFromSettings({ aggressiveModelLoading: false })).toBe('balanced');
+    expect(loadPolicyFromSettings({ aggressiveModelLoading: true })).toBe(
+      'aggressive',
+    );
+    expect(loadPolicyFromSettings({ aggressiveModelLoading: false })).toBe(
+      'balanced',
+    );
     expect(loadPolicyFromSettings({})).toBe('balanced');
   });
 
   it('the explicit mode wins even when the legacy boolean disagrees', () => {
     expect(
-      loadPolicyFromSettings({ modelLoadingMode: 'conservative', aggressiveModelLoading: true }),
+      loadPolicyFromSettings({
+        modelLoadingMode: 'conservative',
+        aggressiveModelLoading: true,
+      }),
     ).toBe('conservative');
   });
 });
@@ -97,34 +117,29 @@ describe('startLoadPolicySync', () => {
     expect(modelResidencyManager.getLoadPolicy()).toBe('balanced');
   });
 
-  it('is a singleton — calling twice does NOT stack subscriptions (leak guard)', () => {
-    const first = startLoadPolicySync();
-    const second = startLoadPolicySync();
-    expect(second).toBe(first); // same live unsubscribe returned, not a new subscription
-    unsubscribe = first;
+  it('one explicit coordinator starts idempotently and never stacks subscriptions', () => {
+    const coordinator = createLoadPolicySync();
+    coordinator.start();
+    coordinator.start();
+    coordinator.dispose();
 
-    const spy = jest.spyOn(modelResidencyManager, 'setLoadPolicy');
-    // One mode change → setLoadPolicy fires exactly once, not once-per-start.
+    // A single dispose after repeated starts must stop the only subscription.
     useAppStore.getState().updateSettings({ modelLoadingMode: 'aggressive' });
-    expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
+    expect(modelApplication().models.snapshot().loadPolicy).toBe('balanced');
   });
 
-  it('does not fire setLoadPolicy when the resolved policy is unchanged (only on a real policy change)', () => {
+  it('keeps the application policy unchanged until the resolved policy changes', () => {
     unsubscribe = startLoadPolicySync();
-    const spy = jest.spyOn(modelResidencyManager, 'setLoadPolicy');
     // Change unrelated settings — resolved policy stays 'balanced'.
     useAppStore.getState().updateSettings({ temperature: 0.5 });
     useAppStore.getState().updateSettings({ maxTokens: 2048 });
-    expect(spy).not.toHaveBeenCalled();
+    expect(modelApplication().models.snapshot().loadPolicy).toBe('balanced');
     // Flipping the legacy boolean while modelLoadingMode='balanced' is set does NOT
-    // change the resolved policy (the explicit mode wins) → still no setLoadPolicy.
+    // change the resolved policy because the explicit mode wins.
     useAppStore.getState().updateSettings({ aggressiveModelLoading: true });
-    expect(spy).not.toHaveBeenCalled();
-    // Actually changing the mode DOES fire it, with the resolved policy.
+    expect(modelApplication().models.snapshot().loadPolicy).toBe('balanced');
+    // Changing the explicit mode changes the authoritative application projection.
     useAppStore.getState().updateSettings({ modelLoadingMode: 'aggressive' });
-    expect(spy).toHaveBeenCalledWith('aggressive');
-    expect(spy).toHaveBeenCalledTimes(1);
-    spy.mockRestore();
+    expect(modelApplication().models.snapshot().loadPolicy).toBe('aggressive');
   });
 });

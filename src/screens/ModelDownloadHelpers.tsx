@@ -9,32 +9,13 @@ import { LoadingDots } from '../components/LoadingDots';
 import { Card } from '../components';
 import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING, FONTS, OFF_GRID_DESKTOP_URL } from '../constants';
-import { huggingFaceService } from '../services';
-import { ModelFile, RemoteModel, RemoteServer } from '../types';
-import logger from '../utils/logger';
+import { RemoteModel, RemoteServer } from '../types';
+export { fetchModelFiles } from '../services/modelCatalogFiles';
 import { withUtm } from '../utils/utm';
 
 // ---------------------------------------------------------------------------
 // Model file fetching
 // ---------------------------------------------------------------------------
-
-export async function fetchModelFiles(
-  models: { id: string }[],
-): Promise<Record<string, ModelFile[]>> {
-  const filesMap: Record<string, ModelFile[]> = {};
-  await Promise.all(
-    models.map(async (model) => {
-      try {
-        const files = await huggingFaceService.getModelFiles(model.id);
-        const q4km = files.find(f => f.quantization.toUpperCase() === 'Q4_K_M');
-        if (q4km) filesMap[model.id] = [q4km];
-      } catch (error) {
-        logger.error(`Error fetching files for ${model.id}:`, error);
-      }
-    }),
-  );
-  return filesMap;
-}
 
 // ---------------------------------------------------------------------------
 // Discovered-server card
@@ -126,7 +107,7 @@ export const NetworkSection: React.FC<{
       {!isCheckingNetwork && !hasServers && (
         <>
           <Text style={styles.emptyText}>
-            No servers found. Make sure you're on the same WiFi network as your Off Grid AI Desktop, Ollama, or LM Studio server, then scan or add it manually.
+            No Off Grid AI Desktop, Ollama, or LM Studio server found. Scan again or add one.
           </Text>
           <TouchableOpacity
             onPress={() => Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'model-download')).catch(() => {})}
@@ -164,7 +145,13 @@ export const NetworkSection: React.FC<{
 
 const serverCardStyles = (colors: ThemeColors) => ({
   serverCard: {
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: SPACING.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   serverCardContent: {
     flexDirection: 'row' as const,
@@ -173,14 +160,14 @@ const serverCardStyles = (colors: ThemeColors) => ({
   },
   serverInfo: {
     flex: 1,
-    marginRight: SPACING.md,
+    marginRight: SPACING.sm,
   },
   serverName: {
     fontFamily: FONTS.mono,
     fontSize: 14,
     fontWeight: '500' as const,
     color: colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   serverMeta: {
     ...TYPOGRAPHY.meta,
@@ -189,14 +176,14 @@ const serverCardStyles = (colors: ThemeColors) => ({
   connectButton: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   connectedBadge: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   connectButtonText: {
     fontFamily: FONTS.mono,
@@ -207,18 +194,18 @@ const serverCardStyles = (colors: ThemeColors) => ({
 
 const networkSectionStyles = (colors: ThemeColors) => ({
   section: {
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.md,
   },
   sectionTitle: {
-    ...TYPOGRAPHY.h2,
+    ...TYPOGRAPHY.h3,
     color: colors.text,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   scanningRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   scanningText: {
     ...TYPOGRAPHY.bodySmall,
@@ -227,24 +214,24 @@ const networkSectionStyles = (colors: ThemeColors) => ({
   emptyText: {
     ...TYPOGRAPHY.bodySmall,
     color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: SPACING.sm,
+    lineHeight: 18,
+    marginBottom: SPACING.xs,
   },
   getDesktopLink: {
     ...TYPOGRAPHY.bodySmall,
     fontFamily: FONTS.mono,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   actionRow: {
     flexDirection: 'row' as const,
-    gap: SPACING.md,
-    marginTop: SPACING.sm,
+    gap: SPACING.sm,
+    marginTop: SPACING.xs,
   },
   actionButton: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: SPACING.sm + 2,
+    borderRadius: SPACING.sm,
+    paddingVertical: SPACING.sm,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },

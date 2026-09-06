@@ -5,23 +5,9 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 // this style sheet. Same pattern the Storage and Remote Servers screens already use.
 export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    minHeight: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: { ...TYPOGRAPHY.h2, color: colors.text },
   scrollView: { flex: 1 },
   content: {
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.md,
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },

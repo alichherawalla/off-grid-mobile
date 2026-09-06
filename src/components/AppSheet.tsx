@@ -1,4 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+} from 'react';
 import {
   View,
   Text,
@@ -35,6 +41,8 @@ export interface AppSheetProps {
   showHeader?: boolean;
   showHandle?: boolean;
   elevation?: 'level3' | 'level4';
+  /** Prevent every user-driven dismissal path while a critical action runs. */
+  dismissible?: boolean;
   children: React.ReactNode;
 }
 
@@ -51,21 +59,33 @@ function createSheetPanResponder({
   backdropOpacity,
   setModalVisible,
   onCloseRef,
+  dismissibleRef,
 }: {
   translateY: Animated.Value;
   backdropOpacity: Animated.Value;
   setModalVisible: (v: boolean) => void;
   onCloseRef: React.MutableRefObject<() => void>;
+  dismissibleRef: React.MutableRefObject<boolean>;
 }) {
   return PanResponder.create({
     onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 8,
+    onMoveShouldSetPanResponder: (_, { dy }) =>
+      dismissibleRef.current && Math.abs(dy) > 8,
     onPanResponderMove: (_, { dy }) => {
-      if (dy > 0) {
+      if (dismissibleRef.current && dy > 0) {
         translateY.setValue(dy);
       }
     },
     onPanResponderRelease: (_, { dy, vy }) => {
+      if (!dismissibleRef.current) {
+        Animated.spring(translateY, {
+          toValue: 0,
+          damping: 28,
+          stiffness: 300,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
       if (dy > 80 || vy > 0.5) {
         Animated.parallel([
           Animated.timing(translateY, {
@@ -106,6 +126,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   showHeader = true,
   showHandle = true,
   elevation = 'level3',
+  dismissible = true,
   children,
 }) => {
   const { elevation: elevationTokens } = useTheme();
@@ -117,14 +138,16 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  // Keep onClose ref current for PanResponder
+  // Stable dismissal handlers read only committed props. Render-phase writes can
+  // leak values from a concurrent render that React later discards.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  // Keep onClosed ref current so the animateOut completion always calls the
-  // latest callback without recreating the close handlers.
+  const dismissibleRef = useRef(dismissible);
   const onClosedRef = useRef(onClosed);
-  onClosedRef.current = onClosed;
+  useLayoutEffect(() => {
+    dismissibleRef.current = dismissible;
+    onCloseRef.current = onClose;
+    onClosedRef.current = onClosed;
+  }, [dismissible, onClose, onClosed]);
 
   // Guards backdrop-tap dismiss during animate-in.
   // Using a ref (not state) so there are zero re-renders — a state-based
@@ -139,9 +162,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // Calculate sheet max height from largest snap point
   const sheetMaxHeight = enableDynamicSizing
     ? SCREEN_HEIGHT * 0.85
-    : resolveSnapPoint(
-      snapPoints?.[snapPoints.length - 1] || '50%',
-    );
+    : resolveSnapPoint(snapPoints?.[snapPoints.length - 1] || '50%');
 
   const levelTokens = elevationTokens[elevation];
 
@@ -220,22 +241,28 @@ export const AppSheet: React.FC<AppSheetProps> = ({
         };
       }
       setModalVisible(true);
-
     } else if (modalVisible) {
       animateOut(() => {
         setModalVisible(false);
         onClosedRef.current?.();
       });
     }
-  }, [visible]);
+  }, [animateOut, modalVisible, visible]);
 
   // Track keyboard height so the sheet lifts above the keyboard
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, e =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
     const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
-    return () => { showSub.remove(); hideSub.remove(); };
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   // Called by Modal when the Dialog is fully rendered and ready for touch
@@ -250,6 +277,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   // Backdrop taps are gated by backdropEnabled to prevent the long-press
   // finger-up event from closing the sheet before any action can be taken.
   const dismiss = useCallback(() => {
+    if (!dismissibleRef.current) return;
     animateOut(() => {
       setModalVisible(false);
       onCloseRef.current();
@@ -258,14 +286,20 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   }, [animateOut]);
 
   const handleBackdropPress = useCallback(() => {
-    if (backdropEnabled.current) {
+    if (dismissibleRef.current && backdropEnabled.current) {
       dismiss();
     }
   }, [dismiss]);
 
   // Swipe-to-dismiss on handle
   const panResponder = useRef(
-    createSheetPanResponder({ translateY, backdropOpacity, setModalVisible, onCloseRef }),
+    createSheetPanResponder({
+      translateY,
+      backdropOpacity,
+      setModalVisible,
+      onCloseRef,
+      dismissibleRef,
+    }),
   ).current;
 
   if (!modalVisible && !visible) {
@@ -293,6 +327,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
         {/* Sheet */}
         <Animated.View
+          testID="app-sheet-surface"
           style={[
             styles.sheet,
             {
@@ -334,7 +369,10 @@ export const AppSheet: React.FC<AppSheetProps> = ({
               </Text>
               <TouchableOpacity
                 testID="app-sheet-close"
-                onPress={onHeaderClosePress || dismiss}
+                onPress={() => {
+                  if (!dismissibleRef.current) return;
+                  (onHeaderClosePress || dismiss)();
+                }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.headerClose}>{closeLabel}</Text>
@@ -347,7 +385,10 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
           {/* Bottom safe area spacer — hidden when keyboard is up (keyboard height includes it) */}
           {bottomInset > 0 && keyboardHeight === 0 && (
-            <View testID="bottom-safe-area-spacer" style={{ height: bottomInset }} />
+            <View
+              testID="bottom-safe-area-spacer"
+              style={{ height: bottomInset }}
+            />
           )}
         </Animated.View>
       </View>

@@ -2,10 +2,11 @@ import { useRef, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import {
-  SpeechEndpointTimer,
   SPEECH_ONSET_LOOKBACK_MS,
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
-} from '@offgrid/speech';
+  type SpeechEndpointTimer,
+} from '@offgrid/application';
+import { createSpeechEndpointTimer } from '../../services/composition/speech-endpoint';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { voiceSession } from '../../services/voiceSession';
 import logger from '../../utils/logger';
@@ -98,14 +99,14 @@ export function useSilenceEndpoint(opts: {
       setIsAwaitingSpeech(true);
     }
 
-    const endpoint = new SpeechEndpointTimer(() => {
+    const endpoint = createSpeechEndpointTimer(() => {
       logger.log('[VAD] silence detected - ending the turn');
       opts.onEndedBySilence?.();
       stop();
       // Deferred off the audio callback: stopping the recorder from inside its own buffer callback
       // tears down native state that the callback is still standing on.
       setTimeout(() => opts.stopTurn(), 0);
-    }, line => logger.log(line));
+    });
     endpointRef.current = endpoint;
     listenAtRef.current = Date.now();
     endpoint.begin(listenAtRef.current, {

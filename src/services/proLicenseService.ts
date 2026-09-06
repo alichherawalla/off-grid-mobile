@@ -5,19 +5,22 @@ import type {
 
 export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
 
-export type ProTier = 'lifetime' | 'yearly';
+export type ProTier = 'lifetime' | 'monthly' | 'annual' | 'subscription';
 
 export const PRO_TIER_META: Record<
   ProTier,
   { label: string; renews: boolean }
 > = {
   lifetime: { label: 'Lifetime', renews: false },
-  yearly: { label: 'Yearly', renews: true },
+  monthly: { label: 'Monthly', renews: true },
+  annual: { label: 'Annual', renews: true },
+  subscription: { label: 'Subscription', renews: true },
 };
 
 export interface ProLicenseInfo {
   isPro: boolean;
   credentialSaved?: boolean;
+  expired?: boolean;
   tier: ProTier | null;
   expiry: string | null;
   verifiedAt: number;
@@ -44,6 +47,7 @@ const UNAVAILABLE_PROVIDER: ProEntitlementProvider = {
   getInfo: async () => ({
     isPro: false,
     credentialSaved: false,
+    expired: false,
     tier: null,
     expiry: null,
     verifiedAt: 0,

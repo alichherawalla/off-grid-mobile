@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../utils/testHelpers';
 /**
  * BATCH 6 — Model Management hardening: selection / activation / unload.
  *
@@ -17,13 +18,16 @@
  */
 
 import { useAppStore } from '../../src/stores/appStore';
-import { activeModelService } from '../../src/services/activeModelService';
-import { modelResidencyManager } from '../../src/services/modelResidency';
+import {
+  activeModelService,
+  modelResidencyManager,
+  resetModelApplication,
+} from '../harness/activeModelLifecycle';
 import { llmService } from '../../src/services/llm';
 import { liteRTService } from '../../src/services/litert';
 import { localDreamGeneratorService } from '../../src/services/localDreamGenerator';
 import { hardwareService } from '../../src/services/hardware';
-import { resetStores, flushPromises, getAppState } from '../utils/testHelpers';
+import { resetStores, flushPromises } from '../utils/testHelpers';
 import { createDownloadedModel, createDeviceInfo } from '../utils/factories';
 
 jest.mock('../../src/services/llm');
@@ -40,17 +44,17 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
-    modelResidencyManager._reset();
+    await resetModelApplication();
 
     mockLlm.isModelLoaded.mockReturnValue(false);
     mockLlm.getLoadedModelPath.mockReturnValue(null);
     mockLlm.loadModel.mockResolvedValue(undefined);
-    mockLlm.unloadModel.mockResolvedValue(undefined);
+    mockLlm.unloadModel.mockResolvedValue({released: true});
     mockLlm.getMultimodalSupport.mockReturnValue(null);
 
     mockLiteRT.isModelLoaded.mockReturnValue(false);
     mockLiteRT.loadModel.mockResolvedValue(undefined);
-    mockLiteRT.unloadModel.mockResolvedValue(undefined);
+    mockLiteRT.unloadModel.mockResolvedValue({released: true});
     mockLiteRT.getActiveBackend.mockReturnValue('cpu');
     mockLiteRT.warmup.mockResolvedValue(undefined);
     mockLiteRT.supportsAudio.mockReturnValue(false);
@@ -77,13 +81,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
   it('activating a model sets activeModelId in the store (nothing active before)', async () => {
     const model = createDownloadedModel({ id: 'A', engine: 'llama' });
     useAppStore.setState({ downloadedModels: [model] });
-    expect(getAppState().activeModelId).toBeNull();
+    expect(selectedLocalModelId('text')).toBeNull();
 
     mockLlm.isModelLoaded.mockReturnValue(true); // native reports loaded after loadModel
     await activeModelService.loadTextModel('A');
 
     expect(mockLlm.loadModel).toHaveBeenCalledWith(model.filePath, undefined, { override: false });
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
   });
 
   // ---- #2 / #22: switching models flips the active id and unloads the old ---
@@ -94,13 +98,13 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
 
     mockLlm.isModelLoaded.mockReturnValue(true);
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
 
     // Loading a DIFFERENT model must unload the previous llama context, then load B.
     await activeModelService.loadTextModel('B');
     expect(mockLlm.unloadModel).toHaveBeenCalled();
     expect(mockLlm.loadModel).toHaveBeenLastCalledWith(B.filePath, undefined, { override: false });
-    expect(getAppState().activeModelId).toBe('B');
+    expect(selectedLocalModelId('text')).toBe('B');
   });
 
   // ---- #4: re-activating the already-active model is a no-op ----------------
@@ -115,7 +119,7 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     // Tap activate again — model is current, so loadModel must not be called again.
     await activeModelService.loadTextModel('A');
     expect(mockLlm.loadModel.mock.calls.length).toBe(loadCallsAfterFirst);
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
   });
 
   // ---- #13-15: user-initiated unload frees RAM AND clears the selection -----
@@ -125,15 +129,15 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
 
     mockLlm.isModelLoaded.mockReturnValue(true);
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
     expect(activeModelService.getLoadedModelIds().textModelId).toBe('A');
 
     await activeModelService.unloadTextModel(false);
 
     expect(mockLlm.unloadModel).toHaveBeenCalled();
-    expect(getAppState().activeModelId).toBeNull(); // deselected
+    expect(selectedLocalModelId('text')).toBeNull(); // deselected
     expect(activeModelService.getLoadedModelIds().textModelId).toBeNull();
-    expect(modelResidencyManager.isResident('text')).toBe(false); // residency released
+    expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(false); // residency released
   });
 
   it('unloadTextModel is a no-op when nothing is loaded (does not touch the engine)', async () => {
@@ -147,15 +151,20 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     const A = createDownloadedModel({ id: 'A', engine: 'llama' });
     useAppStore.setState({ downloadedModels: [A] });
 
-    mockLlm.isModelLoaded.mockReturnValue(true);
+    let nativeLoaded = true;
+    mockLlm.isModelLoaded.mockImplementation(() => nativeLoaded);
+    mockLlm.unloadModel.mockImplementation(async () => {
+      nativeLoaded = false;
+      return {released: true};
+    });
     await activeModelService.loadTextModel('A');
-    expect(getAppState().activeModelId).toBe('A');
+    expect(selectedLocalModelId('text')).toBe('A');
 
     const { count } = await activeModelService.ejectAll();
 
     expect(count).toBe(1);
     expect(mockLlm.unloadModel).toHaveBeenCalled(); // RAM freed
-    expect(getAppState().activeModelId).toBe('A'); // ...but still selected
+    expect(selectedLocalModelId('text')).toBe('A'); // ...but still selected
     expect(activeModelService.getLoadedModelIds().textModelId).toBeNull();
   });
 
@@ -176,26 +185,16 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     await flushPromises();
 
     // Exactly one text resident (not two) — the switch replaced, not stacked.
-    const textResidents = modelResidencyManager.getResidents().filter(r => r.key === 'text');
+    const textResidents = modelResidencyManager.getResidents().filter(r => r.type === 'text');
     expect(textResidents).toHaveLength(1);
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(modelResidencyManager.getResidents().some(r => r.type === 'text')).toBe(true);
   });
 
   // ==========================================================================
-  // BUG-FOUND: user-initiated unload of a LiteRT text model does NOT free the
-  // LiteRT engine's RAM.
-  //
-  // activeModelService.doUnloadTextModelLocked (src/services/activeModelService/
-  // index.ts) gates the native unload on `llmService.isModelLoaded()` and only
-  // calls `llmService.unloadModel()`. For a LiteRT model, llmService reports
-  // NOT loaded, so NEITHER llmService.unloadModel() NOR liteRTService.unloadModel()
-  // runs — the LiteRT weights stay resident. getActiveModels() is engine-aware
-  // (checks liteRTService.isModelLoaded()), so the seam exists on the read side
-  // but not the unload side. The unload path must dispatch per engine the same
-  // way the loader (doLoadTextModel) does. Fix belongs in the service (do NOT
-  // patch here). Skipped until src is fixed in its own PR.
+  // The raw lifecycle dispatches unload through the active native engine, so a
+  // LiteRT model cannot stay resident after shared residency releases its slot.
   // ==========================================================================
-  it.skip('[BUG] unloadTextModel(false) must unload a loaded LiteRT model from RAM', async () => {
+  it('unloadTextModel(false) frees a loaded LiteRT model from RAM', async () => {
     const lite = createDownloadedModel({
       id: 'L', engine: 'litert' as any, fileName: 'm.litertlm', filePath: '/m/m.litertlm',
     });
@@ -211,6 +210,6 @@ describe('BATCH 6 — model selection / activation / unload (real service + stor
     // EXPECTED once the seam is fixed: the LiteRT engine is told to unload.
     expect(mockLiteRT.unloadModel).toHaveBeenCalled();
     // And the model is fully deselected.
-    expect(getAppState().activeModelId).toBeNull();
+    expect(selectedLocalModelId('text')).toBeNull();
   });
 });

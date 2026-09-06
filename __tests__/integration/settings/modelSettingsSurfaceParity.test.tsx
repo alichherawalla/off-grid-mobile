@@ -2,6 +2,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { fireEvent, render } from '@testing-library/react-native';
+import RNFS from 'react-native-fs';
 import { GenerationSettingsModal } from '../../../src/components/GenerationSettingsModal';
 import { ModelSettingsScreen } from '../../../src/screens/ModelSettingsScreen';
 import { useAppStore } from '../../../src/stores/appStore';
@@ -12,6 +13,17 @@ import {
   SLOTS,
 } from '../../../src/bootstrap/slotRegistry';
 import { resetStores } from '../../utils/testHelpers';
+import {
+  refreshMobileModelServices,
+  selectMobileModel,
+  startMobileModelServices,
+  stopMobileModelServices,
+} from '../../../src/services/modelServices';
+import {
+  getMobileApplication,
+  startMobileApplication,
+  stopMobileApplication,
+} from '../../../src/services/composition/application';
 
 jest.mock('@react-native-community/slider', () => ({
   __esModule: true,
@@ -30,8 +42,20 @@ function renderModelSettings() {
 }
 
 describe('model settings surface parity', () => {
+  beforeAll(async () => {
+    startMobileModelServices();
+    await refreshMobileModelServices();
+    await startMobileApplication();
+  });
+
+  afterAll(async () => {
+    stopMobileModelServices();
+    await stopMobileApplication();
+  });
+
   beforeEach(() => {
     resetStores();
+    (RNFS.exists as jest.Mock).mockResolvedValue(false);
     useAppStore.getState().setModelMaxContext(null);
     _clearSlotsForTesting();
   });
@@ -105,8 +129,30 @@ describe('model settings surface parity', () => {
     );
   });
 
-  it('shows the same selected STT model on both settings surfaces', () => {
-    useWhisperStore.setState({ downloadedModelId: 'base.en' });
+  it('shows the same selected STT model on both settings surfaces', async () => {
+    const modelPath = `${RNFS.DocumentDirectoryPath}/whisper-models/ggml-base.en.bin`;
+    const modelFile = {
+      path: modelPath,
+      name: 'ggml-base.en.bin',
+      size: 142 * 1024 * 1024,
+      isFile: () => true,
+      isDirectory: () => false,
+      mtime: new Date(0),
+      ctime: new Date(0),
+    };
+    (RNFS.exists as jest.Mock).mockResolvedValue(true);
+    (RNFS.readDir as jest.Mock).mockResolvedValue([modelFile]);
+    (RNFS.stat as jest.Mock).mockResolvedValue(modelFile);
+    await getMobileApplication().models.refresh();
+    useWhisperStore.setState({
+      downloadedModelId: 'base.en',
+    });
+    await selectMobileModel({
+      source: 'local',
+      hostId: 'whisper.rn',
+      modality: 'transcription',
+      modelId: 'base.en',
+    });
     const chatSettings = render(
       <GenerationSettingsModal visible onClose={() => {}} />,
     );
@@ -118,6 +164,30 @@ describe('model settings surface parity', () => {
     const modelSettings = renderModelSettings();
     fireEvent.press(modelSettings.getByTestId('transcription-accordion'));
     expect(modelSettings.getByText('Base')).toBeTruthy();
+  });
+
+  it('uses one STT language setting in chat settings and the Models screen', () => {
+    useWhisperStore.setState({
+      downloadedModelId: 'base',
+      transcriptionLanguage: 'auto',
+    });
+    const chatSettings = render(
+      <GenerationSettingsModal visible onClose={() => {}} />,
+    );
+    fireEvent.press(chatSettings.getByTestId('modal-transcription-accordion'));
+    fireEvent.press(chatSettings.getByTestId('chat-transcription-language'));
+    fireEvent.press(chatSettings.getByTestId('chat-transcription-language-fr'));
+    expect(useWhisperStore.getState().transcriptionLanguage).toBe('fr');
+    chatSettings.unmount();
+
+    const {
+      TranscriptionModelsTab,
+    } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
+    const models = render(<TranscriptionModelsTab />);
+    expect(
+      models.getByTestId('models-transcription-language').props
+        .accessibilityLabel,
+    ).toBe('Language: French');
   });
 
   it('renders the same TTS settings owner in both UI containers', () => {

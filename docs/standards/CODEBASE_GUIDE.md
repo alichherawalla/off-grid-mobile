@@ -898,6 +898,12 @@ On-device function calling for compatible models.
 
 ### Remote LLM Providers (`src/services/providers/`)
 
+> **Migration note (2026-09-01):** This section describes the legacy Mobile provider control
+> plane. New code must use the canonical route from `@offgrid/models` `LLMService` and execute it
+> through `GenerationService`. Mobile provider code is a transport lookup/stream adapter only. It
+> must not own active selection or silently substitute a local provider. The strict closure gaps are
+> listed in `docs/GAPS_BACKLOG.md`.
+
 A provider abstraction that allows `generationService` to route text generation to either a local GGUF model or a remote OpenAI-compatible server transparently.
 
 **`LLMProvider` interface** (all providers implement):
@@ -1361,6 +1367,15 @@ This section expands on every testable flow, grouped by feature area. Each flow 
 6. `appStore.setActiveImageModelId(id)`
 
 #### 9.4.4 Model Loading Strategies
+
+Selecting a model and loading it into memory are separate actions. The Models sheet stores the
+selected route. Opening Home, entering Chat, or opening a model picker does not load a local text,
+image, or voice runtime. The app acquires the selected runtime when the user sends a message,
+starts image generation, or requests speech. Remote Server settings show the server catalog's
+model name; transport IDs and repository IDs are not user-facing labels when a catalog name exists.
+
+For curated downloads, Shared `@offgrid/models` owns the artifact list. Mobile uses network file
+discovery only for a model that is not present in the Shared catalog.
 
 **Performance mode (`'performance'`):**
 - Model stays loaded in RAM across generations

@@ -13,39 +13,41 @@
  * stores, and the session owner run for real, so a lingering flag surfaces here.
  * Fails-before / passes-after.
  */
-import { generationService } from '../../../src/services/generationService';
+import { mobileChatGenerationProjection } from '../../../src/services/chatGenerationProjection';
 import { generationSession } from '../../../src/services/generationSession';
-import { providerRegistry } from '../../../src/services/providers';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
 import { llmService } from '../../../src/services/llm';
-import { resetStores, setupWithConversation, flushPromises } from '../../utils/testHelpers';
-import { createMessage } from '../../utils/factories';
-import type { LLMProvider } from '../../../src/services/providers/types';
+import {
+  resetStores,
+  setupWithConversation,
+  flushPromises,
+} from '../../utils/testHelpers';
+import {
+  refreshMobileModelServices,
+  selectMobileModel,
+} from '../../../src/services/modelServices';
+import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import {
+  startMobileApplicationFixture,
+  type MobileApplicationFixture,
+} from '../../harness/mobileApplicationFixture';
 
 jest.mock('../../../src/services/llm');
 const mockLlmService = llmService as jest.Mocked<typeof llmService>;
 
-const SERVER_ID = 'remote-test-server';
-
-function makeFailingProvider(): LLMProvider {
-  return {
-    id: SERVER_ID,
-    type: 'remote' as any,
-    capabilities: { supportsThinking: false } as any,
-    loadModel: jest.fn(async () => {}),
-    unloadModel: jest.fn(async () => {}),
-    isModelLoaded: () => true,
-    getLoadedModelId: () => 'remote-model',
-    // The failure: the server rejects (HTTP 400).
-    generate: jest.fn(async () => { throw new Error('HTTP 400: Bad Request'); }),
-    stopGeneration: jest.fn(async () => {}),
-    getTokenCount: jest.fn(async () => 0),
-    isReady: jest.fn(async () => true),
-  };
-}
-
 describe('BUG #29(a) — remote failure clears all loading flags', () => {
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(async () => {
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
@@ -53,28 +55,81 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
     // No local model loaded → generationService routes to the remote provider.
     mockLlmService.isModelLoaded.mockReturnValue(false);
     mockLlmService.getLoadedModelPath.mockReturnValue(null as any);
-    await generationService.stopGeneration().catch(() => {});
+    mobileChatSession.stop();
   });
 
   afterEach(() => {
-    providerRegistry.unregisterProvider(SERVER_ID);
     useRemoteServerStore.setState({ activeServerId: null } as any);
   });
 
   it('leaves isGenerating / isThinking / isStreaming / session all false after a remote error', async () => {
-    providerRegistry.registerProvider(SERVER_ID, makeFailingProvider());
-    useRemoteServerStore.setState({ activeServerId: SERVER_ID } as any);
+    const serverId = (
+      await remoteServerManager.addServer({
+        name: 'Failing server',
+        endpoint: 'http://127.0.0.1:11434',
+        provider: 'openai-compatible',
+      })
+    ).id;
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [
+      {
+        id: 'remote-model',
+        name: 'Remote model',
+        serverId,
+        // The default chat request includes enabled tools. Admit the request so
+        // this test reaches the intended HTTP failure boundary.
+        capabilities: {
+          supportsVision: false,
+          supportsToolCalling: true,
+          supportsThinking: false,
+        },
+        lastUpdated: '2026-08-30T00:00:00.000Z',
+      },
+    ]);
+    // External transport boundary: the current async server manager installs
+    // the real provider. Its network request receives the intended HTTP 400.
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = class {
+      readyState = 0;
+      status = 0;
+      responseText = '';
+      onreadystatechange: null | (() => void) = null;
+      onprogress: null | (() => void) = null;
+      onerror: null | (() => void) = null;
+      ontimeout: null | (() => void) = null;
+      open(): void {
+        this.readyState = 1;
+      }
+      setRequestHeader(): void {}
+      abort(): void {}
+      send(): void {
+        this.status = 400;
+        this.responseText = 'Bad Request';
+        this.readyState = 4;
+        this.onreadystatechange?.();
+      }
+    };
+    await selectMobileModel({
+      source: 'remote',
+      hostId: serverId,
+      modality: 'text',
+      modelId: 'remote-model',
+    });
+    await refreshMobileModelServices();
 
     const conversationId = setupWithConversation({ modelId: 'remote-model' });
     generationSession.begin(conversationId);
 
+    const user = useChatStore.getState().addMessage(conversationId, {
+      role: 'user',
+      content: 'hi',
+      turnKind: 'text',
+    });
     await expect(
-      generationService.generateResponse(conversationId, [createMessage({ role: 'user', content: 'hi' })]),
+      mobileChatSession.sendPersisted(conversationId, user.id),
     ).rejects.toThrow('HTTP 400');
 
     await flushPromises();
 
-    const genState = generationService.getState();
+    const genState = mobileChatGenerationProjection.getState();
     const chat = useChatStore.getState();
 
     expect(genState.isGenerating).toBe(false);
@@ -84,6 +139,8 @@ describe('BUG #29(a) — remote failure clears all loading flags', () => {
     expect(chat.streamingForConversationId).toBeNull();
     // generationService cleared its own session identity; the ChatScreen action layer
     // ends the generationSession on the thrown error (mirrored by handleStop/startGeneration).
-    expect(generationService.isGeneratingFor(conversationId)).toBe(false);
+    expect(mobileChatGenerationProjection.isGeneratingFor(conversationId)).toBe(
+      false,
+    );
   });
 });

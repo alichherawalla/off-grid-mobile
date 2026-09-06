@@ -18,6 +18,15 @@
 import { installNativeBoundary, requireRTL, MB } from '../../harness/nativeBoundary';
 import { doMockRealSqlite } from '../../harness/sqliteFake';
 
+let applicationFixture:
+  | import('../../harness/mobileApplicationFixture').MobileApplicationFixture
+  | undefined;
+
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => ({ params: { projectId: 'p1' } }),
@@ -36,6 +45,8 @@ describe('T118 (rendered) — embedding model co-resides as a sidecar after a KB
     const RNFS = require('react-native-fs');
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
+    // The real app composition root installs the shared sidecar execution port.
+    // This rendered screen test must activate the same root before indexing.
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
      
@@ -48,6 +59,12 @@ describe('T118 (rendered) — embedding model co-resides as a sidecar after a KB
     picker.pick.mockResolvedValue([{ uri: 'file:///docs/notes.txt', name: 'notes.txt', size: 90 }]);
     useProjectStore.setState({ projects: [{ id: 'p1', name: 'Research', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }] });
 
+    // Start the real Mobile composition root: this is what registers the inventory adapters (via
+    // startMobileModelServices), so the embedding model on disk actually reaches 'ready'. A bare
+    // require() of modelServices only imports the module and leaves the adapter set EMPTY.
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
     const openSelector = () => rtl.render(React.createElement(ResidentsProbe, {}));
 
     // Precondition (via the SAME real UI): the embedding model is NOT in memory before any embed.
@@ -61,7 +78,20 @@ describe('T118 (rendered) — embedding model co-resides as a sidecar after a KB
     const kb = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
     await rtl.waitFor(() => { expect(kb.queryByText('No documents yet')).not.toBeNull(); });
     rtl.fireEvent.press(kb.getByText('Add Document'));
-    await rtl.waitFor(() => { expect(kb.queryByText('notes.txt')).not.toBeNull(); }, { timeout: 6000 });
+    await rtl.waitFor(() => {
+      const error = kb.queryByTestId('kb-index-error-card');
+      if (error) {
+        const textOf = (node: any): string => Array.isArray(node)
+          ? node.map(textOf).join(' ')
+          : typeof node === 'string'
+            ? node
+            : node?.props
+              ? textOf(node.props.children)
+              : '';
+        throw new Error(`Index failed: ${textOf(error.props.children)}`);
+      }
+      expect(kb.queryByText('notes.txt')).not.toBeNull();
+    }, { timeout: 6000 });
 
     // Result via the In Memory UI: the embedding model co-resides as a sidecar.
     const after = openSelector();

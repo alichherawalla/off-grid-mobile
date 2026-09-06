@@ -1,24 +1,8 @@
+import { useModelResidencyStore } from '../stores/modelResidencyStore';
 import { useAppStore, useChatStore } from '../stores';
 import type { GeneratedImage } from '../types';
 import { buildImageGenMeta, scheduleImageSharePrompt } from './imageGenerationHelpers';
-import type {
-  ActiveImageModel,
-  GenerateImageParams,
-  ImageGenerationState,
-} from './imageGenerationTypes';
-
-export function completedImageGenerationState(
-  result: GeneratedImage,
-): Partial<ImageGenerationState> {
-  return {
-    phase: 'done',
-    progress: null,
-    status: null,
-    previewPath: null,
-    result,
-    error: null,
-  };
-}
+import type { ActiveImageModel, GenerateImageParams } from './imageGenerationTypes';
 
 export function saveImageGenerationResult(
   result: GeneratedImage,
@@ -30,6 +14,7 @@ export function saveImageGenerationResult(
     guidanceScale: number;
     useOpenCL: boolean;
     startTime: number;
+    isRemote?: boolean;
   },
 ): GeneratedImage {
   const { params, activeImageModel } = input;
@@ -37,7 +22,7 @@ export function saveImageGenerationResult(
   if (params.conversationId) result.conversationId = params.conversationId;
   const appStore = useAppStore.getState();
   appStore.addGeneratedImage(result);
-  appStore.markImageModelWarmed(activeImageModel.id);
+  if (!input.isRemote) useModelResidencyStore.getState().markImageModelWarmed(activeImageModel.id);
   appStore.completeChecklistStep('triedImageGen');
   scheduleImageSharePrompt();
 

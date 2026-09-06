@@ -16,7 +16,7 @@ import { render } from '@testing-library/react-native';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import { REASONING_DELIMITERS } from '../../../src/utils/messageContent';
-import { ThinkTagParser } from '../../../src/services/providers/openAICompatibleStream';
+import { ThinkTagParser } from '../../../src/services/adapters/providers/openAICompatibleStream';
 import { resetStores, getChatState } from '../../utils/testHelpers';
 import type { Message } from '../../../src/types';
 

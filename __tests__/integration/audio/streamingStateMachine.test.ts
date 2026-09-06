@@ -10,6 +10,10 @@
  * the drain lock; a new stream supersedes the old.
  */
 import logger from '@offgrid/core/utils/logger';
+import { createOffGridApplication, type OffGridApplication } from '@offgrid/application';
+import { EXECUTORCH_KOKORO_IDENTITY, type ModelSelectionStore } from '@offgrid/models';
+import { mobileLocalVoiceInventoryAdapter } from '../../../src/services/modelServices/voiceGenerationAdapter';
+import { mobileRouteId } from '../../../src/services/modelServices/mobileRoute';
 
 jest.mock('@offgrid/core/utils/logger', () => ({
   __esModule: true,
@@ -21,6 +25,8 @@ type SpeakMode = 'resolve' | 'hang' | 'throw';
 let speakMode: SpeakMode = 'resolve';
 let enginePhase = 'ready';
 const mockEngine = {
+  id: 'kokoro',
+  stop: jest.fn(),
   speak: jest.fn(() => {
     if (speakMode === 'throw') return Promise.reject(new Error('std::exception'));
     if (speakMode === 'hang') return new Promise<void>(() => { /* never settles */ });
@@ -31,30 +37,60 @@ const mockEngine = {
   release: jest.fn().mockResolvedValue(undefined),
   isFullyDownloaded: jest.fn(() => true),
   getRequiredAssets: jest.fn(() => [{ sizeBytes: 320 * 1024 * 1024 }]),
-  capabilities: { peakRamMB: 320 },
+  capabilities: { streaming: true, peakRamMB: 320 },
   displayName: 'Mock',
 };
 
 jest.mock('../../../pro/audio/engine', () => ({
-  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine) },
+  ttsRegistry: { getActiveEngine: jest.fn(() => mockEngine), getEngine: jest.fn(() => mockEngine), getRegisteredIds: jest.fn(() => ['kokoro']), has: jest.fn(() => true) },
 }));
-const mockCanLoad = jest.fn((..._a: unknown[]) => false);
-jest.mock('@offgrid/core/services/modelResidency', () => ({
-  modelResidencyManager: { canLoadWithoutEviction: (...a: unknown[]) => mockCanLoad(...a) },
-}));
-jest.mock('../../../pro/audio/ttsStore', () => ({
-  useTTSStore: { getState: jest.fn(), setState: jest.fn() },
-}));
-
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 import {
   feedStreamingText, finishStreamingText, resetStreamingSpeech, isStreamingSpeechActive, _setSpeakTimeoutForTest,
   stopStreamingSpeechForTurn,
 } from '../../../pro/audio/streamingSpeech';
 import { _setSmSink, type SmEvent } from '../../../pro/audio/ttsLog';
+import { bindVoiceProjection } from '../../../pro/audio/ttsControlService';
+import { registerApplicationFacade } from '../../../src/services/applicationFacade';
 
-const store = useTTSStore as unknown as { getState: jest.Mock; setState: jest.Mock };
+let availableMemoryMB = 0;
+let totalMemoryMB = 8_192;
+const voiceRouteId = mobileRouteId({
+  source: 'local', hostId: 'kokoro', modality: 'voice', modelId: EXECUTORCH_KOKORO_IDENTITY.modelId,
+});
+const selections: ModelSelectionStore = {
+  read: modality => modality === 'voice' ? voiceRouteId : null,
+  write: async () => undefined,
+};
+const application: OffGridApplication = createOffGridApplication({
+  models: {
+    selection: selections,
+    memory: {
+      current: () => ({ totalMB: totalMemoryMB, availableMB: availableMemoryMB, platform: 'mobile' }),
+    },
+    inventoryAdapters: [mobileLocalVoiceInventoryAdapter],
+    remote: {
+      configuration: {
+        read: () => ({version: 1, activeServerId: null, servers: []}),
+        write: async () => undefined,
+      },
+      credentials: {
+        read: async () => null, write: async () => undefined, remove: async () => undefined,
+      },
+      providers: { register: async () => undefined, unregister: async () => undefined },
+    },
+  },
+});
+registerApplicationFacade(() => application);
+
 const flush = () => new Promise<void>((r) => setImmediate(r));
+async function waitForSpeakCount(count: number): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (mockEngine.speak.mock.calls.length < count) {
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${count} spoken segments`);
+    await flush();
+  }
+}
 let state: Record<string, any>;
 let events: SmEvent[] = [];
 let disposeSink: () => void;
@@ -66,7 +102,8 @@ beforeEach(async () => {
   jest.clearAllMocks();
   speakMode = 'resolve';
   enginePhase = 'ready';
-  mockCanLoad.mockReturnValue(false);
+  availableMemoryMB = 0;
+  totalMemoryMB = 8_192;
   // clearAllMocks resets call history but NOT implementations — restore the
   // speakMode-driven impl so a prior test's mockImplementation can't leak in.
   mockEngine.speak.mockImplementation(() => {
@@ -77,13 +114,15 @@ beforeEach(async () => {
   _setSpeakTimeoutForTest(40); // fast timeout so the "hung" case doesn't wait 15s
   state = {
     settings: { interfaceMode: 'audio', enabled: true, speed: 1, engineId: 'kokoro', voiceByEngine: {} },
+    voices: [],
     isReady: true, playbackElapsed: 0, playSessionId: 0, currentMessageId: null, playbackStatus: 'idle',
     initializeEngine: jest.fn().mockResolvedValue(undefined),
   };
-  store.getState.mockImplementation(() => state);
-  store.setState.mockImplementation((partial: any) => {
-    const p = typeof partial === 'function' ? partial(state) : partial;
-    state = { ...state, ...p };
+  // The REAL zustand store carries the state under test; only the engine is faked.
+  useTTSStore.setState(state as never);
+  bindVoiceProjection({
+    set: (partial: any) => useTTSStore.setState(partial),
+    get: () => useTTSStore.getState() as never,
   });
   resetStreamingSpeech();
   await flush();
@@ -91,7 +130,6 @@ beforeEach(async () => {
   disposeSink = _setSmSink((e) => events.push(e));
   (logger as any);
 });
-
 afterEach(() => { disposeSink?.(); });
 
 describe('streaming state machine — happy path', () => {
@@ -114,7 +152,7 @@ describe('streaming state machine — happy path', () => {
     expect(names()[names().length - 1]).toBe('status → idle (ended)');
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toEqual(['One.', 'Two.', 'Three']);
     expect(isStreamingSpeechActive()).toBe(false);
-    expect(state.playbackStatus).toBe('idle');
+    expect(useTTSStore.getState().playbackStatus).toBe('idle');
   });
 });
 
@@ -131,7 +169,7 @@ describe('streaming state machine — engine errors never wedge', () => {
     expect(names()).toContain('stream segment FAILED');
     expect(names()).not.toContain('stream drain ABORT: engine wedged → release for fresh remount');
     expect(names()).toContain('stream drain DONE → ended'); // recovered, finished
-    expect(state.playbackStatus).toBe('idle');
+    expect(useTTSStore.getState().playbackStatus).toBe('idle');
     expect(isStreamingSpeechActive()).toBe(false);
   });
 
@@ -158,39 +196,44 @@ describe('streaming state machine — engine errors never wedge', () => {
     speakMode = 'resolve';
     resetStreamingSpeech();
     await flush();
+    const callsBeforeRecovery = mockEngine.speak.mock.calls.length;
     feedStreamingText('Recovered. ');
     finishStreamingText('Recovered.', 'm2');
-    await flush();
+    await waitForSpeakCount(callsBeforeRecovery + 1);
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Recovered.');
   });
 });
 
 describe('streaming state machine — budget-aware warm-up (the intelligent path)', () => {
   it('warms TTS to stream alongside the LLM when residency reports budget', async () => {
-    state.isReady = false; // engine cold at stream start
+    useTTSStore.setState({ isReady: false } as never); // engine cold at stream start
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(true); // headroom to coexist with the LLM
+    availableMemoryMB = 6_000; // headroom to coexist with the LLM
     feedStreamingText('Streaming this. ');
     await flush();
-    expect(mockCanLoad).toHaveBeenCalledWith(expect.objectContaining({ key: 'tts' }));
     expect(state.initializeEngine).toHaveBeenCalled(); // warmed → will stream
     expect(names()).toContain('stream warm: budget OK → warming TTS to stream alongside the LLM');
   });
 
   it('does NOT warm (stays speak-after) when there is no budget', async () => {
-    state.isReady = false;
+    useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(false); // memory-tight
+    totalMemoryMB = 2_048;
+    const resident = await application.models.residency.acquire(
+      {key: 'text:active', modelId: 'active.gguf', type: 'text', sizeMB: 800},
+      {load: async () => undefined, unload: async () => ({reclaimed: true})},
+    );
     feedStreamingText('No budget here. ');
     await flush();
     expect(state.initializeEngine).not.toHaveBeenCalled();
     expect(names()).toContain('stream warm SKIP: no budget to run TTS alongside the LLM → speak-after');
+    await resident.release();
   });
 
   it('only attempts the warm once per turn', async () => {
-    state.isReady = false;
+    useTTSStore.setState({ isReady: false } as never);
     enginePhase = 'idle';
-    mockCanLoad.mockReturnValue(true);
+    availableMemoryMB = 6_000;
     feedStreamingText('One. ');
     feedStreamingText('One. Two. ');
     feedStreamingText('One. Two. Three. ');
@@ -203,7 +246,7 @@ describe('streaming state machine — reset always reclaims the lock', () => {
   it('resetStreamingSpeech clears a stuck drain so the next stream is not blocked', async () => {
     speakMode = 'hang';
     feedStreamingText('Stuck. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(isStreamingSpeechActive()).toBe(true);
 
     resetStreamingSpeech(); // the recovery path (stop / new turn)
@@ -212,7 +255,7 @@ describe('streaming state machine — reset always reclaims the lock', () => {
 
     speakMode = 'resolve';
     feedStreamingText('Fresh.');
-    await flush();
+    await waitForSpeakCount(2);
     expect(names()).toContain('stream ENGAGE (engine warm)');
     expect((mockEngine.speak.mock.calls as unknown as string[][]).map((c) => c[0])).toContain('Fresh.');
   });
@@ -226,7 +269,7 @@ describe('streaming state machine — user stops mid-stream', () => {
   it('aborts cleanly without wedging/releasing the engine, and suppresses the rest of the turn', async () => {
     speakMode = 'hang'; // engine can't complete (as if paused) — the exact device condition
     feedStreamingText('One. Two. Three. ');
-    await flush();
+    await waitForSpeakCount(1);
     expect(isStreamingSpeechActive()).toBe(true);
     expect(mockEngine.speak).toHaveBeenCalledTimes(1); // segment 1 in flight (hung)
 

@@ -100,6 +100,7 @@ describe('KokoroEngine — live download lifecycle is the source of truth', () =
     );
 
     const p = engine.downloadAssets();
+    await Promise.resolve(); // the engine serializes asset fetches through one microtask queue
 
     // MID-FETCH: the stale flag was reset, phase is 'downloading' → NOT complete.
     // FAILS on the old early-return (stale _genuineCompletion faked progress=1 + done).

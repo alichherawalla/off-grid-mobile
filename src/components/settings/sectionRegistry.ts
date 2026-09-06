@@ -20,10 +20,16 @@ function emitChange(): void {
   for (const l of listeners) l();
 }
 
-export function registerSettingsSection(component: ComponentType<any>): void {
-  if (sections.includes(component)) return; // no-op re-register (dev Fast Refresh)
+export function registerSettingsSection(component: ComponentType<any>): () => void {
+  if (sections.includes(component)) return () => undefined; // no-op re-register (dev Fast Refresh)
   sections.push(component);
   emitChange();
+  return () => {
+    const index = sections.indexOf(component);
+    if (index < 0) return;
+    sections.splice(index, 1);
+    emitChange();
+  };
 }
 
 export function getSettingsSections(): ComponentType<any>[] {

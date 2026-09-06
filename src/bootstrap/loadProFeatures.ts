@@ -10,6 +10,7 @@ import {
 } from '../services/proLicenseService';
 import { proEntitlementLifecycle } from '../services/proEntitlementLifecycle';
 import { selectHasProAccess } from '../stores/proAccessSlice';
+import { registerMobileApplicationPorts } from '../services/composition/application';
 
 export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
@@ -23,8 +24,16 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   if (!pro) {
     return false; // proStub.js returns null — free build via metro extraNodeModules
   }
+  if (typeof pro.createMobileApplicationPorts === 'function') {
+    registerMobileApplicationPorts(pro.createMobileApplicationPorts);
+  }
   if (typeof pro.configureProEntitlementProvider === 'function') {
-    pro.configureProEntitlementProvider(registerProEntitlementProvider);
+    pro.configureProEntitlementProvider(
+      registerProEntitlementProvider,
+      async () => {
+        await loadProFeatures(true);
+      },
+    );
   }
   logger.log('[BOOT-PRO] proEntitlementLifecycle.start');
   await proEntitlementLifecycle.start();
@@ -42,17 +51,18 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   const credentialActive = isPro ?? licenseInfo.isPro;
   const credentialSaved =
     isPro === true || (licenseInfo.credentialSaved ?? licenseInfo.isPro);
-  const active = credentialActive || DEV_UNLOCK_PRO;
+  const expired = licenseInfo.expired === true;
+  const active = (credentialActive || DEV_UNLOCK_PRO) && !expired;
   // Single source of truth for "Pro is unlocked" — every upsell gate reads this, so a
   // keychain- or dev-unlocked Pro user never sees the upgrade prompt.
   useAppStore.getState().setHasRegisteredPro(credentialActive);
   useAppStore.getState().setHasSavedProCredential(credentialSaved);
   useAppStore.getState().setProActive(active);
+  useAppStore.getState().setHasExpiredProCredential(expired);
   // A credential is not access. If the roster last told us this device is deactivated, the paid bundle
   // must not load at all - loading it and then hiding the entry points leaves every Pro service running.
-  const admitted =
-    selectHasProAccess(useAppStore.getState()) || DEV_UNLOCK_PRO;
-  if (typeof pro.activateSyncBootstrap === 'function') {
+  const admitted = selectHasProAccess(useAppStore.getState()) || DEV_UNLOCK_PRO;
+  if (!expired && typeof pro.activateSyncBootstrap === 'function') {
     pro.activateSyncBootstrap({
       registerScreen,
       registerSlot,

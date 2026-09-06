@@ -1,3 +1,4 @@
+import { arrangeLocalSelection, selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * ChatsListScreen Tests
  *
@@ -11,11 +12,13 @@
  */
 
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { resetModelApplication } from '../../harness/activeModelLifecycle';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { resetStores } from '../../utils/testHelpers';
+import { selectMobileModel } from '../../../src/services/modelServices';
 import {
   createConversation,
   createMessage,
@@ -45,6 +48,7 @@ jest.mock('@react-navigation/native', () => {
 jest.mock('../../../src/hooks/useFocusTrigger', () => ({
   useFocusTrigger: () => 0,
 }));
+
 
 jest.mock('../../../src/components/AnimatedEntry', () => ({
   AnimatedEntry: ({ children }: any) => children,
@@ -121,12 +125,17 @@ jest.mock('../../../src/services', () => ({
 }));
 
 jest.mock('../../../src/components', () => ({
-  ModelSelectorModal: ({ visible }: any) => {
+  ModelSelectorModal: ({ visible, onSelectModel }: any) => {
     if (!visible) return null;
-    const { View, Text } = require('react-native');
+    const { View, Text, TouchableOpacity } = require('react-native');
     return (
       <View testID="model-selector-modal">
         <Text>Select Model</Text>
+        <TouchableOpacity
+          onPress={() => onSelectModel({ id: 'local-text', engine: 'llama' })}
+        >
+          <Text>Choose local model</Text>
+        </TouchableOpacity>
       </View>
     );
   },
@@ -148,9 +157,10 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 import { ChatsListScreen } from '../../../src/screens/ChatsListScreen';
 
 describe('ChatsListScreen', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetStores();
     jest.clearAllMocks();
+    await resetModelApplication();
   });
 
   // ==========================================================================
@@ -170,14 +180,34 @@ describe('ChatsListScreen', () => {
     it('enables New when downloadable models exist but none are loaded', () => {
       useAppStore.setState({
         downloadedModels: [createDownloadedModel()],
-        activeModelId: null,
-        downloadedImageModels: [],
-        activeImageModelId: null,
+        
+        downloadedImageModels: []
+        
       });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
 
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
+    });
+
+    it('selects a text route without loading it before Chat opens', async () => {
+      useAppStore.setState({
+        downloadedModels: [createDownloadedModel({ id: 'local-text' })],
+        
+        downloadedImageModels: []
+        
+      });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
+      const { getByText } = render(<ChatsListScreen />);
+
+      fireEvent.press(getByText('New'));
+      fireEvent.press(getByText('Choose local model'));
+
+      await waitFor(() => expect(selectedLocalModelId('text')).toBe('local-text'));
+      expect(mockNavigate).toHaveBeenCalledWith('Chat', {});
     });
   });
 
@@ -197,11 +227,14 @@ describe('ChatsListScreen', () => {
       ).toBeTruthy();
     });
 
-    it('shows start conversation prompt when models are downloaded', () => {
+    it('shows start conversation prompt when models are downloaded', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(
@@ -214,21 +247,26 @@ describe('ChatsListScreen', () => {
     it('shows New button flow when only image models are available', () => {
       useAppStore.setState({
         downloadedModels: [],
-        activeModelId: null,
-        downloadedImageModels: [createONNXImageModel()],
-        activeImageModelId: null,
+        
+        downloadedImageModels: [createONNXImageModel()]
+        
       });
+      arrangeLocalSelection('text', null);
+      arrangeLocalSelection('image', null);
 
       const { getByText } = render(<ChatsListScreen />);
       fireEvent.press(getByText('New'));
       expect(getByText('Select Model')).toBeTruthy();
     });
 
-    it('shows "New Chat" button in empty state when models are downloaded', () => {
+    it('shows "New Chat" button in empty state when models are downloaded', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
       const { getByText } = render(<ChatsListScreen />);
       expect(getByText('New Chat')).toBeTruthy();
@@ -347,11 +385,14 @@ describe('ChatsListScreen', () => {
       expect(useChatStore.getState().activeConversationId).toBe(conv.id);
     });
 
-    it('navigates to new Chat when New button is pressed and models exist', () => {
+    it('navigates to new Chat when New button is pressed and models exist', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);
@@ -489,11 +530,14 @@ describe('ChatsListScreen', () => {
   // Empty State with Models
   // ==========================================================================
   describe('empty state new chat button', () => {
-    it('navigates when New Chat empty state button pressed', () => {
+    it('navigates when New Chat empty state button pressed', async () => {
       const model = createDownloadedModel();
-      useAppStore.setState({
-        downloadedModels: [model],
-        activeModelId: model.id,
+      useAppStore.getState().addDownloadedModel(model);
+      await selectMobileModel({
+        source: 'local',
+        hostId: model.engine,
+        modality: 'text',
+        modelId: model.id,
       });
 
       const { getByText } = render(<ChatsListScreen />);

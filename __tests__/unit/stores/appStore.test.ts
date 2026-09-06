@@ -1,3 +1,7 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { useModelSelectionStore } from '../../../src/stores/modelSelectionStore';
+import { decodeModelRouteId } from '@offgrid/models';
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * App Store Unit Tests
  *
@@ -169,69 +173,41 @@ describe('appStore', () => {
       expect(models[0].id).toBe('model-2');
     });
 
-    it('removeDownloadedModel clears activeModelId if active model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+    it('removeDownloadedModel leaves selection reconciliation to Shared', () => {
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model = createDownloadedModel({ id: 'active-model' });
 
       addDownloadedModel(model);
-      setActiveModelId('active-model');
-      expect(getAppState().activeModelId).toBe('active-model');
-
       removeDownloadedModel('active-model');
 
-      expect(getAppState().activeModelId).toBeNull();
+      // Selection is no longer a store field; removal only touches the library list.
+      expect(getAppState().downloadedModels.find(m => m.id === 'active-model')).toBeUndefined();
     });
 
-    it('setLastTextModelId records the selected text model as a preference', () => {
-      const { setLastTextModelId } = useAppStore.getState();
-      expect(getAppState().lastTextModelId).toBeNull();
-      setLastTextModelId('my-text-model');
-      expect(getAppState().lastTextModelId).toBe('my-text-model');
-      // Independent of activeModelId, so it survives residency eviction.
-      useAppStore.getState().setActiveModelId(null);
-      expect(getAppState().lastTextModelId).toBe('my-text-model');
-    });
 
     it('removeDownloadedModel preserves activeModelId if different model removed', () => {
-      const { addDownloadedModel, setActiveModelId, removeDownloadedModel } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'model-1' });
       const model2 = createDownloadedModel({ id: 'model-2' });
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      setActiveModelId('model-1');
+      useAppStore.setState({ });
+      arrangeLocalSelection('text', 'model-1');
 
       removeDownloadedModel('model-2');
 
-      expect(getAppState().activeModelId).toBe('model-1');
+      expect(selectedLocalModelId('text')).toBe('model-1');
     });
   });
 
   // ============================================================================
   // Active Model
   // ============================================================================
-  describe('activeModel', () => {
-    it('starts with null activeModelId', () => {
-      expect(getAppState().activeModelId).toBeNull();
-    });
+  describe('activeModel persistence projection', () => {
 
-    it('setActiveModelId updates state', () => {
-      const { setActiveModelId } = useAppStore.getState();
-
-      setActiveModelId('model-123');
-
-      expect(getAppState().activeModelId).toBe('model-123');
-    });
-
-    it('setActiveModelId can clear active model', () => {
-      const { setActiveModelId } = useAppStore.getState();
-
-      setActiveModelId('model-123');
-      setActiveModelId(null);
-
-      expect(getAppState().activeModelId).toBeNull();
+    it('does not expose an independent selection writer', () => {
+      expect((getAppState() as any).setActiveModelId).toBeUndefined();
     });
   });
 
@@ -468,27 +444,26 @@ describe('appStore', () => {
       expect(getAppState().downloadedImageModels).toHaveLength(0);
     });
 
-    it('removeDownloadedImageModel clears activeImageModelId if active', () => {
+    it('removeDownloadedImageModel leaves selection reconciliation to Shared', () => {
       const {
         addDownloadedImageModel,
-        setActiveImageModelId,
         removeDownloadedImageModel,
       } = useAppStore.getState();
       const model = createONNXImageModel({ id: 'img-model-1' });
 
       addDownloadedImageModel(model);
-      setActiveImageModelId('img-model-1');
+      useAppStore.setState({ });
+      arrangeLocalSelection('image', 'img-model-1');
       removeDownloadedImageModel('img-model-1');
 
-      expect(getAppState().activeImageModelId).toBeNull();
+      // The library store never touches the persisted selection; Shared reconciles it on read.
+      const persisted = useModelSelectionStore.getState().entries.image?.localRouteId ?? null;
+      expect(persisted && decodeModelRouteId(persisted)?.modelId).toBe('img-model-1');
+      expect(selectedLocalModelId('image')).toBeNull();
     });
 
-    it('setActiveImageModelId updates state', () => {
-      const { setActiveImageModelId } = useAppStore.getState();
-
-      setActiveImageModelId('img-model-1');
-
-      expect(getAppState().activeImageModelId).toBe('img-model-1');
+    it('does not expose an independent image selection writer', () => {
+      expect((getAppState() as any).setActiveImageModelId).toBeUndefined();
     });
   });
 
@@ -847,7 +822,6 @@ describe('appStore', () => {
     it('preserves activeImageModelId when a different model is removed', () => {
       const {
         addDownloadedImageModel,
-        setActiveImageModelId,
         removeDownloadedImageModel,
       } = useAppStore.getState();
       const model1 = createONNXImageModel({ id: 'img-keep' });
@@ -855,11 +829,12 @@ describe('appStore', () => {
 
       addDownloadedImageModel(model1);
       addDownloadedImageModel(model2);
-      setActiveImageModelId('img-keep');
+      useAppStore.setState({ });
+      arrangeLocalSelection('image', 'img-keep');
 
       removeDownloadedImageModel('img-remove');
 
-      expect(getAppState().activeImageModelId).toBe('img-keep');
+      expect(selectedLocalModelId('image')).toBe('img-keep');
       expect(getAppState().downloadedImageModels).toHaveLength(1);
     });
   });
@@ -973,17 +948,14 @@ describe('appStore', () => {
       // The store initializes flashAttn as Platform.OS !== 'android'.
       // The react-native preset sets defaultPlatform to 'ios', so without resetStores()
       // the store should default to true. We verify by loading a fresh store instance.
-      jest.resetModules();
-      try {
-        // Fresh require — no resetStores() interference, so we see the real default
+      // An isolated registry: the rest of this file keeps its store instances.
+      jest.isolateModules(() => {
         const {
           useAppStore: freshStore,
         } = require('../../../src/stores/appStore');
         // ios !== android → true
         expect(freshStore.getState().settings.flashAttn).toBe(true);
-      } finally {
-        jest.resetModules();
-      }
+      });
     });
 
     it('flashAttn default formula: false on Android, true elsewhere', () => {
@@ -1070,19 +1042,19 @@ describe('appStore', () => {
     });
 
     it('handles model add and remove in sequence', () => {
-      const { addDownloadedModel, removeDownloadedModel, setActiveModelId } =
-        useAppStore.getState();
+      const { addDownloadedModel, removeDownloadedModel } = useAppStore.getState();
       const model1 = createDownloadedModel({ id: 'keep-model' });
       const model2 = createDownloadedModel({ id: 'temp-model' });
 
       addDownloadedModel(model1);
       addDownloadedModel(model2);
-      setActiveModelId('keep-model');
+      useAppStore.setState({ });
+      arrangeLocalSelection('text', 'keep-model');
       removeDownloadedModel('temp-model');
 
       expect(getAppState().downloadedModels).toHaveLength(1);
       expect(getAppState().downloadedModels[0].id).toBe('keep-model');
-      expect(getAppState().activeModelId).toBe('keep-model');
+      expect(selectedLocalModelId('text')).toBe('keep-model');
     });
   });
 

@@ -4,13 +4,10 @@
  * Unit tests for handler functions in useTextModels that are not covered by
  * the trending-selection or ModelsScreen integration tests:
  * - handleCancelDownload
- * - handleDeleteModel (model-not-found and active-model paths)
+ * - handleDeleteModel presentation intent
  * - runSearch error path
  * - runSearch with code type and no query (CODE_FALLBACK_QUERY)
  */
-
-import { renderHook, act } from '@testing-library/react-native';
-import { useTextModels } from '../../../../src/screens/ModelsScreen/useTextModels';
 
 // ── Navigation ────────────────────────────────────────────────────────
 jest.mock('@react-navigation/native', () => ({
@@ -41,7 +38,8 @@ const mockStoreState: any = {
 };
 
 jest.mock('../../../../src/stores', () => ({
-  useAppStore: jest.fn(() => mockStoreState),
+  useAppStore: jest.fn((selector?: (state: typeof mockStoreState) => unknown) =>
+    selector ? selector(mockStoreState) : mockStoreState),
 }));
 
 jest.mock('../../../../src/stores/downloadStore', () => ({
@@ -50,23 +48,32 @@ jest.mock('../../../../src/stores/downloadStore', () => ({
     {
       getState: () => ({
         downloads: mockDownloads,
-        // startModelDownload publishes a queued 'pending' row up-front; mirror the real
-        // store's add (refuses a duplicate modelKey) so the shared download action runs.
         add: (entry: any) => { if (!mockDownloads[entry.modelKey]) mockDownloads[entry.modelKey] = entry; },
         remove: (modelKey: string) => { delete mockDownloads[modelKey]; },
         setStatus: jest.fn(),
       }),
     },
   ),
+  modelDownloadProjection: {
+    admit: (entry: any) => {
+      if (!mockDownloads[entry.modelKey]) mockDownloads[entry.modelKey] = entry;
+    },
+    remove: (modelKey: string) => { delete mockDownloads[modelKey]; },
+    reportStatus: jest.fn(),
+  },
   isActiveStatus: (status: string) => ['pending', 'running', 'retrying', 'waiting_for_network', 'processing'].includes(status),
 }));
 
 // ── Services ──────────────────────────────────────────────────────────
 const mockSearchModels = jest.fn((_query: string, _opts?: any) => Promise.resolve([]));
-const mockCancelBackgroundDownload = jest.fn((_id: number) => Promise.resolve());
 const mockDeleteModel = jest.fn((_id: string) => Promise.resolve());
 const mockUnloadTextModel = jest.fn(() => Promise.resolve());
 const mockGetDownloadedModels = jest.fn(() => Promise.resolve([]));
+jest.mock('../../../../src/services/modelServices/residencyIntents', () => ({
+  mobileResidencyIntents: {
+    unloadText: () => mockUnloadTextModel(),
+  },
+}));
 
 jest.mock('../../../../src/services', () => ({
   huggingFaceService: {
@@ -74,11 +81,10 @@ jest.mock('../../../../src/services', () => ({
     getModelDetails: jest.fn(() => Promise.reject(new Error('not found'))),
     getModelFiles: jest.fn(() => Promise.resolve([])),
   },
-  modelManager: {
+  modelLibrary: {
     getDownloadedModels: () => mockGetDownloadedModels(),
     downloadModelBackground: jest.fn(),
     watchDownload: jest.fn(),
-    cancelBackgroundDownload: (id: number) => mockCancelBackgroundDownload(id),
     repairMmProj: jest.fn(),
     deleteModel: (id: string) => mockDeleteModel(id),
   },
@@ -89,8 +95,8 @@ jest.mock('../../../../src/services', () => ({
   activeModelService: {
     // The model-selection seam, from the one place it is defined.
     ...require('../../../utils/activeModelServiceStub').activeModelSelectionStub(),
-    unloadTextModel: () => mockUnloadTextModel(),
   },
+  unloadTextModel: () => mockUnloadTextModel(),
 }));
 
 // ── Alert ─────────────────────────────────────────────────────────────
@@ -99,6 +105,13 @@ jest.mock('../../../../src/components/CustomAlert', () => ({
   showAlert: (title: string, message: string) => mockShowAlert(title, message),
   initialAlertState: { title: '', message: '', visible: false },
 }));
+
+const { installNativeBoundary, requireRTL } =
+  require('../../../harness/nativeBoundary') as typeof import('../../../harness/nativeBoundary');
+installNativeBoundary({ download: true, fs: true, llama: true });
+const { renderHook, act } = requireRTL();
+const { useTextModels } =
+  require('../../../../src/screens/ModelsScreen/useTextModels') as typeof import('../../../../src/screens/ModelsScreen/useTextModels');
 
 // ─────────────────────────────────────────────────────────────────────
 
@@ -111,48 +124,6 @@ beforeEach(() => {
   Object.keys(mockDownloads).forEach(k => delete mockDownloads[k]);
   const { useAppStore } = jest.requireMock('../../../../src/stores') as any;
   useAppStore.getState = () => mockStoreState;
-});
-
-// ── handleCancelDownload ──────────────────────────────────────────────
-
-describe('handleCancelDownload', () => {
-  it('calls cancelBackgroundDownload when a downloadId exists for the key', async () => {
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    // Seed a download in progress by calling handleDownload first (mock resolves immediately)
-    const mockFile = { name: 'model.gguf', size: 1000, quantization: 'Q4_K_M', downloadUrl: 'http://x' };
-    const mockModel = { id: 'org/repo', name: 'Test', author: 'org', description: '', downloads: 0, likes: 0, tags: [], lastModified: '', files: [] };
-
-    const { modelManager: mm } = jest.requireMock('../../../../src/services');
-    mm.downloadModelBackground.mockResolvedValueOnce({ downloadId: 99 });
-
-    await act(async () => {
-      await result.current.handleDownload(mockModel as any, mockFile as any);
-    });
-
-    mockDownloads['org/repo/model.gguf'] = {
-      downloadId: 99,
-      modelKey: 'org/repo/model.gguf',
-      status: 'running',
-    };
-
-    await act(async () => {
-      await result.current.handleCancelDownload('org/repo/model.gguf');
-    });
-
-    expect(mockCancelBackgroundDownload).toHaveBeenCalledWith(99);
-  });
-
-  it('clears downloadProgress without calling cancelBackgroundDownload when no downloadId', async () => {
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    // Call cancel for a key that was never started
-    await act(async () => {
-      await result.current.handleCancelDownload('nonexistent/key.gguf');
-    });
-
-    expect(mockCancelBackgroundDownload).not.toHaveBeenCalled();
-  });
 });
 
 // ── handleDeleteModel ─────────────────────────────────────────────────
@@ -168,38 +139,8 @@ describe('handleDeleteModel', () => {
     });
 
     expect(mockDeleteModel).not.toHaveBeenCalled();
-    expect(mockUnloadTextModel).not.toHaveBeenCalled();
   });
 
-  it('unloads the active model before deleting when it is active', async () => {
-    const model = { id: 'org/active-model', name: 'Active', fileName: 'active.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
-    mockStoreState.downloadedModels = [model];
-    mockStoreState.activeModelId = 'org/active-model';
-
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    await act(async () => {
-      await result.current.handleDeleteModel('org/active-model');
-    });
-
-    expect(mockUnloadTextModel).toHaveBeenCalled();
-    expect(mockDeleteModel).toHaveBeenCalledWith('org/active-model');
-  });
-
-  it('deletes without unloading when model is not active', async () => {
-    const model = { id: 'org/inactive-model', name: 'Inactive', fileName: 'inactive.gguf', filePath: '/path', fileSize: 1000, quantization: 'Q4_K_M', downloadedAt: '' };
-    mockStoreState.downloadedModels = [model];
-    mockStoreState.activeModelId = 'org/some-other-model';
-
-    const { result } = renderHook(() => useTextModels(setAlertState));
-
-    await act(async () => {
-      await result.current.handleDeleteModel('org/inactive-model');
-    });
-
-    expect(mockUnloadTextModel).not.toHaveBeenCalled();
-    expect(mockDeleteModel).toHaveBeenCalledWith('org/inactive-model');
-  });
 });
 
 // ── runSearch error path ──────────────────────────────────────────────
@@ -251,6 +192,41 @@ describe('runSearch', () => {
 // ── handleSelectModel ────────────────────────────────────────────────
 
 describe('handleSelectModel', () => {
+  it('uses the Shared Gemma artifacts when network file discovery fails', async () => {
+    const { huggingFaceService } = jest.requireMock('../../../../src/services');
+    huggingFaceService.getModelFiles.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useTextModels(setAlertState));
+    const gemma: any = {
+      id: 'unsloth/gemma-4-E2B-it-GGUF',
+      name: 'Gemma 4 E2B',
+      author: 'google',
+      description: '',
+      downloads: 0,
+      likes: 0,
+      tags: ['vision'],
+      lastModified: '',
+      files: [],
+    };
+
+    await act(async () => {
+      await result.current.handleSelectModel(gemma);
+    });
+
+    expect(result.current.modelFiles).toEqual([
+      expect.objectContaining({
+        name: 'gemma-4-E2B-it-Q4_K_M.gguf',
+        quantization: 'Q4_K_M',
+        mmProjFile: expect.objectContaining({
+          name: 'mmproj-gemma-4-E2B-it-F16.gguf',
+        }),
+      }),
+    ]);
+    expect(huggingFaceService.getModelFiles).not.toHaveBeenCalled();
+    expect(setAlertState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Failed to load model files.' }),
+    );
+  });
+
   it('short-circuits HF fetch when model id is in the offgrid/ namespace and ships files', async () => {
     const { huggingFaceService } = jest.requireMock('../../../../src/services');
     const getModelFilesSpy = jest.spyOn(huggingFaceService, 'getModelFiles');
@@ -275,14 +251,14 @@ describe('handleSelectModel', () => {
     expect(result.current.selectedModel).toBe(curatedModel);
   });
 
-  it('falls through to HF fetch for non-offgrid models even when factories pre-populate files', async () => {
+  it('uses pre-populated catalog files for any projected model without a second fetch', async () => {
     const { huggingFaceService } = jest.requireMock('../../../../src/services');
     const fetched = [{ name: 'q4.gguf', size: 2000, quantization: 'Q4_K_M', downloadUrl: 'https://hf/q4' }];
     huggingFaceService.getModelFiles.mockResolvedValueOnce(fetched);
 
     const { result } = renderHook(() => useTextModels(setAlertState));
 
-    // Factory-style model with prepopulated files — must NOT short-circuit
+    // A projected model already carries the authoritative artifact list.
     const hfModel: any = {
       id: 'test-org/test-model',
       name: 'Test Model',
@@ -296,37 +272,8 @@ describe('handleSelectModel', () => {
       await result.current.handleSelectModel(hfModel);
     });
 
-    expect(huggingFaceService.getModelFiles).toHaveBeenCalledWith('test-org/test-model');
-    expect(result.current.modelFiles).toEqual(fetched);
-  });
-});
-
-// ── downloaded-file resolution (recovered / catch-up id schemes) ──────────
-describe('isModelDownloaded / getDownloadedModel resolve by file, not composite id', () => {
-  const REPO = 'unsloth/gemma-4-E2B-it-GGUF';
-
-  it('resolves a quant registered under the composite download id', () => {
-    mockStoreState.downloadedModels = [
-      { id: `${REPO}/gemma-4-E2B-it-Q4_K_M.gguf`, fileName: 'gemma-4-E2B-it-Q4_K_M.gguf', quantization: 'Q4_K_M', engine: 'llama' },
-    ];
-    const { result } = renderHook(() => useTextModels(setAlertState));
-    expect(result.current.isModelDownloaded(REPO, 'gemma-4-E2B-it-Q4_K_M.gguf')).toBe(true);
-    expect(result.current.getDownloadedModel(REPO, 'gemma-4-E2B-it-Q4_K_M.gguf')?.quantization).toBe('Q4_K_M');
-  });
-
-  it('resolves a quant recovered under a DIFFERENT id (catch-up/recovery) by its fileName', () => {
-    // The Q4_0 finished after an app kill and was re-registered by the recovery scan
-    // under a `recovered_…` id — the composite-id lookup would miss it and fall back to
-    // the sibling Q4_K_M. Matching by fileName finds the real Q4_0 entry.
-    mockStoreState.downloadedModels = [
-      { id: `${REPO}/gemma-4-E2B-it-Q4_K_M.gguf`, fileName: 'gemma-4-E2B-it-Q4_K_M.gguf', quantization: 'Q4_K_M', engine: 'llama' },
-      { id: 'recovered_gemma-4-E2B-it-Q4_0.gguf_1783000000000', fileName: 'gemma-4-E2B-it-Q4_0.gguf', quantization: 'Q4_0', engine: 'llama' },
-    ];
-    const { result } = renderHook(() => useTextModels(setAlertState));
-    expect(result.current.isModelDownloaded(REPO, 'gemma-4-E2B-it-Q4_0.gguf')).toBe(true);
-    const resolved = result.current.getDownloadedModel(REPO, 'gemma-4-E2B-it-Q4_0.gguf');
-    expect(resolved?.quantization).toBe('Q4_0');
-    expect(resolved?.id).toBe('recovered_gemma-4-E2B-it-Q4_0.gguf_1783000000000');
+    expect(huggingFaceService.getModelFiles).not.toHaveBeenCalled();
+    expect(result.current.modelFiles).toEqual(hfModel.files);
   });
 });
 

@@ -22,6 +22,11 @@ import {
   CACHE_TYPE_OPTIONS,
 } from '../../hooks/useTextGenerationAdvanced';
 import { hardwareService } from '../../services/hardware';
+import {
+  REASONING_BUDGET_AUTO,
+  REASONING_BUDGET_OPTIONS,
+  reasoningBudgetLabel,
+} from '@offgrid/application';
 import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
 import { SegmentedRow, BOOL_OPTIONS, type PillOption } from './segmentedRow';
@@ -51,7 +56,10 @@ const HTP_BACKEND: BackendOption = {
 
 export const BackendSelector: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { settings, updateSettings } = useAppStore();
+  // One field per row. A whole-store read meant dragging the GPU-layers slider re-rendered every
+  // other advanced row, and any unrelated app write re-rendered all of them.
+  const inferenceBackend = useAppStore(s => s.settings.inferenceBackend);
+  const updateSettings = useAppStore(s => s.updateSettings);
   const { gpuLayersEffective } = useTextGenerationAdvanced();
   const [hasNPU, setHasNPU] = useState(false);
 
@@ -65,7 +73,7 @@ export const BackendSelector: React.FC = () => {
   const backends: BackendOption[] = Platform.OS === 'ios' ? IOS_BACKENDS : androidBackends;
 
   const defaultBackend = Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.CPU;
-  const current = settings.inferenceBackend ?? defaultBackend;
+  const current = inferenceBackend ?? defaultBackend;
   const showLayers = current !== INFERENCE_BACKENDS.CPU;
   const layersLabel = current === INFERENCE_BACKENDS.HTP
     ? 'NPU Layers'
@@ -104,8 +112,9 @@ const LITERT_BACKENDS: { id: LiteRTBackend; label: string; desc: string }[] = [
 ];
 
 export const LiteRTBackendSelector: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
-  const current = settings.liteRTBackend ?? 'gpu';
+  const liteRTBackend = useAppStore(s => s.settings.liteRTBackend);
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const current = liteRTBackend ?? 'gpu';
   return (
     <SegmentedRow<LiteRTBackend>
       label="Acceleration"
@@ -125,7 +134,7 @@ export const LiteRTBackendSelector: React.FC = () => {
 export { SpeculativeDecodingToggle } from './SpeculativeDecodingToggle';
 
 export const FlashAttentionToggle: React.FC = () => {
-  const { updateSettings } = useAppStore();
+  const updateSettings = useAppStore(s => s.updateSettings);
   const { isFlashAttnOn, handleFlashAttnToggle } = useTextGenerationAdvanced();
   return (
     <SegmentedRow<'off' | 'on'>
@@ -180,10 +189,14 @@ const MODE_OPTIONS: PillOption<ModelLoadingMode>[] = [
 ];
 
 export const ModelLoadingModeSelector: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const modelLoadingMode = useAppStore(s => s.settings.modelLoadingMode);
+  const aggressiveModelLoading = useAppStore(
+    s => s.settings.aggressiveModelLoading,
+  );
+  const updateSettings = useAppStore(s => s.updateSettings);
   // Single source of truth: the 3-mode setting, falling back to the legacy boolean.
   const current: ModelLoadingMode =
-    settings.modelLoadingMode ?? (settings.aggressiveModelLoading ? 'aggressive' : 'balanced');
+    modelLoadingMode ?? (aggressiveModelLoading ? 'aggressive' : 'balanced');
   return (
     <SegmentedRow<ModelLoadingMode>
       label="Model Loading"
@@ -196,11 +209,59 @@ export const ModelLoadingModeSelector: React.FC = () => {
   );
 };
 
+// ─── Thinking Budget ─────────────────────────────────────────────────────────
+
+// The shared model contract owns the allowed values. The slider uses their
+// ordered index because Auto is not a numeric token cap.
+const THINKING_BUDGET_VALUES = [
+  REASONING_BUDGET_AUTO,
+  ...REASONING_BUDGET_OPTIONS,
+] as const;
+
+function thinkingBudgetSliderLabel(index: number): string {
+  const value = THINKING_BUDGET_VALUES[Math.round(index)] ?? REASONING_BUDGET_AUTO;
+  return value === REASONING_BUDGET_AUTO
+    ? 'Auto'
+    : reasoningBudgetLabel(value).replace(' tokens', '');
+}
+
+/** llama.rn path only: the cap rides the completion request as thinking_budget_tokens
+ *  (shared rule: @offgrid/models thinkingBudgetPayload). LiteRT has no thinking channel. */
+export const ThinkingBudgetSelector: React.FC = () => {
+  const reasoningBudget = useAppStore(s => s.settings.reasoningBudget);
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const current = reasoningBudget ?? REASONING_BUDGET_AUTO;
+  const selectedIndex = Math.max(
+    0,
+    THINKING_BUDGET_VALUES.findIndex(value => value === current),
+  );
+  return (
+    <SliderSetting
+      testID="thinking-budget"
+      label="Thinking Budget"
+      description="Auto lets the model think for as long as it needs. A cap ends the thinking at that many tokens so the answer arrives sooner. Applies when Thinking is on."
+      value={selectedIndex}
+      min={0}
+      max={THINKING_BUDGET_VALUES.length - 1}
+      step={1}
+      editableValue={false}
+      formatValue={thinkingBudgetSliderLabel}
+      onChange={(index) => {
+        const value = THINKING_BUDGET_VALUES[Math.round(index)] ?? REASONING_BUDGET_AUTO;
+        updateSettings({ reasoningBudget: value });
+      }}
+    />
+  );
+};
+
 // ─── Show Generation Details ──────────────────────────────────────────────────
 
 export const ShowGenerationDetailsToggle: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
-  const on = !!settings.showGenerationDetails;
+  const showGenerationDetails = useAppStore(
+    s => s.settings.showGenerationDetails,
+  );
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const on = !!showGenerationDetails;
   return (
     <SegmentedRow<'off' | 'on'>
       label="Show Generation Details"
@@ -217,7 +278,7 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
 
 export const CpuThreadsSlider: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { updateSettings } = useAppStore();
+  const updateSettings = useAppStore(s => s.updateSettings);
   const { cpuThreadsSliderValue, cpuThreadsDisplayValue } = useTextGenerationAdvanced();
   return (
     <View style={styles.container}>
@@ -238,14 +299,15 @@ export const CpuThreadsSlider: React.FC = () => {
 
 export const BatchSizeSlider: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { settings, updateSettings } = useAppStore();
+  const nBatch = useAppStore(s => s.settings.nBatch);
+  const updateSettings = useAppStore(s => s.updateSettings);
   return (
     <View style={styles.container}>
       <SliderSetting
         testID="batch-size-stepper"
         label="Batch Size"
         description="Tokens processed per batch"
-        value={settings.nBatch ?? 512}
+        value={nBatch ?? 512}
         min={32} max={512} step={32}
         onChange={(v) => updateSettings({ nBatch: v })}
       />

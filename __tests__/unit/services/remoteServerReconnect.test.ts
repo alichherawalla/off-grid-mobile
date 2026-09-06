@@ -1,0 +1,202 @@
+import { getIpAddress } from 'react-native-device-info';
+import * as Keychain from 'react-native-keychain';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import { useAppStore } from '../../../src/stores/appStore';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import {
+  startMobileApplicationFixture,
+  type MobileApplicationFixture,
+} from '../../harness/mobileApplicationFixture';
+import '../../../src/services/modelServices';
+
+jest.mock('react-native-device-info', () => ({
+  getIpAddress: jest.fn(),
+  isEmulator: jest.fn(() => Promise.resolve(false)),
+}));
+
+const modelList = () =>
+  new Response(JSON.stringify({ object: 'list', data: [] }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+
+describe('remote server reconnect', () => {
+  const originalFetch = global.fetch;
+  let applicationFixture: MobileApplicationFixture;
+
+  beforeAll(async () => {
+    applicationFixture = await startMobileApplicationFixture();
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await remoteServerManager.clearAllServers();
+    useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
+    (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.30');
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await remoteServerManager.clearAllServers();
+    useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: false });
+    global.fetch = originalFetch;
+  });
+
+  it('keeps a reachable saved server when another discovered server uses the same port', async () => {
+    const endpointA = 'http://192.168.1.10:7878';
+    const endpointB = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (
+        url === `${endpointA}/v1/models` ||
+        url === `${endpointB}/v1/models`
+      ) {
+        return Promise.resolve(modelList());
+      }
+      return Promise.reject(new Error('no server'));
+    });
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Desktop A',
+      endpoint: endpointA,
+      provider: 'openai-compatible',
+    })).id;
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(`${endpointA}/v1`);
+    expect(result).toEqual({
+      moved: [],
+      found: [
+        {
+          endpoint: endpointB,
+          type: 'gateway',
+          name: 'Off Grid AI Gateway (192.168.1.20)',
+        },
+      ],
+    });
+  });
+
+  it('does not move a credentialed server onto discovered private-LAN HTTP', async () => {
+    const oldEndpoint = 'https://desktop.example.test:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Credentialed Desktop',
+      endpoint: oldEndpoint,
+      provider: 'openai-compatible',
+    })).id;
+    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue({
+      username: `server_${serverId}`,
+      password: 'secret', // NOSONAR - test boundary value, not a real credential
+    });
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(`${oldEndpoint}/v1`);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      expect.objectContaining({ endpoint: discoveredEndpoint }),
+    ]);
+  });
+
+  it('reports an unproven same-port discovery without touching the Keychain', async () => {
+    const oldEndpoint = 'https://desktop.example.test:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Desktop with unavailable credentials',
+      endpoint: oldEndpoint,
+      provider: 'openai-compatible',
+    })).id;
+    // A move needs proof of identity first; a credential is only read for a proven move, so a
+    // Keychain outage cannot block the scan and the discovery is still reported.
+    (Keychain.getGenericPassword as jest.Mock).mockClear();
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(`${oldEndpoint}/v1`);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      expect.objectContaining({ endpoint: discoveredEndpoint }),
+    ]);
+    expect(Keychain.getGenericPassword).not.toHaveBeenCalled();
+  });
+
+  it('does not adopt a same-port discovery that proves no identity, even with no credential (CWE-345)', async () => {
+    const oldEndpoint = 'http://192.168.1.10:7878';
+    const discoveredEndpoint = 'http://192.168.1.20:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) =>
+      String(input) === `${discoveredEndpoint}/v1/models`
+        ? Promise.resolve(modelList())
+        : Promise.reject(new Error('no server')),
+    );
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Uncredentialed Desktop',
+      endpoint: oldEndpoint,
+      provider: 'openai-compatible',
+    })).id;
+
+    const result = await remoteServerManager.scanAndReconcile();
+
+    // Any host answering on :7878 would otherwise receive this server's prompts. Without proof of
+    // identity the saved endpoint stays and the discovery is offered to the person instead.
+    expect(
+      useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
+    ).toBe(`${oldEndpoint}/v1`);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      { endpoint: discoveredEndpoint, type: 'gateway', name: 'Off Grid AI Gateway (192.168.1.20)' },
+    ]);
+  });
+
+  it('scans when auto-discovery is enabled and the active server is reachable', async () => {
+    const endpoint = 'http://192.168.1.10:7878';
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `${endpoint}/v1/models`) return Promise.resolve(modelList());
+      return Promise.reject(new Error('no server'));
+    });
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Desktop',
+      endpoint,
+      provider: 'openai-compatible',
+      selections: { text: 'gemma' },
+      catalog: { text: [{ id: 'gemma', name: 'Gemma' }] },
+    })).id;
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+      id: 'gemma', name: 'Gemma', serverId, lastUpdated: new Date(0).toISOString(),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma');
+    useAppStore.getState().updateSettings({ autoDiscoverRemoteModels: true });
+
+    await remoteServerManager.recoverActiveConnection();
+
+    expect(
+      useRemoteServerStore.getState().serverHealth[serverId]?.status,
+    ).toBe('healthy');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://192.168.1.2:7878/v1/models',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});

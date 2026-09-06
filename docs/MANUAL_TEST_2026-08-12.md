@@ -180,12 +180,9 @@ The preview fix touched a path shared by every locally served image.
 - **Expect:** loads and streams as before. Try one on the Hexagon/NPU backend too, since those kernels come
   from this runtime — they are byte-identical to what we shipped, but worth one pass.
 
-2. **Speak a reply with OuteTTS.** This is the one I would test first.
+2. **Speak a reply with Kokoro.**
 
 - **Expect:** speech sounds as it did.
-- **Why:** 0.13 removed the guide-token API OuteTTS used and moved that job into native. I adapted the
-  engine, but guide tokens are what kept the spoken output tied to the text, so a regression would show as
-  drifting or wrong words rather than an error.
 
 3. Try **Nemotron 3.5** — new in this runtime, and it should now load where it could not before.
 

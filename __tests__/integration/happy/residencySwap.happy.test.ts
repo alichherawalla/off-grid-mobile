@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * HAPPY-PATH (integration) — smart budgeting / routing: switching text models swaps residency so only ONE
  * heavy text model is accounted resident at a time (loading a llama.cpp model evicts the LiteRT one).
@@ -8,7 +9,7 @@
  * ASSERTS THE RESIDENCY MANAGER'S ACCOUNTING (modelResidencyManager.getResidents()) — the single-heavy-text
  * invariant is an accounting rule (per the §4 gesture-less-invariant carve-out). This is the FIX for a prior
  * FALSE GREEN: the old test asserted engine booleans (liteRTService/llmService.isModelLoaded), which the
- * REDUNDANT unloadAllTextEngines() satisfies even if the residency SWAP is deleted — so the residency
+ * direct native unloads can pass even if the residency SWAP is deleted — so the residency
  * accounting could go stale/co-resident and the test stayed green. getResidents() reflects the accounting,
  * which only updates when the swap's register runs — so a swap regression is caught.
  *
@@ -24,8 +25,11 @@ describe('happy — switching text models swaps residency (one heavy model accou
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const {
+      activeModelService,
+      modelResidencyManager,
+      resetModelApplication,
+    } = require('../../harness/activeModelLifecycle');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
      
@@ -35,7 +39,9 @@ describe('happy — switching text models swaps residency (one heavy model accou
 
     const litertModel = createDownloadedModel({ id: 'lrt', engine: 'litert', filePath: '/models/gemma.litertlm' });
     const llamaModel = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
-    useAppStore.setState({ downloadedModels: [litertModel, llamaModel], activeModelId: null });
+    useAppStore.setState({ downloadedModels: [litertModel, llamaModel] });
+    arrangeLocalSelection('text', null);
+    await resetModelApplication();
 
     const textResidents = () => (modelResidencyManager.getResidents() as Array<{ type: string; modelId?: string }>)
       .filter(r => r.type === 'text').map(r => r.modelId);

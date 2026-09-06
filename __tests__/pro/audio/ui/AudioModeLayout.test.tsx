@@ -33,6 +33,7 @@ import { AudioModeLayout } from '@offgrid/pro/audio/ui/AudioModeLayout';
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
 import { hideAlert } from '@offgrid/core/components/CustomAlert';
 import type { TTSVoice } from '@offgrid/pro/audio/engine';
+import type {MobileApplicationFixture} from '../../../harness/mobileApplicationFixture';
 
 // A stylesheet object with just the keys AudioModeLayout reads. Values are irrelevant to
 // behaviour; testIDs/text carry the assertions.
@@ -106,6 +107,16 @@ const VOICES: TTSVoice[] = [
 // Snapshot of the store keys we mutate, so afterEach can restore them (no pollution).
 const STORE_KEYS = ['activeVoiceId', 'voices', 'isSwitchingVoice', 'playbackStatus'] as const;
 let savedStore: Record<string, any>;
+let applicationFixture: MobileApplicationFixture;
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 beforeEach(() => {
   const s = useTTSStore.getState() as any;

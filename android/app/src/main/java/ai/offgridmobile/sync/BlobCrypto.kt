@@ -12,6 +12,16 @@ import java.net.NetworkInterface
  * derivation defined in the shared sync package, and hands it down as bytes.
  */
 object BlobCrypto {
+    data class InterfaceCandidate(
+        val host: String,
+        val interfaceName: String,
+        val isUp: Boolean,
+        val isLoopback: Boolean,
+        val isLinkLocal: Boolean,
+        val isAnyLocal: Boolean,
+        val isMulticast: Boolean,
+    )
+
     fun decode(value: String): ByteArray = Base64.decode(value, Base64.DEFAULT)
 
     /**
@@ -34,4 +44,46 @@ object BlobCrypto {
         }
         return null
     }
+
+    /** Current numeric IPv4 interfaces. Shared sync code owns route safety and classification. */
+    fun interfaceCandidates(): List<InterfaceCandidate> =
+        runCatching {
+            val records = mutableListOf<InterfaceCandidate>()
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return@runCatching emptyList()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (address !is Inet4Address) continue
+                    records +=
+                        InterfaceCandidate(
+                            host = address.hostAddress ?: continue,
+                            interfaceName = networkInterface.name,
+                            isUp = networkInterface.isUp,
+                            isLoopback = networkInterface.isLoopback || address.isLoopbackAddress,
+                            isLinkLocal = address.isLinkLocalAddress,
+                            isAnyLocal = address.isAnyLocalAddress,
+                            isMulticast = address.isMulticastAddress,
+                        )
+                }
+            }
+            usableInterfaceCandidates(records)
+        }.getOrDefault(emptyList())
+
+    internal fun usableInterfaceCandidates(
+        records: List<InterfaceCandidate>,
+    ): List<InterfaceCandidate> =
+        records
+            .asSequence()
+            .filter { record ->
+                record.isUp &&
+                    !record.isLoopback &&
+                    !record.isLinkLocal &&
+                    !record.isAnyLocal &&
+                    !record.isMulticast
+            }
+            .distinctBy { record -> "${record.interfaceName}\u0000${record.host}" }
+            .sortedWith(compareBy(InterfaceCandidate::interfaceName, InterfaceCandidate::host))
+            .toList()
 }

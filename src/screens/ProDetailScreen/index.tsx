@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Linking,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -29,8 +30,8 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 import { ProManageSection } from './ProManageSection';
 import { ProIncludedSection } from './ProIncludedSection';
 import { ProUnlockModal } from './ProUnlockModal';
-import { useHasRegisteredScreen } from '../../navigation/screenRegistry';
 import type { RootStackParamList } from '../../navigation/types';
+import logger from '../../utils/logger';
 
 // Off Grid AI Pro is the ambient intelligence layer across desktop + phone, not a
 // mobile feature list. These pillars mirror the early-access page framing.
@@ -56,6 +57,11 @@ const PILLARS = [
     desc: 'Your chats, projects, files, models, and copied text stay current over your own network, never a cloud relay.',
   },
   {
+    icon: 'monitor',
+    title: 'Your Desktop does the heavy work',
+    desc: 'Create images, transcribe speech, and hear replies with the models active on your named Desktop. You choose which models it serves.',
+  },
+  {
     icon: 'check-circle',
     title: 'It acts, you approve',
     desc: 'It drafts the reply, files the ticket, updates the doc - never on its own. Every action is yours to approve.',
@@ -70,7 +76,6 @@ export const ProDetailScreen: React.FC = () => {
   const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
   const isProActive = useAppStore(s => s.isProActive);
   const hasProAccess = useAppStore(selectHasProAccess);
-  const hasSyncBootstrap = useHasRegisteredScreen('Sync');
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const pricing = getPricingCopy();
   const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
@@ -82,11 +87,23 @@ export const ProDetailScreen: React.FC = () => {
   const deviceStatusColor = hasProAccess ? colors.primary : colors.textMuted;
 
   const openPayPage = () => {
-    Linking.openURL(withUtm(PRO_PAY_PAGE_URL, 'pro-detail')).catch(() => {});
+    Linking.openURL(withUtm(PRO_PAY_PAGE_URL, 'pro-detail')).catch(error => {
+      logger.error(`[Pro] purchase page failed: ${String(error)}`);
+      Alert.alert(
+        'Could not open the purchase page',
+        'Check your connection and try again.',
+      );
+    });
   };
   const openDesktop = () => {
     Linking.openURL(withUtm(OFF_GRID_DESKTOP_URL, 'pro-detail')).catch(
-      () => {},
+      error => {
+        logger.error(`[Pro] desktop page failed: ${String(error)}`);
+        Alert.alert(
+          'Could not open the desktop page',
+          'Check your connection and try again.',
+        );
+      },
     );
   };
   const openVerifyModal = () => setVerifyModalVisible(true);
@@ -94,7 +111,13 @@ export const ProDetailScreen: React.FC = () => {
   // Activation verified: load the pro bundle now so Pro lights up live (the
   // reactive appRoot slot mounts the engine without a restart). Registries dedupe.
   const handleUnlocked = () => {
-    loadProFeatures(true).catch(() => {});
+    loadProFeatures(true).catch(error => {
+      logger.error(`[Pro] activation refresh failed: ${String(error)}`);
+      Alert.alert(
+        'Pro is active',
+        'The screen could not refresh. Reopen Off Grid AI to use your Pro features.',
+      );
+    });
   };
 
   return (
@@ -105,7 +128,7 @@ export const ProDetailScreen: React.FC = () => {
         title="Off Grid AI Pro"
         onBack={() => navigation.goBack()}
         right={
-<View style={styles.headerActions}>
+          <View style={styles.headerActions}>
             {deviceStatus ? (
               <View
                 style={[
@@ -217,14 +240,6 @@ export const ProDetailScreen: React.FC = () => {
               onPress={openVerifyModal}
               style={styles.verifyButton}
             />
-            {hasSyncBootstrap ? (
-              <Button
-                title="Use Pro from another device"
-                variant="secondary"
-                onPress={() => navigation.navigate('Sync')}
-                style={styles.verifyButton}
-              />
-            ) : null}
           </>
         )}
 

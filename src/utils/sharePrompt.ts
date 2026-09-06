@@ -1,32 +1,37 @@
-import { Linking } from 'react-native';
-import { withUtm } from './utm';
+import { Linking, Platform } from 'react-native';
 
 // Star button (Settings + share sheet) points at the mobile repo specifically.
 const GITHUB_URL = 'https://github.com/off-grid-ai/mobile';
 // Community links (Settings "Stay in the loop" card + About screen). Single source of truth.
 const FOLLOW_X_URL = 'https://x.com/alichherawalla';
-const SLACK_INVITE_URL = 'https://join.slack.com/t/off-grid-mobile/shared_invite/zt-43kbisqxf-hM0y07EnaNnIfVN9DLR3Dg';
-// The X share promotes the whole project, so it links to the org and early access.
-// GitHub ignores UTM, so only the early-access link (our property) is tagged; the
-// medium is the X share surface.
-const ORG_GITHUB_URL = 'https://github.com/off-grid-ai';
-const EARLY_ACCESS_URL = withUtm('https://getoffgridai.co/early-access/', 'x-share');
+const SLACK_INVITE_URL = 'https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3swt3s84k-R0CHRwISaUpExV2~3qUUdQ';
 
-const SHARE_TEXT = `Off Grid AI is background intelligence for knowledge workers. It runs on your own hardware with no cloud round trips: it sees your day, remembers it, and gets ahead of you across phone and desktop. One mind across your devices, private by architecture, open source so you can check.
+// Ratings live where the store ranks us, and each store only counts its own.
+// iOS: the numeric App Store id, with action=write-review so the review sheet is
+// already open on arrival rather than the listing.
+// Android: market:// opens the Play app directly; the https form is the fallback
+// for a device with no Play app (or a simulator), where market:// has no handler.
+const APP_STORE_REVIEW_URL =
+  'https://apps.apple.com/app/id6759299882?action=write-review';
+const PLAY_PACKAGE = 'ai.offgridmobile';
+const PLAY_MARKET_URL = `market://details?id=${PLAY_PACKAGE}`;
+const PLAY_WEB_URL = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
 
-A chief of staff for $49/year or Life time $69. Intelligence, democratized.
-
-Early access: ${EARLY_ACCESS_URL}
-Open source: ${ORG_GITHUB_URL}`;
-
-// The X Web Intent: opens a compose screen prefilled with the text, ready to
-// post. x.com/intent/post is the current canonical endpoint (the legacy
-// twitter.com/intent/tweet just 302-redirects to it), so we point straight at it.
-const X_INTENT_URL = `https://x.com/intent/post?text=${encodeURIComponent(SHARE_TEXT)}`;
-
-/** Open a pre-filled X (Twitter) compose screen, ready to post. */
-export async function shareOnX(): Promise<void> {
-  await Linking.openURL(X_INTENT_URL);
+/**
+ * Open this platform's store review page - App Store on iOS, Play Store on Android.
+ *
+ * A rating only counts on the store the user installed from, so the destination follows the
+ * platform rather than being one shared link.
+ */
+export async function rateOnStore(): Promise<void> {
+  if (Platform.OS === 'ios') {
+    await Linking.openURL(APP_STORE_REVIEW_URL);
+    return;
+  }
+  // canOpenURL rather than assuming: a device without the Play app (or an emulator image with no
+  // Play services) has no market:// handler, and openURL would simply reject.
+  const canOpenPlayApp = await Linking.canOpenURL(PLAY_MARKET_URL).catch(() => false);
+  await Linking.openURL(canOpenPlayApp ? PLAY_MARKET_URL : PLAY_WEB_URL);
 }
 
 export { GITHUB_URL, FOLLOW_X_URL, SLACK_INVITE_URL };

@@ -20,24 +20,31 @@
 import { NativeModules } from 'react-native';
 
 const residency = {
-  begin: jest.fn<Promise<void>, []>(),
+  begin: jest.fn<Promise<unknown>, []>(),
   end: jest.fn<Promise<void>, []>(),
+  state: jest.fn<Promise<unknown>, []>(),
   getConstants: jest.fn(() => ({
     survivesBackground: true,
     backgroundGraceSeconds: null,
-    showsOngoingIndicator: true
-  }))
+    showsOngoingIndicator: true,
+  })),
 };
 
 beforeEach(() => {
   jest.resetModules();
-  residency.begin.mockReset().mockResolvedValue(undefined);
+  residency.begin.mockReset().mockResolvedValue({ status: 'background' });
   residency.end.mockReset().mockResolvedValue(undefined);
-  (NativeModules as unknown as Record<string, unknown>).MeshResidencyModule = residency;
+  residency.state.mockReset().mockResolvedValue({ status: 'background' });
+  (NativeModules as unknown as Record<string, unknown>).MeshResidencyModule =
+    residency;
 });
 
 const policy = (): typeof import('../../../pro/sync/meshResidency') =>
   require('../../../pro/sync/meshResidency');
+
+afterEach(async () => {
+  await policy().releaseMeshResidency();
+});
 
 describe('holding the mesh awake in the background', () => {
   it('asks the platform to hold it', async () => {
@@ -48,18 +55,27 @@ describe('holding the mesh awake in the background', () => {
 
   it('does not fail sync start when the platform refuses to hold it', async () => {
     // Exactly what Android returns from a restricted state - the foreground service is simply not allowed.
-    residency.begin.mockRejectedValue(new Error('ForegroundServiceStartNotAllowedException'));
+    residency.begin.mockRejectedValue(
+      new Error('ForegroundServiceStartNotAllowedException'),
+    );
 
     // Resolves. If this rejected, syncService.start would unwind and the user would have NO mesh, foreground
     // included, because the OS declined an optimisation.
-    await expect(policy().holdMeshResidency()).resolves.toBeUndefined();
+    await expect(policy().holdMeshResidency()).resolves.toEqual({
+      status: 'foreground_only',
+      reason: 'promotion_denied',
+    });
   });
 
   it('does not fail sync start when the native module is missing entirely', async () => {
-    delete (NativeModules as unknown as Record<string, unknown>).MeshResidencyModule;
+    delete (NativeModules as unknown as Record<string, unknown>)
+      .MeshResidencyModule;
 
     // An older build, or a platform where nothing implements it. Sync still has to come up.
-    await expect(policy().holdMeshResidency()).resolves.toBeUndefined();
+    await expect(policy().holdMeshResidency()).resolves.toEqual({
+      status: 'foreground_only',
+      reason: 'unavailable',
+    });
   });
 });
 

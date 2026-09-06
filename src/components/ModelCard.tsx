@@ -2,20 +2,22 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useThemedStyles, useTheme } from '../theme';
-import { QUANTIZATION_INFO, CREDIBILITY_LABELS } from '../constants';
+import { CREDIBILITY_LABELS } from '../constants';
+import { QUANTIZATION_INFO } from '@offgrid/application';
 import { ModelFile, DownloadedModel, ModelCredibility } from '../types';
 import { needsVisionRepair } from '../utils/visionRepair';
 import { getMmProjFileSize } from '../utils/modelHelpers';
 import { createStyles } from './ModelCard.styles';
 import {
-  CompactModelCardContent,
+  DenseModelCardContent,
   StandardModelCardContent,
   ModelInfoBadges,
   ModelCardActions,
   RecommendedConfig,
 } from './ModelCardContent';
-import { QUEUED_ICON } from '../utils/downloadStatusIcon';
+import { PAUSED_ICON, QUEUED_ICON } from '../utils/downloadStatusIcon';
 import { formatBytes } from '../utils/formatBytes';
+import { presentProgress } from '../utils/progressPresentation';
 
 interface ModelCardProps {
   model: {
@@ -38,8 +40,11 @@ interface ModelCardProps {
   /** Accepted but waiting for a concurrency slot — shows a "Queued" label instead of a
    *  0% progress bar, so the user gets clear feedback the tap registered. */
   isQueued?: boolean;
+  /** A person paused this download. The bytes on disk still show; the label says "Paused" so the
+   *  card reads as neither idle nor downloading. */
+  isPaused?: boolean;
   downloadProgress?: number;
-  downloadBytes?: { downloaded: number; total: number };
+  downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
   downloadCount?: number;
   isActive?: boolean;
@@ -85,38 +90,116 @@ function resolveCredibility(
   return model.credibility ?? downloadedModel?.credibility;
 }
 
+interface ModelCardHeadingProps {
+  dense: boolean;
+  model: ModelCardProps['model'];
+  fileSize: number;
+  quantization?: string;
+  isVisionModel: boolean;
+  supportsAcceleration?: boolean;
+  recommended?: RecommendedConfig;
+  isTrending?: boolean;
+  credibility?: ModelCredibility;
+  credibilityInfo: { color: string; label: string } | null;
+  isActive?: boolean;
+  incompatibleReason?: string;
+}
+
+const ModelCardHeading: React.FC<ModelCardHeadingProps> = ({
+  dense, model, fileSize, quantization, isVisionModel, supportsAcceleration,
+  recommended, isTrending, credibility, credibilityInfo, isActive, incompatibleReason,
+}) => dense ? (
+  <DenseModelCardContent
+    model={model}
+    fileSize={fileSize}
+    quantization={quantization}
+    isVisionModel={isVisionModel}
+    supportsAcceleration={supportsAcceleration}
+    recommended={recommended}
+    isTrending={isTrending}
+    credibilitySource={credibility?.source}
+    credibilityLabel={credibilityInfo?.label}
+    incompatibleReason={incompatibleReason}
+  />
+) : (
+  <StandardModelCardContent
+    model={model}
+    credibility={credibility}
+    credibilityInfo={credibilityInfo}
+    isActive={isActive}
+    recommended={recommended}
+    supportsAcceleration={supportsAcceleration}
+  />
+);
+
+const ModelDownloadStats: React.FC<{
+  compact?: boolean;
+  downloads?: number;
+  likes?: number;
+  styles: ReturnType<typeof createStyles>;
+}> = ({ compact, downloads = 0, likes = 0, styles }) => {
+  if (compact || downloads <= 0) return null;
+  return (
+    <View style={styles.statsRow}>
+      <Text style={styles.statsText}>{formatNumber(downloads)} downloads</Text>
+      {likes > 0 && <Text style={styles.statsText}>{formatNumber(likes)} likes</Text>}
+    </View>
+  );
+};
+
 const DownloadProgressSection: React.FC<{
   progress: number;
-  bytes?: { downloaded: number; total: number };
+  bytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   queued?: boolean;
+  paused?: boolean;
   /** Number of concurrent downloads behind this card (>1 → show "N downloads"). */
   count?: number;
-}> = ({ progress, bytes, queued, count }) => {
+}> = ({ progress, bytes, queued, paused, count }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
-  const bytesLabel = bytes && bytes.total > 0 ? `${formatBytes(bytes.downloaded)} / ${formatBytes(bytes.total)}` : '';
+  const presented = presentProgress({
+    progress,
+    bytesDownloaded: bytes?.downloaded,
+    totalBytes: bytes?.total,
+    bytesPerSecond: bytes?.bytesPerSecond,
+    status: queued ? 'pending' : paused ? 'paused' : 'running',
+  });
+  const percentage = presented.progress.percentage ?? 0;
   // Cumulative download → note how many files are running so the total reads clearly.
   const countLabel = count && count > 1 ? `${count} downloads` : '';
-  const caption = [bytesLabel, countLabel].filter(Boolean).join(' · ');
+  // No rate while queued or paused: nothing is moving, so a stale rate would be a lie.
+  const caption = [
+    presented.bytesText,
+    queued || paused ? undefined : presented.rateText,
+    countLabel,
+  ].filter(Boolean).join(' · ');
+  const statusLabel = queued ? (
+    <View style={styles.progressLabelRow}>
+      <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+      <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+    </View>
+  ) : paused ? (
+    // Paused keeps the FILLED bar (the bytes are on disk) and says so, where queued shows an
+    // empty one: the person stopped this, they did not just ask for it.
+    <View style={styles.progressLabelRow}>
+      <Icon name={PAUSED_ICON} size={12} color={colors.textSecondary} accessibilityLabel="Paused" />
+      <Text style={[styles.progressText, styles.pausedText]}>Paused</Text>
+    </View>
+  ) : (
+    <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
+  );
   return (
   <View style={styles.progressSection}>
     {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
         (0 progress) so it reads as "not started yet". */}
     <View style={styles.progressBar}>
-      <View style={[styles.progressFill, { width: `${(queued ? 0 : progress) * 100}%` }]} />
+      <View style={[styles.progressFill, { width: `${queued ? 0 : percentage}%` }]} />
     </View>
     {/* Caption row under the bar: bytes (+ "N downloads") on the LEFT, status on the
         RIGHT. "Queued" while waiting for a slot, otherwise the percent. */}
     <View style={styles.progressCaptionRow}>
       <Text style={styles.progressBytesText}>{caption}</Text>
-      {queued ? (
-        <View style={styles.progressLabelRow}>
-          <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
-          <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
-        </View>
-      ) : (
-        <Text style={styles.progressText}>{`${Math.round(progress * 100)}%`}</Text>
-      )}
+      {statusLabel}
     </View>
   </View>
   );
@@ -131,14 +214,19 @@ const FailedSection: React.FC<{
 }> = ({ errorMessage, bytesDownloaded, totalBytes, onRetry, onRemove }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
-  const progress = totalBytes > 0 ? bytesDownloaded / totalBytes : 0;
+  const presented = presentProgress({
+    bytesDownloaded,
+    totalBytes,
+    status: 'failed',
+  });
+  const progress = presented.progress.percentage ?? 0;
   return (
     <View style={styles.failedSection}>
       <View style={styles.progressContainer}>
         <View style={styles.progressBar}>
-          <View style={[styles.failedProgressFill, { width: `${progress * 100}%` }]} />
+          <View style={[styles.failedProgressFill, { width: `${progress}%` }]} />
         </View>
-        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+        <Text style={styles.progressText}>{presented.percentageText ?? 'Stopped'}</Text>
       </View>
       {totalBytes > 0 && (
         <Text style={styles.progressBytesText}>{formatBytes(bytesDownloaded)} / {formatBytes(totalBytes)}</Text>
@@ -168,6 +256,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isDownloaded,
   isDownloading,
   isQueued,
+  isPaused,
   downloadProgress = 0,
   downloadBytes,
   downloadCount,
@@ -189,6 +278,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   failedState,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const useDenseLayout = compact;
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
@@ -214,8 +304,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
     <TouchableOpacity
       style={[
         styles.card,
-        compact && styles.cardCompact,
-        recommended && compact && styles.cardRecommended,
+        useDenseLayout && styles.cardDense,
         isActive && styles.cardActive,
         !isCompatible && styles.cardIncompatible,
       ]}
@@ -224,53 +313,41 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       disabled={!onPress}
       testID={testID}
     >
-<View style={styles.cardRow}>
+      <View style={[styles.cardRow, useDenseLayout && styles.cardRowDense]}>
         <View style={styles.cardContent}>
-          {compact ? (
-            <CompactModelCardContent
-              model={model}
-              credibility={credibility}
-              credibilityInfo={credibilityInfo}
-              isTrending={isTrending}
-              recommended={recommended}
-              supportsAcceleration={supportsAcceleration}
-            />
-          ) : (
-            <StandardModelCardContent
-              model={model}
-              credibility={credibility}
-              credibilityInfo={credibilityInfo}
-              isActive={isActive}
-              recommended={recommended}
-              supportsAcceleration={supportsAcceleration}
-            />
-          )}
-
-          <ModelInfoBadges
+          <ModelCardHeading
+            dense={!!useDenseLayout}
+            model={model}
             fileSize={fileSize}
-            sizeRange={sizeRange}
-            quantInfo={quantInfo}
             quantization={quantization}
             isVisionModel={isVisionModel}
-            needsRepair={needsRepair}
-            isRepairingVision={isRepairingVision}
-            isCompatible={isCompatible}
-            incompatibleReason={incompatibleReason}
+            supportsAcceleration={supportsAcceleration}
+            recommended={recommended}
+            isTrending={isTrending}
+            credibility={credibility}
+            credibilityInfo={credibilityInfo}
+            isActive={isActive}
+            incompatibleReason={!isCompatible ? (incompatibleReason ?? 'Too large') : undefined}
           />
 
-          {!compact && model.downloads !== undefined && model.downloads > 0 && (
-            <View style={styles.statsRow}>
-              <Text style={styles.statsText}>
-                {formatNumber(model.downloads)} downloads
-              </Text>
-              {model.likes !== undefined && model.likes > 0 && (
-                <Text style={styles.statsText}>{formatNumber(model.likes)} likes</Text>
-              )}
-            </View>
+          {!useDenseLayout && (
+            <ModelInfoBadges
+              fileSize={fileSize}
+              sizeRange={sizeRange}
+              quantInfo={quantInfo}
+              quantization={quantization}
+              isVisionModel={isVisionModel}
+              needsRepair={needsRepair}
+              isRepairingVision={isRepairingVision}
+              isCompatible={isCompatible}
+              incompatibleReason={incompatibleReason}
+            />
           )}
 
-          {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} count={downloadCount} />
+          <ModelDownloadStats compact={compact} downloads={model.downloads} likes={model.likes} styles={styles} />
+
+          {(isDownloading || isQueued || isPaused) && (
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} paused={isPaused} count={downloadCount} />
           )}
           {failedState && (
             <FailedSection
@@ -287,6 +364,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           <ModelCardActions
             isDownloaded={isDownloaded}
             isDownloading={isDownloading}
+            isQueued={isQueued}
+            isPaused={isPaused}
             isActive={isActive}
             isCompatible={isCompatible}
             incompatibleReason={incompatibleReason}
@@ -309,4 +388,3 @@ function formatNumber(num: number): string {
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
 }
-

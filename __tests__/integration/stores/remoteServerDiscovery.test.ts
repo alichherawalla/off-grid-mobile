@@ -1,10 +1,10 @@
 /**
  * Integration Tests: Remote Server Model Discovery
  *
- * Tests the model discovery flow in remoteServerStore, specifically:
+ * Tests the model discovery adapter through the Shared remote application service:
  * - Vision detection via fetchRemoteModelInfo (POST /api/show)
  * - Vision detection via fetchLmStudioModelInfo (GET /api/v1/models)
- * - End-to-end through the store's discoverModels action
+ * - End-to-end through the real application composition
  */
 
 // Mock logger before imports
@@ -13,46 +13,37 @@ jest.mock('../../../src/utils/logger', () => ({
   default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }));
 
-// Mock remoteServerManager to prevent initialization side effects
-jest.mock('../../../src/services/remoteServerManager', () => ({
-  remoteServerManager: {
-    initializeProviders: jest.fn(),
-    testConnection: jest.fn(),
-  },
-}));
-
-// Mock httpClient — not exercised in discovery but imported by the store
-jest.mock('../../../src/services/httpClient', () => ({
-  testEndpoint: jest.fn(),
-  detectServerType: jest.fn(),
-}));
-
 import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { discoveredRemoteModels } from '../../../src/stores/remoteServerProjection';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import {applicationFacade} from '../../../src/services/applicationFacade';
+import '../../../src/services/composition/application';
+import {
+  startMobileModelServices,
+  stopMobileModelServices,
+} from '../../../src/services/modelServices';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Add a server directly into the store and return its id. */
-function addServer(opts: {
+/** Add a server through the public application transaction. */
+const addedServerIds = new Set<string>();
+
+async function addServer(opts: {
   id: string;
   endpoint: string;
   name?: string;
-}): void {
-  useRemoteServerStore.setState((state) => ({
-    servers: [
-      ...state.servers,
-      {
-        id: opts.id,
-        name: opts.name ?? opts.id,
-        endpoint: opts.endpoint,
-        providerType: 'openai-compatible' as const,
-        apiKey: undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ],
-  }));
+}): Promise<void> {
+  const outcome = await applicationFacade().models.saveRemoteServer({
+    id: opts.id,
+    name: opts.name ?? opts.id,
+    endpoint: opts.endpoint,
+    provider: 'openai-compatible',
+    createdAt: new Date().toISOString(),
+  });
+  if (!outcome.ok) throw new Error(`Could not add test server: ${outcome.failure.kind}`);
+  addedServerIds.add(outcome.value.id);
 }
 
 /** Resolve a fetch call with a JSON body and a given ok/status. */
@@ -60,6 +51,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
     status,
+    headers: { get: () => null },
     json: async () => body,
   } as unknown as Response;
 }
@@ -76,12 +68,17 @@ function rejectWith(msg: string): Promise<never> {
 describe('remoteServerDiscovery integration', () => {
   let mockFetch: jest.Mock;
 
-  beforeEach(() => {
+  beforeAll(() => startMobileModelServices());
+  afterAll(() => stopMobileModelServices());
+
+  beforeEach(async () => {
+    for (const serverId of addedServerIds) {
+      await applicationFacade().models.removeRemoteServer(serverId);
+    }
+    addedServerIds.clear();
     jest.clearAllMocks();
     mockFetch = jest.fn();
     (globalThis as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
-    // Reset servers and discovered models between tests
-    useRemoteServerStore.setState({ servers: [], discoveredModels: {} });
   });
 
   // =========================================================================
@@ -90,7 +87,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('Ollama vision detection via /api/show', () => {
     it('detects vision model via clip key in model_info', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -111,9 +108,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('llava-v1.6');
@@ -122,7 +117,7 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('detects vision model via "vision" key in model_info', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -143,9 +138,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       expect(models).toHaveLength(1);
       expect(models[0].capabilities.supportsVision).toBe(true);
@@ -153,7 +146,7 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('marks non-vision model supportsVision=false', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -173,9 +166,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       expect(models).toHaveLength(1);
       expect(models[0].capabilities.supportsVision).toBe(false);
@@ -183,7 +174,7 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('falls back to defaults when /api/show rejects (timeout)', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -197,9 +188,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       // Model still appears with default fallback values
       expect(models).toHaveLength(1);
@@ -209,16 +198,14 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('falls back to /api/tags when /v1/models returns 404, then detects vision', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
           return Promise.resolve(jsonResponse({}, false, 404));
         }
         if (url.endsWith('/api/tags')) {
-          return Promise.resolve(
-            jsonResponse({ models: [{ name: 'llava' }] }),
-          );
+          return Promise.resolve(jsonResponse({ models: [{ name: 'llava' }] }));
         }
         if (url.endsWith('/api/show')) {
           return Promise.resolve(
@@ -232,9 +219,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 503));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('llava');
@@ -248,7 +233,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('LM Studio vision detection via /api/v1/models', () => {
     it('does NOT detect vision from type === "vlm" (type field is ignored; only capabilities.vision is used)', async () => {
-      addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
+      await addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         // /api/v1/models returns LM Studio native format: { models: [{ key, type, ... }] }
@@ -270,16 +255,16 @@ describe('remoteServerDiscovery integration', () => {
           return Promise.resolve(
             jsonResponse({
               object: 'list',
-              data: [{ id: 'qwen3-vl-2b-thinking-mlx', max_context_length: 32768 }],
+              data: [
+                { id: 'qwen3-vl-2b-thinking-mlx', max_context_length: 32768 },
+              ],
             }),
           );
         }
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-lms');
+      const models = await remoteServerManager.discoverModels('srv-lms');
 
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe('qwen3-vl-2b-thinking-mlx');
@@ -289,7 +274,7 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('detects VLM via capabilities.vision === true', async () => {
-      addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
+      await addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         // /api/v1/models returns LM Studio native format: { models: [{ key, capabilities, ... }] }
@@ -317,9 +302,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-lms');
+      const models = await remoteServerManager.discoverModels('srv-lms');
 
       expect(models).toHaveLength(1);
       expect(models[0].capabilities.supportsVision).toBe(true);
@@ -327,7 +310,7 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('marks non-vision LM Studio model supportsVision=false', async () => {
-      addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
+      await addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         // /api/v1/models returns LM Studio native format: { models: [{ key, type, ... }] }
@@ -356,9 +339,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-lms');
+      const models = await remoteServerManager.discoverModels('srv-lms');
 
       expect(models).toHaveLength(1);
       expect(models[0].capabilities.supportsVision).toBe(false);
@@ -366,12 +347,14 @@ describe('remoteServerDiscovery integration', () => {
     });
 
     it('falls back to /v1/models context length when /api/v1/models returns non-ok', async () => {
-      addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
+      await addServer({ id: 'srv-lms', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         // Match /api/v1/models before /v1/models (the former is a suffix of the latter)
         if (url.includes('/api/v1/models')) {
-          return Promise.resolve(jsonResponse({ error: 'not found' }, false, 404));
+          return Promise.resolve(
+            jsonResponse({ error: 'not found' }, false, 404),
+          );
         }
         if (url.endsWith('/v1/models')) {
           return Promise.resolve(
@@ -384,9 +367,7 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 503));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-lms');
+      const models = await remoteServerManager.discoverModels('srv-lms');
 
       expect(models).toHaveLength(1);
       // fetchLmStudioModelInfo failed → falls back to { contextLength: 4096, supportsVision: false }
@@ -401,7 +382,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('embedding model filtering', () => {
     it('filters out embedding model and keeps text generation model', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -421,11 +402,9 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
-      const ids = models.map((m) => m.id);
+      const ids = models.map(m => m.id);
       expect(ids).toContain('llama3.2');
       expect(ids).not.toContain('nomic-embed-text');
     });
@@ -437,7 +416,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('multiple models from same Ollama server', () => {
     it('assigns correct vision detection to each model independently', async () => {
-      addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-ollama', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       const showResponses: Record<string, unknown> = {
         'llama3.2': { model_info: { 'llama.context_length': 8192 } },
@@ -472,13 +451,11 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore
-        .getState()
-        .discoverModels('srv-ollama');
+      const models = await remoteServerManager.discoverModels('srv-ollama');
 
       expect(models).toHaveLength(3);
 
-      const byId = Object.fromEntries(models.map((m) => [m.id, m]));
+      const byId = Object.fromEntries(models.map(m => [m.id, m]));
 
       expect(byId['llama3.2'].capabilities.supportsVision).toBe(false);
       expect(byId['llama3.2'].capabilities.maxContextLength).toBe(8192);
@@ -497,7 +474,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('store state persistence', () => {
     it('updates discoveredModels in the store after discoverModels call', async () => {
-      addServer({ id: 'srv-id', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
+      await addServer({ id: 'srv-id', endpoint: 'http://192.168.1.10:11434' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -521,9 +498,9 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      await useRemoteServerStore.getState().discoverModels('srv-id');
+      await remoteServerManager.discoverModels('srv-id');
 
-      const stored = useRemoteServerStore.getState().discoveredModels['srv-id'];
+      const stored = discoveredRemoteModels(useRemoteServerStore.getState().servers)['srv-id'];
       expect(stored).toBeDefined();
       expect(stored).toHaveLength(1);
       expect(stored[0].id).toBe('llava-v1.6');
@@ -538,7 +515,7 @@ describe('remoteServerDiscovery integration', () => {
 
   describe('gateway kind filtering', () => {
     it('keeps only chat/vision models and drops image, speech, and transcription', async () => {
-      addServer({ id: 'srv-gw', endpoint: 'http://192.168.1.44:7878' }); // NOSONAR
+      await addServer({ id: 'srv-gw', endpoint: 'http://192.168.1.44:7878' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -546,7 +523,11 @@ describe('remoteServerDiscovery integration', () => {
             jsonResponse({
               object: 'list',
               data: [
-                { id: 'gemma-3', kind: 'chat' },
+                {
+                  id: 'gemma-3',
+                  kind: 'chat',
+                  capabilities: ['vision', 'tools'],
+                },
                 { id: 'qwen3-vl', kind: 'vision' },
                 { id: 'sdxl', kind: 'image' },
                 { id: 'kokoro', kind: 'speech' },
@@ -559,17 +540,83 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore.getState().discoverModels('srv-gw');
+      const models = await remoteServerManager.discoverModels('srv-gw');
 
-      const ids = models.map((m) => m.id).sort((a, b) => a.localeCompare(b));
+      const ids = models.map(m => m.id).sort((a, b) => a.localeCompare(b));
       expect(ids).toEqual(['gemma-3', 'qwen3-vl']);
-      expect(models.some((m) => m.id === 'sdxl')).toBe(false);
-      expect(models.some((m) => m.id === 'kokoro')).toBe(false);
-      expect(models.some((m) => m.id === 'whisper-base')).toBe(false);
+      expect(models.some(m => m.id === 'sdxl')).toBe(false);
+      expect(models.some(m => m.id === 'kokoro')).toBe(false);
+      expect(models.some(m => m.id === 'whisper-base')).toBe(false);
+      expect(
+        models.find(m => m.id === 'gemma-3')?.capabilities,
+      ).toMatchObject({ supportsVision: true, supportsToolCalling: true });
+    });
+
+    it('records every categorized model and keeps the first as the initial choice', async () => {
+      await addServer({
+        id: 'srv-gw',
+        endpoint: 'http://192.168.1.44:7878',
+        name: 'Studio Mac',
+      }); // NOSONAR
+      mockFetch.mockImplementation((url: string) => {
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(
+            jsonResponse({
+            object: 'list',
+            data: [
+              { id: 'gemma-3', kind: 'chat' },
+                {
+                  id: '/models/sdxl.safetensors',
+                  name: 'Studio Image',
+                  kind: 'image',
+                },
+                { id: 'flux-schnell', name: 'Fast Image', kind: 'image' },
+                {
+                  id: '/models/kokoro.pte',
+                  name: 'Kokoro Voice',
+                  kind: 'speech',
+                },
+                {
+                  id: '/models/whisper-base.bin',
+                  name: 'Whisper Base',
+                  kind: 'transcription',
+                },
+            ],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({}, false, 404));
+      });
+
+      const result = await remoteServerManager.testConnection('srv-gw');
+
+      expect(result.selections).toEqual({
+        text: 'gemma-3',
+        image: '/models/sdxl.safetensors',
+        transcription: '/models/whisper-base.bin',
+        voice: '/models/kokoro.pte',
+      });
+      expect(result.catalog).toEqual({
+        text: [{ id: 'gemma-3', name: 'gemma-3' }],
+        image: [
+          { id: '/models/sdxl.safetensors', name: 'Studio Image' },
+          { id: 'flux-schnell', name: 'Fast Image' },
+        ],
+        voice: [{ id: '/models/kokoro.pte', name: 'Kokoro Voice' }],
+        transcription: [
+          { id: '/models/whisper-base.bin', name: 'Whisper Base' },
+        ],
+      });
+      expect(
+        useRemoteServerStore.getState().getServerById('srv-gw')?.selections,
+      ).toEqual(result.selections);
+      expect(
+        useRemoteServerStore.getState().getServerById('srv-gw')?.catalog,
+      ).toEqual(result.catalog);
     });
 
     it('still lists models from servers that do not send kind (Ollama/LM Studio)', async () => {
-      addServer({ id: 'srv-plain', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
+      await addServer({ id: 'srv-plain', endpoint: 'http://192.168.1.20:1234' }); // NOSONAR
 
       mockFetch.mockImplementation((url: string) => {
         if (url.endsWith('/v1/models')) {
@@ -580,8 +627,8 @@ describe('remoteServerDiscovery integration', () => {
         return Promise.resolve(jsonResponse({}, false, 404));
       });
 
-      const models = await useRemoteServerStore.getState().discoverModels('srv-plain');
-      expect(models.map((m) => m.id)).toEqual(['llama-3.2']);
+      const models = await remoteServerManager.discoverModels('srv-plain');
+      expect(models.map(m => m.id)).toEqual(['llama-3.2']);
     });
   });
 });

@@ -20,75 +20,8 @@
  */
 
 import React from 'react';
-import { render, fireEvent, act } from '@testing-library/react-native';
+import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import { TouchableOpacity, Platform } from 'react-native';
-
-jest.mock('../../../src/hooks/useFocusTrigger', () => ({
-  useFocusTrigger: () => 0,
-}));
-
-jest.mock('../../../src/components', () => ({
-  Card: ({ children, style }: any) => {
-    const { View } = require('react-native');
-    return <View style={style}>{children}</View>;
-  },
-  Button: ({ title, onPress, disabled }: any) => {
-    const { TouchableOpacity: Btn, Text } = require('react-native');
-    return (
-      <Btn onPress={onPress} disabled={disabled}>
-        <Text>{title}</Text>
-      </Btn>
-    );
-  },
-}));
-
-jest.mock('../../../src/components/AnimatedEntry', () => ({
-  AnimatedEntry: ({ children }: any) => children,
-}));
-
-const mockShowAlert = jest.fn((_t: string, _m: string, _b?: any) => ({
-  visible: true,
-  title: _t,
-  message: _m,
-  buttons: _b || [],
-}));
-
-const mockHideAlert = jest.fn(() => ({ visible: false, title: '', message: '', buttons: [] }));
-
-jest.mock('../../../src/components/CustomAlert', () => ({
-  CustomAlert: ({ visible, title, message, buttons, onClose }: any) => {
-    if (!visible) return null;
-    const { View, Text, TouchableOpacity: Btn } = require('react-native');
-    return (
-      <View testID="custom-alert">
-        <Text testID="alert-title">{title}</Text>
-        <Text testID="alert-message">{message}</Text>
-        {buttons?.map((btn: any) => (
-          <Btn key={btn.text} testID={`alert-button-${btn.text}`} onPress={btn.onPress}>
-            <Text>{btn.text}</Text>
-          </Btn>
-        ))}
-        <Btn testID="alert-close" onPress={onClose}>
-          <Text>CloseAlert</Text>
-        </Btn>
-      </View>
-    );
-  },
-  showAlert: (...args: any[]) => (mockShowAlert as any)(...args),
-  hideAlert: (...args: any[]) => (mockHideAlert as any)(...args),
-  initialAlertState: { visible: false, title: '', message: '', buttons: [] },
-}));
-
-jest.mock('../../../src/components/Button', () => ({
-  Button: ({ title, onPress, disabled }: any) => {
-    const { TouchableOpacity: Btn, Text } = require('react-native');
-    return (
-      <Btn onPress={onPress} disabled={disabled}>
-        <Text>{title}</Text>
-      </Btn>
-    );
-  },
-}));
 
 const mockGoBack = jest.fn();
 let mockRouteParams: any = {};
@@ -107,29 +40,17 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-const mockGeneratedImages: any[] = [];
-const mockRemoveGeneratedImage = jest.fn();
-const mockAddGeneratedImage = jest.fn();
+// NOTE: the REAL zustand stores are used here (no jest.mock of our own store barrel).
+// State is arrived at through the stores' OWN actions (addGeneratedImage / createConversation /
+// addMessage) and assertions are made on the UI, per the testing doctrine.
+import { useAppStore, useChatStore } from '../../../src/stores';
 
-jest.mock('../../../src/stores', () => ({
-  useAppStore: Object.assign(
-    jest.fn(() => ({
-      generatedImages: mockGeneratedImages,
-      removeGeneratedImage: mockRemoveGeneratedImage,
-      addGeneratedImage: mockAddGeneratedImage,
-    })),
-    {
-      getState: jest.fn(() => ({
-        generatedImages: mockGeneratedImages,
-        addGeneratedImage: mockAddGeneratedImage,
-      })),
-    },
-  ),
-  useChatStore: jest.fn((selector?: any) => {
-    const state = { conversations: [] };
-    return selector ? selector(state) : state;
-  }),
-}));
+/** Seed the REAL app store through its real action. addGeneratedImage PREPENDS, so add in reverse
+ *  to keep the on-screen order identical to the array passed in. */
+const seedImages = (...images: any[]) => {
+  const { addGeneratedImage } = useAppStore.getState();
+  for (const image of [...images].reverse()) addGeneratedImage(image);
+};
 
 const mockDeleteGeneratedImage = jest.fn(() => Promise.resolve());
 const mockGetGeneratedImages = jest.fn(() => Promise.resolve([]));
@@ -198,6 +119,16 @@ const sampleImages = [
   },
 ];
 
+/** The REAL CustomAlert renders inside an AppSheet whose entry is animated; wait for its title. */
+const waitForAlert = async (result: any, title: string) =>
+  waitFor(() => expect(result.getByText(title)).toBeTruthy());
+
+/** Press the confirm button that belongs to the alert sheet (it renders last). */
+const pressAlertButton = (result: any, label: string) => {
+  const matches = result.getAllByText(label);
+  fireEvent.press(matches[matches.length - 1]);
+};
+
 const getGridItems = (result: any) => {
   const touchables = result.UNSAFE_getAllByType(TouchableOpacity);
   return touchables.filter((t: any) => t.props.activeOpacity === 0.8);
@@ -207,7 +138,8 @@ describe('GalleryScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {};
-    mockGeneratedImages.length = 0;
+    useAppStore.getState().clearGeneratedImages();
+    useChatStore.getState().clearAllConversations();
     mockImageGenState = {
       isGenerating: false,
       prompt: null,
@@ -237,21 +169,21 @@ describe('GalleryScreen', () => {
   });
 
   it('renders image grid when images exist', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const { queryByText } = render(<GalleryScreen />);
     expect(queryByText('No generated images yet')).toBeNull();
   });
 
   it('shows image count badge when images exist', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const { getByText } = render(<GalleryScreen />);
     expect(getByText('3')).toBeTruthy();
   });
 
   it('tapping an image opens the viewer modal', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -265,26 +197,22 @@ describe('GalleryScreen', () => {
     }
   });
 
-  it('pressing delete in viewer shows confirmation alert', () => {
-    mockGeneratedImages.push(...sampleImages);
+  it('pressing delete in viewer shows confirmation alert', async () => {
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
 
-    if (gridItems.length > 0) {
-      fireEvent.press(gridItems[0]);
-      fireEvent.press(result.getByText('Delete'));
+    fireEvent.press(gridItems[0]);
+    fireEvent.press(result.getByText('Delete'));
 
-      expect(mockShowAlert).toHaveBeenCalledWith(
-        'Delete Image',
-        'Are you sure you want to delete this image?',
-        expect.any(Array),
-      );
-    }
+    await waitForAlert(result, 'Delete Image');
+    expect(result.getByText('Are you sure you want to delete this image?')).toBeTruthy();
+    expect(result.getByText('Cancel')).toBeTruthy();
   });
 
   it('pressing close in viewer closes the modal', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -299,7 +227,7 @@ describe('GalleryScreen', () => {
   });
 
   it('pressing Info toggles details view', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -315,7 +243,7 @@ describe('GalleryScreen', () => {
 
   it('shows "Chat Images" title when conversationId is provided', () => {
     mockRouteParams = { conversationId: 'conv-123' };
-    mockGeneratedImages.push({
+    seedImages({
       ...sampleImages[0],
       conversationId: 'conv-123',
     });
@@ -332,7 +260,7 @@ describe('GalleryScreen', () => {
   });
 
   it('long press on image enters select mode', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -345,7 +273,7 @@ describe('GalleryScreen', () => {
   });
 
   it('select all selects all images', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -366,7 +294,7 @@ describe('GalleryScreen', () => {
 
   it('filters images by conversationId', () => {
     mockRouteParams = { conversationId: 'conv-123' };
-    mockGeneratedImages.push(
+    seedImages(
       { ...sampleImages[0], conversationId: 'conv-123' },
       { ...sampleImages[1], conversationId: 'conv-999' },
     );
@@ -378,7 +306,7 @@ describe('GalleryScreen', () => {
   // ===== NEW TESTS FOR COVERAGE =====
 
   it('confirming delete image removes it and clears selected image', async () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -388,17 +316,21 @@ describe('GalleryScreen', () => {
     // Press delete
     fireEvent.press(result.getByText('Delete'));
 
+    await waitForAlert(result, 'Delete Image');
+
     // Confirm delete
     await act(async () => {
-      fireEvent.press(result.getByTestId('alert-button-Delete'));
+      pressAlertButton(result, 'Delete');
     });
 
     expect(mockDeleteGeneratedImage).toHaveBeenCalledWith('img-1');
-    expect(mockRemoveGeneratedImage).toHaveBeenCalledWith('img-1');
+    // UI: the count badge drops from 3 to 2 and the viewer closes.
+    expect(result.getByText('2')).toBeTruthy();
+    expect(result.queryByText('A sunset over mountains')).toBeNull();
   });
 
   it('toggling select mode off clears selected IDs', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -417,7 +349,7 @@ describe('GalleryScreen', () => {
   });
 
   it('tapping image in select mode toggles selection', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     let gridItems = getGridItems(result);
@@ -438,7 +370,7 @@ describe('GalleryScreen', () => {
   });
 
   it('delete selected images with confirmation', async () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -459,26 +391,25 @@ describe('GalleryScreen', () => {
     // Try pressing from the last non-grid touchable backwards until handleDeleteSelected fires
     for (let i = nonGridTouchables.length - 1; i >= 0; i--) {
       fireEvent.press(nonGridTouchables[i]);
-      if (mockShowAlert.mock.calls.length > 0) break;
+      if (result.queryByText('Delete Images')) break;
     }
 
-    expect(mockShowAlert).toHaveBeenCalledWith(
-      'Delete Images',
-      expect.stringContaining('3'),
-      expect.any(Array),
-    );
+    await waitForAlert(result, 'Delete Images');
+    expect(result.getByText('Are you sure you want to delete 3 images?')).toBeTruthy();
 
     // Confirm deletion
     await act(async () => {
-      fireEvent.press(result.getByTestId('alert-button-Delete'));
+      pressAlertButton(result, 'Delete');
     });
 
     expect(mockDeleteGeneratedImage).toHaveBeenCalledTimes(3);
-    expect(mockRemoveGeneratedImage).toHaveBeenCalledTimes(3);
+    // UI: gallery is empty again and select mode has exited.
+    expect(result.getByText('No generated images yet')).toBeTruthy();
+    expect(result.queryByText('3 selected')).toBeNull();
   });
 
   it('handleDeleteSelected does nothing when no items selected', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -529,7 +460,7 @@ describe('GalleryScreen', () => {
 
     const shareSpy = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
 
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -599,7 +530,7 @@ describe('GalleryScreen', () => {
   });
 
   it('modal onRequestClose clears selected image and details', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -625,7 +556,7 @@ describe('GalleryScreen', () => {
   });
 
   it('details sheet shows negative prompt when present', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -640,7 +571,7 @@ describe('GalleryScreen', () => {
   });
 
   it('details sheet Done button closes details', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -657,8 +588,8 @@ describe('GalleryScreen', () => {
     expect(result.queryByText('Image Details')).toBeNull();
   });
 
-  it('alert onClose calls hideAlert', () => {
-    mockGeneratedImages.push(...sampleImages);
+  it('dismissing the alert closes it without deleting', async () => {
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     const gridItems = getGridItems(result);
@@ -666,49 +597,41 @@ describe('GalleryScreen', () => {
     // Open viewer and delete
     fireEvent.press(gridItems[0]);
     fireEvent.press(result.getByText('Delete'));
+    await waitForAlert(result, 'Delete Image');
 
-    // Close alert
-    fireEvent.press(result.getByTestId('alert-close'));
-    expect(mockHideAlert).toHaveBeenCalled();
+    // Close the alert sheet from its header
+    await act(async () => {
+      fireEvent.press(result.getByTestId('app-sheet-close'));
+    });
+
+    await waitFor(() =>
+      expect(result.queryByText('Are you sure you want to delete this image?')).toBeNull(),
+    );
+    // Nothing was deleted: all three images are still there.
+    expect(result.getByText('3')).toBeTruthy();
   });
 
   it('filters images by chat attachment IDs', () => {
-    const { useChatStore } = jest.requireMock('../../../src/stores');
-    useChatStore.mockImplementation((selector?: any) => {
-      const state = {
-        conversations: [
-          {
-            id: 'conv-123',
-            messages: [
-              {
-                id: 'msg-1',
-                attachments: [
-                  { id: 'img-1', type: 'image' },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-      return selector ? selector(state) : state;
-    });
+    // Arrive at the precondition through the REAL chat store's own actions.
+    const conversationId = useChatStore
+      .getState()
+      .createConversation('sd-model', 'Chat with an image');
+    useChatStore.getState().addMessage(conversationId, {
+      role: 'assistant',
+      content: 'here is your image',
+      attachments: [{ id: 'img-1', type: 'image', uri: '/mock/generated/sunset.png' }],
+    } as any);
 
-    mockRouteParams = { conversationId: 'conv-123' };
-    mockGeneratedImages.push(...sampleImages);
+    mockRouteParams = { conversationId };
+    seedImages(...sampleImages);
 
     const { getByText } = render(<GalleryScreen />);
-    // img-1 should be included because it's in the chat attachments
+    // img-1 is included because it is attached to this conversation's message.
     expect(getByText('1')).toBeTruthy();
-
-    // Reset
-    useChatStore.mockImplementation((selector?: any) => {
-      const state = { conversations: [] };
-      return selector ? selector(state) : state;
-    });
   });
 
   it('formatDate handles timestamp strings', () => {
-    mockGeneratedImages.push({
+    seedImages({
       ...sampleImages[0],
       createdAt: String(Date.now()), // numeric timestamp as string
     });
@@ -725,7 +648,7 @@ describe('GalleryScreen', () => {
   });
 
   it('long press does not re-enter select mode if already in select mode', () => {
-    mockGeneratedImages.push(...sampleImages);
+    seedImages(...sampleImages);
 
     const result = render(<GalleryScreen />);
     let gridItems = getGridItems(result);

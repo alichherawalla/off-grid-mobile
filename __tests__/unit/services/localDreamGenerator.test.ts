@@ -452,7 +452,7 @@ describe('LocalDreamGeneratorService', () => {
       await expect(svc.cancelGeneration()).resolves.toBe(true);
     });
 
-    it('getConstants returns defaults when not available', () => {
+    it('getConstants returns null when the native constants boundary is unavailable', () => {
       jest.isolateModules(() => {
         const rn = require('react-native');
         rn.NativeModules.LocalDreamModule = null;
@@ -464,12 +464,7 @@ describe('LocalDreamGeneratorService', () => {
           require('../../../src/services/localDreamGenerator');
 
         const constants = svc.getConstants();
-        expect(constants.DEFAULT_STEPS).toBe(20);
-        expect(constants.DEFAULT_GUIDANCE_SCALE).toBe(7.5);
-        expect(constants.DEFAULT_WIDTH).toBe(512);
-        expect(constants.DEFAULT_HEIGHT).toBe(512);
-        expect(Array.isArray(constants.SUPPORTED_WIDTHS)).toBe(true);
-        expect(Array.isArray(constants.SUPPORTED_HEIGHTS)).toBe(true);
+        expect(constants).toBeNull();
       });
     });
   });
@@ -519,6 +514,7 @@ describe('LocalDreamGeneratorService', () => {
         width: 512,
         height: 512,
         previewInterval: 2,
+        threads: 4,
         useOpenCL: true,
       });
     });

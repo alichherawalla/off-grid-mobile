@@ -3,7 +3,7 @@
  * Focuses on syncWithNativeState LiteRT branch.
  */
 
-import { syncWithNativeState } from '../../../src/services/activeModelService/utils';
+import { syncWithNativeState } from '../../../src/services/modelServices/modelStateNativeProjection';
 
 jest.mock('../../../src/services/llm', () => ({
   llmService: { isModelLoaded: jest.fn() },
@@ -17,16 +17,6 @@ jest.mock('../../../src/services/localDreamGenerator', () => ({
   localDreamGeneratorService: { isModelLoaded: jest.fn(() => Promise.resolve(false)) },
 }));
 
-jest.mock('../../../src/stores', () => ({
-  useAppStore: {
-    getState: jest.fn(() => ({
-      activeModelId: 'model-abc',
-      activeImageModelId: null,
-      downloadedModels: [],
-      downloadedImageModels: [],
-    })),
-  },
-}));
 
 jest.mock('../../../src/services/hardware', () => ({
   hardwareService: {
@@ -37,6 +27,9 @@ jest.mock('../../../src/services/hardware', () => ({
 }));
 
 import { llmService } from '../../../src/services/llm';
+import { useAppStore } from '../../../src/stores/appStore';
+import { arrangeLocalSelection, resetStores } from '../../utils/testHelpers';
+import { createDownloadedModel } from '../../utils/factories';
 import { liteRTService } from '../../../src/services/litert';
 
 const mockedLlm = llmService as jest.Mocked<typeof llmService>;
@@ -54,7 +47,12 @@ function makeTarget(overrides: Partial<{ loadedTextModelId: string | null; loade
 }
 
 describe('syncWithNativeState', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetStores();
+    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'model-abc' })] });
+    arrangeLocalSelection('text', 'model-abc');
+  });
 
   it('sets loadedTextModelId when only liteRTService is loaded and target has no id', async () => {
     mockedLiteRT.isModelLoaded.mockReturnValue(true);

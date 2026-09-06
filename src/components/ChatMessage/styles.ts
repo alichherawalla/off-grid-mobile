@@ -291,10 +291,9 @@ const createThinkingStyles = (colors: ThemeColors) => ({
     fontWeight: '500' as const,
   },
   thinkingPreview: {
-    ...TYPOGRAPHY.bodySmall,
-    color: colors.text,
     marginTop: 6,
-    lineHeight: 18,
+    maxHeight: 36,
+    overflow: 'hidden' as const,
     opacity: 0.8,
   },
   thinkingToggle: {

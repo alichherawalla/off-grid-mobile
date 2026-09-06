@@ -15,7 +15,8 @@ import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
 import {
   OnboardingScreen,
-  ModelDownloadScreen,
+  AutoSetupScreen,
+  AdvancedSetupScreen,
   HomeScreen,
   ModelsScreen,
   ChatScreen,
@@ -34,6 +35,7 @@ import {
   SecuritySettingsScreen,
   GalleryScreen,
   RemoteServersScreen,
+  RemoteServerEditorScreen,
   ProDetailScreen,
   AboutScreen,
   ToolsScreen,
@@ -194,7 +196,7 @@ export const AppNavigator: React.FC = () => {
   // Determine initial route
   let initialRoute: keyof RootStackParamList = 'Onboarding';
   if (hasCompletedOnboarding) {
-    initialRoute = downloadedModels.length > 0 ? 'Main' : 'ModelDownload';
+    initialRoute = downloadedModels.length > 0 ? 'Main' : 'AutoSetup';
   }
 
   return (
@@ -204,10 +206,14 @@ export const AppNavigator: React.FC = () => {
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
           animation: 'slide_from_right',
+          gestureEnabled: true,
+          fullScreenGestureEnabled: true,
+          gestureDirection: 'horizontal',
         }}
       >
         <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
-        <RootStack.Screen name="ModelDownload" component={ModelDownloadScreen} />
+        <RootStack.Screen name="AutoSetup" component={AutoSetupScreen} />
+        <RootStack.Screen name="AdvancedSetup" component={AdvancedSetupScreen} />
         <RootStack.Screen name="Main" component={MainTabs} />
         <RootStack.Screen name="Chat" component={ChatScreen} />
         <RootStack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
@@ -215,12 +221,13 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen
           name="ProjectEdit"
           component={ProjectEditScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureDirection: 'vertical' }}
         />
         <RootStack.Screen name="KnowledgeBase" component={KnowledgeBaseScreen} />
         <RootStack.Screen name="DocumentPreview" component={DocumentPreviewScreen} />
         <RootStack.Screen name="ModelSettings" component={ModelSettingsScreen} />
         <RootStack.Screen name="RemoteServers" component={RemoteServersScreen} />
+        <RootStack.Screen name="RemoteServerEditor" component={RemoteServerEditorScreen} />
         <RootStack.Screen name="DeviceInfo" component={DeviceInfoScreen} />
         <RootStack.Screen name="StorageSettings" component={StorageSettingsScreen} />
         <RootStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
@@ -238,12 +245,12 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen
           name="DownloadManager"
           component={DownloadManagerScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureDirection: 'vertical' }}
         />
         <RootStack.Screen
           name="Gallery"
           component={GalleryScreen}
-          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom', gestureDirection: 'vertical' }}
         />
         {registeredScreens.map(s => (
           <RootStack.Screen key={s.name} name={s.name as any} component={s.component} />

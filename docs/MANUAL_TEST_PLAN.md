@@ -104,6 +104,7 @@ Set-Up footer padding; **dismissable Off Grid AI Desktop promo card** on Home
 - [DEVICE] Bottom bar: loader sits where the mic is; top/bottom gaps match.
 - [DEVICE] Set-Up screen: no oversized gap below "Skip for Now".
 - [DEVICE] Home: Desktop card shows, dismiss (X) hides it and stays hidden across relaunch; tap opens the desktop URL.
+- [DEVICE] Home: "What should we build next?" appears before the Off Grid AI Desktop card.
 - [AUTO] promo card render/dismiss/persist/URL.
 
 ## G. Test-suite health

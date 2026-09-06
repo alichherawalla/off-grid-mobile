@@ -26,14 +26,20 @@ export interface ToolExtension {
 const extensions: ToolExtension[] = [];
 const listeners = new Set<() => void>();
 
-export function registerToolExtension(ext: ToolExtension): void {
-  if (extensions.some(e => e.id === ext.id)) return;
+export function registerToolExtension(ext: ToolExtension): () => void {
+  if (extensions.some(e => e.id === ext.id)) return () => undefined;
   extensions.push(ext);
   // The registry is an external store to anyone rendering from it, and an extension can register
   // AFTER a consumer mounted (Pro activates at runtime). Without this, useExtensionToolCount only
   // picked a late extension up by accident - useIsProActive's re-render plus an inline subscribe
   // happened to re-wire it. Mirrors screenRegistry, which exists for exactly this case.
   listeners.forEach(l => l());
+  return () => {
+    const index = extensions.indexOf(ext);
+    if (index < 0) return;
+    extensions.splice(index, 1);
+    listeners.forEach(l => l());
+  };
 }
 
 /** Registry-change subscription: fires when an extension registers (or tests clear the set). */

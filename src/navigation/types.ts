@@ -2,7 +2,8 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 
 export type RootStackParamList = {
   Onboarding: undefined;
-  ModelDownload: undefined;
+  AutoSetup: undefined;
+  AdvancedSetup: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
   // Former ChatsStack
   Chat: { conversationId?: string; projectId?: string };
@@ -15,6 +16,7 @@ export type RootStackParamList = {
   // Former SettingsStack
   ModelSettings: undefined;
   RemoteServers: undefined;
+  RemoteServerEditor: { serverId?: string } | undefined;
   DeviceInfo: undefined;
   StorageSettings: undefined;
   SecuritySettings: undefined;

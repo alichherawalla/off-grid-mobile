@@ -1,9 +1,11 @@
 package ai.offgridmobile.sync
 
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableMap
 
 /**
  * Android half of the mesh residency contract (see src/services/sync/nativeMeshResidency.ts).
@@ -14,9 +16,8 @@ import com.facebook.react.bridge.ReactMethod
  */
 class MeshResidencyModule(
     private val reactContext: ReactApplicationContext,
+    private val snapshotMapFactory: () -> WritableMap = { Arguments.createMap() },
 ) : ReactContextBaseJavaModule(reactContext) {
-    private var held = false
-
     override fun getName(): String = "MeshResidencyModule"
 
     override fun getConstants(): Map<String, Any?> =
@@ -30,30 +31,30 @@ class MeshResidencyModule(
     @ReactMethod
     fun begin(promise: Promise) {
         try {
-            if (!held) {
-                MeshResidencyService.start(reactContext)
-                held = true
+            MeshResidencyService.start(reactContext) { snapshot ->
+                promise.resolve(snapshot.toWritableMap(snapshotMapFactory()))
             }
-            promise.resolve(null)
         } catch (e: IllegalStateException) {
             // Android throws when a foreground service is started from a disallowed state (for
             // example a background start without an exemption). Report it rather than crashing: the
             // mesh still works in the foreground.
-            held = false
             promise.reject("mesh_residency_denied", e)
         } catch (e: SecurityException) {
-            held = false
             promise.reject("mesh_residency_denied", e)
         }
     }
 
     @ReactMethod
+    fun state(promise: Promise) {
+        promise.resolve(
+            MeshResidencyService.currentSnapshot().toWritableMap(snapshotMapFactory()),
+        )
+    }
+
+    @ReactMethod
     fun end(promise: Promise) {
         try {
-            if (held) {
-                MeshResidencyService.stop(reactContext)
-                held = false
-            }
+            MeshResidencyService.stop(reactContext)
             promise.resolve(null)
         } catch (e: IllegalStateException) {
             promise.reject("mesh_residency_stop_failed", e)
@@ -63,10 +64,7 @@ class MeshResidencyModule(
     override fun invalidate() {
         // A reload or teardown must not leave an orphan notification promising reachability the
         // JS engine can no longer provide.
-        if (held) {
-            MeshResidencyService.stop(reactContext)
-            held = false
-        }
+        MeshResidencyService.stop(reactContext)
         super.invalidate()
     }
 }

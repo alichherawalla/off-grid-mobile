@@ -81,6 +81,22 @@ describe('ModelCard', () => {
       expect(getByText('50%')).toBeTruthy();
     });
 
+    it('shows the canonical live rate while downloading', () => {
+      const { getByText } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloading
+          downloadProgress={0.5}
+          downloadBytes={{
+            downloaded: 2 * 1024 * 1024 * 1024,
+            total: 4 * 1024 * 1024 * 1024,
+            bytesPerSecond: 2.5 * 1024 * 1024,
+          }}
+        />
+      );
+      expect(getByText('2.0 GB / 4.0 GB · 2.5 MB/s')).toBeTruthy();
+    });
+
     it('shows bytes alongside the Queued label (queued reads "0 B / size")', () => {
       const { getByText, getByLabelText } = render(
         <ModelCard
@@ -98,6 +114,51 @@ describe('ModelCard', () => {
   // ============================================================================
   // Basic Rendering
   // ============================================================================
+  // ============================================================================
+  // Paused — its own state. The Text tab now feeds isPaused from the same aggregate
+  // as isDownloading/isQueued; without it a paused card read as idle (no section)
+  // while bytes sat on disk.
+  // ============================================================================
+  describe('paused state', () => {
+    const bytes = { downloaded: 1024 * 1024 * 1024, total: 4 * 1024 * 1024 * 1024 };
+
+    it('renders the Paused label (and glyph) when isPaused, with neither downloading nor queued set', () => {
+      const { getByText, getByLabelText, queryByLabelText } = render(
+        <ModelCard model={baseModel} isPaused downloadProgress={0.25} downloadBytes={bytes} />
+      );
+      expect(getByText('Paused')).toBeTruthy();
+      expect(getByLabelText('Paused')).toBeTruthy();
+      expect(queryByLabelText('Queued')).toBeNull();
+    });
+
+    it('keeps showing the bytes already on disk while paused, without a transfer rate', () => {
+      const { getByText, queryByText } = render(
+        <ModelCard
+          model={baseModel}
+          isPaused
+          downloadProgress={0.25}
+          downloadBytes={{ ...bytes, bytesPerSecond: 5 * 1024 * 1024 }}
+        />
+      );
+      expect(getByText('1.0 GB / 4.0 GB')).toBeTruthy();
+      // Nothing is moving, so no "/s" rate may be claimed.
+      expect(queryByText(/\/s/)).toBeNull();
+    });
+
+    it('does not show Paused for a running or a queued download', () => {
+      const running = render(<ModelCard model={baseModel} isDownloading downloadProgress={0.25} />);
+      expect(running.queryByText('Paused')).toBeNull();
+      const queued = render(<ModelCard model={baseModel} isQueued downloadProgress={0} />);
+      expect(queued.queryByText('Paused')).toBeNull();
+    });
+
+    it('shows nothing download-related when idle (no flags)', () => {
+      const { queryByText, queryByLabelText } = render(<ModelCard model={baseModel} />);
+      expect(queryByText('Paused')).toBeNull();
+      expect(queryByLabelText('Queued')).toBeNull();
+    });
+  });
+
   describe('basic rendering', () => {
     it('renders model name', () => {
       const { getByText } = render(
@@ -241,7 +302,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('15.0K dl')).toBeTruthy();
+      expect(getByText(/15\.0K dl/)).toBeTruthy();
     });
 
     it('shows model type badge in compact mode for vision', () => {
@@ -261,7 +322,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('Code')).toBeTruthy();
+      expect(getByText(/Code/)).toBeTruthy();
     });
 
     it('shows model type badge in compact mode for text', () => {
@@ -271,7 +332,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('Text')).toBeTruthy();
+      expect(getByText(/Text/)).toBeTruthy();
     });
 
     it('shows param count badge in compact mode', () => {
@@ -281,15 +342,15 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('7B params')).toBeTruthy();
+      expect(getByText(/7B params/)).toBeTruthy();
     });
 
     it('shows the NPU/GPU badge when supportsAcceleration is set', () => {
       const { getByText, queryByTestId } = render(
         <ModelCard model={{ ...baseModel, paramCount: 7 }} compact={true} supportsAcceleration />
       );
-      expect(getByText('NPU/GPU')).toBeTruthy();
-      expect(queryByTestId('npu-gpu-badge')).toBeTruthy();
+      expect(getByText(/NPU\/GPU/)).toBeTruthy();
+      expect(queryByTestId('npu-gpu-badge')).toBeNull();
     });
 
     it('hides the NPU/GPU badge when the model is not accelerable', () => {
@@ -343,7 +404,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('4GB+ RAM')).toBeTruthy();
+      expect(getByText(/4GB\+ RAM/)).toBeTruthy();
     });
 
     it('does not show download count when 0 in compact mode', () => {
@@ -371,8 +432,7 @@ describe('ModelCard', () => {
           compact={true}
         />
       );
-      expect(getByText('LM Studio')).toBeTruthy();
-      expect(getByText('★')).toBeTruthy();
+      expect(getByText(/test-author · LM Studio/)).toBeTruthy();
     });
 
     it('shows trending icon in compact mode', () => {
@@ -380,6 +440,28 @@ describe('ModelCard', () => {
         <ModelCard model={baseModel} compact={true} isTrending={true} />
       );
       expect(getByText('')).toBeTruthy();
+    });
+
+    it('shows an accessible verified icon without visible Verified text', () => {
+      const { getByLabelText, queryByText } = render(
+        <ModelCard
+          model={{
+            ...baseModel,
+            author: 'Unsloth',
+            credibility: {
+              source: 'verified-quantizer',
+              isOfficial: false,
+              isVerifiedQuantizer: true,
+              verifiedBy: 'Unsloth',
+            },
+          }}
+          compact={true}
+        />
+      );
+
+      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(queryByText('Verified')).toBeNull();
+      expect(queryByText(/Unsloth/)).toBeTruthy();
     });
   });
 
@@ -744,6 +826,27 @@ describe('ModelCard', () => {
       expect(getByTestId('card-cancel')).toBeTruthy();
     });
 
+    it.each([
+      ['queued', { isQueued: true }],
+      ['paused', { isPaused: true }],
+    ])('keeps the cancel action available while %s', (_label, state) => {
+      const onDownload = jest.fn();
+      const onCancel = jest.fn();
+      const { queryByTestId, getByTestId } = render(
+        <ModelCard
+          model={baseModel}
+          isDownloaded={false}
+          {...state}
+          onDownload={onDownload}
+          onCancel={onCancel}
+          testID="card"
+        />
+      );
+
+      expect(queryByTestId('card-download')).toBeNull();
+      expect(getByTestId('card-cancel')).toBeTruthy();
+    });
+
     it('does not show select button when model is active', () => {
       const onSelect = jest.fn();
       const { toJSON } = render(
@@ -900,28 +1003,28 @@ describe('ModelCard', () => {
       const { getByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{}} />,
       );
-      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByText(/test-author · Recommended/)).toBeTruthy();
     });
 
     it('renders the pill with a custom pillLabel', () => {
       const { getByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
       );
-      expect(getByText('Featured')).toBeTruthy();
+      expect(getByText(/test-author · Featured/)).toBeTruthy();
     });
 
     it('renders custom chips in place of the modelType chip row (compact)', () => {
-      const { getByText, queryByText } = render(
+      const { getByText, queryAllByText } = render(
         <ModelCard
           model={{ ...baseModel, modelType: 'vision' }}
           compact={true}
           recommended={{ chips: ['Vision', 'GPU'] }}
         />,
       );
-      expect(getByText('GPU')).toBeTruthy();
+      expect(getByText(/Vision · GPU/)).toBeTruthy();
       // Both "Vision" (custom chip) and the auto-derived modelType "Vision" would
       // collide on text — assert only one matching node renders (custom chip path).
-      expect(queryByText('Vision')).toBeTruthy();
+      expect(queryAllByText(/Vision/)).toHaveLength(1);
     });
 
     it('renders the highlight as part of the common description (compact)', () => {
@@ -1045,14 +1148,16 @@ describe('ModelCard', () => {
       expect(getByText('50%')).toBeTruthy();
     });
 
-    it('shows 0% when totalBytes is 0 (unknown size)', () => {
-      const { getByText } = render(
+    it('does not invent a percentage when the failed download size is unknown', () => {
+      const { getByText, queryByText } = render(
         <ModelCard
           model={baseModel}
           failedState={{ ...baseFailedState, bytesDownloaded: 0, totalBytes: 0 }}
         />,
       );
-      expect(getByText('0%')).toBeTruthy();
+      expect(getByText('Stopped')).toBeTruthy();
+      expect(queryByText(/NaN/)).toBeNull();
+      expect(queryByText('0%')).toBeNull();
     });
 
     it('hides ModelCardActions when failedState is set', () => {

@@ -1,3 +1,5 @@
+import { arrangeRemoteSelection, resetStores as resetStoresForSelection } from '../../utils/testHelpers';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 /**
  * Extra coverage for McpToolExtension — drives the REAL extension against the REAL
  * mcpStore + remoteServerStore + schemaTrim + mcpService parse/prompt logic. The only
@@ -17,6 +19,7 @@
 // executeMcpTool is the sole boundary (needs a live native MCP client). Keep the rest
 // of mcpService REAL so getMcpToolsPrompt / parseMcpToolCallsFromText run for real.
 const mockExecuteMcpTool = jest.fn();
+const mockExecuteCompanionTask = jest.fn();
 jest.mock('@offgrid/pro/mcp/mcpService', () => {
   const actual = jest.requireActual('@offgrid/pro/mcp/mcpService');
   return {
@@ -25,12 +28,35 @@ jest.mock('@offgrid/pro/mcp/mcpService', () => {
     executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
   };
 });
+jest.mock('@offgrid/pro/mcp/companionTaskMesh', () => {
+  const actual = jest.requireActual('@offgrid/pro/mcp/companionTaskMesh');
+  return {
+    ...actual,
+    executeCompanionTask: (input: unknown) => mockExecuteCompanionTask(input),
+  };
+});
+
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
+
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
 
 import { McpToolExtension } from '@offgrid/pro/mcp/McpToolExtension';
 import { useMcpStore } from '@offgrid/pro/mcp/mcpStore';
-import { useRemoteServerStore } from '@offgrid/core/stores';
-import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/pro/mcp/schemaTrim';
+import { SMALL_MODEL_TOOL_BUDGET } from '@offgrid/models';
 import type { McpTool } from '@offgrid/pro/mcp/types';
+import { useSyncStore } from '@offgrid/pro/sync/syncStore';
+
+let applicationFixture: MobileApplicationFixture;
 
 // A compact tool (under the small-model budget) — passes through trimming untouched.
 const compactTool: McpTool = {
@@ -48,7 +74,11 @@ const compactTool: McpTool = {
 function makeLargeTool(): McpTool {
   const bigDesc = 'x'.repeat(40);
   const props: Record<string, any> = {
-    required_key: { type: 'string', description: 'must stay', enum: ['a', 'b'] },
+    required_key: {
+      type: 'string',
+      description: 'must stay',
+      enum: ['a', 'b'],
+    },
   };
   // Many fat optional props so the serialized size blows past the budget.
   for (let i = 0; i < 12; i++) {
@@ -82,8 +112,17 @@ function resetStores() {
     knownToolNames: [],
     toolOwners: {},
   });
-  useRemoteServerStore.setState({ activeRemoteTextModelId: null });
+  resetStoresForSelection();
 }
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture?.dispose();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -98,7 +137,7 @@ describe('getOpenAISchemas', () => {
       toolOwners: { huge_tool: 's1' },
       enabledTools: ['huge_tool'],
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: null });
+    resetStoresForSelection();
 
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
     expect(schemas).toHaveLength(1);
@@ -111,14 +150,14 @@ describe('getOpenAISchemas', () => {
     expect(schemas[0].function.description).toBe('A very long description.');
   });
 
-  it('only prunes noise (keeps optional params) when a remote text model IS active', () => {
+  it('only prunes noise (keeps optional params) when a remote text model IS active', async () => {
     const large = makeLargeTool();
     useMcpStore.setState({
       serverTools: { s1: [large] },
       toolOwners: { huge_tool: 's1' },
       enabledTools: ['huge_tool'],
     });
-    useRemoteServerStore.setState({ activeRemoteTextModelId: 'gpt-x' });
+    await arrangeRemoteSelection('text', 'server-1', 'gpt-x');
 
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
     const params = schemas[0].function.parameters;
@@ -160,14 +199,20 @@ describe('getOpenAISchemas', () => {
   });
 
   it('falls back to an empty-object schema when a tool has no inputSchema', () => {
-    const noSchema = { name: 'bare', description: 'no schema' } as unknown as McpTool;
+    const noSchema = {
+      name: 'bare',
+      description: 'no schema',
+    } as unknown as McpTool;
     useMcpStore.setState({
       serverTools: { s1: [noSchema] },
       toolOwners: { bare: 's1' },
       enabledTools: ['bare'],
     });
     const schemas = McpToolExtension.getOpenAISchemas!() as any[];
-    expect(schemas[0].function.parameters).toEqual({ type: 'object', properties: {} });
+    expect(schemas[0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+    });
   });
 });
 
@@ -222,7 +267,9 @@ describe('parseToolCalls / stripFromVisibleText', () => {
   });
 
   it('leaves text without tags unchanged (trimmed)', () => {
-    expect(McpToolExtension.stripFromVisibleText('  hello world  ')).toBe('hello world');
+    expect(McpToolExtension.stripFromVisibleText('  hello world  ')).toBe(
+      'hello world',
+    );
   });
 });
 
@@ -240,16 +287,139 @@ describe('canHandle', () => {
 
 describe('execute', () => {
   it('returns content + toolCallId on success and never sets error', async () => {
-    mockExecuteMcpTool.mockResolvedValue({ content: 'the result', durationMs: 42 });
-    const r = await McpToolExtension.execute({ id: 'c1', name: 'notion_search', arguments: { query: 'x' } });
-    expect(r).toMatchObject({ toolCallId: 'c1', name: 'notion_search', content: 'the result', durationMs: 42 });
+    mockExecuteMcpTool.mockResolvedValue({
+      content: 'the result',
+      durationMs: 42,
+    });
+    const r = await McpToolExtension.execute({
+      id: 'c1',
+      name: 'notion_search',
+      arguments: { query: 'x' },
+    });
+    expect(r).toMatchObject({
+      toolCallId: 'c1',
+      name: 'notion_search',
+      content: 'the result',
+      durationMs: 42,
+    });
     expect(r.error).toBeUndefined();
-    expect(mockExecuteMcpTool).toHaveBeenCalledWith('notion_search', { query: 'x' });
+    expect(mockExecuteMcpTool).toHaveBeenCalledWith('notion_search', {
+      query: 'x',
+    });
+  });
+
+  it('passes the originating chat and device with a companion action', async () => {
+    useMcpStore.setState({
+      servers: [
+        {
+          id: 'desktop-tools',
+          name: 'Office Mac',
+          url: 'http://office-mac/mcp',
+          grantedByDeviceId: 'desktop-1',
+        },
+        {
+          id: 'studio-tools',
+          name: 'Studio Mac',
+          url: 'http://studio-mac/mcp',
+          grantedByDeviceId: 'desktop-2',
+        },
+      ],
+      connectionStates: {
+        'desktop-tools': 'connected',
+        'studio-tools': 'connected',
+      },
+      serverTools: {
+        'desktop-tools': [
+          {
+            name: 'web_use',
+            description: 'Run a web task',
+            inputSchema: { type: 'object' },
+          },
+        ],
+        'studio-tools': [
+          {
+            name: 'web_use',
+            description: 'Run a web task',
+            inputSchema: { type: 'object' },
+          },
+        ],
+      },
+      enabledTools: ['web_use'],
+      toolOwners: { web_use: 'desktop-tools' },
+    });
+    useSyncStore.setState({
+      thisDevice: {
+        id: 'phone-1',
+        name: 'Ali phone',
+        platform: 'ios',
+        version: '1',
+        host: '',
+        port: 0,
+      },
+      knownDevices: [
+        {
+          id: 'desktop-1',
+          name: 'Office Mac',
+          platform: 'macos',
+          version: '1',
+          host: 'office-mac',
+          port: 1,
+          status: 'connected',
+          pairedAt: 1,
+          lastSeenAt: 1,
+        },
+        {
+          id: 'desktop-2',
+          name: 'Studio Alias',
+          platform: 'macos',
+          version: '1',
+          host: 'studio-mac',
+          port: 1,
+          status: 'connected',
+          pairedAt: 1,
+          lastSeenAt: 1,
+        },
+      ],
+      connectedDeviceIds: ['desktop-1', 'desktop-2'],
+    });
+    mockExecuteCompanionTask.mockResolvedValue({
+      content: 'started',
+      durationMs: 9,
+    });
+
+    await McpToolExtension.execute({
+      id: 'task-1',
+      name: 'web_use',
+      arguments: {
+        task: 'Find a flight',
+        execution_device: 'studio alias',
+      },
+      context: { conversationId: 'chat-mobile-1' },
+    });
+
+    expect(mockExecuteCompanionTask).toHaveBeenCalledWith({
+      deviceId: 'desktop-2',
+      name: 'web_use',
+      args: { task: 'Find a flight', execution_device: 'studio alias' },
+      origin: {
+          conversationId: 'chat-mobile-1',
+          launchId: expect.any(String),
+          deviceId: 'phone-1',
+          deviceName: 'Ali phone',
+          executionDeviceId: 'desktop-2',
+      },
+    });
   });
 
   it('returns a typed error result (does NOT throw) when the call rejects with an Error', async () => {
-    mockExecuteMcpTool.mockRejectedValue(new Error('Server "notion" is not connected'));
-    const r = await McpToolExtension.execute({ id: 'c2', name: 'notion_search', arguments: {} });
+    mockExecuteMcpTool.mockRejectedValue(
+      new Error('Server "notion" is not connected'),
+    );
+    const r = await McpToolExtension.execute({
+      id: 'c2',
+      name: 'notion_search',
+      arguments: {},
+    });
     expect(r.toolCallId).toBe('c2');
     expect(r.content).toBe('');
     expect(r.error).toContain('not connected');
@@ -258,7 +428,11 @@ describe('execute', () => {
 
   it('uses the fallback message when the rejection is not an Error instance', async () => {
     mockExecuteMcpTool.mockRejectedValue('boom-string');
-    const r = await McpToolExtension.execute({ id: 'c3', name: 'notion_search', arguments: {} });
+    const r = await McpToolExtension.execute({
+      id: 'c3',
+      name: 'notion_search',
+      arguments: {},
+    });
     expect(r.error).toBe('MCP tool execution failed');
     expect(r.content).toBe('');
   });

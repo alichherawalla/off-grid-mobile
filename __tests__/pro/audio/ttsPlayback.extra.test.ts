@@ -51,6 +51,9 @@ jest.mock('../../../pro/audio/audioFilePlayer', () => ({
 // --- engine registry: dumb boundary (wraps react-native-executorch). ---
 jest.mock('../../../pro/audio/engine', () => {
   const engine = {
+    id: 'mock-tts',
+    displayName: 'Mock TTS',
+    capabilities: { streaming: false, peakRamMB: 100 },
     getPhase: jest.fn(() => 'ready' as string),
     stop: jest.fn(),
     pause: jest.fn(),
@@ -69,8 +72,8 @@ jest.mock('../../../pro/audio/engine', () => {
       getEngine: jest.fn(() => (mockCtl.engineNull ? null : engine)),
       getActiveEngineId: jest.fn(() => 'mock-tts'),
       setActiveEngine: jest.fn(),
+      getRegisteredIds: jest.fn(() => ['mock-tts']),
     },
-    OuteTTSEngine: class {},
   };
 });
 
@@ -93,6 +96,7 @@ import {
   stopStreamingPlayback,
   setPlaybackSpeed,
 } from '@offgrid/pro/audio/ttsPlayback';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
 
 // Retrieve the mocked boundaries (built inside the factories) via the mock registry.
 const mockAudioFilePlayer = jest.requireMock('@offgrid/pro/audio/audioFilePlayer').audioFilePlayer as {
@@ -111,6 +115,7 @@ const mockResetStreamingSpeech = mockStreaming.resetStreamingSpeech;
 const mockStopStreamingSpeechForTurn = mockStreaming.stopStreamingSpeechForTurn;
 
 const getState = () => useTTSStore.getState();
+let applicationFixture: MobileApplicationFixture;
 
 function resetState() {
   useTTSStore.setState({
@@ -120,10 +125,18 @@ function resetState() {
     isReady: true, isDownloading: false, isLoading: false, isSpeaking: false, isPaused: false,
     isGeneratingAudio: false, assets: [], overallDownloadProgress: 1,
     voices: [{ id: 'default', label: 'Default', metadata: {} }], activeVoiceId: 'default',
-    audioCacheSizeMB: 0,
     settings: { interfaceMode: 'chat', enabled: true, speed: 1.5, engineId: 'mock-tts', voiceByEngine: {} },
   });
 }
+
+beforeAll(async () => {
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({pro: true});
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 beforeEach(() => {
   resetState();

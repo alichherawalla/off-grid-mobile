@@ -110,35 +110,14 @@ describe('Batch3 · document attach validation (real documentService)', () => {
 
   // ── #17: URL-encoded filename should display decoded ────────────────────────
   //
-  // BUG-FOUND: documentService.processDocumentFromPath returns `fileName` VERBATIM
-  // for display (src/services/documentService.ts:156,190). It decodeURIComponent()s
-  // only the file PATH inside resolveContentUri, never the display name. So a name
-  // like 'my%20notes.txt' is surfaced to the attachment chip un-decoded, contrary
-  // to device case #17 ("shows the human-readable decoded filename, not the raw
-  // encoded string"). On device the picker usually hands back an already-decoded
-  // name, which is why the E2E may still pass — but the service seam does not
-  // guarantee it. Fixing this belongs in src (decode the display name once in the
-  // service); per hardening rules we do NOT edit src, so the correct-behavior
-  // assertion is skipped and the actual (buggy) behavior is pinned below.
   describe('URL-encoded filename display decode (#17)', () => {
-    it.skip('BUG-FOUND: display fileName should be decoded (my%20notes.txt -> "my notes.txt")', async () => {
+    it('displays the shared decoded document name', async () => {
       seedReadableFile('/docs/my%20notes.txt', 'body');
       const att = await documentService.processDocumentFromPath(
         '/docs/my%20notes.txt',
         'my%20notes.txt',
       );
-      // Desired behavior per device case #17: the chip shows the decoded, human-readable name.
       expect(att!.fileName).toBe('my notes.txt');
-    });
-
-    it.skip('pins ACTUAL behavior: the display fileName is returned un-decoded (documents the bug) — SKIP: do not enshrine the bug as passing; see the desired-behavior skip above', async () => {
-      seedReadableFile('/docs/my%20notes.txt', 'body');
-      const att = await documentService.processDocumentFromPath(
-        '/docs/my%20notes.txt',
-        'my%20notes.txt',
-      );
-      // NOT decoded today — this is the current, incorrect behavior we are pinning.
-      expect(att!.fileName).toBe('my%20notes.txt');
     });
 
     it('resolves the file even when the PATH is URL-encoded (path decode works)', async () => {

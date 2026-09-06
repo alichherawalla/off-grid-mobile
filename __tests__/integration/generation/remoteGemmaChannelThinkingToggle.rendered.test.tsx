@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * DEV-B16 / B17 (capability half) — a REMOTE model that reasons via Gemma-style inline channel
  * markup (`<|channel>thought …`, NO separate reasoning_content field) must be detected as
@@ -103,26 +104,28 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     // capability path reads the remote model (the screen prefers a remote when one is active).
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
 
-    const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
+    const { useAppStore } = require('../../../src/stores');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+    const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     // Route remote: no local model loaded/selected (mirrors selecting a remote model on device).
     await llmService.unloadModel();
-    useAppStore.getState().setActiveModelId(null);
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
 
     const restoreFetch = installDiscoveryFetch(GEMMA_CHANNEL_PROBE_SSE);
     try {
       // REAL "add a server" end state + REAL discovery — this is what runs deltaHasThinking. No caps
       // are pre-placed; supportsThinking is EMERGENT from the probe stream through the real detection.
-      const serverId = useRemoteServerStore.getState().addServer({
-        name: 'LM Studio', endpoint: ENDPOINT, providerType: 'openai-compatible',
-      });
-      await useRemoteServerStore.getState().discoverModels(serverId);
+      const serverId = (await remoteServerManager.addServer({
+        name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
+      })).id;
+      await remoteServerManager.discoverModels(serverId);
 
       // REAL "user selects this discovered remote model" — sets it active + registers the provider
       // and applies the discovered capabilities. Same action the model picker fires.
-      await setActiveRemoteTextModelImpl(serverId, MODEL_ID);
+      await selectRemoteMobileModel(serverId, 'text', MODEL_ID);
     } finally {
       restoreFetch();
     }
@@ -149,20 +152,22 @@ describe('remote Gemma-channel inline reasoning → Thinking toggle appears (DEV
     // discriminator: it FAILS if deltaHasThinking is broken to be always-true (the surviving M10 mutant),
     // so together with the positive case it pins detection to the actual delimiter grammar.
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
-    const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
+    const { useAppStore } = require('../../../src/stores');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
     const { llmService } = require('../../../src/services/llm');
-    const { setActiveRemoteTextModelImpl } = require('../../../src/services/remoteServerManagerUtils');
+    const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
 
     await llmService.unloadModel();
-    useAppStore.getState().setActiveModelId(null);
+    useAppStore.setState({ });
+    arrangeLocalSelection('text', null);
 
     const restoreFetch = installDiscoveryFetch(PLAIN_PROBE_SSE);
     try {
-      const serverId = useRemoteServerStore.getState().addServer({
-        name: 'LM Studio', endpoint: ENDPOINT, providerType: 'openai-compatible',
-      });
-      await useRemoteServerStore.getState().discoverModels(serverId);
-      await setActiveRemoteTextModelImpl(serverId, MODEL_ID);
+      const serverId = (await remoteServerManager.addServer({
+        name: 'LM Studio', endpoint: ENDPOINT, provider: 'openai-compatible',
+      })).id;
+      await remoteServerManager.discoverModels(serverId);
+      await selectRemoteMobileModel(serverId, 'text', MODEL_ID);
     } finally {
       restoreFetch();
     }

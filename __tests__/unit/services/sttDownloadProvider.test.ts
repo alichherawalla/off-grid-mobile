@@ -1,93 +1,132 @@
-/**
- * STT download provider — wraps the existing whisper + downloadStore bridge under
- * the uniform DownloadProvider contract. Verifies list merges in-flight + completed,
- * retry/cancel/remove delegate to the working service calls, and reconcile strands
- * an interrupted (non-resumable) download as a retriable error.
- */
-jest.mock('../../../src/services/whisperService', () => ({
-  whisperService: {
-    listDownloadedModels: jest.fn(async () => []),
-    downloadModel: jest.fn(async () => '/path'),
-    deleteModel: jest.fn(async () => {}),
+import type {PersistedModelDownload} from '@offgrid/models';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+import {installNativeBoundary} from '../../harness/nativeBoundary';
+
+const MODEL_ID = 'whisper-base.en';
+const FILE_NAME = 'ggml-base.en.bin';
+const DOWNLOAD_ID = 'whisper-base.en/ggml-base.en.bin';
+const TRANSFER_ID = 'native-stt';
+
+let fixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
+});
+
+const record = (
+  phase: PersistedModelDownload['phase'] = 'downloading',
+  options: {transferId?: string; bytes?: number; updatedAt?: number} = {},
+): PersistedModelDownload => ({
+  manifest: {
+    id: DOWNLOAD_ID,
+    modelId: MODEL_ID,
+    kind: 'transcription',
+    revision: 'main',
+    artifacts: [{
+      id: 'primary',
+      name: FILE_NAME,
+      role: 'primary',
+      required: true,
+      localName: FILE_NAME,
+      url: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${FILE_NAME}`,
+      sizeBytes: 100,
+    }],
   },
-}));
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: { cancelDownload: jest.fn(async () => {}) },
-}));
-jest.mock('../../../src/utils/logger', () => ({ __esModule: true, default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
-
-import { sttProvider } from '../../../src/services/modelDownloadService/providers/sttProvider';
-import { useDownloadStore } from '../../../src/stores/downloadStore';
-import { whisperService } from '../../../src/services/whisperService';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
-
-const mockWhisper = whisperService as unknown as { listDownloadedModels: jest.Mock; downloadModel: jest.Mock; deleteModel: jest.Mock };
-const mockBg = backgroundDownloadService as unknown as { cancelDownload: jest.Mock };
-
-const entry = (over: any = {}) => ({
-  modelKey: 'whisper-base.en/ggml-base.en.bin', downloadId: 'dl-1', modelId: 'whisper-base.en',
-  fileName: 'ggml-base.en.bin', quantization: '', modelType: 'stt', status: 'running',
-  bytesDownloaded: 50, totalBytes: 100, combinedTotalBytes: 100, progress: 0.5, createdAt: 1, ...over,
+  phase,
+  artifacts: [{
+    artifactId: 'primary',
+    phase,
+    ...(options.transferId ? {transferId: options.transferId} : {}),
+    bytesDownloaded: options.bytes ?? 50,
+    totalBytes: 100,
+  }],
+  createdAt: 1,
+  updatedAt: options.updatedAt ?? 1,
+  attempt: options.updatedAt ?? 1,
 });
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} } as any);
-  useDownloadStore.getState().add(entry());
-});
+async function start(records: readonly PersistedModelDownload[]): Promise<void> {
+  const {seedMobileDownloadJournal, startMobileApplicationFixture} =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal(records);
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
+}
 
-describe('sttProvider', () => {
-  it('lists an in-flight download mapped to the uniform shape (downloading)', async () => {
-    const list = await sttProvider.list();
-    const d = list.find(x => x.id === 'stt:base.en');
-    expect(d?.status).toBe('downloading');
-    expect(d?.modelType).toBe('stt');
-    expect(d?.capabilities.resumable).toBe(false);
-    expect(d?.progress).toBe(0.5);
+function projected() {
+  const {useDownloadStore} = require('../../../src/stores/downloadStore') as typeof import('../../../src/stores/downloadStore');
+  return Object.values(useDownloadStore.getState().downloads);
+}
+
+describe('Shared transcription download lifecycle', () => {
+  it('reactively projects an active transcription download with determinate progress', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    boundary.download!.seedActive({downloadId: TRANSFER_ID, modelId: MODEL_ID, fileName: FILE_NAME, modelType: 'stt', status: 'running', bytesDownloaded: 50, totalBytes: 100});
+    await start([record('downloading', {transferId: TRANSFER_ID})]);
+    expect(projected()).toEqual([expect.objectContaining({
+      modelId: MODEL_ID,
+      modelType: 'stt',
+      status: 'downloading',
+      progress: 0.5,
+    })]);
   });
 
-  it('lists completed disk models, skipping ones already in-flight', async () => {
-    mockWhisper.listDownloadedModels.mockResolvedValue([
-      { modelId: 'base.en', fileName: 'ggml-base.en.bin', sizeBytes: 100, filePath: '/p' }, // dup of in-flight
-      { modelId: 'small', fileName: 'ggml-small.bin', sizeBytes: 400, filePath: '/p2' },
+  it('keeps one projection for the newest durable attempt', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    boundary.download!.seedActive({downloadId: TRANSFER_ID, modelId: MODEL_ID, fileName: FILE_NAME, modelType: 'stt', status: 'running', bytesDownloaded: 70, totalBytes: 100});
+    await start([
+      record('failed', {bytes: 10, updatedAt: 1}),
+      record('downloading', {transferId: TRANSFER_ID, bytes: 70, updatedAt: 2}),
     ]);
-    const list = await sttProvider.list();
-    expect(list.filter(d => d.id === 'stt:base.en')).toHaveLength(1); // not duplicated
-    const done = list.find(d => d.id === 'stt:small');
-    expect(done?.status).toBe('completed');
+    expect(projected()).toHaveLength(1);
+    expect(projected()[0]).toEqual(expect.objectContaining({modelId: MODEL_ID, status: 'downloading'}));
   });
 
-  it('cancel cancels the native task and clears the store row', async () => {
-    await sttProvider.cancel('stt:base.en');
-    expect(mockBg.cancelDownload).toHaveBeenCalledWith('dl-1');
-    expect(useDownloadStore.getState().downloads['whisper-base.en/ggml-base.en.bin']).toBeUndefined();
+  it('cancels the native transcription transfer and keeps a clearable cancelled projection', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    boundary.download!.seedActive({downloadId: TRANSFER_ID, modelId: MODEL_ID, fileName: FILE_NAME, modelType: 'stt', status: 'running', bytesDownloaded: 50, totalBytes: 100});
+    await start([record('downloading', {transferId: TRANSFER_ID})]);
+    const outcome = await fixture!.application.models.cancelDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true, value: true}));
+    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(TRANSFER_ID, false);
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, status: 'cancelled'})]);
   });
 
-  it('retry clears the dead row then re-downloads via whisperService', async () => {
-    await sttProvider.retry('stt:base.en');
-    expect(mockBg.cancelDownload).toHaveBeenCalledWith('dl-1');
-    expect(mockWhisper.downloadModel).toHaveBeenCalledWith('base.en');
+  it('retries a failed transcription download through the native transfer port', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    const outcome = await fixture!.application.models.retryDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true}));
+    expect(boundary.download!.module.startDownload).toHaveBeenCalledTimes(1);
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, status: 'downloading'})]);
   });
 
-  it('retry restores a failed row if the re-download fails before re-registering (no vanished model)', async () => {
-    mockWhisper.downloadModel.mockRejectedValueOnce(new Error('network down'));
-    await sttProvider.retry('stt:base.en');
-    // A moment for the fire-and-forget re-download rejection to settle.
-    await new Promise(r => setImmediate(r));
-    const restored = useDownloadStore.getState().downloads['whisper-base.en/ggml-base.en.bin'];
-    expect(restored).toBeDefined();
-    expect(restored.status).toBe('failed');
-    expect(restored.errorMessage).toBe('network down');
+  it('restores a retriable failure when the retry transfer errors', async () => {
+    const boundary = installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    await fixture!.application.models.retryDownload({downloadId: DOWNLOAD_ID});
+    const transferId = boundary.download!.active()[0].downloadId;
+    boundary.download!.events.emit('DownloadError', {downloadId: transferId, reason: 'network down'});
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(projected()).toEqual([expect.objectContaining({
+      modelId: MODEL_ID,
+      status: 'failed',
+      errorMessage: 'network down',
+    })]);
   });
 
-  it('remove deletes the model from disk', async () => {
-    await sttProvider.remove('stt:base.en');
-    expect(mockWhisper.deleteModel).toHaveBeenCalledWith('base.en');
+  it('removes a failed transcription download from durable and reactive state', async () => {
+    installNativeBoundary({download: true, fs: true});
+    await start([record('failed')]);
+    const outcome = await fixture!.application.models.removeDownload({downloadId: DOWNLOAD_ID});
+    expect(outcome).toEqual(expect.objectContaining({ok: true, value: true}));
+    expect(projected()).toEqual([]);
   });
 
-  it('reconcile strands an interrupted in-flight download as failed (not resumable)', async () => {
-    await sttProvider.reconcile!();
-    const e = useDownloadStore.getState().downloads['whisper-base.en/ggml-base.en.bin'];
-    expect(e.status).toBe('failed');
+  it('retains a missing native transcription transfer as interrupted and retriable', async () => {
+    installNativeBoundary({download: true, fs: true, ram: {platform: 'ios', totalBytes: 8 * 1024 ** 3, availBytes: 4 * 1024 ** 3}});
+    await start([record('downloading', {transferId: TRANSFER_ID})]);
+    expect(projected()).toEqual([expect.objectContaining({modelId: MODEL_ID, status: 'interrupted'})]);
   });
 });

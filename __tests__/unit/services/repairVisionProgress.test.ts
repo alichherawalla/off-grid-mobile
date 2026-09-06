@@ -1,183 +1,117 @@
-/**
- * Repair-Vision Progress Tests
- *
- * BUG OD2: the "Repair Vision" action re-downloads a model's missing mmproj
- * (~900MB) but showed only an indeterminate spinner. It must drive the SAME
- * determinate-progress store the normal download uses, so the existing
- * progress-bar UI (ActiveDownloadCard) lights up.
- *
- * These tests drive the REAL useDownloadStore and assert the store entry's
- * `progress` advances incrementally (0 -> mid -> complete), mocking only the
- * boundaries (backgroundDownloadService + RNFS). The onProgress callback is
- * captured DYNAMICALLY so we can fire per-byte events and prove the store
- * updates between them, not just a terminal done.
- */
+import type {ModelsEvent, RepairProjectorCommand} from '@offgrid/application';
+import type {MobileApplicationFixture} from '../../harness/mobileApplicationFixture';
+import {installNativeBoundary} from '../../harness/nativeBoundary';
 
-import RNFS from 'react-native-fs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
-import { useDownloadStore } from '../../../src/stores/downloadStore';
-import { createModelFileWithMmProj } from '../../utils/factories';
-
-const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
-const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
-
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
-    isAvailable: jest.fn(() => true),
-    startDownload: jest.fn(),
-    cancelDownload: jest.fn(() => Promise.resolve()),
-    moveCompletedDownload: jest.fn(),
-    startProgressPolling: jest.fn(),
-    stopProgressPolling: jest.fn(),
-    onProgress: jest.fn(() => jest.fn()),
-    onComplete: jest.fn(() => jest.fn()),
-    onError: jest.fn(() => jest.fn()),
-    excludeFromBackup: jest.fn(() => Promise.resolve(true)),
-  },
-}));
-
-const mockService = backgroundDownloadService as jest.Mocked<
-  typeof backgroundDownloadService
->;
-
-// DYNAMIC mocks: capture the callbacks the service hands back so the test can
-// fire progress/complete events on demand and observe the store react between them.
-function captureCallbacks() {
-  const progress: Record<string, (e: any) => void> = {};
-  const complete: Record<string, (e: any) => Promise<void> | void> = {};
-  const error: Record<string, (e: any) => void> = {};
-  mockService.onProgress.mockImplementation((id: string, cb: any) => {
-    progress[id] = cb;
-    return jest.fn();
-  });
-  mockService.onComplete.mockImplementation((id: string, cb: any) => {
-    complete[id] = cb;
-    return jest.fn();
-  });
-  mockService.onError.mockImplementation((id: string, cb: any) => {
-    error[id] = cb;
-    return jest.fn();
-  });
-  return { progress, complete, error };
-}
-
-const REPO = 'test/model';
+const MODEL_ID = 'test/model/vision-Q4_K_M.gguf';
 const MODEL_NAME = 'vision-Q4_K_M.gguf';
-const MMPROJ_SIZE = 900_000_000; // ~900MB, the OD2 case
+const PROJECTOR_NAME = 'mmproj-model-f16.gguf';
+const PROJECTOR_SIZE = 900_000_000;
+const OPERATION_ID = 'repair-vision-progress';
 
-function visionFile() {
-  return createModelFileWithMmProj({
-    name: MODEL_NAME,
-    size: 4_000_000_000,
+let fixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
+});
+
+const command = (): RepairProjectorCommand => ({
+  operationId: OPERATION_ID,
+  modelId: MODEL_ID,
+  primary: {fileName: MODEL_NAME, localName: `models/${MODEL_NAME}`},
+  projector: {
+    fileName: PROJECTOR_NAME,
+    url: `https://huggingface.co/test/model/resolve/main/${PROJECTOR_NAME}`,
+    totalBytes: PROJECTOR_SIZE,
+  },
+});
+
+async function startRepairBoundary() {
+  const boundary = installNativeBoundary({download: true, fs: true});
+  boundary.fs!.seedFile(`/docs/models/${MODEL_NAME}`, 4_000_000_000);
+  const AsyncStorage = require('@react-native-async-storage/async-storage');
+  await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([{
+    id: MODEL_ID,
+    name: 'Vision model',
+    author: 'test',
+    filePath: `/docs/models/${MODEL_NAME}`,
+    fileName: MODEL_NAME,
+    fileSize: 4_000_000_000,
     quantization: 'Q4_K_M',
-    mmProjName: 'mmproj-model-f16.gguf',
-    mmProjSize: MMPROJ_SIZE,
-    mmProjDownloadUrl:
-      'https://huggingface.co/test/model/resolve/main/mmproj-model-f16.gguf',
-  });
+    downloadedAt: '2026-09-04T00:00:00.000Z',
+    engine: 'llama',
+    isVisionModel: true,
+    mmProjFileName: PROJECTOR_NAME,
+  }]));
+  const {startMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
+  return boundary;
 }
 
-describe('repairMmProj — determinate progress (BUG OD2)', () => {
-  // The modelKey the completed model carries and the store keys on.
-  const MODEL_KEY = `${REPO}/${MODEL_NAME}`;
+async function waitForTransferStart(boundary: ReturnType<typeof installNativeBoundary>) {
+  for (let turn = 0; turn < 20 && boundary.download!.module.startDownload.mock.calls.length === 0; turn += 1) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  expect(boundary.download!.module.startDownload).toHaveBeenCalledTimes(1);
+  return boundary.download!.active()[0].downloadId;
+}
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // Fresh store between tests.
-    useDownloadStore.setState({
-      downloads: {},
-      downloadIdIndex: {},
-      repairingVisionIds: {},
+describe('Shared projector repair progress', () => {
+  it('publishes determinate progress incrementally from zero through mid-transfer', async () => {
+    const boundary = await startRepairBoundary();
+    const events: ModelsEvent[] = [];
+    const release = fixture!.application.models.events(event => events.push(event));
+    const repair = fixture!.application.models.repairProjector(command());
+    const transferId = await waitForTransferStart(boundary);
+
+    const progress = () => events.filter((event): event is Extract<ModelsEvent, {type: 'model_projector_repair_progress'}> =>
+      event.type === 'model_projector_repair_progress');
+    expect(progress()).toEqual([]);
+
+    boundary.download!.events.emit('DownloadProgress', {
+      downloadId: transferId,
+      bytesDownloaded: PROJECTOR_SIZE / 2,
+      totalBytes: PROJECTOR_SIZE,
     });
+    expect(progress().at(-1)).toEqual(expect.objectContaining({
+      operationId: OPERATION_ID,
+      bytesDownloaded: PROJECTOR_SIZE / 2,
+      totalBytes: PROJECTOR_SIZE,
+    }));
 
-    mockedRNFS.exists.mockResolvedValue(false);
-    mockedRNFS.stat.mockResolvedValue({ size: MMPROJ_SIZE } as any);
-    mockedRNFS.unlink.mockResolvedValue(undefined as any);
-    mockedAsyncStorage.getItem.mockResolvedValue(
-      JSON.stringify([
-        { id: MODEL_KEY, engine: 'llama', fileName: MODEL_NAME },
-      ]),
-    );
-    mockedAsyncStorage.setItem.mockResolvedValue(undefined as any);
+    boundary.download!.events.emit('DownloadProgress', {
+      downloadId: transferId,
+      bytesDownloaded: PROJECTOR_SIZE * 0.9,
+      totalBytes: PROJECTOR_SIZE,
+    });
+    expect(progress().at(-1)!.bytesDownloaded).toBeGreaterThan(progress()[0].bytesDownloaded);
 
-    mockService.startDownload.mockResolvedValue({
-      downloadId: 'repair-1',
-      fileName: 'mmproj-model-f16.gguf',
-      modelId: REPO,
-      status: 'pending',
-      bytesDownloaded: 0,
-      totalBytes: MMPROJ_SIZE,
-      startedAt: Date.now(),
-    } as any);
-    mockService.moveCompletedDownload.mockResolvedValue(
-      `/models/${MODEL_NAME.replace('.gguf', '')}-mmproj-model-f16.gguf`,
-    );
+    boundary.fs!.seedFile(`/docs/offgrid-download-staging/projector-repair/${OPERATION_ID}/${PROJECTOR_NAME}`, PROJECTOR_SIZE);
+    boundary.download!.events.emit('DownloadComplete', {downloadId: transferId});
+    const outcome = await repair;
+    expect(outcome.ok).toBe(true);
+    release();
   });
 
-  it('drives the download store incrementally (0 -> mid -> complete), not just a terminal done', async () => {
-    const cbs = captureCallbacks();
-    const { modelManager } = require('../../../src/services/modelManager');
+  it('publishes failure and returns a typed failure when the transfer errors', async () => {
+    const boundary = await startRepairBoundary();
+    const events: ModelsEvent[] = [];
+    const release = fixture!.application.models.events(event => events.push(event));
+    const repair = fixture!.application.models.repairProjector(command());
+    const transferId = await waitForTransferStart(boundary);
 
-    const repairPromise = modelManager.repairMmProj(REPO, visionFile(), {});
-
-    // Give startDownload + listener registration a tick.
-    await new Promise(r => setImmediate(r));
-
-    // The store must now hold an active entry for this model so the UI's
-    // ActiveDownloadCard progress bar can render.
-    const started = useDownloadStore.getState().downloads[MODEL_KEY];
-    expect(started).toBeDefined();
-    expect(started.progress).toBe(0);
-
-    // Fire a MID progress event over the boundary.
-    cbs.progress['repair-1']?.({
-      downloadId: 'repair-1',
-      bytesDownloaded: MMPROJ_SIZE / 2,
-      totalBytes: MMPROJ_SIZE,
-      status: 'running',
-      fileName: 'mmproj-model-f16.gguf',
-      modelId: REPO,
-    });
-    const mid = useDownloadStore.getState().downloads[MODEL_KEY];
-    expect(mid.progress).toBeCloseTo(0.5, 2);
-
-    // Fire a near-complete progress event.
-    cbs.progress['repair-1']?.({
-      downloadId: 'repair-1',
-      bytesDownloaded: MMPROJ_SIZE * 0.9,
-      totalBytes: MMPROJ_SIZE,
-      status: 'running',
-      fileName: 'mmproj-model-f16.gguf',
-      modelId: REPO,
-    });
-    expect(
-      useDownloadStore.getState().downloads[MODEL_KEY].progress,
-    ).toBeCloseTo(0.9, 2);
-
-    // Completion.
-    mockedRNFS.exists.mockResolvedValue(true);
-    await cbs.complete['repair-1']?.({
-      downloadId: 'repair-1',
-      fileName: 'mmproj-model-f16.gguf',
-    });
-    await repairPromise;
-  });
-
-  it('reports failure through the store when the download errors', async () => {
-    const cbs = captureCallbacks();
-    const { modelManager } = require('../../../src/services/modelManager');
-
-    const repairPromise = modelManager.repairMmProj(REPO, visionFile(), {});
-    await new Promise(r => setImmediate(r));
-
-    expect(useDownloadStore.getState().downloads[MODEL_KEY]).toBeDefined();
-
-    cbs.error['repair-1']?.({
-      downloadId: 'repair-1',
+    boundary.download!.events.emit('DownloadError', {
+      downloadId: transferId,
       reason: 'Network error',
     });
-
-    await expect(repairPromise).rejects.toThrow('Network error');
+    const outcome = await repair;
+    expect(outcome).toEqual(expect.objectContaining({ok: false}));
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'model_projector_repair_failed',
+      operationId: OPERATION_ID,
+      failure: expect.objectContaining({message: 'Network error'}),
+    }));
+    release();
   });
 });

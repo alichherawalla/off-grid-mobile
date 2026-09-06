@@ -8,8 +8,10 @@ import {
   type ModelTransferMetadata,
   type TransferredModelManifest,
 } from '@offgrid/sync';
-import { modelManager } from '../../../src/services/modelManager';
+import { modelLibrary } from '../../../src/services/modelServices/bootstrap/modelLibraryBootstrap';
 import { whisperService } from '../../../src/services/whisperService';
+import '../../../src/stores/whisperStore';
+import '../../../src/services/composition/application';
 import { MobileModelPackageSink } from '../../../pro/sync/modelPackageSink';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 
@@ -39,7 +41,7 @@ describe('a model arriving on this device', () => {
 
   beforeEach(async () => {
     modelTransferFsBoundary.reset();
-    await modelManager.initialize();
+    await modelLibrary.initialize();
     await whisperService.ensureModelsDirExists();
   });
 
@@ -147,7 +149,7 @@ describe('a model arriving on this device', () => {
     manifest: TransferredModelManifest,
     fileIndex: number,
     bytes: Buffer,
-    destination = modelManager.getModelsDirectory(),
+    destination = modelLibrary.getModelsDirectory(),
   ): Receiver {
     const file = manifest.files[fileIndex];
     if (!file) throw new Error('the package has no such file');
@@ -196,7 +198,7 @@ describe('a model arriving on this device', () => {
       await stream(receiver.sink, TEXT_BYTES);
       await expect(receiver.sink.finalize()).resolves.toBe(true);
 
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
         expect.objectContaining({
           // The catalog's identity for a downloaded model is repository plus file, because one repository
           // ships the same model at several quantizations and the user can hold more than one.
@@ -219,7 +221,7 @@ describe('a model arriving on this device', () => {
 
       const landed = Buffer.from(
         await RNFS.read(
-          `${modelManager.getModelsDirectory()}/mobile-text-Q4_K_M.gguf`,
+          `${modelLibrary.getModelsDirectory()}/mobile-text-Q4_K_M.gguf`,
           TEXT_BYTES.length,
           0,
           'base64',
@@ -394,7 +396,7 @@ describe('a model arriving on this device', () => {
     it('keeps the file it already has and only takes the one it is missing', async () => {
       // The user downloaded these weights on this phone already, and is now sent the vision package for the
       // same model from the Mac. The projector is the only new thing.
-      const destination = modelManager.getModelsDirectory();
+      const destination = modelLibrary.getModelsDirectory();
       await write(`${destination}/mobile-vision-Q4_K_M.gguf`, VISION_PRIMARY);
 
       for (const [index, bytes] of [VISION_PRIMARY, VISION_PROJECTOR].entries()) {
@@ -417,7 +419,7 @@ describe('a model arriving on this device', () => {
         'base64',
       );
       expect(landed.equals(VISION_PRIMARY)).toBe(true);
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
         expect.objectContaining({ isVisionModel: true }),
       ]);
     });
@@ -441,14 +443,14 @@ describe('a model arriving on this device', () => {
     });
 
     it('repairs a deleted registry row when all package files remain', async () => {
-      const destination = modelManager.getModelsDirectory();
+      const destination = modelLibrary.getModelsDirectory();
       const projectorHere = 'mobile-vision-mmproj-F16.gguf';
       await write(
         `${destination}/${VISION_MANIFEST.files[0].name}`,
         VISION_PRIMARY,
       );
       await write(`${destination}/${projectorHere}`, VISION_PROJECTOR);
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([]);
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([]);
 
       for (const [index, bytes] of [
         VISION_PRIMARY,
@@ -460,7 +462,7 @@ describe('a model arriving on this device', () => {
         await expect(receiver.sink.finalize()).resolves.toBe(true);
       }
 
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
         expect.objectContaining({
           name: 'Mobile Vision',
           fileName: VISION_MANIFEST.files[0].name,
@@ -508,7 +510,7 @@ describe('a model arriving on this device', () => {
       // Several repositories ship a projector called exactly `mmproj-F16.gguf`. Keeping the sender's name
       // would mean the second model collides with the first on disk - and the on-disk stem is also what ties
       // a projector to its model, so a wrong name leaves a vision model that loads as text only.
-      const directory = modelManager.getModelsDirectory();
+      const directory = modelLibrary.getModelsDirectory();
       const present = (await RNFS.readDir(directory))
         .filter(entry => entry.isFile())
         .map(entry => entry.name)
@@ -526,12 +528,12 @@ describe('a model arriving on this device', () => {
 
       // Promotion and registration read the same resolution, so what is on disk and what the catalog believes
       // cannot drift apart. They used to disagree, and the disagreement was a vision model with no vision.
-      const models = await modelManager.getDownloadedModels();
+      const models = await modelLibrary.getDownloadedModels();
       expect(models).toEqual([
         expect.objectContaining({
           id: 'off-grid/mobile-vision/mobile-vision-Q4_K_M.gguf',
           isVisionModel: true,
-          mmProjPath: `${modelManager.getModelsDirectory()}/mobile-vision-mmproj-F16.gguf`,
+          mmProjPath: `${modelLibrary.getModelsDirectory()}/mobile-vision-mmproj-F16.gguf`,
         }),
       ]);
     });
@@ -565,11 +567,11 @@ describe('a model arriving on this device', () => {
       // The weights arrived and the projector did not. Left there, that is a vision model the catalog would
       // list as usable and which would load as text only - the exact failure the naming rule exists to
       // prevent, arrived at from the other direction. So the files this attempt moved are moved back out.
-      const present = (await RNFS.readDir(modelManager.getModelsDirectory()))
+      const present = (await RNFS.readDir(modelLibrary.getModelsDirectory()))
         .filter(entry => entry.isFile())
         .map(entry => entry.name);
       expect(present).toEqual([]);
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([]);
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([]);
       expect(projector.installed()).toBe(false);
 
       // The staged bytes go too. The whole package has to be sent again, which on a phone that just ran out
@@ -656,7 +658,7 @@ describe('a model arriving on this device', () => {
       // Right size, wrong contents. Nothing is promoted, so the user never gets a model that fails to load
       // hours later with nothing to explain it.
       await expect(receiver.sink.finalize()).resolves.toBe(false);
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([]);
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([]);
     });
 
     it('are refused when the file came up short', async () => {
@@ -739,10 +741,9 @@ describe('a model arriving on this device', () => {
       await receiver.sink.prepare();
       await stream(receiver.sink, tooSmall);
 
-      // Note the shape of this refusal: a text model that fails its check comes back false, and this one
-      // throws, because the transcription catalog's own validator throws (and deletes the file it rejected).
-      // Both end the transfer; only this one carries a reason the user can read.
-      await expect(receiver.sink.finalize()).rejects.toThrow('too small');
+      // Shared rejects the staged artifact before promotion. The receive transaction
+      // then owns cleanup, so no invalid model reaches the transcription catalog.
+      await expect(receiver.sink.finalize()).resolves.toBe(false);
       await expect(whisperService.listDownloadedModels()).resolves.toEqual([]);
     });
 
@@ -854,14 +855,14 @@ describe('a model arriving on this device', () => {
       });
 
       expect(await sink.blobDestination()).toBe(
-        `${modelManager.getModelsDirectory()}/.sync-packages/${encodeURIComponent(
+        `${modelLibrary.getModelsDirectory()}/.sync-packages/${encodeURIComponent(
           DEVICE,
         )}--${message.id}/legacy-Q4_K_M.gguf.part`,
       );
       await sink.prepare();
       await stream(sink, bytes);
       await expect(sink.finalize()).resolves.toBe(true);
-      await expect(modelManager.getDownloadedModels()).resolves.toEqual([
+      await expect(modelLibrary.getDownloadedModels()).resolves.toEqual([
         expect.objectContaining({
           id: 'off-grid/legacy-text/legacy-Q4_K_M.gguf',
         }),
@@ -893,7 +894,7 @@ describe('a model arriving on this device', () => {
         await expect(receiver.sink.finalize()).resolves.toBe(true);
       }
 
-      const present = (await RNFS.readDir(modelManager.getModelsDirectory()))
+      const present = (await RNFS.readDir(modelLibrary.getModelsDirectory()))
         .filter(entry => entry.isFile())
         .map(entry => entry.name);
       expect(present.sort()).toEqual([

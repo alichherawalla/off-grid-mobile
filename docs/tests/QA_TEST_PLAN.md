@@ -1309,7 +1309,7 @@
 | # | Step | Expected |
 |---|------|----------|
 | 1 | "Star on GitHub" | Opens external browser to GitHub repo |
-| 2 | "Share on X" | Opens X/Twitter with pre-filled tweet |
+| 2 | "Rate on the App Store" / "Rate on Google Play" | Opens this platform's store rating page |
 
 ### 22.4 Reset Onboarding (debug) (P2)
 
@@ -1407,7 +1407,7 @@
 
 | # | Step | Expected |
 |---|------|----------|
-| 1 | Trigger met | Sheet appears: "Star on GitHub", "Share on X", "Maybe later" |
+| 1 | Trigger met | Sheet appears: "Star on GitHub", the platform rating action, "Maybe later" |
 | 2 | Tap GitHub or X | Opens link. `hasEngagedSharePrompt` flag set. Never shown again |
 | 3 | "Maybe later" | Dismisses without setting flag. Will show again |
 

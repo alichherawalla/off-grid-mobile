@@ -124,6 +124,7 @@ export function createKeygenFake(): KeygenFake {
     type: 'licenses',
     attributes: {
       expiry: licence.expiry ?? null,
+      maxMachines: licence.seats,
       name: licence.name ?? null,
       metadata: licence.metadata ?? {},
     },

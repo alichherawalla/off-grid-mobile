@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * INTEGRATION (residency/lifecycle INVARIANT) — load → resident/ready, unload → not resident, delete →
  * removed from the library. Drives the REAL activeModelService + modelResidencyManager + llmService over
@@ -11,15 +12,25 @@
  */
 import { installNativeBoundary, GB, requireRTL } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
+import { isResidentType } from '../../harness/modelResidency';
 
 describe('happy — model lifecycle (load / unload / delete)', () => {
   it('loads a text model (resident + ready), unloads it, and deletes it from the library', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
-    const { isModelReady } = require('../../../src/services/engines');
+    const {
+      activeModelService,
+      modelApplication,
+      modelResidencyManager,
+      resetModelApplication,
+    } = require('../../harness/activeModelLifecycle');
+    const {
+      refreshMobileModelServices,
+      selectMobileModel,
+    } = require('../../../src/services/modelServices');
+    const { mobileTextEngineControl } = require('../../../src/services/modelServices/textEngineControl');
+    const { commitModelsList } = require('../../../src/services/adapters/models/library/modelRegistryStorageAdapter');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
      
@@ -27,20 +38,30 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();
     const model = createDownloadedModel({ id: 'llm', engine: 'llama', filePath: '/models/small.gguf' });
-    useAppStore.setState({ downloadedModels: [model], activeModelId: null });
+    await commitModelsList([model]);
+    arrangeLocalSelection('text', null);
+    await resetModelApplication();
+    await refreshMobileModelServices();
 
     // Load — becomes ready + resident.
+    await selectMobileModel({
+      source: 'local',
+      hostId: model.engine,
+      modality: 'text',
+      modelId: model.id,
+    });
     await activeModelService.loadTextModel('llm');
-    expect(isModelReady(model)).toBe(true);
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(mobileTextEngineControl.isReady(model.id)).toBe(true);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(true);
 
     // Unload — no longer ready/resident.
     await activeModelService.unloadTextModel();
-    expect(isModelReady(model)).toBe(false);
-    expect(modelResidencyManager.isResident('text')).toBe(false);
+    expect(mobileTextEngineControl.isReady(model.id)).toBe(false);
+    expect(isResidentType(modelResidencyManager, 'text')).toBe(false);
 
-    // Delete — removed from the library.
-    useAppStore.getState().removeDownloadedModel('llm');
+    // Delete through the Shared application workflow — removed from the library.
+    const removed = await modelApplication().models.remove('llm');
+    expect(removed.ok).toBe(true);
     expect(useAppStore.getState().downloadedModels.find((m: { id: string }) => m.id === 'llm')).toBeUndefined();
   });
 });

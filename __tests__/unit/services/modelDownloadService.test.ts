@@ -1,209 +1,222 @@
-/**
- * ModelDownloadService — the single owner of downloads across all model types.
- * Verifies: merged listing, transition detection + [DL-SM] logging, capability-gated
- * ops (refuse, never a dead op), id→provider routing, and subscribe aggregation.
- */
-import logger from '../../../src/utils/logger';
-import { modelDownloadService } from '../../../src/services/modelDownloadService';
-import { backgroundDownloadService } from '../../../src/services/backgroundDownloadService';
-import type { DownloadProvider, ModelDownload, ModelDownloadType } from '../../../src/services/modelDownloadService/types';
+import type { ModelKind, PersistedModelDownload } from '@offgrid/models';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
 
-// The queue of not-yet-started downloads is owned by backgroundDownloadService; the
-// service maps a uniform id onto it to cancel a "Queued" row that no provider lists.
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
-    getQueuedItems: jest.fn(() => []),
-    cancelQueued: jest.fn(() => false),
+let fixture: MobileApplicationFixture | null = null;
+
+afterEach(async () => {
+  await fixture?.dispose();
+  fixture = null;
+});
+
+const record = (
+  id: string,
+  fileName: string,
+  kind: ModelKind = 'text',
+  options: {
+    phase?: PersistedModelDownload['phase'];
+    transferId?: string;
+    updatedAt?: number;
+  } = {},
+): PersistedModelDownload => ({
+  manifest: {
+    id,
+    modelId: id,
+    kind,
+    revision: 'main',
+    artifacts: [
+      {
+        id: 'primary',
+        name: fileName,
+        role: 'primary',
+        required: true,
+        localName: fileName,
+        url: `https://example.test/${fileName}`,
+      },
+    ],
   },
-}));
-const mockBg = backgroundDownloadService as unknown as {
-  getQueuedItems: jest.Mock;
-  cancelQueued: jest.Mock;
-};
+  phase: options.phase ?? 'downloading',
+  artifacts: [
+    {
+      artifactId: 'primary',
+      phase: options.phase ?? 'downloading',
+      ...(options.transferId ? { transferId: options.transferId } : {}),
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    },
+  ],
+  createdAt: 1,
+  updatedAt: options.updatedAt ?? 1,
+  attempt: options.updatedAt ?? 1,
+});
 
-jest.spyOn(logger, 'log').mockImplementation(() => {});
-
-const CAPS_FULL = { cancel: true, retry: true, remove: true, resumable: true, determinateProgress: true };
-
-function makeProvider(modelType: ModelDownloadType, initial: ModelDownload[]): DownloadProvider & {
-  _set: (d: ModelDownload[]) => void; _onChange?: () => void;
-  retry: jest.Mock; cancel: jest.Mock; remove: jest.Mock;
-} {
-  let items = initial;
-  const p: any = {
-    modelType,
-    list: jest.fn(async () => items),
-    retry: jest.fn(async () => {}),
-    cancel: jest.fn(async () => {}),
-    remove: jest.fn(async () => {}),
-    subscribe: (cb: () => void) => { p._onChange = cb; return () => { p._onChange = undefined; }; },
-    _set: (d: ModelDownload[]) => { items = d; },
-  };
-  return p;
+async function start(
+  records: readonly PersistedModelDownload[],
+): Promise<void> {
+  const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  await seedMobileDownloadJournal(records);
+  fixture = await startMobileApplicationFixture();
+  await fixture.refreshModels();
 }
 
-const dl = (id: string, modelType: ModelDownloadType, over: Partial<ModelDownload> = {}): ModelDownload => ({
-  id, modelType, name: id, sizeBytes: 100, bytesDownloaded: 0, progress: 0,
-  status: 'downloading', capabilities: CAPS_FULL, ...over,
-});
+const rows = () => fixture!.application.models.snapshot().control.downloads;
 
-beforeEach(() => {
-  modelDownloadService._reset();
-  (logger.log as jest.Mock).mockClear();
-  mockBg.getQueuedItems.mockReset().mockReturnValue([]);
-  mockBg.cancelQueued.mockReset().mockReturnValue(false);
-});
-
-describe('ModelDownloadService', () => {
-  it('merges downloads from every registered provider', async () => {
-    modelDownloadService.register(makeProvider('text', [dl('text:a', 'text')]));
-    modelDownloadService.register(makeProvider('stt', [dl('stt:b', 'stt')]));
-    const list = await modelDownloadService.list();
-    expect(list.map(d => d.id).sort()).toEqual(['stt:b', 'text:a']);
-  });
-
-  it('logs a [DL-SM] line on each status transition', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
-    modelDownloadService.register(p);
-    await modelDownloadService.list(); // new → downloading
-    p._set([dl('text:a', 'text', { status: 'completed', progress: 1, bytesDownloaded: 100 })]);
-    await modelDownloadService.list(); // downloading → completed
-
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]).filter((l: string) => l.includes('[DL-SM] text:a'));
-    expect(lines.some((l: string) => l.includes('new → downloading'))).toBe(true);
-    expect(lines.some((l: string) => l.includes('downloading → completed'))).toBe(true);
-  });
-
-  it('logs when a download disappears (removed)', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text')]);
-    modelDownloadService.register(p);
-    await modelDownloadService.list();
-    p._set([]);
-    await modelDownloadService.list();
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('text:a') && l.includes('gone (removed)'))).toBe(true);
-  });
-
-  it('routes retry/cancel/remove to the owning provider by id prefix', async () => {
-    const text = makeProvider('text', [dl('text:a', 'text')]);
-    const stt = makeProvider('stt', [dl('stt:b', 'stt')]);
-    modelDownloadService.register(text);
-    modelDownloadService.register(stt);
-    await modelDownloadService.list();
-    await modelDownloadService.retry('text:a');
-    await modelDownloadService.remove('stt:b');
-    expect(text.retry).toHaveBeenCalledWith('text:a');
-    expect(stt.remove).toHaveBeenCalledWith('stt:b');
-    expect(text.remove).not.toHaveBeenCalled();
-  });
-
-  it('dispatches even with a cold cache (refreshes list, routes by the download modelType)', async () => {
-    const text = makeProvider('text', [dl('text:a', 'text')]);
-    modelDownloadService.register(text);
-    // No list() called first — dispatch must refresh authoritatively, then route.
-    await modelDownloadService.retry('text:a');
-    expect(text.retry).toHaveBeenCalledWith('text:a');
-  });
-
-  it('REFUSES an op when the capability is false (no dead op), and logs it', async () => {
-    const tts = makeProvider('tts', [dl('tts:k', 'tts', { capabilities: { ...CAPS_FULL, cancel: false } })]);
-    modelDownloadService.register(tts);
-    await modelDownloadService.list();
-    await modelDownloadService.cancel('tts:k');
-    expect(tts.cancel).not.toHaveBeenCalled();
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('cancel tts:k REFUSED'))).toBe(true);
-  });
-
-  it('refuses (no throw) when no provider owns the id', async () => {
-    await expect(modelDownloadService.retry('image:zzz')).resolves.toBeUndefined();
-  });
-
-  it('cancels a queued text download using the SAME id the View dispatches (text:<modelKey>, not text:<repo>)', async () => {
-    // A queued text start carries modelId=<repo> but modelKey=<repo/file>. Its started-row
-    // id is text:<modelKey> (textProvider.list keys on modelKey), so the View dispatches
-    // text:m/a/a.gguf — NOT text:m/a. cancelQueuedStart must match on the modelKey-derived
-    // id via queuedUniformId, or cancelling a Queued text row silently no-ops and it
-    // downloads anyway. (Before the fix cancelQueuedStart derived text:m/a and missed.)
-    mockBg.getQueuedItems.mockReturnValue([
-      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
-    ]);
-    mockBg.cancelQueued.mockReturnValue(true);
-    modelDownloadService.register(makeProvider('text', [dl('text:other', 'text')]));
-
-    await modelDownloadService.cancel('text:m/a/a.gguf');
-
-    // Routed to the queue owner by the SAME uniform id, using the queued item's modelKey.
-    expect(mockBg.cancelQueued).toHaveBeenCalledWith('m/a/a.gguf');
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('cancel text:m/a/a.gguf → cancelled queued start'))).toBe(true);
-  });
-
-  it('does NOT match a queued text download by its bare-repo id (text:<repo>)', async () => {
-    // The bare-repo id is never what the View dispatches; matching it would be the old bug.
-    mockBg.getQueuedItems.mockReturnValue([
-      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
-    ]);
-    mockBg.cancelQueued.mockReturnValue(true);
-    await modelDownloadService.cancel('text:m/a');
-    expect(mockBg.cancelQueued).not.toHaveBeenCalled();
-  });
-
-  it('does NOT route retry to the queue (a not-yet-started item cannot be retried)', async () => {
-    mockBg.getQueuedItems.mockReturnValue([
-      { modelKey: 'm/a/a.gguf', modelId: 'm/a', fileName: 'a.gguf', modelType: 'text', totalBytes: 100 },
-    ]);
-    await modelDownloadService.retry('text:m/a/a.gguf');
-    expect(mockBg.cancelQueued).not.toHaveBeenCalled();
-  });
-
-  it('reconcile() lets a provider strand an un-resumable in-flight download as error (app-kill), logged', async () => {
-    // iOS-style backend: was downloading when the app was killed, can't resume.
-    const p = makeProvider('stt', [dl('stt:base', 'stt', { status: 'downloading', capabilities: { ...CAPS_FULL, resumable: false } })]);
-    (p as any).reconcile = jest.fn(async () => {
-      p._set([dl('stt:base', 'stt', { status: 'error', error: 'interrupted — retry', capabilities: { ...CAPS_FULL, resumable: false } })]);
+describe('public Shared model-download owner', () => {
+  it('merges durable downloads across model kinds', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'text-transfer',
+      modelId: 'text:a',
+      fileName: 'a.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
     });
-    modelDownloadService.register(p);
-    await modelDownloadService.list();      // new → downloading
-    await modelDownloadService.reconcile(); // provider strands it → downloading → error
-
-    expect((p as any).reconcile).toHaveBeenCalled();
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('stt:base') && l.includes('downloading → error'))).toBe(true);
-    expect(lines.some((l: string) => l.includes('reconcile start'))).toBe(true);
+    boundary.download!.seedActive({
+      downloadId: 'stt-transfer',
+      modelId: 'stt:b',
+      fileName: 'b.bin',
+      modelType: 'stt',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    await start([
+      record('text:a', 'a.gguf', 'text', { transferId: 'text-transfer' }),
+      record('stt:b', 'b.bin', 'transcription', { transferId: 'stt-transfer' }),
+    ]);
+    expect(
+      rows()
+        .map(item => item.modelId)
+        .sort(),
+    ).toEqual(['stt:b', 'text:a']);
   });
 
-  it('reconcile() tolerates a provider without a reconcile hook (resumable backend)', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
-    modelDownloadService.register(p); // no reconcile() defined
-    await expect(modelDownloadService.reconcile()).resolves.toBeUndefined();
+  it('cancels the exact Shared-owned transfer and removes the native task', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'native-a',
+      modelId: 'm/a',
+      fileName: 'a.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    await start([
+      record('m/a/a.gguf', 'a.gguf', 'text', { transferId: 'native-a' }),
+    ]);
+    const outcome = await fixture!.application.models.cancelDownload({
+      downloadId: rows()[0].downloadId,
+    });
+    expect(outcome).toEqual(expect.objectContaining({ ok: true, value: true }));
+    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(
+      'native-a',
+      false,
+    );
+    expect(boundary.download!.active()).toEqual([]);
   });
 
-  it('self-drives transition logging on a provider change WHEN a consumer is subscribed', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
-    modelDownloadService.register(p);
-    modelDownloadService.subscribe(() => {}); // a consumer is observing → self-list runs
-    p._onChange?.();                           // a progress/status change fires
-    await new Promise(r => setTimeout(r, 360));
-    const lines = (logger.log as jest.Mock).mock.calls.map(c => c[0]);
-    expect(lines.some((l: string) => l.includes('text:a') && l.includes('new → downloading'))).toBe(true);
+  it('does not confuse a bare repository id with a file-specific download id', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'native-a',
+      modelId: 'm/a',
+      fileName: 'a.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    await start([
+      record('m/a/a.gguf', 'a.gguf', 'text', { transferId: 'native-a' }),
+    ]);
+    const outcome = await fixture!.application.models.cancelDownload({
+      downloadId: 'm/a',
+    });
+    expect(outcome).toEqual(
+      expect.objectContaining({ ok: true, value: false }),
+    );
+    expect(boundary.download!.module.stopDownload).not.toHaveBeenCalled();
+    expect(boundary.download!.active()).toHaveLength(1);
   });
 
-  it('does NOT self-list (no disk scan) when NO consumer is subscribed — avoids download-time lag', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text', { status: 'downloading' })]);
-    modelDownloadService.register(p); // no subscriber
-    (p.list as jest.Mock).mockClear();
-    p._onChange?.(); // progress tick
-    await new Promise(r => setTimeout(r, 360));
-    expect(p.list).not.toHaveBeenCalled();
+  it('refuses retry when no durable download owns the id', async () => {
+    installNativeBoundary({ download: true, fs: true });
+    await start([]);
+    await expect(
+      fixture!.application.models.retryDownload({
+        downloadId: 'image:unknown',
+      }),
+    ).resolves.toEqual(expect.objectContaining({ ok: false }));
   });
 
-  it('notifies subscribers when a provider reports a change', async () => {
-    const p = makeProvider('text', [dl('text:a', 'text')]);
-    modelDownloadService.register(p);
+  it('retains an interrupted record when its native transfer is gone', async () => {
+    installNativeBoundary({
+      download: true,
+      fs: true,
+      ram: {
+        platform: 'ios',
+        totalBytes: 8 * 1024 ** 3,
+        availBytes: 4 * 1024 ** 3,
+      },
+    });
+    await start([
+      record('stt:base', 'base.bin', 'transcription', {
+        transferId: 'missing-native',
+      }),
+    ]);
+    expect(rows()).toEqual([
+      expect.objectContaining({ modelId: 'stt:base', status: 'interrupted' }),
+    ]);
+  });
+
+  it('keeps the newest durable attempt for one logical model', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'new-native',
+      modelId: 'text:a',
+      fileName: 'a.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    await start([
+      record('text:a', 'a.gguf', 'text', { phase: 'failed', updatedAt: 1 }),
+      record('text:a', 'a.gguf', 'text', {
+        transferId: 'new-native',
+        updatedAt: 2,
+      }),
+    ]);
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toEqual(
+      expect.objectContaining({ modelId: 'text:a', status: 'downloading' }),
+    );
+  });
+
+  it('publishes lifecycle changes to application subscribers', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'native-a',
+      modelId: 'text:a',
+      fileName: 'a.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    await start([
+      record('text:a', 'a.gguf', 'text', { transferId: 'native-a' }),
+    ]);
     const listener = jest.fn();
-    modelDownloadService.subscribe(listener);
-    p._onChange?.();
+    const unsubscribe = fixture!.application.models.subscribe(listener);
+    await fixture!.application.models.cancelDownload({
+      downloadId: rows()[0].downloadId,
+    });
     expect(listener).toHaveBeenCalled();
+    unsubscribe();
   });
 });

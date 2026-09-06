@@ -1,7 +1,7 @@
 /**
  * T115 (checklist Area 3) — VOICE twin of T111: a voice-note send on a memory-tight device reclaims the idle
  * whisper (STT) sidecar. After the note transcribes (whisper USED, then idle), sending the transcript is a
- * generation turn that goes through the same handleSendFn → reclaimSttForGeneration path as a typed turn, so
+ * generation turn that goes through the shared chat reclaim policy as a typed turn, so
  * on a ≤6GB device whisper is freed for the LLM working set. The reply still renders.
  *
  * Real user behavior: enter voice mode (real gesture), record a voice note and release to send (real
@@ -33,19 +33,20 @@ describe('T115 (rendered) — voice-note send reclaims idle STT on a tight devic
     });
     // Whisper resident (real download+select) BEFORE render (the order the working voice tests use).
     await h.setupWhisperModel();
+    await h.loadSelectedWhisperOnDemand();
     h.render();
      
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
     const { hardwareService } = require('../../../src/services/hardware');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
      
     const residentTypes = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type);
 
     // Enter voice mode (real gesture) on the roomy device.
     await h.enterVoiceMode();
-    // Precondition (setup check only): text + whisper both resident before the turn.
-    expect(residentTypes()).toEqual(expect.arrayContaining(['text', 'whisper']));
+    // Precondition (setup check only): text + canonical transcription route are resident before the turn.
+    expect(residentTypes()).toEqual(expect.arrayContaining(['text', 'transcription']));
 
     // Memory tightens to ≤6GB (the reclaim gate keys on TOTAL).
     h.boundary.setRam({ platform: 'android', totalBytes: 6 * GB, availBytes: 5 * GB });

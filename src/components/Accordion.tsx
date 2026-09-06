@@ -8,9 +8,13 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 interface AccordionProps {
   /** Rendered as an uppercase label whisper, so pass it in sentence case. */
   title: string;
+  /** A single-line preview of the newest or most relevant content in the closed section. */
+  preview?: string;
   /** Rendered beside the chevron: the one fact worth seeing while the section is closed. */
   right?: ReactNode;
   defaultOpen?: boolean;
+  /** Use plain when the disclosure already sits inside another card. */
+  variant?: 'card' | 'plain';
   testID?: string;
   children: ReactNode;
 }
@@ -27,8 +31,10 @@ interface AccordionProps {
  */
 export const Accordion: React.FC<AccordionProps> = ({
   title,
+  preview,
   right,
   defaultOpen = false,
+  variant = 'card',
   testID,
   children,
 }) => {
@@ -37,17 +43,24 @@ export const Accordion: React.FC<AccordionProps> = ({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, variant === 'plain' && styles.plainCard]}>
       <TouchableOpacity
         style={styles.header}
         activeOpacity={0.72}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={title}
+        accessibilityLabel={preview ? `${title}. Latest: ${preview}` : title}
         onPress={() => setOpen(current => !current)}
         testID={testID}
       >
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, preview && styles.titleWithPreview]}>
+          {title}
+        </Text>
+        {preview ? (
+          <Text style={styles.preview} numberOfLines={1} ellipsizeMode="tail">
+            {preview}
+          </Text>
+        ) : null}
         {right}
         <Icon
           name={open ? 'chevron-up' : 'chevron-down'}
@@ -68,6 +81,13 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     ...shadows.small,
   },
+  plainCard: {
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+    boxShadow: 'none',
+  },
   header: {
     minHeight: 44,
     flexDirection: 'row' as const,
@@ -80,6 +100,14 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
+    flex: 1,
+  },
+  titleWithPreview: {
+    flex: 0,
+  },
+  preview: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
     flex: 1,
   },
   content: {

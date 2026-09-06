@@ -29,6 +29,110 @@ export interface RecommendedConfig {
   chips?: string[];
 }
 
+interface DenseModelCardContentProps {
+  model: {
+    name: string;
+    author: string;
+    description?: string;
+    downloads?: number;
+    modelType?: 'text' | 'vision' | 'code';
+    paramCount?: number;
+    minRamGB?: number;
+  };
+  fileSize: number;
+  quantization?: string;
+  isVisionModel: boolean;
+  supportsAcceleration?: boolean;
+  recommended?: RecommendedConfig;
+  isTrending?: boolean;
+  credibilitySource?: ModelCredibility['source'];
+  credibilityLabel?: string;
+  incompatibleReason?: string;
+}
+
+/**
+ * Dense rows use typography for hierarchy instead of a cluster of badges. The
+ * name and outcome stay primary; technical facts share one scannable line.
+ */
+export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
+  model,
+  fileSize,
+  quantization,
+  isVisionModel,
+  supportsAcceleration,
+  recommended,
+  isTrending,
+  credibilitySource,
+  credibilityLabel,
+  incompatibleReason,
+}) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
+  const description = cardDescription(model.description, recommended?.highlightText);
+  const customFacts = recommended?.chips;
+  const modelType = isVisionModel || model.modelType === 'vision'
+    ? 'Vision'
+    : model.modelType === 'code'
+      ? 'Code'
+      : model.modelType === 'text'
+        ? 'Text'
+        : undefined;
+  const facts = customFacts ?? [
+    fileSize > 0 ? huggingFaceService.formatFileSize(fileSize) : undefined,
+    quantization,
+    modelType,
+    model.paramCount ? `${model.paramCount}B params` : undefined,
+    model.minRamGB ? `${model.minRamGB}GB+ RAM` : undefined,
+    supportsAcceleration ? 'NPU/GPU' : undefined,
+    model.downloads ? `${formatCompactNumber(model.downloads)} dl` : undefined,
+    incompatibleReason,
+  ].filter((value): value is string => !!value);
+  const isVerified = credibilitySource === 'verified-quantizer';
+  const sourceLabels = [
+    model.author,
+    isVerified ? undefined : credibilityLabel,
+    recommended
+      ? (recommended.pillLabel ?? 'Recommended')
+      : (isTrending ? 'Trending' : undefined),
+  ].filter((value): value is string => !!value);
+
+  return (
+    <>
+      <View style={styles.denseTitleRow}>
+        <Text style={styles.denseName} numberOfLines={1}>{model.name}</Text>
+        <View style={styles.denseSourceGroup}>
+          {isVerified && (
+            <MaterialIcon
+              name="verified"
+              size={12}
+              color={colors.primary}
+              accessibilityLabel="Verified"
+            />
+          )}
+          <Text style={styles.denseSource} numberOfLines={1}>
+            {sourceLabels.join(' · ')}
+          </Text>
+          {(recommended || isTrending) && (
+            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
+          )}
+        </View>
+      </View>
+      {!!description && (
+        <Text style={styles.denseDescription} numberOfLines={1}>{description}</Text>
+      )}
+      {facts.length > 0 && (
+        <Text style={styles.denseMeta} numberOfLines={1}>{facts.join(' · ')}</Text>
+      )}
+    </>
+  );
+};
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
+
 /**
  * The ONE description string a card shows: the model's description plus any
  * recommended highlight line, deduped (a curated entry whose description IS its
@@ -40,148 +144,6 @@ function cardDescription(description?: string, highlightText?: string): string |
   const unique = parts.filter((v, i) => parts.indexOf(v) === i);
   return unique.length ? unique.join(' ') : undefined;
 }
-
-interface CompactModelCardContentProps {
-  model: {
-    name: string;
-    author: string;
-    description?: string;
-    downloads?: number;
-    modelType?: 'text' | 'vision' | 'code';
-    paramCount?: number;
-    minRamGB?: number;
-  };
-  credibility?: ModelCredibility;
-  credibilityInfo: CredibilityInfo | null;
-  isTrending?: boolean;
-  recommended?: RecommendedConfig;
-  /** Model can run on the GPU/NPU (LiteRT or Q4_0/Q8_0 GGUF) → show the badge. */
-  supportsAcceleration?: boolean;
-}
-
-function formatNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
-}
-
-type ModelType = 'text' | 'vision' | 'code';
-
-function modelTypeLabel(modelType: ModelType): string {
-  if (modelType === 'vision') return 'Vision';
-  if (modelType === 'code') return 'Code';
-  return 'Text';
-}
-
-function modelTypeBadgeStyle(
-  styles: ReturnType<typeof createStyles>,
-  modelType: ModelType,
-) {
-  if (modelType === 'vision') return styles.visionBadge;
-  if (modelType === 'code') return styles.codeBadge;
-  return null;
-}
-
-function modelTypeTextStyle(
-  styles: ReturnType<typeof createStyles>,
-  modelType: ModelType,
-) {
-  if (modelType === 'vision') return styles.visionText;
-  if (modelType === 'code') return styles.codeText;
-  return null;
-}
-
-export const CompactModelCardContent: React.FC<CompactModelCardContentProps> = ({
-  model,
-  credibility,
-  credibilityInfo,
-  isTrending,
-  recommended,
-  supportsAcceleration,
-}) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
-  const description = cardDescription(model.description, recommended?.highlightText);
-
-  return (
-    <>
-      <View style={styles.compactTopRow}>
-        <View style={styles.compactNameGroup}>
-          <Text style={[styles.name, styles.compactName, recommended && styles.compactNameRecommended]} numberOfLines={1}>
-            {model.name}
-          </Text>
-          <View style={styles.authorTag}>
-            <Text style={styles.authorTagText}>{model.author}</Text>
-          </View>
-          {credibilityInfo && (
-            <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
-              {credibility?.source === 'lmstudio' && (
-                <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
-              )}
-              <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
-                {credibilityInfo.label}
-              </Text>
-            </View>
-          )}
-          {(isTrending || recommended) && <MaterialIcon name="whatshot" size={14} color={colors.trending} />}
-          {recommended && (
-            <View style={styles.recommendedPill}>
-              <Text style={styles.recommendedPillText}>{recommended.pillLabel ?? 'Recommended'}</Text>
-            </View>
-          )}
-        </View>
-        {model.downloads !== undefined && model.downloads > 0 && (
-          <View style={styles.authorTag}>
-            <Text style={styles.authorTagText}>{formatNumber(model.downloads)} dl</Text>
-          </View>
-        )}
-      </View>
-      {/* One common description line for EVERY compact card: model description +
-          any recommended highlight, same slot (under the name), same muted style. */}
-      {!!description && (
-        <Text style={styles.descriptionCompact} numberOfLines={2}>
-          {description}
-        </Text>
-      )}
-      {recommended?.chips && recommended.chips.length > 0 ? (
-        <View style={[styles.infoRow, styles.infoRowCompact]}>
-          {recommended.chips.map(chip => (
-            <View key={chip} style={styles.recommendedChip}>
-              <Text style={styles.recommendedChipText}>{chip}</Text>
-            </View>
-          ))}
-        </View>
-      ) : (model.modelType || model.paramCount || supportsAcceleration) && (
-        <View style={[styles.infoRow, styles.infoRowCompact]}>
-          {/* Capability badge: this model can run on the GPU/NPU (a LiteRT model or a
-              Q4_0/Q8_0 GGUF). K-quants silently fall back to CPU, so they get no badge. */}
-          {supportsAcceleration && (
-            <View style={styles.accelBadge} testID="npu-gpu-badge">
-              <Text style={styles.accelBadgeText}>NPU/GPU</Text>
-            </View>
-          )}
-          {model.modelType && (
-            <View style={[styles.infoBadge, modelTypeBadgeStyle(styles, model.modelType)]}>
-              <Text style={[styles.infoText, modelTypeTextStyle(styles, model.modelType)]}>
-                {modelTypeLabel(model.modelType)}
-              </Text>
-            </View>
-          )}
-          {model.paramCount && (
-            <View style={styles.infoBadge}>
-              <Text style={styles.infoText}>{model.paramCount}B params</Text>
-            </View>
-          )}
-          {model.minRamGB && (
-            <View style={styles.infoBadge}>
-              <Text style={styles.infoText}>{model.minRamGB}GB+ RAM</Text>
-            </View>
-          )}
-        </View>
-      )}
-    </>
-  );
-};
 
 // ── Standard (non-compact) header ──
 
@@ -355,6 +317,8 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
 interface ModelCardActionsProps {
   isDownloaded: boolean | undefined;
   isDownloading: boolean | undefined;
+  isQueued: boolean | undefined;
+  isPaused: boolean | undefined;
   isActive: boolean | undefined;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
@@ -367,11 +331,11 @@ interface ModelCardActionsProps {
   onCancel: (() => void) | undefined;
 }
 
-const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
-function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, accessibilityLabel, styles }: {
   icon: string; color: string; haptic: string; onPress: () => void;
-  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+  disabled?: boolean; testID?: string; accessibilityLabel?: string; styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <TouchableOpacity
@@ -380,6 +344,7 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
       disabled={disabled}
       hitSlop={HIT_SLOP}
       testID={testID}
+      accessibilityLabel={accessibilityLabel}
     >
       <Icon name={icon} size={16} color={color} />
     </TouchableOpacity>
@@ -401,21 +366,21 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
       ) : (
         onRepairVision && <ActionButton icon="tool" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
-      {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
-      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
+      {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} testID={tid('select')} accessibilityLabel="Use this model" styles={styles} />}
+      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} testID={tid('delete')} accessibilityLabel="Delete this model" styles={styles} />}
     </>
   );
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isActive, isCompatible,
+  isDownloaded, isDownloading, isQueued, isPaused, isActive, isCompatible,
   testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
-  if (isDownloading && onCancel) {
+  if ((isDownloading || isQueued || isPaused) && onCancel) {
     return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
   }
   if (!isDownloaded && onDownload) {
@@ -426,5 +391,3 @@ export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
   }
   return null;
 };
-
-

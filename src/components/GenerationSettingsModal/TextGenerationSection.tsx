@@ -18,6 +18,7 @@ import {
   ModelLoadingModeSelector,
   ShowGenerationDetailsToggle,
   SpeculativeDecodingToggle,
+  ThinkingBudgetSelector,
 } from '../settings/textGenAdvancedSections';
 
 const ChatSettingSlider: React.FC<{ setting: NumericSettingModel }> = ({
@@ -40,6 +41,7 @@ export const TextGenerationSection: React.FC = () => {
       {basicSettings.map(setting => (
         <ChatSettingSlider key={setting.key} setting={setting} />
       ))}
+      {!isLiteRT && <ThinkingBudgetSelector />}
       <ShowGenerationDetailsToggle />
       <AdvancedToggle
         isExpanded={showAdvanced}

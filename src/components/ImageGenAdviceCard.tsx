@@ -6,6 +6,7 @@ import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { AnimatedPressable } from './AnimatedPressable';
 import { useAppStore } from '../stores';
+import { useActiveLocalModelId } from '../hooks/useActiveMobileModel';
 import { getImageGenAdvice } from '../utils/imageGenAdvice';
 
 /**
@@ -21,7 +22,9 @@ export const ImageGenAdviceCard: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const [dismissed, setDismissed] = useState(false);
-  const { settings, downloadedImageModels, activeImageModelId } = useAppStore();
+  const settings = useAppStore(s => s.settings);
+  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
+  const activeImageModelId = useActiveLocalModelId('image');
   const backend = downloadedImageModels.find(m => m.id === activeImageModelId)?.backend;
 
   const advice = getImageGenAdvice({

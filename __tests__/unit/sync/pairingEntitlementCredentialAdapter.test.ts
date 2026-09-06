@@ -1,5 +1,4 @@
 import {
-  PERSONAL_MESH_DEVICE_CAP,
   PersonalMeshEntitlementError,
   type PairingEntitlementCredential,
   type PersonalMeshReconciliationSnapshot,
@@ -30,6 +29,8 @@ import { createKeygenFake, type KeygenFake } from '../../harness/keygenFake';
  * coordinators, the registry, the seat accounting and the reconciliation are all real.
  */
 describe('two devices agreeing about a shared licence', () => {
+  const DEFAULT_MAX_DEVICES = 3;
+  const FULL_MESH_MAX_DEVICES = 5;
   const LICENCE_KEY = 'OFFGRID-TEST-LICENCE';
   const OTHER_LICENCE_KEY = 'OFFGRID-OTHER-LICENCE';
   /** This phone's hardware identity, which is also its seat's identity on the licence. */
@@ -119,12 +120,14 @@ describe('two devices agreeing about a shared licence', () => {
   function credentialFrom(
     key: string,
     entitlementId: string,
+    maxDevices = DEFAULT_MAX_DEVICES,
   ): PairingEntitlementCredential {
     return {
       version: 1,
       entitlementId,
       secret: key,
       expiresAt: null,
+      maxDevices,
       verifiedAt: 1_700_000_000_000,
     };
   }
@@ -141,7 +144,7 @@ describe('two devices agreeing about a shared licence', () => {
   async function meshIsFull(): Promise<void> {
     const fullLicenceId = keygen.addLicence({
       key: FULL_LICENCE_KEY,
-      seats: PERSONAL_MESH_DEVICE_CAP + 2,
+      seats: FULL_MESH_MAX_DEVICES + 2,
     });
     // Activated first, so it is the one that has been on the licence - and away - longest.
     keygen.activate({
@@ -150,7 +153,7 @@ describe('two devices agreeing about a shared licence', () => {
       name: 'Old MacBook',
       platform: 'macos',
     });
-    for (let index = 1; index < PERSONAL_MESH_DEVICE_CAP; index += 1) {
+    for (let index = 1; index < FULL_MESH_MAX_DEVICES; index += 1) {
       keygen.activate({
         key: FULL_LICENCE_KEY,
         fingerprint: `fp-device-${index}`,
@@ -163,6 +166,8 @@ describe('two devices agreeing about a shared licence', () => {
       key: FULL_LICENCE_KEY,
       entitlementId: fullLicenceId,
       expiry: null,
+      maxMachines: FULL_MESH_MAX_DEVICES,
+      tier: null,
       verifiedAt: 1_700_000_000_000,
     });
   }
@@ -212,6 +217,8 @@ describe('two devices agreeing about a shared licence', () => {
       key: LICENCE_KEY,
       entitlementId: licenceId,
       expiry: null,
+      maxMachines: DEFAULT_MAX_DEVICES,
+      tier: null,
       verifiedAt: 1_700_000_000_000,
     });
   }
@@ -305,7 +312,7 @@ describe('two devices agreeing about a shared licence', () => {
       // has been away longest, which is the only choice a person would accept without being asked.
       expect(fingerprintsOnFullLicence()).not.toContain('fp-away-longest');
       expect(fingerprintsOnFullLicence()).toHaveLength(
-        PERSONAL_MESH_DEVICE_CAP - 1,
+        FULL_MESH_MAX_DEVICES - 1,
       );
 
       await adapter.commitExport(prepared.id);
@@ -314,7 +321,7 @@ describe('two devices agreeing about a shared licence', () => {
       // Committing and finalizing make it permanent - they retire this device's local trust in the evicted
       // device - and take nothing further off the licence.
       expect(fingerprintsOnFullLicence()).toHaveLength(
-        PERSONAL_MESH_DEVICE_CAP - 1,
+        FULL_MESH_MAX_DEVICES - 1,
       );
     });
 
@@ -329,7 +336,7 @@ describe('two devices agreeing about a shared licence', () => {
       // The pairing failed after the place was given up, so the device evicted for it is put back. Left as
       // it was, the user would have lost a device and gained nothing for it.
       expect(fingerprintsOnFullLicence()).toContain('fp-away-longest');
-      expect(fingerprintsOnFullLicence()).toHaveLength(PERSONAL_MESH_DEVICE_CAP);
+      expect(fingerprintsOnFullLicence()).toHaveLength(FULL_MESH_MAX_DEVICES);
     });
 
     it('refuses when this phone has no licence to share', async () => {
@@ -760,7 +767,7 @@ describe('two devices agreeing about a shared licence', () => {
       let message = '';
       try {
         await host().prepareImport(
-          credentialFrom(FULL_LICENCE_KEY, fullLicenceId),
+          credentialFrom(FULL_LICENCE_KEY, fullLicenceId, FULL_MESH_MAX_DEVICES),
           thisPhone,
         );
       } catch (error) {
@@ -770,7 +777,7 @@ describe('two devices agreeing about a shared licence', () => {
         'The licensed peer must prepare capacity before this device can register.',
       );
       // Nothing was taken from anyone to make the attempt.
-      expect(fingerprintsOnFullLicence()).toHaveLength(PERSONAL_MESH_DEVICE_CAP);
+      expect(fingerprintsOnFullLicence()).toHaveLength(FULL_MESH_MAX_DEVICES);
     });
 
     it('refuses when the licence itself has no seat left to sell', async () => {

@@ -12,13 +12,14 @@ import { SegmentedRow, BOOL_OPTIONS } from './segmentedRow';
  * speed-up every model will deliver.
  */
 export const SpeculativeDecodingToggle: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const speculativeDecoding = useAppStore(s => s.settings.speculativeDecoding);
+  const updateSettings = useAppStore(s => s.updateSettings);
   return (
     <SegmentedRow<'off' | 'on'>
       label="Speculative Decoding (MTP)"
       description="Drafts several tokens per step and checks them together. Faster on models built with MTP layers; no effect on others. Requires model reload."
       options={BOOL_OPTIONS}
-      current={settings.speculativeDecoding ? 'on' : 'off'}
+      current={speculativeDecoding ? 'on' : 'off'}
       onSelect={(id) => updateSettings({ speculativeDecoding: id === 'on' })}
       testIdFor={(id) => `speculative-${id}-button`}
     />

@@ -9,13 +9,24 @@
  * This mounts the REAL ModelsScreen, arrives at a model's detail via a real search+tap, and asserts the
  * rendered file list against `fileExceedsBudget`'s verdict for each file: the under-budget quant renders,
  * the over-budget quant is absent. Boundary fakes only: native download + fs + RAM (installNativeBoundary)
- * and the HuggingFace network transport. The budget math, screen, hooks, ModelCard all run REAL.
+ * and the HuggingFace network transport. The REAL Mobile composition root (Shared application + download
+ * coordinator) is booted via startMobileApplicationFixture; the budget math, screen, hooks, ModelCard all run REAL.
  *
  * Falsification (DRY): the expected present/absent set is computed from `fileExceedsBudget` itself, so if
  * a caller's inline copy of the formula drifts from the owner (different fraction, wrong comparison, a
  * unit slip), the rendered list stops matching the owner's verdict and this test goes red.
  */
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
+
+let fixture: import("../../harness/mobileApplicationFixture").MobileApplicationFixture | undefined;
+afterEach(async () => { await fixture?.dispose(); fixture = undefined; });
+
+// Boots the REAL Mobile composition root (Shared application + download coordinator) over the fakes.
+// The fit hint flows Mobile device RAM -> Shared's owned budget -> rendered file list; nothing is mocked.
+async function bootApplication() {
+  const { startMobileApplicationFixture } = require("../../harness/mobileApplicationFixture") as typeof import("../../harness/mobileApplicationFixture");
+  fixture = await startMobileApplicationFixture();
+}
 
 const MODEL_ID = 'org/fit-hint';
 
@@ -39,7 +50,7 @@ describe('detail Available Files fit hint matches the owned fileExceedsBudget ve
       },
     }));
 
-     
+    await bootApplication();
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
@@ -102,7 +113,7 @@ describe('detail Available Files fit hint matches the owned fileExceedsBudget ve
       },
     }));
 
-     
+    await bootApplication();
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');

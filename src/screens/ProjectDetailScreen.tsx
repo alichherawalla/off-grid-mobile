@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,15 +15,20 @@ import {
 } from '../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../theme';
 import { createStyles } from './ProjectDetailScreen.styles';
-import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useChatStore, useProjectStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { formatWhen } from '../utils/localTime';
+import { conversationsForProject } from '../utils/projectConversations';
 import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
+import { useMobileModelInventory } from '../hooks/useMobileModelInventory';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
+
+const chatKey = (conversation: Conversation): string => conversation.id;
 
 export const ProjectDetailScreen: React.FC = () => {
   const previewLine = useConversationPreviewLine();
@@ -34,25 +39,25 @@ export const ProjectDetailScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { getProject, deleteProject } = useProjectStore();
-  const {
-    conversations,
-    deleteConversation,
-    setActiveConversation,
-    createConversation,
-  } = useChatStore();
-  const { downloadedModels, activeModelId } = useAppStore();
+  const project = useProjectStore(state =>
+    state.projects.find(p => p.id === projectId),
+  );
+  const deleteProject = useProjectStore(state => state.deleteProject);
+  const conversations = useChatStore(state => state.conversations);
+  const deleteConversation = useChatStore(state => state.deleteConversation);
+  const setActiveConversation = useChatStore(
+    state => state.setActiveConversation,
+  );
+  const createConversation = useChatStore(state => state.createConversation);
+  const activeText = useActiveMobileModel('text').model;
+  const textModels = useMobileModelInventory('text');
 
-  const project = getProject(projectId);
-  const hasModels = downloadedModels.length > 0;
+  const hasModels = textModels.length > 0;
 
-  // Get chats for this project
-  const projectChats = conversations
-    .filter(c => c.projectId === projectId)
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
+  const projectChats = useMemo(
+    () => conversationsForProject(conversations, projectId),
+    [conversations, projectId],
+  );
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -69,7 +74,7 @@ export const ProjectDetailScreen: React.FC = () => {
       );
       return;
     }
-    const modelId = activeModelId || downloadedModels[0]?.id;
+    const modelId = activeText?.id ?? textModels[0]?.id;
     if (modelId) {
       const newConversationId = createConversation(
         modelId,
@@ -93,9 +98,20 @@ export const ProjectDetailScreen: React.FC = () => {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: () => {
-              deleteProject(projectId);
-              navigation.goBack();
+            onPress: async () => {
+              try {
+                await deleteProject(projectId);
+                navigation.goBack();
+              } catch (error: unknown) {
+                setAlertState(
+                  showAlert(
+                    'Project Not Deleted',
+                    error instanceof Error
+                      ? error.message
+                      : 'Failed to delete project',
+                  ),
+                );
+              }
             },
           },
         ],
@@ -131,34 +147,38 @@ export const ProjectDetailScreen: React.FC = () => {
     const preview = previewLine(item.messages);
 
     return (
-      <Swipeable
-        renderRightActions={() => renderChatRightActions(item)}
-        overshootRight={false}
-        containerStyle={styles.swipeableContainer}
-      >
-        <TouchableOpacity
-          style={styles.chatItem}
-          onPress={() => handleChatPress(item)}
+      <View style={styles.chatItemWrapper}>
+        <Swipeable
+          renderRightActions={() => renderChatRightActions(item)}
+          overshootRight={false}
+          containerStyle={styles.swipeableContainer}
         >
-          <View style={styles.chatIcon}>
-            <Icon name="message-circle" size={14} color={colors.textMuted} />
-          </View>
-          <View style={styles.chatContent}>
-            <View style={styles.chatHeader}>
-              <Text style={styles.chatTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
+          <TouchableOpacity
+            style={styles.chatItem}
+            onPress={() => handleChatPress(item)}
+          >
+            <View style={styles.chatIcon}>
+              <Icon name="message-circle" size={14} color={colors.textMuted} />
             </View>
-            {preview ? (
-              <Text style={styles.chatPreview} numberOfLines={1}>
-                {preview}
-              </Text>
-            ) : null}
-          </View>
-          <Icon name="chevron-right" size={14} color={colors.textMuted} />
-        </TouchableOpacity>
-      </Swipeable>
+            <View style={styles.chatContent}>
+              <View style={styles.chatHeader}>
+                <Text style={styles.chatTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.chatDate}>
+                  {formatDate(item.updatedAt)}
+                </Text>
+              </View>
+              {preview ? (
+                <Text style={styles.chatPreview} numberOfLines={1}>
+                  {preview}
+                </Text>
+              ) : null}
+            </View>
+            <Icon name="chevron-right" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        </Swipeable>
+      </View>
     );
   };
 
@@ -264,34 +284,31 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </TouchableOpacity>
 
-          <ScrollView style={styles.sectionList} nestedScrollEnabled>
-            {projectChats.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Icon
-                  name="message-circle"
-                  size={24}
-                  color={colors.textMuted}
+          {projectChats.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Icon name="message-circle" size={24} color={colors.textMuted} />
+              <Text style={styles.emptyStateText}>No chats yet</Text>
+              {hasModels && (
+                <Button
+                  title="Start a Chat"
+                  variant="primary"
+                  size="small"
+                  onPress={handleNewChat}
+                  style={styles.emptyStateButton}
+                  testID="project-start-chat"
                 />
-                <Text style={styles.emptyStateText}>No chats yet</Text>
-                {hasModels && (
-                  <Button
-                    title="Start a Chat"
-                    variant="primary"
-                    size="small"
-                    onPress={handleNewChat}
-                    style={styles.emptyStateButton}
-                    testID="project-start-chat"
-                  />
-                )}
-              </View>
-            ) : (
-              projectChats.map(chat => (
-                <View key={chat.id} style={styles.chatItemWrapper}>
-                  {renderChat({ item: chat })}
-                </View>
-              ))
-            )}
-          </ScrollView>
+              )}
+            </View>
+          ) : (
+            <FlatList
+              style={styles.sectionList}
+              data={projectChats}
+              renderItem={renderChat}
+              keyExtractor={chatKey}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={Platform.OS !== 'android'}
+            />
+          )}
         </View>
       </View>
 

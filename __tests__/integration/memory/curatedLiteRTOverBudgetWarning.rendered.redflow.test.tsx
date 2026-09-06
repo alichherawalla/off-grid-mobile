@@ -23,7 +23,7 @@
  * RED on HEAD: the pre-filter drops BOTH (both exceed 2.0GB), so the E4B card is ABSENT → warning
  * unreachable. GREEN after fix: E4B present + its download tap surfaces the warning; E2B stays hidden.
  *
- * Real ModelDownloadScreen + real hardwareService/memoryBudget/curated registry + real CustomAlert;
+ * Real AdvancedSetupScreen + real hardwareService/memoryBudget/curated registry + real CustomAlert;
  * fakes ONLY at the native RAM-sensor boundary (installNativeBoundary). NEVER mocks our own code.
  */
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
@@ -45,32 +45,32 @@ describe('Curated LiteRT onboarding — an over-budget model that HAS a warning 
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
-    const { ModelDownloadScreen } = require('../../../src/screens/ModelDownloadScreen');
+    const { AdvancedSetupScreen } = require('../../../src/screens/ModelDownloadScreen');
 
     // Prime the RAM cache the same way the screen's own effect does (getDeviceInfo → getTotalMemoryGB
     // reads cachedDeviceInfo). This is a device-boundary read, not our state.
     await hardwareService.getDeviceInfo();
 
     const nav: any = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {}, replace: () => {} };
-    const view = rtl.render(React.createElement(ModelDownloadScreen, { navigation: nav }));
+    const view = rtl.render(React.createElement(AdvancedSetupScreen, { navigation: nav }));
 
     // Wait for the async init effect to settle (loading → loaded).
-    await rtl.waitFor(() => { expect(view.getByText('Set Up Your AI')).toBeTruthy(); }, { timeout: 10000 });
+    await rtl.waitFor(() => { expect(view.getByText('Advanced Setup')).toBeTruthy(); }, { timeout: 10000 });
 
     // The over-budget-but-warnable E4B card IS offered. RED on HEAD: pre-filter dropped it → the
     // curated LiteRT list was empty (both files over budget). Assert on the LiteRT card specifically
     // (its testID + displayName) — the display name "Gemma 4 E2B/E4B" is also reused by a recommended
     // GGUF card, so match the LiteRT surface, not a bare display-name string.
-    const e4bCard = await rtl.waitFor(() => view.getByTestId('litert-model-0'), { timeout: 10000 });
+    const e4bCard = await rtl.waitFor(() => view.getByTestId('onboarding-litert-model-0'), { timeout: 10000 });
     expect(rtl.within(e4bCard).getByText('Gemma 4 E4B')).toBeTruthy();
 
     // The over-budget-with-NO-warning E2B (the OTHER curated LiteRT entry) stays hidden — no safe way
     // to offer it. So exactly ONE curated LiteRT card renders; there is no second one.
-    expect(view.queryByTestId('litert-model-1')).toBeNull();
+    expect(view.queryByTestId('onboarding-litert-model-1')).toBeNull();
 
     // The warning is REACHABLE: the E4B download button is enabled and tapping it surfaces the sheet.
     // (On HEAD isCompatible was false → the button was disabled → even a rendered card couldn't warn.)
-    const e4bDownload = await rtl.waitFor(() => view.getByTestId('litert-model-0-download'), { timeout: 10000 });
+    const e4bDownload = await rtl.waitFor(() => view.getByTestId('onboarding-litert-model-0-download'), { timeout: 10000 });
     await rtl.act(async () => { rtl.fireEvent.press(e4bDownload); });
 
     expect(await rtl.waitFor(() => view.getByText(/may exceed your device's memory/), { timeout: 10000 })).toBeTruthy();

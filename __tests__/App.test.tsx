@@ -69,6 +69,8 @@ const mockModelManager = {
   refreshModelLists: jest.fn(() => Promise.resolve({ textModels: [], imageModels: [] })),
   watchDownload: jest.fn(),
 };
+const mockInitializeProviders = jest.fn(() => Promise.resolve());
+const mockStartNetworkReconnectWatcher = jest.fn();
 
 jest.mock('../src/navigation', () => ({
   AppNavigator: () => null,
@@ -120,7 +122,7 @@ jest.mock('../src/stores', () => ({
 jest.mock('../src/services/downloadHydration', () => ({
   hydrateDownloadStore: jest.fn(() => Promise.resolve()),
 }));
-jest.mock('../src/services/modelDownloadService/registerProviders', () => ({
+jest.mock('../src/services/modelServices/downloadBootstrap', () => ({
   registerCoreDownloadProviders: jest.fn(),
 }));
 jest.mock('../src/services/proLicenseService', () => ({
@@ -133,11 +135,16 @@ jest.mock('../src/hooks/useDownloads', () => ({
   useDownloadListeners: jest.fn(),
 }));
 jest.mock('../src/services/loadPolicySync', () => ({
-  startLoadPolicySync: jest.fn(() => jest.fn()),
+  createLoadPolicySync: jest.fn(() => ({ start: jest.fn(), dispose: jest.fn() })),
+}));
+jest.mock('../src/services/networkReconnect', () => ({
+  startNetworkReconnectWatcher: mockStartNetworkReconnectWatcher,
+  stopNetworkReconnectWatcher: jest.fn(),
 }));
 jest.mock('../src/utils/debugLogFile', () => ({
   initDebugLogFile: jest.fn(),
   appendDebugLine: jest.fn(),
+  stopDebugLogFile: jest.fn(),
 }));
 
 jest.mock('../src/services', () => ({
@@ -145,7 +152,7 @@ jest.mock('../src/services', () => ({
     getDeviceInfo: jest.fn(() => Promise.resolve({ totalMemory: 8 * 1024 * 1024 * 1024 })),
     getModelRecommendation: jest.fn(() => ({ maxParameters: 7, recommendedQuantization: 'Q4_K_M' })),
   },
-  modelManager: mockModelManager,
+  modelLibrary: mockModelManager,
   authService: {
     hasPassphrase: jest.fn(() => Promise.resolve(false)),
   },
@@ -153,26 +160,28 @@ jest.mock('../src/services', () => ({
     ensureReady: jest.fn(() => Promise.resolve()),
   },
   remoteServerManager: {
-    initializeProviders: jest.fn(() => Promise.resolve()),
+    initializeProviders: mockInitializeProviders,
   },
 }));
 
 // NOTE: App is required INSIDE the test, not imported at top level. The jest.mock
 // factories above are hoisted above the `const mock*` definitions; a top-level
 // `import App` is hoisted too and would run those factories BEFORE the consts
-// initialize, so every mocked hook (useAppStore, modelManager, …) captured
+// initialize, so every mocked hook (useAppStore, modelLibrary, …) captured
 // `undefined` → "useAppStore is not a function" during render. Requiring App from
 // inside the test defers the factories until the consts exist.
 
 describe('App', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockInitializeProviders.mockResolvedValue(undefined);
   });
 
   it('restores in-flight downloads at startup and watches each to completion', async () => {
     const App = require('../App').default;
+    let renderer: ReactTestRenderer.ReactTestRenderer;
     await ReactTestRenderer.act(async () => {
-      ReactTestRenderer.create(<App />);
+      renderer = ReactTestRenderer.create(<App />);
       // Flush the async startup chain (hydrate → reattach → restore → watch).
       for (let i = 0; i < 20; i++) await Promise.resolve();
     });
@@ -188,5 +197,59 @@ describe('App', () => {
       expect.any(Function),
       expect.any(Function),
     );
+    await ReactTestRenderer.act(async () => {
+      renderer!.unmount();
+    });
+  });
+
+  it('starts reconnect recovery only after remote provider initialization settles', async () => {
+    let finishInitialization: (() => void) | undefined;
+    mockInitializeProviders.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishInitialization = resolve;
+    }));
+
+    const App = require('../App').default;
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<App />);
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
+
+    expect(mockInitializeProviders).toHaveBeenCalledTimes(1);
+    expect(mockStartNetworkReconnectWatcher).not.toHaveBeenCalled();
+
+    await ReactTestRenderer.act(async () => {
+      finishInitialization?.();
+      await Promise.resolve();
+    });
+
+    expect(mockStartNetworkReconnectWatcher).toHaveBeenCalledTimes(1);
+    await ReactTestRenderer.act(async () => {
+      renderer!.unmount();
+    });
+  });
+
+  it('does not start reconnect recovery when provider initialization settles after unmount', async () => {
+    let finishInitialization: (() => void) | undefined;
+    mockInitializeProviders.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishInitialization = resolve;
+    }));
+
+    const App = require('../App').default;
+    let renderer: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(<App />);
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    });
+
+    await ReactTestRenderer.act(async () => {
+      renderer!.unmount();
+    });
+    await ReactTestRenderer.act(async () => {
+      finishInitialization?.();
+      await Promise.resolve();
+    });
+
+    expect(mockStartNetworkReconnectWatcher).not.toHaveBeenCalled();
   });
 });

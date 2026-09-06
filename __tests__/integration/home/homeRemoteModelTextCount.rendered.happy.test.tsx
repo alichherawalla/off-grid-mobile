@@ -1,3 +1,5 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
+import { selectedRemoteRoute } from '../../utils/testHelpers';
 /**
  * T097 (checklist Area 14, rendered) — Home with a remote model active: the "Text" count must reflect
  * LOCAL reality (the literal local-download count) WITHOUT reading as a broken desync.
@@ -36,6 +38,12 @@
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 describe('T097 (rendered) — Home Text count with a remote model active is not a misleading desync', () => {
   const setup = (opts: { selectRemoteModel: boolean }) => {
     installNativeBoundary();
@@ -43,14 +51,16 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
      
     const React = require('react');
     const rtl = requireRTL();
-    const { RemoteServersScreen } = require('../../../src/screens/RemoteServersScreen');
+    const { RemoteServerEditorScreen } = require('../../../src/screens/RemoteServerEditorScreen');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
      
 
     // Fresh remote store (no servers) + ZERO local text models — the exact device precondition (0 local).
-    useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });
-    useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });
+    useRemoteServerStore.setState({ servers: [], serverHealth: {} });
+    useAppStore.setState({ downloadedModels: [],  downloadedImageModels: [] });
+    arrangeLocalSelection('text', null);
+    arrangeLocalSelection('image', null);
 
     // LAN boundary: a reachable OpenAI-compatible server answering /v1/models with one text model (as T046).
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
@@ -61,26 +71,27 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
     });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
-    return { React, rtl, RemoteServersScreen, HomeScreen, useRemoteServerStore, useAppStore, nav, opts };
+    return { React, rtl, RemoteServerEditorScreen, HomeScreen, useRemoteServerStore, useAppStore, nav, opts };
   };
 
   // Arrive at "a remote server is connected + its models discovered" through the REAL Add-Server UI (T046 flow).
   const connectServerViaUI = async (env: ReturnType<typeof setup>) => {
-    const { React, rtl, RemoteServersScreen, nav } = env;
-    const srv = rtl.render(React.createElement(RemoteServersScreen, { navigation: nav }));
-    rtl.fireEvent.press(srv.getByTestId('add-server'));
-    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
+    const { React, rtl, RemoteServerEditorScreen } = env;
+    const srv = rtl.render(React.createElement(RemoteServerEditorScreen));
+    rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('Off Grid AI Desktop')), 'My LM Studio');
     rtl.fireEvent.changeText(srv.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
     rtl.fireEvent.press(srv.getByTestId('test-connection'));
     await rtl.waitFor(() => { expect(srv.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
     rtl.fireEvent.press(srv.getByTestId('save-server'));
-    await rtl.waitFor(() => { expect(srv.queryByText('My LM Studio')).not.toBeNull(); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(env.useRemoteServerStore.getState().servers).toHaveLength(1); }, { timeout: 4000 });
     srv.unmount();
   };
 
   it('shows Text count = 0 (literal local count) while the Text type reads ACTIVE (remote model represented)', async () => {
     const env = setup({ selectRemoteModel: true });
-    const { React, rtl, HomeScreen, useRemoteServerStore, nav } = env;
+    const { React, rtl, HomeScreen, nav } = env;
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
 
     await connectServerViaUI(env);
 
@@ -94,7 +105,7 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
     rtl.fireEvent.press(await rtl.waitFor(() => home.getByTestId('remote-model-item'), { timeout: 4000 }));
 
     // The real store now reports a remote model active (EMERGENT from the gesture, not setState).
-    await rtl.waitFor(() => { expect(useRemoteServerStore.getState().activeRemoteTextModelId).toBe('llama-3-8b'); }, { timeout: 4000 });
+    await rtl.waitFor(() => { expect(selectedRemoteRoute('text')?.modelId).toBe('llama-3-8b'); }, { timeout: 4000 });
 
     // ── Assert the rendered Home "Text" surface (ModelsSummaryRow) — the finding's exact surface ──
     // (a) The count numeral is the LITERAL local count: 0. It is a LOCAL-download count, not the remote model.

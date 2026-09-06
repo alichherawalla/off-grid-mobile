@@ -30,7 +30,7 @@ import {
 } from './components/ToolMessages';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
-import { isSupportingChatContext } from '@offgrid/sync';
+import { isSupportingChatContext } from '@offgrid/application';
 
 type MetaRowProps = {
   message: Message;
@@ -263,7 +263,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showSelectText, setShowSelectText] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(message.content);
   const [showThinking, setShowThinking] = useState(!!isStreaming);
   const [showSupportingContext, setShowSupportingContext] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -302,7 +301,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleEdit = () => {
-    setEditedContent(message.content);
     setShowActionMenu(false);
     setTimeout(() => setIsEditing(true), 350);
   };
@@ -313,14 +311,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     setTimeout(() => setShowSelectText(true), 350);
   };
 
-  const handleSaveEdit = () => {
-    const trimmed = editedContent.trim();
+  // The candidate comes from the sheet that owns the draft, so this can never judge a stale
+  // value from an earlier render.
+  const handleSaveEdit = (text: string) => {
+    const trimmed = text.trim();
     if (trimmed !== message.content) onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
-    setEditedContent(message.content);
     setIsEditing(false);
   };
 
@@ -347,6 +346,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     callHook(HOOKS.audioSpeak, displayContent, message.id);
   };
 
+  // A tool row can also be system info (kept out of the prompt): render it as the tool row.
+  if (message.role === 'tool')
+    return (
+      <ToolResultMessage message={message} styles={styles} colors={colors} />
+    );
   if (message.isSystemInfo) {
     return (
       <SystemInfoMessage
@@ -357,10 +361,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       />
     );
   }
-  if (message.role === 'tool')
-    return (
-      <ToolResultMessage message={message} styles={styles} colors={colors} />
-    );
   if (message.role === 'assistant' && message.toolCalls?.length) {
     return (
       <ToolCallWithThinking
@@ -446,7 +446,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         alertState={alertState}
         onCloseActionMenu={() => setShowActionMenu(false)}
         onCloseSelectText={() => setShowSelectText(false)}
-        onChangeEditText={setEditedContent}
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}

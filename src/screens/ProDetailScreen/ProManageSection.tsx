@@ -2,11 +2,11 @@
  * ProManageSection
  *
  * Shown on the Pro screen when a protected credential is saved. Surfaces
- * subscription status from the cached license (lifetime vs yearly + expiry).
+ * subscription status from the cached license tier and expiry.
  * Active licensed
  * devices are managed from the Pro-owned Sync screen, so there is one list and
  * one action owner rather than a second read-only copy here.
- * For a recurring (yearly) license it explains how to cancel or update payment:
+ * For a recurring license it explains how to cancel or update payment:
  * via the link RevenueCat emails with every purchase and renewal. There is no
  * in-app portal because RevenueCat authenticates Web Billing customers by email.
  */
@@ -110,7 +110,7 @@ export const ProManageSection: React.FC = () => {
                 if (!repainted) {
                   Alert.alert(
                     'Pro was reset',
-                    'This phone no longer holds the licence. Restart the app to finish unloading Pro features.',
+                    'This phone no longer holds the licence. Pro features are now locked.',
                   );
                 }
               })

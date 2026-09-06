@@ -1,10 +1,10 @@
+import { activeMobileRoute } from '../services/modelServices/mobileLLMService';
 import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  Linking,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,7 +30,8 @@ import { ProUpsellBanner } from '../components/settings/ProUpsellBanner';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import RNFS from 'react-native-fs';
-import { useAppStore, useRemoteServerStore } from '../stores';
+import { useAppStore } from '../stores';
+import { activeLocalModelId } from '../services/modelServices/activeRoute';
 import { hardwareService } from '../services';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { useHasRegisteredScreen } from '../navigation/screenRegistry';
@@ -38,8 +39,8 @@ import { clearProForTesting } from '../services/proLicenseService';
 import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import { useOpenSync } from '../hooks/useOpenSync';
 import { appBuildLabel, appVersion } from '../utils/appVersion';
-
-const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { openSupportEmail } from '../utils/supportEmail';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'SettingsTab'>,
@@ -75,8 +76,9 @@ export const SettingsScreen: React.FC = () => {
   }, [completeChecklistStep]);
 
   const handleSendFeedback = async () => {
-    const { downloadedModels, activeModelId } = useAppStore.getState();
-    const { activeServerId } = useRemoteServerStore.getState();
+    const { downloadedModels } = useAppStore.getState();
+    const activeModelId = activeLocalModelId('text');
+    const activeServerId = activeMobileRoute('text').model?.serverId ?? null;
 
     const fsInfo = await RNFS.getFSInfo();
 
@@ -90,10 +92,8 @@ export const SettingsScreen: React.FC = () => {
       ? `Device: ${deviceInfo.deviceModel} (${deviceInfo.systemName} ${deviceInfo.systemVersion})`
       : 'Device: Unknown';
 
-    const subject = encodeURIComponent(
-      `[Feedback] Off Grid AI v${appVersion()}`,
-    );
-    const body = encodeURIComponent(
+    const subject = `[Feedback] Off Grid AI v${appVersion()}`;
+    const body =
       `Hi,\n\n[Describe your feedback or issue here]\n\n` +
         `---\n` +
         `App: ${appBuildLabel()}\n` +
@@ -101,18 +101,8 @@ export const SettingsScreen: React.FC = () => {
         `RAM: ${ramGB} GB · Tier: ${tier}\n` +
         `Model: ${modelLine}\n` +
         `Free storage: ${freeGB} GB\n` +
-        `Remote server: ${remoteServer}`,
-    );
-    const url = `mailto:${FEEDBACK_EMAIL}?subject=${subject}&body=${body}`;
-    try {
-      await Linking.openURL(url);
-    } catch {
-      Alert.alert(
-        'Could Not Open Mail',
-        `Looks like there was an issue. You can reach out to us at ${FEEDBACK_EMAIL}`,
-        [{ text: 'OK' }],
-      );
-    }
+        `Remote server: ${remoteServer}`;
+    await openSupportEmail({ subject, body });
   };
 
   // DEV-only: flip the Pro auto-unlock. Disabling also clears the cached license
@@ -150,9 +140,7 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-      </View>
+      <ScreenHeader title="Settings" variant="tab" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}

@@ -1,6 +1,6 @@
 import type { Conversation, Message } from '../types';
+import { CORE_SYNC_ENTITIES } from '@offgrid/application';
 import {
-  CORE_SYNC_ENTITIES,
   deleteSyncMutation,
   emitSyncMutation,
   messagePutMutation,

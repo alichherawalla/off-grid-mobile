@@ -1,16 +1,13 @@
 import { selectHasProAccess } from '../stores/proAccessSlice';
 import { useAppStore } from '../stores/appStore';
 
-// Fires at count 3, then every 10 starting at 15 (3, 15, 25, 35...)
-// Share sheet fires at 2, 10, 20, 30... so these never collide
-const PRO_AHA_THRESHOLD = 3;
-const PRO_AHA_REPEAT_START = 15;
-const PRO_AHA_REPEAT_INTERVAL = 10;
+// One automatic offer, after the user has completed enough work to understand the product.
+// The persisted `proAhaTriggeredBy` marker makes this an install-level decision. Later upgrade
+// choices stay at explicit Pro entry points instead of interrupting ordinary generation.
+const PRO_AHA_THRESHOLD = 10;
 
 export function shouldShowProAha(count: number): boolean {
-  if (count === PRO_AHA_THRESHOLD) return true;
-  if (count >= PRO_AHA_REPEAT_START && (count - PRO_AHA_REPEAT_START) % PRO_AHA_REPEAT_INTERVAL === 0) return true;
-  return false;
+  return count === PRO_AHA_THRESHOLD;
 }
 
 type ProPromptVariant = 'text' | 'image';

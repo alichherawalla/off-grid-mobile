@@ -17,8 +17,9 @@ export function installRealSqlite(setupSql?: string): void {
  * already reset modules (e.g. installNativeBoundary for a mounted-screen RAG test). Call AFTER that installer,
  * before requiring the rag modules. installRealSqlite = resetModules + this.
  */
-export function doMockRealSqlite(setupSql?: string): void {
-  jest.doMock('@op-engineering/op-sqlite', () => {
+export function createRealSqliteModule(setupSql?: string) {
+  const databases: any[] = [];
+  return (() => {
     const { DatabaseSync } = require('node:sqlite');
 
     const wrap = (db: any) => ({
@@ -65,9 +66,20 @@ export function doMockRealSqlite(setupSql?: string): void {
     return {
       open: () => {
         const db = new DatabaseSync(':memory:');
+        databases.push(db);
         if (setupSql) db.exec(setupSql);
         return wrap(db);
       },
+      reset: () => {
+        for (const db of databases) {
+          const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all();
+          for (const {name} of tables) db.exec(`DELETE FROM "${name}"`);
+        }
+      },
     };
-  });
+  })();
+}
+
+export function doMockRealSqlite(setupSql?: string): void {
+  jest.doMock('@op-engineering/op-sqlite', () => createRealSqliteModule(setupSql));
 }

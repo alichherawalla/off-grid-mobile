@@ -3,7 +3,7 @@
  * the model id as a full file path; the picker must show a clean basename without
  * the extension, while the raw id is still used for loading.
  */
-import { displayModelName } from '../../../src/stores/remoteServerHelpers';
+import { displayModelName } from '../../../src/services/adapters/remote/serverDiscovery';
 
 describe('displayModelName', () => {
   it('strips a full file path down to the basename without extension', () => {
@@ -25,6 +25,14 @@ describe('displayModelName', () => {
   it('leaves a plain id (no path, no extension) unchanged', () => {
     expect(displayModelName('llama3.1:8b')).toBe('llama3.1:8b');
     expect(displayModelName('gpt-4o-mini')).toBe('gpt-4o-mini');
+  });
+
+  it('shows the provider model name for a Desktop remote inventory id', () => {
+    expect(
+      displayModelName(
+        'remote-vision:desktop-id:google%2Fgemini-3.7-flash',
+      ),
+    ).toBe('google/gemini-3.7-flash');
   });
 
   it('keeps a namespace-style slug intact (does NOT treat / as a path separator)', () => {

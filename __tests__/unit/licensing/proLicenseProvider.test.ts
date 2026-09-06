@@ -114,7 +114,11 @@ describe('the licence this phone holds', () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await load()
+      .proLicenseProvider.clearForTesting?.()
+      .catch(() => undefined);
+    jest.useRealTimers();
     keygen.restore();
     jest.restoreAllMocks();
   });
@@ -243,18 +247,35 @@ describe('the licence this phone holds', () => {
       });
     });
 
-    it('waits for the mesh, and says so when it never arrives', async () => {
+    it('waits through delayed Sync startup for the registration owner', async () => {
+      jest.useFakeTimers();
+      const provider = load();
+      const mesh = activationOwner();
+
+      const activation = provider.proLicenseProvider.activate!(LICENCE_KEY);
+      setTimeout(
+        () => provider.setDirectEntitlementActivationOwner(mesh.owner),
+        6_000,
+      );
+
+      await jest.advanceTimersByTimeAsync(6_000);
+      await expect(activation).resolves.toEqual({ ok: true });
+      expect(mesh.calls).toEqual(['prepare', 'commit', 'finalize']);
+    });
+
+    it('reports local activation startup when the registration owner never arrives', async () => {
+      jest.useFakeTimers();
       const provider = load();
 
       // No activation owner registered: on a build where sync has not started, the seat cannot be claimed. This
-      // is the reason activation appears to hang and then fails rather than reporting a bad key.
-      await expect(
-        provider.proLicenseProvider.activate!(LICENCE_KEY),
-      ).resolves.toEqual({
+      // is local startup state, not proof that the licence service could not be reached.
+      const activation = provider.proLicenseProvider.activate!(LICENCE_KEY);
+      await jest.advanceTimersByTimeAsync(30_000);
+      await expect(activation).resolves.toEqual({
         ok: false,
-        reason: 'network_unavailable',
+        reason: 'activation_unavailable',
       });
-    }, 10_000);
+    });
 
     it('lets the mesh be swapped out and put back', async () => {
       const provider = load();
@@ -454,7 +475,7 @@ describe('the licence this phone holds', () => {
       });
     });
 
-    it('calls a licence with an expiry a yearly one, and shows the date', async () => {
+    it('shows a legacy timed licence as a neutral subscription', async () => {
       keygen.reset();
       keygen.addLicence({
         key: LICENCE_KEY,
@@ -469,8 +490,28 @@ describe('the licence this phone holds', () => {
         provider.proLicenseProvider.getInfo(),
       ).resolves.toMatchObject({
         isPro: true,
-        tier: 'yearly',
+        tier: 'subscription',
         expiry: '2030-01-01T00:00:00.000Z',
+      });
+    });
+
+    it('shows the new RevenueCat key as a monthly plan', async () => {
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: '2030-01-01T00:00:00.000Z',
+        metadata: { tier: 'monthly' },
+      });
+      const provider = load();
+      provider.setDirectEntitlementActivationOwner(activationOwner().owner);
+      await provider.proLicenseProvider.activate!(LICENCE_KEY);
+
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: true,
+        tier: 'monthly',
       });
     });
 
@@ -511,6 +552,35 @@ describe('the licence this phone holds', () => {
       );
     });
 
+    it('removes access at the exact cached expiry without a restart', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: '2030-01-01T00:00:05.000Z',
+      });
+      const provider = load();
+      provider.setDirectEntitlementActivationOwner(activationOwner().owner);
+      await provider.proLicenseProvider.activate!(LICENCE_KEY);
+
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        true,
+      );
+      await jest.advanceTimersByTimeAsync(5_001);
+
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        false,
+      );
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: false,
+        credentialSaved: true,
+      });
+    });
+
     it('locks the app when the licence has been revoked', async () => {
       const provider = await licensed();
       // Refunded, charged back, or revoked by an admin: the provider stops recognising the key.
@@ -535,6 +605,164 @@ describe('the licence this phone holds', () => {
       await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
         true,
       );
+    });
+
+    it('closes a saved credential locally before a throttled foreground check', async () => {
+      const start = Date.UTC(2026, 7, 26, 9, 0, 0);
+      let now = start;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: new Date(start + 5_000).toISOString(),
+      });
+      const provider = await licensed();
+      await provider.proLicenseProvider.revalidate!('peer_connected');
+      const providerCalls = keygen.calls.length;
+
+      now = start + 5_000;
+      await provider.proLicenseProvider.revalidate!('foreground');
+
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: false,
+        credentialSaved: true,
+        expired: true,
+      });
+      // The local deadline closes access first. An expired credential bypasses the ordinary
+      // foreground throttle so an authoritative renewal can restore access in this session.
+      expect(keygen.calls).toHaveLength(providerCalls + 1);
+    });
+
+    it('reports an expired saved credential as inactive on cold start', async () => {
+      secrets.set(
+        'off-grid-pro-license',
+        JSON.stringify({
+          isPro: true,
+          key: LICENCE_KEY,
+          licenseId: 'licence-1',
+          expiry: new Date(Date.now() - 1).toISOString(),
+          verifiedAt: Date.now() - 10_000,
+        }),
+      );
+      const provider = load();
+
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: false,
+        credentialSaved: true,
+        expired: true,
+      });
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        false,
+      );
+    });
+
+    it('closes access at the exact saved deadline without a network event', async () => {
+      jest.useFakeTimers();
+      const start = Date.UTC(2026, 7, 26, 9, 0, 0);
+      jest.setSystemTime(start);
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: new Date(start + 5_000).toISOString(),
+      });
+      const provider = await licensed();
+      const decisions: boolean[] = [];
+      provider.onProLicenseInfoChanged(info => decisions.push(info.isPro));
+      const providerCalls = keygen.calls.length;
+
+      await jest.advanceTimersByTimeAsync(5_000);
+
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: false,
+        expired: true,
+      });
+      expect(decisions).toContain(false);
+      expect(keygen.calls).toHaveLength(providerCalls);
+      jest.useRealTimers();
+    });
+
+    it('serializes expiry shutdown and Keygen renewal without an app restart', async () => {
+      jest.useFakeTimers();
+      const start = Date.UTC(2026, 7, 26, 9, 0, 0);
+      jest.setSystemTime(start);
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: new Date(start + 5_000).toISOString(),
+      });
+      const provider = load();
+      provider.setDirectEntitlementActivationOwner(activationOwner().owner);
+      await provider.proLicenseProvider.activate!(LICENCE_KEY);
+
+      const runtimeChanges: string[] = [];
+      const { createEntitlementRuntimeTransition } =
+        require('../../../pro/licensing/entitlementRuntimeTransition') as typeof import('../../../pro/licensing/entitlementRuntimeTransition');
+      const runtime = createEntitlementRuntimeTransition({
+        activate: async () => {
+          runtimeChanges.push('activate');
+        },
+        deactivate: async () => {
+          runtimeChanges.push('deactivate');
+        },
+        report: error => {
+          throw error;
+        },
+      });
+      const stop = provider.onProLicenseInfoChanged(runtime.apply);
+
+      await jest.advanceTimersByTimeAsync(5_000);
+      await runtime.settled();
+      expect(runtimeChanges).toEqual(['deactivate']);
+
+      keygen.reset();
+      keygen.addLicence({
+        key: LICENCE_KEY,
+        seats: 3,
+        expiry: new Date(start + 60_000).toISOString(),
+      });
+      keygen.activate({
+        key: LICENCE_KEY,
+        fingerprint: FINGERPRINT,
+        name: "Mac's iPhone",
+        platform: 'ios',
+      });
+      await provider.proLicenseProvider.revalidate!('foreground');
+      await runtime.settled();
+
+      await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
+        true,
+      );
+      expect(runtimeChanges).toEqual(['deactivate', 'activate']);
+      stop();
+      jest.useRealTimers();
+    });
+
+    it('keeps lifetime access active when time advances', async () => {
+      jest.useFakeTimers();
+      const start = Date.UTC(2026, 7, 26, 9, 0, 0);
+      jest.setSystemTime(start);
+      const provider = await licensed();
+
+      await jest.advanceTimersByTimeAsync(10 * 365 * 24 * 60 * 60 * 1_000);
+
+      await expect(
+        provider.proLicenseProvider.getInfo(),
+      ).resolves.toMatchObject({
+        isPro: true,
+        tier: 'lifetime',
+        expiry: null,
+        expired: false,
+      });
+      jest.useRealTimers();
     });
 
     it('stops active access but keeps the credential when the seat is gone', async () => {

@@ -11,15 +11,6 @@ import { handleRetryMessageFn, handleEditMessageFn } from '../../../src/screens/
 import * as generationActions from '../../../src/screens/ChatScreen/useChatGenerationActions';
 import { createMessage } from '../../utils/factories';
 
-// Light mocks — the no-model path bails before any of these are touched, but
-// they still need to exist so the module imports cleanly.
-jest.mock('../../../src/services/modelResidency', () => ({
-  modelResidencyManager: { getResidents: jest.fn(() => []), reclaimSttForGeneration: jest.fn() },
-}));
-jest.mock('../../../src/services/hardware', () => ({
-  hardwareService: { getAvailableMemoryGB: jest.fn(() => 4), getTotalMemoryGB: jest.fn(() => 8) },
-}));
-
 const makeDeps = (overrides: Partial<any> = {}): any => ({
   setAlertState: jest.fn(),
   ...overrides,
@@ -29,7 +20,7 @@ describe('handleRetryMessageFn — no active model', () => {
   let regenSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    regenSpy = jest.spyOn(generationActions, 'regenerateResponseFn').mockResolvedValue(undefined);
+    regenSpy = jest.spyOn(generationActions, 'replayPersistedChatTurnFn').mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -70,7 +61,7 @@ describe('handleEditMessageFn — no active model', () => {
   let regenSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    regenSpy = jest.spyOn(generationActions, 'regenerateResponseFn').mockResolvedValue(undefined);
+    regenSpy = jest.spyOn(generationActions, 'editPersistedChatTurnFn').mockResolvedValue(undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 

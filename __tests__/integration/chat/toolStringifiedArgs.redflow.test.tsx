@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (integration) — Q3: a tool call whose `arguments` is a STRINGIFIED JSON object is passed
  * through as a raw string instead of being normalized to an object, so the tool receives no usable
@@ -13,32 +14,80 @@ import { installNativeBoundary } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 import type { Message } from '../../../src/types';
 
-const ARGS_STRINGIFIED = '{"name": "calculator", "arguments": "{\\"expression\\": \\"2+2\\"}"}';
-const ARGS_OBJECT = '{"name": "calculator", "arguments": {"expression": "2+2"}}';
+const ARGS_STRINGIFIED =
+  '{"name": "calculator", "arguments": "{\\"expression\\": \\"2+2\\"}"}';
+const ARGS_OBJECT =
+  '{"name": "calculator", "arguments": {"expression": "2+2"}}';
 
 async function toolResultContentFor(callBody: string): Promise<string> {
-  const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-   
-  const { llmService } = require('../../../src/services/llm');
-  const { generationService } = require('../../../src/services/generationService');
-  const { hardwareService } = require('../../../src/services/hardware');
-  const { useAppStore, useChatStore } = require('../../../src/stores');
-   
+  const boundary = installNativeBoundary({
+    llama: true,
+    fs: true,
+    ram: {
+      platform: 'android',
+      totalBytes: 12 * 1024 ** 3,
+      availBytes: 8 * 1024 ** 3,
+    },
+  });
+  const { startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  const fixture = await startMobileApplicationFixture();
 
-  boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-  await hardwareService.refreshMemoryInfo();
-  await llmService.loadModel('/models/small.gguf');
-  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'llm', engine: 'llama' })], activeModelId: 'llm' });
+  try {
+    const { llmService } = require('../../../src/services/llm');
+    const {
+      mobileChatSession,
+    } = require('../../../src/screens/ChatScreen/mobileChatSession');
+    const { hardwareService } = require('../../../src/services/hardware');
+    const { useAppStore, useChatStore } = require('../../../src/stores');
 
-  boundary.llama!.scriptCompletion({ text: `Calculating. <tool_call>${callBody}</tool_call>` });
+    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+    await hardwareService.refreshMemoryInfo();
+    await llmService.loadModel('/models/small.gguf');
+    useAppStore.setState({
+      downloadedModels: [
+        createDownloadedModel({
+          id: 'llm',
+          engine: 'llama',
+          filePath: '/models/small.gguf',
+          fileName: 'small.gguf',
+        }),
+      ],
+      settings: {
+        ...useAppStore.getState().settings,
+        enabledTools: ['calculator'],
+      },
+    });
+    arrangeLocalSelection('text', 'llm');
+    const {
+      refreshMobileModelServices,
+    } = require('../../../src/services/modelServices');
+    await refreshMobileModelServices();
 
-  const conversationId = useChatStore.getState().createConversation('llm');
-  useChatStore.getState().addMessage(conversationId, { role: 'user', content: 'what is 2 + 2' });
-  await generationService.generateWithTools(conversationId, useChatStore.getState().getConversationMessages(conversationId), { enabledToolIds: ['calculator'] });
+    boundary.llama!.scriptCompletion({
+      text: `Calculating. <tool_call>${callBody}</tool_call>`,
+    });
 
-  const messages: Message[] = useChatStore.getState().getConversationMessages(conversationId);
-  const toolMsg = messages.find(m => m.role === 'tool' && m.toolName === 'calculator');
-  return toolMsg?.content ?? '';
+    const conversationId = useChatStore.getState().createConversation('llm');
+    const user = useChatStore
+      .getState()
+      .addMessage(conversationId, {
+        role: 'user',
+        content: 'what is 2 + 2',
+        turnKind: 'text',
+      });
+    await mobileChatSession.sendPersisted(conversationId, user.id);
+
+    const messages: Message[] = useChatStore
+      .getState()
+      .getConversationMessages(conversationId);
+    const toolMsg = messages.find(
+      m => m.role === 'tool' && m.toolName === 'calculator',
+    );
+    return toolMsg?.content ?? '';
+  } finally {
+    await fixture.dispose();
+  }
 }
 
 describe('Q3 — stringified tool arguments (red-flow)', () => {

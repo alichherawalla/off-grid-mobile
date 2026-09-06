@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from './AppSheet';
 import { useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { GITHUB_URL, shareOnX } from '../utils/sharePrompt';
+import { GITHUB_URL, rateOnStore } from '../utils/sharePrompt';
 import { useAppStore } from '../stores/appStore';
 import { Button } from './Button';
 
@@ -42,9 +42,11 @@ export const SharePromptSheet: React.FC<SharePromptSheetProps> = ({ visible, onC
           <Text style={styles.buttonText}>Star on GitHub</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={() => handleEngage(shareOnX)}>
-          <Icon name="share-2" size={18} color={styles.buttonText.color} />
-          <Text style={styles.buttonText}>Share on X</Text>
+        <TouchableOpacity style={styles.button} onPress={() => handleEngage(rateOnStore)}>
+          <Icon name="star" size={18} color={styles.buttonText.color} />
+          <Text style={styles.buttonText}>
+            {Platform.OS === 'ios' ? 'Rate on the App Store' : 'Rate on Google Play'}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.dismissActions}>

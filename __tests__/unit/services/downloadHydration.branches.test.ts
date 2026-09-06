@@ -1,169 +1,289 @@
-/**
- * Branch-coverage tests for downloadHydration.ts.
- * Targets the mapNativeStatus switch arms (retrying/waiting_for_network/default),
- * the image-completed -> 'processing' branch, computeProgress denom fallbacks,
- * and the per-row try/catch that logs and continues on a malformed row.
- */
+import {
+  reconcileNativeDownloadSnapshot,
+  type NativeDownloadRow,
+} from '@offgrid/models';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+import { installNativeBoundary } from '../../harness/nativeBoundary';
 
-import { hydrateDownloadStore } from '../../../src/services/downloadHydration';
-import { useDownloadStore } from '../../../src/stores/downloadStore';
+const reconcile = (
+  rows: readonly NativeDownloadRow[],
+  onMalformedRow?: (row: NativeDownloadRow, error: unknown) => void,
+) =>
+  reconcileNativeDownloadSnapshot({
+    rows,
+    persistedPrior: [],
+    inMemoryPrior: [],
+    keyFor: row => row.modelKey ?? `${row.modelId ?? ''}::${row.fileName}`,
+    onMalformedRow,
+  });
 
-jest.mock('../../../src/services/backgroundDownloadService', () => ({
-  backgroundDownloadService: {
-    isAvailable: jest.fn(),
-    getActiveDownloads: jest.fn(),
-  },
-}));
-jest.mock('../../../src/utils/modelKey', () => ({
-  makeModelKey: jest.fn((id: string, fn: string) => `${id}::${fn}`),
-}));
-jest.mock('../../../src/utils/logger', () => ({
-  __esModule: true,
-  default: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-}));
+describe('Shared native download status policy', () => {
+  it("maps 'retrying' to 'downloading'", () => {
+    expect(
+      reconcile([
+        {
+          downloadId: 'r',
+          modelId: 'a/b',
+          fileName: 'b.gguf',
+          status: 'retrying',
+          bytesDownloaded: 1,
+          totalBytes: 10,
+        },
+      ])[0].status,
+    ).toBe('downloading');
+  });
 
-const { backgroundDownloadService } = jest.requireMock('../../../src/services/backgroundDownloadService');
-import logger from '../../../src/utils/logger';
+  it("maps 'waiting_for_network' to 'paused'", () => {
+    expect(
+      reconcile([
+        {
+          downloadId: 'w',
+          modelId: 'a/b',
+          fileName: 'b.gguf',
+          status: 'waiting_for_network',
+          bytesDownloaded: 0,
+          totalBytes: 10,
+        },
+      ])[0].status,
+    ).toBe('paused');
+  });
 
-beforeEach(() => {
-  jest.clearAllMocks();
-  useDownloadStore.setState({ downloads: {}, downloadIdIndex: {} });
-  backgroundDownloadService.isAvailable.mockReturnValue(true);
+  it('maps an unknown native status to failed', () => {
+    expect(
+      reconcile([
+        {
+          downloadId: 'p',
+          modelId: 'a/b',
+          fileName: 'b.gguf',
+          status: 'bogus',
+          bytesDownloaded: 0,
+          totalBytes: 10,
+        },
+      ])[0].status,
+    ).toBe('failed');
+  });
 });
 
-describe('mapNativeStatus arms', () => {
-  it("maps 'retrying' to 'failed'", async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'r', modelId: 'a/b', fileName: 'b.gguf', status: 'retrying', bytesDownloaded: 1, totalBytes: 10, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('failed');
-  });
-
-  it("maps 'waiting_for_network' through unchanged", async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'w', modelId: 'a/b', fileName: 'b.gguf', status: 'waiting_for_network', bytesDownloaded: 0, totalBytes: 10, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('waiting_for_network');
-  });
-
-  it('maps an unknown native status to the default "pending"', async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'p', modelId: 'a/b', fileName: 'b.gguf', status: 'bogus' as any, bytesDownloaded: 0, totalBytes: 10, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('pending');
-  });
-});
-
-describe('image-completed surfaces as processing', () => {
-  it("turns a completed image row (modelType image) into 'processing'", async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'img', modelId: 'image:foo', modelType: 'image', fileName: 'foo.zip', status: 'completed', bytesDownloaded: 100, totalBytes: 100, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
+describe('Shared image completion policy', () => {
+  it('surfaces a completed image row as processing', () => {
+    const entry = reconcile([
+      {
+        downloadId: 'img',
+        modelId: 'image:foo',
+        modelType: 'image',
+        fileName: 'foo.zip',
+        status: 'completed',
+        bytesDownloaded: 100,
+        totalBytes: 100,
+      },
+    ])[0];
     expect(entry.status).toBe('processing');
     expect(entry.modelType).toBe('image');
   });
 
-  it("detects an image row via modelId 'image:' prefix even without modelType", async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'img2', modelId: 'image:bar', fileName: 'bar.zip', status: 'completed', bytesDownloaded: 50, totalBytes: 100, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.status).toBe('processing');
+  it("recognises the legacy 'image:' identity when modelType is absent", () => {
+    expect(
+      reconcile([
+        {
+          downloadId: 'img2',
+          modelId: 'image:bar',
+          fileName: 'bar.zip',
+          status: 'completed',
+          bytesDownloaded: 50,
+          totalBytes: 100,
+        },
+      ])[0].status,
+    ).toBe('processing');
   });
 });
 
-describe('computeProgress and field fallbacks', () => {
-  it('returns 0 progress when denominator is 0', async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'z', modelId: 'a/b', fileName: 'b.gguf', status: 'running', bytesDownloaded: 0, totalBytes: 0, combinedTotalBytes: 0, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.progress).toBe(0);
+describe('Shared progress and fallback policy', () => {
+  it('returns zero progress when the denominator is zero', () => {
+    expect(
+      reconcile([
+        {
+          downloadId: 'z',
+          modelId: 'a/b',
+          fileName: 'b.gguf',
+          status: 'running',
+          bytesDownloaded: 0,
+          totalBytes: 0,
+          combinedTotalBytes: 0,
+        },
+      ])[0].progress,
+    ).toBe(0);
   });
 
-  it('uses combinedTotalBytes over totalBytes and applies ?? fallbacks for missing fields', async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'c', modelKey: 'k', fileName: 'b.gguf', status: 'running', totalBytes: 200, combinedTotalBytes: 400, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = useDownloadStore.getState().downloads.k;
-    expect(entry.modelId).toBe('');
-    expect(entry.quantization).toBe('Unknown');
-    expect(entry.modelType).toBe('text');
-    expect(entry.bytesDownloaded).toBe(0);
-    expect(entry.combinedTotalBytes).toBe(400);
-    expect(entry.createdAt).toBe(1);
+  it('uses the combined total and stable field fallbacks', () => {
+    const entry = reconcile([
+      {
+        downloadId: 'c',
+        modelKey: 'k',
+        fileName: 'b.gguf',
+        status: 'running',
+        totalBytes: 200,
+        combinedTotalBytes: 400,
+      },
+    ])[0];
+    expect(entry).toEqual(
+      expect.objectContaining({
+        modelId: '',
+        quantization: 'Unknown',
+        modelType: 'text',
+        bytesDownloaded: 0,
+        combinedTotalBytes: 400,
+        createdAt: 0,
+      }),
+    );
   });
 
-  it('resolves mmProj bytes/status onto the parent entry', async () => {
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([
-      { downloadId: 'par', modelId: 'a/b', fileName: 'b.gguf', status: 'running', bytesDownloaded: 300, totalBytes: 1000, combinedTotalBytes: 1500, mmProjDownloadId: 'mm', createdAt: 1 },
-      { downloadId: 'mm', modelId: 'a/b', fileName: 'b-mmproj.gguf', status: 'completed', bytesDownloaded: 200, totalBytes: 500, createdAt: 1 },
-    ]);
-    await hydrateDownloadStore();
-    const entry = Object.values(useDownloadStore.getState().downloads)[0];
-    expect(entry.mmProjDownloadId).toBe('mm');
-    expect(entry.mmProjBytesDownloaded).toBe(200);
-    expect(entry.mmProjStatus).toBe('completed');
-    // progress uses combined denom: (300 + 200) / 1500
+  it('folds projector bytes and status into the parent progress', () => {
+    const entry = reconcile([
+      {
+        downloadId: 'par',
+        modelId: 'a/b',
+        fileName: 'b.gguf',
+        status: 'running',
+        bytesDownloaded: 300,
+        totalBytes: 1000,
+        combinedTotalBytes: 1500,
+        mmProjDownloadId: 'mm',
+      },
+      {
+        downloadId: 'mm',
+        modelId: 'a/b',
+        fileName: 'b-mmproj.gguf',
+        status: 'completed',
+        bytesDownloaded: 200,
+        totalBytes: 500,
+      },
+    ])[0];
+    expect(entry).toEqual(
+      expect.objectContaining({
+        mmProjDownloadId: 'mm',
+        mmProjBytesDownloaded: 200,
+        mmProjStatus: 'completed',
+      }),
+    );
     expect(entry.progress).toBeCloseTo(500 / 1500);
   });
 });
 
-describe('malformed row try/catch', () => {
-  it('logs and skips a row whose toDownloadEntry throws, keeping good rows', async () => {
-    // Force toDownloadEntry to throw on the bad row by making fileName access throw.
-    // quantization is read inside toDownloadEntry (which is wrapped in try/catch)
-    // but NOT in getParentRows/getLatestRowsByKey, so the throw lands in the catch.
-    const badRow: any = {
+describe('Shared malformed-row isolation', () => {
+  it('skips a malformed row and keeps valid rows', () => {
+    const failures: unknown[] = [];
+    const bad: NativeDownloadRow = {
       downloadId: 'bad',
       modelId: 'a/bad',
       modelKey: 'a/bad/x.gguf',
       fileName: 'x.gguf',
       status: 'running',
-      createdAt: 1,
-      get quantization() { throw new Error('corrupt row'); },
+      get quantization(): never {
+        throw new Error('corrupt row');
+      },
     };
-    const goodRow: any = {
-      downloadId: 'good', modelId: 'a/good', modelKey: 'a/good/y.gguf', fileName: 'y.gguf',
-      status: 'running', bytesDownloaded: 10, totalBytes: 100, createdAt: 1,
-    };
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([goodRow, badRow]);
-
-    await hydrateDownloadStore();
-
-    const downloads = useDownloadStore.getState().downloads;
-    expect(downloads['a/good/y.gguf']).toBeDefined();
-    expect(downloads['a/bad/x.gguf']).toBeUndefined();
-    expect(logger.error).toHaveBeenCalledWith(
-      '[DownloadHydration] Failed to hydrate download row',
-      expect.objectContaining({ downloadId: 'bad', error: 'corrupt row' }),
+    const entries = reconcile(
+      [
+        {
+          downloadId: 'good',
+          modelId: 'a/good',
+          modelKey: 'a/good/y.gguf',
+          fileName: 'y.gguf',
+          status: 'running',
+          bytesDownloaded: 10,
+          totalBytes: 100,
+        },
+        bad,
+      ],
+      (_row, error) => failures.push(error),
     );
+    expect(entries.map(entry => entry.modelKey)).toEqual(['a/good/y.gguf']);
+    expect(failures).toEqual([
+      expect.objectContaining({ message: 'corrupt row' }),
+    ]);
   });
 
-  it('stringifies a non-Error thrown value in the log', async () => {
-    const badRow: any = {
-      downloadId: 'bad2', modelId: 'a/bad2', modelKey: 'a/bad2/z.gguf', fileName: 'z.gguf',
-      status: 'running', createdAt: 1,
-      get quantization(): string { throw 'plain string failure'; },
+  it('preserves a non-Error malformed-row reason at the reporting boundary', () => {
+    const failures: unknown[] = [];
+    const bad: NativeDownloadRow = {
+      downloadId: 'bad2',
+      modelId: 'a/bad2',
+      modelKey: 'a/bad2/z.gguf',
+      fileName: 'z.gguf',
+      status: 'running',
+      get quantization(): never {
+        throw 'plain string failure';
+      },
     };
-    backgroundDownloadService.getActiveDownloads.mockResolvedValue([badRow]);
+    expect(reconcile([bad], (_row, error) => failures.push(error))).toEqual([]);
+    expect(failures).toEqual(['plain string failure']);
+  });
+});
 
-    await hydrateDownloadStore();
+describe('production Mobile projection wiring', () => {
+  let fixture: MobileApplicationFixture | null = null;
 
-    expect(logger.error).toHaveBeenCalledWith(
-      '[DownloadHydration] Failed to hydrate download row',
-      expect.objectContaining({ error: 'plain string failure' }),
-    );
+  afterEach(async () => {
+    await fixture?.dispose();
+    fixture = null;
+  });
+
+  it('projects a durable native download through the public Shared application facade', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    boundary.download!.seedActive({
+      downloadId: 'transfer-a/b',
+      modelId: 'a/b',
+      fileName: 'b.gguf',
+      modelType: 'text',
+      status: 'running',
+      bytesDownloaded: 25,
+      totalBytes: 100,
+    });
+    const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    await seedMobileDownloadJournal([
+      {
+        manifest: {
+          id: 'a/b',
+          modelId: 'a/b',
+          kind: 'text',
+          revision: 'main',
+          artifacts: [
+            {
+              id: 'primary',
+              name: 'b.gguf',
+              role: 'primary',
+              required: true,
+              localName: 'b.gguf',
+              url: 'https://example.test/b.gguf',
+            },
+          ],
+        },
+        phase: 'downloading',
+        artifacts: [
+          {
+            artifactId: 'primary',
+            phase: 'downloading',
+            transferId: 'transfer-a/b',
+            bytesDownloaded: 25,
+            totalBytes: 100,
+          },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+        attempt: 1,
+      },
+    ]);
+    fixture = await startMobileApplicationFixture();
+    await fixture.refreshModels();
+    const { useDownloadStore } =
+      require('../../../src/stores/downloadStore') as typeof import('../../../src/stores/downloadStore');
+    expect(Object.values(useDownloadStore.getState().downloads)).toEqual([
+      expect.objectContaining({
+        fileName: 'b.gguf',
+        status: 'downloading',
+        progress: 0.25,
+      }),
+    ]);
   });
 });

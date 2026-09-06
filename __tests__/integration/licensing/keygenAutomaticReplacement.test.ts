@@ -93,10 +93,8 @@ describe('activating a key when every seat is taken', () => {
       service.registerProEntitlementProvider,
     );
 
-    // The mesh half, registered the way syncService registers it. Without an owner the provider WAITS for
-    // one and then reports the network as unavailable - which is right in production (a device with no mesh
-    // running cannot claim a seat) and is why the two success cases here were timing out rather than failing.
-    // The adapter is the real one; only its callbacks into the stores are dropped, since no UI is mounted.
+    // Register the same entitlement host that syncService prepares before the slower transport startup.
+    // The adapter is real. Only its UI callbacks are dropped because no screen is mounted.
     const {
       createPairingEntitlementHostAdapter,
     } = require('../../../pro/sync/pairingEntitlementCredentialAdapter');
@@ -127,21 +125,7 @@ describe('activating a key when every seat is taken', () => {
   const heldFingerprints = (): string[] =>
     keygen.machines(LICENCE_KEY).map(({ fingerprint }) => fingerprint);
 
-  /**
-   * SKIPPED, and not because the assertion is wrong: both need a mesh RUNTIME.
-   *
-   * PersonalMeshRegistrationCoordinator.prepare() goes through the membership adapter for every
-   * registration, not only for a replacement, and that adapter needs a live runtime to evict a membership
-   * through (syncService passes `membershipOwner: () => runtimeRef`). With no runtime the activation refuses
-   * with 'replacement_failed' even when a seat is free - which is honest behaviour for a device whose mesh is
-   * not running, and is exactly what the two cases below cannot express yet.
-   *
-   * Standing up that runtime in the harness is its own piece of work (backlog: "Make pairing work in the
-   * mobile test harness"). The DECISION these two describe - retire the least recently active installation -
-   * is covered where it now lives, in shared's personal-mesh-entitlement suite, which drives the coordinator
-   * directly with an 'away-longest' installation. Un-skip once the harness can start a runtime.
-   */
-  it.skip('takes the free seat when the licence has one', async () => {
+  it('takes a free seat before the full sync runtime starts', async () => {
     keygen.addLicence({ key: LICENCE_KEY, seats: CAP });
     keygen.activate({ key: LICENCE_KEY, fingerprint: 'fp-away-longest', platform: 'ios' });
 
@@ -152,6 +136,8 @@ describe('activating a key when every seat is taken', () => {
     expect(heldFingerprints()).toContain('fp-sixth-device');
   });
 
+  /** A full mesh still needs its live runtime to retire the replaced device membership. */
+  // eslint-disable-next-line jest/no-disabled-tests -- the free-seat path above is the release regression
   it.skip('retires the device that has been away longest, and admits this one', async () => {
     const fingerprints = fillEverySeat();
     expect(keygen.machines(LICENCE_KEY)).toHaveLength(CAP);

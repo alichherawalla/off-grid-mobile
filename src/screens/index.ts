@@ -1,5 +1,6 @@
 export { OnboardingScreen } from './OnboardingScreen';
-export { ModelDownloadScreen } from './ModelDownloadScreen';
+export { AdvancedSetupScreen } from './ModelDownloadScreen';
+export { AutoSetupScreen } from './AutoSetupScreen';
 export { HomeScreen } from './HomeScreen';
 export { ModelsScreen } from './ModelsScreen';
 export { ChatScreen } from './ChatScreen';
@@ -20,6 +21,7 @@ export { DeviceInfoScreen } from './DeviceInfoScreen';
 export { StorageSettingsScreen } from './StorageSettingsScreen';
 export { SecuritySettingsScreen } from './SecuritySettingsScreen';
 export { RemoteServersScreen } from './RemoteServersScreen';
+export { RemoteServerEditorScreen } from './RemoteServerEditorScreen';
 export { ProDetailScreen } from './ProDetailScreen';
 export { AboutScreen } from './AboutScreen';
 export { ToolsScreen } from './ToolsScreen';

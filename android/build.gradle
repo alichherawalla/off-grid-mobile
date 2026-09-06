@@ -6,6 +6,11 @@ buildscript {
         targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
         kotlinVersion = "2.2.0"
+        // react-native-inappbrowser-reborn otherwise requests dynamic `+`
+        // versions. Pin them so Gradle does not query unrelated repositories
+        // for metadata during an offline/local build.
+        androidXAnnotationVersion = "1.5.0"
+        androidXBrowserVersion = "1.4.0"
     }
     repositories {
         google()
@@ -29,6 +34,16 @@ apply plugin: "com.facebook.react.rootproject"
 // afterEvaluate — the latter threw "Cannot run afterEvaluate when the project is already
 // evaluated" for subprojects the React root plugin had already configured.
 subprojects { subproject ->
+    // Gradle 9 fails a Test task when a third-party React Native module ships test
+    // sources that its own configuration does not discover. Those dependency tests
+    // are not our test authority. Keep :app fail-closed, but let external modules
+    // report an empty test task instead of blocking the product build.
+    if (subproject.path != ":app") {
+        subproject.tasks.withType(Test).configureEach {
+            failOnNoDiscoveredTests = false
+        }
+    }
+
     ["com.android.application", "com.android.library"].each { pluginId ->
         subproject.plugins.withId(pluginId) {
             subproject.android {
@@ -37,4 +52,3 @@ subprojects { subproject ->
         }
     }
 }
-

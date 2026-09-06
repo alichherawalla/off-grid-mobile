@@ -13,6 +13,17 @@ export function isPrivateIPv4(ip: string): boolean {
   );
 }
 
+/** Returns true for the CGNAT IPv4 range assigned to Tailscale devices. */
+export function isTailscaleIPv4(ip: string): boolean {
+  const match = /^100\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!match) return false;
+
+  const second = Number.parseInt(match[1], 10);
+  const third = Number.parseInt(match[2], 10);
+  const fourth = Number.parseInt(match[3], 10);
+  return second >= 64 && second <= 127 && third <= 255 && fourth <= 255;
+}
+
 /** Returns true if the string looks like an IPv6 address */
 export function isIPv6(ip: string): boolean {
   return ip.includes(':');

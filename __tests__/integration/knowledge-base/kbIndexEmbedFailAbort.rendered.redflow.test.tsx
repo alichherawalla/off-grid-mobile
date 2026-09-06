@@ -27,6 +27,15 @@
 import { installNativeBoundary, requireRTL, MB } from '../../harness/nativeBoundary';
 import { doMockRealSqlite } from '../../harness/sqliteFake';
 
+let applicationFixture:
+  | import('../../harness/mobileApplicationFixture').MobileApplicationFixture
+  | undefined;
+
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
   useRoute: () => ({ params: { projectId: 'p1' } }),
@@ -62,6 +71,12 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
     picker.pick.mockResolvedValue([{ uri: 'file:///docs/report.txt', name: 'report.txt', size: 4096 }]);
     useProjectStore.setState({ projects: [{ id: 'p1', name: 'Research', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }] });
 
+    // Start the real Mobile composition root: this is what registers the inventory adapters (via
+    // startMobileModelServices), so the embedding model on disk actually reaches 'ready'. A bare
+    // require() of modelServices only imports the module and leaves the adapter set EMPTY.
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
     const view = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
     await rtl.waitFor(() => { expect(view.queryByText('No documents yet')).not.toBeNull(); });
 
@@ -98,6 +113,12 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
     picker.pick.mockResolvedValue([{ uri: 'file:///docs/report.txt', name: 'report.txt', size: 4096 }]);
     useProjectStore.setState({ projects: [{ id: 'p1', name: 'Research', description: '', systemPrompt: '', createdAt: 1, updatedAt: 1 }] });
 
+    // Start the real Mobile composition root: this is what registers the inventory adapters (via
+    // startMobileModelServices), so the embedding model on disk actually reaches 'ready'. A bare
+    // require() of modelServices only imports the module and leaves the adapter set EMPTY.
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
     const view = rtl.render(React.createElement(KnowledgeBaseScreen, {}));
     await rtl.waitFor(() => { expect(view.queryByText('No documents yet')).not.toBeNull(); });
 

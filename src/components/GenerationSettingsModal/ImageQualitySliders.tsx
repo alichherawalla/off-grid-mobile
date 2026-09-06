@@ -5,6 +5,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import {
+  DEFAULT_IMAGE_GUIDANCE,
   defaultImageSteps,
   MAX_IMAGE_STEPS,
   SWEET_SPOT_SIZE,
@@ -31,7 +32,11 @@ const ClearGPUCacheButton: React.FC = () => {
 
 /** Basic controls: Image Steps + Image Size */
 export const ImageQualityBasicSliders: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  // Two sliders, two fields. A whole-store read meant every step of the steps slider re-rendered
+  // the size slider beside it, and every unrelated app write re-rendered both.
+  const imageSteps = useAppStore(s => s.settings.imageSteps);
+  const imageWidth = useAppStore(s => s.settings.imageWidth);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
   return (
     <>
@@ -39,7 +44,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
         testID="image-steps"
         label="Image Steps"
         description="4-8 steps for speed, 20-50 for quality"
-        value={settings.imageSteps || defaultImageSteps(Platform.OS)}
+        value={imageSteps || defaultImageSteps(Platform.OS)}
         min={4} max={MAX_IMAGE_STEPS} step={1}
         onChange={(value) => updateSettings({ imageSteps: value })}
       />
@@ -48,7 +53,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
         testID="image-size"
         label="Image Size"
         description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
-        value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? SWEET_SPOT_SIZE)}
+        value={Math.max(SWEET_SPOT_SIZE, imageWidth ?? SWEET_SPOT_SIZE)}
         min={SWEET_SPOT_SIZE} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}
@@ -61,7 +66,10 @@ export const ImageQualityBasicSliders: React.FC = () => {
 export const ImageQualityAdvancedSliders: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { settings, updateSettings } = useAppStore();
+  const imageGuidanceScale = useAppStore(s => s.settings.imageGuidanceScale);
+  const imageThreads = useAppStore(s => s.settings.imageThreads);
+  const imageUseOpenCL = useAppStore(s => s.settings.imageUseOpenCL);
+  const updateSettings = useAppStore(s => s.updateSettings);
 
   return (
     <>
@@ -69,7 +77,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
         testID="guidance-scale"
         label="Guidance Scale"
         description="Higher = follows prompt more strictly (5-15 range)"
-        value={settings.imageGuidanceScale || 7.5}
+        value={imageGuidanceScale || DEFAULT_IMAGE_GUIDANCE}
         min={1} max={20} step={0.5} decimals={1}
         onChange={(value) => updateSettings({ imageGuidanceScale: value })}
       />
@@ -78,7 +86,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
         testID="image-threads"
         label="Image Threads"
         description="CPU threads used for image generation. Takes effect next time the image model loads."
-        value={settings.imageThreads ?? 4}
+        value={imageThreads ?? 4}
         min={1} max={8} step={1}
         onChange={(value) => updateSettings({ imageThreads: value })}
       />
@@ -90,9 +98,9 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
             <Switch
               testID="image-gpu-acceleration"
               accessibilityLabel={`GPU Acceleration, ${
-                (settings.imageUseOpenCL ?? true) ? 'ON' : 'OFF'
+                (imageUseOpenCL ?? true) ? 'ON' : 'OFF'
               }`}
-              value={settings.imageUseOpenCL ?? true}
+              value={imageUseOpenCL ?? true}
               onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
               trackColor={{ false: colors.surfaceLight, true: colors.primary }}
               thumbColor={colors.surface}
@@ -101,7 +109,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
           <Text style={styles.settingDescription}>
             Use GPU for faster image generation. First run may be slower while optimizing for your device.
           </Text>
-          {(settings.imageUseOpenCL ?? true) && <ClearGPUCacheButton />}
+          {(imageUseOpenCL ?? true) && <ClearGPUCacheButton />}
         </View>
       )}
     </>

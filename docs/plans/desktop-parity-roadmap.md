@@ -18,12 +18,9 @@ Chat + vision, image generation, voice STT (Whisper), tools/MCP, projects + RAG,
 model catalog/downloads, Keygen licensing.
 
 TTS / Audio Mode - BUILT and shipped in the `mobile-pro` submodule
-(`pro/audio/`): Kokoro + OuteTTS + Qwen3 engines behind an EngineRegistry, full
-`ttsService` lifecycle (download/load/generate/save/speak/stop/cache), streaming
-playback, waveforms, and complete audio-mode UI. At polish stage (recent iOS playback
-fix). NOTE: the public `TTS_IMPLEMENTATION_PLAN.md` is stale and says "NOT STARTED" -
-trust the pro code. Only follow-up: the audio module has no tests yet (quality task,
-not a feature gap).
+(`pro/audio/`): Kokoro behind an EngineRegistry. The supported Kokoro lifecycle covers download,
+load, streaming speak, stop, and cache management. The current audio UI must expose only behavior
+that Kokoro supports. See `TTS_ENGINE_INTERFACE.md` for the current boundary.
 
 ### Gaps - candidate epics
 | Desktop capability | Mobile today | Epic |

@@ -6,6 +6,7 @@ import type { ThemeColors } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { AnimatedPressable } from './AnimatedPressable';
 import { useAppStore } from '../stores';
+import { useActiveLocalModelId } from '../hooks/useActiveMobileModel';
 import { modelSupportsMtp } from '../services/mtpDetection';
 
 /**
@@ -26,7 +27,10 @@ export const MtpAdviceCard: React.FC<{ onEnable: () => void }> = ({ onEnable }) 
   const { colors } = useTheme();
   const [dismissed, setDismissed] = useState(false);
   const [supported, setSupported] = useState(false);
-  const { settings, updateSettings, downloadedModels, activeModelId } = useAppStore();
+  const settings = useAppStore(s => s.settings);
+  const downloadedModels = useAppStore(s => s.downloadedModels);
+  const { updateSettings } = useAppStore.getState();
+  const activeModelId = useActiveLocalModelId('text');
   const activeModel = downloadedModels.find(m => m.id === activeModelId);
   const modelPath = activeModel?.engine === 'litert' ? undefined : activeModel?.filePath;
 

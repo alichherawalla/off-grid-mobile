@@ -18,31 +18,53 @@ import { createProject } from '../../utils/factories';
 
 describe('project chat does NOT auto-inject search_knowledge_base (red-flow)', () => {
   it('with tools toggled OFF, a chat in a real project sends NO tools to the model', async () => {
-    const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-     
-    const { llmService } = require('../../../src/services/llm');
-    const { hardwareService } = require('../../../src/services/hardware');
-    const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
-    const { useProjectStore, useChatStore } = require('../../../src/stores');
-     
+    const boundary = installNativeBoundary({
+      llama: true,
+      fs: true,
+      ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB },
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    const fixture = await startMobileApplicationFixture();
 
-    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    await llmService.loadModel('/models/small.gguf');
+    try {
+      const { llmService } = require('../../../src/services/llm');
+      const { hardwareService } = require('../../../src/services/hardware');
+      const {
+        runPersistedChatTurnFn,
+      } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+      const { useProjectStore, useChatStore } = require('../../../src/stores');
 
-    // A REAL, existing project (not a deleted/orphan one) — the exact condition that auto-injected KB.
-    useProjectStore.setState({ projects: [createProject({ id: 'p1', name: 'Research' })] });
-    const convId = useChatStore.getState().createConversation('txt', 'In project', 'p1');
-    useChatStore.getState().addMessage(convId, { role: 'user', content: 'hi' });
-    // Tools OFF (makeGenDeps defaults enabledTools: []) — the device state where the popover showed 0.
-    const { deps } = makeGenDeps({ activeConversationId: convId });
+      boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+      await hardwareService.refreshMemoryInfo();
+      await llmService.loadModel('/models/small.gguf');
 
-    boundary.llama!.scriptCompletion({ text: 'Hello there.' });
-    await startGenerationFn(deps, { targetConversationId: convId, messageText: 'hi', setDebugInfo: () => {} });
+      // A REAL, existing project (not a deleted/orphan one) — the exact condition that auto-injected KB.
+      useProjectStore.setState({
+        projects: [createProject({ id: 'p1', name: 'Research' })],
+      });
+      const convId = useChatStore
+        .getState()
+        .createConversation('txt', 'In project', 'p1');
+      useChatStore
+        .getState()
+        .addMessage(convId, { role: 'user', content: 'hi' });
+      // Tools OFF (makeGenDeps defaults enabledTools: []) — the device state where the popover showed 0.
+      const { deps } = makeGenDeps({ activeConversationId: convId });
 
-    // What actually reached the model: no search_knowledge_base was force-injected by the project.
-    const sentToModel = JSON.stringify(boundary.llama!.calls.completion);
-    expect(sentToModel).not.toContain('search_knowledge_base');
-    expect(sentToModel).not.toContain('"tools"'); // tools off → the request carries no tools at all
+      boundary.llama!.scriptCompletion({ text: 'Hello there.' });
+      await runPersistedChatTurnFn(deps, {
+        targetConversationId: convId,
+        messageText: 'hi',
+        setDebugInfo: () => {},
+      });
+
+      // What actually reached the model: no search_knowledge_base was force-injected by the project.
+      const sentToModel = JSON.stringify(boundary.llama!.calls.completion);
+      expect(sentToModel).not.toContain('search_knowledge_base');
+      expect(sentToModel).not.toContain('"tools"'); // tools off → the request carries no tools at all
+    } finally {
+      await fixture.dispose();
+    }
   });
 });

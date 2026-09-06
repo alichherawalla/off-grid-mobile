@@ -8,6 +8,7 @@
  * are faked. Falsified below by asserting a never-scripted answer.
  */
 import { setupChatScreen } from '../../harness/chatHarness';
+import { selectedRemoteRoute } from '../../utils/testHelpers';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -22,6 +23,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.render();
     await h.send('what is the capital of France', { text: 'The capital of France is Paris.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The capital of France is Paris\./)).not.toBeNull(); });
+    expect(h.boundary.llama!.calls.clearCache).toContain(true);
   });
 
   it('LiteRT: typing + send renders the reply', async () => {
@@ -39,5 +41,61 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.render();
     await h.send('what is the capital of France', { text: 'The capital of France is Paris.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The capital of France is Paris\./)).not.toBeNull(); });
+    expect(h.boundary.llama!.calls.clearCache).toContain(true);
+  });
+
+  it('new chat defers the selected model load until the first message', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
+    h.boundary.llama!.scriptMultimodalHold();
+    h.render();
+
+    expect(h.boundary.llama!.multimodalHoldActive()).toBe(false);
+    expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+
+    await h.send('start the model', { text: 'Ready.' });
+    await h.rtl.waitFor(() => {
+      expect(h.boundary.llama!.multimodalHoldActive()).toBe(true);
+    });
+
+    h.boundary.llama!.releaseMultimodalHold();
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+    }, { timeout: 5000 });
+  });
+
+  it('new chat keeps a remote model choice while discovery metadata refreshes', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
+    const { useRemoteServerStore } = require('../../../src/stores');
+    const { remoteServerManager } = require('../../../src/services/remoteServerManager');
+
+    const remoteStore = useRemoteServerStore.getState();
+    const saved = await remoteServerManager.addServer({
+      name: 'Off Grid Desktop',
+      endpoint: 'http://192.168.5.219:7878',
+      provider: 'openai-compatible',
+    });
+    const serverId = saved.id;
+    remoteStore.setDiscoveredModels(serverId, [{
+      id: 'gemma-4-e4b',
+      name: 'Gemma 4 E4B',
+      capabilities: {
+        supportsVision: false,
+        supportsToolCalling: true,
+        supportsThinking: false,
+        acceptsThinkingKwarg: false,
+      },
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma-4-e4b');
+
+    // Device-shaped race: provider selection is complete, but the background
+    // discovery refresh temporarily has no metadata for the chosen model.
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, []);
+    h.render();
+
+    await h.rtl.waitFor(() => {
+      expect(selectedRemoteRoute('text')).toEqual({ serverId, modelId: 'gemma-4-e4b' });
+    });
+    expect(h.boundary.llama!.multimodalHoldActive()).toBe(false);
+    expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
   });
 });

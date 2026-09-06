@@ -1,42 +1,65 @@
 import { useCallback } from 'react';
 import { showAlert } from '../../../components';
-import { activeModelService, remoteServerManager } from '../../../services';
+import {
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../../../services/modelServices/modelFacadeCommands';
 import { RemoteModel } from '../../../types';
 import { LoadingState } from './types';
 import logger from '../../../utils/logger';
 
 interface RemoteModelHandlersParams {
-  activeModelId: string | null;
   setPickerType: (type: 'text' | 'image' | null) => void;
   setLoadingState: (state: LoadingState) => void;
   setAlertState: (state: any) => void;
 }
 
-export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadingState, setAlertState }: RemoteModelHandlersParams) {
-  const handleSelectRemoteTextModel = useCallback(async (model: RemoteModel) => {
-    logger.log('[useHomeScreen] handleSelectRemoteTextModel called:', model.id, model.serverId);
+export function useRemoteModelHandlers({
+  setPickerType,
+  setLoadingState,
+  setAlertState,
+}: RemoteModelHandlersParams) {
+  const handleSelectRemoteTextModel = useCallback(
+    async (model: RemoteModel) => {
+      logger.log(
+        '[useHomeScreen] handleSelectRemoteTextModel called:',
+        model.id,
+        model.serverId,
+      );
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: model.name });
     try {
       // Unload any active local model first — only one active model at a time
-      if (activeModelId) {
-        await activeModelService.unloadTextModel();
-      }
-      await remoteServerManager.setActiveRemoteTextModel(model.serverId, model.id);
+        await selectModelRoute({
+          source: 'remote',
+          hostId: model.serverId,
+          modality: 'text',
+          modelId: model.id,
+        });
       logger.log('[useHomeScreen] Remote text model set successfully');
     } catch (_error) {
-      logger.error('[useHomeScreen] Failed to set remote text model:', _error);
-      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(_error as Error).message}`));
+        logger.error(
+          '[useHomeScreen] Failed to set remote text model:',
+          _error,
+        );
+        setAlertState(
+          showAlert(
+            'Error',
+            `Failed to connect to remote model: ${(_error as Error).message}`,
+          ),
+        );
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
-  }, [activeModelId, setPickerType, setLoadingState, setAlertState]);
+    },
+    [setPickerType, setLoadingState, setAlertState],
+  );
 
   const handleUnloadRemoteTextModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'text', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteModel();
+        await unloadAndClearModel('text');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {
@@ -44,23 +67,40 @@ export function useRemoteModelHandlers({ activeModelId, setPickerType, setLoadin
     }
   }, [setPickerType, setLoadingState, setAlertState]);
 
-  const handleSelectRemoteImageModel = useCallback(async (model: RemoteModel) => {
+  const handleSelectRemoteImageModel = useCallback(
+    async (model: RemoteModel) => {
     setPickerType(null);
-    setLoadingState({ isLoading: true, type: 'image', modelName: model.name });
+      setLoadingState({
+        isLoading: true,
+        type: 'image',
+        modelName: model.name,
+      });
     try {
-      await remoteServerManager.setActiveRemoteImageModel(model.serverId, model.id);
+        await selectModelRoute({
+          source: 'remote',
+          hostId: model.serverId,
+          modality: 'image',
+          modelId: model.id,
+        });
     } catch (_error) {
-      setAlertState(showAlert('Error', `Failed to connect to remote model: ${(_error as Error).message}`));
+        setAlertState(
+          showAlert(
+            'Error',
+            `Failed to connect to remote model: ${(_error as Error).message}`,
+          ),
+        );
     } finally {
       setLoadingState({ isLoading: false, type: null, modelName: null });
     }
-  }, [setPickerType, setLoadingState, setAlertState]);
+    },
+    [setPickerType, setLoadingState, setAlertState],
+  );
 
   const handleUnloadRemoteImageModel = useCallback(async () => {
     setPickerType(null);
     setLoadingState({ isLoading: true, type: 'image', modelName: null });
     try {
-      remoteServerManager.clearActiveRemoteModel();
+      await unloadAndClearModel('image');
     } catch {
       setAlertState(showAlert('Error', 'Failed to disconnect remote model'));
     } finally {

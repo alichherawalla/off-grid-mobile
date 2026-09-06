@@ -1,3 +1,4 @@
+import { arrangeLocalSelection } from '../../utils/testHelpers';
 /**
  * RED-FLOW (integration) — Q11: "New chat" on a context-full alert drops the project.
  *
@@ -9,42 +10,91 @@
  */
 import { installNativeBoundary, GB } from '../../harness/nativeBoundary';
 import { makeGenDeps } from '../../harness/genDeps';
-import { createProject } from '../../utils/factories';
+import { createDownloadedModel, createProject } from '../../utils/factories';
 
 describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
   it('creates the continuation chat inside the same project', async () => {
-    const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-     
-    const { llmService } = require('../../../src/services/llm');
-    const { hardwareService } = require('../../../src/services/hardware');
-    const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
-    const { useProjectStore, useChatStore } = require('../../../src/stores');
-     
+    const boundary = installNativeBoundary({
+      llama: true,
+      fs: true,
+      ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB },
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    const fixture = await startMobileApplicationFixture();
 
-    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    await llmService.loadModel('/models/small.gguf');
+    try {
+      const { llmService } = require('../../../src/services/llm');
+      const { hardwareService } = require('../../../src/services/hardware');
+      const {
+        runPersistedChatTurnFn,
+      } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+      const {
+        useAppStore,
+        useProjectStore,
+        useChatStore,
+      } = require('../../../src/stores');
 
-    // A chat filed under a project.
-    useProjectStore.setState({ projects: [createProject({ id: 'proj-1', name: 'Research' })] });
-    const convId = useChatStore.getState().createConversation('txt', 'In project', 'proj-1');
-    useChatStore.getState().addMessage(convId, { role: 'user', content: 'continue please' });
-    const { deps, captured } = makeGenDeps({ activeConversationId: convId });
+      boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
+      await hardwareService.refreshMemoryInfo();
+      await llmService.loadModel('/models/small.gguf');
+      useAppStore.setState({
+        downloadedModels: [
+          createDownloadedModel({
+            id: 'txt',
+            engine: 'llama',
+            filePath: '/models/small.gguf',
+            fileName: 'small.gguf',
+          }),
+        ],
+      });
+      arrangeLocalSelection('text', 'txt');
+      await require('../../../src/services/modelServices').refreshMobileModelServices();
 
-    // Generation overflows the context window → the context-full alert is raised.
-    boundary.llama!.scriptCompletion({ throwMessage: 'the input prompt is too long for this context window' });
-    await startGenerationFn(deps, { targetConversationId: convId, messageText: 'continue please', setDebugInfo: () => {} });
+      // A chat filed under a project.
+      useProjectStore.setState({
+        projects: [createProject({ id: 'proj-1', name: 'Research' })],
+      });
+      const convId = useChatStore
+        .getState()
+        .createConversation('txt', 'In project', 'proj-1');
+      useChatStore
+        .getState()
+        .addMessage(convId, { role: 'user', content: 'continue please' });
+      const { deps, captured } = makeGenDeps({ activeConversationId: convId });
 
-    // The user taps "New chat" on that alert.
-    const alert = captured.alerts.find(a => a.buttons?.some(b => b.text === 'New chat'));
-    expect(alert).toBeDefined();
-    const before = new Set(useChatStore.getState().conversations.map((c: { id: string }) => c.id));
-    alert!.buttons!.find(b => b.text === 'New chat')!.onPress!();
+      // Generation overflows the context window → the context-full alert is raised.
+      boundary.llama!.scriptCompletion({
+        throwMessage: 'the input prompt is too long for this context window',
+      });
+      boundary.llama!.scriptCompletion({
+        throwMessage: 'the input prompt is too long for this context window',
+      });
+      await runPersistedChatTurnFn(deps, {
+        targetConversationId: convId,
+        messageText: 'continue please',
+        setDebugInfo: () => {},
+      });
 
-    // Correct: the continuation chat inherits the project. Today createConversation(modelId) omits the
-    // projectId, so the new chat is unfiled → RED.
-    const newConv = useChatStore.getState().conversations.find((c: { id: string }) => !before.has(c.id));
-    expect(newConv).toBeDefined();
-    expect((newConv as { projectId?: string }).projectId).toBe('proj-1');
+      // The user taps "New chat" on that alert.
+      const alert = captured.alerts.find(a =>
+        a.buttons?.some(b => b.text === 'New chat'),
+      );
+      expect(alert).toBeDefined();
+      const before = new Set(
+        useChatStore.getState().conversations.map((c: { id: string }) => c.id),
+      );
+      alert!.buttons!.find(b => b.text === 'New chat')!.onPress!();
+
+      // Correct: the continuation chat inherits the project. Today createConversation(modelId) omits the
+      // projectId, so the new chat is unfiled → RED.
+      const newConv = useChatStore
+        .getState()
+        .conversations.find((c: { id: string }) => !before.has(c.id));
+      expect(newConv).toBeDefined();
+      expect((newConv as { projectId?: string }).projectId).toBe('proj-1');
+    } finally {
+      await fixture.dispose();
+    }
   });
 });

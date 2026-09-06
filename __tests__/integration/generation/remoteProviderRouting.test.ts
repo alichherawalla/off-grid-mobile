@@ -1,319 +1,190 @@
-/**
- * Generation Service Provider Routing Integration Tests
- *
- * Tests for routing between local and remote providers in the generation service.
- */
+import type { TextStreamTransport } from '../../../src/services/adapters/providers/types';
+import { modelsFailureMessage } from '@offgrid/application';
+import { remoteTextTransportRegistry } from '../../../src/services/adapters/providers';
+import { getMobileApplication } from '../../../src/services/composition/application';
+import { mobileTextEngineControl } from '../../../src/services/modelServices/textEngineControl';
+import { useAppStore } from '../../../src/stores';
+import { createDownloadedModel } from '../../utils/factories';
+import { mobileChatSession } from '../../../src/screens/ChatScreen/mobileChatSession';
+import { useChatStore } from '../../../src/stores/chatStore';
+import { setupWithConversation } from '../../utils/testHelpers';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import {
+  startMobileApplicationFixture,
+  type MobileApplicationFixture,
+} from '../../harness/mobileApplicationFixture';
 
-import { providerRegistry, localProvider } from '../../../src/services/providers';
-import { useRemoteServerStore } from '../../../src/stores';
-import { OpenAICompatibleProvider } from '../../../src/services/providers/openAICompatibleProvider';
+function remoteTransport(id: string): TextStreamTransport {
+  return {
+    id,
+    type: 'openai-compatible',
+    async generate(_modelId, _messages, _options, callbacks) {
+      callbacks.onToken('remote reply');
+      callbacks.onComplete({ content: 'remote reply' });
+    },
+    async stopGeneration() {},
+    async isReady() { return true; },
+  };
+}
 
-// Mock stores
-jest.mock('../../../src/stores', () => ({
-  useAppStore: {
-    getState: jest.fn(() => ({
-      settings: {
-        systemPrompt: 'You are helpful.',
-        temperature: 0.7,
-        maxTokens: 1024,
-        topP: 0.9,
-      },
-      downloadedModels: [],
-      activeModelId: null,
-    })),
-  },
-  useChatStore: {
-    getState: jest.fn(() => ({
-      startStreaming: jest.fn(),
-      appendToStreamingMessage: jest.fn(),
-      appendToStreamingReasoningContent: jest.fn(),
-      finalizeStreamingMessage: jest.fn(),
-      clearStreamingMessage: jest.fn(),
-      setStreamingMessage: jest.fn(),
-      setIsThinking: jest.fn(),
-      addMessage: jest.fn(),
-    })),
-  },
-  useRemoteServerStore: {
-    getState: jest.fn(() => ({
-      activeServerId: null,
-      servers: [],
-      setActiveServerId: jest.fn(),
-      getActiveServer: jest.fn(),
-    })),
-  },
-}));
+describe('canonical Mobile text route authority', () => {
+  const local = createDownloadedModel({ id: 'local-model', name: 'Local model', engine: 'llama' });
+  let applicationFixture: MobileApplicationFixture;
 
-// Mock llmService
-jest.mock('../../../src/services/llm', () => ({
-  llmService: {
-    isModelLoaded: jest.fn(() => true),
-    isCurrentlyGenerating: jest.fn(() => false),
-    supportsVision: jest.fn(() => false),
-    supportsToolCalling: jest.fn(() => true),
-    supportsThinking: jest.fn(() => false),
-    getGpuInfo: jest.fn(() => ({ gpu: false, gpuBackend: 'CPU', gpuLayers: 0 })),
-    getPerformanceStats: jest.fn(() => ({
-      lastTokensPerSecond: 10,
-      lastDecodeTokensPerSecond: 8,
-      lastTimeToFirstToken: 0.5,
-      lastGenerationTime: 1000,
-      lastTokenCount: 10,
-    })),
-    generateResponse: jest.fn(),
-    generateResponseWithTools: jest.fn(),
-    stopGeneration: jest.fn(),
-    loadModel: jest.fn(),
-  },
-}));
+  beforeAll(async () => {
+    applicationFixture = await startMobileApplicationFixture();
+  });
 
-// Mock llmToolGeneration
-jest.mock('../../../src/services/llmToolGeneration', () => ({
-  generateWithToolsImpl: jest.fn(),
-}));
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
 
-// Mock tools
-jest.mock('../../../src/services/tools', () => ({
-  getToolsAsOpenAISchema: jest.fn(() => []),
-  executeToolCall: jest.fn(),
-}));
+  beforeEach(async () => {
+    remoteTextTransportRegistry.clear();
+    await remoteServerManager.clearAllServers();
+    const app = useAppStore.getState();
+    for (const model of app.downloadedModels) app.removeDownloadedModel(model.id);
+    app.addDownloadedModel(local);
+    await selectMobileModel({ source: 'local', hostId: 'llama', modality: 'text', modelId: local.id });
+  });
 
-// Mock sharePrompt
-jest.mock('../../../src/utils/sharePrompt', () => ({
-  shouldShowSharePrompt: jest.fn(() => false),
-  emitSharePrompt: jest.fn(),
-}));
+  afterEach(async () => {
+    await clearMobileModel('text');
+    remoteTextTransportRegistry.clear();
+    await remoteServerManager.clearAllServers();
+  });
 
-describe('Generation Service Provider Routing', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // Reset active server
-    (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-      activeServerId: null,
-      servers: [],
-      setActiveServerId: jest.fn(),
-      getActiveServer: jest.fn(),
+  it('uses the canonical local route for status, capability, and execution identity', () => {
+    const active = activeMobileModel('text');
+    expect(active.model).toMatchObject({ id: local.id, source: 'local', providerId: 'llama' });
+    expect(remoteTextTransportRegistry.ids()).toEqual([]);
+    expect(mobileTextEngineControl.activeLocalProviderId()).toBe('llama');
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(false);
+    expect(mobileTextEngineControl.capabilities(local.id)).toEqual({
+      vision: false, audio: false, tools: true, thinking: false,
     });
   });
 
-  describe('Local Provider (Default)', () => {
-    it('should use local provider when no remote server is active', () => {
-      const activeProvider = providerRegistry.getActiveProvider();
+  it('keeps remote UI capability and execution identity on the same canonical route', async () => {
+    const modelId = 'remote-model';
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Remote server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Remote model',
+        capabilities: { supportsVision: true, supportsToolCalling: true, supportsThinking: true },
+      }] },
+    })).id;
+    await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
-      expect(activeProvider.id).toBe('local');
-      expect(activeProvider.type).toBe('local');
+    expect(activeMobileModel('text').model).toMatchObject({ id: modelId, source: 'remote', serverId });
+    expect(remoteTextTransportRegistry.get(serverId)).toMatchObject({
+      id: serverId,
+      type: 'openai-compatible',
+      config: { endpoint: 'http://127.0.0.1:11434/v1' },
     });
-
-    it('should return local provider from getProviderForServer(null)', () => {
-      const provider = providerRegistry.getProvider('local');
-
-      expect(provider!.id).toBe('local');
-      expect(provider).toBe(localProvider);
-    });
-  });
-
-  describe('Remote Provider Routing', () => {
-    it('should register a remote provider', () => {
-      const remoteProvider = new OpenAICompatibleProvider('test-server', {
-        endpoint: 'http://192.168.1.50:11434',
-        modelId: 'llama2',
-      });
-
-      providerRegistry.registerProvider('test-server', remoteProvider);
-
-      expect(providerRegistry.hasProvider('test-server')).toBe(true);
-      expect(providerRegistry.getProvider('test-server')).toBe(remoteProvider);
-
-      // Cleanup
-      providerRegistry.unregisterProvider('test-server');
-    });
-
-    it('should switch active provider', () => {
-      const remoteProvider = new OpenAICompatibleProvider('remote-1', {
-        endpoint: 'http://192.168.1.50:11434',
-        modelId: 'mistral',
-      });
-
-      providerRegistry.registerProvider('remote-1', remoteProvider);
-
-      const switched = providerRegistry.setActiveProvider('remote-1');
-
-      expect(switched).toBe(true);
-      expect(providerRegistry.getActiveProviderId()).toBe('remote-1');
-      expect(providerRegistry.getActiveProvider()).toBe(remoteProvider);
-
-      // Cleanup
-      providerRegistry.setActiveProvider('local');
-      providerRegistry.unregisterProvider('remote-1');
-    });
-
-    it('should return undefined for unknown provider', () => {
-      const provider = providerRegistry.getProvider('unknown-id');
-
-      // Should return undefined for unknown provider
-      expect(provider).toBeUndefined();
-    });
-
-    it('should not unregister local provider', () => {
-      providerRegistry.unregisterProvider('local');
-
-      // Local should still be available
-      expect(providerRegistry.hasProvider('local')).toBe(true);
+    expect(mobileTextEngineControl.activeLocalProviderId()).toBeNull();
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
+    expect(mobileTextEngineControl.capabilities(modelId)).toEqual({
+      vision: true, audio: false, tools: true, thinking: true,
     });
   });
 
-  describe('Provider Notifications', () => {
-    it('should notify listeners on provider change', () => {
-      const listener = jest.fn();
-      const unsubscribe = providerRegistry.subscribe(listener);
+  it('fails closed when the selected remote provider becomes unavailable', async () => {
+    const modelId = 'unavailable-model';
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Unavailable server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Unavailable model',
+        capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      }] },
+    })).id;
+    remoteTextTransportRegistry.register(serverId, remoteTransport(serverId));
+    await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
-      const remoteProvider = new OpenAICompatibleProvider('notify-test', {
-        endpoint: 'http://test:11434',
-        modelId: 'test',
-      });
+    remoteTextTransportRegistry.unregister(serverId);
+    await refreshMobileModelServices();
 
-      providerRegistry.registerProvider('notify-test', remoteProvider);
-      providerRegistry.setActiveProvider('notify-test');
-
-      expect(listener).toHaveBeenCalledWith('notify-test');
-
-      // Cleanup
-      providerRegistry.setActiveProvider('local');
-      providerRegistry.unregisterProvider('notify-test');
-      unsubscribe();
+    const active = activeMobileModel('text');
+    expect(active.selectedId).not.toBeNull();
+    expect(active.model).toMatchObject({ id: modelId, source: 'remote', ready: false });
+    expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(true);
+    expect(models().resolve({ modality: 'text', routeId: active.selectedId!, allowFallback: false }))
+      .toMatchObject({ selected: null, candidates: [], requested: { ready: false } });
+    const conversationId = setupWithConversation({ modelId });
+    const user = useChatStore.getState().addMessage(conversationId, {
+      role: 'user', content: 'Do not send this to a local model.', turnKind: 'text',
     });
-
-    it('should unsubscribe listeners', () => {
-      const listener = jest.fn();
-      const unsubscribe = providerRegistry.subscribe(listener);
-
-      unsubscribe();
-
-      const remoteProvider = new OpenAICompatibleProvider('unsub-test', {
-        endpoint: 'http://test:11434',
-        modelId: 'test',
-      });
-
-      providerRegistry.registerProvider('unsub-test', remoteProvider);
-      providerRegistry.setActiveProvider('unsub-test');
-
-      expect(listener).not.toHaveBeenCalled();
-
-      // Cleanup
-      providerRegistry.setActiveProvider('local');
-      providerRegistry.unregisterProvider('unsub-test');
-    });
+    await expect(mobileChatSession.sendPersisted(conversationId, user.id))
+      .rejects.toThrow('No compatible text model is ready');
   });
 
-  describe('Clear Providers', () => {
-    it('should clear all providers except local', () => {
-      const remoteProvider1 = new OpenAICompatibleProvider('clear-test-1', {
-        endpoint: 'http://test1:11434',
-        modelId: 'test',
-      });
-      const remoteProvider2 = new OpenAICompatibleProvider('clear-test-2', {
-        endpoint: 'http://test2:11434',
-        modelId: 'test',
-      });
+  it('returns to the persisted local route only after the remote server is removed', async () => {
+    const modelId = 'removed-model';
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Removed server', endpoint: 'http://127.0.0.1:11434', provider: 'openai-compatible',
+      selections: { text: modelId },
+      catalog: { text: [{
+        id: modelId, name: 'Removed model',
+        capabilities: { supportsVision: false, supportsToolCalling: false, supportsThinking: false },
+      }] },
+    })).id;
+    remoteTextTransportRegistry.register(serverId, remoteTransport(serverId));
+    await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
 
-      providerRegistry.registerProvider('clear-test-1', remoteProvider1);
-      providerRegistry.registerProvider('clear-test-2', remoteProvider2);
+    await remoteServerManager.removeServer(serverId);
+    await refreshMobileModelServices();
 
-      expect(providerRegistry.getProviderIds()).toHaveLength(3); // local + 2 remote
-
-      providerRegistry.clear();
-
-      expect(providerRegistry.getProviderIds()).toHaveLength(1);
-      expect(providerRegistry.getProviderIds()).toContain('local');
-    });
+    expect(activeMobileModel('text').model).toMatchObject({ id: local.id, source: 'local' });
+    expect(remoteTextTransportRegistry.get(serverId)).toBeUndefined();
+    expect(mobileTextEngineControl.isRemoteActive()).toBe(false);
   });
 
-  describe('Generation Service isUsingRemoteProvider', () => {
-    it('should return false when no remote server is active', () => {
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        activeServerId: null,
-      });
+  it('selects and clears a remote embedding route through the same server control plane', async () => {
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Embedding server',
+      endpoint: 'https://embeddings.example.test/v1',
+      provider: 'openai-compatible',
+      selections: { embedding: 'embed-small' },
+      catalog: { embedding: [{ id: 'embed-small', name: 'Embed Small' }] },
+    })).id;
+    await refreshMobileModelServices();
 
-      // generationService.isUsingRemoteProvider() should return false
-      // This is tested indirectly through the local generation path
-      expect(providerRegistry.getActiveProvider().type).toBe('local');
+    await selectMobileModel({
+      source: 'remote', hostId: serverId, modality: 'embedding', modelId: 'embed-small',
+    });
+    expect(activeMobileModel('embedding').model).toMatchObject({
+      id: 'embed-small', source: 'remote', serverId,
     });
 
-    it('should return true when remote server is active', () => {
-      (useRemoteServerStore.getState as jest.Mock).mockReturnValue({
-        activeServerId: 'remote-server',
-      });
-
-      // Create and register remote provider
-      const remoteProvider = new OpenAICompatibleProvider('remote-server', {
-        endpoint: 'http://192.168.1.50:11434',
-        modelId: 'llama2',
-      });
-
-      providerRegistry.registerProvider('remote-server', remoteProvider);
-      providerRegistry.setActiveProvider('remote-server');
-
-      expect(providerRegistry.getActiveProvider().type).toBe('openai-compatible');
-
-      // Cleanup
-      providerRegistry.setActiveProvider('local');
-      providerRegistry.unregisterProvider('remote-server');
-    });
-  });
-
-  describe('Local Provider Capabilities', () => {
-    it('should report correct capabilities', () => {
-      const caps = localProvider.capabilities;
-
-      expect(caps).toHaveProperty('supportsVision');
-      expect(caps).toHaveProperty('supportsToolCalling');
-      expect(caps).toHaveProperty('supportsThinking');
-      expect(caps).toHaveProperty('providerName');
-    });
-
-    it('should delegate to llmService for model loading', async () => {
-      const { llmService } = require('../../../src/services/llm');
-      (llmService.loadModel as jest.Mock).mockResolvedValue(undefined);
-
-      await localProvider.loadModel('/path/to/model.gguf');
-
-      // loadModel on localProvider just tracks the ID
-      // llmService.loadModel is called by activeModelService, not directly here
-      expect(localProvider.getLoadedModelId()).toBe('/path/to/model.gguf');
-    });
-
-    it('should delegate stopGeneration to llmService', async () => {
-      const { llmService } = require('../../../src/services/llm');
-      (llmService.stopGeneration as jest.Mock).mockResolvedValue(undefined);
-
-      await localProvider.stopGeneration();
-
-      expect(llmService.stopGeneration).toHaveBeenCalled();
-    });
-  });
-
-  describe('Remote Provider Capabilities', () => {
-    it('sets vision capability via updateCapabilities, not model name', async () => {
-      const provider = new OpenAICompatibleProvider('test', {
-        endpoint: 'http://test:11434',
-        modelId: 'llava-v1.6',
-      });
-
-      await provider.loadModel('llava-v1.6');
-      // loadModel no longer infers vision from name — stays false until discovery applies it
-      expect(provider.capabilities.supportsVision).toBe(false);
-
-      provider.updateCapabilities({ supportsVision: true });
-      expect(provider.capabilities.supportsVision).toBe(true);
-    });
-
-    it('should enable tool calling by default', () => {
-      const provider = new OpenAICompatibleProvider('test', {
-        endpoint: 'http://test:11434',
-        modelId: 'test-model',
-      });
-
-      expect(provider.capabilities.supportsToolCalling).toBe(true);
-    });
+    await remoteServerManager.removeServer(serverId);
+    await refreshMobileModelServices();
+    expect(activeMobileModel('embedding').model).toBeNull();
   });
 });
+  const models = () => getMobileApplication().models;
+  const activeMobileModel = (modality: 'text' | 'embedding') => {
+    const active = models().snapshot().active[modality];
+    if (!active) throw new Error(`Missing ${modality} projection.`);
+    return active;
+  };
+  const refreshMobileModelServices = () => models().refresh();
+  const clearMobileModel = async (modality: 'text' | 'embedding') => {
+    const outcome = await models().select({modality, modelId: null});
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  };
+  const selectMobileModel = async (selection: {
+    source: 'local' | 'remote';
+    hostId: string;
+    modality: 'text' | 'embedding';
+    modelId: string;
+  }) => {
+    await models().refresh();
+    const route = selection.source === 'remote'
+      ? models().remoteModelRoute(selection.hostId, selection.modelId, selection.modality)
+      : models().resolveRoute(selection.modality, selection.modelId);
+    const outcome = await models().select({modality: selection.modality, modelId: route ?? selection.modelId});
+    if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+  };

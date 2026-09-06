@@ -13,27 +13,44 @@ import { createProject } from '../../utils/factories';
 
 describe('Q10 — new chat files a pending project (guard)', () => {
   it('files the new conversation under the pending project on first send', async () => {
-    const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-     
-    const { llmService } = require('../../../src/services/llm');
-    const { hardwareService } = require('../../../src/services/hardware');
-    const { handleSendFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
-    const { useProjectStore, useChatStore } = require('../../../src/stores');
-     
+    installNativeBoundary({
+      ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB },
+    });
+    const { startMobileApplicationFixture } =
+      require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    const fixture = await startMobileApplicationFixture();
 
-    boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
-    await hardwareService.refreshMemoryInfo();
-    await llmService.loadModel('/models/small.gguf');
+    try {
+      const {
+        handleSendFn,
+      } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
+      const { useProjectStore, useChatStore } = require('../../../src/stores');
 
-    useProjectStore.setState({ projects: [createProject({ id: 'proj-1', name: 'Research' })] });
-    // Brand-new chat: no active conversation, but the user picked a project (pendingProjectId).
-    const { deps } = makeGenDeps({ activeConversationId: null, pendingProjectId: 'proj-1' });
+      useProjectStore.setState({
+        projects: [createProject({ id: 'proj-1', name: 'Research' })],
+      });
+      // Brand-new chat: no active conversation, but the user picked a project (pendingProjectId).
+      const { deps } = makeGenDeps({
+        activeConversationId: null,
+        pendingProjectId: 'proj-1',
+      });
 
-    const before = new Set(useChatStore.getState().conversations.map((c: { id: string }) => c.id));
-    await handleSendFn(deps, { text: 'hello there', startGeneration: async () => {}, setDebugInfo: () => {} });
+      const before = new Set(
+        useChatStore.getState().conversations.map((c: { id: string }) => c.id),
+      );
+      await handleSendFn(deps, {
+        text: 'hello there',
+        startGeneration: async () => {},
+        setDebugInfo: () => {},
+      });
 
-    const newConv = useChatStore.getState().conversations.find((c: { id: string }) => !before.has(c.id));
-    expect(newConv).toBeDefined();
-    expect((newConv as { projectId?: string }).projectId).toBe('proj-1');
+      const newConv = useChatStore
+        .getState()
+        .conversations.find((c: { id: string }) => !before.has(c.id));
+      expect(newConv).toBeDefined();
+      expect((newConv as { projectId?: string }).projectId).toBe('proj-1');
+    } finally {
+      await fixture.dispose();
+    }
   });
 });

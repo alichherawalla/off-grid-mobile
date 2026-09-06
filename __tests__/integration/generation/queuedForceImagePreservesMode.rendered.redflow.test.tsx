@@ -63,6 +63,11 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     await h.tapSend('tell me about cats'); // NON-draw prompt: only the force flag should make it an image
     await h.settle(50); // let handleSendFn enqueue
 
+    // The user can see that the message is waiting and can identify it.
+    expect(view.queryByTestId('queue-indicator')).not.toBeNull();
+    expect(view.queryByText('1 queued')).not.toBeNull();
+    expect(view.queryAllByText('tell me about cats').length).toBeGreaterThan(0);
+
     // No image generated yet — turn #2 is queued, turn #1 still holds.
     expect(h.boundary.diffusion.calls.generateImage.length).toBe(0);
 
@@ -79,22 +84,19 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     expect(view.queryAllByText(new RegExp(QUEUED_TEXT_LEAK)).length).toBe(1);
   });
 
-  it('COALESCE (M16): two sends queue together and one forced image — the merged dispatch draws an image', async () => {
-    // Exercises the multi-message branch (all.length > 1) where imageMode = all.some(force) ? force : all[0].
-    // My single-message test above only hits the all[0] shortcut; this pins the coalesce force-merge so a
-    // regression to `all[0].imageMode` (dropping the .some) is caught.
+  it('keeps each queued turn and its recorded route when two sends wait together', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     h.render();
     const { rtl } = h;
     const view = h.view!;
     await h.placeImageModel({ backend: 'coreml' });
 
-    // Turn #1 holds in prefill → in-flight, so BOTH following sends queue behind it and coalesce.
+    // Turn #1 holds in prefill, so both following sends wait behind it.
     h.boundary.llama!.scriptCompletion({ text: QUEUED_TEXT_LEAK, holdBeforeStream: true });
     await h.tapSend('what is the weather like');
     await rtl.waitFor(() => { expect(view.queryByTestId('stop-button')).not.toBeNull(); }, { timeout: 4000 });
 
-    // Queue #2 (auto/text) then #3 (force image) — both queue while #1 holds → coalesced on drain.
+    // Queue #2 (auto/text) then #3 (force image). Shared keeps two distinct user intents.
     await h.tapSend('and how are you'); // auto, non-draw → queued
     await h.settle(30);
     await h.cycleImageMode();
@@ -103,7 +105,7 @@ describe('#510 (rendered) — a queued force-image send preserves its force flag
     await h.settle(50);
     expect(h.boundary.diffusion.calls.generateImage.length).toBe(0); // nothing drawn while #1 holds
 
-    // Drain: the 2 queued messages coalesce; because one was force, the merged dispatch must draw.
+    // Drain in order. The final recorded image route must still draw.
     h.boundary.llama!.releaseStream();
     await h.settle(400);
     await rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); }, { timeout: 4000 });

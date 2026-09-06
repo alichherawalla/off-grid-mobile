@@ -20,7 +20,9 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { MessageAudioMode } from '@offgrid/pro/audio/ui/MessageAudioMode';
 import type { MessageAudioModeProps } from '@offgrid/pro/audio/ui/MessageAudioMode';
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
+import { useChatStore } from '@offgrid/core/stores';
 import type { Message } from '@offgrid/core/types';
+import type { MobileApplicationFixture } from '../../../harness/mobileApplicationFixture';
 import {
   createUserMessage,
   createAssistantMessage,
@@ -48,10 +50,22 @@ const renderMode = (msg: Message, overrides: Partial<MessageAudioModeProps> = {}
   render(<MessageAudioMode {...baseProps} msg={msg} {...overrides} />);
 
 const initialTTSState = useTTSStore.getState();
+const initialChatState = useChatStore.getState();
+let applicationFixture: MobileApplicationFixture;
+
+beforeAll(async () => {
+  const { startMobileApplicationFixture } = require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({ pro: true });
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
 
 afterEach(() => {
   jest.clearAllMocks();
   useTTSStore.setState(initialTTSState, true);
+  useChatStore.setState(initialChatState, true);
 });
 
 describe('MessageAudioMode', () => {
@@ -93,6 +107,26 @@ describe('MessageAudioMode', () => {
     expect(getByTestId(`audio-bubble-${msg.id}`)).toBeTruthy();
     // Completed bubble is NOT loading → the "•••" action hint is shown.
     expect(getByText('•••')).toBeTruthy();
+  });
+
+  it('keeps a Hindi assistant answer visible in Voice Mode', () => {
+    const msg = createAssistantMessage('बाहर ही रहे आप प्लीज');
+    const { getByTestId } = renderMode(msg);
+
+    expect(getByTestId(`audio-bubble-${msg.id}`)).toBeTruthy();
+  });
+
+  it('keeps the newest assistant voice answer transcript open by default', () => {
+    const conversationId = useChatStore.getState().createConversation('model-1');
+    const msg = useChatStore.getState().addMessage(conversationId, {
+      role: 'assistant',
+      content: 'The newest answer stays readable.',
+    });
+
+    const { getByText } = renderMode(msg);
+
+    expect(getByText('Hide transcript')).toBeTruthy();
+    expect(getByText('The newest answer stays readable.')).toBeTruthy();
   });
 
   it('pressing copy on a completed assistant bubble passes the transcript to onCopy', () => {

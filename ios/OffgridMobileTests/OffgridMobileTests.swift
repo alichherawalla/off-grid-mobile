@@ -21,6 +21,52 @@ private func makeTempDirectory() -> URL {
   return url
 }
 
+final class BlobChannelInterfaceCandidatesTests: XCTestCase {
+  func testUsableKeepsOnlyActiveUnicastInterfacesAndPreservesNames() {
+    let candidates = [
+      record("en0", "192.168.1.10"),
+      record("utun3", "100.80.1.2"),
+      record("lo0", "127.0.0.1", isLoopback: true),
+      record("en0", "169.254.2.3", isLinkLocal: true),
+      record("down0", "10.0.0.4", isUp: false),
+      record("any0", "0.0.0.0", isAnyLocal: true),
+      record("cast0", "224.0.0.1", isMulticast: true),
+    ]
+
+    XCTAssertEqual(
+      BlobChannelSupport.usableInterfaceCandidates(candidates),
+      [record("en0", "192.168.1.10"), record("utun3", "100.80.1.2")])
+  }
+
+  func testUsableDeduplicatesPerInterfaceWithoutCollapsingDifferentInterfaces() {
+    let candidate = record("utun3", "100.64.0.9")
+
+    XCTAssertEqual(
+      BlobChannelSupport.usableInterfaceCandidates(
+        [candidate, candidate, record("utun4", "100.64.0.9")]),
+      [candidate, record("utun4", "100.64.0.9")])
+  }
+
+  private func record(
+    _ interfaceName: String,
+    _ host: String,
+    isUp: Bool = true,
+    isLoopback: Bool = false,
+    isLinkLocal: Bool = false,
+    isAnyLocal: Bool = false,
+    isMulticast: Bool = false
+  ) -> BlobChannelSupport.InterfaceCandidate {
+    BlobChannelSupport.InterfaceCandidate(
+      interfaceName: interfaceName,
+      host: host,
+      isUp: isUp,
+      isLoopback: isLoopback,
+      isLinkLocal: isLinkLocal,
+      isAnyLocal: isAnyLocal,
+      isMulticast: isMulticast)
+  }
+}
+
 final class BlobReceiveWindowTests: XCTestCase {
   func testBodyWaitsForOneCompleteAuthenticatedFrame() {
     let productionFrame = 4 * 1_048_576 + BlobFrameCipher.tagBytes
@@ -41,6 +87,77 @@ final class BlobReceiveWindowTests: XCTestCase {
   func testHeaderCanReturnAsSoonAsOneByteArrives() {
     XCTAssertEqual(BlobReceiveWindow.header.minimum, 1)
     XCTAssertEqual(BlobReceiveWindow.header.maximum, 1 << 16)
+  }
+}
+
+final class BlobChannelUploaderDeadlineTests: XCTestCase {
+  func testAReachedNetworkSignalContinues() {
+    let signal = DispatchSemaphore(value: 0)
+    signal.signal()
+
+    XCTAssertNoThrow(
+      try BlobChannelUploader.waitForSignal(
+        signal, timeout: .milliseconds(1), message: "should not time out"))
+  }
+
+  func testAnUnreachedNetworkSignalFailsInsteadOfPretendingToContinue() {
+    let signal = DispatchSemaphore(value: 0)
+
+    XCTAssertThrowsError(
+      try BlobChannelUploader.waitForSignal(
+        signal, timeout: .milliseconds(0), message: "the endpoint did not become reachable")
+    ) { error in
+      XCTAssertEqual(error.localizedDescription, "the endpoint did not become reachable")
+    }
+  }
+}
+
+final class ProximityAdvertisingControllerTests: XCTestCase {
+  func testStopAndRestartReachTheNativeAdvertiserWithoutRestartingTheSession() {
+    let controller = ProximityAdvertisingController()
+    var starts = 0
+    var stops = 0
+    controller.install(
+      start: { starts += 1 },
+      stop: { stops += 1 }
+    )
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(starts, 0)
+
+    XCTAssertTrue(controller.start())
+    controller.stop()
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(starts, 1)
+    XCTAssertEqual(stops, 1)
+
+    XCTAssertTrue(controller.start())
+    XCTAssertTrue(controller.isAdvertising)
+    XCTAssertEqual(starts, 2)
+  }
+
+  func testReplacingTheAdvertiserPreservesWhetherItWasHidden() {
+    let controller = ProximityAdvertisingController()
+    var firstStarts = 0
+    var firstStops = 0
+    var replacementStarts = 0
+    controller.install(
+      start: { firstStarts += 1 },
+      stop: { firstStops += 1 }
+    )
+    XCTAssertTrue(controller.start())
+
+    controller.install(
+      start: { replacementStarts += 1 },
+      stop: {}
+    )
+    XCTAssertEqual(firstStops, 1)
+    XCTAssertEqual(replacementStarts, 1)
+
+    controller.stop()
+    controller.install(start: { replacementStarts += 1 }, stop: {})
+    XCTAssertFalse(controller.isAdvertising)
+    XCTAssertEqual(replacementStarts, 1)
+    XCTAssertEqual(firstStarts, 1)
   }
 }
 
@@ -653,22 +770,228 @@ final class DownloadManagerModuleTests: XCTestCase {
     waitForExpectations(timeout: 2)
   }
 
-  // MARK: cancelDownload — unknown id
+  // MARK: stopDownload — unknown id
 
-  func testCancelDownloadRejectsUnknownId() {
-    let exp = expectation(description: "cancelDownload rejects unknown id")
-    module.cancelDownload(
+  func testStopDownloadReturnsNotFoundForUnknownId() {
+    let exp = expectation(description: "stopDownload reports an unknown transfer was not stopped")
+    module.stopDownload(
       "99_999",
-      resolver: { _ in
-        XCTFail("should reject for unknown download id")
+      retainPartial: false,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "not-found")
         exp.fulfill()
       },
-      rejecter: { code, _, _ in
-        XCTAssertEqual(code, "NOT_FOUND")
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
         exp.fulfill()
       }
     )
     waitForExpectations(timeout: 2)
+  }
+
+  func testStopDownloadWaitsForNativeTaskAcknowledgement() {
+    let session = URLSession(configuration: .ephemeral)
+    let task = session.downloadTask(with: URL(string: "https://127.0.0.1/offgrid-cancel-test")!)
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: "cancel-race",
+      fileName: "cancelled.bin",
+      modelId: "test/model",
+      totalBytes: 1,
+      bytesDownloaded: 0,
+      status: "running",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 1,
+      metadataJson: nil,
+      task: task,
+      taskIdentifier: task.taskIdentifier,
+      localUri: nil,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[info.downloadId] = info
+      self.module.taskToDownloadId[task.taskIdentifier] = info.downloadId
+    }
+
+    let stopAcknowledged = expectation(description: "native task stop acknowledged")
+    module.stopDownload(
+      info.downloadId,
+      retainPartial: true,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "stopped")
+        XCTAssertTrue(task.state == .canceling || task.state == .completed)
+        XCTAssertNil(self.module.downloads[info.downloadId])
+        XCTAssertNil(self.module.taskToDownloadId[task.taskIdentifier])
+        stopAcknowledged.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
+        stopAcknowledged.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+    session.invalidateAndCancel()
+  }
+
+  func testStopDownloadOwnsRequestedCancellationDelegateRace() {
+    let session = URLSession(configuration: .ephemeral)
+    let task = session.downloadTask(with: URL(string: "https://127.0.0.1/offgrid-stop-race")!)
+    let info = DownloadManagerModule.DownloadInfo(
+      downloadId: "stop-delegate-race",
+      fileName: "cancelled.bin",
+      modelId: "test/model",
+      totalBytes: 1,
+      bytesDownloaded: 0,
+      status: "running",
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 1,
+      metadataJson: nil,
+      task: task,
+      taskIdentifier: task.taskIdentifier,
+      localUri: nil,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false
+    )
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[info.downloadId] = info
+      self.module.taskToDownloadId[task.taskIdentifier] = info.downloadId
+    }
+    let exp = expectation(description: "requested cancellation delegate race settles as stopped")
+
+    // Hold the native state queue so both sides of the race have a fixed order: stop records
+    // its policy, URLSession reports cancellation, then native acknowledgement settles stop.
+    module.queue.suspend()
+    module.stopDownload(
+      info.downloadId,
+      retainPartial: false,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "stopped")
+        XCTAssertNil(self.module.downloads[info.downloadId])
+        exp.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
+        exp.fulfill()
+      }
+    )
+    DownloadSessionDelegate(module: module).urlSession(
+      session,
+      task: task,
+      didCompleteWithError: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
+    )
+    module.queue.resume()
+
+    waitForExpectations(timeout: 2)
+    session.invalidateAndCancel()
+  }
+
+  func testStopDownloadPauseRetainsResumeData() {
+    let id = "pause-retains"
+    let url = "https://huggingface.co/test/model/resolve/main/model.gguf"
+    let key = DownloadManagerModule.resumeDataKey(
+      modelId: "test/model", fileName: "model.gguf", relativePath: nil, url: url
+    )
+    DownloadManagerModule.storeResumeData(Data([1, 2, 3]), forKey: key)
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[id] = self.downloadInfo(id: id, status: "running", sourceURL: url)
+    }
+    let exp = expectation(description: "pause retains resume data")
+
+    module.stopDownload(
+      id,
+      retainPartial: true,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "stopped")
+        XCTAssertEqual(DownloadManagerModule.loadResumeData(forKey: key), Data([1, 2, 3]))
+        exp.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+    DownloadManagerModule.discardResumeData(forKey: key)
+  }
+
+  func testStopDownloadCancelDeletesResumeData() {
+    let id = "cancel-deletes"
+    let url = "https://huggingface.co/test/model/resolve/main/model.gguf"
+    let key = DownloadManagerModule.resumeDataKey(
+      modelId: "test/model", fileName: "model.gguf", relativePath: nil, url: url
+    )
+    DownloadManagerModule.storeResumeData(Data([1, 2, 3]), forKey: key)
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[id] = self.downloadInfo(id: id, status: "running", sourceURL: url)
+    }
+    let exp = expectation(description: "cancel deletes resume data")
+
+    module.stopDownload(
+      id,
+      retainPartial: false,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "stopped")
+        XCTAssertNil(DownloadManagerModule.loadResumeData(forKey: key))
+        exp.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  func testStopDownloadDoesNotOverwriteCompletedVerdict() {
+    let id = "completed-wins"
+    module.queue.sync(flags: .barrier) {
+      self.module.downloads[id] = self.downloadInfo(id: id, status: "completed", sourceURL: nil)
+    }
+    let exp = expectation(description: "completed verdict wins")
+
+    module.stopDownload(
+      id,
+      retainPartial: false,
+      resolver: { outcome in
+        XCTAssertEqual(outcome as? String, "completed")
+        XCTAssertEqual(self.module.downloads[id]?.status, "completed")
+        exp.fulfill()
+      },
+      rejecter: { code, message, _ in
+        XCTFail("stopDownload rejected: \(code ?? "") \(message ?? "")")
+        exp.fulfill()
+      }
+    )
+    waitForExpectations(timeout: 2)
+  }
+
+  private func downloadInfo(id: String, status: String, sourceURL: String?) -> DownloadManagerModule.DownloadInfo {
+    DownloadManagerModule.DownloadInfo(
+      downloadId: id,
+      fileName: "model.gguf",
+      modelId: "test/model",
+      totalBytes: 3,
+      bytesDownloaded: 1,
+      status: status,
+      startedAt: Date().timeIntervalSince1970 * 1000,
+      modelKey: nil,
+      modelType: "text",
+      combinedTotalBytes: 3,
+      metadataJson: nil,
+      task: nil,
+      taskIdentifier: nil,
+      localUri: nil,
+      fileTasks: [:],
+      multiFileDestDir: nil,
+      isMultiFile: false,
+      sourceURL: sourceURL
+    )
   }
 
   // MARK: moveCompletedDownload — unknown id

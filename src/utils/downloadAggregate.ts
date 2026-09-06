@@ -19,7 +19,7 @@ export interface AggregatedDownload {
   /** Cumulative progress 0..1 across all matched entries. */
   progress: number;
   /** Cumulative bytes across all matched entries, or undefined when total is unknown. */
-  bytes?: { downloaded: number; total: number };
+  bytes?: { downloaded: number; total: number; bytesPerSecond?: number };
 }
 
 /** All active download entries whose modelKey belongs to `modelId` (its files). */
@@ -40,11 +40,17 @@ export function aggregateActiveDownloads(
   const transferring = active.filter(e => !isQueuedStatus(e.status));
   const downloaded = active.reduce((s, e) => s + e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0), 0);
   const total = active.reduce((s, e) => s + (e.combinedTotalBytes || e.totalBytes || 0), 0);
+  const allRatesKnown =
+    transferring.length > 0 &&
+    transferring.every(e => e.bytesPerSecond !== undefined);
+  const bytesPerSecond = allRatesKnown
+    ? transferring.reduce((sum, entry) => sum + (entry.bytesPerSecond ?? 0), 0)
+    : undefined;
   return {
     downloading: transferring.length > 0,
     queued: transferring.length === 0, // entries exist but none transferring yet
     count: transferring.length,
     progress: total > 0 ? Math.min(1, downloaded / total) : (active[0].progress ?? 0),
-    bytes: total > 0 ? { downloaded, total } : undefined,
+    bytes: total > 0 ? { downloaded, total, bytesPerSecond } : undefined,
   };
 }

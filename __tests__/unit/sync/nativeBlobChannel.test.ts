@@ -9,6 +9,7 @@ import { NativeEventBus } from '../../utils/nativeEventBus';
 import {
   createNativeBlobChannel,
   hasNativeBlobChannel,
+  nativePairingRouteCandidates,
 } from '../../../src/services/sync/nativeBlobChannel';
 
 jest.mock('react-native', () => {
@@ -54,6 +55,11 @@ class BlobNativeFake extends NativeEventBus {
   /** null is a platform that cannot host an endpoint right now - no port, no permission. */
   endpoint: { url: string } | null = { url: 'http://192.168.1.50:9999/blob/1' };
   streamFailure: Error | undefined;
+  candidates: unknown = [];
+
+  async interfaceCandidates(): Promise<unknown> {
+    return this.candidates;
+  }
 
   async serve(options: ServeOptions): Promise<{ url: string } | null> {
     this.served.push(options);
@@ -163,6 +169,50 @@ describe('moving a large file natively between two devices', () => {
       native.SyncBlobChannelModule = {} as BlobNativeFake;
 
       expect(hasNativeBlobChannel()).toBe(false);
+    });
+  });
+
+  describe('listing this device routes for pairing', () => {
+    it('preserves interface identity for the shared route projector', async () => {
+      platform.candidates = [
+        { host: '192.168.1.20', interfaceName: 'en0' },
+        { host: '100.84.2.9', interfaceName: 'utun4' },
+      ];
+
+      await expect(nativePairingRouteCandidates()).resolves.toEqual([
+        { host: '192.168.1.20', interfaceName: 'en0' },
+        { host: '100.84.2.9', interfaceName: 'utun4' },
+      ]);
+    });
+
+    it('fails closed when native data is absent or malformed', async () => {
+      platform.candidates = [
+        null,
+        '192.168.1.20',
+        { host: '' },
+        { host: '10.0.0.3', interfaceName: 4 },
+        { host: '10.0.0.4' },
+      ];
+      await expect(nativePairingRouteCandidates()).resolves.toEqual([
+        { host: '10.0.0.4' },
+      ]);
+
+      delete native.SyncBlobChannelModule;
+      await expect(nativePairingRouteCandidates()).resolves.toEqual([]);
+    });
+
+    it('reads the live interfaces each time the existing address owner asks', async () => {
+      let read = 0;
+      platform.interfaceCandidates = async () => [
+        { host: `192.168.1.${++read}`, interfaceName: 'wlan0' },
+      ];
+
+      await expect(nativePairingRouteCandidates()).resolves.toEqual([
+        { host: '192.168.1.1', interfaceName: 'wlan0' },
+      ]);
+      await expect(nativePairingRouteCandidates()).resolves.toEqual([
+        { host: '192.168.1.2', interfaceName: 'wlan0' },
+      ]);
     });
   });
 

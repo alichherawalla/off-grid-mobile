@@ -9,10 +9,8 @@
  *  - toggles: pressing the active message stops playback; pressing an inactive one
  *    starts speaking it.
  *
- * These drive the REAL useTTSStore (setState real state) and assert the resulting
- * store STATE after a press — not "an action was called". No active TTS engine is
- * registered in jest, so speak()/stop() run their real store transitions (start →
- * preparing / stop → idle) and bail safely at the native boundary.
+ * These drive the real store and registered Shared speech application, then assert
+ * the resulting playback state after a press rather than an internal call.
  */
 import React from 'react';
 import { render, fireEvent, screen, act } from '@testing-library/react-native';
@@ -28,10 +26,12 @@ jest.mock('react-native-vector-icons/Feather', () => {
 
 import { TTSButton } from '@offgrid/pro/audio/ui/TTSButton';
 import { useTTSStore } from '@offgrid/pro/audio/ttsStore';
+import type {MobileApplicationFixture} from '../../../harness/mobileApplicationFixture';
 
 const MID = 'msg-1';
 const OTHER = 'msg-2';
 const TEXT = 'hello world';
+let applicationFixture: MobileApplicationFixture;
 
 // A clean, known baseline for every test: TTS on, engine usable, nothing playing.
 function seedStore(patch: Partial<ReturnType<typeof useTTSStore.getState>> = {}) {
@@ -46,6 +46,15 @@ function seedStore(patch: Partial<ReturnType<typeof useTTSStore.getState>> = {})
 }
 
 describe('TTSButton', () => {
+  beforeAll(async () => {
+    const {startMobileApplicationFixture} = require('../../../harness/mobileApplicationFixture') as typeof import('../../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture({pro: true});
+  });
+
+  afterAll(async () => {
+    await applicationFixture.dispose();
+  });
+
   beforeEach(() => {
     seedStore();
   });

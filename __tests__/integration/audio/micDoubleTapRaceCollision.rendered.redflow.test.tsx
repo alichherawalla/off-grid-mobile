@@ -39,15 +39,15 @@ describe('T078 (rendered) — double-tapping the chat-mode mic must be one clean
     h.render();
 
     const whisper = h.boundary.whisper!;
-    // The native whisper context the REAL whisperService drives; its transcribeRealtime is the native
-    // start-a-realtime-session leaf. Each invocation = one attempt to open a live mic session.
-    const ctx = await (whisper.module.initWhisper as jest.Mock).mock.results[0].value;
-    const nativeStarts = () => (ctx.transcribeRealtime as jest.Mock).mock.calls.length;
 
     // GESTURE 1: press the chat-mode mic → REAL startRecording → REAL startRealtimeTranscription → the native
     // realtime session starts (one native start).
     await h.tapMic();
     await h.rtl.waitFor(() => { expect(whisper.hasRealtimeSubscriber()).toBe(true); });
+    // Whisper selection is on demand. The first microphone use, not the picker gesture,
+    // creates the native context whose realtime starts this test counts.
+    const ctx = await (whisper.module.initWhisper as jest.Mock).mock.results[0].value;
+    const nativeStarts = () => (ctx.transcribeRealtime as jest.Mock).mock.calls.length;
     // Precondition: the first session is GENUINELY capturing (so the second start is a real overlap, not a
     // no-op firing against a dead session — a false "only one" can't hide behind a session that never began).
     expect(whisper.realtimeActive()).toBe(true);

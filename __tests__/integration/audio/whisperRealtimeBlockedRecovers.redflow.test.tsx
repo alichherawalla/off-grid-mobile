@@ -29,6 +29,7 @@
  * whisper → startRealtimeTranscription throws → the composer never receives text.
  */
 import { setupChatScreen } from '../../harness/chatHarness';
+import { GB } from '../../harness/nativeBoundary';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -38,20 +39,26 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('realtime hold-to-talk dictation recovers when whisper load is blocked (free→retry) — device', () => {
   it('frees the generation model, loads whisper, and the transcript lands in the composer', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'android', whisper: true });
-    const { useWhisperStore } = require('../../../src/stores/whisperStore');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const h = await setupChatScreen({
+      engine: 'llama',
+      platform: 'android',
+      whisper: true,
+      pro: true,
+      ram: { platform: 'android', totalBytes: 5 * GB, availBytes: 5 * GB },
+    });
+    const { refreshTranscriptionModels, selectTranscriptionModel } = require('../../../src/services/transcriptionModelApplication') as typeof import('../../../src/services/transcriptionModelApplication');
 
     // DOWNLOAD-ONLY whisper: the completed-download boundary artifact (file on disk + downloadedModelId) with
     // NO resident load — so the realtime turn's first load attempt runs for real (and blocks on the tight budget).
     const docs = h.boundary.fs!.DocumentDirectoryPath;
     h.boundary.fs!.seedFile(`${docs}/whisper-models/ggml-tiny.en.bin`, 75 * 1024 * 1024);
-    await useWhisperStore.getState().refreshPresentModels();
-    useWhisperStore.setState({ downloadedModelId: 'tiny.en', isModelLoaded: false });
+    const refreshed = await refreshTranscriptionModels();
+    expect(refreshed.ok).toBe(true);
+    const selected = await selectTranscriptionModel('tiny.en');
+    expect(selected.ok).toBe(true);
 
-    // Pin the budget tight: the resident text model fills it, so the whisper sidecar cannot co-reside →
-    // makeRoomFor returns fits=false → whisperStore.loadModel returns 'blocked'.
-    modelResidencyManager.setBudgetOverrideMB(700);
+    // The 5 GB Android boundary gives Shared a 3 GB balanced budget. The real 2 GB text model uses
+    // that full budget after its CPU-runtime overhead, so Whisper must take the free→retry path.
 
     h.render();
     const view = h.view!;
@@ -77,5 +84,13 @@ describe('realtime hold-to-talk dictation recovers when whisper load is blocked 
     await h.rtl.waitFor(() => {
       expect(view.getByTestId('chat-input').props.value ?? '').toContain('take a note');
     }, { timeout: 4000 });
+
+    // End the native recording session before Jest tears down the React Native module graph.
+    // The screen cleanup is intentionally fire-and-forget in production, but this integration
+    // journey must wait for the boundary cleanup so no native promise crosses test environments.
+    const { whisperService } = require('../../../src/services/whisperService');
+    await h.rtl.act(async () => {
+      await whisperService.forceReset();
+    });
   });
 });

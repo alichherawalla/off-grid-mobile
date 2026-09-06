@@ -1,4 +1,3 @@
-
 /**
  * Remote Server Store
  *
@@ -9,317 +8,112 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { RemoteServer, RemoteModel } from '../types';
 import {
-  RemoteServer,
-  RemoteModel,
-  ServerTestResult,
-} from '../types';
-import logger from '../utils/logger';
-import { generateId } from '../utils/generateId';
-import {
-  testServerConnection,
-  testEndpointAndGetModels,
-  fetchModelsFromServer,
-} from './remoteServerHelpers';
+  migrateRemoteServerConfiguration,
+  type RemoteServerHealth,
+} from '@offgrid/application';
 
 interface RemoteServerState {
   /** Configured remote servers */
   servers: RemoteServer[];
-  /** Currently active server ID (null = local only) */
-  activeServerId: string | null;
-  /** Models discovered per server */
-  discoveredModels: Record<string, RemoteModel[]>;
+  /** @deprecated Legacy persistence read once by the selection migration. The active server is the text route's. */
+  activeServerId?: string | null;
   /** Server health status */
-  serverHealth: Record<string, { isHealthy: boolean; lastCheck: string }>;
+  serverHealth: Record<string, RemoteServerHealth>;
   /** Loading states */
   isLoading: boolean;
   testingServerId: string | null;
   discoveringServerId: string | null;
 
-  /** Active remote text model ID (when using remote for text generation) */
-  activeRemoteTextModelId: string | null;
-  /** Active remote image/vision model ID (when using remote for vision) */
-  activeRemoteImageModelId: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeRemoteTextModelId?: string | null;
+  /** @deprecated Legacy persistence read once by the selection migration. */
+  activeRemoteImageModelId?: string | null;
 
-  // Server CRUD
-  addServer: (server: Omit<RemoteServer, 'id' | 'createdAt'>) => string;
-  updateServer: (id: string, updates: Partial<RemoteServer>) => void;
-  removeServer: (id: string) => void;
-
-  // Active server
-  setActiveServerId: (id: string | null) => void;
-  getActiveServer: () => RemoteServer | null;
-
-  // Active remote model selection
-  setActiveRemoteTextModelId: (id: string | null) => void;
-  setActiveRemoteImageModelId: (id: string | null) => void;
-  getActiveRemoteTextModel: () => RemoteModel | null;
-  getActiveRemoteImageModel: () => RemoteModel | null;
-
-  // Model discovery
-  discoverModels: (serverId: string) => Promise<RemoteModel[]>;
+  /** The ONE write for what discovery learned about a server: its text catalog. */
   setDiscoveredModels: (serverId: string, models: RemoteModel[]) => void;
-  clearDiscoveredModels: (serverId: string) => void;
-
-  // Health check
-  testConnection: (serverId: string) => Promise<ServerTestResult>;
-  testConnectionByEndpoint: (endpoint: string, apiKey?: string) => Promise<ServerTestResult>;
   updateServerHealth: (serverId: string, isHealthy: boolean) => void;
 
   // Utility
   getServerById: (id: string) => RemoteServer | null;
-  getModelById: (serverId: string, modelId: string) => RemoteModel | null;
-  clearAllServers: () => void;
 }
 
+type PersistedRemoteServerState = Partial<RemoteServerState>;
+export function migrateRemoteServerState(
+  persisted: unknown,
+): PersistedRemoteServerState {
+  // Retired persisted mirrors: discovered models live on the server catalog; media server
+  // selection lives in the selection store (migrated once by modelSelectionProjection).
+  const { discoveredModels: _discovered, activeRemoteMediaServerIds: _media, ...raw } =
+    (persisted ?? {}) as PersistedRemoteServerState & {
+      discoveredModels?: unknown;
+      activeRemoteMediaServerIds?: unknown;
+    };
+  const migrated = migrateRemoteServerConfiguration(persisted);
+  const servers = migrated.servers.map(server => ({
+    ...server,
+    createdAt: server.createdAt ?? new Date(0).toISOString(),
+  })) as RemoteServer[];
+  return { ...raw, servers, activeServerId: migrated.activeServerId };
+}
 
 export const useRemoteServerStore = create<RemoteServerState>()(
   persist(
     (set, get) => ({
       servers: [],
-      activeServerId: null,
-      discoveredModels: {},
       serverHealth: {},
       isLoading: false,
       testingServerId: null,
       discoveringServerId: null,
-      activeRemoteTextModelId: null,
-      activeRemoteImageModelId: null,
-
-      // Server CRUD
-      addServer: (serverData) => {
-        const id = generateId();
-        const server: RemoteServer = {
-          ...serverData,
-          id,
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          servers: [...state.servers, server],
-        }));
-        logger.log('[RemoteServer] Added server:', server.name);
-        return id;
-      },
-
-      updateServer: (id, updates) => {
-        set((state) => ({
-          servers: state.servers.map((s) =>
-            s.id === id ? { ...s, ...updates } : s
-          ),
-        }));
-        logger.log('[RemoteServer] Updated server:', id);
-      },
-
-      removeServer: (id) => {
-        const state = get();
-        // Clear active server and model IDs if removing the active server
-        if (state.activeServerId === id) {
-          set({
-            activeServerId: null,
-            activeRemoteTextModelId: null,
-            activeRemoteImageModelId: null,
-          });
-        }
-        set((prev) => ({
-          servers: prev.servers.filter((srv) => srv.id !== id),
-          discoveredModels: Object.fromEntries(
-            Object.entries(prev.discoveredModels).filter(([key]) => key !== id)
-          ),
-          serverHealth: Object.fromEntries(
-            Object.entries(prev.serverHealth).filter(([key]) => key !== id)
-          ),
-        }));
-        logger.log('[RemoteServer] Removed server:', id);
-      },
-
-      // Active server
-      setActiveServerId: (id) => {
-        set({ activeServerId: id });
-        logger.log('[RemoteServer] Active server set to:', id || 'local');
-      },
-
-      getActiveServer: () => {
-        const { servers, activeServerId } = get();
-        return servers.find((s) => s.id === activeServerId) || null;
-      },
-
-      // Active remote model selection
-      setActiveRemoteTextModelId: (id) => {
-        set({ activeRemoteTextModelId: id });
-        logger.log('[RemoteServer] Active remote text model set to:', id || 'none');
-      },
-
-      setActiveRemoteImageModelId: (id) => {
-        set({ activeRemoteImageModelId: id });
-        logger.log('[RemoteServer] Active remote image model set to:', id || 'none');
-      },
-
-      getActiveRemoteTextModel: () => {
-        const { activeRemoteTextModelId, activeServerId, discoveredModels } = get();
-        if (!activeRemoteTextModelId || !activeServerId) return null;
-        const models = discoveredModels[activeServerId] || [];
-        return models.find((m) => m.id === activeRemoteTextModelId) || null;
-      },
-
-      getActiveRemoteImageModel: () => {
-        const { activeRemoteImageModelId, activeServerId, discoveredModels } = get();
-        if (!activeRemoteImageModelId || !activeServerId) return null;
-        const models = discoveredModels[activeServerId] || [];
-        return models.find((m) => m.id === activeRemoteImageModelId) || null;
-      },
-
-      // Model discovery
-      discoverModels: async (serverId) => {
-        const { servers } = get();
-        const server = servers.find((s) => s.id === serverId);
-        if (!server) {
-          throw new Error(`Server not found: ${serverId}`);
-        }
-
-        set({ discoveringServerId: serverId, isLoading: true });
-
-        try {
-          const models = await fetchModelsFromServer(server);
-          set((state) => ({
-            discoveredModels: {
-              ...state.discoveredModels,
-              [serverId]: models,
-            },
-            isLoading: false,
-            discoveringServerId: null,
-          }));
-          logger.log('[RemoteServer] Discovered models:', models.length);
-          return models;
-        } catch (error) {
-          set({ isLoading: false, discoveringServerId: null });
-          throw error;
-        }
-      },
-
       setDiscoveredModels: (serverId, models) => {
-        set((state) => ({
-          discoveredModels: {
-            ...state.discoveredModels,
-            [serverId]: models,
-          },
+        // Discovered text models and their capabilities are catalog facts of the server: the shared
+        // inventory reads a server's catalog, so the record carries what discovery learned.
+        set(state => ({
+          servers: state.servers.map(server => server.id === serverId
+            ? {
+                ...server,
+                catalog: {
+                  ...server.catalog,
+                  text: models.map(model => ({
+                    id: model.id,
+                    name: model.name,
+                    ...(model.capabilities ? { capabilities: model.capabilities } : {}),
+                  })),
+                },
+              }
+            : server),
         }));
-      },
-
-      clearDiscoveredModels: (serverId) => {
-        set((state) => {
-          const newDiscovered = { ...state.discoveredModels };
-          delete newDiscovered[serverId];
-          return { discoveredModels: newDiscovered };
-        });
-      },
-
-      // Health check
-      testConnection: async (serverId) => {
-        const { servers } = get();
-        const server = servers.find((s) => s.id === serverId);
-        if (!server) {
-          return { success: false, error: 'Server not found' };
-        }
-
-        set({ testingServerId: serverId, isLoading: true });
-
-        try {
-          const result = await testServerConnection(server);
-
-          set((state) => ({
-            serverHealth: {
-              ...state.serverHealth,
-              [serverId]: {
-                isHealthy: result.success,
-                lastCheck: new Date().toISOString(),
-              },
-            },
-            isLoading: false,
-            testingServerId: null,
-          }));
-
-          // Update models if discovered
-          if (result.success && result.models) {
-            set((state) => ({
-              discoveredModels: {
-                ...state.discoveredModels,
-                [serverId]: result.models!,
-              },
-            }));
-          }
-
-          return result;
-        } catch (error) {
-          set({ isLoading: false, testingServerId: null });
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          };
-        }
-      },
-
-      testConnectionByEndpoint: async (endpoint, apiKey) => {
-        set({ isLoading: true });
-        try {
-          const result = await testEndpointAndGetModels(endpoint, apiKey);
-          set({ isLoading: false });
-          return result;
-        } catch (error) {
-          set({ isLoading: false });
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          };
-        }
       },
 
       updateServerHealth: (serverId, isHealthy) => {
-        set((state) => ({
+        set(state => ({
           serverHealth: {
             ...state.serverHealth,
             [serverId]: {
-              isHealthy,
-              lastCheck: new Date().toISOString(),
+              status: isHealthy ? 'healthy' : 'unhealthy',
+              checkedAt: new Date().toISOString(),
             },
           },
         }));
       },
 
       // Utility
-      getServerById: (id) => {
+      getServerById: id => {
         const { servers } = get();
-        return servers.find((s) => s.id === id) || null;
+        return servers.find(s => s.id === id) || null;
       },
 
-      getModelById: (serverId, modelId) => {
-        const { discoveredModels } = get();
-        const models = discoveredModels[serverId] || [];
-        return models.find((m) => m.id === modelId) || null;
-      },
-
-      clearAllServers: () => {
-        set({
-          servers: [],
-          activeServerId: null,
-          discoveredModels: {},
-          serverHealth: {},
-          activeRemoteTextModelId: null,
-          activeRemoteImageModelId: null,
-        });
-      },
     }),
     {
       name: 'remote-servers',
+      version: 4,
+      migrate: migrateRemoteServerState,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        servers: state.servers,
-        activeServerId: state.activeServerId,
-        activeRemoteTextModelId: state.activeRemoteTextModelId,
-        activeRemoteImageModelId: state.activeRemoteImageModelId,
-        discoveredModels: state.discoveredModels,
+      partialize: state => ({
+        servers: state.servers.map(({ apiKey: _apiKey, ...server }) => server),
         // Don't persist health status - it should be refreshed
       }),
-    }
-  )
+    },
+  ),
 );
-

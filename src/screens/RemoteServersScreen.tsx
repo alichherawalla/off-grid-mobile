@@ -1,3 +1,4 @@
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
 /**
  * Remote Servers
  *
@@ -5,7 +6,14 @@
  * or an Ollama / LM Studio server on the same network.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import { callHook, HOOKS } from '../bootstrap/hookRegistry';
+import {
+  REMOTE_LAN_PROVIDER_KINDS,
+  REMOTE_LAN_PROVIDER_LABELS,
+  remoteLanScanKinds,
+  type RemoteLanProviderKind,
+} from '@offgrid/application';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,48 +28,181 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, useThemedStyles } from '../theme';
 import { useRemoteServerStore, useAppStore } from '../stores';
-import { RemoteServerModal } from '../components/RemoteServerModal';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Button } from '../components/Button';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
-import { remoteServerManager } from '../services/remoteServerManager';
-import { discoverLANServers } from '../services/networkDiscovery';
-import { CustomAlert, AlertState, initialAlertState, showAlert } from '../components/CustomAlert';
+import { applicationFacade } from '../services/applicationFacade';
+import { useModelsProjection } from '../hooks/useApplicationProjection';
+import { modelsFailureMessage } from '@offgrid/application';
+import {
+  CustomAlert,
+  AlertState,
+  initialAlertState,
+  showAlert,
+} from '../components/CustomAlert';
 import { OFF_GRID_DESKTOP_URL } from '../constants';
 import { withUtm } from '../utils/utm';
 import { createStyles } from './RemoteServersScreen.styles';
 
 const DESKTOP_URL = withUtm(OFF_GRID_DESKTOP_URL, 'remote-servers');
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'RemoteServers'>;
+type NavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'RemoteServers'
+>;
+
+/** Say what was actually tried: the ports are what has to be listening on the other machine. */
+function scanEmptyNote(savedCount: number): string {
+  return savedCount > 0
+    ? 'Everything on this network is already in your list.'
+    : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.';
+}
+
+/** Which server kinds a scan looks for. Shared owns the default and the filter; this only renders. */
+const ScanKindToggles: React.FC<{ styles: any; theme: any }> = ({ styles, theme }) => {
+  // Select the stored value, never a fresh array: a selector that returns a new array every render
+  // re-renders for ever under useSyncExternalStore and takes the app down.
+  const storedKinds = useAppStore(s => s.settings.remoteScanKinds);
+  const scanKinds = useMemo(() => remoteLanScanKinds({ remoteScanKinds: storedKinds }), [storedKinds]);
+  const updateSettings = useAppStore(s => s.updateSettings);
+  const toggle = (kind: RemoteLanProviderKind, on: boolean) => {
+    const next = REMOTE_LAN_PROVIDER_KINDS.filter(candidate =>
+      candidate === kind ? on : scanKinds.includes(candidate),
+    );
+    // Shared treats an empty choice as "everything"; keep one kind on so the switch you just
+    // turned off stays off.
+    updateSettings({ remoteScanKinds: next.length ? next : [kind] });
+  };
+  return (
+    <View style={styles.kindGroup}>
+      {REMOTE_LAN_PROVIDER_KINDS.map(kind => (
+        <View key={kind} style={styles.kindRow}>
+          <View style={styles.cardTextCol}>
+            <Text style={styles.cardDesc}>{REMOTE_LAN_PROVIDER_LABELS[kind]}</Text>
+          </View>
+          <Switch
+            testID={`scan-kind-${kind}`}
+            value={scanKinds.includes(kind)}
+            onValueChange={on => toggle(kind, on)}
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+};
+
+/** The scan action: each server joins the list as it answers; the note reads found-so-far and percent. */
+function useScanNetwork({
+  servers,
+  scanKindLabels,
+  setIsScanning,
+  setScanNote,
+}: {
+  servers: readonly unknown[];
+  scanKindLabels: readonly string[];
+  setIsScanning: (value: boolean) => void;
+  setScanNote: (value: string | null) => void;
+}) {
+  return useCallback(async () => {
+    setIsScanning(true);
+    setScanNote(null);
+    try {
+      // Paired devices first: a Mac you paired over sync is a server without any scan.
+      await callHook<Promise<void>>(HOOKS.remoteServersAdoptPaired);
+      // Each server joins the list the moment it answers; the scan keeps going behind it.
+      let addedSoFar = 0;
+      let percent = 0;
+      const note = () => {
+        const found = addedSoFar ? `Found ${addedSoFar} so far. ` : '';
+        setScanNote(`${found}Looking for ${scanKindLabels.join(', ')}… ${percent}%`);
+      };
+      note();
+      const pendingSaves: Array<Promise<void>> = [];
+      let saveFailure: unknown;
+      const reconciled = await applicationFacade().models.reconcileRemoteServers({
+        onFound: found => {
+          const saving = applicationFacade().models.saveRemoteServer({
+            name: found.name,
+            endpoint: found.endpoint,
+            provider: 'openai-compatible',
+          }).then(async saved => {
+            if (!saved.ok) throw new Error(modelsFailureMessage(saved.failure));
+            const checked = await applicationFacade().models.checkRemoteServer(saved.value.id);
+            if (!checked.success)
+              throw new Error(checked.error ?? 'The server did not answer.');
+            addedSoFar += 1;
+            note();
+          }).catch(error => { saveFailure ??= error; });
+          pendingSaves.push(saving);
+        },
+        onProgress: (done, total) => {
+          const next = total ? Math.floor((done / total) * 100) : 0;
+          if (next !== percent) {
+            percent = next;
+            note();
+          }
+        },
+      });
+      if (!reconciled.ok) throw new Error(modelsFailureMessage(reconciled.failure));
+      await Promise.all(pendingSaves);
+      if (saveFailure) throw saveFailure;
+      const newServers = reconciled.value.found;
+      if (newServers.length === 0) {
+        setScanNote(scanEmptyNote(servers.length));
+        return;
+      }
+      setScanNote(
+        `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
+      );
+    } catch (error) {
+      setScanNote(
+        error instanceof Error ? error.message : 'The scan could not finish.',
+      );
+    } finally {
+      setIsScanning(false);
+    }
+  }, [servers, scanKindLabels, setIsScanning, setScanNote]);
+}
 
 export const RemoteServersScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { servers, serverHealth, testConnection, activeServerId, setActiveServerId } = useRemoteServerStore();
-  const autoDiscover = useAppStore(s => s.settings.autoDiscoverRemoteModels === true);
+  const servers = useModelsProjection().servers;
+  const serverHealth = useRemoteServerStore(state => state.serverHealth);
+  const activeServerId = useActiveMobileModel('text').model?.serverId ?? null;
+  const autoDiscover = useAppStore(
+    s => s.settings.autoDiscoverRemoteModels === true,
+  );
   const updateSettings = useAppStore(s => s.updateSettings);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
+  const storedScanKinds = useAppStore(s => s.settings.remoteScanKinds);
+  const scanKindLabels = useMemo(
+    () => remoteLanScanKinds({ remoteScanKinds: storedScanKinds }).map(kind => REMOTE_LAN_PROVIDER_LABELS[kind]),
+    [storedScanKinds],
+  );
+
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  // Auto-check all server statuses when screen opens
   useEffect(() => {
     servers.forEach(server => {
-      testConnection(server.id).catch(() => { });
+      applicationFacade().models.checkRemoteServer(server.id).catch(error => {
+        const message = error instanceof Error ? error.message : 'The server did not answer.';
+        setAlertState(showAlert('Could not check server', message));
+      });
     });
-
+  // Status refresh belongs to this screen-open event, not every health projection update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTestServer = useCallback(async (serverId: string) => {
     setTestingId(serverId);
     try {
-      const result = await testConnection(serverId);
+      const result = await applicationFacade().models.checkRemoteServer(serverId);
       // The row's own status line already says Connected or Offline, so a success needs no
       // dialog to dismiss. Only a failure earns one, because it carries the reason.
       if (!result.success) {
@@ -72,45 +213,14 @@ export const RemoteServersScreen: React.FC = () => {
     } finally {
       setTestingId(null);
     }
-  }, [testConnection]);
+  }, []);
 
-  const handleScanNetwork = useCallback(async () => {
-    setIsScanning(true);
-    setScanNote(null);
-    try {
-      const discovered = await discoverLANServers();
-      const existingEndpoints = new Set(servers.map(s => s.endpoint));
-      const newServers = discovered.filter(d => !existingEndpoints.has(d.endpoint));
-      if (newServers.length === 0) {
-        // Say what was actually tried. "No servers found" leaves the user with nothing to act
-        // on; the ports do, because that is what has to be listening on the other machine.
-        setScanNote(
-          discovered.length > 0
-            ? 'Everything on this network is already in your list.'
-            : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.',
-        );
-        return;
-      }
-      const added = await Promise.all(
-        newServers.map(d =>
-          remoteServerManager.addServer({
-            name: d.name,
-            endpoint: d.endpoint,
-            providerType: 'openai-compatible',
-          })
-        )
-      );
-      added.forEach(s => remoteServerManager.testConnection(s.id).catch(() => { }));
-      setScanNote(`Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
-    } catch (error) {
-      setScanNote(error instanceof Error ? error.message : 'The scan could not finish.');
-    } finally {
-      setIsScanning(false);
-    }
-  }, [servers]);
+  const handleScanNetwork = useScanNetwork({ servers, scanKindLabels, setIsScanning, setScanNote });
 
-  const handleDeleteServer = useCallback((server: typeof servers[0]) => {
-    setAlertState(showAlert(
+  const handleDeleteServer = useCallback(
+    (server: (typeof servers)[0]) => {
+      setAlertState(
+        showAlert(
       'Remove this server',
       `"${server.name}" will be removed from this phone. The server itself is not touched.`,
       [
@@ -119,47 +229,98 @@ export const RemoteServersScreen: React.FC = () => {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (activeServerId === server.id) setActiveServerId(null);
-            await remoteServerManager.removeServer(server.id);
+            try {
+              await applicationFacade().models.removeRemoteServer(server.id);
+            } catch (error: unknown) {
+              const message = error instanceof Error
+                ? error.message : 'The server could not be removed.';
+              setAlertState(showAlert('Could not remove this server', message));
+            }
           },
         },
-      ]
-    ));
-  }, [activeServerId, setActiveServerId]);
+          ],
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleUseServer = useCallback(
+    async (server: (typeof servers)[0]) => {
+      if (activeServerId === server.id) {
+        const cleared = await applicationFacade().models.select({
+          modality: 'text',
+          modelId: null,
+        });
+        if (!cleared.ok)
+          setAlertState(showAlert('Could not stop using this model',
+            modelsFailureMessage(cleared.failure)));
+        return;
+      }
+      const textModelId = server.selections?.text;
+      if (textModelId) {
+        try {
+          const routeId = applicationFacade().models.remoteModelRoute(
+            server.id, textModelId, 'text');
+          if (!routeId) throw new Error('The selected server model is unavailable.');
+          const selected = await applicationFacade().models.select({
+            modality: 'text',
+            modelId: routeId,
+          });
+          if (!selected.ok) throw new Error(modelsFailureMessage(selected.failure));
+          return;
+        } catch (error) {
+          setAlertState(showAlert('Could not use this model', error instanceof Error
+            ? error.message : 'The server did not load the selected model.'));
+          return;
+        }
+      }
+      setAlertState(showAlert(
+        'Select a text model first',
+        'Open this server and select the text model that you want to use.',
+      ));
+    },
+    [activeServerId],
+  );
 
   const openDesktopUrl = useCallback(() => {
-    Linking.openURL(DESKTOP_URL).catch(() => {});
+    Linking.openURL(DESKTOP_URL).catch(error => {
+      const message = error instanceof Error ? error.message : 'The link could not be opened.';
+      setAlertState(showAlert('Could not open link', message));
+    });
   }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader title="Remote Servers" onBack={() => navigation.goBack()} />
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+      >
         <Text style={styles.intro}>
-          Run models this phone cannot hold. Another machine on your network does the work and the
-          answer comes back here, over your own Wi-Fi.
+          Run models this phone cannot hold. Another machine on your network
+          does the work and the answer comes back here, over your own Wi-Fi.
         </Text>
 
         <View style={styles.card}>
           <View style={styles.cardRow}>
             <View style={styles.cardTextCol}>
               <Text style={styles.cardTitle}>Auto-discover on Wi-Fi</Text>
-              {/* Describes what is happening NOW, not what the default was: the old copy read
-                  "Off by default" while the switch was on. */}
-              <Text style={styles.cardDesc}>
-                {autoDiscover
-                  ? 'Looks for servers on your network each time you open this screen.'
-                  : 'Turn this on to find servers on your network without scanning by hand.'}
-              </Text>
             </View>
             <Switch
               testID="auto-discover-toggle"
               value={autoDiscover}
-              onValueChange={(v) => updateSettings({ autoDiscoverRemoteModels: v })}
-              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              onValueChange={v =>
+                updateSettings({ autoDiscoverRemoteModels: v })
+              }
+              trackColor={{
+                false: theme.colors.border,
+                true: theme.colors.primary,
+              }}
             />
           </View>
+          <ScanKindToggles styles={styles} theme={theme} />
         </View>
 
         <View style={styles.actionRow}>
@@ -177,7 +338,7 @@ export const RemoteServersScreen: React.FC = () => {
           <Button
             title="Add manually"
             variant="secondary"
-            onPress={() => setShowAddModal(true)}
+            onPress={() => navigation.navigate('RemoteServerEditor')}
             style={styles.actionButton}
             testID="add-server"
             icon={<Icon name="plus" size={14} color={theme.colors.text} />}
@@ -189,14 +350,16 @@ export const RemoteServersScreen: React.FC = () => {
             textStyle={styles.scanNote}
           />
         ) : null}
-        {!isScanning && scanNote ? <Text style={styles.scanNote}>{scanNote}</Text> : null}
+        {!isScanning && scanNote ? (
+          <Text style={styles.scanNote}>{scanNote}</Text>
+        ) : null}
 
         {servers.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No servers yet</Text>
             <Text style={styles.emptyText}>
-              Off Grid AI Desktop serves your Mac&apos;s models to this phone. Ollama and LM Studio
-              work the same way.
+              Off Grid AI Desktop serves your Mac&apos;s models to this phone.
+              Ollama and LM Studio work the same way.
             </Text>
             <TouchableOpacity
               style={styles.desktopLink}
@@ -205,30 +368,38 @@ export const RemoteServersScreen: React.FC = () => {
               accessibilityLabel="Get Off Grid AI Desktop"
             >
               <Icon name="monitor" size={14} color={theme.colors.primary} />
-              <Text style={styles.desktopLinkText}>Get Off Grid AI Desktop</Text>
+              <Text style={styles.desktopLinkText}>
+                Get Off Grid AI Desktop
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
             <Text style={styles.sectionLabel}>Servers</Text>
-            {servers.map((server) => {
+            {servers.map(server => {
               const isTesting = testingId === server.id;
               const isActive = activeServerId === server.id;
               const health = serverHealth[server.id];
 
               let statusColor = styles.statusDotUnknown;
-              if (health?.isHealthy === true) statusColor = styles.statusDotActive;
-              else if (health?.isHealthy === false) statusColor = styles.statusDotInactive;
+              if (health?.status === 'healthy')
+                statusColor = styles.statusDotActive;
+              else if (health?.status === 'unhealthy')
+                statusColor = styles.statusDotInactive;
 
               let statusText = 'Not checked yet';
               if (isTesting) statusText = 'Checking';
-              else if (health?.isHealthy === true) statusText = 'Connected';
-              else if (health?.isHealthy === false) statusText = 'Not answering';
+              else if (health?.status === 'healthy') statusText = 'Connected';
+              else if (health?.status === 'unhealthy')
+                statusText = 'Not answering';
 
               return (
                 <View
                   key={server.id}
-                  style={[styles.serverCard, isActive && styles.serverCardActive]}
+                  style={[
+                    styles.serverCard,
+                    isActive && styles.serverCardActive,
+                  ]}
                   testID={`server-${server.id}`}
                 >
                   {/* Tapping the server chooses it. The store has always had an active server
@@ -236,19 +407,29 @@ export const RemoteServersScreen: React.FC = () => {
                       somewhere else. */}
                   <TouchableOpacity
                     style={styles.serverIdentity}
-                    onPress={() => setActiveServerId(isActive ? null : server.id)}
+                    onPress={() => handleUseServer(server)}
                     accessibilityRole="button"
-                    accessibilityLabel={isActive ? `Stop using ${server.name}` : `Use ${server.name}`}
+                    accessibilityLabel={
+                      isActive
+                        ? `Stop using ${server.name}`
+                        : `Use ${server.name}`
+                    }
                     testID={`server-use-${server.id}`}
                   >
                     <View style={styles.serverTopRow}>
                       <View style={[styles.statusDot, statusColor]} />
-                      <Text style={styles.serverName} numberOfLines={1}>{server.name}</Text>
-                      <Text style={isActive ? styles.activeBadge : styles.useHint}>
+                      <Text style={styles.serverName} numberOfLines={1}>
+                        {server.name}
+                      </Text>
+                      <Text
+                        style={isActive ? styles.activeBadge : styles.useHint}
+                      >
                         {isActive ? 'In use' : 'Use'}
                       </Text>
                     </View>
-                    <Text style={styles.serverEndpoint} numberOfLines={1}>{server.endpoint}</Text>
+                    <Text style={styles.serverEndpoint} numberOfLines={1}>
+                      {server.endpoint}
+                    </Text>
                     <Text style={styles.serverStatus}>{statusText}</Text>
                   </TouchableOpacity>
 
@@ -260,22 +441,45 @@ export const RemoteServersScreen: React.FC = () => {
                     >
                       {/* The row's status line already says "Checking", so the icon stays put
                           rather than being swapped for a spinner that reads as retry. */}
-                      <Icon name="refresh-cw" size={13} color={theme.colors.textSecondary} />
-                      <Text style={styles.serverActionText}>{isTesting ? 'Checking' : 'Test'}</Text>
+                      <Icon
+                        name="refresh-cw"
+                        size={13}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text style={styles.serverActionText}>
+                        {isTesting ? 'Checking' : 'Test'}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.serverAction}
-                      onPress={() => setEditingServer(server)}
+                      onPress={() =>
+                        navigation.navigate('RemoteServerEditor', {
+                          serverId: server.id,
+                        })
+                      }
                     >
-                      <Icon name="edit-2" size={13} color={theme.colors.textSecondary} />
+                      <Icon
+                        name="edit-2"
+                        size={13}
+                        color={theme.colors.textSecondary}
+                      />
                       <Text style={styles.serverActionText}>Edit</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.serverAction, styles.serverActionDanger]}
                       onPress={() => handleDeleteServer(server)}
                     >
-                      <Icon name="trash-2" size={13} color={theme.colors.error} />
-                      <Text style={[styles.serverActionText, styles.serverActionDangerText]}>
+                      <Icon
+                        name="trash-2"
+                        size={13}
+                        color={theme.colors.error}
+                      />
+                      <Text
+                        style={[
+                          styles.serverActionText,
+                          styles.serverActionDangerText,
+                        ]}
+                      >
                         Remove
                       </Text>
                     </TouchableOpacity>
@@ -286,19 +490,6 @@ export const RemoteServersScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
-
-      <RemoteServerModal
-        visible={showAddModal || !!editingServer}
-        onClose={() => {
-          setShowAddModal(false);
-          setEditingServer(null);
-        }}
-        server={editingServer || undefined}
-        onSave={() => {
-          setShowAddModal(false);
-          setEditingServer(null);
-        }}
-      />
 
       <CustomAlert
         {...alertState}

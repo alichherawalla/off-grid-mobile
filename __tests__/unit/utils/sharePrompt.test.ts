@@ -1,10 +1,10 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
   maybeScheduleSharePrompt,
   resetSharePromptSession,
   subscribeSharePrompt,
   emitSharePrompt,
-  shareOnX,
+  rateOnStore,
 } from '../../../src/utils/sharePrompt';
 
 describe('maybeScheduleSharePrompt — at most once per session', () => {
@@ -56,20 +56,42 @@ describe('maybeScheduleSharePrompt — at most once per session', () => {
   });
 });
 
-describe('shareOnX', () => {
+describe('rateOnStore', () => {
   const openURL = Linking.openURL as jest.Mock;
+  const canOpenURL = Linking.canOpenURL as jest.Mock;
+  const originalPlatform = Platform.OS;
 
   beforeEach(() => {
     openURL.mockReset().mockResolvedValue(undefined);
+    canOpenURL.mockReset().mockResolvedValue(false);
   });
 
-  it('opens the X web intent prefilled with the share text, ready to post', async () => {
-    await shareOnX();
-    expect(openURL).toHaveBeenCalledTimes(1);
-    const url = openURL.mock.calls[0][0];
-    expect(url).toMatch(/^https:\/\/x\.com\/intent\/post\?text=/);
-    expect(decodeURIComponent(url)).toContain('Off Grid AI is background intelligence');
-    expect(decodeURIComponent(url)).toContain('getoffgridai.co/early-access');
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
+  });
+
+  it('opens the App Store review page on iOS', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
+    await rateOnStore();
+    expect(openURL).toHaveBeenCalledWith(
+      'https://apps.apple.com/app/id6759299882?action=write-review',
+    );
+    expect(canOpenURL).not.toHaveBeenCalled();
+  });
+
+  it('opens the Play Store app on Android when it is available', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    canOpenURL.mockResolvedValue(true);
+    await rateOnStore();
+    expect(openURL).toHaveBeenCalledWith('market://details?id=ai.offgridmobile');
+  });
+
+  it('opens the Play Store web page when the Android app is unavailable', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    await rateOnStore();
+    expect(openURL).toHaveBeenCalledWith(
+      'https://play.google.com/store/apps/details?id=ai.offgridmobile',
+    );
   });
 });
 

@@ -25,10 +25,11 @@ describe('T062 (llama) — resend of an image request re-draws on the llama engi
   it('re-runs the IMAGE pipeline on resend of "draw a dog" with a llama (GGUF) model active', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     h.render();
-    await h.placeImageModel({ backend: 'coreml' });
+    // 57ee10c1: the harness composes the real application root and the import adapter owns the model id.
+    const imageModel = await h.placeImageModel({ backend: 'coreml' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
-    await activeModelService.loadImageModel('sd');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
+    await activeModelService.loadImageModel(imageModel.id);
     await h.cycleImageMode(); // auto → ON(force)
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });
 

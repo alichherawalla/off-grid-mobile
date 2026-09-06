@@ -1,3 +1,4 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
  * RED-FLOW (UI integration, HEAVY entry point) — RAM DISPLAY AGREEMENT across surfaces.
  *
@@ -63,6 +64,12 @@ function ramGb(node: { props?: { children?: unknown } }): string {
   return bare[1];
 }
 
+let applicationFixture: import('../../harness/mobileApplicationFixture').MobileApplicationFixture | undefined;
+afterEach(async () => {
+  await applicationFixture?.dispose();
+  applicationFixture = undefined;
+});
+
 describe('RAM display agreement — picker label matches the residency chip for the same model', () => {
   it('shows the SAME GB figure on the manager-sheet chip and the picker "Currently Loaded" label (GPU backend)', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
@@ -74,7 +81,7 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
     const AsyncStorage = require('@react-native-async-storage/async-storage').default ?? require('@react-native-async-storage/async-storage');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
     const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');
@@ -99,11 +106,16 @@ describe('RAM display agreement — picker label matches the residency chip for 
     ));
     await rtl.waitFor(() => { expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0); }, { timeout: 10000 });
 
+    // The real Mobile composition root: the Shared model inventory only knows the downloaded model
+    // once the real local adapter has listed it, which is what selection resolves the route against.
+    const { startMobileApplicationFixture } = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+    applicationFixture = await startMobileApplicationFixture();
+
     // GESTURE: select the text model the way a user does — open the picker, tap the row.
     rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('browse-models-button')));
-    const rows = await rtl.waitFor(() => { const r = view.queryAllByTestId('model-item'); expect(r.length).toBeGreaterThan(0); return r; }, { timeout: 10000 });
-    rtl.fireEvent.press(rows[0]);
-    await rtl.waitFor(() => { expect(useAppStore.getState().activeModelId).toBe('m'); }, { timeout: 10000 });
+    const row = await rtl.waitFor(() => view.getByTestId('text-model-row-m'), { timeout: 10000 });
+    rtl.fireEvent.press(row);
+    await rtl.waitFor(() => { expect(selectedLocalModelId('text')).toBe('m'); }, { timeout: 10000 });
 
     // GESTURE: switch the inference backend to GPU (OpenCL) via the REAL BackendSelector control — the same
     // store action the settings screen dispatches — BEFORE the load, so the resident registers at 2.2×.

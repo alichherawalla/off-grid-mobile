@@ -2,6 +2,8 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getRegisteredScreens } from '../navigation/screenRegistry';
 import { RootStackParamList } from '../navigation/types';
+import { useAppStore } from '../stores/appStore';
+import { selectHasProAccess } from '../stores/proAccessSlice';
 import { PRO_TOOLS_SCREEN } from './useIsProActive';
 
 /**
@@ -18,8 +20,9 @@ import { PRO_TOOLS_SCREEN } from './useIsProActive';
 export function useOpenProTools(): () => void {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return () => {
+    const hasAccess = selectHasProAccess(useAppStore.getState());
     const hasProScreen = getRegisteredScreens().some(s => s.name === PRO_TOOLS_SCREEN);
-    if (hasProScreen) {
+    if (hasAccess && hasProScreen) {
       navigation.navigate(PRO_TOOLS_SCREEN as any);
     } else {
       navigation.navigate('ProDetail');

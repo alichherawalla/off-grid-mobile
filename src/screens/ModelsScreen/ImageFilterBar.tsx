@@ -124,7 +124,7 @@ export const ImageFilterBar: React.FC<Props> = ({
   const styleLabel = getStyleLabel(styleFilter);
 
   return (
-    <View style={[styles.filterBar, { marginHorizontal: -SPACING.lg }]}>
+    <View style={[styles.filterBar, { marginHorizontal: -SPACING.md }]}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillRow} keyboardShouldPersistTaps="handled">
         {Platform.OS !== 'ios' && (
           <TouchableOpacity

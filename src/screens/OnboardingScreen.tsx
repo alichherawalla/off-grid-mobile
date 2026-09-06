@@ -31,12 +31,7 @@ import {
 } from '../constants';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { useAppStore } from '../stores';
-import { useRemoteServerStore } from '../stores/remoteServerStore';
-import { discoverLANServers } from '../services/networkDiscovery';
-import { shouldAutoDiscoverRemoteModels } from '../utils/remoteAutoDiscovery';
-import { remoteServerManager } from '../services';
 import { RootStackParamList } from '../navigation/types';
-import logger from '../utils/logger';
 
 type OnboardingScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Onboarding'>;
@@ -181,40 +176,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  // Kick off non-blocking LAN scan so results are ready by ModelDownloadScreen — but only if the
-  // user has opted into auto-discovery. Onboarding is a fresh install (auto-discovery OFF by
-  // default), so this normally no-ops; it stays gated for correctness.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!shouldAutoDiscoverRemoteModels(useAppStore.getState().settings))
-          return;
-        const discovered = await discoverLANServers();
-        if (cancelled || discovered.length === 0) return;
-        const store = useRemoteServerStore.getState();
-        const existingEndpoints = new Set(
-          store.servers.map(s => s.endpoint.replace(/\/$/, '')),
-        );
-        for (const server of discovered) {
-          if (existingEndpoints.has(server.endpoint.replace(/\/$/, '')))
-            continue;
-          await remoteServerManager.addServer({
-            name: server.name,
-            endpoint: server.endpoint,
-            providerType: 'openai-compatible',
-          });
-        }
-        logger.log('[Onboarding] Pre-discovered', discovered.length, 'servers');
-      } catch (e) {
-        logger.warn('[Onboarding] LAN scan skipped:', (e as Error).message);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const handleNext = () => {
     if (currentIndex < slides.length - 1) {
       flatListRef.current?.scrollToIndex({
@@ -232,7 +193,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const completeOnboarding = () => {
     setOnboardingComplete(true);
-    navigation.replace('ModelDownload');
+    navigation.replace('AutoSetup');
   };
 
   const renderSlide = ({

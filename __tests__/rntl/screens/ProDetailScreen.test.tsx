@@ -37,6 +37,7 @@ jest.mock('../../../src/services/proLicenseService', () => ({
 }));
 
 import { ProDetailScreen } from '../../../src/screens/ProDetailScreen';
+import { ProUnlockModal } from '../../../src/screens/ProDetailScreen/ProUnlockModal';
 
 /**
  * PARTIALLY GREEN, and the four that remain red are red for one reason: this suite mocks
@@ -76,8 +77,9 @@ describe('ProDetailScreen', () => {
   });
 
   it('renders the Get Pro call-to-action when the user is not Pro', () => {
-    const { queryAllByText } = render(<ProDetailScreen />);
+    const { queryAllByText, queryByText } = render(<ProDetailScreen />);
     expect(queryAllByText('Get Pro').length).toBeGreaterThan(0);
+    expect(queryByText('Use Pro from another device')).toBeNull();
   });
 
   it('Get Pro opens the web pay page directly without a modal', () => {
@@ -98,6 +100,16 @@ describe('ProDetailScreen', () => {
     );
   });
 
+  it('shows the remote media outcomes and named Desktop control', () => {
+    const { getByText } = render(<ProDetailScreen />);
+    expect(getByText('Your Desktop does the heavy work')).toBeTruthy();
+    expect(
+      getByText(
+        'Create images, transcribe speech, and hear replies with the models active on your named Desktop. You choose which models it serves.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('shows the Off Grid AI Desktop link to Pro-active users too', async () => {
     useAppStore.setState({ hasRegisteredPro: true });
     const { getByText } = render(<ProDetailScreen />);
@@ -116,7 +128,7 @@ describe('ProDetailScreen', () => {
     expect(getByText('Enter your license key')).toBeTruthy();
     expect(
       getByText(
-        'Paste the license key from your email. It works on up to 5 devices.',
+        'Paste the license key from your email. It works on your licensed devices.',
       ),
     ).toBeTruthy();
   });
@@ -131,6 +143,38 @@ describe('ProDetailScreen', () => {
       expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'),
     );
     await waitFor(() => expect(getByText('Pro activated')).toBeTruthy());
+  });
+
+  it('keeps an in-flight activation and its result visible if the parent closes', async () => {
+    let finishActivation!: (result: { ok: true }) => void;
+    mockActivateProByKey.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishActivation = resolve;
+        }),
+    );
+    const onClose = jest.fn();
+    const onUnlocked = jest.fn();
+    const ui = render(
+      <ProUnlockModal visible onClose={onClose} onUnlocked={onUnlocked} />,
+    );
+    fireEvent.changeText(ui.getByTestId('license-key-input'), 'key/abc123');
+    fireEvent.press(ui.getByTestId('unlock-cta'));
+    expect(ui.getByText('Activating...')).toBeTruthy();
+
+    ui.rerender(
+      <ProUnlockModal
+        visible={false}
+        onClose={onClose}
+        onUnlocked={onUnlocked}
+      />,
+    );
+    expect(ui.getByText('Activating...')).toBeTruthy();
+
+    finishActivation({ ok: true });
+    await waitFor(() => expect(ui.getByText('Pro activated')).toBeTruthy());
+    expect(onUnlocked).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('lets the user dismiss the success card with Got it', async () => {
@@ -258,7 +302,10 @@ describe('ProDetailScreen', () => {
   });
 
   it('shows a lifetime status line and NO Manage subscription link for a one-time license', async () => {
-    useAppStore.setState({ hasRegisteredPro: true, hasSavedProCredential: true });
+    useAppStore.setState({
+      hasRegisteredPro: true,
+      hasSavedProCredential: true,
+    });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,
       tier: 'lifetime',

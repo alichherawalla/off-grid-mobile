@@ -1,46 +1,64 @@
 /**
- * RED-FLOW (integration) — Q17, rebuilt on the harness (the prior carrier mocked our own liteRTService —
- * "mocked too high"). A voice note + a tool enabled on LiteRT: the tool-loop derives audioUris inline and
- * sends the note's AUDIO to the model instead of the transcript (generationToolLoop.ts callLiteRTForLoop),
- * so native gets a stale/gone file path → device crash ("File does not exist").
- *
- * Real runToolLoop + real liteRTService; only the native LiteRTModule is faked (records what audio the
- * native layer received). UI manifestation is a device-only native crash, so the honest jest ceiling is
- * "what reached the native boundary" — audioUris must be [] (transcript-only).
+ * A recorded voice note is transcribed before Shared chat generation. The LiteRT
+ * native boundary receives the transcript as text and never receives the stale
+ * recording path as model audio.
  */
-import { installNativeBoundary } from '../../harness/nativeBoundary';
-import { createDownloadedModel, createMessage } from '../../utils/factories';
-import type { MediaAttachment, Message } from '../../../src/types';
+import { setupChatScreen } from '../../harness/chatHarness';
 
-describe('Q17 (harness) — voice note + tool on LiteRT sends audio to native (red-flow)', () => {
-  it('sends the transcript and NO audio to the native LiteRT model', async () => {
-    const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-     
-    const { liteRTService } = require('../../../src/services/litert');
-    const { runToolLoop } = require('../../../src/services/generationToolLoop');
-    const { useAppStore, useChatStore } = require('../../../src/stores');
-     
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
+  useRoute: () => require('../../harness/chatHarness').routeHolder,
+  useFocusEffect: () => {},
+  useIsFocused: () => true,
+}));
 
-    await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
-    useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });
-    boundary.litert.scriptTurn({ content: 'Paris' });
-
-    const voiceNote: MediaAttachment = { id: 'a1', type: 'audio', uri: '/stale/container/vn.wav', audioFormat: 'wav', textContent: 'what is the capital of France' } as MediaAttachment;
-    const userMsg: Message = createMessage({ role: 'user', content: 'what is the capital of France', attachments: [voiceNote] });
-    const conversationId = useChatStore.getState().createConversation('lrt');
-
-    await runToolLoop({
-      conversationId, messages: [userMsg], enabledToolIds: ['web_search'],
-      isAborted: () => false, onThinkingDone: () => {}, onStream: () => {}, onFinalResponse: () => {},
+describe('voice note on LiteRT', () => {
+  it('sends transcript text and no audio file to the native model', async () => {
+    const h = await setupChatScreen({
+      engine: 'litert',
+      platform: 'android',
+      whisper: true,
+      pro: true,
     });
+    await h.setupWhisperModel();
+    h.render();
+    await h.enterVoiceMode();
 
-    // The native layer must have received the TRANSCRIPT with NO audio uris. Today the tool-loop passes
-    // the voice note's audio inline → native gets ['/stale/.../vn.wav'] → "File does not exist" → RED.
-    const audioCalls = [
-      ...boundary.litert.module.sendMessageWithAudio.mock.calls,
-      ...boundary.litert.calls.sendMessageWithMedia,
-    ];
-    const audioSentToNative = audioCalls.flatMap(c => (Array.isArray(c[c.length - 1]) ? c[c.length - 1] : c[1]) ?? []);
-    expect(audioSentToNative).toEqual([]);
+    try {
+      const transcript = 'use the calculator for two plus two';
+      const textCallCount = h.boundary.litert.calls.sendMessage.length;
+      const audioCallCount =
+        h.boundary.litert.module.sendMessageWithAudio.mock.calls.length +
+        h.boundary.litert.calls.sendMessageWithMedia.length;
+
+      await h.voiceSend(transcript, { content: 'The result is 4.' });
+
+      await h.rtl.waitFor(() => {
+        expect(h.boundary.litert.calls.sendMessage).toHaveLength(
+          textCallCount + 1,
+        );
+        expect(
+          h.useChatStore.getState().getActiveConversation?.()?.messages.at(-1)
+            ?.content,
+        ).toBe('The result is 4.');
+      });
+
+      expect(String(h.boundary.litert.calls.sendMessage.at(-1)?.[0])).toContain(
+        transcript,
+      );
+      expect(
+        h.boundary.litert.module.sendMessageWithAudio.mock.calls.length +
+          h.boundary.litert.calls.sendMessageWithMedia.length,
+      ).toBe(audioCallCount);
+    } finally {
+      h.view?.unmount();
+      const pro = require('@offgrid/pro') as typeof import('../../../pro');
+      await pro.deactivate();
+    }
   });
 });

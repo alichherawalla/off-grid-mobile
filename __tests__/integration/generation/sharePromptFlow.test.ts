@@ -11,281 +11,294 @@
  * (1st gen, every 10th gen) and not emitted on failed/aborted generations.
  */
 
-import { useAppStore } from '../../../src/stores/appStore';
-import { generationService } from '../../../src/services/generationService';
-import { imageGenerationService } from '../../../src/services/imageGenerationService';
-import { llmService } from '../../../src/services/llm';
-import { localDreamGeneratorService } from '../../../src/services/localDreamGenerator';
-import { activeModelService } from '../../../src/services/activeModelService';
-import { subscribeSharePrompt, resetSharePromptSession } from '../../../src/utils/sharePrompt';
-import {
-  resetStores,
-  setupWithActiveModel,
-  setupWithConversation,
-  flushPromises,
-  getAppState,
-  wait,
-} from '../../utils/testHelpers';
-import { createMessage, createONNXImageModel } from '../../utils/factories';
-
-jest.mock('../../../src/services/llm');
-jest.mock('../../../src/services/localDreamGenerator');
-jest.mock('../../../src/services/activeModelService');
-
-const mockLlmService = llmService as jest.Mocked<typeof llmService>;
-const mockLocalDreamService = localDreamGeneratorService as jest.Mocked<typeof localDreamGeneratorService>;
-const mockActiveModelService = activeModelService as jest.Mocked<typeof activeModelService>;
+import { wait } from '../../utils/testHelpers';
 
 describe('Share Prompt Flow Integration', () => {
-  let shareListener: jest.Mock;
-  let unsubscribe: () => void;
-
-  beforeEach(async () => {
-    resetStores();
-    jest.clearAllMocks();
-    resetSharePromptSession(); // fresh app session per test (the sheet is once-per-session)
-
-    shareListener = jest.fn();
-    unsubscribe = subscribeSharePrompt(shareListener);
-
-    // Default LLM mocks
-    mockLlmService.isModelLoaded.mockReturnValue(true);
-    mockLlmService.isCurrentlyGenerating.mockReturnValue(false);
-    mockLlmService.getGpuInfo.mockReturnValue({
-      gpu: false, gpuBackend: 'CPU', gpuLayers: 0, reasonNoGPU: '',
-    });
-    mockLlmService.getPerformanceStats.mockReturnValue({
-      lastTokensPerSecond: 15, lastDecodeTokensPerSecond: 18,
-      lastTimeToFirstToken: 0.5, lastGenerationTime: 5, lastTokenCount: 100,
-    });
-    mockLlmService.stopGeneration.mockResolvedValue();
-
-    mockActiveModelService.getActiveModels.mockReturnValue({
-      text: { model: null, isLoaded: true, isLoading: false },
-      image: { model: null, isLoaded: false, isLoading: false },
-    });
-
-    await generationService.stopGeneration().catch(() => {});
-  });
-
-  afterEach(() => {
-    unsubscribe();
-  });
-
-  // ============================================================================
-  // Text Generation → Share Prompt
-  // ============================================================================
-  describe('text generation triggers share prompt', () => {
-    const runTextGeneration = async () => {
-      const modelId = setupWithActiveModel();
-      const conversationId = setupWithConversation({ modelId });
-
-      let streamCallback: any;
-      let completeCallback: any;
-
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream, onComplete } = {}) => {
-          streamCallback = onStream!;
-          completeCallback = onComplete!;
-          return 'Response';
-        },
-      );
-
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      const promise = generationService.generateResponse(conversationId, messages);
-      await flushPromises();
-
-      streamCallback?.('Hello');
-      await flushPromises();
-      completeCallback?.('');
-      await promise;
-    };
-
-    it('increments textGenerationCount on successful generation', async () => {
-      await runTextGeneration();
-      expect(getAppState().textGenerationCount).toBe(1);
-    });
-
-    it('does not emit share prompt on the first text generation (avoids first-run stacking)', async () => {
-      await runTextGeneration();
-
-      expect(shareListener).not.toHaveBeenCalled();
-      await wait(1600);
-      expect(shareListener).not.toHaveBeenCalled();
-    });
-
-    it('emits the share prompt on the 2nd text generation (after delay)', async () => {
-      useAppStore.setState({ textGenerationCount: 1 });
-
-      await runTextGeneration();
-      expect(shareListener).not.toHaveBeenCalled();
-      await wait(1600);
-      expect(shareListener).toHaveBeenCalledWith('text');
-      expect(getAppState().textGenerationCount).toBe(2);
-    });
-
-    it('emits AT MOST ONCE per session across many generations (no 2/10/20 re-show)', async () => {
-      // Second generation triggers it once; later generations in the SAME session must
-      // NOT re-show it (the old cadence re-showed at 10, 20, …).
-      useAppStore.setState({ textGenerationCount: 1 });
-      await runTextGeneration(); // count → 2, fires
-      await wait(1600);
-      expect(shareListener).toHaveBeenCalledTimes(1);
-
-      await runTextGeneration(); // → 3, same session
-      await runTextGeneration(); // → 4, same session
-      await wait(1600);
-      expect(shareListener).toHaveBeenCalledTimes(1); // still exactly once
-    });
-  });
-
-  // ============================================================================
-  // Text Generation Error → No Share Prompt
-  // ============================================================================
-  describe('failed text generation does not trigger share prompt', () => {
-    it('does not increment count when generation throws', async () => {
-      const modelId = setupWithActiveModel();
-      const conversationId = setupWithConversation({ modelId });
-
-      mockLlmService.generateResponse.mockRejectedValue(new Error('Generation failed'));
-
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      await expect(
-        generationService.generateResponse(conversationId, messages),
-      ).rejects.toThrow('Generation failed');
-
-      expect(getAppState().textGenerationCount).toBe(0);
-      await wait(1600);
-      expect(shareListener).not.toHaveBeenCalled();
-    });
-  });
-
-  // ============================================================================
-  // Stop Generation → Share Prompt (when content exists)
-  // ============================================================================
-  describe('stopped generation with content triggers share prompt', () => {
-    it('increments count when stopped with partial content', async () => {
-      const modelId = setupWithActiveModel();
-      const conversationId = setupWithConversation({ modelId });
-
-      let streamCallback: any;
-
-      mockLlmService.generateResponse.mockImplementation(
-        async (_messages, { onStream } = {}) => {
-          streamCallback = onStream!;
-          // Never call onComplete — simulates long-running gen
-          await new Promise(() => {}); // hang forever
-          return '';
-        },
-      );
-
-      const messages = [createMessage({ role: 'user', content: 'Hi' })];
-      generationService.generateResponse(conversationId, messages);
-      await flushPromises();
-
-      // Stream some content
-      streamCallback?.('Partial response');
-      await flushPromises();
-
-      // Stop with content
-      await generationService.stopGeneration();
-
-      expect(getAppState().textGenerationCount).toBe(1);
-      // First generation doesn't trigger share prompt (skipped until 2nd)
-      await wait(1600);
-      expect(shareListener).not.toHaveBeenCalled();
-    });
-  });
-
   // ============================================================================
   // Image Generation → Share Prompt
   // ============================================================================
   describe('image generation triggers share prompt', () => {
-    const setupImageModel = () => {
-      const imageModel = createONNXImageModel({
-        id: 'img-model-1',
-        modelPath: '/mock/image-model',
-      });
-      useAppStore.setState({
-        downloadedImageModels: [imageModel],
-        activeImageModelId: 'img-model-1',
-        generatedImages: [],
-        settings: {
-          imageSteps: 20, imageGuidanceScale: 7.5,
-          imageWidth: 512, imageHeight: 512, imageThreads: 4,
-          enhanceImagePrompts: false,
-        } as any,
-      });
-      mockLocalDreamService.isModelLoaded.mockResolvedValue(true);
-      mockLocalDreamService.getLoadedModelPath.mockResolvedValue('/mock/image-model');
-      mockLocalDreamService.getLoadedThreads.mockReturnValue(4);
-      mockLocalDreamService.generateImage.mockResolvedValue({
-        id: 'gen-img-1', prompt: 'sunset', imagePath: '/mock/image.png',
-        width: 512, height: 512, steps: 20, seed: 12345,
-        modelId: 'img-model-1', createdAt: new Date().toISOString(),
-      });
+    const setupImageJourney = async () => {
+      const { setupChatScreen } =
+        require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+      const harness = await setupChatScreen({ engine: 'llama' });
+      harness.render();
+      await harness.placeImageModel({ backend: 'coreml' });
+      await harness.cycleImageMode();
+      const sharePrompt =
+        require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+      sharePrompt.resetSharePromptSession();
+      const listener = jest.fn();
+      const unsubscribe = sharePrompt.subscribeSharePrompt(listener);
+      return { harness, listener, unsubscribe };
+    };
+    type ImageJourney = Awaited<ReturnType<typeof setupImageJourney>>;
+    let imageJourney: ImageJourney;
+
+    beforeEach(async () => {
+      imageJourney = await setupImageJourney();
+    }, 30_000);
+
+    afterEach(() => {
+      imageJourney?.unsubscribe();
+    });
+
+    const generate = async (
+      harness: ImageJourney['harness'],
+      prompt: string,
+    ) => {
+      const previous = harness.boundary.diffusion.calls.generateImage.length;
+      await harness.tapSend(prompt);
+      await harness.rtl.waitFor(() =>
+        expect(harness.boundary.diffusion.calls.generateImage).toHaveLength(
+          previous + 1,
+        ),
+      );
     };
 
     it('increments imageGenerationCount on successful generation', async () => {
-      setupImageModel();
-      await imageGenerationService.generateImage({ prompt: 'sunset' });
-      expect(getAppState().imageGenerationCount).toBe(1);
+      const { harness } = imageJourney;
+      await generate(harness, 'sunset');
+      await harness.rtl.waitFor(() =>
+        expect(harness.useAppStore.getState().imageGenerationCount).toBe(1),
+      );
     });
 
     it('does not emit share prompt on first image generation (delayed to 2nd)', async () => {
-      setupImageModel();
-      await imageGenerationService.generateImage({ prompt: 'sunset' });
-
-      expect(shareListener).not.toHaveBeenCalled();
+      const { harness, listener } = imageJourney;
+      await generate(harness, 'sunset');
+      expect(listener).not.toHaveBeenCalled();
       await wait(2100);
-      expect(shareListener).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('emits share prompt on 2nd image generation (after delay)', async () => {
-      setupImageModel();
-      useAppStore.setState({ imageGenerationCount: 1 });
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' });
-      expect(shareListener).not.toHaveBeenCalled();
+      const { harness, listener } = imageJourney;
+      await generate(harness, 'draw first sunset');
+      await generate(harness, 'draw second sunset');
+      expect(listener).not.toHaveBeenCalled();
       await wait(2100);
-      expect(shareListener).toHaveBeenCalledWith('image');
-      expect(getAppState().imageGenerationCount).toBe(2);
+      expect(listener).toHaveBeenCalledWith('image');
+      expect(harness.useAppStore.getState().imageGenerationCount).toBe(2);
     });
 
     it('emits AT MOST ONCE per session across image generations (no 20th re-show)', async () => {
-      setupImageModel();
-      useAppStore.setState({ imageGenerationCount: 1 });
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 2, fires
+      const { harness, listener } = imageJourney;
+      await generate(harness, 'draw sunset 1');
+      await generate(harness, 'draw sunset 2');
       await wait(2100);
-      expect(shareListener).toHaveBeenCalledTimes(1);
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 3, same session
-      await imageGenerationService.generateImage({ prompt: 'sunset' }); // → 4, same session
+      expect(listener).toHaveBeenCalledTimes(1);
+      await generate(harness, 'draw sunset 3');
+      await generate(harness, 'draw sunset 4');
       await wait(2100);
-      expect(shareListener).toHaveBeenCalledTimes(1); // still exactly once
+      expect(listener).toHaveBeenCalledTimes(1);
     });
 
     it('does not increment count when image generation fails', async () => {
-      setupImageModel();
-      mockLocalDreamService.generateImage.mockRejectedValue(new Error('GPU error'));
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' });
-
-      expect(getAppState().imageGenerationCount).toBe(0);
+      const { harness, listener } = imageJourney;
+      harness.boundary.diffusion.module.generateImage.mockRejectedValueOnce(
+        new Error('GPU error'),
+      );
+      await harness.tapSend('sunset');
+      await harness.rtl.waitFor(() =>
+        expect(harness.view!.queryAllByText(/GPU error/).length).toBeGreaterThan(0),
+      );
+      expect(harness.useAppStore.getState().imageGenerationCount).toBe(0);
       await wait(2100);
-      expect(shareListener).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('does not increment count when image generation returns null result', async () => {
-      setupImageModel();
-      mockLocalDreamService.generateImage.mockResolvedValue(null as any);
-
-      await imageGenerationService.generateImage({ prompt: 'sunset' });
-
-      expect(getAppState().imageGenerationCount).toBe(0);
+      const { harness, listener } = imageJourney;
+      harness.boundary.diffusion.module.generateImage.mockResolvedValueOnce(null);
+      await harness.tapSend('sunset');
+      await harness.rtl.waitFor(() =>
+        expect(harness.view!.queryByTestId('stop-button')).toBeNull(),
+      );
+      expect(harness.useAppStore.getState().imageGenerationCount).toBe(0);
       await wait(2100);
-      expect(shareListener).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
+  });
+
+  it('does not emit share prompt on the first text generation (avoids first-run stacking)', async () => {
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({ engine: 'llama' });
+    const {
+      resetSharePromptSession: resetRealSharePromptSession,
+      subscribeSharePrompt: subscribeRealSharePrompt,
+    } =
+      require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+    const realShareListener = jest.fn();
+    resetRealSharePromptSession();
+    const unsubscribeRealSharePrompt =
+      subscribeRealSharePrompt(realShareListener);
+
+    try {
+      harness.render();
+      await harness.send('Hi', { text: 'Hello' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(1);
+      });
+
+      expect(realShareListener).not.toHaveBeenCalled();
+      await wait(1600);
+      expect(realShareListener).not.toHaveBeenCalled();
+    } finally {
+      unsubscribeRealSharePrompt();
+    }
+  });
+
+  it('emits the share prompt on the 2nd text generation (after delay)', async () => {
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({ engine: 'llama' });
+    const {
+      resetSharePromptSession: resetRealSharePromptSession,
+      subscribeSharePrompt: subscribeRealSharePrompt,
+    } =
+      require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+    const realShareListener = jest.fn();
+    resetRealSharePromptSession();
+    const unsubscribeRealSharePrompt =
+      subscribeRealSharePrompt(realShareListener);
+
+    try {
+      harness.render();
+      await harness.send('First question', { text: 'First answer' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(1);
+      });
+      expect(realShareListener).not.toHaveBeenCalled();
+
+      await harness.send('Second question', { text: 'Second answer' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(2);
+      });
+      expect(realShareListener).not.toHaveBeenCalled();
+      await wait(1600);
+      expect(realShareListener).toHaveBeenCalledWith('text');
+    } finally {
+      unsubscribeRealSharePrompt();
+    }
+  });
+
+  it('does not increment count when generation throws', async () => {
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({ engine: 'llama' });
+    const {
+      resetSharePromptSession: resetRealSharePromptSession,
+      subscribeSharePrompt: subscribeRealSharePrompt,
+    } =
+      require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+    const realShareListener = jest.fn();
+    resetRealSharePromptSession();
+    const unsubscribeRealSharePrompt =
+      subscribeRealSharePrompt(realShareListener);
+
+    try {
+      harness.render();
+      harness.boundary.llama!.scriptCompletion({
+        throwMessage: 'Generation failed',
+      });
+      await harness.tapSend('Hi');
+      await harness.rtl.waitFor(() => {
+        expect(
+          harness.view!.queryAllByText(/Generation failed|Generation Error/i)
+            .length,
+        ).toBeGreaterThan(0);
+      });
+
+      expect(harness.useAppStore.getState().textGenerationCount).toBe(0);
+      await wait(1600);
+      expect(realShareListener).not.toHaveBeenCalled();
+    } finally {
+      unsubscribeRealSharePrompt();
+    }
+  });
+
+  it('does not emit again after a later completed generation in the same session', async () => {
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({ engine: 'llama' });
+    const {
+      resetSharePromptSession: resetRealSharePromptSession,
+      subscribeSharePrompt: subscribeRealSharePrompt,
+    } =
+      require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+    const realShareListener = jest.fn();
+    resetRealSharePromptSession();
+    const unsubscribeRealSharePrompt =
+      subscribeRealSharePrompt(realShareListener);
+
+    try {
+      harness.render();
+      await harness.send('Question 1', { text: 'Answer 1' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(1);
+      });
+      await harness.send('Question 2', { text: 'Answer 2' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(2);
+      });
+      await wait(1600);
+      expect(realShareListener).toHaveBeenCalledTimes(1);
+      expect(realShareListener).toHaveBeenCalledWith('text');
+
+      await harness.send('Question 3', { text: 'Answer 3' });
+      await harness.rtl.waitFor(() => {
+        expect(harness.useAppStore.getState().textGenerationCount).toBe(3);
+      });
+      // The once-per-session guard is claimed before the first timer is scheduled.
+      // A later completed generation must therefore leave the emitted count unchanged;
+      // the owner's direct scheduler test proves that no second delayed callback exists.
+      expect(realShareListener).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribeRealSharePrompt();
+    }
+  });
+
+  it('preserves partial content without completing a stopped generation', async () => {
+    const { setupChatScreen } =
+      require('../../harness/chatHarness') as typeof import('../../harness/chatHarness');
+    const harness = await setupChatScreen({ engine: 'llama' });
+    const {
+      resetSharePromptSession: resetRealSharePromptSession,
+      subscribeSharePrompt: subscribeRealSharePrompt,
+    } =
+      require('../../../src/utils/sharePrompt') as typeof import('../../../src/utils/sharePrompt');
+    const realShareListener = jest.fn();
+    resetRealSharePromptSession();
+    const unsubscribeRealSharePrompt =
+      subscribeRealSharePrompt(realShareListener);
+
+    try {
+      harness.render();
+      harness.boundary.llama!.scriptCompletion({
+        text: 'Partial response that would continue',
+        pauseAfter: 'Partial response',
+      });
+      await harness.tapSend('Hi');
+      await harness.rtl.waitFor(() => {
+        expect(harness.view!.queryByText('Partial response')).not.toBeNull();
+        expect(harness.view!.queryByTestId('stop-button')).not.toBeNull();
+      });
+
+      await harness.rtl.act(async () => {
+        harness.rtl.fireEvent.press(harness.view!.getByTestId('stop-button'));
+      });
+      await harness.rtl.waitFor(() => {
+        expect(harness.view!.queryByTestId('stop-button')).toBeNull();
+      });
+
+      expect(harness.view!.queryByText('Partial response')).not.toBeNull();
+      expect(harness.useAppStore.getState().textGenerationCount).toBe(0);
+      await wait(1600);
+      expect(realShareListener).not.toHaveBeenCalled();
+    } finally {
+      unsubscribeRealSharePrompt();
+    }
   });
 });

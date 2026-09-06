@@ -1,0 +1,105 @@
+import { AppState } from 'react-native';
+import { getIpAddress } from 'react-native-device-info';
+import '../../../src/services/composition/application';
+import { useRemoteServerStore } from '../../../src/stores/remoteServerStore';
+import { remoteServerManager } from '../../../src/services/remoteServerManager';
+import '../../../src/services/modelServices';
+import {
+  startNetworkReconnectWatcher,
+  stopNetworkReconnectWatcher,
+} from '../../../src/services/networkReconnect';
+
+jest.mock('react-native-device-info', () => ({
+  getIpAddress: jest.fn(),
+  isEmulator: jest.fn(() => Promise.resolve(false)),
+}));
+
+describe('network reconnect watcher', () => {
+  let appStateListener: ((state: 'active' | 'background') => void) | undefined;
+  const originalFetch = global.fetch;
+
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    stopNetworkReconnectWatcher();
+    jest.clearAllMocks();
+    await remoteServerManager.clearAllServers();
+    global.fetch = jest.fn(() => Promise.reject(new Error('server offline')));
+    jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        appStateListener = listener as (state: 'active' | 'background') => void;
+        return { remove: jest.fn() };
+      });
+    Object.defineProperty(AppState, 'currentState', {
+      configurable: true,
+      value: 'active',
+    });
+  });
+
+  afterEach(async () => {
+    stopNetworkReconnectWatcher();
+    await remoteServerManager.clearAllServers();
+    global.fetch = originalFetch;
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('validates the active connection after a same-IP foreground rejoin', async () => {
+    (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.20');
+    const serverId = (await remoteServerManager.addServer({
+      name: 'Desktop',
+      endpoint: 'http://192.168.1.10:7878',
+      provider: 'openai-compatible',
+      selections: { text: 'gemma' },
+      catalog: { text: [{ id: 'gemma', name: 'Gemma' }] },
+    })).id;
+    useRemoteServerStore.getState().setDiscoveredModels(serverId, [{
+      id: 'gemma', name: 'Gemma', serverId, lastUpdated: new Date(0).toISOString(),
+      capabilities: { supportsVision: false, supportsToolCalling: true, supportsThinking: false },
+    }]);
+    await remoteServerManager.setActiveRemoteTextModel(serverId, 'gemma');
+
+    startNetworkReconnectWatcher();
+    await Promise.resolve();
+    appStateListener?.('background');
+    appStateListener?.('active');
+    await Promise.resolve();
+    jest.advanceTimersByTime(2_500);
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(
+      useRemoteServerStore.getState().serverHealth[serverId]?.status,
+    ).toBe('unhealthy');
+  });
+
+  it('discards an IP lookup that settles after teardown', async () => {
+    let resolveIp: ((ip: string) => void) | undefined;
+    (getIpAddress as jest.Mock).mockImplementation(
+      () =>
+        new Promise<string>(resolve => {
+          resolveIp = resolve;
+        }),
+    );
+
+    startNetworkReconnectWatcher();
+    stopNetworkReconnectWatcher();
+    resolveIp?.('192.168.1.20');
+    await Promise.resolve();
+    jest.runOnlyPendingTimers();
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not validate an unchanged IP during steady-state polling', async () => {
+    (getIpAddress as jest.Mock).mockResolvedValue('192.168.1.20');
+
+    startNetworkReconnectWatcher();
+    await Promise.resolve();
+    jest.advanceTimersByTime(15_000);
+    await Promise.resolve();
+    jest.advanceTimersByTime(2_500);
+    await Promise.resolve();
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});

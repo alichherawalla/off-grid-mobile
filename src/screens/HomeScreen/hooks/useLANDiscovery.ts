@@ -1,53 +1,68 @@
 import { useCallback } from 'react';
-import { showAlert, hideAlert } from '../../../components';
-import { useRemoteServerStore } from '../../../stores/remoteServerStore';
-import { remoteServerManager } from '../../../services';
-import { discoverLANServers } from '../../../services/networkDiscovery';
+import { showAlert, hideAlert, type AlertState } from '../../../components';
+import { applicationFacade } from '../../../services/applicationFacade';
+import {
+  modelsFailureMessage,
+  shouldAutoDiscoverRemoteModels,
+  type DiscoveredRemoteServer,
+} from '@offgrid/application';
 import { useAppStore } from '../../../stores/appStore';
-import { shouldAutoDiscoverRemoteModels } from '../../../utils/remoteAutoDiscovery';
 import type { HomeScreenNavigationProp } from './types';
-import type { RemoteServer } from '../../../types';
 import logger from '../../../utils/logger';
-
-const getPort = (endpoint: string): string | null => {
-  try { return new URL(endpoint).port; } catch { return null; }
-};
 
 interface LANDiscoveryParams {
   navigation: HomeScreenNavigationProp;
-  setAlertState: (state: any) => void;
-}
-
-async function updateMovedServer(
-  samePortServer: RemoteServer,
-  d: { endpoint: string; name: string },
-  store: ReturnType<typeof useRemoteServerStore.getState>,
-): Promise<void> {
-  logger.log('[HomeScreen] Server moved to new IP, updating:', samePortServer.name, '->', d.endpoint);
-  await remoteServerManager.updateServer(samePortServer.id, { endpoint: d.endpoint, name: d.name });
-  try { await store.discoverModels(samePortServer.id); } catch { /* offline */ }
-  if (store.activeServerId === samePortServer.id && store.activeRemoteTextModelId) {
-    try {
-      await remoteServerManager.setActiveRemoteTextModel(samePortServer.id, store.activeRemoteTextModelId);
-    } catch { /* user can re-select */ }
-  }
+  setAlertState: (state: AlertState) => void;
 }
 
 export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParams) {
   const addNewServersAndNotify = useCallback(async (
-    newServersToAdd: Awaited<ReturnType<typeof discoverLANServers>>
+    newServersToAdd: DiscoveredRemoteServer[]
   ) => {
+    const connectionFailures: string[] = [];
     for (const server of newServersToAdd) {
       logger.log('[HomeScreen] Auto-adding discovered server:', server.name);
-      const added = await remoteServerManager.addServer({
+      const saved = await applicationFacade().models.saveRemoteServer({
         name: server.name,
         endpoint: server.endpoint,
-        providerType: 'openai-compatible',
+        provider: 'openai-compatible',
       });
-      remoteServerManager.testConnection(added.id).catch(() => { });
+      if (!saved.ok) {
+        const message = modelsFailureMessage(saved.failure);
+        logger.error(`[HomeScreen] Failed to save ${server.name}: ${message}`);
+        connectionFailures.push(`${server.name}: ${message}`);
+        continue;
+      }
+      try {
+        const result = await applicationFacade().models.checkRemoteServer(
+          saved.value.id,
+        );
+        if (!result.success) {
+          connectionFailures.push(
+            `${server.name}: ${result.error ?? 'Connection check failed'}`,
+          );
+        }
+      } catch (error: unknown) {
+        logger.error(
+          `[HomeScreen] Connection check failed for ${server.name}`,
+          error,
+        );
+        connectionFailures.push(
+          `${server.name}: ${
+            error instanceof Error ? error.message : 'Connection check failed'
+          }`,
+        );
+      }
     }
 
     if (newServersToAdd.length === 0) return;
+    if (connectionFailures.length > 0) {
+      setAlertState(showAlert(
+        'Server Check Failed',
+        connectionFailures.join('\n'),
+      ));
+      return;
+    }
 
     const names = newServersToAdd.map(s => s.name).join(', ');
     const title = newServersToAdd.length === 1
@@ -77,38 +92,15 @@ export function useLANDiscovery({ navigation, setAlertState }: LANDiscoveryParam
       return;
     }
     logger.log('[HomeScreen] LAN auto-discovery enabled — scanning');
-    let discovered: Awaited<ReturnType<typeof discoverLANServers>>;
-    try {
-      discovered = await discoverLANServers();
-    } catch (error) {
-      logger.warn('[HomeScreen] LAN discovery skipped:', (error as Error).message);
+    const reconciled = await applicationFacade().models.reconcileRemoteServers();
+    if (!reconciled.ok) {
+      const message = modelsFailureMessage(reconciled.failure);
+      logger.error(`[HomeScreen] LAN discovery failed: ${message}`);
+      setAlertState(showAlert('Network Scan Failed', message));
       return;
     }
-    if (discovered.length === 0) return;
-
-    const store = useRemoteServerStore.getState();
-    const existingServers = store.servers;
-    const existingEndpoints = new Set(existingServers.map(s => s.endpoint.replace(/\/$/, '')));
-
-    const newServersToAdd: typeof discovered = [];
-
-    for (const d of discovered) {
-      if (existingEndpoints.has(d.endpoint.replace(/\/$/, ''))) continue;
-
-      const dPort = getPort(d.endpoint);
-      const samePortServer = dPort
-        ? existingServers.find(s => getPort(s.endpoint) === dPort)
-        : null;
-
-      if (samePortServer) {
-        await updateMovedServer(samePortServer, d, store);
-      } else {
-        newServersToAdd.push(d);
-      }
-    }
-
-    await addNewServersAndNotify(newServersToAdd);
-  }, [addNewServersAndNotify]);
+    await addNewServersAndNotify([...reconciled.value.found]);
+  }, [addNewServersAndNotify, setAlertState]);
 
   return { runLANDiscovery };
 }

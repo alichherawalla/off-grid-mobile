@@ -1,16 +1,24 @@
 # Download Architecture
 
-> Reflects the current state of the codebase on branch `final-download-refactor`.
+> Current boundary reference. Portable download state and policy are owned by `@offgrid/models`;
+> Mobile supplies native transfer, filesystem, persistence, and UI adapters.
 
 ---
 
 ## Source of Truth
 
-There is one JS-side source of truth for in-progress downloads: **`useDownloadStore`** (`src/stores/downloadStore.ts`).
+There is one portable owner for download rules and transitions: the download modules in
+**`@offgrid/models`**. `ModelDownloadCoordinator`, `ModelDownloadProjectionController`, the state
+machine, sequential service, operation registry, and image workflow own admission, identity, phase,
+retry, recovery, cancellation, and verification policy.
+
+**`useDownloadStore`** (`src/stores/downloadStore.ts`) is the Mobile read projection. It does not
+define a second state machine. Android Room and iOS/native transfer records are persistence and
+transport state that the Shared reconciliation policy projects into the app.
 
 | Data | Where it lives |
 |---|---|
-| Active / in-flight downloads | `useDownloadStore` (Zustand) |
+| Active / in-flight projection | `useDownloadStore` (Zustand), written through Shared controllers |
 | Completed text models | `useAppStore.downloadedModels` |
 | Completed image models | `useAppStore.downloadedImageModels` |
 | Persistent native state (survives process kill) | Android Room DB via `WorkerDownload` / `DownloadDao` |
@@ -190,15 +198,17 @@ Entry is removed from `useDownloadStore` only after the file is on disk and regi
 
 ## Image Model Download Flow
 
-Image downloads also use `useDownloadStore` for state, but the finalization path differs from text.
+Image downloads use `ImageDownloadWorkflowService` for portable state and policy. Mobile executes
+the selected native transfer and finalization work.
 
 ### Start
 
-1. User taps download in `ImageModelsTab` → `useImageModels.handleDownloadImageModel` → `imageDownloadActions.handleDownloadImageModel`.
-2. Depending on model type:
+1. User intent reaches the image download owner and Shared creates the canonical plan and logical id.
+2. Shared selects the workflow from descriptor facts:
    - **Zip (MNN/QNN):** single native `startDownload()` → store entry added, WorkManager task enqueued.
    - **CoreML / HF multi-file:** synthetic `downloadId` prefixed `image-multi:…`; files downloaded sequentially via `downloadFileTo()`.
-3. Store entry added for all variants (zip gets a real UUID; multi-file gets the synthetic id).
+3. Shared coalesces duplicate intent and admits one projection entry. Mobile then starts the native
+   transfer and attaches its transfer id to the same Shared operation.
 
 ### Runtime events
 
@@ -207,11 +217,14 @@ Same `useDownloads` global hook handles zip downloads. On complete:
 - If `entry.modelType === 'image'`, calls `setProcessing(downloadId)` (status → `processing`).
 - Finalization (unzip / file move) happens in `imageDownloadActions`, then `addDownloadedImageModel` + `remove(modelKey)`.
 
-Multi-file downloads update progress via callbacks into the store, not through native events.
+Multi-file downloads run through the Shared sequential artifact service. Mobile callbacks supply
+native byte progress and file verification facts to the Shared workflow.
 
 ### Key difference from text
 
-For text, `watchDownload` drives finalization. For image, `imageDownloadActions` drives it directly. The store entry is removed at the end of both paths.
+For text, the coordinator and native watcher drive finalization. For image, Shared selects the
+recovery/finalization action and Mobile performs RNFS, unzip, integrity probing, and model-library
+registration. Shared removes or fails the projection at the terminal transition.
 
 ---
 
@@ -242,7 +255,8 @@ After hydration, `watchDownload` is re-attached for any text entry that was in-p
 
 ## Duplicate-Start Protection
 
-`useDownloadStore.add()` refuses to insert if an entry already exists for the `modelKey` (regardless of status). Combined with the `isActiveStatus` check in `handleDownload`, this prevents:
+Shared coordinator/workflow admission refuses a second active operation for the logical model key.
+The Mobile store only reflects that result. This prevents:
 
 - Rapid double-taps starting two workers.
 - A fresh start silently replacing a visible `failed` entry (user must explicitly cancel or retry first).
@@ -258,4 +272,3 @@ Vision models download two files: the main GGUF and an mmproj file.
 - `setStatus` detects mmproj events via `entry.mmProjDownloadId === downloadId` and updates `mmProjStatus` only — mmproj failure never fails the main entry.
 - If mmproj fails: model is registered as `isVisionModel: false`. A "Repair Vision" affordance is shown. State persists across restarts (stored in `downloadedModels`).
 - Progress bar combines both: `(bytesDownloaded + mmProjBytesDownloaded) / combinedTotalBytes`.
-

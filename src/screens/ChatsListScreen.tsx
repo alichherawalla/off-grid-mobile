@@ -11,15 +11,20 @@ import { ModelSelectorModal } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
 import { AnimatedListItem } from '../components/AnimatedListItem';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
+import { useActiveMobileModel } from '../hooks/useActiveMobileModel';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
-import { onnxImageGeneratorService, activeModelService, llmService, remoteServerManager } from '../services';
-import { loadModelWithOverride } from '../services/loadModelWithOverride';
-import { Conversation } from '../types';
+import { onnxImageGeneratorService } from '../services';
+import {
+  selectModelRoute,
+  unloadAndClearModel,
+} from '../services/modelServices/modelFacadeCommands';
+import { Conversation, DownloadedModel } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
 import { formatWhen } from '../utils/localTime';
@@ -37,15 +42,17 @@ export const ChatsListScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const conversations = useChatStore(s => s.conversations);
   const { deleteConversation, setActiveConversation } = useChatStore.getState();
-  const { getProject } = useProjectStore();
-  const activeImageModelId = useAppStore(s => s.activeImageModelId);
+  // `getProject` reads through `get()`, so selecting the FUNCTION would never re-render this list
+  // when a project is renamed. The rows render project names, so the rows subscribe to the projects.
+  const projects = useProjectStore(s => s.projects);
   const { removeImagesByConversationId } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
 
-  const hasModels = !!activeTextModelId || !!activeImageModelId;
+  const hasImageModel = !!useActiveMobileModel('image').model;
+  const hasModels = !!activeTextModelId || hasImageModel;
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -60,39 +67,22 @@ export const ChatsListScreen: React.FC = () => {
     setShowModelSelector(true);
   };
 
-  const handleSelectTextModel = async (model: any) => {
-    // Shared inline Load-Anyway flow: a memory-blocked load offers "Load Anyway"
-    // here just like the chat screen (was a dead-end "Failed to load model").
-    await loadModelWithOverride(
-      (opts) => activeModelService.loadTextModel(model.id, undefined, opts),
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
-  };
-
-  const handleSelectImageModel = async (model: any) => {
-    await loadModelWithOverride(
-      (opts) => activeModelService.loadImageModel(model.id, undefined, opts),
-      {
-        setAlertState,
-        onAttemptStart: () => setIsModelLoading(true),
-        onAttemptEnd: () => setIsModelLoading(false),
-        onSuccess: () => { setShowModelSelector(false); navigation.navigate('Chat', {}); },
-      },
-    );
+  const handleSelectTextModel = async (model: DownloadedModel) => {
+    try {
+      await selectModelRoute({
+        source: 'local', hostId: model.engine, modality: 'text', modelId: model.id,
+      });
+      setShowModelSelector(false);
+      navigation.navigate('Chat', {});
+    } catch (error) {
+      setAlertState(showAlert('Failed to Select Model', (error as Error).message));
+    }
   };
 
   const handleUnloadTextModel = async () => {
     setIsModelLoading(true);
     try {
-      remoteServerManager.clearActiveRemoteModel();
-      if (llmService.isModelLoaded()) {
-        await activeModelService.unloadTextModel();
-      }
+      await unloadAndClearModel('text');
     } finally {
       setIsModelLoading(false);
     }
@@ -101,7 +91,7 @@ export const ChatsListScreen: React.FC = () => {
   const handleUnloadImageModel = async () => {
     setIsModelLoading(true);
     try {
-      await activeModelService.unloadImageModel();
+      await unloadAndClearModel('image');
     } finally {
       setIsModelLoading(false);
     }
@@ -141,7 +131,9 @@ export const ChatsListScreen: React.FC = () => {
   );
 
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
-    const project = item.projectId ? getProject(item.projectId) : null;
+    const project = item.projectId
+      ? projects.find(candidate => candidate.id === item.projectId)
+      : null;
     // The preview line comes from the shared rule, so this list and the Mac's read the same.
     const preview = previewLine(item.messages);
 
@@ -186,8 +178,10 @@ export const ChatsListScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
+      <ScreenHeader
+        title="Chats"
+        variant="tab"
+        right={
           <Button
             title="New"
             variant="primary"
@@ -195,7 +189,8 @@ export const ChatsListScreen: React.FC = () => {
             onPress={handleNewChat}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
-      </View>
+        }
+      />
 
       {sortedConversations.length === 0 ? (
         <View style={styles.emptyState}>
@@ -243,7 +238,6 @@ export const ChatsListScreen: React.FC = () => {
         visible={showModelSelector}
         onClose={() => setShowModelSelector(false)}
         onSelectModel={handleSelectTextModel}
-        onSelectImageModel={handleSelectImageModel}
         onUnloadModel={handleUnloadTextModel}
         onUnloadImageModel={handleUnloadImageModel}
         isLoading={isModelLoading}
@@ -272,24 +266,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   swipeableContainer: {
     overflow: 'visible' as const,
   },
-  header: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadows.small,
-    zIndex: 1,
-  },
-  title: {
-    ...TYPOGRAPHY.h2,
-    color: colors.text,
-  },
   list: {
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
   },
   chatItem: {
     flexDirection: 'row' as const,
@@ -340,7 +319,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     flex: 1,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-    paddingHorizontal: SPACING.xxl + SPACING.sm,
+    paddingHorizontal: SPACING.md,
   },
   emptyIcon: {
     width: 72,

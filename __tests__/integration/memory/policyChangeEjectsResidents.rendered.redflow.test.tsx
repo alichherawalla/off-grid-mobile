@@ -25,10 +25,10 @@ describe('policy change ejects every resident (device 2026-07-14) — Lean with 
   it('selecting Lean while text + image + whisper are resident ejects them all', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true });
     h.render();
-    await h.placeImageModel({ backend: 'mnn' });
+    const imageModel = await h.placeImageModel({ backend: 'mnn' });
      
-    const { activeModelService } = require('../../../src/services/activeModelService');
-    const { modelResidencyManager } = require('../../../src/services/modelResidency');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
+    const { modelResidencyManager } = require('../../harness/activeModelLifecycle');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { useAppStore } = require('../../../src/stores');
      
@@ -36,7 +36,7 @@ describe('policy change ejects every resident (device 2026-07-14) — Lean with 
     // Start the projection (singleton; App starts it at boot). Its initial seed reads the current
     // mode (balanced) and MUST NOT eject — only a subsequent change does.
     startLoadPolicySync();
-    await activeModelService.loadImageModel('sd');
+    await activeModelService.loadImageModel(imageModel.id);
     await h.setupWhisperModel();
 
     const residentCount = () => modelResidencyManager.getResidents().length;

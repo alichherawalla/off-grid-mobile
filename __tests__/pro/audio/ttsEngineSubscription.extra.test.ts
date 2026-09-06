@@ -64,6 +64,8 @@ beforeEach(() => {
     playbackDuration: 0,
     currentAmplitude: 0,
     overallDownloadProgress: 0,
+    voiceSwitchProgress: 0,
+    isSwitchingVoice: false,
     activeVoiceId: null,
     playSessionId: 7,
     error: null,
@@ -81,6 +83,35 @@ describe('downloadProgress → store projection', () => {
     subscribeToEngine(engine as any, deps());
     engine.emit('downloadProgress');
     expect(state.overallDownloadProgress).toBe(0.42);
+  });
+
+  it('projects progress into the pending voice switch', () => {
+    state.isSwitchingVoice = true;
+    const engine = makeEngine(0.42);
+    subscribeToEngine(engine as any, deps());
+    engine.emit('downloadProgress');
+    expect(state.voiceSwitchProgress).toBe(0.42);
+  });
+
+  it('measures one aggregate byte rate for every voice download view', () => {
+    const now = jest.spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(2_000);
+    const engine = makeEngine(0.5);
+    subscribeToEngine(engine as any, deps());
+
+    engine.emit('downloadProgress', {
+      assetId: 'voice', progress: 0.25, bytesWritten: 250, totalBytes: 1_000,
+    });
+    expect(state.downloadBytesPerSecond).toBeUndefined();
+
+    engine.emit('downloadProgress', {
+      assetId: 'voice', progress: 0.5, bytesWritten: 500, totalBytes: 1_000,
+    });
+    expect(state.downloadCurrentBytes).toBe(500);
+    expect(state.downloadTotalBytes).toBe(1_000);
+    expect(state.downloadBytesPerSecond).toBe(250);
+    now.mockRestore();
   });
 });
 
@@ -140,6 +171,15 @@ describe('voiceChanged → store projection', () => {
     const engine = makeEngine();
     subscribeToEngine(engine as any, deps());
     engine.emit('voiceChanged', 'af_heart');
+    expect(state.activeVoiceId).toBe('af_heart');
+  });
+
+  it('does not mark a voice active before its pending switch is ready', () => {
+    state.isSwitchingVoice = true;
+    state.activeVoiceId = 'af_heart';
+    const engine = makeEngine();
+    subscribeToEngine(engine as any, deps());
+    engine.emit('voiceChanged', 'bf_emma');
     expect(state.activeVoiceId).toBe('af_heart');
   });
 });

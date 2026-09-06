@@ -1,12 +1,11 @@
+import { selectedLocalModelId } from '../../utils/testHelpers';
 /**
- * RED-FLOW (integration → UI) — device 2026-07-14: when a text model FAILS to load, the active model must
- * become null EVERYWHERE (no stale selection driving the wrong settings/engine). The write is consolidated
- * in activeModelService (the one owner): set on select, on load-success, and CLEARED on load-failure.
+ * RED-FLOW (integration → UI): model selection and runtime residency are separate
+ * canonical states. A failed on-demand load keeps the user's selection, but must not
+ * project the model as currently loaded.
  *
  * Drives the REAL load path (activeModelService.loadTextModel) over a llama boundary scripted to fail every
- * init attempt, then asserts the store invariant (activeModelId null) AND the UI outcome (the model selector
- * shows no "Currently Loaded" model). RED before the fix: the failed load left activeModelId at its prior
- * value, so the selector still showed a loaded model + the wrong settings.
+ * init attempt, then asserts both the selected identity and the runtime UI outcome.
  */
 import { setupChatScreen } from '../../harness/chatHarness';
 
@@ -16,26 +15,26 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {}, useIsFocused: () => true,
 }));
 
-describe('load failure clears the active model (rendered) — device 2026-07-14', () => {
-  it('a text model that fails to load leaves activeModelId null and the selector showing no loaded model', async () => {
+describe('load failure preserves selection but clears runtime residency (rendered)', () => {
+  it('a text model that fails to load stays selected while the selector shows no loaded model', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' }); // model 'm' loaded, active
      
     const React = require('react');
-    const { activeModelService } = require('../../../src/services/activeModelService');
+    const { activeModelService } = require('../../harness/activeModelLifecycle');
     const { llmService } = require('../../../src/services/llm');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
      
 
     // Pre-condition: 'm' is the active loaded model.
-    expect(h.useAppStore.getState().activeModelId).toBe('m');
+    expect(selectedLocalModelId('text')).toBe('m');
 
     // Now a reload FAILS on every backend (corrupt file / unsupported arch).
     await activeModelService.unloadTextModel(true);
     h.boundary.llama!.scriptInitFailure();
     await activeModelService.loadTextModel('m').catch(() => {}); // real load path throws → caught
 
-    // Invariant: the active model is null (never a stale selection).
-    expect(h.useAppStore.getState().activeModelId).toBeNull();
+    // Selection remains stable; only runtime residency failed.
+    expect(selectedLocalModelId('text')).toBe('m');
 
     // UI outcome: the selector shows NO currently-loaded model (the user sees no active model).
     const v = h.rtl.render(React.createElement(ModelSelectorModal, {

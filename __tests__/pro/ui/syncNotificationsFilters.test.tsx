@@ -15,7 +15,11 @@
  * modules the sync services build emitters over at import.
  */
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
+import {
+  installNativeBoundary,
+  requireRTL,
+} from '../../harness/nativeBoundary';
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -23,19 +27,28 @@ jest.mock('react-native-vector-icons/Feather', () => {
 });
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
+  useNavigation: () => ({
+    navigate: () => {},
+    goBack: () => {},
+    setOptions: () => {},
+    addListener: () => () => {},
+  }),
   useRoute: () => ({ params: {} }),
   useFocusEffect: () => {},
   useIsFocused: () => true,
 }));
 
 jest.mock('react-native-tcp-socket', () => {
-  const { createNativeTcpBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeTcpBoundary() };
 });
 
 jest.mock('react-native-zeroconf', () => {
-  const { createNativeDiscoveryBoundary } = require('../../utils/nativeSyncBoundaries');
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
 });
 
@@ -45,28 +58,45 @@ const describePro = proIsPresent() ? describe : describe.skip;
 
 type ScreenModule = typeof import('@offgrid/pro/ui/SyncNotificationsScreen');
 let SyncNotificationsScreen: ScreenModule['SyncNotificationsScreen'];
+let applicationFixture: MobileApplicationFixture;
+let rtl: typeof import('@testing-library/react-native');
 
-beforeAll(() => {
-  const mod = requirePro<ScreenModule>('@offgrid/pro/ui/SyncNotificationsScreen');
+beforeAll(async () => {
+  installNativeBoundary();
+  rtl = requireRTL();
+  const mod = requirePro<ScreenModule>(
+    '@offgrid/pro/ui/SyncNotificationsScreen',
+  );
   if (mod) SyncNotificationsScreen = mod.SyncNotificationsScreen;
+  const { startMobileApplicationFixture } =
+    require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
+  applicationFixture = await startMobileApplicationFixture({ pro: true });
+});
+
+afterAll(async () => {
+  await applicationFixture.dispose();
+});
+
+afterEach(() => {
+  rtl.cleanup();
 });
 
 const FILTERS = ['all', 'approvals', 'transfers', 'recent'] as const;
 
 const chooseFilter = (
-  ui: ReturnType<typeof render>,
+  ui: ReturnType<typeof rtl.render>,
   filter: (typeof FILTERS)[number],
 ): void => {
-  fireEvent.press(ui.getByTestId('sync-notifications-filter'));
-  fireEvent.press(
+  rtl.fireEvent.press(ui.getByTestId('sync-notifications-filter'));
+  rtl.fireEvent.press(
     ui.getByTestId(`sync-notifications-filter-option-${filter}`),
   );
 };
 
 describePro('the notifications screen filter', () => {
   it('offers every filter, with All chosen to begin with', () => {
-    const ui = render(<SyncNotificationsScreen />);
-    fireEvent.press(ui.getByTestId('sync-notifications-filter'));
+    const ui = rtl.render(<SyncNotificationsScreen />);
+    rtl.fireEvent.press(ui.getByTestId('sync-notifications-filter'));
 
     // All four are reachable. A filter that is not rendered is a section the user can never isolate.
     for (const filter of FILTERS) {
@@ -77,14 +107,14 @@ describePro('the notifications screen filter', () => {
   });
 
   it('says nothing is waiting for approval, rather than showing a blank area', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     // The answer to the question the user asked by opening this screen. Blank space reads as a failed load.
     expect(ui.queryByText('No files are waiting for approval.')).not.toBeNull();
   });
 
   it('keeps the approvals answer visible when the user narrows to Approvals', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     chooseFilter(ui, 'approvals');
 
@@ -93,7 +123,7 @@ describePro('the notifications screen filter', () => {
   });
 
   it('drops the approvals section entirely when the user narrows to Transfers', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     chooseFilter(ui, 'transfers');
 
@@ -102,7 +132,7 @@ describePro('the notifications screen filter', () => {
   });
 
   it('drops the approvals section when the user narrows to Recent', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     chooseFilter(ui, 'recent');
 
@@ -110,7 +140,7 @@ describePro('the notifications screen filter', () => {
   });
 
   it('comes back to everything when the user chooses All again', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     chooseFilter(ui, 'transfers');
     expect(ui.queryByText('No files are waiting for approval.')).toBeNull();
@@ -121,7 +151,7 @@ describePro('the notifications screen filter', () => {
   });
 
   it('offers a way to reach the screens the notifications came from', () => {
-    const ui = render(<SyncNotificationsScreen />);
+    const ui = rtl.render(<SyncNotificationsScreen />);
 
     // A notification about a file is only useful if the user can get to the file. At least one destination has
     // to be offered, or this screen is a dead end.

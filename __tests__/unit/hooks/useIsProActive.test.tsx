@@ -22,14 +22,18 @@ describe('useIsProActive / useHasRegisteredScreen', () => {
     // Registration alone no longer means Pro: the device must still be entitled, or a device the owner
     // removed from the licence would keep every Pro entry point until the app restarted.
     useAppStore.setState({
+      hasRegisteredPro: true,
       hasSavedProCredential: true,
+      isProActive: true,
       proDeviceAdmission: 'active',
     });
   });
   afterEach(() => {
     _clearScreensForTesting();
     useAppStore.setState({
+      hasRegisteredPro: false,
       hasSavedProCredential: false,
+      isProActive: false,
       proDeviceAdmission: 'unknown',
     });
   });

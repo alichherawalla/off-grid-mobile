@@ -1,11 +1,10 @@
 /**
  * ChatInputModeToggle tests
  *
- * The pro-only Chat→Voice interface toggle in the chat-input pill row. It's a chip
- * that opens a dropdown; choosing "Voice":
+ * The pro-only Text/Voice interface control is one direct icon toggle:
  *  - when the voice model is NOT downloaded → routes to the Models Voice tab
  *  - when downloaded → flips interfaceMode inline (chat→audio)
- *  - when the chip is disabled → does nothing (menu never opens)
+ *  - when the control is disabled → does nothing
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
@@ -19,18 +18,20 @@ jest.mock('@offgrid/core/utils/haptics', () => ({
   triggerHaptic: jest.fn(),
 }));
 
+const mockActiveRemoteVoiceServer = jest.fn(() => null);
+jest.mock('@offgrid/core/services/remoteVoicePlayback', () => ({
+  activeRemoteVoiceServer: () => mockActiveRemoteVoiceServer(),
+}));
+
 import { ChatInputModeToggle } from '../../../pro/audio/ui/ChatInputModeToggle';
 import { useTTSStore } from '../../../pro/audio/ttsStore';
 
-// The chip opens its dropdown via chipRef.measureInWindow(...) → setOpen(true).
-// Host instances don't implement it under jest, so shim it to fire the callback.
-beforeAll(() => {
-  (require('react-native').View.prototype as any).measureInWindow = (cb: (x: number, y: number, w: number, h: number) => void) => cb(0, 0, 100, 40);
-});
-
 // isReady drives the `downloaded` gate (modelDownloaded ?? isReady) the component uses.
-const setDownloaded = (downloaded: boolean, mode: 'chat' | 'audio' = 'chat') => {
-  useTTSStore.setState((s) => ({
+const setDownloaded = (
+  downloaded: boolean,
+  mode: 'chat' | 'audio' = 'chat',
+) => {
+  useTTSStore.setState(s => ({
     isReady: downloaded,
     settings: { ...s.settings, interfaceMode: mode },
   }));
@@ -39,6 +40,7 @@ const setDownloaded = (downloaded: boolean, mode: 'chat' | 'audio' = 'chat') => 
 describe('ChatInputModeToggle', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
+    mockActiveRemoteVoiceServer.mockReturnValue(null);
     setDownloaded(false, 'chat');
   });
 
@@ -54,7 +56,6 @@ describe('ChatInputModeToggle', () => {
       const { getByTestId, getByText } = render(<ChatInputModeToggle />);
 
       fireEvent.press(getByTestId('chat-mode-toggle'));
-      fireEvent.press(getByTestId('mode-option-audio'));
 
       // No silent switch — a prompt appears and the mode stays on chat.
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -62,7 +63,10 @@ describe('ChatInputModeToggle', () => {
 
       // Tapping "Get voice model" routes to the nested Models Voice tab.
       fireEvent.press(getByText('Get voice model'));
-      expect(mockNavigate).toHaveBeenCalledWith('Main', { screen: 'ModelsTab', params: { initialTab: 'voice' } });
+      expect(mockNavigate).toHaveBeenCalledWith('Main', {
+        screen: 'ModelsTab',
+        params: { initialTab: 'voice' },
+      });
       expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
     } finally {
       Platform.OS = prevOS;
@@ -74,19 +78,31 @@ describe('ChatInputModeToggle', () => {
     const { getByTestId } = render(<ChatInputModeToggle />);
 
     fireEvent.press(getByTestId('chat-mode-toggle'));
-    fireEvent.press(getByTestId('mode-option-audio'));
 
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(useTTSStore.getState().settings.interfaceMode).toBe('audio');
   });
 
-  it('does not open the menu when disabled', () => {
-    setDownloaded(true, 'chat');
-    const { getByTestId, queryByTestId } = render(<ChatInputModeToggle disabled />);
+  it('flips to audio when a remote voice model is active', () => {
+    mockActiveRemoteVoiceServer.mockReturnValue({
+      id: 'desktop',
+      selections: { voice: 'kokoro' },
+    });
+    setDownloaded(false, 'chat');
+    const { getByTestId } = render(<ChatInputModeToggle />);
 
     fireEvent.press(getByTestId('chat-mode-toggle'));
 
-    expect(queryByTestId('mode-option-audio')).toBeNull();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(useTTSStore.getState().settings.interfaceMode).toBe('audio');
+  });
+
+  it('does not change mode when disabled', () => {
+    setDownloaded(true, 'chat');
+    const { getByTestId } = render(<ChatInputModeToggle disabled />);
+
+    fireEvent.press(getByTestId('chat-mode-toggle'));
+
     expect(useTTSStore.getState().settings.interfaceMode).toBe('chat');
   });
 });

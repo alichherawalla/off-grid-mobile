@@ -78,6 +78,13 @@ maybe('McpAddServerSheet', () => {
     expect(props.onAddCustom).toHaveBeenCalledTimes(1);
   });
 
+  it('has no "Scan a desktop QR" button - a paired desktop grants tools over the mesh', () => {
+    // The QR-scan pairing was removed: a paired desktop now hands its tools over
+    // the sync mesh, so there is nothing to scan from the add sheet.
+    const { queryByTestId } = render(<McpAddServerSheet {...baseProps()} />);
+    expect(queryByTestId('scan-desktop-qr')).toBeNull();
+  });
+
   it('lists the preset rows', () => {
     const props = baseProps();
     const { getByTestId } = render(<McpAddServerSheet {...props} />);
