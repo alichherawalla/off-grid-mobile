@@ -3,7 +3,7 @@
  *
  * Guards the approved behavior change: a paired-code sheet can be filled by scanning
  * the other device's QR, not just by typing. A decoded QR carrying a valid pairing
- * code lands on the SAME onPair (syncService.pair) as the typed path, and a QR that
+ * code lands on the same normalized input as the typed path, and a QR that
  * is not a pairing code is ignored so the scanner keeps looking.
  *
  * Lives in the private pro/ submodule, loaded via a computed path so the suite skips
@@ -104,7 +104,7 @@ maybe('PairingCodeSheet scan-to-pair', () => {
     await act(async () => {
       scanConfig!.onCodeScanned([{ value: url }]);
     });
-    expect(props.onPair).toHaveBeenCalledWith(VALID_QR);
+    expect(getByTestId('sync-test-input').props.value).toBe('ABCD-2345');
   });
 
   it('ignores a QR that is not a pairing code', async () => {
