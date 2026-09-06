@@ -23,7 +23,6 @@ import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBound
 
 const MODEL_ID = 'meta/llama-lost';
 const FILE_NAME = 'llama-q4.gguf';
-const MODEL_KEY = `${MODEL_ID}/${FILE_NAME}`;
 
 describe('iOS text retry re-issues a rehydrated failed download that lost its downloadId (red-flow)', () => {
   it('tapping Retry on a lost-downloadId failed card re-issues a fresh download (not a silent no-op)', async () => {
