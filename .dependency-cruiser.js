@@ -8,8 +8,12 @@
  * does NOT catch the `engine === 'litert'` VALUE branch (an ESLint no-restricted-syntax rule
  * guards that) or DRY drift / logic bugs. Complements the hygiene standard; does not replace it.
  *
- * The tree is CLEAN — zero violations, no baseline file. Every rule is fully enforced with no
- * exceptions; any new violation fails `npm run depcruise` (CI + pre-push). If you ever must adopt
+ * The tree is CLEAN — zero violations, no baseline file. Every rule is fully enforced; any new
+ * violation fails `npm run depcruise` (CI + pre-push). The one static-analysis boundary is
+ * `applicationFacade.ts`: it is a late-bound composition locator whose deferred `require` prevents
+ * a runtime initialization cycle. Dependency Cruiser treats it as a leaf so it does not expand one
+ * intentional locator edge into every possible path through the composed application graph.
+ * If you ever must adopt
  * a new strict rule onto legacy debt, baseline it (`depcruise --output-type baseline >
  * .dependency-cruiser-known-violations.json` + run the gate with `--ignore-known`) and burn it
  * down — never regenerate a baseline to hide a fresh violation.
@@ -154,7 +158,9 @@ module.exports = {
     // classify them from this package.json instead of treating their real paths as
     // undeclared source files outside the mobile project.
     preserveSymlinks: true,
-    doNotFollow: { path: 'node_modules' },
+    doNotFollow: {
+      path: '^(node_modules|src/services/applicationFacade\\.ts$)',
+    },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: {
