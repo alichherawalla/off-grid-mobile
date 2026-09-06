@@ -11,7 +11,6 @@ import {
   type GenerationMessage,
   type GenerationRequest,
   type LiveGenerationContext,
-  type ModelResidencyLifecyclePort,
   type ReasoningWireFragment,
   type RuntimeModel,
   classifyRuntimeError,
@@ -24,7 +23,6 @@ import { liteRTService } from '../litert';
 import { llmService } from '../llm';
 import { modelInputAudioUris, modelInputImageUris } from '../modelMedia';
 import { getToolExtensions } from '../tools/extensions';
-import { applicationFacade } from '../applicationFacade';
 import { mobileExecutionAdapterId } from './mobileRoute';
 import { mobileImageGenerationAdapter } from './imageGenerationAdapter';
 import { mobileTextEngineControl } from './textEngineControl';
@@ -426,20 +424,6 @@ function adapter(id: string): GenerationAdapter {
 export async function clearMobileEphemeralTextState(): Promise<void> {
   await mobileTextEngineControl.invalidateAllConversations();
 }
-
-/**
- * Shared generation receives the atomic residency lifecycle through the facade's admission port.
- *
- * `ModelResidencyLifecyclePort` asks only for `acquire` and an optional `markUsed`, both of which
- * `ResidencyAdmissionPort` carries - so this is the same capability reached through the sanctioned
- * direction rather than by holding the manager instance. A getter, not a captured value: the facade
- * is not configured while this module is imported.
- */
-export const mobileGenerationResidency: ModelResidencyLifecyclePort = {
-  acquire: (spec, handlers, options) =>
-    applicationFacade().models.residency.acquire(spec, handlers, options),
-  markUsed: (key, now) => applicationFacade().models.residency.markUsed(key, now),
-};
 
 export function reconcileMobileGenerationAdapters(
   service: { registerAdapter(adapter: GenerationAdapter): () => void },

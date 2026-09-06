@@ -25,7 +25,7 @@ import { mobileTextDownloadRequest } from '../modelServices/modelDownloadRequest
 import { publicImageDownloadRequest } from '../adapters/models/downloads/publicImageDownloadRequest';
 import { downloadTranscriptionModel } from '../transcriptionModelApplication';
 
-export interface AutoSetupDownloadBoundaries {
+interface AutoSetupDownloadBoundaries {
   start: (request: ModelDownloadStartRequest) => Promise<void>;
   list: () => Promise<GuidedSetupDownloadProjection[]>;
   cancel: (id: string) => Promise<void>;

@@ -7,8 +7,6 @@ import type { ModelFile } from '../types';
 import { classifierProvisioning } from './composition/model-library';
 import type { ClassifierModel } from './classifierProvisioningPorts';
 
-export type { ClassifierModel } from './classifierProvisioningPorts';
-
 const service = (): ClassifierProvisioningService<ModelFile, ClassifierModel> => classifierProvisioning();
 
 export function ensureDefaultClassifier(): Promise<void> {

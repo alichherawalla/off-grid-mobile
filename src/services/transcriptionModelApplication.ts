@@ -40,14 +40,6 @@ export function loadTranscriptionModel(modelId?: string) {
   });
 }
 
-/** Release the transcription runtime while keeping its selection. */
-export function unloadTranscriptionModel() {
-  return applicationFacade().models.unload({
-    modality: 'transcription',
-    keepSelection: true,
-  });
-}
-
 /** Delete a transcription model through the application library boundary. */
 export function removeTranscriptionModel(modelId: string) {
   return applicationFacade().models.remove(modelId);

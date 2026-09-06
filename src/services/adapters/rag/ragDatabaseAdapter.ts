@@ -15,7 +15,7 @@ export interface RagDocument {
   enabled: number;
 }
 
-export interface RagSearchResult {
+interface RagSearchResult {
   doc_id: number;
   name: string;
   content: string;

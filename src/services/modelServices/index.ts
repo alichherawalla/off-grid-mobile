@@ -239,4 +239,3 @@ export {
   selectMobileModel,
   selectRemoteMobileModel,
 } from './selectionCommands';
-export type { MobileRouteFacts } from './mobileRoute';

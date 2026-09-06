@@ -1,12 +1,3 @@
-import type {
-  DownloadModelType,
-  DownloadProvider as SharedDownloadProvider,
-  RegisteredModelDownload,
-} from '@offgrid/models';
-
-export type { DownloadModelType } from '@offgrid/models';
-export type ModelDownload = RegisteredModelDownload;
-
 export type ModelDownloadStartRequest =
   | {
       modelType: 'text';
@@ -18,13 +9,3 @@ export type ModelDownloadStartRequest =
       model: import('../imageModelDownloadTypes').ImageModelDescriptor;
     }
   | { modelType: 'stt'; modelId: string };
-
-export type ModelDownloadReissueRequest =
-  import('../backgroundDownloadTypes').DownloadParams & {
-    modelType: DownloadModelType;
-  };
-
-export type DownloadProvider = SharedDownloadProvider<
-  ModelDownloadStartRequest,
-  ModelDownloadReissueRequest
->;

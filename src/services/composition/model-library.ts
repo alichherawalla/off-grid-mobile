@@ -15,13 +15,6 @@ import {
   type ClassifierModel,
 } from '../classifierProvisioningPorts';
 
-export {
-  chatModelReadiness,
-  modelFileImport,
-  modelLibraryRegistry,
-  visionMetadataRepair,
-} from './model-library-services';
-
 export const imageArchiveImport = once(
   () => new ImageArchiveImportService(mobileImageArchiveImportPorts()),
 );

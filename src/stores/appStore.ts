@@ -284,7 +284,7 @@ const persistedAppSlice = (state: AppState) => ({
   loadedSettings: state.loadedSettings,
 });
 
-export type PersistedAppSlice = ReturnType<typeof persistedAppSlice>;
+type PersistedAppSlice = ReturnType<typeof persistedAppSlice>;
 
 /**
  * Ephemeral state shares this store with the gallery, so a plain JSON storage re-serialised every

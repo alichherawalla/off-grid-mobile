@@ -14,7 +14,7 @@ export interface OpenAIChatMessage {
 }
 
 /** OpenAI content part */
-export interface OpenAIContentPart {
+interface OpenAIContentPart {
   type: 'text' | 'image_url';
   text?: string;
   image_url?: {

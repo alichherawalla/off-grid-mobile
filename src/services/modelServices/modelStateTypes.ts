@@ -3,23 +3,9 @@ import {
   TEXT_ACCELERATED_MEMORY_MULTIPLIER,
   TEXT_CPU_MEMORY_MULTIPLIER,
   textRuntimeMemoryMultiplier,
-  type MemoryAdvisorySeverity,
 } from '@offgrid/models';
 
 export type ModelType = 'text' | 'image';
-
-type MemoryCheckSeverity = MemoryAdvisorySeverity;
-
-export interface MemoryCheckResult {
-  canLoad: boolean;
-  severity: MemoryCheckSeverity;
-  availableMemoryGB: number;
-  requiredMemoryGB: number;
-  currentlyLoadedMemoryGB: number;
-  totalRequiredMemoryGB: number;
-  remainingAfterLoadGB: number;
-  message: string;
-}
 
 export interface ActiveModelInfo {
   text: {

@@ -8,7 +8,7 @@ function failureMessage(failure: ModelsFailure): string {
   return failure.kind;
 }
 
-export function requireModelOutcome<Value>(outcome: Outcome<Value, ModelsFailure>): Value {
+function requireModelOutcome<Value>(outcome: Outcome<Value, ModelsFailure>): Value {
   if (outcome.ok) return outcome.value;
   throw new Error(failureMessage(outcome.failure));
 }

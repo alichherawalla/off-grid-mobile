@@ -32,7 +32,7 @@ interface DownloadStoreState {
 }
 
 /** Zustand read/write as the projection's persistence port. */
-export function mobileDownloadProjectionPorts(): DownloadProjectionPort<DownloadEntry> {
+function mobileDownloadProjectionPorts(): DownloadProjectionPort<DownloadEntry> {
   return {
     read: () => {
       const state = useDownloadStore.getState();

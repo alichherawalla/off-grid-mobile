@@ -26,7 +26,7 @@ import {
   type DiscoveredServer,
 } from '../networkDiscovery';
 
-export const remoteCapabilityDiscovery = once(
+const remoteCapabilityDiscovery = once(
   () =>
     new RemoteCapabilityDiscoveryApplicationService(
       mobileRemoteCapabilityPorts(),
@@ -58,17 +58,17 @@ async function mapTextModels(input: {
   });
 }
 
-export const remoteProviderDiscovery = once(
+const remoteProviderDiscovery = once(
   () =>
     new RemoteProviderDiscoveryApplicationService(
       mobileRemoteProviderDiscoveryPorts(mapTextModels),
     ),
 );
-export const remoteLanDiscovery = once(
+const remoteLanDiscovery = once(
   () => new RemoteLanDiscoveryApplicationService(mobileLanDiscoveryPorts()),
 );
 
-export function fetchModelCapabilities(
+function fetchModelCapabilities(
   endpoint: string,
   modelId: string,
   nameBasedDetect: {

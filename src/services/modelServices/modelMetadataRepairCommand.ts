@@ -11,7 +11,7 @@ type VisionMetadataRepairInput = {
 };
 
 /** Registry facts and writes for one repair. Shared decides what to repair. */
-export function mobileVisionMetadataRepairPorts(
+function mobileVisionMetadataRepairPorts(
   input: VisionMetadataRepairInput,
 ): ConstructorParameters<typeof ModelMetadataRepairCommandService<string[]>>[0] {
   return {

@@ -100,7 +100,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
  * download-store subscription. Without this, one character re-ran that subscription for every
  * row on screen.
  */
-export const ImageModelCardItem = React.memo(ImageModelCard);
+const ImageModelCardItem = React.memo(ImageModelCard);
 ImageModelCardItem.displayName = 'ImageModelCardItem';
 
 /** Stable identity so the list does not remount while the catalogue is loading or errored. */

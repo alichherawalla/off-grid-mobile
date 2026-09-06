@@ -28,7 +28,7 @@ export interface MobileModelFileImportInput {
 }
 
 /** Copy, size, and registry ports for one import. Shared owns the decisions. */
-export function mobileModelFileImportPorts(
+function mobileModelFileImportPorts(
   input: MobileModelFileImportInput,
 ): ConstructorParameters<typeof ModelFileImportApplicationService<DownloadedModel>>[0] {
   return {

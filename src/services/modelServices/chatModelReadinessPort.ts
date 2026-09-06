@@ -15,7 +15,7 @@ export interface MobileChatModelReadinessInput {
 }
 
 /** Load and memory-refusal ports around one readiness inspection. */
-export function mobileChatModelReadinessPorts(
+function mobileChatModelReadinessPorts(
   input: MobileChatModelReadinessInput,
   inspect: () => ChatModelReadinessFacts,
 ): ConstructorParameters<typeof ChatModelReadinessService>[0] {

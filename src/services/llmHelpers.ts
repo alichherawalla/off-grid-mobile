@@ -294,7 +294,7 @@ export async function fitMessagesInBudget(
 }
 // Pure GPU hardware rules live in their own module and need no engine.
 export { BYTES_PER_GB, getGpuLayersForDevice } from './llmDeviceLimits';
-export { validateModelFile, safeCompletion } from './llmSafetyChecks';
+export {  safeCompletion } from './llmSafetyChecks';
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
 }, options?: { disableCtxShift?: boolean }): Record<string, any> {

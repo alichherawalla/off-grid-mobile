@@ -20,13 +20,13 @@ import {
 import { contextCompaction, generationIntent } from './chat-services';
 
 // Re-exported so the existing import paths keep resolving; the owner is `chat-services`.
-export { contextCompaction, generationIntent, imagePromptEnhancement } from './chat-services';
+;
 
-export const chatOperation = once(
+const chatOperation = once(
   () => new ChatOperationApplicationService(mobileChatOperationPorts(generationIntent())),
 );
-export const chatContext = once(() => new ChatContextApplicationService(mobileChatContextPorts()));
-export const chatSession = once(() => new ChatSessionService(
+const chatContext = once(() => new ChatContextApplicationService(mobileChatContextPorts()));
+const chatSession = once(() => new ChatSessionService(
   ...mobileChatSessionPorts(
     {
       augment: ({ identity, signal }) => chatContext().compose({

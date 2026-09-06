@@ -17,7 +17,7 @@ import type { GenerateImageParams } from './imageGenerationTypes';
 type EnhancementStateWriter = (status: string) => void;
 
 /** Runtime, generation, and chat-card presentation ports for one enhancement. */
-export function mobileImagePromptEnhancementPorts(
+function mobileImagePromptEnhancementPorts(
   params: GenerateImageParams,
   setState: EnhancementStateWriter,
 ): ConstructorParameters<typeof ImagePromptEnhancementService>[0] {

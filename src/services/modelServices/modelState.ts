@@ -7,18 +7,10 @@ import { nativeModelLifecycle } from '../adapters/native/modelLifecycle';
 import { activeModelSnapshot } from './modelStateSnapshot';
 import type {
   ActiveModelInfo,
-  MemoryCheckResult,
-  ModelType,
   ResourceUsage,
 } from './modelStateTypes';
-import { selectCanonicalModel } from './modelSelectionCommandPort';
-import { mobileRouteId } from './mobileRoute';
 import { activeLocalModelId } from './activeRoute';
 import { rememberedLocalTextModelId } from './modelSelectionProjection';
-import {
-  checkMemoryForDualModel as checkDualMemory,
-  checkMemoryForModel as checkMemory,
-} from './modelMemoryAdvisory';
 import { getResourceUsage as readResourceUsage } from './modelStateNativeProjection';
 
 export function resolveSelectedTextModel(): DownloadedModel | null {
@@ -30,14 +22,6 @@ export function selectedTextModelId(): string | null {
     activeModelId: activeLocalModelId('text'),
     lastModelId: rememberedLocalTextModelId(),
   });
-}
-
-export function selectTextModel(modelId: string): Promise<void> {
-  const model = useAppStore.getState().downloadedModels.find(candidate => candidate.id === modelId);
-  if (!model) return Promise.reject(new Error('Model not found'));
-  return selectCanonicalModel('text', mobileRouteId({
-    source: 'local', hostId: model.engine, modality: 'text', modelId,
-  }));
 }
 
 export function getActiveModels(): ActiveModelInfo {
@@ -54,24 +38,8 @@ export function getActiveModels(): ActiveModelInfo {
   });
 }
 
-export function hasAnyModelLoaded(): boolean {
-  const models = getActiveModels();
-  return models.text.isLoaded || models.image.isLoaded;
-}
-
 export function supportsAudioInput(): boolean {
   return nativeModelLifecycle.supportsAudioInput();
-}
-
-export function getLoadedModelIds(): {
-  textModelId: string | null;
-  imageModelId: string | null;
-} {
-  const state = nativeModelLifecycle.getState();
-  return {
-    textModelId: state.loadedTextModelId,
-    imageModelId: state.loadedImageModelId,
-  };
 }
 
 export function getPerformanceStats() {
@@ -80,20 +48,6 @@ export function getPerformanceStats() {
 
 export async function getResourceUsage(): Promise<ResourceUsage> {
   return readResourceUsage();
-}
-
-export async function checkMemoryForModel(
-  modelId: string,
-  modelType: ModelType,
-): Promise<MemoryCheckResult> {
-  return checkMemory(modelId, modelType);
-}
-
-export async function checkMemoryForDualModel(
-  textModelId: string | null,
-  imageModelId: string | null,
-): Promise<MemoryCheckResult> {
-  return checkDualMemory(textModelId, imageModelId);
 }
 
 export async function clearTextModelCache(): Promise<void> {

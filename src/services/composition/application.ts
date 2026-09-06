@@ -28,7 +28,7 @@ import { modelsChatPort } from './chat';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { mobileCoreSpeechPorts } from '../adapters/speech/mobileSpeechInputPorts';
 
-export type MobileApplicationExtensionPorts = Partial<
+type MobileApplicationExtensionPorts = Partial<
   Pick<OffGridPlatformPorts, 'sync' | 'speech' | 'automation' | 'use' | 'pro'>
 > & { readonly modelDownloads?: MobileManagedArtifactIO };
 

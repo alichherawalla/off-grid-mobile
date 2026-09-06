@@ -70,7 +70,7 @@ export function savedImageModels(server: RemoteServer): RemoteModel[] {
   }));
 }
 
-export function selectLocalImageModelOnDemand(
+function selectLocalImageModelOnDemand(
   model: ONNXImageModel,
 ): Promise<void> {
   return selectModelRoute({

@@ -1,4 +1,1 @@
-export {
-  createMobileSyncIo,
-  type MobileSyncIo,
-} from '../composition/mobile-sync-io';
+export { createMobileSyncIo } from '../composition/mobile-sync-io';

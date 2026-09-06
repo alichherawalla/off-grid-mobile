@@ -107,27 +107,6 @@ export function isLiteRTModel(m: DownloadedModel): m is LiteRTDownloadedModel {
   return m.engine === 'litert';
 }
 
-export interface PersistedDownloadInfo {
-  modelId: string;
-  fileName: string;
-  quantization: string;
-  author: string;
-  totalBytes: number;
-  mainFileSize?: number;
-  mmProjFileName?: string;
-  mmProjFileSize?: number;
-  mmProjLocalPath?: string | null;
-  mmProjDownloadId?: string;
-  // Image model metadata (for restoring downloads after app kill)
-  imageModelName?: string;
-  imageModelDescription?: string;
-  imageModelSize?: number;
-  imageModelStyle?: string;
-  imageModelBackend?: string;
-  imageModelRepo?: string;
-  imageDownloadType?: 'zip' | 'multifile';
-}
-
 export interface DownloadProgress {
   downloadId?: string;
   modelId: string;
@@ -435,14 +414,6 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
 }
-export type BackgroundDownloadStatus =
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'waiting_for_network'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
 export type BackgroundDownloadReasonCode =
   | 'none'
   | 'network_lost'
@@ -460,20 +431,6 @@ export type BackgroundDownloadReasonCode =
   | 'http_429'
   | 'client_error'
   | 'unknown_error';
-export interface BackgroundDownloadInfo {
-  downloadId: string;
-  fileName: string;
-  modelId: string;
-  status: BackgroundDownloadStatus;
-  bytesDownloaded: number;
-  totalBytes: number;
-  localUri?: string;
-  startedAt: number;
-  reason?: string;
-  reasonCode?: BackgroundDownloadReasonCode;
-  /** Raw JSON persisted with the download row by the JS layer at start time. */
-  metadataJson?: string;
-}
 export interface DebugInfo {
   systemPrompt: string;
   originalMessageCount: number;
